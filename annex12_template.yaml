@@ -1,0 +1,260 @@
+annex12:
+  meta:
+    template: ESMA Annex 12 (Investor Report) - Deal-level template
+    version: 0.1
+    notes:
+      - Generic, deal-level template for Annex 12 projection.
+      - Intended to be deep-merged with an asset-class overlay (e.g., equity release)
+        and then a client/deal instance config (e.g., config_ere_annex12.yaml).
+      - Do NOT add Annex 12 fields to exposure-level field_registry; keep Annex 12
+        deal-level and computed off canonical post-transform.
+
+  assumptions:
+    reporting_currency: ""
+    nd_code_for_not_applicable: ND5
+    nd_code_for_not_available: ND1
+    newly_originated_pool: false
+  
+  enums:
+    IVSS8:
+      VSLC: "Vertical slice"
+      SLLS: "Seller's share"
+      RSEX: "Randomly-selected exposures"
+      FLTR: "First loss tranche"
+      FLEX: "First loss exposure in each asset"
+      NCOM: "No compliance"
+      OTHR: "Other"
+    IVSS9:
+      ORIG: "Originator"
+      SPON: "Sponsor"
+      OLND: "Original lender"
+      SELL: "Seller"
+      NCOM: "No compliance"
+      OTHR: "Other"
+    IVSS10:
+      ALOL: "Automobile loan or lease"
+      CONL: "Consumer loan"
+      CMRT: "Commercial mortgage"
+      CCRR: "Credit-card receivable"
+      LEAS: "Lease"
+      RMRT: "Residential mortgage"
+      MIXD: "Mixed"
+      SMEL: "SME"
+      NSML: "Non-SME corporate"
+      OTHR: "Other"
+    IVSS30:
+      STND: "Standardised approach"
+      FIRB: "Foundation IRB"
+      ADIR: "Advanced IRB"
+    IVSR10:
+      CHPP: "Change in priority of payments"
+      CHCP: "Replacement of counterparty"
+      BOTH: "Both"
+      OTHR: "Other"
+
+  # ---------------------------------------------------------------------------
+  # Deal / issuer / parties: supplied by client/deal instance config.
+  # ---------------------------------------------------------------------------
+  deal:
+    IVSS1_unique_identifier: ""                  # e.g., securitisation/warehouse ID
+    IVSS3_securitisation_name: ""
+    IVSS4_reporting_entity_name: ""
+    IVSS5_reporting_entity_contact_person: ""
+    IVSS6_reporting_entity_contact_telephone: ""
+    IVSS7_reporting_entity_contact_emails: ""
+    IVSS8_risk_retention_method: ""               # enums
+    IVSS9_risk_retention_holder: ""               # enums
+    IVSS10_underlying_exposure_type: ""           # enums
+    IVSS11_risk_transfer_method: ""
+    IVSS12_trigger_measurements_ratios: ""       # may be a narrative or structured block
+    IVSS13_revolving_ramp_up_end_date: ""        # YYYY-MM-DD if relevant
+    IVSS20_excess_spread_trapping_mechanism: ""
+    IVSS30_risk_weight_approach: ""              # enums
+
+  period:
+    IVSS2_data_cut_off_date: ""                  # YYYY-MM-DD
+
+  # Optional explicit overrides (highest priority). If present, these should
+  # override computed or defaulted values.
+  field_overrides: {}
+
+  # ---------------------------------------------------------------------------
+  # Computations: how to derive selected Annex 12 fields from canonical.
+  # This is the "generic" layer. Asset overlays can disable/ND certain fields,
+  # or add additional mapping logic.
+  #
+  # Conventions:
+  #   - method: SUM | COUNT | COUNT_IF | WAVG | MIN | MAX
+  #   - source_field/value_field/weight_field refer to canonical column names
+  #   - filter is optional; supports simple equality tests for COUNT_IF
+  # ---------------------------------------------------------------------------
+  computations:
+    IVSS16_principal_collections_in_period:
+      method: SUM
+      source_fields:
+        - redemptions_received_in_period
+        - principal_prepayments_in_period
+      output_alias: IVSS16
+    IVSS17_interest_collections_in_period:
+      method: SUM
+      source_field: interest_collections_in_period
+      output_alias: IVSS17
+
+    IVSS21_current_overcollateralisation:
+      method: ""                                 # often deal-structure derived; leave blank
+
+    IVSS22_annualised_constant_prepayment_rate:
+      method: ""                                 # typically modelled; leave blank unless you compute
+
+    IVSS24_gross_charge_offs_in_period:
+      method: ""
+      source_field: 
+      output_alias: IVSS24
+
+    IVSS28_defaulted_exposures:
+      method: SUM
+      source_field: defaulted_amount
+      output_alias: IVSS28
+
+    # Arrears buckets - generic mapping; overlays may set these to 0/ND.
+    IVSS38_arrears_1_29_days:
+      method: BUCKET_SUM
+      source_field: current_outstanding_balance
+      filter_field: number_of_days_in_arrears
+      min: 0
+      max: 29
+      output_alias: IVSS38
+    IVSS39_arrears_30_59_days:
+      method: BUCKET_SUM
+      source_field: current_outstanding_balance  # What to sum
+      filter_field: number_of_days_in_arrears              # What to check
+      min: 30
+      max: 59
+      output_alias: IVSS39
+    IVSS40_arrears_60_89_days:
+      method: BUCKET_SUM
+      source_field: current_outstanding_balance
+      filter_field: number_of_days_in_arrears
+      min: 50
+      max: 89
+      output_alias: IVSS40
+    IVSS41_arrears_90_119_days:
+      method: BUCKET_SUM
+      source_field: current_outstanding_balance
+      filter_field: number_of_days_in_arrears
+      min: 90
+      max: 119
+      output_alias: IVSS41
+    IVSS42_arrears_120_149_days:
+      method: BUCKET_SUM
+      source_field: current_outstanding_balance
+      filter_field: number_of_days_in_arrears
+      min: 120
+      max: 149
+      output_alias: IVSS42
+    IVSS43_arrears_150_179_days:
+      method: BUCKET_SUM
+      source_field: current_outstanding_balance
+      filter_field: number_of_days_in_arrears
+      min: 150
+      max: 179
+      output_alias: IVSS43
+    IVSS44_arrears_180_plus_days:
+      method: BUCKET_SUM
+      source_field: current_outstanding_balance
+      filter_field: number_of_days_in_arrears
+      min: 180
+      max: 10000
+      output_alias: IVSS44
+
+  # ---------------------------------------------------------------------------
+  # Defaults & applicability policy.
+  # These are generic; asset overlays should refine which codes are 0 vs ND.
+  # ---------------------------------------------------------------------------
+  defaults:
+    set_to_zero_if_missing: []
+    set_to_nd5_if_missing: []
+    set_to_nd1_if_missing: []
+
+  # Optional repeating sections (kept empty in generic template).
+  triggers_tests_events: []
+  cashflow_items: []
+
+  # Optional: required fields for completeness checks (deal/period typically).
+  validation:
+    required:
+      - IVSS1_unique_identifier
+      - IVSS2_data_cut_off_date
+      - IVSS4_reporting_entity_name
+      - IVSS10_underlying_exposure_type
+
+  cashflow_waterfall_definition:
+    - id: A
+      IVSF4: "Security Trustee fees"
+    - id: B
+      IVSF4: "Facility Agent / Account Bank / Corporate Services"
+    - id: C
+      IVSF4: "Servicer fees"
+    - id: D
+      IVSF4: "Swap payments"
+    - id: E
+      IVSF4: "Liquidity Reserve top-up"
+    - id: F
+      IVSF4: "Debt Funder interest and fees"
+    - id: G
+      IVSF4: "Debt Funder principal"
+    - id: H
+      IVSF4: "Exit fee"
+    - id: I
+      IVSF4: "Sponsor deferred consideration"
+  
+  # ---------------------------------------------------------------------------
+  # Trigger / Test / Event catalogue (IVSR)
+  #
+  # Purpose:
+  # - Define the standard set of tests for a transaction type (deterministic).
+  # - Actual values/breach status can be populated per period from an external
+  #   source (e.g. facility agent report) or manually for early periods.
+  #
+  # Notes:
+  # - IVSR1 is always derived = IVSS1 (unique identifier).
+  # - IVSR2/IVSR3 are stable test identifiers (do not change over time).
+  # - IVSR5/IVSR6 may be ND5 for non-numerical tests (per constraints).
+  # ---------------------------------------------------------------------------
+  triggers_catalogue:
+    - id: BORROWING_BASE_TEST
+      IVSR2: "BBT01"
+      IVSR3: "BBT01"
+      IVSR4: "Borrowing Base Test"
+      IVSR5: "1.00"          # threshold (example; replace with doc value)
+      IVSR8: 10              # cure period days (from docs; replace if needed)
+      IVSR9: 30              # monthly
+      IVSR10: "OTHR"         # consequence category (often Draw Stop / Amortisation)
+
+    - id: CONCENTRATION_TEST
+      IVSR2: "CONC01"
+      IVSR3: "CONC01"
+      IVSR4: "Concentration Test (breach of concentration limits)"
+      IVSR5: "ND5"           # threshold may not be a single scalar; ND5 permitted
+      IVSR8: 0
+      IVSR9: 30
+      IVSR10: "OTHR"
+
+    - id: HEDGING_TEST
+      IVSR2: "HEDGE01"
+      IVSR3: "HEDGE01"
+      IVSR4: "Hedging Test"
+      IVSR5: "ND5"
+      IVSR8: 0
+      IVSR9: 30
+      IVSR10: "OTHR"
+
+    - id: INDEX_HOUSE_PRICE_TEST
+      IVSR2: "IHPT01"
+      IVSR3: "IHPT01"
+      IVSR4: "Index House Price Test"
+      IVSR5: "ND5"
+      IVSR8: 0
+      IVSR9: 30
+      IVSR10: "OTHR"
+

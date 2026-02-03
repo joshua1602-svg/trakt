@@ -1,0 +1,270 @@
+annex12_field_constraints:
+  fields:
+    IVSF1:
+      format: '{ALPHANUM-28}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSF2:
+      format: '{ALPHANUM-1000}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSF3:
+      format: '{ALPHANUM-1000}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSF4:
+      format: '{ALPHANUM-1000}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSF5:
+      format: '{MONETARY}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSF6:
+      format: '{MONETARY}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSR1:
+      format: '{ALPHANUM-28}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSR10:
+      format: '{LIST}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSR2:
+      format: '{ALPHANUM-1000}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSR3:
+      format: '{ALPHANUM-1000}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSR4:
+      format: '{ALPHANUM-10000}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSR5:
+      format: '{NUMERIC}'
+      nd1_nd4_allowed: false
+      nd5_allowed: true
+    IVSR6:
+      format: '{NUMERIC}'
+      nd1_nd4_allowed: false
+      nd5_allowed: true
+    IVSR7:
+      format: '{Y/N}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSR8:
+      format: '{INTEGER-9999}'
+      nd1_nd4_allowed: false
+      nd5_allowed: true
+    IVSR9:
+      format: '{INTEGER-9999}'
+      nd1_nd4_allowed: false
+      nd5_allowed: true
+    IVSS1:
+      format: '{ALPHANUM-28}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSS10:
+      format: '{LIST}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSS11:
+      format: '{Y/N}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSS12:
+      format: '{Y/N}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSS13:
+      format: '{DATEFORMAT}'
+      nd1_nd4_allowed: false
+      nd5_allowed: true
+    IVSS14:
+      format: '{MONETARY}'
+      nd1_nd4_allowed: false
+      nd5_allowed: true
+    IVSS15:
+      format: '{MONETARY}'
+      nd1_nd4_allowed: false
+      nd5_allowed: true
+    IVSS16:
+      format: '{MONETARY}'
+      nd1_nd4_allowed: false
+      nd5_allowed: true
+    IVSS17:
+      format: '{MONETARY}'
+      nd1_nd4_allowed: false
+      nd5_allowed: true
+    IVSS18:
+      format: '{Y/N}'
+      nd1_nd4_allowed: false
+      nd5_allowed: true
+    IVSS19:
+      format: '{MONETARY}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSS2:
+      format: '{DATEFORMAT}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSS20:
+      format: '{Y/N}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSS21:
+      format: '{PERCENTAGE}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSS22:
+      format: '{PERCENTAGE}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSS23:
+      format: '{MONETARY}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSS24:
+      format: '{MONETARY}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSS25:
+      format: '{MONETARY}'
+      nd1_nd4_allowed: true
+      nd5_allowed: true
+    IVSS26:
+      format: '{MONETARY}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSS27:
+      format: '{PERCENTAGE}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSS28:
+      format: '{MONETARY}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSS29:
+      format: '{MONETARY}'
+      nd1_nd4_allowed: true
+      nd5_allowed: true
+    IVSS3:
+      format: '{ALPHANUM-100}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSS30:
+      format: '{LIST}'
+      nd1_nd4_allowed: false
+      nd5_allowed: true
+    IVSS31:
+      format: '{PERCENTAGE}'
+      nd1_nd4_allowed: false
+      nd5_allowed: true
+    IVSS32:
+      format: '{PERCENTAGE}'
+      nd1_nd4_allowed: false
+      nd5_allowed: true
+    IVSS33:
+      format: '{PERCENTAGE}'
+      nd1_nd4_allowed: false
+      nd5_allowed: true
+    IVSS34:
+      format: '{PERCENTAGE}'
+      nd1_nd4_allowed: false
+      nd5_allowed: true
+    IVSS35:
+      format: '{PERCENTAGE}'
+      nd1_nd4_allowed: false
+      nd5_allowed: true
+    IVSS36:
+      format: '{PERCENTAGE}'
+      nd1_nd4_allowed: false
+      nd5_allowed: true
+    IVSS37:
+      format: '{PERCENTAGE}'
+      nd1_nd4_allowed: false
+      nd5_allowed: true
+    IVSS38:
+      format: '{PERCENTAGE}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSS39:
+      format: '{PERCENTAGE}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSS4:
+      format: '{ALPHANUM-100}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSS40:
+      format: '{PERCENTAGE}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSS41:
+      format: '{PERCENTAGE}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSS42:
+      format: '{PERCENTAGE}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSS43:
+      format: '{PERCENTAGE}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSS44:
+      format: '{PERCENTAGE}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSS5:
+      format: '{ALPHANUM-256}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSS6:
+      format: '{TELEPHONE}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSS7:
+      format: '{ALPHANUM-256}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSS8:
+      format: '{LIST}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+    IVSS9:
+      format: '{LIST}'
+      nd1_nd4_allowed: false
+      nd5_allowed: false
+
+permitted_values:
+  IVSS8_risk_retention_method:
+    - VR
+    - HR
+    - L
+    - R
+    - S
+    
+  IVSS9_risk_retention_holder:
+    - Originator
+    - Sponsor
+    - Other
+    
+  IVSS10_underlying_exposure:
+    - Equity Release Mortgage
+    - Residential Mortgage
+    - Commercial Mortgage
+    - Auto Loan/Lease
+    - Consumer Loan
+    - Credit Card Receivable
+    - SME Loan
+    - Corporate Loan
+    
+  IVSS30_risk_weight_approach:
+    - SA
+    - IRB
+    - Other

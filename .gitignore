@@ -1,0 +1,5 @@
+﻿venv/
+out/
+out_validation/
+__pycache__/
+*.pyc

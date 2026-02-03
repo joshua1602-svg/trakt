@@ -1,0 +1,205 @@
+# ESMA Template Field Order
+# 
+# Purpose: Defines the exact order fields must appear in ESMA XML submissions
+# Source: ESMA Final Report on Draft RTS and ITS on Securitisation Reporting
+# 
+# CRITICAL: The order below must match the XSD schema exactly.
+# ESMA XML validators will reject submissions with incorrect field ordering.
+#
+# Maintenance:
+# - When ESMA releases new specifications, update from the XSD schema
+# - Look for <xs:sequence> tags in XSD to determine field order
+# - Download XSD from: https://www.esma.europa.eu/document/final-report-draft-rts-and-its-securitisation-reporting
+
+metadata:
+  version: "1.0"
+  source: "ESMA Securitisation Reporting Technical Standards"
+  updated: "2026-01-08"
+  author: "Digifin Platform"
+  notes: "Starter template - verify against official ESMA XSD before production use"
+
+# ESMA_Annex2 - XSD STRUCTURAL ORDER
+# This replaces the old list. It matches the XSD tree strict requirement.
+
+Header:
+  # The script handles ScrtstnIdr/CutOffDt automatically, or you can map them here.
+
+Record:
+  # 1. IDENTITY (Must be first)
+  - RREL1  # Unique ID (NewUndrlygXpsrIdr)
+  - RREL3  # New ID
+  - RREL2  # Original ID
+
+  # 2. DATES
+  - RREL5  # Origination Date
+  - RREL7
+  - RREL8
+  - RREL9
+  - RREL10
+
+  # 3. OBLIGOR
+  - RREL11
+  - RREL12
+  - RREL13
+  - RREL14
+  - RREL15
+  - RREL16
+  - RREL17
+  - RREL18
+  - RREL19
+  - RREL20
+
+  # 4. LOAN DATA
+  - RREL21
+  - RREL22
+  - RREL23
+  - RREL24
+  - RREL25
+  - RREL26
+  - RREL27
+  - RREL28
+  - RREL29
+  - RREL30
+  - RREL31
+  - RREL32
+  - RREL33
+  - RREL34
+  - RREL35
+  - RREL36
+  - RREL37
+  - RREL38
+  - RREL39
+  - RREL40
+  - RREL41
+  - RREL42
+  - RREL43
+  - RREL44
+  - RREL45
+  - RREL46
+  - RREL47
+  - RREL48
+  - RREL49
+  - RREL50
+  - RREL51
+  - RREL52
+  - RREL53
+  - RREL54
+  - RREL55
+  - RREL56
+  - RREL57
+  - RREL58
+  - RREL59
+  - RREL60
+
+  # 5. COLLATERAL
+  - RREC1  # Collateral ID
+  - RREC4
+  - RREC3
+  - RREC2
+  - RREC6
+  - RREC7
+  - RREC8
+  - RREC9
+  - RREC10
+  - RREC11
+  - RREC12
+  - RREC13
+  - RREC14
+  - RREC15
+  - RREC16
+  - RREC17
+  - RREC18
+  - RREC19
+  - RREC20
+
+ESMA_Annex12:
+  - IVSS1
+  - IVSS2
+  - IVSS3
+  - IVSS4
+  - IVSS5
+  - IVSS6
+  - IVSS7
+  - IVSS8
+  - IVSS9
+  - IVSS10
+  - IVSS11
+  - IVSS12
+  - IVSS13
+  - IVSS14
+  - IVSS15
+  - IVSS16
+  - IVSS17
+  - IVSS18
+  - IVSS19
+  - IVSS20
+  - IVSS21
+  - IVSS22
+  - IVSS23
+  - IVSS24
+  - IVSS25
+  - IVSS26
+  - IVSS27
+  - IVSS28
+  - IVSS29
+  - IVSS30
+  - IVSS31
+  - IVSS32
+  - IVSS33
+  - IVSS34
+  - IVSS35
+  - IVSS36
+  - IVSS37
+  - IVSS38
+  - IVSS39
+  - IVSS40
+  - IVSS41
+  - IVSS42
+  - IVSS43
+  - IVSS44
+  - IVSR1
+  - IVSR2
+  - IVSR3
+  - IVSR4
+  - IVSR5
+  - IVSR6
+  - IVSR7
+  - IVSR8
+  - IVSR9
+  - IVSR10
+  - IVSF1
+  - IVSF2
+  - IVSF3
+  - IVSF4
+  - IVSF5
+  - IVSF6
+
+# ============================================================
+# USAGE NOTES
+# ============================================================
+# 
+# 1. VERIFICATION REQUIRED:
+#    Before production use, cross-reference this file with official ESMA XSD schemas.
+#    Download XSD from: https://www.esma.europa.eu/
+#
+# 2. FIELD CODE MAPPING:
+#    This file uses ESMA field codes (e.g., RREL1, CREL1).
+#    These must match the "code" values in your field_registry.yaml regime_mapping section.
+#
+# 3. UPDATING:
+#    When ESMA releases new specifications:
+#    - Download updated XSD schema
+#    - Extract field order from <xs:sequence> tags
+#    - Update this file accordingly
+#    - Increment version number in metadata
+#
+# 4. REGIME-SPECIFIC:
+#    Each ESMA Annex has different field codes and ordering.
+#    Ensure you're using the correct section for your asset class.
+#
+# 5. VALIDATION:
+#    Run validation checks after updating to ensure:
+#    - All mandatory fields present
+#    - Field codes match field_registry.yaml
+#    - No duplicate codes
+#    - No missing codes from XSD

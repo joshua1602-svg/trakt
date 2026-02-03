@@ -1,0 +1,271 @@
+ESMA_Annex2:
+
+  # ============================================================
+  # AMORTISATION TYPE (CREL87) — Official ESMA codes:
+  # FRXX, DEXX, FIXE, BLLT, OTHR
+  # ============================================================
+  amortisation_type:
+    # French (constant instalment)
+    ANNUITY: "FRXX"
+    FRENCH: "FRXX"
+    "FRENCH AMORTISATION": "FRXX"
+    CAPITAL_REPAYMENT: "FRXX"
+    CONSTANT_INSTALLMENT: "FRXX"
+    LEVEL_PAYMENT: "FRXX"
+    STANDARD: "FRXX"
+
+    # German
+    GERMAN: "DEXX"
+    TILGUNG: "DEXX"
+    TILGUNGSDARLEHEN: "DEXX"
+    INTEREST_THEN_LEVEL: "DEXX"
+
+    # Fixed amortisation (constant principal)
+    FIXED: "FIXE"
+    FIXED_AMORTISATION: "FIXE"
+    CONSTANT_PRINCIPAL: "FIXE"
+    LINEAR: "FIXE"
+
+    # Bullet
+    BULLET: "BLLT"
+    INTEREST_ONLY_BULLET: "BLLT"
+    IO_BULLET: "BLLT"
+    FULL_REPAY_AT_MATURITY: "BLLT"
+    REDEMPTION_AT_MATURITY: "BLLT"
+
+    # Other
+    PART_AND_PART: "OTHR"
+    MIXED: "OTHR"
+    HYBRID: "OTHR"
+    OTHER: "OTHR"
+    UNKNOWN: "OTHR"
+    N_A: "OTHR"
+
+
+  # ============================================================
+  # GUARANTEE TYPE (CREL54) — Official codes:
+  # NGUA, FAML, IOTH, GOVE, BANK, INSU, NHGX, FGAS, CATN, OTHR
+  # ============================================================
+  guarantee_type:
+    NO_GUARANTOR: "NGUA"
+    NONE: "NGUA"
+    NO GUARANTOR: "NGUA"
+
+    FAMILY_GUARANTEE: "FAML"
+    PARENT_GUARANTEE: "FAML"
+
+    PERSONAL_GUARANTEE: "IOTH"
+    PERSONAL GUARANTEE: "IOTH"
+    PERS_GUAR: "IOTH"
+
+    GOVERNMENT_GUARANTEE: "GOVE"
+    GOVT_GUARANTEE: "GOVE"
+
+    BANK_GUARANTEE: "BANK"
+    BG: "BANK"
+
+    INSURANCE_GUARANTEE: "INSU"
+    MORTGAGE_INDEMNITY: "INSU"
+    MIG: "INSU"
+
+    NHG: "NHGX"
+    "NATIONALE HYPOTHEEK GARANTIE": "NHGX"
+
+    FGAS: "FGAS"
+
+    CAUTION: "CATN"
+    SURETY: "CATN"
+
+    OTHER: "OTHR"
+    UNKNOWN: "OTHR"
+    N_A: "OTHR"
+
+
+  # ============================================================
+  # INTEREST RATE TYPE (CREL80)
+  # FIX, FLTV, TEAS, OTHR
+  # ============================================================
+  interest_rate_type:
+    FIXED: "FIX"
+    FIX: "FIX"
+
+    VARIABLE: "FLTV"
+    FLOATING: "FLTV"
+    VAR: "FLTV"
+    LIBOR: "FLTV"
+    EURIBOR: "FLTV"
+    BASE_RATE: "FLTV"
+
+    TEASER: "TEAS"
+    INTRODUCTORY: "TEAS"
+    DISCOUNTED: "TEAS"
+
+    MIXED: "OTHR"
+    UNKNOWN: "OTHR"
+    OTHER: "OTHR"
+
+
+  # ============================================================
+  # COLLATERAL TYPE (CREL28) — Example codes R1/R2/C1/C2/OTHR
+  # You map to your chosen ESMA collateral classification
+  # ============================================================
+  collateral_type:
+    HOUSE: "R1"
+    DETACHED: "R1"
+    SEMI_DETACHED: "R1"
+    BUNGALOW: "R1"
+
+    FLAT: "R2"
+    APARTMENT: "R2"
+    MAISONETTE: "R2"
+
+    MIXED_USE: "C1"
+    COMMERCIAL_RESIDENTIAL: "C1"
+
+    OFFICE: "C2"
+    RETAIL: "C2"
+    WAREHOUSE: "C2"
+    INDUSTRIAL: "C2"
+
+    LAND: "OTHR"
+    AGRICULTURAL: "OTHR"
+    DEVELOPMENT: "OTHR"
+    OTHER: "OTHR"
+    UNKNOWN: "OTHR"
+
+
+  # ============================================================
+  # REPAYMENT METHOD / PAYMENT PROFILE (CREL26)
+  # ESMA uses textual codes, not short forms
+  # ============================================================
+  repayment_type:
+    ANNUITY: "Annuity"
+    "ANNUITY MORTGAGE": "Annuity"
+    CAPITAL_REPAYMENT: "Annuity"
+
+    INTEREST_ONLY: "Interest-Only"
+    IO: "Interest-Only"
+    INT_ONLY: "Interest-Only"
+
+    BULLET: "Bullet"
+    FULL_AT_MATURITY: "Bullet"
+
+    PART_AND_PART: "Other"
+    MIXED: "Other"
+    OTHER: "Other"
+    UNKNOWN: "Other"
+
+
+  # ============================================================
+  # EMPLOYMENT STATUS (CREL09)
+  # (semantic mapping, ESMA sometimes uses E01/E02/E03/E06 etc.)
+  # ============================================================
+  employment_status:
+    EMP: "EMPLOYED"
+    EMPLOYED: "EMPLOYED"
+    FULL_TIME: "EMPLOYED"
+    PART_TIME: "EMPLOYED"
+
+    SELF: "SELF_EMPLOYED"
+    SELF_EMPLOYED: "SELF_EMPLOYED"
+    CONTRACTOR: "SELF_EMPLOYED"
+    FREELANCER: "SELF_EMPLOYED"
+
+    RETIRED: "RETIRED"
+    RET: "RETIRED"
+    PENSIONER: "RETIRED"
+
+    UNEMPLOYED: "UNEMPLOYED"
+    UNEMP: "UNEMPLOYED"
+    BETWEEN_JOBS: "UNEMPLOYED"
+
+    STUDENT: "STUDENT"
+
+    UNKNOWN: "OTHER"
+    HOMEMAKER: "OTHER"
+    N_A: "OTHER"
+    OTHER: "OTHER"
+
+
+  # ============================================================
+  # PURPOSE (CREL30) — ESMA CREL list
+  # ============================================================
+  purpose:
+    ACQUISITION: "ACQI"
+    ACQUISITION_FOR_INVESTMENT: "ACQI"
+    INVESTMENT: "ACQI"
+
+    ACQUISITION_FOR_LIQUIDATION: "ACQL"
+
+    REFINANCE: "RFIN"
+    REFINANCING: "RFIN"
+
+    CONSTRUCTION: "CNST"
+    NEW_BUILD: "CNST"
+
+    REDEVELOPMENT: "RDVL"
+    DEVELOPMENT: "RDVL"
+
+    OTHER: "OTHR"
+    UNKNOWN: "OTHR"
+
+
+  # ============================================================
+  # BORROWER TYPE (CREL03)
+  # H, C, P, O
+  # ============================================================
+  borrower_type:
+    INDIVIDUAL: "H"
+    RETAIL: "H"
+    PRIVATE_PERSON: "H"
+
+    SME: "C"
+    CORPORATE: "C"
+    COMPANY: "C"
+    LTD: "C"
+    BV: "C"
+
+    GOVERNMENT: "P"
+    PUBLIC_SECTOR: "P"
+    MUNICIPAL: "P"
+
+    OTHER: "O"
+    UNKNOWN: "O"
+
+
+  # ============================================================
+  # BORROWER RESIDENCY (CREL06) – ISO country codes
+  # ============================================================
+  borrower_residency:
+    UNITED KINGDOM: "GB"
+    GREAT BRITAIN: "GB"
+    ENGLAND: "GB"
+    SCOTLAND: "GB"
+
+    IRELAND: "IE"
+    IRL: "IE"
+
+    NETHERLANDS: "NL"
+    HOLLAND: "NL"
+
+    UNKNOWN: "OTHR"
+    OTHER: "OTHR"
+
+
+  # ============================================================
+  # CURRENCY (ISO 4217) — safe mappings
+  # ============================================================
+  currency:
+    GBP-STG: "GBP"
+    POUND STERLING: "GBP"
+    STERLING: "GBP"
+    GB POUND: "GBP"
+
+    EURO: "EUR"
+    EUROS: "EUR"
+
+    US DOLLAR: "USD"
+    DOLLAR: "USD"
+
+    UNKNOWN: "OTH"
+    N_A: "OTH"

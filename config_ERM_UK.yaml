@@ -1,0 +1,44 @@
+# config_ERM_UK.yaml
+# LAYER 3: MASTER CLIENT CONFIG
+
+client:
+  client_id: ere_funding_uk
+  display_name: "ERE Funding"   # Used for UI/Reports only
+  environment: production
+
+portfolio:
+  asset_class: equity_release
+  country: GB
+  base_currency: GBP
+  static_reporting_date: "2025-11-30"
+
+regime: ESMA_Annex2
+
+# --- DEFAULTS (CRITICAL CHANGE) ---
+# These are moved here so the Projector injects them into the CSV rows.
+defaults:
+  originator_legal_entity_identifier: "213800ABCDE123456701N202501"  # RREL83
+  originator_name: "ERE Funding Limited"                            # RREL82
+  originator_establishment_country: "GB"                            # RREL84
+
+# --- TRANSFORMATIONS (Client Specific) ---
+transformations:
+  copy_if_missing:
+    current_principal_balance: current_outstanding_balance
+
+# --- ENRICHMENT (Client Specific) ---
+enrichment:
+  enable:
+    uk_nuts3: true
+  uk_nuts3:
+    nuts_csv_path: "reference_data/uk_itl_master_lookup_v2.csv"
+    postcode_columns: [postcode, property_postcode]
+    target_field: geographic_region_classification
+    fill_only_if_blank: true
+
+# --- MI & DISPLAY ---
+mi:
+  branding:
+    app_title: "ERE Funding — Portfolio MI"
+    theme:
+      primary_color: "#0B1F3B"

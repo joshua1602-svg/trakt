@@ -1,0 +1,389 @@
+# issue_policy.yaml
+# Defines issue classification, materiality levels, and allowed governance actions
+
+metadata:
+  version: "1.0"
+  last_updated: "2025-01-02"
+  description: "Field-level validation governance policy"
+
+# ==========================================================
+# MATERIALITY LEVELS
+# ==========================================================
+# Determines whether issues are blocking, require review, or are informational
+
+materiality_levels:
+  BLOCKING:
+    label: "Blocking"
+    description: "Must be resolved before proceeding; prevents XML generation"
+    color: "#DC2626"  # red-600
+    icon: "⛔"
+    workflow_impact: "Stops all downstream processing"
+    
+  REVIEW:
+    label: "Review Required"
+    description: "Requires manual review and decision before proceeding"
+    color: "#F59E0B"  # amber-500
+    icon: "⚠️"
+    workflow_impact: "Pauses workflow pending decision"
+    
+  INFO:
+    label: "For Information"
+    description: "Advisory only; does not block processing"
+    color: "#3B82F6"  # blue-500
+    icon: "ℹ️"
+    workflow_impact: "No workflow impact; logged for awareness"
+
+# ==========================================================
+# ISSUE CLASSIFICATIONS
+# ==========================================================
+# Categories issues by root cause to enable targeted remediation
+
+classifications:
+  nd_mandatory_violation:
+    label: "ND Code in Mandatory Field"
+    description: "Mandatory field contains ND1-ND4 code"
+    default_materiality: BLOCKING
+    typical_causes:
+      - "Missing data from originator"
+      - "Field not collected historically"
+      - "Semantic mapping error"
+    remediation_priority: "Critical"
+    
+  nd_usage_threshold:
+    label: "ND5 Usage Exceeds Threshold"
+    description: "Optional field has excessive ND5 usage (>threshold%)"
+    default_materiality: REVIEW
+    typical_causes:
+      - "Field not consistently populated"
+      - "Legacy system limitations"
+      - "Data quality degradation"
+    remediation_priority: "Medium"
+    
+  mandatory_null:
+    label: "Mandatory Field Missing"
+    description: "Required field is null or empty"
+    default_materiality: BLOCKING
+    typical_causes:
+      - "Upstream data gap"
+      - "Schema mapping error"
+      - "Data ingestion failure"
+    remediation_priority: "Critical"
+    
+  mapping_error:
+    label: "Semantic Mapping Error"
+    description: "Source field incorrectly mapped to canonical field"
+    default_materiality: REVIEW
+    typical_causes:
+      - "Ambiguous source field name"
+      - "TF-IDF false positive"
+      - "Multiple source candidates"
+    remediation_priority: "High"
+    
+  value_format_error:
+    label: "Value Format Invalid"
+    description: "Value does not match expected format (date, decimal, integer)"
+    default_materiality: BLOCKING
+    typical_causes:
+      - "Incompatible source format"
+      - "Currency formatting inconsistency"
+      - "Regional date format variation"
+    remediation_priority: "High"
+    
+  enum_violation:
+    label: "Value Not in Allowed List"
+    description: "Value not present in allowed_values enumeration"
+    default_materiality: BLOCKING
+    typical_causes:
+      - "Legacy values not in current standard"
+      - "Typos or data entry errors"
+      - "New values not yet cataloged"
+    remediation_priority: "Medium"
+    
+  business_logic_violation:
+    label: "Business Logic Failure"
+    description: "Cross-field relationship or calculation check failed"
+    default_materiality: REVIEW
+    typical_causes:
+      - "Data inconsistency across systems"
+      - "Timing differences in data extraction"
+      - "Manual data override"
+    remediation_priority: "Medium"
+    
+  date_logic_violation:
+    label: "Date Relationship Invalid"
+    description: "Date sequence or relationship constraint violated"
+    default_materiality: BLOCKING
+    typical_causes:
+      - "System clock drift"
+      - "Historical data correction"
+      - "Timezone handling error"
+    remediation_priority: "High"
+    
+  ltv_calculation_mismatch:
+    label: "LTV Calculation Tolerance Exceeded"
+    description: "Calculated LTV differs from provided LTV beyond tolerance"
+    default_materiality: INFO
+    typical_causes:
+      - "Rounding differences"
+      - "Different valuation sources"
+      - "Interim payment not reflected"
+    remediation_priority: "Low"
+    
+  portfolio_aggregate_violation:
+    label: "Portfolio-Level Constraint Failed"
+    description: "Aggregate metrics (sums, percentages, uniqueness) failed"
+    default_materiality: BLOCKING
+    typical_causes:
+      - "Duplicate records"
+      - "Multi-currency without conversion"
+      - "Incomplete portfolio extract"
+    remediation_priority: "Critical"
+    
+  data_quality_threshold:
+    label: "Completeness Threshold Violated"
+    description: "Field completeness below acceptable threshold"
+    default_materiality: INFO
+    typical_causes:
+      - "Progressive data quality degradation"
+      - "New field introduction"
+      - "System migration artifacts"
+    remediation_priority: "Low"
+
+# ==========================================================
+# RULE → CLASSIFICATION MAPPING
+# ==========================================================
+# Maps rule IDs to their primary classification
+
+rule_classifications:
+  # ND Rules
+  ND001: nd_mandatory_violation
+  ND002: nd_mandatory_violation
+  ND003: nd_mandatory_violation
+  ND004: nd_mandatory_violation
+  ND005: nd_mandatory_violation
+  ND006: nd_usage_threshold
+  ND007: nd_mandatory_violation
+  ND008: nd_usage_threshold
+  ND009: nd_mandatory_violation
+  ND010: nd_usage_threshold
+  
+  # Field Validation
+  FIELD001: mandatory_null
+  FIELD002: enum_violation
+  FIELD003: enum_violation
+  FIELD004: value_format_error
+  FIELD005: value_format_error
+  FIELD006: value_format_error
+  
+  # Date Logic
+  DAT001: date_logic_violation
+  DAT002: date_logic_violation
+  DAT003: date_logic_violation
+  DAT004: date_logic_violation
+  DAT005: value_format_error
+  DAT101: date_logic_violation
+  SEC001: portfolio_aggregate_violation
+  
+  # Balance Logic
+  BAL001: business_logic_violation
+  BAL002: business_logic_violation
+  BAL101: business_logic_violation
+  BAL102: business_logic_violation
+  BAL103: business_logic_violation
+  
+  # LTV Logic
+  LTV001: business_logic_violation
+  LTV002: business_logic_violation
+  LTV101: ltv_calculation_mismatch
+  LTV102: ltv_calculation_mismatch
+  
+  # Collateral Logic
+  COLL001: business_logic_violation
+  COLL002: business_logic_violation
+  
+  # Portfolio Logic
+  POR001: portfolio_aggregate_violation
+  POR002: business_logic_violation
+  PORT101: portfolio_aggregate_violation
+  CUR001: portfolio_aggregate_violation
+  
+  # Meta Quality
+  META101: data_quality_threshold
+  META102: data_quality_threshold
+
+# ==========================================================
+# ALLOWED GOVERNANCE ACTIONS
+# ==========================================================
+# Defines what actions users can take for each materiality level
+
+allowed_actions:
+  BLOCKING:
+    - action: "FIX_UPSTREAM"
+      label: "Fix in Source System"
+      description: "Correct the issue at the data source and re-ingest"
+      requires_comment: true
+      captures_decision: true
+      
+    - action: "MANUAL_OVERRIDE"
+      label: "Manual Override"
+      description: "Manually provide correct value"
+      requires_comment: true
+      requires_approval: true
+      captures_decision: true
+      audit_trail: true
+      
+    - action: "ESCALATE"
+      label: "Escalate to Data Owner"
+      description: "Assign to data owner for resolution"
+      requires_comment: true
+      captures_decision: true
+      
+  REVIEW:
+    - action: "ACCEPT_AS_IS"
+      label: "Accept As-Is"
+      description: "Accept current value; document rationale"
+      requires_comment: true
+      captures_decision: true
+      audit_trail: true
+      
+    - action: "INVESTIGATE"
+      label: "Mark for Investigation"
+      description: "Flag for deeper analysis; proceed with current value"
+      requires_comment: false
+      captures_decision: true
+      
+    - action: "FIX_UPSTREAM"
+      label: "Fix in Source System"
+      description: "Correct the issue at the data source and re-ingest"
+      requires_comment: true
+      captures_decision: true
+      
+    - action: "MANUAL_OVERRIDE"
+      label: "Manual Override"
+      description: "Manually provide correct value"
+      requires_comment: true
+      captures_decision: true
+      audit_trail: true
+      
+  INFO:
+    - action: "ACKNOWLEDGE"
+      label: "Acknowledge"
+      description: "Note the information; no action required"
+      requires_comment: false
+      captures_decision: true
+      
+    - action: "INVESTIGATE"
+      label: "Mark for Investigation"
+      description: "Flag for future analysis"
+      requires_comment: false
+      captures_decision: true
+
+# ==========================================================
+# FIELD-LEVEL AGGREGATION THRESHOLDS
+# ==========================================================
+# When multiple row violations aggregate to field level, what triggers escalation?
+
+field_aggregation_thresholds:
+  error_rate_high:
+    threshold: 0.25  # 25% of rows
+    escalation: "BLOCKING"
+    description: "High error rate indicates systematic issue"
+    
+  error_rate_medium:
+    threshold: 0.10  # 10% of rows
+    escalation: "REVIEW"
+    description: "Medium error rate warrants review"
+    
+  error_rate_low:
+    threshold: 0.05  # 5% of rows
+    escalation: "INFO"
+    description: "Low error rate is informational"
+    
+  absolute_threshold:
+    min_count: 10
+    description: "Minimum absolute count before escalating to REVIEW"
+
+# ==========================================================
+# DECISION CAPTURE SCHEMA
+# ==========================================================
+# What information must be captured when making governance decisions
+
+decision_schema:
+  required_fields:
+    - field_name
+    - issue_count
+    - affected_rows
+    - materiality_level
+    - classification
+    - action_taken
+    - decision_timestamp
+    - decided_by
+    
+  optional_fields:
+    - rationale
+    - override_value
+    - approval_reference
+    - related_issues
+    - remediation_plan
+    - target_resolution_date
+    
+  audit_trail:
+    enabled: true
+    retention_period: "7 years"
+    includes:
+      - "Original violation details"
+      - "Decision metadata"
+      - "User information"
+      - "System state at decision time"
+
+# ==========================================================
+# REPORT GENERATION POLICIES
+# ==========================================================
+# Controls what appears in different report types
+
+report_policies:
+  executive_summary:
+    include_materiality: [BLOCKING, REVIEW]
+    include_classifications: [nd_mandatory_violation, mandatory_null, portfolio_aggregate_violation]
+    grouping: "by_field"
+    
+  technical_detail:
+    include_materiality: [BLOCKING, REVIEW, INFO]
+    include_classifications: "all"
+    grouping: "by_rule_and_field"
+    include_sample_rows: true
+    max_samples: 5
+    
+  audit_pack:
+    include_materiality: [BLOCKING, REVIEW, INFO]
+    include_classifications: "all"
+    grouping: "by_field_and_classification"
+    include_all_decisions: true
+    include_row_details: true
+
+# ==========================================================
+# WORKFLOW GATES
+# ==========================================================
+# Defines when processing can proceed
+
+workflow_gates:
+  xml_generation:
+    blocked_by:
+      - materiality: BLOCKING
+        action_required: true
+    description: "XML generation requires all BLOCKING issues resolved"
+    
+  securitization:
+    blocked_by:
+      - materiality: BLOCKING
+        action_required: true
+      - materiality: REVIEW
+        action_required: true
+    description: "Securitization requires all BLOCKING and REVIEW issues resolved"
+    
+  mi_reporting:
+    blocked_by:
+      - materiality: BLOCKING
+        action_required: true
+    allow_partial: true
+    description: "MI reporting can proceed with INFO issues present"

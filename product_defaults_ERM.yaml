@@ -1,0 +1,47 @@
+# product_defaults_ERM.yaml
+# LAYER 2: ASSET CLASS STANDARD
+# Universal defaults for UK Equity Release Mortgages.
+# These apply to ALL clients unless specifically overridden in Layer 3.
+
+defaults:
+  # --- 1. Core Product Structure ---
+  amortisation_type: Bullet           # ERMs roll up; they do not amortise
+  repayment_type: Bullet              # Repayment occurs at death/sale
+  interest_rate_type: Fixed           # Vast majority of ERM back-books are Fixed
+  payment_frequency: ND2              # Borrower makes NO payments
+  recourse: N                         # NNEG (No Negative Equity Guarantee) is standard
+  loan_seniority: Senior              # Always 1st Lien
+  
+  # --- 2. Property & Borrower Characteristics ---
+  property_occupancy_type: Owner-occupied
+  original_valuation_method: FIEI    # Standard full appraial for origination
+  
+  # --- 3. Currency ---
+  exposure_currency_denomination: GBP
+  currency_of_financials: GBP
+
+nd_defaults:
+# --- 4. Income & Affordability (ND1) ---
+  # NEW: Explicitly stating these are not required for ERM underwriting
+  employment_status: ND1                  # RREL13
+  primary_income: ND1                     # RREL16
+  primary_income_type: ND1                # RREL17
+  primary_income_currency: ND1            # RREL18
+  primary_income_verification: ND1        # RREL19
+  secondary_income: ND1                   # RREL20
+  secondary_income_verification: ND1      # RREL21
+  debt_to_income_ratio: ND1               # RREL40
+
+  # --- 5. The "Not Applicable" Safety Net (ND2) ---
+  # These fields exist in ESMA but are irrelevant for ERM
+  maturity_date: ND5                         # No fixed term
+  scheduled_principal_payment_frequency: ND5 # No payments
+  scheduled_interest_payment_frequency: ND5  # No payments
+  current_interest_rate_margin: ND5          # Fixed rate, no margin
+  interest_rate_reset_interval: ND5          # Fixed rate
+  next_interest_rate_reset_date: ND5         # Fixed rate
+  
+  # --- 5. Data Gaps (ND5) ---
+  # Safe defaults for optional fields likely missing from older tapes
+  energy_performance_certificate_value: ND5
+  syndicated_portion: ND5

@@ -1,0 +1,489 @@
+asset_type:
+  aliases:
+  - asset type
+  - asset_type
+  - assettype
+primary_income:
+  aliases:
+  - income borrower 1
+  - borrower1 income
+  - primary income
+  - borrower_1_income
+  - prim income
+  - Customer 1 income
+borrower_1_gender:
+  aliases:
+  - gender borrower 1
+  - borrower1 gender
+  - Customer 1 gender
+  - Customer 1 sex
+  - Borrower 1 sex
+borrower_1_age:
+  aliases:
+  - age borrower 1
+  - borrower age
+  - borrower1 age
+  - borrowerage
+  - B1 age
+  - Customer 1 age
+borrower_1_id:
+  aliases:
+  - borrower1 id
+  - id borrower 1
+  - B1 ID
+  - Customer 1 ID
+borrower_1_DOB:
+  aliases:
+  - Customer 1 DOB
+  - Borrower 1 DOB
+borrower_1_date_of_death:
+  aliases:
+  - Customer 1 DOD
+  - Borrower 1 DOD
+borrower_2_age:
+  aliases:
+  - age borrower 2
+  - borrower 2 age
+  - borrower2 age
+  - B2 age
+  - Customer 2 age
+borrower_2_id:
+  aliases:
+  - borrower2 id
+  - id borrower 2
+  - B2 ID
+  - Customer 2 ID
+borrower_2_income:
+  aliases:
+  - borrower2 income
+  - income borrower 2
+  - secondary income
+  - secnd income
+  - Customer 2 income
+borrower_2_gender:
+  aliases:
+  - gender borrower 2
+  - borrower2 gender
+  - Customer 2 Gender
+  - Customer 2 sex
+  - Borrower 2 sex
+borrower_2_DOB:
+  aliases:
+  - Customer 2 DOB
+  - Borrower 2 DOB
+borrower_2_date_of_death:
+  aliases:
+  - Customer 2 DOD
+  - Borrower 2 DOD
+collateral_value:
+  aliases:
+  - coll_val
+  - collat_val
+  - collat_value
+  - collateral value
+  - collateralValue
+  - collateral_value
+  - collatval
+  - collval
+cumulative_drawn_amount:
+  aliases:
+  - amount drawn to date
+  - cumulative drawn amount
+current_loan_to_value:
+  aliases:
+  - Cur LTV %
+  - LTV
+  - LTV %
+  - curr loan-to-value
+  - currentLoan-To-Value
+  - currentLoanToValue
+  - current_loan_to_value
+  - Curr Ln To Value
+  - curr ltv
+  - ltvlatest valuation
+current_residual_value_of_asset:
+  aliases:
+  - curr_residual_value_of_asset
+  - current residual value of asset
+  - currentResidualValueOfAsset
+  - current_rv
+  - residual_value
+  - rv
+current_valuation_amount:
+  aliases:
+  - cur_val
+  - curr_valuation_amt
+  - current valuation amount
+  - currentValuationAmount
+  - Curr Val Amt
+  - latest valuation
+  - latest property valuation
+  - Latest Property Value
+  - last valuation
+dominion_bond_rating_service_dbrs_public_rating_equivalent:
+  aliases:
+  - dbrs public rating equivalent
+  - dominion bond rating service dbrs public rating equivalent
+  - dominionBondRatingServiceDbrsPublicRatingEquivalent
+  - dominion_bond_rating_service_dbrs_public_rating_equivalent
+  - dominionbondratingservice(dbrs)publicrating(equivalent)
+current_outstanding_balance:
+  aliases:
+  - Current Outstanding Balance
+drawdown_facility:
+  aliases:
+  - drawdown facility
+early_repayment_charge:
+  aliases:
+  - ERC
+  - early repayment charge
+  - ERCs Paid in the period
+early_repayment_charge_end:
+  aliases:
+  - ERC end date
+  - erc end
+erm_product_type:
+  aliases:
+  - ER product type
+  - er product
+  - er product type
+  - erm product
+  - product category
+erm_sub_product_type:
+  aliases:
+  - product variant
+fitch_public_rating_equivalent:
+  aliases:
+  - fitch public rating equivalent
+  - fitchPublicRatingEquivalent
+  - fitch_public_rating_equivalent
+  - fitchpublicrating(equivalent)
+further_advance_amount:
+  aliases:
+  - fa amount
+  - fa amt
+  - further advance
+  - further advance amount
+  - further advance amt
+further_advance_flag:
+  aliases:
+  - fa flag
+  - further advance flag
+further_advance_date:
+  aliases:
+  - date of further advancement
+  - date of further advance
+  - last drawndown date
+geographic_region_collateral:
+  aliases:
+  - Geographic Region - Collateral
+  - collateral region
+  - geographic region collateral
+  - geographicRegionCollateral
+  - geographic_region_collateral
+  - geographicregion-collateral
+health_impairment_flag:
+  aliases:
+  - health impairment flag
+  - impaired health flag
+interest_arrears_amount:
+  aliases:
+  - int_arrears_amt
+  - interest arrears amount
+  - interestArrearsAmount
+ltv_cap:
+  aliases:
+  - ltv cap
+  - ltv cap %
+  - ltv cap%
+  - ltvcap%
+moody_s_public_rating_equivalent:
+  aliases:
+  - moody s public rating equivalent
+  - moody's public rating (equivalent)
+  - moody's public rating equivalent
+  - moody'spublicrating(equivalent)
+  - moodySPublicRatingEquivalent
+  - moody_s_public_rating_equivalent
+nace_industry_code:
+  aliases:
+  - nace industry code
+  - naceIndustryCode
+  - nace_code
+  - nace_industry_code
+negative_equity_guarantee:
+  aliases:
+  - negative equity guarantee
+  - nneg
+number_of_days_in_interest_arrears:
+  aliases:
+  - Number of Days in Principal Arrears
+  - no of days in prin arrears
+  - no_of_days_in_int_arrears
+  - numberOfDaysInInterestArrears
+  - number_of_days_in_interest_arrears
+  - numberofdaysinprincipalarrears
+number_of_days_in_principal_arrears:
+  aliases:
+  - days in principal arrears
+  - number of days in principal arrears
+  - number_of_days_in_principal_arrears
+obligor_legal_form_business_type:
+  aliases:
+  - business legal form
+  - obligor legal form
+  - obligor legal form business type
+  - obligorLegalForm/BusinessType
+  - obligor_legal_form_/_business_type
+  - obligor_legal_form_business_type
+  - obligorlegalformbusinesstype
+original_loan_to_value:
+  aliases:
+  - Original Loan-To-Value
+  - origLTV
+  - origLTV%
+  - orig_loan_to_value
+  - originalLoan-To-Value
+  - originalLoanToValue
+  - orig ltv
+original_principal_balance:
+  aliases:
+  - Original Principal Balance
+  - orig prin bal eur
+  - orig prin bal gbp
+  - orig_prin_bal
+  - originalPrincipalBalance
+  - original loan amount
+  - Importe Préstamo
+original_residual_value_of_asset:
+  aliases:
+  - orig_residual_value_of_asset
+  - originalResidualValueOfAsset
+  - original_residual_value_of_asset
+original_term:
+  aliases:
+  - orig term
+  - original term
+  - originalTerm
+  - original_term
+principal_arrears_amount:
+  aliases:
+  - prin_arrears_amt
+  - principal arrears amount
+  - principalarrearsamount
+s_p_public_rating_equivalent:
+  aliases:
+  - s p public rating equivalent
+  - s&p public rating equivalent
+  - s&pPublicRating(Equivalent)
+  - s_p_public_rating_equivalent
+  - sppublicratingequivalent
+type_of_loan:
+  aliases:
+  - loan type
+  - Loan Type
+  - loan_type
+  - loantype
+  - type of loan
+  - type_of_loan
+  - typeofloan
+undrawn_facility:
+  aliases:
+  - reserve amount
+  - undrawn Facility
+  - remaining facility
+  - drawdown remaining
+valuation_type:
+  aliases:
+  - val type
+  - valuation method
+  - valuation_type
+weighted_average_life:
+  aliases:
+  - wal
+  - weighted average life
+  - weightedAverageLife
+  - weighted_average_life
+cumulative_accrued_interest:
+  aliases:
+  - Total Interest Accrued
+  - total accrued int
+  - cum interest
+  - total interest
+accrued_interest_in_period:
+  aliases:
+  - Accrued Interest This Period
+  - Interest Charged / (Reversed) / (Waived) in Period
+loan_redemption_flag:
+  aliases:
+  - redeemed Y/N
+broker_channel:
+  aliases:
+  - broker
+current_valuation_method:
+  aliases:
+  - curr valuation method
+  - currentValuationMethod
+  - current_valuation_method
+  - latest valuation type
+  - Curr Val Method
+  - valuation type
+customer_type:
+  aliases:
+  - borrower_type
+  - clienttype
+  - customer type
+  - customerType
+  - cust type
+  - client type 
+  - Cust Type
+original_valuation_amount:
+  aliases:
+  - initial valuation
+  - orig_valuation_amt
+  - original_valuation_amount
+  - originalvaluationamount
+  - Orig Val Amt
+  - original valuation
+  - original property value
+  - Tasación Activo
+original_valuation_date:
+  aliases:
+  - orig valn date
+  - orig valn dt
+  - orig valuation date
+  - original valuation date
+  - originalvaluationdate
+  - val date
+  - orig val dt
+original_valuation_method:
+  aliases:
+  - org valn method
+  - orig valn method
+  - orig_valuation_method
+  - original valuation method
+  - originalValuationMethod
+  - Orig Val Method
+origination_date:
+  aliases:
+  - Loan Origination Date
+  - loanoriginationdate
+  - orig dt
+  - orig valuation date
+  - original_valuation_date
+  - originalvaluationdate
+  - origination date
+  - originationDate
+  - start date
+  - date of completion
+  - Entrada en Vigor
+guarantor_type:
+  aliases:
+  - guarantor_type
+  - guarantortype
+  - type_guarantor
+resident:
+  aliases:
+  - resident
+  - Res?
+geographic_region_classification:
+  aliases:
+  - Geographic Region Classification
+  - geog_region
+  - geographicRegionClassification
+  - region
+  - Geo Region Class
+geographic_region_obligor:
+  aliases:
+  - geographicRegionObligor
+  - geographic_region_-_obligor
+  - geographicregion-obligor
+  - Geo Region
+employment_status:
+  aliases:
+  - employment status
+  - empl status
+  - emp status
+  - employment_status
+  - emp stat
+primary_income_currency:
+  aliases:
+  - primary income currency
+  - primary_income_currency
+  - primary income ccy
+  - primary_income_ccy
+  - prim inc ccy
+purpose:
+  aliases:
+  - Purpose
+  - facilitypurpose
+  - loan_purpose
+  - loanpurpose
+amortisation_type:
+  aliases:
+  - amort_type
+  - amortisationType
+  - amortisation_type
+  - amortization_type
+  - amortizationtype
+  - amorttype
+  - pmt type
+number_of_payments_before_securitisation:
+  aliases:
+  - No. Payments Before Securitisation
+  - no of pmts before securitisation
+  - number_of_payments_before_securitisation
+  - numberofpaymentsbeforesecuritisation
+loan_sub_type:
+  aliases:
+  - Lump Sum or Drawdown
+indexed_loan_to_value:
+  aliases:
+  - LTVIndexed
+  - iLTV
+indexed_value:
+  aliases:
+  - index value
+  - index valuation
+  - index adj value
+protected_equity_percentage:
+  aliases:
+  - protected equity
+  - protected eq
+  - protected eqty
+protected_equity_flag:
+  aliases:
+  - protected equity flag
+  - protected equity (Y/N))
+  - protected eq flag
+  - protected eq (Y/N)
+  - protected eqty flag
+  - protected eqty (Y/N)
+principal_advances_in_period:
+  aliases:
+    - Principal Advances in the Period
+    - New Advances in Period
+    - Further Advances Period
+    - Principal Draws in Period
+    - Advances Principal
+redemptions_received_in_period:
+  aliases:
+    - Redemptions Received in Period
+    - Redemption Amount in Period
+    - Full Redemptions Period
+    - Payoffs Received Period
+recoveries_in_period:
+  aliases:
+    - Recoveries on shortfall cases (net of any further costs)
+    - Recoveries
+interest_collections_in_period:
+  aliases:
+    - Interest and Other Cash Received
+    - Interest Received in period
+    - interest paid
+    - interest collected
+origination_channel:
+  aliases:
+    - channel
+    - sale type
+    - orig_channel

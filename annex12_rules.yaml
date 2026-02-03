@@ -1,0 +1,67 @@
+# annex12_rules.yaml (Corrected for ESMA mapping workbook v1.3.1)
+
+# 1. CHOICE FIELDS
+# Fields where the mapping workbook provides NoDataOptn/NoData rows for the SAME RTS code.
+# Your engine uses this list to select the NoData leaf when val is ND*.
+choice_fields:
+  - IVSS16  # Principal Collections (has NoDataOptn/NoData in mapping)
+  - IVSS17  # Interest Collections (has NoDataOptn/NoData in mapping)
+  - IVSR5   # Trigger Threshold (has NoDataOptn/NoData in mapping)
+  - IVSR6   # Trigger Value (has NoDataOptn/NoData in mapping)
+
+# 2. MONETARY FIELDS
+# Fields where XSD expects a 'Ccy' attribute on an *Amt* leaf.
+# Your code only injects Ccy if the actual XML leaf tag ends with 'Amt'.
+monetary_fields:
+  - IVSS16
+  - IVSS17
+  - IVSS28
+  - IVSF5
+  - IVSF6
+
+# 3. BOOLEAN FIELDS
+# Fields requiring conversion from Y/N to true/false.
+boolean_fields:
+  - IVSS11
+  - IVSS12
+  - IVSS18
+  - IVSS20
+  - IVSR7
+
+# 4. REPEATABLE GROUPS
+# container_tag MUST match an exact segment appearing in the mapping PATH for the group fields.
+repeatable_groups:
+  Triggers:
+    container_tag: TstEvtTrggr
+    members: [IVSR2, IVSR3, IVSR4, IVSR5, IVSR6, IVSR7, IVSR8, IVSR9, IVSR10]
+
+  Cashflows:
+    container_tag: CshFlow
+    members: [IVSF2, IVSF3, IVSF4, IVSF5, IVSF6]
+
+# 5. SIGN LOGIC
+implicit_sign_fields:
+  - IVSF4
+  - IVSF5
+  - IVSF6
+  - IVSS14
+  - IVSS15  
+  - IVSS16
+  - IVSS17
+  - IVSS19
+  - IVSS23
+  - IVSS24
+  - IVSS25
+  - IVSS26
+  - IVSS28
+  - IVSS29
+  - IVSS33
+  - IVSS34
+  - IVSS38
+  - IVSS39
+  - IVSS40
+  - IVSS41
+  - IVSS42
+  - IVSS43
+  - IVSS44
+
