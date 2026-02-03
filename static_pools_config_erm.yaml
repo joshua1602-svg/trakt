@@ -1,0 +1,14 @@
+static_pools:
+  charts:
+    - title: "Origination Quality: LTV by Cohort"
+      metric: "current_ltv"
+      agg: "mean"
+      y_axis_label: "Weighted Avg LTV (%)"
+    - title: "Pricing Discipline: Yield by Cohort"
+      metric: "interest_rate"
+      agg: "mean"
+      y_axis_label: "Coupon (%)"
+    - title: "Prepayment Speed (CPR)"
+      metric: "prepayment_amount"
+      agg: "sum"
+      y_axis_label: "Cumulative Redemptions (£)"

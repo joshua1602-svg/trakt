@@ -1,0 +1,45 @@
+# standards_library.yaml
+
+# 1. Currency: ISO 4217
+CURRENCYCODE_3:
+  description: "ISO 4217 3-letter currency code"
+  pattern: "^[A-Z]{3}$"
+  default: "GBP"
+
+# 2. Date: ISO 8601
+ISODATE:
+  description: "ISO 8601 Date format YYYY-MM-DD"
+  pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+
+# 3. Region: NUTS3 Resolution Engine
+GEOGRAPHIC_REGION:
+  description: "Resolves ITL or NUTS3 via Code, Name, or Postcode Outcode"
+  pattern: "^[A-Z]{2}[A-Z0-9]{3}$" # Matches TLI32 (ITL) or UKC12 (NUTS)
+  sources:
+    # Point to the processed V2 file, NOT the raw ONS download
+    uk_master: "reference_data/uk_itl_master_lookup_v2.csv"
+    eu_master: "NUTS2021-NUTS2024.csv"
+  fallbacks:
+    uk: "GBZZZ"
+
+# 4. ESMA Securitisation "No Data" options (RTS on Disclosure Annex 1 Table 1; Reporting Instructions)
+
+# - ND1-ND4 indicate legitimate cases where information is not available; they are not exemptions from reporting.
+# - ND4 includes an availability date in the form ND4-YYYY-MM-DD.
+ND_OPTIONS:
+  ND1:
+    description: "Data not collected as not required by the lending or underwriting criteria"
+    category: "not_collected"
+  ND2:
+    description: "Data collected on underlying exposure application but not loaded into the originator's reporting system"
+    category: "collected_not_loaded_reporting_system"
+  ND3:
+    description: "Data collected on underlying exposure application but loaded onto a separate system from the originator's reporting system"
+    category: "collected_in_separate_system"
+  ND4:
+    description: "Data collected but will only be available from YYYY-MM-DD (ND4-YYYY-MM-DD)"
+    pattern: "^ND4-\\d{4}-\\d{2}-\\d{2}$"
+    category: "collected_available_from_date"
+  ND5:
+    description: "Not applicable"
+    category: "not_applicable"

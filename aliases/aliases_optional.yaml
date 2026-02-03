@@ -1,0 +1,384 @@
+asset_insurance:
+  aliases:
+  - Asset Insurance
+  - assetInsurance
+balloon_amount:
+  aliases:
+  - balloon amount
+  - balloon amt
+  - balloonAmount
+bank_internal_rating:
+  aliases:
+  - bank internal rating
+  - bankinternalrating
+  - riskbucket
+  - riskrating
+borrower_basel_iii_segment:
+  aliases:
+  - borrower basel iii segment
+  - borrowerbaseliiisegment
+borrower_deposit_amount:
+  aliases:
+  - borrower deposit amount
+  - borrower deposit amt
+  - borrowerdepositamount
+borrower_deposit_currency:
+  aliases:
+  - borrowerDepositCurrency
+  - borrower_deposit_currency
+borrower_identifier:
+  aliases:
+  - Borrower Identifier
+  - borrower 1
+  - borrower 1 id
+  - borrower id
+  - borrower id 1
+  - borrowerIdentifier
+collateral_id:
+  aliases:
+  - Collateral ID
+  - collateralId
+collateralisation_ratio:
+  aliases:
+  - collateralisationRatio
+  - collateralisation_ratio
+commercial_liabilities:
+  aliases:
+  - commercial liabilities
+  - commercialliabilities
+currency_of_financials:
+  aliases:
+  - currencyOfFinancials
+  - currency_of_financials
+customer_segment:
+  aliases:
+  - customer segment
+  - customersegment
+date_of_breach:
+  aliases:
+  - date of breach
+  - date of breach cure
+  - dateOfBreach
+  - dateofbreachcure
+date_of_end_of_work_out:
+  aliases:
+  - date of end of work out
+  - dateOfEndOfWork-Out
+  - dateOfEndOfWorkOut
+date_of_financials:
+  aliases:
+  - Date of Financials
+  - dateoffinancials
+date_of_financials_at_securitisation:
+  aliases:
+  - date of financials at securitisation
+  - dateoffinancialsatsecuritisation
+date_of_restructuring:
+  aliases:
+  - Date Of Restructuring
+  - dateOfRestructuring
+debt_to_income_ratio:
+  aliases:
+  - Debt To Income Ratio
+  - debtToIncomeRatio
+energy_performance_certificate_provider_name:
+  aliases:
+  - energyPerformanceCertificateProviderName
+  - energy_performance_certificate_provider_name
+equity:
+  aliases:
+  - Equity
+financial_expenses:
+  aliases:
+  - financial expenses
+  - financialExpenses
+finished_property:
+  aliases:
+  - Finished Property?
+  - finishedproperty
+fitch_industry_code:
+  aliases:
+  - fitchIndustryCode
+  - fitch_industry_code
+foreclosure_cost:
+  aliases:
+  - foreclosure_cost
+  - foreclosurecost
+group_company_identifier:
+  aliases:
+  - groupCompanyIdentifier
+  - group_company_id
+  - group_company_identifier
+income_expiring_1_12_months:
+  aliases:
+  - Income Expiring 13-24 Months
+  - incomeExpiring112Months
+  - incomeExpiring13-24Months
+  - income_expiring_1-12_months
+  - incomeexpiring1-12months
+income_expiring_25_36_months:
+  aliases:
+  - income expiring 25-36 months
+  - incomeExpiring25-36Months
+  - incomeexpiring2536months
+income_expiring_37_48_months:
+  aliases:
+  - incomeExpiring37-48Months
+  - income_expiring_37_48_months
+  - incomeexpiring3748months
+income_expiring_49_months:
+  aliases:
+  - incomeExpiring49+Months
+  - income_expiring_49+_months
+  - incomeexpiring49months
+insurance_or_investment_provider:
+  aliases:
+  - Insurance Or Investment Provider
+  - insuranceOrInvestmentProvider
+last_internal_obligor_rating_review:
+  aliases:
+  - Last Internal Obligor Rating Review
+  - lastInternalObligorRatingReview
+legal_proceedings_start_date:
+  aliases:
+  - Legal Proceedings Start Date
+  - legalProceedingsStartDate
+licensed_property:
+  aliases:
+  - licensed_property?
+  - licensedproperty
+lien:
+  aliases:
+  - 1st charge
+  - 1st lien
+  - Lien
+  - first charge
+  - first lien
+loan_hedged:
+  aliases:
+  - Loan Hedged
+  - loanHedged
+loan_identifier:
+  aliases:
+  - loan identifier
+  - loan ref Number
+  - loan ref no
+  - loanIdentifier
+  - loan_id
+  - loanid
+  - loanref no
+  - loanref number
+  - loanrefno
+  - Loan Policy Number
+long_term_debt:
+  aliases:
+  - Long Term Debt
+  - longtermdebt
+moody_s_industry_code:
+  aliases:
+  - moody'sIndustryCode
+  - moody's_industry_code
+  - moodysindustrycode
+most_recent_capital_expenditure:
+  aliases:
+  - Most Recent Capital Expenditure
+  - mostrecentcapitalexpenditure
+most_recent_financials_as_of_start_date:
+  aliases:
+  - Most Recent Financials As Of Start Date
+  - mostRecentFinancialsAsOfStartDate
+  - most_recent_financials_as_of_end_date
+  - mostrecentfinancialsasofenddate
+most_recent_operating_expenses:
+  aliases:
+  - Most Recent Operating Expenses
+  - mostRecentOperatingExpenses
+most_recent_revenue:
+  aliases:
+  - Most Recent Revenue
+  - mostrecentrevenue
+net_internal_floor_area_validated:
+  aliases:
+  - net_internal_floor_area_validated
+  - netinternalfloorareavalidated
+net_operating_income_at_securitisation:
+  aliases:
+  - Net Operating Income At Securitisation
+  - netoperatingincomeatsecuritisation
+net_profit:
+  aliases:
+  - net_profit
+  - netprofit
+non_recoverability_determined:
+  aliases:
+  - Non Recoverability Determined
+  - nonRecoverabilityDetermined
+number_of_collateral_items_securing_the_loan:
+  aliases:
+  - no of collateral items securing the loan
+  - number of collateral items securing the loan
+  - numberofcollateralitemssecuringtheloan
+number_of_employees:
+  aliases:
+  - no of employees
+  - number of employees
+  - numberOfEmployees
+obligor_basel_iii_segment:
+  aliases:
+  - obligor_basel_iii_segment
+  - obligorbaseliiisegment
+obligor_incorporation_date:
+  aliases:
+  - obligor incorporation date
+  - obligorincorporationdate
+obligor_is_a_customer_since:
+  aliases:
+  - obligor_is_a_customer_since?
+  - obligorisacustomersince?
+obligor_legal_type:
+  aliases:
+  - obligorLegalType
+  - obligor_legal_type
+obligor_tax_code:
+  aliases:
+  - obligor_tax_code
+  - obligortaxcode
+occupancy_type:
+  aliases:
+  - occupancy type
+  - occupancyType
+original_lender_establishment_country:
+  aliases:
+  - orig_lender_establishment_country
+  - originalLenderEstablishmentCountry
+  - original_lender_establishment_country
+original_lender_legal_entity_identifier:
+  aliases:
+  - Original Lender Legal Entity Identifier
+  - orig_lender_legal_entity_id
+  - originalLenderLegalEntityIdentifier
+  - originator legal entity identifier
+  - originatorLegalEntityIdentifier
+  - originator_legal_entity_id
+original_lender_name:
+  aliases:
+  - orig lender name
+  - originalLenderName
+  - original_lender_name
+originator:
+  aliases:
+  - Originator
+originator_affiliate:
+  aliases:
+  - Originator Affiliate?
+  - originatorAffiliate
+other_industry_code:
+  aliases:
+  - otherIndustryCode
+  - other_industry_code
+other_public_rating:
+  aliases:
+  - Other Public Rating
+  - otherPublicRating
+pool_identifier:
+  aliases:
+  - Pool Identifier
+  - loan identifier
+  - loanIdentifier
+  - loan_id
+  - poolIdentifier
+  - pool_id
+  - pool
+  - Pool
+postcode:
+  aliases:
+  - postcode
+  - post code
+  - post code.1
+ranking:
+  aliases:
+  - ranking
+real_estate_sale_price:
+  aliases:
+  - real_estate_sale_price
+  - realestatesaleprice
+recourse:
+  aliases:
+  - recourse
+recourse_3rd_party:
+  aliases:
+  - recourse-3RdParty
+  - recourse3RdParty
+  - recourse_3rd_party
+s_p_industry_code:
+  aliases:
+  - s&p industry code
+  - s&pindustrycode
+  - sPIndustryCode
+secondary_income:
+  aliases:
+  - secondary income
+  - secondaryincome
+secondary_income_verification:
+  aliases:
+  - Secondary Income Verification
+  - secondaryincomeverification
+securitised_loan_amount:
+  aliases:
+  - securitised loan amount
+  - securitised loan amt
+  - securitisedLoanAmount
+servicer_identifier:
+  aliases:
+  - servicer_id
+  - servicer_identifier
+  - serviceridentifier
+short_term_financial_debt:
+  aliases:
+  - Short Term Financial Debt
+  - shorttermfinancialdebt
+special_scheme:
+  aliases:
+  - specialScheme
+  - special_scheme
+start_date_of_amortisation:
+  aliases:
+  - start_date_of_amortisation
+  - startdateofamortisation
+total_credit_limit:
+  aliases:
+  - Total Credit Limit
+  - totalcreditlimit
+total_liabilities_excluding_equity:
+  aliases:
+  - total liabilities excluding equity
+  - totalLiabilitiesExcludingEquity
+  - totalliabilities(excludingequity)
+turnover_of_obligor:
+  aliases:
+  - turnover of obligor
+  - turnoverofobligor
+work_out_process_complete:
+  aliases:
+  - work-outProcessComplete
+  - work-out_process_complete
+  - workOutProcessComplete
+year_built:
+  aliases:
+  - year built
+  - yearBuilt
+  - year of construction
+year_last_renovated:
+  aliases:
+  - year last renovated
+  - yearlastrenovated
+year_of_manufacture_construction:
+  aliases:
+  - yearOfManufacture/Construction
+  - year_of_manufacture_construction
+  - yearofmanufactureconstruction
+youngest_borrower_age:
+  aliases:
+  - youngest age
+penalty_interest_charge:
+  - Interéses de demora

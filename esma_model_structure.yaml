@@ -1,0 +1,94 @@
+# ESMA Annex 2 - XSD STRUCTURAL ORDER
+# CORRECTED: Header is handled automatically by script. RREL1 is a Record field.
+
+Header:
+  # Leave empty. The script will force ScrtstnIdr and CutOffDt automatically.
+
+Record:
+  # --- 1. IDENTIFIERS ---
+  - RREL1  # Unique Identifier (This is the Loan ID)
+  - RREL3  # New Identifier
+  - RREL2  # Original Identifier (Note: Annex 2 often swaps 2/3 vs 3/2, verify map)
+
+  # --- 2. ACTIVITY DATES ---
+  - RREL5  # Origination
+  - RREL7  # Pool Add
+  - RREL8  # Repurchase
+  - RREL9  # Redemption
+  - RREL10 # Maturity
+
+  # --- 3. OBLIGOR DETAILS ---
+  - RREL11
+  - RREL12
+  - RREL13
+  - RREL14
+  - RREL15
+  - RREL16
+  - RREL17
+  - RREL18
+  - RREL19
+  - RREL20
+
+  # --- 4. LOAN DATA ---
+  - RREL21
+  - RREL22
+  - RREL23
+  - RREL24
+  - RREL25
+  - RREL26
+  - RREL27
+  - RREL28
+  - RREL29
+  - RREL30
+  - RREL31
+  - RREL32
+  - RREL33
+  - RREL34
+  - RREL35
+  - RREL36
+  - RREL37
+  - RREL38
+  - RREL39
+  - RREL40
+  - RREL41
+  - RREL42
+  - RREL43
+  - RREL44
+  - RREL45
+  - RREL46
+  - RREL47
+  - RREL48
+  - RREL49
+  - RREL50
+  - RREL51
+  - RREL52
+  - RREL53
+  - RREL54
+  - RREL55
+  - RREL56
+  - RREL57
+  - RREL58
+  - RREL59
+  - RREL60
+
+  # --- 5. COLLATERAL IDENTIFIERS ---
+  - RREC1  # Unique Coll ID
+  - RREC4  # New Coll ID
+  - RREC3  # Original Coll ID
+
+  # --- 6. COLLATERAL DATA ---
+  - RREC6
+  - RREC7
+  - RREC8
+  - RREC9
+  - RREC10
+  - RREC11
+  - RREC12
+  - RREC13
+  - RREC14
+  - RREC15
+  - RREC16
+  - RREC17
+  - RREC18
+  - RREC19
+  - RREC20

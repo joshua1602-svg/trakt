@@ -1,0 +1,52 @@
+# config_ere_annex12.yaml
+# LAYER 3: ANNEX 12 OVERLAY
+# Extension for Investor Reporting. Inherits LEI/Identity from config_ERM_UK.yaml.
+
+annex12:
+  meta:
+    template: "ESMA Annex 12 (Investor Report)"
+  
+  assumptions:
+    reporting_currency: "GBP"
+
+  deal:
+    # --- HEADER INFO (Specific to Annex 12 Contact Person) ---
+    # Note: LEI (IVSS1) and Entity Name (IVSS3/4) are pulled from Master Config.
+    IVSS5: "Andrew Fenlon"
+    IVSS6: "+44-0000000000"
+    IVSS7: "reporting@example.com"
+    
+    # --- DEAL SPECIFIC FLAGS ---
+    IVSS8: "VSLC"
+    IVSS9: "SPON"
+    IVSS10: "OTHR"
+
+    # Structural features 
+    IVSS11: "Y" 
+    IVSS12: "N"
+    IVSS13: "ND5"
+    IVSS20: "N"
+
+    # --- FORCED TRIGGERS (Required for XML Structure) ---
+    # These remain here because they don't exist in the Loan Tape
+    IVSR1: "213800ABCDE123456701N202501"        # Report ID
+    IVSR2: "TEST_001"       # Test Identifier
+    IVSR3: "TEST_001"       # Test Name ID
+    IVSR4: "Borrowing Base" # Test Name
+    IVSR5: "ND5"            # Threshold
+    IVSR6: "ND5"            # Result
+    IVSR7: "N"              # Breach Status
+    IVSR8: 0                # Cure Days
+    IVSR9: 30               # Freq
+    IVSR10: "OTHR"          # Consequence
+
+    # --- CASHFLOWS ---
+    IVSF1: "CF_001"         # Cashflow ID
+    IVSF2: "CF_001"         # Original ID
+    IVSF3: "CF_001"         # Current ID
+    IVSF4: "Revenue"        # Description
+    IVSF5: 0.00             # Amount
+    IVSF6: 0.00             # Post Funds
+
+  period:
+    IVSS2: "2025-10-31"     # Reporting Period End Date (Often distinct from Cut-off)

@@ -1,0 +1,5509 @@
+consumers:
+  BOE_Securitisation:
+    include_unmapped_analytics: false
+    priority_regimes:
+    - BOE_Cashflow
+    validation: Strict
+  ESMA_Securitisation:
+    include_unmapped_analytics: false
+    priority_regimes:
+    - ESMA_Annex2
+    - ESMA_Annex3
+    - ESMA_Annex8
+    validation: Strict
+  MA_Buyside:
+    description: Due Diligence Super-Set for Buyers
+    include_unmapped_analytics: true
+    priority_regimes:
+    - ESMA_Annex2
+    - ESMA_Annex3
+    validation: Standard
+  MI_Reporting:
+    description: Internal MI (Regulatory + Asset-specific unmapped fields)
+    include_unmapped_analytics: true
+    priority_regimes:
+    - ESMA_Annex2
+    - ESMA_Annex3
+    validation: Relaxed
+fields:
+  account_status:
+    allowed_values: account_status
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL69
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL136
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL79
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL57
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL55
+        priority: Mandatory
+    layer: core
+    core_canonical: true
+  accrual_of_interest_allowed:
+    allowed_values: yes_no
+    category: regulatory
+    format: Y/N
+    portfolio_type: cre
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL121
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  accrued_interest_in_period:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  actual_default_interest:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: cre
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL135
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  age_restricted:
+    allowed_values: yes_no
+    category: analytics
+    format: Y/N
+    portfolio_type: rre
+    layer: collateral
+    core_canonical: false
+  agent_bank_of_syndication_legal_entity_identifier:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: cre
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL173
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  allocated_losses:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL73
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL137
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL83
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL61
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL59
+        priority: Optional
+    layer: performance
+    core_canonical: false
+  allocated_percentage_of_underlying_exposure_at_securitisation_date:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: cre
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC20
+        priority: Optional
+    layer: core
+    core_canonical: false
+  amortisation_type:
+    allowed_values: amortisation
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL35
+        priority: Analytics
+      ESMA_Annex3:
+        code: CREL87
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL46
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL31
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL31
+        priority: Mandatory
+    layer: core
+    core_canonical: true
+  amounts_added_to_escrows_in_current_period:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: cre
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL64
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  amounts_held_in_escrow:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: cre
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL52
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  arrears_balance:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL67
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL129
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL77
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL55
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL53
+        priority: Optional
+    layer: performance
+    core_canonical: false
+  asset_insurance:
+    allowed_values: yes_no
+    category: analytics
+    format: Y/N
+    portfolio_type: sme
+    layer: core
+    core_canonical: false
+  asset_type:
+    allowed_values: debt_type
+    category: analytics
+    format: list
+    portfolio_type: sme
+    layer: core
+    core_canonical: false
+  balloon_amount:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL41
+        priority: Optional
+      ESMA_Annex4:
+        code: CRPL51
+        priority: Optional
+      ESMA_Annex9:
+        code: ESTL37
+        priority: Optional
+    layer: core
+    core_canonical: false
+  bank_internal_loss_given_default_lgd_estimate:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: sme
+    layer: performance
+    core_canonical: false
+  bank_internal_loss_given_default_lgd_estimate_down_turn:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: sme
+    layer: performance
+    core_canonical: false
+  bank_internal_rating:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: sme
+    layer: product
+    core_canonical: false
+  bank_internal_rating_prior_to_default:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: sme
+    layer: performance
+    core_canonical: false
+  borrower_1_age:
+    allowed_values: null
+    category: analytics
+    format: integer
+    portfolio_type: equity_release
+    layer: product
+    core_canonical: false
+  borrower_1_date_of_death:
+    allowed_values: null
+    category: analytics
+    format: date
+    portfolio_type: equity_release
+    layer: product
+    core_canonical: false
+  borrower_1_id:
+    allowed_values: null
+    category: analytics
+    format: string
+    portfolio_type: equity_release
+    layer: product
+    core_canonical: false
+  borrower_2_age:
+    allowed_values: null
+    category: analytics
+    format: integer
+    portfolio_type: equity_release
+    layer: product
+    core_canonical: false
+  borrower_2_date_of_death:
+    allowed_values: null
+    category: analytics
+    format: date
+    portfolio_type: equity_release
+    layer: product
+    core_canonical: false
+  borrower_2_id:
+    allowed_values: null
+    category: analytics
+    format: string
+    portfolio_type: equity_release
+    layer: product
+    core_canonical: false
+  borrower_2_income:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: equity_release
+    layer: product
+    core_canonical: false
+  borrower_basel_iii_segment:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: sme
+    layer: product
+    core_canonical: false
+  borrower_deposit_amount:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: sme
+    layer: product
+    core_canonical: false
+  borrower_deposit_currency:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: sme
+    layer: product
+    core_canonical: false
+  borrower_identifier:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: sme
+    layer: core
+    core_canonical: true
+  breakage_costs_due_from_swap_counterparty:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: cre
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL170
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  breakage_costs_due_to_underlying_exposure_swap_provider:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: cre
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL168
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  broker_channel:
+    allowed_values: null
+    category: analytics
+    format: string
+    portfolio_type: equity_release
+    layer: product
+    core_canonical: false
+  capital_expenditures_at_securitisation_date:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: cre
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL67
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  charge_type:
+    allowed_values: charge_type
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex4:
+        code: CRPC7
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTC7
+        priority: Optional
+    layer: core
+    core_canonical: false
+  collateral_currency:
+    allowed_values: currency_code_iso
+    category: regulatory
+    format: currency_code
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREC22
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPC18
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTC20
+        priority: Mandatory
+    layer: collateral
+    core_canonical: false
+  collateral_id:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: collateral
+    core_canonical: false
+  collateral_identifier:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CRET3
+        priority: Mandatory
+    layer: collateral
+    core_canonical: false
+  collateral_securitisation_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: cre
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC19
+        priority: Mandatory
+    layer: collateral
+    core_canonical: false
+  collateral_type:
+    allowed_values: collateral_type
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREC5
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREC5
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPC9
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL71
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTC9
+        priority: Mandatory
+    layer: collateral
+    core_canonical: false
+  collateral_value:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: collateral
+    core_canonical: false
+  collateralisation_ratio:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: sme
+    layer: collateral
+    core_canonical: false
+  collection_of_escrows:
+    allowed_values: yes_no
+    category: regulatory
+    format: Y/N
+    portfolio_type: cre
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL53
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  collection_of_other_reserves:
+    allowed_values: yes_no
+    category: regulatory
+    format: Y/N
+    portfolio_type: cre
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL54
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  commercial_area:
+    allowed_values: null
+    category: regulatory
+    format: integer
+    portfolio_type: cre
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC29
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  commercial_liabilities:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: sme
+    layer: core
+    core_canonical: false
+  committed_undrawn_facility_underlying_exposure_balance:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL26
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  conditions_of_drawing_cash_reserve:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL58
+        priority: Mandatory
+    layer: product
+    core_canonical: false
+  consequence_for_breach_of_financial_covenant:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL47
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  contractual_annual_rental_income:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC46
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  corporate_guarantee_currency:
+    allowed_values: currency_code_iso
+    category: analytics
+    format: currency_code
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  corporate_guarantor_bank_internal_1_year_probability_default:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  corporate_guarantor_identifier:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: product
+    core_canonical: false
+  corporate_guarantor_last_internal_rating_review:
+    allowed_values: null
+    category: analytics
+    format: date
+    portfolio_type: common
+    layer: product
+    core_canonical: false
+  covenant_breach_trigger:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL149
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  credit_impaired_obligor:
+    allowed_values: yes_no
+    category: regulatory
+    format: Y/N
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL14
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL12
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL12
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL14
+        priority: Optional
+    layer: performance
+    core_canonical: false
+  cumulative_accrued_interest:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  cumulative_drawn_amount:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  cumulative_prepayments:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL64
+        priority: Optional
+      ESMA_Annex4:
+        code: CRPL74
+        priority: Optional
+      ESMA_Annex8:
+        code: LESL49
+        priority: Optional
+      ESMA_Annex9:
+        code: ESTL51
+        priority: Optional
+    layer: performance
+    core_canonical: false
+  cumulative_recoveries:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL74
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL141
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL84
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL62
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL60
+        priority: Optional
+    layer: performance
+    core_canonical: false
+  cure_payments_possible:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL37
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  exposure_currency_denomination:
+    allowed_values: currency_code_iso
+    category: regulatory
+    format: currency_code
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL28
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL22
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL37
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL26
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL26
+        priority: Mandatory
+    layer: core
+    core_canonical: true
+  currency_of_financials:
+    allowed_values: currency_code_iso
+    category: analytics
+    format: currency_code
+    portfolio_type: sme
+    layer: core
+    core_canonical: false
+  currency_swap_maturity_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL160
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL95
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  currency_swap_notional:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL161
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL92
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  currency_swap_provider:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL158
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL94
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  currency_swap_provider_legal_entity_identifier:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL159
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL93
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  current_allocated_underlying_exposure_percentage:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC21
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  current_debt_service_coverage_ratio:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL74
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  current_default_interest_rate:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL120
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  current_index_rate:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL115
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  current_interest_coverage_ratio:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL78
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  current_interest_rate:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL43
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL110
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL53
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL36
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL39
+        priority: Analytics
+    layer: core
+    core_canonical: true
+  current_interest_rate_index:
+    allowed_values: interest_rate_index
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL44
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL111
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL54
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL37
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL40
+        priority: Analytics
+    layer: core
+    core_canonical: false
+  current_interest_rate_index_tenor:
+    allowed_values: interest_rate_tenor
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL45
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL112
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL55
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL38
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL41
+        priority: Optional
+    layer: core
+    core_canonical: false
+  current_interest_rate_margin:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL46
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL113
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL56
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL39
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL42
+        priority: Analytics
+    layer: core
+    core_canonical: false
+  current_loan_to_value:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREC12
+        priority: Analytics
+      ESMA_Annex3:
+        code: CREL76
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTC13
+        priority: Analytics
+    layer: collateral
+    core_canonical: false
+  current_principal_balance:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL30
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL23
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL39
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL28
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL28
+        priority: Analytics
+    layer: core
+    core_canonical: true
+  current_residual_value_of_asset:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: equipment
+    regime_mapping:
+      ESMA_Annex8:
+        code: LESL52
+        priority: Analytics
+    layer: core
+    core_canonical: false
+  current_valuation_amount:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREC13
+        priority: Analytics
+      ESMA_Annex3:
+        code: CREC15
+        priority: Analytics
+      ESMA_Annex4:
+        code: CRPC10
+        priority: Analytics
+      ESMA_Annex8:
+        code: LESL75
+        priority: Analytics
+      ESMA_Annex9:
+        code: ESTC10
+        priority: Optional
+    layer: collateral
+    core_canonical: false
+  current_valuation_basis:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC17
+        priority: Mandatory
+    layer: collateral
+    core_canonical: false
+  current_valuation_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREC15
+        priority: Optional
+      ESMA_Annex3:
+        code: CREC14
+        priority: Optional
+      ESMA_Annex4:
+        code: CRPC12
+        priority: Optional
+      ESMA_Annex8:
+        code: LESL77
+        priority: Optional
+      ESMA_Annex9:
+        code: ESTC12
+        priority: Optional
+    layer: collateral
+    core_canonical: false
+  current_valuation_method:
+    allowed_values: valuation_method
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREC14
+        priority: Analytics
+      ESMA_Annex3:
+        code: CREC16
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPC11
+        priority: Optional
+      ESMA_Annex8:
+        code: LESL76
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTC11
+        priority: Optional
+    layer: collateral
+    core_canonical: false
+  customer_segment:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: sme
+    layer: core
+    core_canonical: false
+  customer_type:
+    allowed_values: customer_type
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL15
+        priority: Analytics
+      ESMA_Annex4:
+        code: CRPL13
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL14
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  data_cut_off_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL6
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL6
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL6
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL6
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL6
+        priority: Mandatory
+    layer: core
+    core_canonical: true
+  date_last_in_arrears:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL66
+        priority: Optional
+      ESMA_Annex3:
+        code: CREL128
+        priority: Optional
+      ESMA_Annex4:
+        code: CRPL76
+        priority: Optional
+      ESMA_Annex8:
+        code: LESL54
+        priority: Optional
+      ESMA_Annex9:
+        code: ESTL52
+        priority: Optional
+    layer: performance
+    core_canonical: false
+  date_loss_allocated:
+    allowed_values: null
+    category: analytics
+    format: date
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  date_of_breach:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL150
+        priority: Optional
+    layer: core
+    core_canonical: false
+  date_of_breach_cure:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL151
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  date_of_end_of_work_out:
+    allowed_values: null
+    category: analytics
+    format: date
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  date_of_financials:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex4:
+        code: CRPL22
+        priority: Optional
+    layer: core
+    core_canonical: false
+  date_of_financials_at_securitisation:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC36
+        priority: Optional
+    layer: core
+    core_canonical: false
+  date_of_lease_expiration:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: equipment
+    regime_mapping:
+      ESMA_Annex3:
+        code: CRET7
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  date_of_repurchase:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL8
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL9
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL8
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL8
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL8
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  date_of_restructuring:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL65
+        priority: Optional
+      ESMA_Annex3:
+        code: CREL8
+        priority: Optional
+      ESMA_Annex4:
+        code: CRPL75
+        priority: Optional
+      ESMA_Annex8:
+        code: LESL53
+        priority: Optional
+    layer: performance
+    core_canonical: false
+  date_of_sale:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREC20
+        priority: Optional
+      ESMA_Annex4:
+        code: CRPC16
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTC18
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  date_of_substitution:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL10
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  date_of_valuation_at_securitisation:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC24
+        priority: Mandatory
+    layer: collateral
+    core_canonical: false
+  day_count_convention:
+    allowed_values: day_count_convention
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL122
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  days_in_arrears_prior:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  debt_service_coverage_ratio_at_the_securitisation_date:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL73
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  debt_service_coverage_ratio_indicator_at_securitisation_date:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL71
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  debt_service_coverage_ratio_method:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL70
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  debt_to_income_ratio:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL40
+        priority: Optional
+      ESMA_Annex9:
+        code: ESTL36
+        priority: Optional
+    layer: core
+    core_canonical: false
+  debt_type:
+    allowed_values: debt_type
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex4:
+        code: CRPL24
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  default_amount:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL71
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL132
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL81
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL59
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL57
+        priority: Analytics
+    layer: performance
+    core_canonical: false
+  default_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL72
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL133
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL82
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL60
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL58
+        priority: Optional
+    layer: performance
+    core_canonical: false
+  default_or_foreclosure_on_the_loan_per_basel_iii_definition:
+    allowed_values: yes_no
+    category: analytics
+    format: Y/N
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  default_or_foreclosure_on_the_loan_per_the_transaction_definition:
+    allowed_values: yes_no
+    category: analytics
+    format: Y/N
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  defaulted_underlying_exposure_purchase_price:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL36
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  deferred_interest:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL126
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  deposit_amount:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL77
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL87
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL64
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  description:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex9:
+        code: ESTL10
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  do_non_payments_on_equal_ranking_underlying_exposures_constitute_default_of_property:
+    allowed_values: yes_no
+    category: regulatory
+    format: Y/N
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL42
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  do_non_payments_on_prior_ranking_claims_constitute_a_default_of_the_underlying_exposure:
+    allowed_values: yes_no
+    category: regulatory
+    format: Y/N
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL41
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  dominion_bond_rating_service_dbrs_public_rating_equivalent:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  down_payment_amount:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex8:
+        code: LESL51
+        priority: Optional
+    layer: core
+    core_canonical: false
+  drawdown_facility:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  duration_of_extension_option:
+    allowed_values: null
+    category: regulatory
+    format: integer
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL20
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  early_repayment_charge:
+    allowed_values: yes_no
+    category: analytics
+    format: Y/N
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  early_repayment_charge_end:
+    allowed_values: null
+    category: analytics
+    format: date
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  earnings_before_interest_taxes_depreciation_and_amortisation_ebitda:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: sme
+    layer: core
+    core_canonical: false
+  earnings_before_interest_taxes_ebit:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: sme
+    layer: core
+    core_canonical: false
+  ebitda:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex4:
+        code: CRPL19
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  economic_occupancy_at_securitisation:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC33
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  employment_status:
+    allowed_values: employment_status
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL13
+        priority: Analytics
+      ESMA_Annex9:
+        code: ESTL13
+        priority: Optional
+    layer: core
+    core_canonical: false
+  energy_performance_certificate_provider_name:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREC11
+        priority: Optional
+    layer: core
+    core_canonical: false
+  energy_performance_certificate_value:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREC10
+        priority: Optional
+    layer: core
+    core_canonical: false
+  enforcement_start_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL142
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  enterprise_size:
+    allowed_values: enterprise_size
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex4:
+        code: CRPL16
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL16
+        priority: Optional
+    layer: core
+    core_canonical: false
+  enterprise_value:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: sme
+    regime_mapping:
+      ESMA_Annex4:
+        code: CRPL20
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  equity:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: sme
+    layer: core
+    core_canonical: false
+  erm_product_type:
+    allowed_values: null
+    category: analytics
+    format: string
+    portfolio_type: equity_release
+    layer: product
+    core_canonical: false
+  erm_sub_product_type:
+    allowed_values: null
+    category: analytics
+    format: string
+    portfolio_type: equity_release
+    layer: product
+    core_canonical: false
+  escrow_account_currency:
+    allowed_values: currency_code_iso
+    category: regulatory
+    format: currency_code
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL59
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  escrow_account_release_conditions:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: equipment
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL57
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  escrow_payments_currency:
+    allowed_values: currency_code_iso
+    category: regulatory
+    format: currency_code
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL60
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  escrow_trigger_event_occurred:
+    allowed_values: yes_no
+    category: regulatory
+    format: Y/N
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL63
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  exchange_rate_for_swap:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL162
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  expected_timing_of_recoveries:
+    allowed_values: null
+    category: regulatory
+    format: integer
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL140
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  final_margin:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  financial_expenses:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: sme
+    layer: core
+    core_canonical: false
+  financial_information_non_submission_penalties:
+    allowed_values: yes_no
+    category: regulatory
+    format: Y/N
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL48
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  financial_statement_currency:
+    allowed_values: currency_code_iso
+    category: regulatory
+    format: currency_code
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL68
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL23
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL18
+        priority: Optional
+      ESMA_Annex9:
+        code: ESTL22
+        priority: Optional
+    layer: core
+    core_canonical: false
+  finished_property:
+    allowed_values: yes_no
+    category: analytics
+    format: Y/N
+    portfolio_type: common
+    layer: collateral
+    core_canonical: false
+  first_payment_adjustment_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL108
+        priority: Optional
+    layer: performance
+    core_canonical: false
+  fitch_industry_code:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  fitch_public_rating_equivalent:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  floor_of_property:
+    allowed_values: null
+    category: analytics
+    format: integer
+    portfolio_type: common
+    layer: collateral
+    core_canonical: false
+  foreclosure_cost:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  free_cashflow:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex4:
+        code: CRPL21
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  full_or_partial_termination_event_of_swap_for_current_period:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL166
+        priority: Mandatory
+    layer: product
+    core_canonical: false
+  further_advance_amount:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: equity_release
+    layer: product
+    core_canonical: false
+  further_advance_flag:
+    allowed_values: yes_no
+    category: analytics
+    format: Y/N
+    portfolio_type: equity_release
+    layer: product
+    core_canonical: false
+  geographic_region_classification:
+    allowed_values: geographic_region_nuts3
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL12
+        priority: Analytics
+      ESMA_Annex3:
+        code: CREL13
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL11
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL11
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL12
+        priority: Optional
+    layer: core
+    core_canonical: false
+  geographic_region_collateral:
+    allowed_values: geographic_region_nuts3
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREC6
+        priority: Optional
+      ESMA_Annex3:
+        code: CREC8
+        priority: Analytics
+      ESMA_Annex4:
+        code: CRPC5
+        priority: Analytics
+      ESMA_Annex8:
+        code: LESL65
+        priority: Analytics
+      ESMA_Annex9:
+        code: ESTC5
+        priority: Optional
+    layer: collateral
+    core_canonical: false
+  geographic_region_obligor:
+    allowed_values: geographic_region_nuts3
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL11
+        priority: Analytics
+      ESMA_Annex3:
+        code: CREL12
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL10
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL10
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL11
+        priority: Optional
+    layer: product
+    core_canonical: false
+  grace_days_allowed:
+    allowed_values: null
+    category: regulatory
+    format: integer
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL89
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  ground_rent_payable:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC43
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  group_company_identifier:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  guarantor_country:
+    allowed_values: country
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex4:
+        code: CRPC19
+        priority: Mandatory
+    layer: product
+    core_canonical: false
+  guarantor_esa_subsector:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex4:
+        code: CRPC20
+        priority: Mandatory
+    layer: product
+    core_canonical: false
+  guarantor_type:
+    allowed_values: guarantor_type
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREC23
+        priority: Analytics
+    layer: product
+    core_canonical: false
+  health_impairment_flag:
+    allowed_values: yes_no
+    category: analytics
+    format: Y/N
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  income_expiring_13_24_months:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC48
+        priority: Optional
+    layer: core
+    core_canonical: false
+  income_expiring_1_12_months:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC47
+        priority: Optional
+    layer: core
+    core_canonical: false
+  income_expiring_25_36_months:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC49
+        priority: Optional
+    layer: core
+    core_canonical: false
+  income_expiring_37_48_months:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC50
+        priority: Optional
+    layer: core
+    core_canonical: false
+  income_expiring_49_months:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC51
+        priority: Optional
+    layer: core
+    core_canonical: false
+  index_determination_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL116
+        priority: Mandatory
+    layer: product
+    core_canonical: false
+  insurance_or_investment_provider:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL78
+        priority: Optional
+    layer: core
+    core_canonical: false
+  interest_arrears_amount:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  interest_cap_rate:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  interest_coverage_ratio_at_the_securitisation_date:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL77
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  interest_coverage_ratio_method:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL79
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  interest_floor_rate:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  interest_grace_period_end_date:
+    allowed_values: null
+    category: analytics
+    format: date
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  interest_in_arrears:
+    allowed_values: yes_no
+    category: regulatory
+    format: Y/N
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL134
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  interest_rate_at_the_securitisation_date:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL107
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  interest_rate_cap:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL48
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL118
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL58
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL41
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL43
+        priority: Optional
+    layer: core
+    core_canonical: false
+  interest_rate_floor:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL49
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL119
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL59
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL42
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL44
+        priority: Optional
+    layer: core
+    core_canonical: false
+  interest_rate_reset_interval:
+    allowed_values: null
+    category: regulatory
+    format: integer
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL47
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL114
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL57
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL40
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL38
+        priority: Optional
+    layer: core
+    core_canonical: false
+  interest_rate_swap_maturity_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL156
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL91
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  interest_rate_swap_notional:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL157
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL88
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  interest_rate_swap_provider:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL154
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL90
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  interest_rate_swap_provider_legal_entity_identifier:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL155
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL89
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  interest_rate_type:
+    allowed_values: interest_rate_type
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL42
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL109
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL52
+        priority: Mandatory
+    layer: core
+    core_canonical: true
+  interest_reset_period:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  interest_revision_date_1:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL51
+        priority: Optional
+      ESMA_Annex4:
+        code: CRPL61
+        priority: Optional
+    layer: core
+    core_canonical: false
+  interest_revision_date_2:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL53
+        priority: Optional
+      ESMA_Annex4:
+        code: CRPL63
+        priority: Optional
+    layer: core
+    core_canonical: false
+  interest_revision_date_3:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL55
+        priority: Optional
+      ESMA_Annex4:
+        code: CRPL65
+        priority: Optional
+    layer: core
+    core_canonical: false
+  international_securities_identification_number:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex4:
+        code: CRPL26
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL23
+        priority: Optional
+    layer: core
+    core_canonical: false
+  last_internal_obligor_rating_review:
+    allowed_values: null
+    category: analytics
+    format: date
+    portfolio_type: sme
+    layer: product
+    core_canonical: false
+  latest_utilisation_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL29
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  legal_proceedings_start_date:
+    allowed_values: null
+    category: analytics
+    format: date
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  leveraged_transaction:
+    allowed_values: yes_no
+    category: regulatory
+    format: Y/N
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex4:
+        code: CRPL29
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  licensed_property:
+    allowed_values: yes_no
+    category: analytics
+    format: Y/N
+    portfolio_type: common
+    layer: collateral
+    core_canonical: false
+  lien:
+    allowed_values: null
+    category: regulatory
+    format: integer
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREC8
+        priority: Optional
+      ESMA_Annex3:
+        code: CREC10
+        priority: Optional
+      ESMA_Annex4:
+        code: CRPC8
+        priority: Optional
+      ESMA_Annex9:
+        code: ESTC8
+        priority: Optional
+    layer: collateral
+    core_canonical: false
+  liquidation_expense:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL139
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  liquidation_prepayment_code:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL100
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  liquidation_prepayment_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL99
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  listed_grade:
+    allowed_values: yes_no
+    category: analytics
+    format: Y/N
+    portfolio_type: rre
+    layer: collateral
+    core_canonical: false
+  litigation:
+    allowed_values: yes_no
+    category: regulatory
+    format: Y/N
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL75
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  loan_entered_arrears:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  loan_hedged:
+    allowed_values: yes_no
+    category: analytics
+    format: Y/N
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  loan_identifier:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: true
+  loan_redemption_flag:
+    allowed_values: yes_no
+    category: analytics
+    format: Y/N
+    portfolio_type: equity_release
+    layer: performance
+    core_canonical: false
+  long_term_debt:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: sme
+    layer: product
+    core_canonical: false
+  ltv_cap:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: equity_release
+    layer: product
+    core_canonical: false
+  main_residence:
+    allowed_values: yes_no
+    category: analytics
+    format: Y/N
+    portfolio_type: rre
+    layer: collateral
+    core_canonical: false
+  managed_by_clo:
+    allowed_values: yes_no
+    category: regulatory
+    format: Y/N
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex4:
+        code: CRPL30
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  manufacturer:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: equipment
+    regime_mapping:
+      ESMA_Annex8:
+        code: LESL66
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  market_value:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex4:
+        code: CRPL41
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  maturity_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL24
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL18
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL34
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL23
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL25
+        priority: Analytics
+    layer: core
+    core_canonical: true
+    applicability:
+      equity_release:
+        allowed_missing: true
+        severity_if_missing: warning
+        nd_default: ND2
+        reason: "Lifetime mortgage / equity release products do not have a fixed contractual maturity."
+  maturity_date_at_securitisation_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL17
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  maximum_balance:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  model:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: equipment
+    regime_mapping:
+      ESMA_Annex8:
+        code: LESL67
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  modification:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL144
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  moody_s_industry_code:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  moody_s_public_rating_equivalent:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  most_recent_capital_expenditure:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC42
+        priority: Optional
+    layer: core
+    core_canonical: false
+  most_recent_debt_service_coverage_ratio_indicator:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL72
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  most_recent_financials_as_of_end_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC39
+        priority: Optional
+    layer: core
+    core_canonical: false
+  most_recent_financials_as_of_start_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC38
+        priority: Optional
+    layer: core
+    core_canonical: false
+  most_recent_operating_expenses:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC41
+        priority: Optional
+    layer: core
+    core_canonical: false
+  most_recent_primary_servicer_return_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL147
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  most_recent_revenue:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC40
+        priority: Optional
+    layer: core
+    core_canonical: false
+  most_recent_special_servicer_transfer_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL146
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  nace_industry_code:
+    allowed_values: NACE_code
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CRET6
+        priority: Analytics
+      ESMA_Annex4:
+        code: CRPL14
+        priority: Analytics
+      ESMA_Annex8:
+        code: LESL15
+        priority: Analytics
+      ESMA_Annex9:
+        code: ESTL16
+        priority: Analytics
+    layer: core
+    core_canonical: false
+  name_of_valuer_at_securitisation:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC23
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  nature_of_extension_option:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL21
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  negative_amortisation:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL125
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  negative_equity_guarantee:
+    allowed_values: yes_no
+    category: analytics
+    format: Y/N
+    portfolio_type: equity_release
+    layer: product
+    core_canonical: false
+  net_internal_floor_area_validated:
+    allowed_values: yes_no
+    category: regulatory
+    format: Y/N
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC31
+        priority: Optional
+    layer: core
+    core_canonical: false
+  net_operating_income_at_securitisation:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC37
+        priority: Optional
+    layer: core
+    core_canonical: false
+  net_periodic_payment_made_by_swap_provider:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL167
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  net_proceeds_received_on_liquidation:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL138
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  net_profit:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: sme
+    layer: core
+    core_canonical: false
+  net_square_metres:
+    allowed_values: null
+    category: regulatory
+    format: integer
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC28
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  new_build:
+    allowed_values: yes_no
+    category: analytics
+    format: Y/N
+    portfolio_type: rre
+    layer: collateral
+    core_canonical: false
+  new_collateral_identifier:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREC4
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREC4
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPC4
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTC4
+        priority: Mandatory
+    layer: collateral
+    core_canonical: false
+  new_obligor_identifier:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL5
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL3
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL5
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL5
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL5
+        priority: Mandatory
+    layer: product
+    core_canonical: false
+  new_or_used:
+    allowed_values: new_or_used
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex8:
+        code: LESL69
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  new_underlying_exposure_identifier:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL3
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL5
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL3
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL3
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL3
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  next_payment_adjustment_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL103
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  next_payment_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL104
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  next_swap_reset_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL171
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  non_recoverability_determined:
+    allowed_values: yes_no
+    category: regulatory
+    format: Y/N
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL148
+        priority: Optional
+    layer: product
+    core_canonical: false
+  noteholder_consent:
+    allowed_values: yes_no
+    category: regulatory
+    format: Y/N
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL43
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  noteholder_meeting_scheduled:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL44
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  number_of_bedrooms:
+    allowed_values: null
+    category: analytics
+    format: integer
+    portfolio_type: equity_release
+    layer: collateral
+    core_canonical: false
+  number_of_collateral_items_securing_the_loan:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: collateral
+    core_canonical: false
+  number_of_days_in_arrears:
+    allowed_values: null
+    category: regulatory
+    format: integer
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL68
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL130
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL78
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL56
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL54
+        priority: Analytics
+    layer: performance
+    core_canonical: false
+  number_of_days_in_interest_arrears:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  number_of_days_in_principal_arrears:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  number_of_employees:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: sme
+    layer: core
+    core_canonical: false
+  number_of_leased_objects:
+    allowed_values: null
+    category: regulatory
+    format: integer
+    portfolio_type: equipment
+    regime_mapping:
+      ESMA_Annex8:
+        code: LESL78
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  number_of_payments_before_securitisation:
+    allowed_values: null
+    category: regulatory
+    format: integer
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL58
+        priority: Analytics
+      ESMA_Annex3:
+        code: CREL92
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL68
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL43
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL45
+        priority: Optional
+    layer: performance
+    core_canonical: false
+  number_of_properties_at_data_cut_off_date:
+    allowed_values: null
+    category: regulatory
+    format: integer
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL81
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  number_of_properties_at_securitisation_date:
+    allowed_values: null
+    category: regulatory
+    format: integer
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL80
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  number_of_units:
+    allowed_values: null
+    category: regulatory
+    format: integer
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC27
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  obligor_basel_iii_segment:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex4:
+        code: CRPL15
+        priority: Optional
+      ESMA_Annex8:
+        code: LESL13
+        priority: Optional
+    layer: product
+    core_canonical: false
+  obligor_incorporation_date:
+    allowed_values: null
+    category: analytics
+    format: date
+    portfolio_type: sme
+    layer: product
+    core_canonical: false
+  obligor_is_a_customer_since:
+    allowed_values: null
+    category: analytics
+    format: date
+    portfolio_type: sme
+    layer: product
+    core_canonical: false
+  obligor_legal_form_business_type:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: sme
+    layer: product
+    core_canonical: false
+  obligor_legal_type:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: sme
+    regime_mapping:
+      ESMA_Annex9:
+        code: ESTL15
+        priority: Optional
+    layer: product
+    core_canonical: false
+  obligor_must_pay_breakage_on_swap:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: sme
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL165
+        priority: Mandatory
+    layer: product
+    core_canonical: false
+  obligor_reporting_breach:
+    allowed_values: yes_no
+    category: regulatory
+    format: Y/N
+    portfolio_type: sme
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL69
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  obligor_tax_code:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: sme
+    layer: product
+    core_canonical: false
+  occupancy_as_of_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC32
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  occupancy_type:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREC7
+        priority: Optional
+    layer: core
+    core_canonical: false
+  operating_expenses_at_securitisation_date:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL66
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  option_to_buy_price:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex8:
+        code: LESL50
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  original_collateral_identifier:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREC3
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREC3
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPC3
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTC3
+        priority: Mandatory
+    layer: collateral
+    core_canonical: false
+  original_interest_rate:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL106
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  original_lender_establishment_country:
+    allowed_values: country
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL81
+        priority: Optional
+      ESMA_Annex3:
+        code: CREL181
+        priority: Optional
+      ESMA_Annex4:
+        code: CRPL98
+        priority: Optional
+      ESMA_Annex8:
+        code: LESL81
+        priority: Optional
+      ESMA_Annex9:
+        code: ESTL66
+        priority: Optional
+    layer: core
+    core_canonical: false
+  original_lender_legal_entity_identifier:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL80
+        priority: Optional
+      ESMA_Annex3:
+        code: CREL180
+        priority: Optional
+      ESMA_Annex4:
+        code: CRPL97
+        priority: Optional
+      ESMA_Annex8:
+        code: LESL80
+        priority: Optional
+      ESMA_Annex9:
+        code: ESTL65
+        priority: Optional
+    layer: core
+    core_canonical: false
+  original_lender_name:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL79
+        priority: Optional
+      ESMA_Annex3:
+        code: CREL179
+        priority: Optional
+      ESMA_Annex4:
+        code: CRPL96
+        priority: Optional
+      ESMA_Annex8:
+        code: LESL79
+        priority: Optional
+      ESMA_Annex9:
+        code: ESTL64
+        priority: Optional
+    layer: core
+    core_canonical: false
+  original_loan_to_value:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREC16
+        priority: Analytics
+      ESMA_Annex3:
+        code: CREL75
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTC17
+        priority: Analytics
+    layer: collateral
+    core_canonical: false
+  original_obligor_identifier:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL4
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL2
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL4
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL4
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL4
+        priority: Mandatory
+    layer: product
+    core_canonical: false
+  original_principal_balance:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL29
+        priority: Analytics
+      ESMA_Annex3:
+        code: CREL24
+        priority: Analytics
+      ESMA_Annex4:
+        code: CRPL38
+        priority: Analytics
+      ESMA_Annex8:
+        code: LESL27
+        priority: Analytics
+      ESMA_Annex9:
+        code: ESTL27
+        priority: Analytics
+    layer: core
+    core_canonical: true
+  original_principal_balance_at_securitisation_date:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: CRE
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL25
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  original_residual_value_of_asset:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: equipment
+    regime_mapping:
+      ESMA_Annex8:
+        code: LESL70
+        priority: Analytics
+    layer: core
+    core_canonical: false
+  original_term:
+    allowed_values: null
+    category: regulatory
+    format: integer
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL25
+        priority: Analytics
+      ESMA_Annex3:
+        code: CREL19
+        priority: Analytics
+      ESMA_Annex8:
+        code: LESL24
+        priority: Analytics
+    layer: product
+    core_canonical: false
+  original_underlying_exposure_identifier:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL2
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL4
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL2
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL2
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL2
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  original_valuation_amount:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREC17
+        priority: Analytics
+      ESMA_Annex4:
+        code: CRPC13
+        priority: Analytics
+      ESMA_Annex8:
+        code: LESL72
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTC14
+        priority: Optional
+    layer: collateral
+    core_canonical: false
+  original_valuation_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREC19
+        priority: Analytics
+      ESMA_Annex4:
+        code: CRPC15
+        priority: Optional
+      ESMA_Annex8:
+        code: LESL74
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTC16
+        priority: Optional
+    layer: collateral
+    core_canonical: false
+  original_valuation_method:
+    allowed_values: valuation_method
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREC18
+        priority: Analytics
+      ESMA_Annex3:
+        code: CREC18
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPC14
+        priority: Optional
+      ESMA_Annex8:
+        code: LESL73
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTC15
+        priority: Optional
+    layer: collateral
+    core_canonical: false
+  original_valuation_type:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: collateral
+    core_canonical: false
+  origination_channel:
+    allowed_values: origination_channel
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL26
+        priority: Optional
+      ESMA_Annex4:
+        code: CRPL35
+        priority: Optional
+      ESMA_Annex8:
+        code: LESL25
+        priority: Optional
+    layer: core
+    core_canonical: false
+  origination_channel_arranging_bank_or_division:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  origination_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL23
+        priority: Analytics
+      ESMA_Annex3:
+        code: CREL15
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL33
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL22
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL24
+        priority: Analytics
+    layer: core
+    core_canonical: true
+  originator:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  originator_affiliate:
+    allowed_values: yes_no
+    category: analytics
+    format: Y/N
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  originator_establishment_country:
+    allowed_values: country
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL84
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL178
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL101
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL84
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL63
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  originator_legal_entity_identifier:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL83
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL177
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL100
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL83
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL62
+        priority: Mandatory
+    layer: core
+    core_canonical: true
+  originator_name:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL82
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL176
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL99
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL82
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL61
+        priority: Mandatory
+    layer: core
+    core_canonical: true
+  other_industry_code:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  other_public_rating:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  other_swap_provider:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL163
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  other_swap_provider_legal_entity_identifier:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL164
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  outstanding_balance_period_1:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  outstanding_balance_period_121_599:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  outstanding_balance_period_121_599_date:
+    allowed_values: null
+    category: analytics
+    format: date
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  outstanding_balance_period_1_date:
+    allowed_values: null
+    category: analytics
+    format: date
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  outstanding_balance_period_2_120:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  outstanding_balance_period_2_120_date:
+    allowed_values: null
+    category: analytics
+    format: date
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  outstanding_balance_period_600:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  outstanding_balance_period_600_date:
+    allowed_values: null
+    category: analytics
+    format: date
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  pari_passu_underlying_exposures:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL32
+        priority: Optional
+    layer: core
+    core_canonical: false
+  participation_of_sspe:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL46
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  payment_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL102
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  payment_due:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL39
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL105
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL50
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL35
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL35
+        priority: Optional
+    layer: performance
+    core_canonical: false
+  payment_in_kind:
+    allowed_values: yes_no
+    category: regulatory
+    format: Y/N
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex4:
+        code: CRPL31
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  payment_type:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  percentage_of_prepayments_allowed_per_year:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL59
+        priority: Optional
+      ESMA_Annex4:
+        code: CRPL69
+        priority: Optional
+      ESMA_Annex8:
+        code: LESL44
+        priority: Optional
+      ESMA_Annex9:
+        code: ESTL46
+        priority: Optional
+    layer: performance
+    core_canonical: false
+  personal_guarantee_currency:
+    allowed_values: currency_code_iso
+    category: analytics
+    format: currency_code
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  physical_occupancy_at_securitisation:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC34
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  pool_addition_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL7
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL7
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL7
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL7
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL7
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  pool_identifier:
+    allowed_values: '{ALPHANUM-28}'
+    category: analytics
+    format: string
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  postcode:
+    allowed_values: null
+    category: analytics
+    format: string
+    portfolio_type: common
+    layer: collateral
+    core_canonical: false
+  prepayment_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL63
+        priority: Optional
+      ESMA_Annex4:
+        code: CRPL73
+        priority: Optional
+      ESMA_Annex8:
+        code: LESL48
+        priority: Optional
+      ESMA_Annex9:
+        code: ESTL50
+        priority: Optional
+    layer: performance
+    core_canonical: false
+  prepayment_fee:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL61
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL96
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL71
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL46
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL48
+        priority: Optional
+    layer: performance
+    core_canonical: false
+  prepayment_fee_end_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL62
+        priority: Optional
+      ESMA_Annex3:
+        code: CREL97
+        priority: Optional
+      ESMA_Annex4:
+        code: CRPL72
+        priority: Optional
+      ESMA_Annex8:
+        code: LESL47
+        priority: Optional
+      ESMA_Annex9:
+        code: ESTL49
+        priority: Optional
+    layer: performance
+    core_canonical: false
+  prepayment_interest_excess_shortfall:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL101
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  prepayment_lock_out_end_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL60
+        priority: Optional
+      ESMA_Annex3:
+        code: CREL94
+        priority: Optional
+      ESMA_Annex4:
+        code: CRPL70
+        priority: Optional
+      ESMA_Annex8:
+        code: LESL45
+        priority: Optional
+      ESMA_Annex9:
+        code: ESTL47
+        priority: Optional
+    layer: performance
+    core_canonical: false
+  prepayment_penalty:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  prepayment_terms_description:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL93
+        priority: Optional
+    layer: performance
+    core_canonical: false
+  primary_income:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL16
+        priority: Analytics
+      ESMA_Annex9:
+        code: ESTL17
+        priority: Optional
+    layer: core
+    core_canonical: false
+  primary_income_currency:
+    allowed_values: currency_code_iso
+    category: regulatory
+    format: currency_code
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL18
+        priority: Analytics
+      ESMA_Annex9:
+        code: ESTL19
+        priority: Optional
+    layer: core
+    core_canonical: false
+  primary_income_type:
+    allowed_values: income_type
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL17
+        priority: Analytics
+      ESMA_Annex9:
+        code: ESTL18
+        priority: Optional
+    layer: core
+    core_canonical: false
+  primary_income_verification:
+    allowed_values: income_verification
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL19
+        priority: Analytics
+      ESMA_Annex9:
+        code: ESTL20
+        priority: Optional
+    layer: core
+    core_canonical: false
+  principal_arrears_amount:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  principal_grace_period_end_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL36
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL88
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL47
+        priority: Optional
+      ESMA_Annex8:
+        code: LESL32
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL32
+        priority: Optional
+    layer: core
+    core_canonical: false
+  principal_payment_allocation_to_senior_loan:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL34
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  principal_payment_frequency:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  prior_balance_currency:
+    allowed_values: currency_code_iso
+    category: analytics
+    format: currency_code
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  prior_balances:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  prior_principal_balances:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL31
+        priority: Optional
+      ESMA_Annex4:
+        code: CRPL40
+        priority: Optional
+    layer: core
+    core_canonical: false
+  product_type:
+    allowed_values: product_type
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex8:
+        code: LESL19
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  properties_collateralised_to_the_underlying_exposure:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL82
+        priority: Mandatory
+    layer: collateral
+    core_canonical: false
+  property_address:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC7
+        priority: Mandatory
+    layer: collateral
+    core_canonical: false
+  property_form_of_title:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: cre
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC13
+        priority: Mandatory
+    layer: collateral
+    core_canonical: false
+  property_leasehold_expiry:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: cre
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC45
+        priority: Mandatory
+    layer: collateral
+    core_canonical: false
+  property_name:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC6
+        priority: Mandatory
+    layer: collateral
+    core_canonical: false
+  property_portfolio_valuation_currency_at_securitisation_date:
+    allowed_values: currency_code_iso
+    category: regulatory
+    format: currency_code
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL84
+        priority: Mandatory
+    layer: collateral
+    core_canonical: false
+  property_portfolio_value_at_securitisation_date:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL83
+        priority: Mandatory
+    layer: collateral
+    core_canonical: false
+  property_post_code:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC9
+        priority: Mandatory
+    layer: collateral
+    core_canonical: false
+  property_postcode:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: collateral
+    core_canonical: false
+  property_status:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC11
+        priority: Mandatory
+    layer: collateral
+    core_canonical: false
+  property_type:
+    allowed_values: property_type
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREC9
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREC12
+        priority: Mandatory
+    layer: collateral
+    core_canonical: false
+  protected_equity_flag:
+    allowed_values: yes_no
+    category: analytics
+    format: Y/N
+    portfolio_type: equity_release
+    layer: product
+    core_canonical: false
+  protected_equity_percentage:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: equity_release
+    layer: product
+    core_canonical: false
+  purchase_price:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL34
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL28
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL43
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL29
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL30
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  purpose:
+    allowed_values: purpose
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL27
+        priority: Analytics
+      ESMA_Annex3:
+        code: CREL30
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL36
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  put_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: corporate
+    regime_mapping:
+      ESMA_Annex4:
+        code: CRPL44
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  put_strike:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: corporate
+    regime_mapping:
+      ESMA_Annex4:
+        code: CRPL45
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  ranking:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  real_estate_sale_price:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  reason_for_default_basel_ii_definition:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  reason_for_default_or_foreclosure:
+    allowed_values: reasons_for_default_foreclosure
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL70
+        priority: Optional
+      ESMA_Annex3:
+        code: CREL131
+        priority: Optional
+      ESMA_Annex4:
+        code: CRPL80
+        priority: Optional
+      ESMA_Annex8:
+        code: LESL58
+        priority: Optional
+      ESMA_Annex9:
+        code: ESTL56
+        priority: Optional
+    layer: performance
+    core_canonical: false
+  recourse:
+    allowed_values: yes_no
+    category: regulatory
+    format: Y/N
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL76
+        priority: Optional
+      ESMA_Annex3:
+        code: CREL49
+        priority: Optional
+      ESMA_Annex4:
+        code: CRPL86
+        priority: Optional
+    layer: core
+    core_canonical: false
+  recourse_3rd_party:
+    allowed_values: yes_no
+    category: regulatory
+    format: Y/N
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL50
+        priority: Optional
+    layer: core
+    core_canonical: false
+  recovery_source:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex4:
+        code: CRPL85
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL63
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  redemption_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL9
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL11
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL9
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL9
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL9
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  regular_interest_instalment:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  regular_principal_instalment:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  rent_currency:
+    allowed_values: currency_code_iso
+    category: regulatory
+    format: currency_code
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CRET9
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  rent_payable:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CRET8
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  reserve_balance_currency:
+    allowed_values: currency_code_iso
+    category: regulatory
+    format: currency_code
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL62
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  resident:
+    allowed_values: yes_no
+    category: regulatory
+    format: Y/N
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL10
+        priority: Analytics
+    layer: core
+    core_canonical: false
+  residential_area:
+    allowed_values: null
+    category: regulatory
+    format: integer
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC30
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  restrictions_on_sale_of_subordinated_loan:
+    allowed_values: yes_no
+    category: regulatory
+    format: Y/N
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL38
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  revenue:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL65
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL17
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL17
+        priority: Optional
+      ESMA_Annex9:
+        code: ESTL21
+        priority: Optional
+    layer: core
+    core_canonical: false
+  revised_interest_rate_index:
+    allowed_values: interest_rate_index
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL56
+        priority: Optional
+      ESMA_Annex4:
+        code: CRPL66
+        priority: Optional
+    layer: core
+    core_canonical: false
+  revised_interest_rate_index_tenor:
+    allowed_values: interest_rate_tenor
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL57
+        priority: Optional
+      ESMA_Annex4:
+        code: CRPL67
+        priority: Optional
+    layer: core
+    core_canonical: false
+  revision_margin_1:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL50
+        priority: Optional
+      ESMA_Annex4:
+        code: CRPL60
+        priority: Optional
+    layer: core
+    core_canonical: false
+  revision_margin_2:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL52
+        priority: Optional
+      ESMA_Annex4:
+        code: CRPL62
+        priority: Optional
+    layer: core
+    core_canonical: false
+  revision_margin_3:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL54
+        priority: Optional
+      ESMA_Annex4:
+        code: CRPL64
+        priority: Optional
+    layer: core
+    core_canonical: false
+  rounding_increment:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL117
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  s_p_industry_code:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  s_p_public_rating_equivalent:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  sale_price:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREC21
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPC17
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTC19
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  scheduled_interest_payment_frequency:
+    allowed_values: payment_frequency
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL38
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL91
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL49
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL34
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL34
+        priority: Optional
+    layer: core
+    core_canonical: false
+    applicability:
+      equity_release:
+        allowed_missing: true
+        severity_if_missing: warning
+        nd_default: ND2
+        reason: "Equity release (roll-up) products typically have no scheduled interest payments; interest accrues until redemption."
+  scheduled_principal_payment_frequency:
+    allowed_values: payment_frequency
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL37
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL90
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL48
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL33
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL33
+        priority: Optional
+    layer: core
+    core_canonical: false
+    applicability:
+      equity_release:
+        allowed_missing: true
+        severity_if_missing: warning
+        nd_default: ND2
+        reason: "Equity release (roll-up) products typically have no scheduled interest payments; interest accrues until redemption."
+  secondary_income:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: rre
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL20
+        priority: Optional
+    layer: core
+    core_canonical: false
+  secondary_income_verification:
+    allowed_values: income_verification
+    category: regulatory
+    format: list
+    portfolio_type: rre
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL21
+        priority: Optional
+    layer: core
+    core_canonical: false
+  securitised_loan_amount:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  securitised_receivables:
+    allowed_values: securitised_receivables
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex4:
+        code: CRPL25
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  securitised_residual_value:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: equipment
+    regime_mapping:
+      ESMA_Annex8:
+        code: LESL30
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  security_type:
+    allowed_values: security_type
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex4:
+        code: CRPC6
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTC6
+        priority: Mandatory
+    layer: collateral
+    core_canonical: false
+  seniority:
+    allowed_values: seniority
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex4:
+        code: CRPL27
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  servicer_identifier:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  servicer_legal_entity_identifier:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL174
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  servicer_name:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL175
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  servicer_watchlist_code:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL152
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  servicer_watchlist_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL153
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  servicing_standard:
+    allowed_values: yes_no
+    category: regulatory
+    format: Y/N
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL51
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  short_term_financial_debt:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: product
+    core_canonical: false
+  shortfall_in_payment_of_breakage_costs_on_swap:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL169
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  special_scheme:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL22
+        priority: Optional
+      ESMA_Annex3:
+        code: CREL14
+        priority: Optional
+      ESMA_Annex4:
+        code: CRPL32
+        priority: Optional
+      ESMA_Annex8:
+        code: LESL21
+        priority: Optional
+    layer: core
+    core_canonical: false
+  special_servicing_status:
+    allowed_values: yes_no
+    category: regulatory
+    format: Y/N
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL145
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  sponsor:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL172
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  start_date_of_amortisation:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL16
+        priority: Optional
+    layer: core
+    core_canonical: false
+  status_of_properties:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: cre
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL85
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  stressed_LTV:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: collateral
+    core_canonical: false
+  structure:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL31
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  subordinated_loan_holder_affiliated_to_obligor:
+    allowed_values: yes_no
+    category: regulatory
+    format: Y/N
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL39
+        priority: Mandatory
+    layer: product
+    core_canonical: false
+  subordinated_loan_holder_control_of_workout_process:
+    allowed_values: yes_no
+    category: regulatory
+    format: Y/N
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL40
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  syndicated:
+    allowed_values: yes_no
+    category: regulatory
+    format: Y/N
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL45
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL28
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL20
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  target_escrow_amounts_reserves:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: cre
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL56
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  tenant_identifier:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: cre
+    regime_mapping:
+      ESMA_Annex3:
+        code: CRET4
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  tenant_name:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: cre
+    regime_mapping:
+      ESMA_Annex3:
+        code: CRET5
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  tenure:
+    allowed_values: null
+    category: analytics
+    format: string
+    portfolio_type: rre
+    layer: collateral
+    core_canonical: false
+  total_credit_limit:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL33
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL42
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL29
+        priority: Optional
+    layer: core
+    core_canonical: false
+  total_credit_limit_granted_to_the_loan:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  total_credit_limit_used:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  total_debt:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex4:
+        code: CRPL18
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  total_liabilities_excluding_equity:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: sme
+    layer: core
+    core_canonical: false
+  total_other_amounts_outstanding:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL27
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  total_proceeds_from_other_collateral_or_guarantees:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: collateral
+    core_canonical: false
+  total_reserve_balance:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL61
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  total_scheduled_principal_interest_due:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL123
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  total_scheduled_principal_interest_paid:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL124
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  total_shortfalls_in_principal_interest_outstanding:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL127
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  trigger_for_escrow_to_be_held:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: cre
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL55
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  turnover_of_obligor:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: product
+    core_canonical: false
+  type_of_loan:
+    allowed_values: null
+    category: analytics
+    format: list
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  unconditional_corporate_third_party_guarantee_amount:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: sme
+    layer: core
+    core_canonical: false
+  unconditional_personal_guarantee_amount:
+    allowed_values: null
+    category: analytics
+    format: null
+    portfolio_type: sme
+    layer: core
+    core_canonical: false
+  underlying_exposure_identifier:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREC2
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREC2
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPC2
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTC2
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  undrawn_facility:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  unique_identifier:
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREL1
+        priority: Mandatory
+      ESMA_Annex3:
+        code: CREL1
+        priority: Mandatory
+      ESMA_Annex4:
+        code: CRPL1
+        priority: Mandatory
+      ESMA_Annex8:
+        code: LESL1
+        priority: Mandatory
+      ESMA_Annex9:
+        code: ESTL1
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  unscheduled_principal_collections:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: CRE
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL98
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  vacant_possession_value_at_securitisation_date:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: CRE
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC35
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  valuation_at_securitisation:
+    allowed_values: null
+    category: regulatory
+    format: decimal
+    portfolio_type: CRE
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC22
+        priority: Mandatory
+    layer: collateral
+    core_canonical: false
+  valuation_date_at_securitisation_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: CRE
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL86
+        priority: Mandatory
+    layer: collateral
+    core_canonical: false
+  valuation_type:
+    allowed_values: null
+    category: analytics
+    format: string
+    portfolio_type: RRE
+    layer: collateral
+    core_canonical: false
+  waterfall_a_b_pre_enforcement_scheduled_interest_payments:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: CRE
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL32
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  waterfall_a_b_pre_enforcement_scheduled_principal_payments:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: CRE
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL33
+        priority: Mandatory
+    layer: performance
+    core_canonical: false
+  waterfall_type:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: CRE
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL35
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  weighted_average_lease_terms:
+    allowed_values: null
+    category: regulatory
+    format: integer
+    portfolio_type: equipment
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC44
+        priority: Mandatory
+    layer: product
+    core_canonical: false
+  weighted_average_life:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  work_out_process_complete:
+    allowed_values: yes_no
+    category: analytics
+    format: Y/N
+    portfolio_type: SME
+    layer: core
+    core_canonical: false
+  workout_strategy_code:
+    allowed_values: null
+    category: regulatory
+    format: list
+    portfolio_type: CRE
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL143
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  year_built:
+    allowed_values: null
+    category: regulatory
+    format: integer
+    portfolio_type: common
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC25
+        priority: Optional
+    layer: collateral
+    core_canonical: false
+  year_last_renovated:
+    allowed_values: null
+    category: regulatory
+    format: integer
+    portfolio_type: CRE
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREC26
+        priority: Optional
+    layer: core
+    core_canonical: false
+  year_of_manufacture_construction:
+    allowed_values: null
+    category: regulatory
+    format: integer
+    portfolio_type: equipment
+    regime_mapping:
+      ESMA_Annex8:
+        code: LESL68
+        priority: Optional
+    layer: core
+    core_canonical: false
+  yield_maintenance_end_date:
+    allowed_values: null
+    category: regulatory
+    format: date
+    portfolio_type: CRE
+    regime_mapping:
+      ESMA_Annex3:
+        code: CREL95
+        priority: Mandatory
+    layer: core
+    core_canonical: false
+  youngest_borrower_age:
+    allowed_values: null
+    category: analytics
+    format: integer
+    portfolio_type: equity_release
+    layer: product
+    core_canonical: false
+  borrower_1_gender:
+    allowed_values: null
+    category: analytics
+    format: string
+    portfolio_type: equity_release
+    layer: product
+    core_canonical: false
+  borrower_1_DOB:
+    allowed_values: null
+    category: analytics
+    format: date
+    portfolio_type: equity_release
+    layer: product
+    core_canonical: false
+  borrower_2_gender:
+    allowed_values: null
+    category: analytics
+    format: string
+    portfolio_type: equity_release
+    layer: product
+    core_canonical: false
+  borrower_2_DOB:
+    allowed_values: null
+    category: analytics
+    format: date
+    portfolio_type: equity_release
+    layer: product
+    core_canonical: false
+  indexed_loan_to_value:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: collateral
+    core_canonical: false
+  indexed_value:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: collateral
+    core_canonical: false
+  loan_sub_type:
+    allowed_values: null
+    category: analytics
+    format: string
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  current_outstanding_balance:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  further_advance_date:
+    allowed_values: null
+    category: analytics
+    format: date
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+  principal_advances_in_period:
+    allowed_values: null
+    category: analytics  # Matches your cumulative; could bump to regulatory if ESMA-tied
+    format: decimal
+    portfolio_type: common
+    regime_mapping: {}  # Empty; it's a source for Annex 12 computations, not direct ESMA code
+    layer: performance
+    core_canonical: false
+  redemptions_received_in_period:
+    allowed_values: null
+    category: regulatory  # Performance-related; ESMA-relevant source
+    format: decimal
+    portfolio_type: common
+    regime_mapping: {}  # Source for IVSS14/IVSS16
+    layer: performance
+    core_canonical: false
+  recoveries_in_period:
+    allowed_values: null
+    category: regulatory  # Recovery counterpart to allocated_losses
+    format: decimal
+    portfolio_type: common
+    regime_mapping: {}  # Source for IVSS14/IVSS15
+    layer: performance
+    core_canonical: false
+  interest_collections_in_period:
+    allowed_values: null
+    category: regulatory  # Recovery counterpart to allocated_losses
+    format: decimal
+    portfolio_type: common
+    regime_mapping: {}  # Source for IVSS17
+    layer: performance
+    core_canonical: false
