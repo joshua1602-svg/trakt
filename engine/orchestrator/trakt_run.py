@@ -222,14 +222,19 @@ def run_common_gates(py: str, args, input_path: Path, out_dir: Path, val_dir: Pa
     value_lineage    = out_dir / "value_lineage.json"
 
     # -- Gate 1: Semantic alignment ----------------------------------------
-    _run([
+    gate1_cmd = [
         py, _script("semantic_alignment"),
         "--input", str(input_path),
         "--portfolio-type", args.portfolio_type,
         "--output-schema", args.output_schema,
         "--registry", args.registry,
         "--output-dir", str(out_dir),
-    ])
+    ]
+    # For regulatory mode, filter "full" schema to the target annex fields
+    if args.mode == "regulatory" and args.regime:
+        gate1_cmd.extend(["--regimes", args.regime])
+
+    _run(gate1_cmd)
 
     if not canonical_full.exists():
         raise RuntimeError(f"[Gate 1] Failed: did not produce {canonical_full}")
@@ -588,6 +593,14 @@ examples:
             ap.error("--regime is required for regulatory mode")
         if args.regime not in VALID_REGULATORY_REGIMES:
             ap.error(f"--regime must be one of: {', '.join(VALID_REGULATORY_REGIMES)}")
+
+    # -- Schema policy per mode --------------------------------------------
+    # MI & Annex 12: "active" = core:true + mapped headers (lean dataset)
+    # Regulatory:    "full"   = all fields for the target annex (complete)
+    if args.mode == "regulatory":
+        args.output_schema = "full"
+    elif args.mode in ("mi", "annex12"):
+        args.output_schema = "active"
 
     # -- Setup -------------------------------------------------------------
     run_start = time.time()
