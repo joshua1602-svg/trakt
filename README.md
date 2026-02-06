@@ -24,11 +24,11 @@ streamlit run streamlit_app_erm.py
 
 | Gate | Script | Purpose |
 |------|--------|---------|
-| 1 - Semantic alignment | `messy_to_canonical.py` | Fuzzy-matches raw loan tape columns to the canonical field registry |
-| &mdash; Transform | `canonical_transform_frozen_v1_3_5_CONFIG.py` | Standardises formats, enriches geography (NUTS/ITL), derives fields (LTV, classifications) |
-| 2 - Canonical validation | `validate_canonical_frozen_v1_4.py` | Schema and format validation against the field registry |
-| 2.5 - Lineage | `lineage_JSON.py` | Tracks field-level and value-level data lineage |
-| 3 - Business rules | `validate_business_rules_aligned_v1_2.py` | Cross-field business rule validation |
+| 1 - Semantic alignment | `semantic_alignment.py` | Fuzzy-matches raw loan tape columns to the canonical field registry |
+| &mdash; Transform | `canonical_transform.py` | Standardises formats, enriches geography (NUTS/ITL), derives fields (LTV, classifications) |
+| 2 - Canonical validation | `validate_canonical.py` | Schema and format validation against the field registry |
+| 2.5 - Lineage | `lineage_tracker.py` | Tracks field-level and value-level data lineage |
+| 3 - Business rules | `validate_business_rules.py` | Cross-field business rule validation |
 | 4 - Regime projection | `annex12_projector.py` | Projects canonical data into the full ESMA Annex 12 schema |
 | 5 - XML + XSD validation | `xml_builder_investor.py` | Generates ESMA-compliant XML and validates against the XSD schema |
 
@@ -50,7 +50,7 @@ Optional modules (`risk_monitor.py`, `risk_limits_config.py`) add concentration-
 |------|------|
 | `config_ERM_UK.yaml` | Master client config -- identity, transformations, enrichment rules, UI branding |
 | `config_ere_annex12.yaml` | ESMA Annex 12 deal metadata and structural overlay |
-| `fields_registry_v6_core_canonical_pricing_currency_code.yaml` | Canonical field definitions |
+| `fields_registry.yaml` | Canonical field definitions |
 | `annex12_field_constraints.yaml` | Field-level validation constraints |
 | `annex12_rules.yaml` | Business rule definitions |
 | `product_defaults_ERM.yaml` | Default values for equity release mortgage fields |
@@ -71,24 +71,42 @@ Optional modules (`risk_monitor.py`, `risk_limits_config.py`) add concentration-
 
 ```
 trakt/
-  trakt_run.py                       # Pipeline orchestrator (entry point)
-  streamlit_app_erm.py               # Analytics dashboard (entry point)
-  messy_to_canonical.py              # Gate 1: semantic alignment
-  canonical_transform_frozen_*.py    # Transform: typing & derivation
-  validate_canonical_frozen_*.py     # Gate 2: canonical validation
-  validate_business_rules_*.py       # Gate 3: business rule validation
-  lineage_JSON.py                    # Gate 2.5: data lineage
-  annex12_projector.py               # Gate 4: regime projection
-  xml_builder_investor.py            # Gate 5: XML generation
-  mi_prep.py                         # Dashboard data preparation layer
-  charts_plotly.py                   # Plotly chart factories
-  static_pools_core.py               # Static pool analysis engine
-  risk_monitor.py                    # Concentration-limit monitoring
-  alias_builder.py                   # TF-IDF alias generation
-  delta_json.py                      # Run manifest / SHA256 hashing
-  config_ERM_UK.yaml                 # Master client configuration
-  config_ere_annex12.yaml            # ESMA Annex 12 configuration
-  aliases/                           # Field alias YAML files
-  enum/                              # Enumeration mapping files
+  engine/
+    orchestrator/
+      trakt_run.py                   # Pipeline orchestrator (entry point)
+    gate_1_alignment/
+      semantic_alignment.py          # Gate 1: semantic alignment
+      aliases/
+        alias_builder.py             # TF-IDF alias generation
+    gate_2_transform/
+      canonical_transform.py         # Transform: typing & derivation
+      lineage_tracker.py             # Gate 2.5: data lineage
+      delta_manifest.py              # Run manifest / SHA256 hashing
+    gate_3_validation/
+      validate_canonical.py          # Gate 2: canonical validation
+      validate_business_rules.py     # Gate 3: business rule validation
+      aggregate_validation_results.py # Validation results aggregation
+      validate_only.py               # Standalone validation utility
+    gate_4_projection/
+      annex12_projector.py           # Gate 4: regime projection
+      regime_projector.py            # Alternative regime projector
+    gate_5_delivery/
+      xml_builder_investor.py        # Gate 5: XML generation
+      xml_builder.py                 # Alternative XML builder
+  analytics/
+    streamlit_app_erm.py             # Analytics dashboard (entry point)
+    mi_prep.py                       # Dashboard data preparation layer
+    charts_plotly.py                 # Plotly chart factories
+    scenario_engine.py               # Cashflow projection engine
+    static_pools_core.py             # Static pool analysis engine
+    risk_monitor.py                  # Concentration-limit monitoring
+  config/
+    system/
+      fields_registry.yaml           # Canonical field definitions
+    client/
+      config_client_ERM_UK.yaml      # Master client configuration
+      config_client_annex12.yaml     # ESMA Annex 12 configuration
+    asset/                           # Product defaults and policies
+    regime/                          # Regulatory regime configurations
   requirements.txt                   # Python dependencies
 ```

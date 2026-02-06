@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-messy_to_canonical.py (FROZEN SPINE v1.2)
+semantic_alignment.py
 
 Purpose (locked contract):
-- Ingest a messy loan tape (CSV/XLSX)
+- Ingest a raw loan tape (CSV/XLSX)
 - Map columns to the canonical field registry (core + extensions)
 - Emit a FULL canonical dataset (truth set; no ND padding)
 - Emit mapping diagnostics (mapping report + unmapped headers)
@@ -336,7 +336,7 @@ def main() -> None:
     parser.add_argument("--portfolio-type", default="equity_release", help="e.g. equity_release, sme, cre")
     parser.add_argument(
         "--registry",
-        default="fields_registry_v6_core_canonical_pricing_currency_code.yaml",
+        default="fields_registry.yaml",
         help="Field registry YAML (source of truth)",
     )
     parser.add_argument(

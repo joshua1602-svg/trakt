@@ -220,7 +220,7 @@ def main() -> None:
     # optional knobs
     ap.add_argument("--portfolio-type", default="equity_release")
     ap.add_argument("--output-schema", choices=["active", "full"], default="active")
-    ap.add_argument("--registry", default="fields_registry_v6_core_canonical_pricing_currency_code.yaml")
+    ap.add_argument("--registry", default="fields_registry.yaml")
     ap.add_argument("--master-config", default="config_ERM_UK.yaml")
 
     ap.add_argument("--out-dir", default="out")
@@ -268,7 +268,7 @@ def main() -> None:
     # Gate 1: Semantic alignment (messy -> canonical)
     # -------------------------
     _run([
-        py, "messy_to_canonical.py",
+        py, "semantic_alignment.py",
         "--input", str(input_path),
         "--portfolio-type", args.portfolio_type,
         "--output-schema", args.output_schema,
@@ -295,7 +295,7 @@ def main() -> None:
     # Transform (typing/derivations)
     # -------------------------
     _run([
-        py, "canonical_transform_frozen_v1_3_5_CONFIG.py",
+        py, "canonical_transform.py",
         str(canonical_full),
         "--registry", args.registry,
         "--portfolio-type", args.portfolio_type,
@@ -310,7 +310,7 @@ def main() -> None:
     # Gate 2: Canonical validation
     # -------------------------
     canon_rc = _run([
-        py, "validate_canonical_frozen_v1_4.py",
+        py, "validate_canonical.py",
         str(canonical_typed),
         "--registry", args.registry,
         "--portfolio-type", args.portfolio_type,
@@ -344,7 +344,7 @@ def main() -> None:
     # -------------------------
 
     _run([
-        py, "lineage_JSON.py",
+        py, "lineage_tracker.py",
         "--canonical", str(canonical_typed),
         "--registry", args.registry,
         "--portfolio-type", args.portfolio_type,
@@ -364,7 +364,7 @@ def main() -> None:
     # Gate 3: Business rules
     # -------------------------
     biz_rc = _run([
-        py, "validate_business_rules_aligned_v1_2.py",
+        py, "validate_business_rules.py",
         str(canonical_typed),
         "--config", args.master_config,
     ], allow_fail=True)
