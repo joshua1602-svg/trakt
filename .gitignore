@@ -1,5 +1,64 @@
-﻿venv/
-out/
-out_validation/
+﻿# -----------------------------
+# Python & System
+# -----------------------------
 __pycache__/
 *.pyc
+*.pyo
+venv/
+.venv/
+.env
+.DS_Store
+.vscode/
+.idea/
+
+# -----------------------------
+# DATA & SAMPLES (Governance)
+# -----------------------------
+# Exclude the specific samples folder
+data/samples/
+# Exclude raw input data but keep the folder structure
+data/input/*
+
+# -----------------------------
+# GENERATED ARTEFACTS
+# -----------------------------
+*.csv
+*.xlsx
+*.xls
+*.xml
+
+# Generated JSON (but NOT configs / schemas)
+run_manifest.json
+*lineage*.json
+*out*.json
+
+# -----------------------------
+# OUTPUT DIRECTORIES
+# -----------------------------
+out/
+out_validation/
+logs/
+*.log
+
+# -----------------------------
+# SECRETS (defensive)
+# -----------------------------
+*secret*
+*key*
+*cred*
+
+# -----------------------------
+# ALLOW CONFIG / SCHEMA FILES
+# -----------------------------
+!**/*.yaml
+!**/*.yml
+!**/*schema.json
+!pyproject.toml
+
+# -----------------------------
+# Compressed Archives
+# -----------------------------
+*.zip
+*.7z
+*.rar
+*.tar.gz
