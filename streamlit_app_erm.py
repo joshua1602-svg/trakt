@@ -5,7 +5,6 @@ Three-tab structure: Stratifications | Scenario Analysis | Static Pools
 Focused on Equity Release Mortgage portfolio analytics
 """
 
-import os
 from pathlib import Path
 from datetime import datetime
 import numpy as np
@@ -16,9 +15,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import sys
 import subprocess
-import tempfile
 import yaml
-import plotly.colors as pcolors
 import base64
 
 # ============================
@@ -70,12 +67,17 @@ if theme_conf:
         "#A3CCC9"  # Light teal fallback
     ]
       
-from scenario_engine import (
-    project_portfolio,
-    ScenarioAssumptions,
-    PRESET_SCENARIOS,
-    compare_scenarios,
-)
+try:
+    from scenario_engine import (
+        project_portfolio,
+        ScenarioAssumptions,
+        PRESET_SCENARIOS,
+        compare_scenarios,
+    )
+    SCENARIO_ENGINE_AVAILABLE = True
+except ImportError:
+    SCENARIO_ENGINE_AVAILABLE = False
+    print("Warning: scenario_engine module not found. Scenario Analysis tab will be disabled.")
 
 from mi_prep import (
     assert_trusted_canonical,
@@ -111,8 +113,6 @@ from static_pools_core import (
     add_segment_label,
 )
 
-import mi_prep
-
 from charts_plotly import (
     apply_chart_theme,
     strat_bar_chart_pure,
@@ -131,16 +131,6 @@ def validate_file_path_pure(path_str: str):
     if not p.is_file():
         raise ValueError("Path must be a file.")
     return p
-
-def get_file_modified_time(path):
-    """Get last modified timestamp of file."""
-    from datetime import datetime
-    try:
-        timestamp = path.stat().st_mtime
-        dt = datetime.fromtimestamp(timestamp)
-        return dt.strftime("%Y-%m-%d %H:%M")
-    except Exception:
-        return "Unknown"
 
 def validate_file_path(path_str: str):
     """UI wrapper: preserves original st.error behaviour."""
@@ -277,23 +267,6 @@ def load_data(path: str):
 
     except Exception as e:
         raise
-
-def strat_bar_chart(
-    df: pd.DataFrame,
-    group_col: str,
-    value_col: str = "total_balance",
-    agg: str = "sum",
-    title: str = ""
-):
-    """UI wrapper: preserves original st.warning/st.info behaviour."""
-    fig, msg, level = strat_bar_chart_pure(df, group_col, value_col=value_col, agg=agg, title=title)
-    if msg:
-        if level == "warning":
-            st.warning(msg)
-        else:
-            st.info(msg)
-        return None
-    return fig
 
 def fmt_float(x, decimals=1, suffix="", na="N/A"):
     """Safely format floats that may be None/NaN."""
@@ -632,15 +605,10 @@ div[data-testid="stDecoration"], header {{
 # HEADER WITH LOGO
 # ============================
 
-from datetime import datetime
-from pathlib import Path
-import base64
-
 # Locate Logo
 search_dirs = [
     Path(__file__).resolve().parent,
     Path.cwd(),
-    Path(r"C:\Users\joshu\OneDrive\Documents\ESMA CANONICAL WORKINGS"),
 ]
 
 logo_path = None
@@ -740,7 +708,8 @@ try:
     # Save successful path for next time
     try:
         LATEST_TYPED_PATH_FILE.write_text(str(validated_path), encoding="utf-8")
-    except: pass
+    except OSError:
+        pass
     
     # Create View Copy
     df_view = df.copy()
@@ -1647,7 +1616,11 @@ with tab1:
 with tab2:
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("### 🎯 Scenario Analysis")
-    
+
+    if not SCENARIO_ENGINE_AVAILABLE:
+        st.warning("Scenario Analysis is unavailable — the `scenario_engine` module was not found.")
+        st.stop()
+
     # Check if we have required columns
     required_cols = [
         "current_principal_balance",

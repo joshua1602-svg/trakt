@@ -182,9 +182,3 @@ def add_buckets(df: pd.DataFrame) -> pd.DataFrame:
     # ========== END AGE BUCKET ==========
 
     return out
-
-def weighted_average(series: pd.Series, weights: pd.Series) -> float:
-    mask = series.notna() & weights.notna()
-    if not mask.any():
-        return np.nan
-    return float(np.average(series[mask], weights=weights[mask]))

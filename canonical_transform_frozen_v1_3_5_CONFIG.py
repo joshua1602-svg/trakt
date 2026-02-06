@@ -74,14 +74,14 @@ def smart_parse_cutoff_date(val, default_year=2025):
         try:
             last_day = calendar.monthrange(default_year, month_idx)[1]
             return f"{default_year}-{month_idx:02d}-{last_day}"
-        except:
+        except (ValueError, KeyError):
             return None
-        
+
     # 2. Fallback to standard ISO parsing
     try:
         dt = pd.to_datetime(s_val, dayfirst=True)
         return dt.strftime("%Y-%m-%d")
-    except:
+    except (ValueError, TypeError):
         return None
 # ---------------------------
 
@@ -204,7 +204,8 @@ def apply_types(df: pd.DataFrame, fields_meta: dict, currency_synonyms: dict | N
         if failures_mask.sum() > 0:
             try:
                 sample = original[failures_mask].astype('string').dropna().drop_duplicates().head(5).tolist()
-            except: pass
+            except Exception:
+                pass
                 
         report["fields"][col] = {
             "format": fmt or "string",

@@ -14,7 +14,12 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
-from config import PRIMARY_COLOR, SECONDARY_COLOR, ACCENT_COLOR, TEXT_DARK
+# Theme defaults (overridden at runtime by streamlit_app_erm via YAML config)
+PRIMARY_COLOR = "#232D55"
+SECONDARY_COLOR = "#919DD1"
+ACCENT_COLOR = "#BFBFBF"
+TEXT_DARK = "#2D2D2D"
+
 import mi_prep
 
 
