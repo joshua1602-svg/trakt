@@ -344,7 +344,7 @@ def main() -> None:
     # -------------------------
 
     _run([
-        py, "lineage_json.py",
+        py, "lineage_JSON.py",
         "--canonical", str(canonical_typed),
         "--registry", args.registry,
         "--portfolio-type", args.portfolio_type,
