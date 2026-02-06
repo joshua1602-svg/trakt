@@ -1,5 +1,36 @@
-﻿venv/
-out/
-out_validation/
+﻿# --- Python & System ---
 __pycache__/
 *.pyc
+venv/
+.env
+.DS_Store
+.vscode/
+.idea/
+
+# --- DATA (Block Everything) ---
+*.csv
+*.xlsx
+*.xls
+*.xml
+*.json
+
+# --- EXCEPTIONS (Allow Config/Schema) ---
+# We block all JSON/YAML above, but we need these specific ones for the engine
+!esma_code_order.yaml
+!fields_registry_*.yaml
+!config_*.yaml
+!*schema.json
+!pyproject.toml
+
+# --- LOGS & OUTPUTS ---
+out/
+out_validation/
+logs/
+*.log
+run_manifest.json
+
+# --- SECRETS ---
+# Explicitly block anything with 'secret' or 'key' in the name
+*secret*
+*key*
+*cred*
