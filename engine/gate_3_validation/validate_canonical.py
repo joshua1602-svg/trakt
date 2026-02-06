@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-validate_canonical_frozen_v1_4.py (Frozen Spine-aligned + Applicability)
+validate_canonical.py
 
 Validates either:
-  A) Full Canonical (truth set) produced by messy_to_canonical (active schema), or
+  A) Full Canonical (truth set) produced by semantic_alignment (active schema), or
   B) Regime projection (schema-complete, ND-padded) produced by a downstream projector
 
 Source of truth: field registry YAML (core_canonical flags, formats, regime mappings, applicability overrides).

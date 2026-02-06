@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-lineage_json.py
+lineage_tracker.py
 
 Generates:
 - field_lineage.json (always)
@@ -128,7 +128,7 @@ def extract_header_map(header_map: dict) -> Dict[str, dict]:
             if not isinstance(m, dict):
                 continue
 
-            # Your messy_to_canonical emits these keys:
+            # semantic_alignment emits these keys:
             raw = m.get("raw_header")
             can = m.get("canonical_field")
             method = m.get("mapping_method")

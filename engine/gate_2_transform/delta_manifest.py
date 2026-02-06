@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-delta_json.py
+delta_manifest.py
 
 Builds a run_manifest.json for a run and (optionally) a run_delta.json vs a prior run.
 
@@ -12,14 +12,14 @@ Works with:
 - header mapping report JSON (optional)
 
 Typical usage:
-  python delta_json.py \
+  python delta_manifest.py \
     --current-canonical out/current/canonical_typed.csv \
     --prior-manifest out/prior/run_manifest.json \
     --current-agg-validation out/current/validation_aggregated.csv \
     --outdir out/current
 
 Or build prior manifest from prior canonical:
-  python delta_json.py \
+  python delta_manifest.py \
     --current-canonical out/current/canonical_typed.csv \
     --prior-canonical out/prior/canonical_typed.csv \
     --outdir out/current

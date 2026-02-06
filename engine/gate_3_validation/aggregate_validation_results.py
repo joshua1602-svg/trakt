@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-aggregate_validation_results_FIXED.py
+aggregate_validation_results.py
 
 Aggregates row-level violations from:
-- validate_canonical_frozen_v1_4.py  (columns: rule_id,severity,field,row,message)
-- validate_business_rules_aligned_v1_2.py (columns: rule_id,severity,description,message,row_index)
+- validate_canonical.py  (columns: rule_id,severity,field,row,message)
+- validate_business_rules.py (columns: rule_id,severity,description,message,row_index)
 
 into a field-level summary with materiality policy.
 
@@ -63,7 +63,7 @@ def load_yaml_optional(path: Path) -> Dict[str, Any]:
 
 def normalise_canonical_violations(df: pd.DataFrame) -> pd.DataFrame:
     """
-    validate_canonical_frozen_v1_4 schema: rule_id,severity,field,row,message
+    validate_canonical schema: rule_id,severity,field,row,message
     Normalise to: field_name, issue_type, severity, row_index, message
     """
     if df.empty:
@@ -90,7 +90,7 @@ def normalise_canonical_violations(df: pd.DataFrame) -> pd.DataFrame:
 
 def normalise_business_violations(df: pd.DataFrame) -> pd.DataFrame:
     """
-    validate_business_rules_aligned_v1_2 schema: rule_id,severity,description,message,row_index
+    validate_business_rules schema: rule_id,severity,description,message,row_index
     Normalise to: field_name, issue_type, severity, row_index, message
     field_name requires rule_registry expansion; default to PORTFOLIO.
     """

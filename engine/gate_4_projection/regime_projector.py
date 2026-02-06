@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-regime_projector_frozen_v1_0.py (Frozen Spine-aligned)
+regime_projector.py
 
 Purpose (locked contract):
 - Read canonical_typed.csv (truth set from canonical_transform)
@@ -19,10 +19,10 @@ Key Design Principles:
 5. Field ordering follows ESMA spec (Mandatory → Optional)
 
 Usage:
-    python regime_projector_frozen_v1_0.py \\
+    python regime_projector.py \\
       canonical_typed.csv \\
       --regime ESMA_Annex2 \\
-      --registry fields_registry_v6_core_canonical_pricing_currency_code.yaml \\
+      --registry fields_registry.yaml \\
       --enum-mapping enum_mapping.yaml \\
       --config config_ERM_UK.yaml \\
       --output-dir out \\
