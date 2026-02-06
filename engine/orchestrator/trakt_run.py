@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 """
-trakt_run.py - Deterministic pipeline orchestrator + investor-friendly run manifest.
+trakt_run.py - Multi-mode pipeline orchestrator.
 
-Windows-safe:
-- No shell multiline strings
-- Uses sys.executable consistently (works with py launcher)
-- Best-effort metrics + clear gate prints
+Modes:
+  mi          Gates 1-3 → canonical_typed.csv (dashboard-ready for Streamlit)
+  annex12     Gates 1-5 → ESMA Annex 12 investor XML (deal-level)
+  regulatory  Gates 1-5 → ESMA Annex 2-9 regime projection + XML (exposure-level)
+
+Usage:
+  python trakt_run.py --mode mi --input tape.csv
+  python trakt_run.py --mode annex12 --input tape.csv --config config_client_annex12.yaml
+  python trakt_run.py --mode regulatory --input tape.csv --regime ESMA_Annex2
+
+Windows-safe: uses sys.executable, forces UTF-8 encoding in child processes.
 """
 
 from __future__ import annotations
@@ -22,16 +29,46 @@ from typing import Optional, Dict, Any, Tuple, List
 import pandas as pd
 
 
-# -------------------------
-# helpers
-# -------------------------
+# ---------------------------------------------------------------------------
+# Path resolution — derive project layout from this file's location
+# ---------------------------------------------------------------------------
+
+ENGINE_ROOT  = Path(__file__).resolve().parent.parent          # engine/
+PROJECT_ROOT = ENGINE_ROOT.parent                               # trakt/
+CONFIG_ROOT  = PROJECT_ROOT / "config"
+
+SCRIPTS = {
+    "semantic_alignment":   ENGINE_ROOT / "gate_1_alignment"  / "semantic_alignment.py",
+    "canonical_transform":  ENGINE_ROOT / "gate_2_transform"  / "canonical_transform.py",
+    "lineage_tracker":      ENGINE_ROOT / "gate_2_transform"  / "lineage_tracker.py",
+    "validate_canonical":   ENGINE_ROOT / "gate_3_validation" / "validate_canonical.py",
+    "validate_business_rules": ENGINE_ROOT / "gate_3_validation" / "validate_business_rules.py",
+    "annex12_projector":    ENGINE_ROOT / "gate_4_projection" / "annex12_projector.py",
+    "regime_projector":     ENGINE_ROOT / "gate_4_projection" / "regime_projector.py",
+    "xml_builder_investor": ENGINE_ROOT / "gate_5_delivery"   / "xml_builder_investor.py",
+    "xml_builder":          ENGINE_ROOT / "gate_5_delivery"   / "xml_builder.py",
+}
+
+VALID_REGULATORY_REGIMES = [
+    "ESMA_Annex2", "ESMA_Annex3", "ESMA_Annex4",
+    "ESMA_Annex8", "ESMA_Annex9",
+]
+
+
+def _script(name: str) -> str:
+    """Resolve a gate script to its absolute path. Fails fast if missing."""
+    path = SCRIPTS[name]
+    if not path.exists():
+        raise FileNotFoundError(f"Script not found: {path}")
+    return str(path)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 def _run(args: List[str], allow_fail: bool = False) -> int:
-    """
-    Run a command, streaming output to console.
-    Forces UTF-8 env for child python processes (Windows-safe).
-    Returns exit code; raises only when allow_fail=False.
-    """
+    """Run a subprocess with UTF-8 encoding. Returns exit code."""
     env = dict(os.environ)
     env["PYTHONUTF8"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
@@ -43,10 +80,7 @@ def _run(args: List[str], allow_fail: bool = False) -> int:
 
 
 def _count_rows_quick(csv_path: Path) -> int:
-    # fast-ish row count without loading everything into memory
-    # (still reads the file, but does not parse full df)
     with csv_path.open("r", encoding="utf-8", errors="ignore") as f:
-        # subtract header
         return max(sum(1 for _ in f) - 1, 0)
 
 
@@ -69,10 +103,7 @@ def _latest_matching(dir_path: Path, patterns: List[str]) -> Optional[Path]:
 
 
 def _best_effort_validation_paths(val_dir: Path, stem: str) -> Tuple[Optional[Path], Optional[Path]]:
-    """
-    Your filenames are not always perfectly stable across versions.
-    Find the most likely canonical violations + business violations files.
-    """
+    """Find the most likely canonical violations + business violations files."""
     canon = _latest_matching(
         val_dir,
         [
@@ -106,23 +137,14 @@ def _summarise_violations(path: Optional[Path]) -> Dict[str, int]:
         warnings = int((sev == "warning").sum())
         errors = int((sev == "error").sum())
         return {"errors": errors, "warnings": warnings, "rows": rows}
-    # fallback if no severity col
     return {"errors": rows, "warnings": 0, "rows": rows}
 
+
 def _count_hq_recommendations(header: Optional[dict], min_conf: float = 0.88) -> int:
-    """
-    Count HQ recommendations from header_mapping_report.json.
-
-    Supports both JSON shapes:
-      - top-level: {"hq_recommendations":[...], "hq_recommendations_count": N}
-      - legacy:   {"thresholds":{"hq_recommendations":[...], "hq_recommendations_count": N}}
-
-    min_conf is a fraction (0.88 = 88%).
-    """
+    """Count HQ recommendations from header_mapping_report.json."""
     if not header or not isinstance(header, dict):
         return 0
 
-    # Prefer explicit count if present
     cnt = header.get("hq_recommendations_count")
     if isinstance(cnt, int):
         return cnt
@@ -133,14 +155,12 @@ def _count_hq_recommendations(header: Optional[dict], min_conf: float = 0.88) ->
     if isinstance(cnt, int):
         return cnt
 
-    # Fall back to counting list entries
     recs = header.get("hq_recommendations")
     if not isinstance(recs, list):
         recs = thr.get("hq_recommendations")
     if not isinstance(recs, list):
         return 0
 
-    # If items have confidence as 0-1 or 0-100, handle both
     n = 0
     for r in recs:
         if not isinstance(r, dict):
@@ -161,32 +181,9 @@ def _count_hq_recommendations(header: Optional[dict], min_conf: float = 0.88) ->
             n += 1
     return n
 
-    # Case 2: infer from mappings if candidates are embedded (best-effort)
-    mappings = header_json.get("mappings")
-    if isinstance(mappings, list):
-        n = 0
-        for r in mappings:
-            if not isinstance(r, dict):
-                continue
-            # Only consider truly unmapped rows
-            if r.get("canonical_field"):
-                continue
-            # Look for a candidate confidence field if you store it
-            cand_conf = r.get("best_candidate_confidence") or r.get("confidence") or r.get("score")
-            try:
-                if cand_conf is not None and float(cand_conf) >= float(min_conf):
-                    n += 1
-            except Exception:
-                pass
-        return n
-
-    return 0
 
 def _field_counts_from_violations(path: Optional[Path]) -> Dict[str, int]:
-    """
-    Return unique field counts for errors/warnings (best-effort).
-    Expects a column named 'field' or 'field_name' and 'severity'.
-    """
+    """Return unique field counts for errors/warnings."""
     if not path or not path.exists():
         return {"fields_with_errors": 0, "fields_with_warnings": 0}
 
@@ -195,7 +192,6 @@ def _field_counts_from_violations(path: Optional[Path]) -> Dict[str, int]:
     except Exception:
         return {"fields_with_errors": 0, "fields_with_warnings": 0}
 
-    # find field column
     field_col = "field_name" if "field_name" in df.columns else ("field" if "field" in df.columns else None)
     if field_col is None or "severity" not in df.columns:
         return {"fields_with_errors": 0, "fields_with_warnings": 0}
@@ -203,78 +199,42 @@ def _field_counts_from_violations(path: Optional[Path]) -> Dict[str, int]:
     sev = df["severity"].astype(str).str.lower()
     fields = df[field_col].astype(str)
 
-    fields_with_errors = int(fields[sev == "error"].nunique())
-    fields_with_warnings = int(fields[sev == "warning"].nunique())
+    return {
+        "fields_with_errors": int(fields[sev == "error"].nunique()),
+        "fields_with_warnings": int(fields[sev == "warning"].nunique()),
+    }
 
-    return {"fields_with_errors": fields_with_errors, "fields_with_warnings": fields_with_warnings}
 
-# -------------------------
-# main
-# -------------------------
+# ---------------------------------------------------------------------------
+# Gate runners
+# ---------------------------------------------------------------------------
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description="trakt run (orchestrator + run manifest)")
-    ap.add_argument("--input", required=True, help="Input loan tape CSV/XLSX (e.g. loan_portfolio_112025.csv)")
-    ap.add_argument("--config", required=True, help="Annex12 config YAML (e.g. config_ere_annex12.yaml)")
+def run_common_gates(py: str, args, input_path: Path, out_dir: Path, val_dir: Path, stem: str) -> dict:
+    """
+    Run Gates 1-3 (common to all modes).
+    Returns a context dict with intermediate results for the manifest.
+    """
+    canonical_full   = out_dir / f"{stem}_canonical_full.csv"
+    canonical_typed  = out_dir / f"{stem}_canonical_typed.csv"
+    header_json      = out_dir / f"{stem}_header_mapping_report.json"
+    transform_json   = out_dir / f"{stem}_transform_report.json"
+    field_lineage    = out_dir / "field_lineage.json"
+    value_lineage    = out_dir / "value_lineage.json"
 
-    # optional knobs
-    ap.add_argument("--portfolio-type", default="equity_release")
-    ap.add_argument("--output-schema", choices=["active", "full"], default="active")
-    ap.add_argument("--registry", default="fields_registry.yaml")
-    ap.add_argument("--master-config", default="config_ERM_UK.yaml")
-
-    ap.add_argument("--out-dir", default="out")
-    ap.add_argument("--validation-out-dir", default="out_validation")
-
-    ap.add_argument("--constraints", default="annex12_field_constraints.yaml")
-    ap.add_argument("--code-order-yaml", default="esma_code_order.yaml")
-    ap.add_argument("--rules", default="annex12_rules.yaml")
-    ap.add_argument("--mapping", default="annex12_mapping.csv")
-    ap.add_argument("--currency", default="GBP")
-    ap.add_argument("--xsd", default="DRAFT1auth.098.001.04_1.3.0.xsd")
-
-    args = ap.parse_args()
-
-    run_start = time.time()
-    py = sys.executable  # ensures we run with same interpreter as `py`
-
-    input_path = Path(args.input)
-    if not input_path.exists():
-        raise FileNotFoundError(f"Input file not found: {input_path}")
-
-    out_dir = Path(args.out_dir)
-    val_dir = Path(args.validation_out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    val_dir.mkdir(parents=True, exist_ok=True)
-
-    stem = input_path.stem
-
-    canonical_full = out_dir / f"{stem}_canonical_full.csv"
-    canonical_typed = out_dir / f"{stem}_canonical_typed.csv"
-    header_json = out_dir / f"{stem}_header_mapping_report.json"
-    transform_json = out_dir / f"{stem}_transform_report.json"
-    field_lineage_json = out_dir / "field_lineage.json"
-    value_lineage_json = out_dir / "value_lineage.json"
-    manifest_path = out_dir / "run_manifest.json"
-
-    annex_projected = Path("annex12_projected.csv")
-    annex_xml = Path("annex12_final.xml")
-
-    print("")
-    print(f"$ trakt run --config {args.config} --input {args.input}")
-    print("")
-
-    # -------------------------
-    # Gate 1: Semantic alignment (messy -> canonical)
-    # -------------------------
-    _run([
-        py, "semantic_alignment.py",
+    # -- Gate 1: Semantic alignment ----------------------------------------
+    gate1_cmd = [
+        py, _script("semantic_alignment"),
         "--input", str(input_path),
         "--portfolio-type", args.portfolio_type,
         "--output-schema", args.output_schema,
         "--registry", args.registry,
         "--output-dir", str(out_dir),
-    ])
+    ]
+    # For regulatory mode, filter "full" schema to the target annex fields
+    if args.mode == "regulatory" and args.regime:
+        gate1_cmd.extend(["--regimes", args.regime])
+
+    _run(gate1_cmd)
 
     if not canonical_full.exists():
         raise RuntimeError(f"[Gate 1] Failed: did not produce {canonical_full}")
@@ -291,11 +251,9 @@ def main() -> None:
     else:
         print(f"[Gate 1] Semantic alignment.............. OK PASS | {hq_recs} HQ recommendations")
 
-    # -------------------------
-    # Transform (typing/derivations)
-    # -------------------------
+    # -- Transform (typing / derivations) ----------------------------------
     _run([
-        py, "canonical_transform.py",
+        py, _script("canonical_transform"),
         str(canonical_full),
         "--registry", args.registry,
         "--portfolio-type", args.portfolio_type,
@@ -304,13 +262,13 @@ def main() -> None:
     ])
 
     if not canonical_typed.exists():
-        raise RuntimeError(f"Transform failed: did not produce {canonical_typed}")
+        raise RuntimeError(f"[Transform] Failed: did not produce {canonical_typed}")
 
-    # -------------------------
-    # Gate 2: Canonical validation
-    # -------------------------
+    print("[Transform] Canonical transform.......... OK")
+
+    # -- Gate 2: Canonical validation --------------------------------------
     canon_rc = _run([
-        py, "validate_canonical.py",
+        py, _script("validate_canonical"),
         str(canonical_typed),
         "--registry", args.registry,
         "--portfolio-type", args.portfolio_type,
@@ -318,19 +276,15 @@ def main() -> None:
         "--out-dir", str(val_dir),
     ], allow_fail=True)
 
-
     loan_count = _count_rows_quick(canonical_typed)
-
     canonical_status = "pass" if canon_rc == 0 else "fail"
+
     canon_viol_path, biz_viol_path = _best_effort_validation_paths(val_dir, stem)
     canon_stats = _summarise_violations(canon_viol_path)
     canon_field_counts = _field_counts_from_violations(canon_viol_path)
 
-
-    fields_err = canon_field_counts["fields_with_errors"]
+    fields_err  = canon_field_counts["fields_with_errors"]
     fields_warn = canon_field_counts["fields_with_warnings"]
-
-    # status: FAIL if any errors, else OK
     gate2_status = "FAIL" if canon_stats["errors"] > 0 else "OK"
 
     print(
@@ -339,38 +293,34 @@ def main() -> None:
         f"{canon_stats['errors']} errors ({fields_err} fields)"
     )
 
-    # -------------------------
-    # Gate 2.5: Lineage
-    # -------------------------
-
+    # -- Gate 2.5: Lineage -------------------------------------------------
     _run([
-        py, "lineage_tracker.py",
+        py, _script("lineage_tracker"),
         "--canonical", str(canonical_typed),
         "--registry", args.registry,
         "--portfolio-type", args.portfolio_type,
         "--outdir", str(out_dir),
         "--header-map", str(header_json),
-        "--transform-report", str(transform_json), 
+        "--transform-report", str(transform_json),
     ])
-    
-    lineage_path = out_dir / "field_lineage.json"
-    if not lineage_path.exists():
-        raise RuntimeError("[Gate 2.5] Lineage failed: field_lineage.json not produced")
-    
-    if not field_lineage_json.exists():
-        raise RuntimeError("[Gate 2.5] Lineage failed: did not produce field_lineage.json")
 
-    # -------------------------
-    # Gate 3: Business rules
-    # -------------------------
-    biz_rc = _run([
-        py, "validate_business_rules.py",
+    if not field_lineage.exists():
+        raise RuntimeError("[Gate 2.5] Lineage failed: field_lineage.json not produced")
+
+    print("[Gate 2.5] Data lineage.................. OK")
+
+    # -- Gate 3: Business rules --------------------------------------------
+    biz_cmd = [
+        py, _script("validate_business_rules"),
         str(canonical_typed),
         "--config", args.master_config,
-    ], allow_fail=True)
+    ]
+    if hasattr(args, "regime") and args.regime:
+        biz_cmd.extend(["--regime", args.regime])
+
+    biz_rc = _run(biz_cmd, allow_fail=True)
 
     biz_stats = _summarise_violations(biz_viol_path)
-    # We also try to infer unique rule count if present
     rules_executed = None
     if biz_viol_path and biz_viol_path.exists():
         try:
@@ -381,7 +331,6 @@ def main() -> None:
             pass
 
     if biz_stats["rows"] == 0:
-        # if no failures file or empty file
         if rules_executed is not None:
             print(f"[Gate 3] Business rules.................. OK {rules_executed} rules | 0 failures")
         else:
@@ -392,14 +341,35 @@ def main() -> None:
         else:
             print(f"[Gate 3] Business rules.................. Warn {biz_stats['rows']} failures")
 
-    # -------------------------
-    # Gate 4: Regime projection
-    # -------------------------
+    return {
+        "canonical_full": canonical_full,
+        "canonical_typed": canonical_typed,
+        "header_json": header_json,
+        "transform_json": transform_json,
+        "field_lineage": field_lineage,
+        "value_lineage": value_lineage,
+        "fields_mapped": fields_mapped,
+        "loan_count": loan_count,
+        "canonical_status": canonical_status,
+        "canon_stats": canon_stats,
+        "canon_viol_path": canon_viol_path,
+        "biz_stats": biz_stats,
+        "biz_viol_path": biz_viol_path,
+        "rules_executed": rules_executed,
+    }
+
+
+def run_annex12(py: str, args, ctx: dict, out_dir: Path) -> dict:
+    """Gate 4-5 for Annex 12 investor reporting (deal-level)."""
+    annex_projected = out_dir / "annex12_projected.csv"
+    annex_xml       = out_dir / "annex12_final.xml"
+
+    # -- Gate 4: Annex 12 projection ---------------------------------------
     _run([
-        py, "annex12_projector.py",
+        py, _script("annex12_projector"),
         "--config", args.config,
         "--master-config", args.master_config,
-        "--canonical", str(canonical_typed),
+        "--canonical", str(ctx["canonical_typed"]),
         "--constraints", args.constraints,
         "--code-order-yaml", args.code_order_yaml,
         "--output", str(annex_projected),
@@ -410,11 +380,9 @@ def main() -> None:
 
     print("[Gate 4] Regime projection............... OK ESMA Annex 12")
 
-    # -------------------------
-    # Gate 5: XML build + XSD validation
-    # -------------------------
+    # -- Gate 5: XML + XSD -------------------------------------------------
     _run([
-        py, "xml_builder_investor.py",
+        py, _script("xml_builder_investor"),
         "--input", str(annex_projected),
         "--mapping", args.mapping,
         "--rules", args.rules,
@@ -429,91 +397,277 @@ def main() -> None:
 
     print("[Gate 5] XSD validation.................. OK PASS")
 
-    # -------------------------
-    # Manifest
-    # -------------------------
-    transform = _safe_read_json(transform_json) or {}
-    loan_count_reported = transform.get("rows", loan_count)
+    return {
+        "regime": "ESMA_Annex12",
+        "projected": annex_projected,
+        "xml": annex_xml,
+    }
+
+
+def run_regulatory(py: str, args, ctx: dict, out_dir: Path) -> dict:
+    """Gate 4-5 for ESMA Annex 2-9 exposure-level reporting."""
+    regime = args.regime
+    regime_short = regime.replace("ESMA_", "").lower()  # e.g. "annex2"
+    projected = out_dir / f"{regime_short}_projected.csv"
+    xml_out   = out_dir / f"{regime_short}_final.xml"
+
+    # -- Gate 4: Regime projection -----------------------------------------
+    _run([
+        py, _script("regime_projector"),
+        str(ctx["canonical_typed"]),
+        "--regime", regime,
+        "--registry", args.registry,
+        "--enum-mapping", args.enum_mapping,
+        "--config", args.master_config,
+        "--template-order", args.code_order_yaml,
+        "--portfolio-type", args.portfolio_type,
+        "--output-dir", str(out_dir),
+    ])
+
+    if not projected.exists():
+        # regime_projector uses {stem}_{regime}_projected.csv naming
+        candidates = list(out_dir.glob(f"*{regime}*projected*.csv"))
+        if candidates:
+            projected = max(candidates, key=lambda p: p.stat().st_mtime)
+        else:
+            raise RuntimeError(f"[Gate 4] Failed: no projected CSV found for {regime}")
+
+    print(f"[Gate 4] Regime projection............... OK {regime}")
+
+    # -- Gate 5: XML generation --------------------------------------------
+    _run([
+        py, _script("xml_builder"),
+        "--input", str(projected),
+        "--output", str(xml_out),
+        "--currency", args.currency,
+    ])
+
+    if not xml_out.exists():
+        raise RuntimeError(f"[Gate 5] Failed: did not produce {xml_out}")
+
+    print(f"[Gate 5] XML generation.................. OK {regime}")
+
+    return {
+        "regime": regime,
+        "projected": projected,
+        "xml": xml_out,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Manifest
+# ---------------------------------------------------------------------------
+
+def write_manifest(args, ctx: dict, gate45: Optional[dict], out_dir: Path, run_start: float) -> Path:
+    """Write the run_manifest.json summarising the pipeline execution."""
+    manifest_path = out_dir / "run_manifest.json"
+    transform = _safe_read_json(ctx["transform_json"]) or {}
+    loan_count_raw = transform.get("rows", ctx["loan_count"])
+    loan_count = int(loan_count_raw) if str(loan_count_raw).isdigit() else ctx["loan_count"]
+
+    gates: Dict[str, Any] = {
+        "semantic_alignment": {
+            "status": "pass",
+            "fields_mapped": ctx["fields_mapped"],
+            "artifact": str(ctx["header_json"]) if ctx["header_json"].exists() else None,
+        },
+        "canonical_transform": {
+            "status": "pass",
+            "artifact": str(ctx["transform_json"]) if ctx["transform_json"].exists() else None,
+        },
+        "canonical_validation": {
+            "status": ctx["canonical_status"],
+            "warnings": ctx["canon_stats"]["warnings"],
+            "errors": ctx["canon_stats"]["errors"],
+            "blocking": ctx["canon_stats"]["errors"] > 0,
+            "artifact": str(ctx["canon_viol_path"]) if ctx["canon_viol_path"] else None,
+        },
+        "business_rules": {
+            "status": "pass" if ctx["biz_stats"]["rows"] == 0 else "review",
+            "failures": ctx["biz_stats"]["rows"],
+            "rules_executed": ctx["rules_executed"],
+            "artifact": str(ctx["biz_viol_path"]) if ctx["biz_viol_path"] else None,
+        },
+    }
+
+    if gate45:
+        gates["regime_projection"] = {
+            "status": "pass",
+            "regime": gate45["regime"],
+            "artifact": str(gate45["projected"]),
+        }
+        if gate45.get("xml"):
+            gates["xsd_validation"] = {
+                "status": "pass",
+                "artifact": str(gate45["xml"]),
+            }
+
+    outputs = [
+        str(ctx["canonical_full"]),
+        str(ctx["canonical_typed"]),
+        str(ctx["transform_json"]) if ctx["transform_json"].exists() else None,
+        str(ctx["field_lineage"]) if ctx["field_lineage"].exists() else None,
+        str(ctx["value_lineage"]) if ctx["value_lineage"].exists() else None,
+    ]
+    if gate45:
+        outputs.append(str(gate45["projected"]))
+        if gate45.get("xml"):
+            outputs.append(str(gate45["xml"]))
 
     manifest: Dict[str, Any] = {
         "run_id": time.strftime("run_%Y%m%d_%H%M%S"),
-        "config": args.config,
-        "input_file": str(input_path),
+        "mode": args.mode,
+        "config": getattr(args, "config", None),
+        "input_file": str(args.input),
         "portfolio_type": args.portfolio_type,
         "output_schema": args.output_schema,
-        "loan_count": int(loan_count_reported) if str(loan_count_reported).isdigit() else loan_count,
-        "gates": {
-            "semantic_alignment": {
-                "status": "pass",
-                "fields_mapped": fields_mapped,
-                "artifact": str(header_json) if header_json.exists() else None,
-            },
-            "canonical_transform": {
-                "status": "pass",
-                "artifact": str(transform_json) if transform_json.exists() else None,
-            },
-            "canonical_validation": {
-                "status": canonical_status,
-                "warnings": canon_stats["warnings"],
-                "errors": canon_stats["errors"],
-                "blocking": canon_stats["errors"] > 0,
-                "artifact": str(canon_viol_path) if canon_viol_path else None,
-            },
-            "business_rules": {
-                "status": "pass" if biz_stats["rows"] == 0 else "review",
-                "failures": biz_stats["rows"],
-                "rules_executed": rules_executed,
-                "artifact": str(biz_viol_path) if biz_viol_path else None,
-            },
-            "regime_projection": {
-                "status": "pass",
-                "regime": "ESMA_Annex12",
-                "artifact": str(annex_projected),
-            },
-            "xsd_validation": {
-                "status": "pass",
-                "artifact": str(annex_xml),
-            },
-        },
-        "outputs": [
-            str(canonical_full),
-            str(canonical_typed),
-            str(transform_json) if transform_json.exists() else None,
-            str(field_lineage_json) if field_lineage_json.exists() else None,
-            str(value_lineage_json) if value_lineage_json.exists() else None,
-            str(annex_projected),
-            str(annex_xml),
-        ],
+        "loan_count": loan_count,
+        "gates": gates,
+        "outputs": [x for x in outputs if x],
         "execution_time_seconds": round(time.time() - run_start, 2),
         "generated_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
-    manifest["outputs"] = [x for x in manifest["outputs"] if x]
 
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return manifest_path
 
-    # -------------------------
-    # Final output list (investor proof)
-    # -------------------------
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    ap = argparse.ArgumentParser(
+        description="trakt — multi-mode pipeline orchestrator",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+modes:
+  mi          Run Gates 1-3 to produce canonical_typed.csv for the Streamlit dashboard.
+  annex12     Run Gates 1-5 to produce ESMA Annex 12 investor XML (deal-level).
+  regulatory  Run Gates 1-5 to produce ESMA Annex 2-9 regime projection + XML (exposure-level).
+
+examples:
+  python trakt_run.py --mode mi --input tape.csv
+  python trakt_run.py --mode annex12 --input tape.csv --config config_client_annex12.yaml
+  python trakt_run.py --mode regulatory --input tape.csv --regime ESMA_Annex2
+""",
+    )
+
+    ap.add_argument("--mode", required=True, choices=["mi", "annex12", "regulatory"],
+                     help="Pipeline mode: mi | annex12 | regulatory")
+    ap.add_argument("--input", required=True,
+                     help="Input loan tape CSV/XLSX")
+
+    # Common config
+    ap.add_argument("--portfolio-type", default="equity_release")
+    ap.add_argument("--output-schema", choices=["active", "full"], default="active")
+    ap.add_argument("--registry", default=str(CONFIG_ROOT / "system" / "fields_registry.yaml"))
+    ap.add_argument("--master-config", default=str(CONFIG_ROOT / "client" / "config_client_ERM_UK.yaml"))
+    ap.add_argument("--out-dir", default="out")
+    ap.add_argument("--validation-out-dir", default="out_validation")
+
+    # Annex 12 mode
+    ap.add_argument("--config", default=None,
+                     help="Annex 12 config YAML (required for annex12 mode)")
+    ap.add_argument("--constraints", default=str(CONFIG_ROOT / "regime" / "annex12_field_constraints.yaml"))
+    ap.add_argument("--mapping", default="annex12_mapping.csv")
+    ap.add_argument("--rules", default=str(CONFIG_ROOT / "regime" / "annex12_rules.yaml"))
+    ap.add_argument("--xsd", default=str(CONFIG_ROOT / "system" / "DRAFT1auth.098.001.04_1.3.0.xsd"))
+
+    # Regulatory mode (Annex 2-9)
+    ap.add_argument("--regime", default=None,
+                     help="Target regime for regulatory mode (e.g. ESMA_Annex2)")
+    ap.add_argument("--enum-mapping", default=str(CONFIG_ROOT / "system" / "enum_mapping.yaml"))
+
+    # Shared
+    ap.add_argument("--code-order-yaml", default=str(CONFIG_ROOT / "system" / "esma_code_order.yaml"))
+    ap.add_argument("--currency", default="GBP")
+
+    args = ap.parse_args()
+
+    # -- Validate mode-specific requirements -------------------------------
+    if args.mode == "annex12" and not args.config:
+        ap.error("--config is required for annex12 mode")
+    if args.mode == "regulatory":
+        if not args.regime:
+            ap.error("--regime is required for regulatory mode")
+        if args.regime not in VALID_REGULATORY_REGIMES:
+            ap.error(f"--regime must be one of: {', '.join(VALID_REGULATORY_REGIMES)}")
+
+    # -- Schema policy per mode --------------------------------------------
+    # MI & Annex 12: "active" = core:true + mapped headers (lean dataset)
+    # Regulatory:    "full"   = all fields for the target annex (complete)
+    if args.mode == "regulatory":
+        args.output_schema = "full"
+    elif args.mode in ("mi", "annex12"):
+        args.output_schema = "active"
+
+    # -- Setup -------------------------------------------------------------
+    run_start = time.time()
+    py = sys.executable
+
+    input_path = Path(args.input)
+    if not input_path.exists():
+        raise FileNotFoundError(f"Input file not found: {input_path}")
+
+    out_dir = Path(args.out_dir)
+    val_dir = Path(args.validation_out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    val_dir.mkdir(parents=True, exist_ok=True)
+
+    stem = input_path.stem
+
+    print("")
+    print(f"$ trakt run --mode {args.mode} --input {args.input}")
+    if args.mode == "annex12":
+        print(f"  config: {args.config}")
+    elif args.mode == "regulatory":
+        print(f"  regime: {args.regime}")
+    print("")
+
+    # -- Gates 1-3 (common) ------------------------------------------------
+    ctx = run_common_gates(py, args, input_path, out_dir, val_dir, stem)
+
+    # -- Mode-specific gates -----------------------------------------------
+    gate45 = None
+
+    if args.mode == "mi":
+        print("")
+        print("[MI] Dashboard-ready canonical produced.")
+
+    elif args.mode == "annex12":
+        gate45 = run_annex12(py, args, ctx, out_dir)
+
+    elif args.mode == "regulatory":
+        gate45 = run_regulatory(py, args, ctx, out_dir)
+
+    # -- Manifest ----------------------------------------------------------
+    manifest_path = write_manifest(args, ctx, gate45, out_dir, run_start)
+
+    # -- Summary -----------------------------------------------------------
+    elapsed = round(time.time() - run_start, 2)
     print("")
     print("Output artefacts:")
-    print(f"  -> {canonical_full}")
-    print(f"  -> {canonical_typed}")
-    if transform_json.exists():
-        print(f"  -> {transform_json}")
-    if canon_viol_path:
-        print(f"  -> {canon_viol_path}")
-    if biz_viol_path:
-        print(f"  -> {biz_viol_path}")
-    if field_lineage_json.exists():
-        print(f"  -> {field_lineage_json}")
-    if value_lineage_json.exists():
-        print(f"  -> {value_lineage_json}")
-    print(f"  -> {annex_projected}")
-    print(f"  -> {annex_xml}")
+    print(f"  -> {ctx['canonical_full']}")
+    print(f"  -> {ctx['canonical_typed']}")
+    if ctx["transform_json"].exists():
+        print(f"  -> {ctx['transform_json']}")
+    if ctx["canon_viol_path"]:
+        print(f"  -> {ctx['canon_viol_path']}")
+    if ctx["biz_viol_path"]:
+        print(f"  -> {ctx['biz_viol_path']}")
+    if ctx["field_lineage"].exists():
+        print(f"  -> {ctx['field_lineage']}")
+    if ctx["value_lineage"].exists():
+        print(f"  -> {ctx['value_lineage']}")
+    if gate45:
+        print(f"  -> {gate45['projected']}")
+        if gate45.get("xml"):
+            print(f"  -> {gate45['xml']}")
     print(f"  -> {manifest_path}")
     print("")
-    print(f"Completed in {manifest['execution_time_seconds']}s")
+    print(f"Completed in {elapsed}s")
+
 
 if __name__ == "__main__":
     main()
-

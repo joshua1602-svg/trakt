@@ -2,25 +2,45 @@
 
 Data pipeline and analytics platform for Equity Release Mortgage (ERM) portfolio management with ESMA Annex 12 regulatory compliance.
 
-Trakt ingests raw loan tape data, normalises it into a canonical format, validates it against schema and business rules, projects it into the ESMA Annex 12 schema, and produces investor-ready XML reports.
+Trakt ingests raw loan tape data, normalises it into a canonical format, validates it against schema and business rules, and produces regime-specific outputs for MI dashboards, ESMA Annex 12 investor reporting, or Annex 2-9 regulatory submissions.
 
 ## Quick start
 
 ```bash
 pip install -r requirements.txt
 
-# Run the full pipeline
-python trakt_run.py \
+# MI mode — produce dashboard-ready canonical for Streamlit
+python engine/orchestrator/trakt_run.py \
+  --mode mi \
+  --input loan_portfolio_112025.csv
+
+# Annex 12 — investor reporting (deal-level XML)
+python engine/orchestrator/trakt_run.py \
+  --mode annex12 \
   --input loan_portfolio_112025.csv \
-  --config config_ere_annex12.yaml
+  --config config/client/config_client_annex12.yaml
+
+# Regulatory — exposure-level Annex 2-9
+python engine/orchestrator/trakt_run.py \
+  --mode regulatory \
+  --input loan_portfolio_112025.csv \
+  --regime ESMA_Annex2
 
 # Launch the analytics dashboard
-streamlit run streamlit_app_erm.py
+streamlit run analytics/streamlit_app_erm.py
 ```
 
-## Pipeline stages
+## Pipeline modes
 
-`trakt_run.py` orchestrates the following gates in sequence:
+`trakt_run.py` supports three modes. Gates 1-3 are common to all modes; Gates 4-5 are mode-specific.
+
+| Mode | Gates | Output |
+|------|-------|--------|
+| `mi` | 1-3 | `canonical_typed.csv` for Streamlit dashboard |
+| `annex12` | 1-5 | ESMA Annex 12 investor XML (deal-level) |
+| `regulatory` | 1-5 | ESMA Annex 2-9 regime projection + XML (exposure-level) |
+
+### Gate sequence
 
 | Gate | Script | Purpose |
 |------|--------|---------|
@@ -29,10 +49,28 @@ streamlit run streamlit_app_erm.py
 | 2 - Canonical validation | `validate_canonical.py` | Schema and format validation against the field registry |
 | 2.5 - Lineage | `lineage_tracker.py` | Tracks field-level and value-level data lineage |
 | 3 - Business rules | `validate_business_rules.py` | Cross-field business rule validation |
-| 4 - Regime projection | `annex12_projector.py` | Projects canonical data into the full ESMA Annex 12 schema |
+| 4a - Annex 12 projection | `annex12_projector.py` | Projects canonical data into the ESMA Annex 12 schema (annex12 mode) |
+| 4b - Regime projection | `regime_projector.py` | Projects canonical data into ESMA Annex 2-9 schemas (regulatory mode) |
 | 5 - XML + XSD validation | `xml_builder_investor.py` | Generates ESMA-compliant XML and validates against the XSD schema |
 
 A JSON run manifest (`out/run_manifest.json`) is produced at the end of every run with gate statuses, artefact paths, and timing.
+
+## Blob storage trigger
+
+`blob_trigger.py` provides automatic pipeline execution when a data tape is uploaded to cloud blob storage (Azure Blob, AWS S3, or local filesystem for testing).
+
+Upload path convention determines the mode:
+```
+uploads/{client_id}/mi/tape.csv          → MI mode
+uploads/{client_id}/annex12/tape.csv     → Annex 12 mode
+uploads/{client_id}/regulatory/tape.csv  → Regulatory mode (regime from filename)
+```
+
+Local testing:
+```bash
+python engine/orchestrator/blob_trigger.py \
+  --provider local --path tape.csv --mode mi
+```
 
 ## Analytics dashboard
 
@@ -74,6 +112,7 @@ trakt/
   engine/
     orchestrator/
       trakt_run.py                   # Pipeline orchestrator (entry point)
+      blob_trigger.py                # Cloud blob-storage trigger (Azure/AWS/local)
     gate_1_alignment/
       semantic_alignment.py          # Gate 1: semantic alignment
       aliases/
