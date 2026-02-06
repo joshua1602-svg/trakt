@@ -5,7 +5,7 @@ annex12:
     notes:
       - Generic, deal-level template for Annex 12 projection.
       - Intended to be deep-merged with an asset-class overlay (e.g., equity release)
-        and then a client/deal instance config (e.g., config_ere_annex12.yaml).
+        and then a client/deal instance config (e.g., client_config_annex_12.yaml).
       - Do NOT add Annex 12 fields to exposure-level field_registry; keep Annex 12
         deal-level and computed off canonical post-transform.
 

@@ -1,6 +1,6 @@
-# config_ere_annex12.yaml
+# client_config_annex_12.yaml
 # LAYER 3: ANNEX 12 OVERLAY
-# Extension for Investor Reporting. Inherits LEI/Identity from config_ERM_UK.yaml.
+# Extension for Investor Reporting. Inherits LEI/Identity from asset_policy_uk.yaml.
 
 annex12:
   meta:

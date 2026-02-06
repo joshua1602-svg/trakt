@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-annex12_projector.py
+esma_investor_regime_adapter.py
 
 Projects a complete ESMA Annex 12 record from:
 - merged Annex 12 config
 - canonical CSV
-- annex12_field_constraints.yaml
-- esma_code_order.yaml
+- esma_12_integrity_rules.yaml
+- submission_schema_layout.yaml
 
 Guarantees:
 - every ESMA code populated (or fails fast if legally impossible)
@@ -222,7 +222,7 @@ def _load_cashflow_executed(path: Optional[str]) -> List[Dict[str, Any]]:
 def parse_args():
     ap = argparse.ArgumentParser(description="Annex 12 Regime Projector")
     ap.add_argument("--config", required=True)
-    ap.add_argument("--master-config", required=False, help="Path to Master Config (config_ERM_UK.yaml)")
+    ap.add_argument("--master-config", required=False, help="Path to Master Config (asset_policy_uk.yaml)")
     ap.add_argument("--canonical", required=True)
     ap.add_argument("--as-of-date", required=False, help="Override IVSS2 (YYYY-MM-DD)")
     ap.add_argument("--constraints", required=True)
@@ -243,7 +243,7 @@ def main():
     if args.master_config:
         try:
             master_root = load_yaml(args.master_config)
-            # The LEI and Name are in the 'defaults' section of config_ERM_UK.yaml
+            # The LEI and Name are in the 'defaults' section of asset_policy_uk.yaml
             master_defaults = master_root.get('defaults', {})
             
             lei = master_defaults.get('originator_legal_entity_identifier')

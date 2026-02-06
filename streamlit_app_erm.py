@@ -36,7 +36,7 @@ CLIENT_DISPLAY_NAME = "Portfolio Analytics Platform"
 
 # Load YAML to override defaults
 def load_client_config():
-    config_path = Path("config_ERM_UK.yaml")
+    config_path = Path("asset_policy_uk.yaml")
     if config_path.exists():
         try:
             with open(config_path, "r", encoding="utf-8") as f:

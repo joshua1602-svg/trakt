@@ -3,7 +3,7 @@
 aggregate_validation_results_FIXED.py
 
 Aggregates row-level violations from:
-- validate_canonical_frozen_v1_4.py  (columns: rule_id,severity,field,row,message)
+- gatekeeper.py  (columns: rule_id,severity,field,row,message)
 - validate_business_rules_aligned_v1_2.py (columns: rule_id,severity,description,message,row_index)
 
 into a field-level summary with materiality policy.
@@ -11,7 +11,7 @@ into a field-level summary with materiality policy.
 Drop-in replacement with:
 - Robust input schema handling (field vs field_name; row vs row_index)
 - Correct use of loaded YAML dicts (no Path/dict confusion)
-- Optional rule_registry.yaml support for rule->field expansion (best effort)
+- Optional governance_rulebook.yaml support for rule->field expansion (best effort)
 
 Level-1 integration fix:
 - Emits BOTH `canonical_field` and `field_name` columns (backward compatible)
@@ -275,8 +275,8 @@ def main():
     ap.add_argument("--output", default="", help="Output CSV path")
     ap.add_argument("--dashboard-json", default="", help="Output dashboard JSON path (optional)")
     ap.add_argument("--regime", required=True, help="Regime name (metadata only for now)")
-    ap.add_argument("--issue-policy", default="issue_policy.yaml", help="Path to issue_policy.yaml (required)")
-    ap.add_argument("--rule-registry", default="rule_registry.yaml", help="Path to rule_registry.yaml (optional)")
+    ap.add_argument("--issue-policy", default="materiality_framework.yaml", help="Path to materiality_framework.yaml (required)")
+    ap.add_argument("--rule-registry", default="governance_rulebook.yaml", help="Path to governance_rulebook.yaml (optional)")
     args = ap.parse_args()
 
     issue_policy = load_yaml_required(Path(args.issue_policy))

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-xml_builder_investor.py
+esma_investor_disclosure_generator.py
 
 ESMA Annex 12 XML Builder (Investor / Significant Event) — Final Version
 FIXED:
@@ -237,7 +237,7 @@ def select_mapping_spec(code: str, val: str, mapping: dict, rules: dict, report_
     clean_code = str(code).strip()
 
     # --- SCALABLE FIX: Read Exclusion List from YAML ---
-    # We no longer hardcode the list here. We read it from annex12_rules.yaml.
+    # We no longer hardcode the list here. We read it from esma_12_disclosure_logic.yaml.
     no_sign_fields = rules.get("implicit_sign_fields", [])
     
     if clean_code in no_sign_fields:

@@ -10,9 +10,9 @@ Trakt ingests raw loan tape data, normalises it into a canonical format, validat
 pip install -r requirements.txt
 
 # Run the full pipeline
-python trakt_run.py \
+python trakt_orchestrator.py \
   --input loan_portfolio_112025.csv \
-  --config config_ere_annex12.yaml
+  --config client_config_annex_12.yaml
 
 # Launch the analytics dashboard
 streamlit run streamlit_app_erm.py
@@ -20,17 +20,17 @@ streamlit run streamlit_app_erm.py
 
 ## Pipeline stages
 
-`trakt_run.py` orchestrates the following gates in sequence:
+`trakt_orchestrator.py` orchestrates the following gates in sequence:
 
 | Gate | Script | Purpose |
 |------|--------|---------|
-| 1 - Semantic alignment | `messy_to_canonical.py` | Fuzzy-matches raw loan tape columns to the canonical field registry |
-| &mdash; Transform | `canonical_transform_frozen_v1_3_5_CONFIG.py` | Standardises formats, enriches geography (NUTS/ITL), derives fields (LTV, classifications) |
-| 2 - Canonical validation | `validate_canonical_frozen_v1_4.py` | Schema and format validation against the field registry |
+| 1 - Semantic alignment | `alignment_engine.py` | Fuzzy-matches raw loan tape columns to the canonical field registry |
+| &mdash; Transform | `portfolio_synthesizer.py` | Standardises formats, enriches geography (NUTS/ITL), derives fields (LTV, classifications) |
+| 2 - Canonical validation | `gatekeeper.py` | Schema and format validation against the field registry |
 | 2.5 - Lineage | `lineage_JSON.py` | Tracks field-level and value-level data lineage |
 | 3 - Business rules | `validate_business_rules_aligned_v1_2.py` | Cross-field business rule validation |
-| 4 - Regime projection | `annex12_projector.py` | Projects canonical data into the full ESMA Annex 12 schema |
-| 5 - XML + XSD validation | `xml_builder_investor.py` | Generates ESMA-compliant XML and validates against the XSD schema |
+| 4 - Regime projection | `esma_investor_regime_adapter.py` | Projects canonical data into the full ESMA Annex 12 schema |
+| 5 - XML + XSD validation | `esma_investor_disclosure_generator.py` | Generates ESMA-compliant XML and validates against the XSD schema |
 
 A JSON run manifest (`out/run_manifest.json`) is produced at the end of every run with gate statuses, artefact paths, and timing.
 
@@ -48,11 +48,13 @@ Optional modules (`risk_monitor.py`, `risk_limits_config.py`) add concentration-
 
 | File | Role |
 |------|------|
-| `config_ERM_UK.yaml` | Master client config -- identity, transformations, enrichment rules, UI branding |
-| `config_ere_annex12.yaml` | ESMA Annex 12 deal metadata and structural overlay |
-| `fields_registry_v6_core_canonical_pricing_currency_code.yaml` | Canonical field definitions |
-| `annex12_field_constraints.yaml` | Field-level validation constraints |
-| `annex12_rules.yaml` | Business rule definitions |
+| `asset_policy_uk.yaml` | Master client config -- identity, transformations, enrichment rules, UI branding |
+| `client_config_annex_12.yaml` | ESMA Annex 12 deal metadata and structural overlay |
+| `data_standard_definition.yaml` | Canonical field definitions |
+| `esma_12_integrity_rules.yaml` | Field-level validation constraints |
+| `esma_12_disclosure_logic.yaml` | Business rule definitions |
+| `submission_schema_layout.yaml` | ESMA code ordering for XML output |
+| `materiality_framework.yaml` | Issue severity and materiality policy |
 | `product_defaults_ERM.yaml` | Default values for equity release mortgage fields |
 | `aliases/` | Field alias mappings for data reconciliation |
 
@@ -71,24 +73,29 @@ Optional modules (`risk_monitor.py`, `risk_limits_config.py`) add concentration-
 
 ```
 trakt/
-  trakt_run.py                       # Pipeline orchestrator (entry point)
-  streamlit_app_erm.py               # Analytics dashboard (entry point)
-  messy_to_canonical.py              # Gate 1: semantic alignment
-  canonical_transform_frozen_*.py    # Transform: typing & derivation
-  validate_canonical_frozen_*.py     # Gate 2: canonical validation
-  validate_business_rules_*.py       # Gate 3: business rule validation
-  lineage_JSON.py                    # Gate 2.5: data lineage
-  annex12_projector.py               # Gate 4: regime projection
-  xml_builder_investor.py            # Gate 5: XML generation
-  mi_prep.py                         # Dashboard data preparation layer
-  charts_plotly.py                   # Plotly chart factories
-  static_pools_core.py               # Static pool analysis engine
-  risk_monitor.py                    # Concentration-limit monitoring
-  alias_builder.py                   # TF-IDF alias generation
-  delta_json.py                      # Run manifest / SHA256 hashing
-  config_ERM_UK.yaml                 # Master client configuration
-  config_ere_annex12.yaml            # ESMA Annex 12 configuration
-  aliases/                           # Field alias YAML files
-  enum/                              # Enumeration mapping files
-  requirements.txt                   # Python dependencies
+  trakt_orchestrator.py                       # Pipeline orchestrator (entry point)
+  streamlit_app_erm.py                        # Analytics dashboard (entry point)
+  alignment_engine.py                         # Gate 1: semantic alignment
+  portfolio_synthesizer.py                    # Transform: typing & derivation
+  gatekeeper.py                               # Gate 2: canonical validation
+  validate_business_rules_aligned_v1_2.py     # Gate 3: business rule validation
+  lineage_JSON.py                             # Gate 2.5: data lineage
+  esma_investor_regime_adapter.py             # Gate 4: regime projection
+  esma_investor_disclosure_generator.py       # Gate 5: XML generation
+  mi_prep.py                                  # Dashboard data preparation layer
+  charts_plotly.py                            # Plotly chart factories
+  static_pools_core.py                        # Static pool analysis engine
+  risk_monitor.py                             # Concentration-limit monitoring
+  alias_builder.py                            # TF-IDF alias generation
+  delta_json.py                               # Run manifest / SHA256 hashing
+  asset_policy_uk.yaml                        # Master client configuration
+  client_config_annex_12.yaml                 # ESMA Annex 12 configuration
+  data_standard_definition.yaml               # Canonical field definitions
+  esma_12_integrity_rules.yaml                # Field-level validation constraints
+  esma_12_disclosure_logic.yaml               # Business rule definitions
+  submission_schema_layout.yaml               # ESMA code ordering
+  materiality_framework.yaml                  # Issue materiality policy
+  aliases/                                    # Field alias YAML files
+  enum/                                       # Enumeration mapping files
+  requirements.txt                            # Python dependencies
 ```

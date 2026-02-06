@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-messy_to_canonical.py (FROZEN SPINE v1.2)
+alignment_engine.py (FROZEN SPINE v1.2)
 
 Purpose (locked contract):
 - Ingest a messy loan tape (CSV/XLSX)
@@ -336,7 +336,7 @@ def main() -> None:
     parser.add_argument("--portfolio-type", default="equity_release", help="e.g. equity_release, sme, cre")
     parser.add_argument(
         "--registry",
-        default="fields_registry_v6_core_canonical_pricing_currency_code.yaml",
+        default="data_standard_definition.yaml",
         help="Field registry YAML (source of truth)",
     )
     parser.add_argument(

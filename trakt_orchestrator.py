@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-trakt_run.py - Deterministic pipeline orchestrator + investor-friendly run manifest.
+trakt_orchestrator.py - Deterministic pipeline orchestrator + investor-friendly run manifest.
 
 Windows-safe:
 - No shell multiline strings
@@ -215,20 +215,20 @@ def _field_counts_from_violations(path: Optional[Path]) -> Dict[str, int]:
 def main() -> None:
     ap = argparse.ArgumentParser(description="trakt run (orchestrator + run manifest)")
     ap.add_argument("--input", required=True, help="Input loan tape CSV/XLSX (e.g. loan_portfolio_112025.csv)")
-    ap.add_argument("--config", required=True, help="Annex12 config YAML (e.g. config_ere_annex12.yaml)")
+    ap.add_argument("--config", required=True, help="Annex12 config YAML (e.g. client_config_annex_12.yaml)")
 
     # optional knobs
     ap.add_argument("--portfolio-type", default="equity_release")
     ap.add_argument("--output-schema", choices=["active", "full"], default="active")
-    ap.add_argument("--registry", default="fields_registry_v6_core_canonical_pricing_currency_code.yaml")
-    ap.add_argument("--master-config", default="config_ERM_UK.yaml")
+    ap.add_argument("--registry", default="data_standard_definition.yaml")
+    ap.add_argument("--master-config", default="asset_policy_uk.yaml")
 
     ap.add_argument("--out-dir", default="out")
     ap.add_argument("--validation-out-dir", default="out_validation")
 
-    ap.add_argument("--constraints", default="annex12_field_constraints.yaml")
-    ap.add_argument("--code-order-yaml", default="esma_code_order.yaml")
-    ap.add_argument("--rules", default="annex12_rules.yaml")
+    ap.add_argument("--constraints", default="esma_12_integrity_rules.yaml")
+    ap.add_argument("--code-order-yaml", default="submission_schema_layout.yaml")
+    ap.add_argument("--rules", default="esma_12_disclosure_logic.yaml")
     ap.add_argument("--mapping", default="annex12_mapping.csv")
     ap.add_argument("--currency", default="GBP")
     ap.add_argument("--xsd", default="DRAFT1auth.098.001.04_1.3.0.xsd")
@@ -268,7 +268,7 @@ def main() -> None:
     # Gate 1: Semantic alignment (messy -> canonical)
     # -------------------------
     _run([
-        py, "messy_to_canonical.py",
+        py, "alignment_engine.py",
         "--input", str(input_path),
         "--portfolio-type", args.portfolio_type,
         "--output-schema", args.output_schema,
@@ -295,7 +295,7 @@ def main() -> None:
     # Transform (typing/derivations)
     # -------------------------
     _run([
-        py, "canonical_transform_frozen_v1_3_5_CONFIG.py",
+        py, "portfolio_synthesizer.py",
         str(canonical_full),
         "--registry", args.registry,
         "--portfolio-type", args.portfolio_type,
@@ -310,7 +310,7 @@ def main() -> None:
     # Gate 2: Canonical validation
     # -------------------------
     canon_rc = _run([
-        py, "validate_canonical_frozen_v1_4.py",
+        py, "gatekeeper.py",
         str(canonical_typed),
         "--registry", args.registry,
         "--portfolio-type", args.portfolio_type,
@@ -396,7 +396,7 @@ def main() -> None:
     # Gate 4: Regime projection
     # -------------------------
     _run([
-        py, "annex12_projector.py",
+        py, "esma_investor_regime_adapter.py",
         "--config", args.config,
         "--master-config", args.master_config,
         "--canonical", str(canonical_typed),
@@ -414,7 +414,7 @@ def main() -> None:
     # Gate 5: XML build + XSD validation
     # -------------------------
     _run([
-        py, "xml_builder_investor.py",
+        py, "esma_investor_disclosure_generator.py",
         "--input", str(annex_projected),
         "--mapping", args.mapping,
         "--rules", args.rules,

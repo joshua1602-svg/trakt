@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-canonical_transform_frozen_v1_9.py
+portfolio_synthesizer.py
 
 Purpose (locked contract):
-- Read a canonical dataset produced by messy_to_canonical (truth set; no ND padding)
+- Read a canonical dataset produced by alignment_engine (truth set; no ND padding)
 - Standardise formats according to the field registry.
 - Enrich Geography (NUTS/ITL) via config-driven strategy.
 - Apply deterministic derivations (classification, LTV, reporting date).
