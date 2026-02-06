@@ -310,16 +310,20 @@ def run_common_gates(py: str, args, input_path: Path, out_dir: Path, val_dir: Pa
     print("[Gate 2.5] Data lineage.................. OK")
 
     # -- Gate 3: Business rules --------------------------------------------
+    biz_report = val_dir / f"{stem}_canonical_business_rules_violations.csv"
     biz_cmd = [
         py, _script("validate_business_rules"),
         str(canonical_typed),
         "--config", args.master_config,
+        "--report", str(biz_report),
     ]
     if hasattr(args, "regime") and args.regime:
         biz_cmd.extend(["--regime", args.regime])
 
     biz_rc = _run(biz_cmd, allow_fail=True)
 
+    # Re-resolve biz_viol_path now that Gate 3 has written the file
+    biz_viol_path = biz_report if biz_report.exists() else None
     biz_stats = _summarise_violations(biz_viol_path)
     rules_executed = None
     if biz_viol_path and biz_viol_path.exists():
