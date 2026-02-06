@@ -149,10 +149,15 @@ def coerce_bool_yn(series: pd.Series) -> pd.Series:
     return s.map(mapping).astype("string")
 
 
-def load_enum_library() -> dict:
-    """Load enum synonym libraries if present (best-effort)."""
+def load_enum_library(config_dir: Path = None) -> dict:
+    """Load enum synonym libraries if present (best-effort).
+    Searches config_dir (typically config/system/) for enum_synonyms*.yaml.
+    """
+    if config_dir is None:
+        config_dir = Path(__file__).resolve().parent.parent.parent / "config" / "system"
     libs = []
-    for p in [Path("/mnt/data/enum_synonyms.yaml"), Path("/mnt/data/enum_synonyms_learned.yaml")]:
+    for name in ["enum_synonyms.yaml", "enum_synonyms_learned.yaml"]:
+        p = config_dir / name
         if p.exists():
             try:
                 libs.append(yaml.safe_load(p.read_text(encoding="utf-8")) or {})
@@ -575,7 +580,7 @@ def main() -> None:
         required = get_core_required_fields(reg_fields)
         violations += validate_core_presence(df, required, reg_fields, args.portfolio_type)
         violations += validate_formats(df, reg_fields, scope="canonical")
-        enum_lib = load_enum_library()
+        enum_lib = load_enum_library(config_dir=reg_path.parent)
         violations += validate_enums(df, reg_fields, enum_lib, allow_nd=False)
         out_name = f"{inp.stem}_canonical_violations.csv"
 
@@ -584,7 +589,7 @@ def main() -> None:
             raise ValueError("--regime is required when --scope=regime")
         violations += validate_regime_schema_and_mandatory(df, reg_fields, args.regime)
         violations += validate_formats(df, reg_fields, scope="regime")
-        enum_lib = load_enum_library()
+        enum_lib = load_enum_library(config_dir=reg_path.parent)
         violations += validate_enums(df, reg_fields, enum_lib, allow_nd=True)
         out_name = f"{inp.stem}_{args.regime}_violations.csv"
 
