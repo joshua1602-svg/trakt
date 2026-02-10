@@ -256,7 +256,6 @@ def main():
             # Inject LEI (IVSS1) if not already hardcoded in Annex 12 config
             if lei and 'IVSS1' not in cfg['deal']:
                 cfg['deal']['IVSS1'] = lei
-                print(f"DEBUG: Injected IVSS1 (LEI) from Master: {lei}")
 
             # Inject Entity Name (IVSS3/IVSS4)
             if name and 'IVSS3' not in cfg['deal']:
@@ -272,7 +271,6 @@ def main():
         if 'period' not in cfg:
             cfg['period'] = {}
         cfg['period']['IVSS2_data_cut_off_date'] = args.as_of_date
-        print(f"DEBUG: Injecting dynamic Cut-Off Date: {args.as_of_date}")
 
     constraints_yaml = load_yaml(args.constraints)
     constraints_fields = _constraints_fields(constraints_yaml)

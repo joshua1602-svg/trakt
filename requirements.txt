@@ -1,4 +1,4 @@
-pandas>=1.5
+pandas>=1.5.0,<3.0.0
 numpy>=1.23
 streamlit>=1.24
 plotly>=5.14
@@ -7,3 +7,5 @@ lxml>=4.9
 rapidfuzz>=3.0
 scikit-learn>=1.2
 Jinja2>=3.1
+azure-functions>=1.17
+azure-storage-blob>=12.19
