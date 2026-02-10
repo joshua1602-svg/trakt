@@ -7,13 +7,13 @@ on:
   workflow_dispatch:
 
 env:
-  AZURE_FUNCTIONAPP_PACKAGE_PATH: '.'
   PYTHON_VERSION: '3.11'
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     permissions:
+      id-token: write
       contents: read
 
     steps:
@@ -25,46 +25,24 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Create and start virtual environment
+      - name: Install dependencies into .python_packages
         run: |
-          python -m venv venv
-          source venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r requirements-azure.txt --target=".python_packages/lib/site-packages"
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      # Install again into .python_packages so Azure can find them at runtime
-      - name: Install dependencies for Azure
-        run: pip install -r requirements.txt --target=".python_packages/lib/site-packages"
-
-      - name: Zip artifact for deployment
-        run: zip release.zip ./* -r -x "venv/*"
-
-      - name: Upload artifact for deployment job
-        uses: actions/upload-artifact@v4
-        with:
-          name: python-app
-          path: |
-            release.zip
-            !venv/
-
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
-    permissions:
-      id-token: write
-      contents: read
-
-    steps:
-      - name: Download artifact from build job
-        uses: actions/download-artifact@v4
-        with:
-          name: python-app
-
-      - name: Unzip artifact for deployment
+      - name: Create deployment package
         run: |
-          unzip release.zip
-          rm release.zip
+          zip -r deploy.zip \
+            function_app.py \
+            host.json \
+            requirements-azure.txt \
+            engine/ \
+            config/ \
+            .python_packages/ \
+            -x "*.pyc" "__pycache__/*"
+
+      - name: Show package size
+        run: ls -lh deploy.zip
 
       - name: Login to Azure
         uses: azure/login@v2
@@ -74,9 +52,8 @@ jobs:
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_E4CB93E6899E4A55B8EA48212ABC8295 }}
 
       - name: Deploy to Azure Functions
-        uses: Azure/functions-action@v1
-        id: deploy-to-function
-        with:
-          app-name: 'trakt'
-          slot-name: 'Production'
-          package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
+        run: |
+          az functionapp deployment source config-zip \
+            --resource-group trakt \
+            --name trakt \
+            --src deploy.zip
