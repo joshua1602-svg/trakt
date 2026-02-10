@@ -47,7 +47,7 @@ def _parse_mode_from_path(blob_path: str) -> str:
 
 def _upload_outputs(out_dir: Path, container: str, prefix: str) -> list[str]:
     """Upload all files in out_dir to the outbound container."""
-    conn_str = os.environ["DATA_STORAGE_CONNECTION"]
+    conn_str = os.environ["AzureWebJobsStorage"]
     client = BlobServiceClient.from_connection_string(conn_str)
     container_client = client.get_container_client(container)
 
@@ -70,7 +70,7 @@ def _upload_outputs(out_dir: Path, container: str, prefix: str) -> list[str]:
 @app.blob_trigger(
     arg_name="blob",
     path="inbound/{name}",
-    connection="DATA_STORAGE_CONNECTION",
+    connection="AzureWebJobsStorage",
 )
 def trakt_blob_trigger(blob: func.InputStream):
     filename = Path(blob.name).name
