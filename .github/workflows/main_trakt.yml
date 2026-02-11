@@ -28,14 +28,14 @@ jobs:
       - name: Install dependencies into .python_packages
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-azure.txt --target=".python_packages/lib/site-packages"
+          pip install -r requirements.txt --target=".python_packages/lib/site-packages"
 
       - name: Create deployment package
         run: |
           zip -r deploy.zip \
             function_app.py \
             host.json \
-            requirements-azure.txt \
+            requirements.txt \
             engine/ \
             config/ \
             .python_packages/ \
