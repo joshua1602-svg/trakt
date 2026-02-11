@@ -47,6 +47,7 @@ SCRIPTS = {
     "regime_projector":     ENGINE_ROOT / "gate_4_projection" / "regime_projector.py",
     "xml_builder_investor": ENGINE_ROOT / "gate_5_delivery"   / "xml_builder_investor.py",
     "xml_builder":          ENGINE_ROOT / "gate_5_delivery"   / "xml_builder.py",
+    "aggregate_validation": ENGINE_ROOT / "gate_3_validation" / "aggregate_validation_results.py",
 }
 
 VALID_REGULATORY_REGIMES = [
@@ -345,6 +346,31 @@ def run_common_gates(py: str, args, input_path: Path, out_dir: Path, val_dir: Pa
         else:
             print(f"[Gate 3] Business rules.................. Warn {biz_stats['rows']} failures")
 
+    # -- Gate 3b: Aggregate validation results -----------------------------
+    field_summary_csv = val_dir / f"{stem}_field_summary.csv"
+    dashboard_json    = val_dir / f"{stem}_dashboard.json"
+    issue_policy_path = CONFIG_ROOT / "asset" / "issue_policy.yaml"
+
+    agg_cmd = [
+        py, _script("aggregate_validation"),
+        "--input-csv", str(canonical_typed),
+        "--output", str(field_summary_csv),
+        "--dashboard-json", str(dashboard_json),
+        "--regime", args.regime or "MI",
+        "--issue-policy", str(issue_policy_path),
+    ]
+    if canon_viol_path and canon_viol_path.exists():
+        agg_cmd.extend(["--canonical-violations", str(canon_viol_path)])
+    if biz_viol_path and biz_viol_path.exists():
+        agg_cmd.extend(["--business-violations", str(biz_viol_path)])
+
+    _run(agg_cmd, allow_fail=True)
+
+    if field_summary_csv.exists():
+        print(f"[Gate 3b] Validation aggregation.......... OK -> {field_summary_csv.name}")
+    else:
+        print("[Gate 3b] Validation aggregation.......... SKIP (no output)")
+
     return {
         "canonical_full": canonical_full,
         "canonical_typed": canonical_typed,
@@ -360,6 +386,8 @@ def run_common_gates(py: str, args, input_path: Path, out_dir: Path, val_dir: Pa
         "biz_stats": biz_stats,
         "biz_viol_path": biz_viol_path,
         "rules_executed": rules_executed,
+        "field_summary_csv": field_summary_csv,
+        "dashboard_json": dashboard_json,
     }
 
 
@@ -660,6 +688,10 @@ examples:
         print(f"  -> {ctx['canon_viol_path']}")
     if ctx["biz_viol_path"]:
         print(f"  -> {ctx['biz_viol_path']}")
+    if ctx["field_summary_csv"].exists():
+        print(f"  -> {ctx['field_summary_csv']}")
+    if ctx["dashboard_json"].exists():
+        print(f"  -> {ctx['dashboard_json']}")
     if ctx["field_lineage"].exists():
         print(f"  -> {ctx['field_lineage']}")
     if ctx["value_lineage"].exists():
