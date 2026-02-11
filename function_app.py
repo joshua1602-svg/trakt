@@ -1,8 +1,8 @@
 """
-Azure Blob Trigger for the trakt pipeline.
+Azure Event Grid Trigger for the trakt pipeline.
 
-Upload a CSV to the "inbound" container and the pipeline runs automatically.
-Outputs are written back to the "outbound" container.
+Upload a CSV to the "inbound" container on traktstorage and the pipeline
+runs automatically. Outputs are written back to the "outbound" container.
 
 Folder convention for mode routing:
     inbound/mi/<file>.csv           → --mode mi
@@ -10,11 +10,11 @@ Folder convention for mode routing:
     inbound/regulatory/<file>.csv   → --mode regulatory   (requires metadata)
     inbound/<file>.csv              → --mode mi  (default)
 
-For annex12 mode, set blob metadata:
-    config = <path to annex12 config yaml>
+For annex12 mode, set app setting:
+    TRAKT_ANNEX12_CONFIG = <path to annex12 config yaml>
 
-For regulatory mode, set blob metadata:
-    regime = ESMA_Annex2   (or Annex3, Annex4, Annex8, Annex9)
+For regulatory mode, set app setting:
+    TRAKT_REGIME = ESMA_Annex2   (or Annex3, Annex4, Annex8, Annex9)
 """
 
 from __future__ import annotations
@@ -45,6 +45,16 @@ def _parse_mode_from_path(blob_path: str) -> str:
     return "mi"
 
 
+def _download_blob(container: str, blob_name: str, dest: Path) -> None:
+    """Download a blob from traktstorage to a local path."""
+    conn_str = os.environ["DATA_STORAGE_CONNECTION"]
+    client = BlobServiceClient.from_connection_string(conn_str)
+    blob_client = client.get_blob_client(container, blob_name)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with dest.open("wb") as f:
+        f.write(blob_client.download_blob().readall())
+
+
 def _upload_outputs(out_dir: Path, container: str, prefix: str) -> list[str]:
     """Upload all files in out_dir to the outbound container."""
     conn_str = os.environ["DATA_STORAGE_CONNECTION"]
@@ -67,25 +77,42 @@ def _upload_outputs(out_dir: Path, container: str, prefix: str) -> list[str]:
     return uploaded
 
 
-@app.blob_trigger(
-    arg_name="blob",
-    path="inbound/{name}",
-    connection="DATA_STORAGE_CONNECTION",
-    source="EventGrid",
-)
-def trakt_blob_trigger(blob: func.InputStream):
-    filename = Path(blob.name).name
-    blob_path = blob.name  # e.g. "inbound/mi/tape_2026Q1.csv"
+@app.event_grid_trigger(arg_name="event")
+def trakt_blob_trigger(event: func.EventGridEvent):
+    data = event.get_json()
+    subject = event.subject  # e.g. /blobServices/default/containers/inbound/blobs/mi/tape.csv
 
-    logging.info(f"Blob trigger fired: {blob_path} ({blob.length} bytes)")
+    # Extract container and blob path from subject
+    # subject format: /blobServices/default/containers/{container}/blobs/{blob_path}
+    parts = subject.split("/blobs/", 1)
+    if len(parts) != 2:
+        logging.warning(f"Unexpected subject format: {subject}")
+        return
+
+    container = parts[0].rsplit("/", 1)[-1]  # "inbound"
+    blob_path = parts[1]                      # "mi/tape.csv" or "tape.csv"
+    filename = Path(blob_path).name           # "tape.csv"
+
+    # Skip non-CSV files
+    if not filename.lower().endswith(".csv"):
+        logging.info(f"Skipping non-CSV blob: {blob_path}")
+        return
+
+    logging.info(
+        f"Event Grid trigger fired: {container}/{blob_path} "
+        f"(url: {data.get('url', 'n/a')})"
+    )
 
     # -- Resolve mode from folder path ------------------------------------
-    mode = _parse_mode_from_path(blob_path)
+    full_path = f"{container}/{blob_path}"
+    mode = _parse_mode_from_path(full_path)
 
-    # -- Write blob to temp file ------------------------------------------
+    # -- Download blob to temp file ---------------------------------------
     tmp_dir = tempfile.mkdtemp(prefix="trakt_")
     input_path = Path(tmp_dir) / filename
-    input_path.write_bytes(blob.read())
+    _download_blob(container, blob_path, input_path)
+
+    logging.info(f"Downloaded {input_path.stat().st_size} bytes to {input_path}")
 
     out_dir = Path(tmp_dir) / "out"
     val_dir = Path(tmp_dir) / "out_validation"
