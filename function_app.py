@@ -71,6 +71,7 @@ def _upload_outputs(out_dir: Path, container: str, prefix: str) -> list[str]:
     arg_name="blob",
     path="inbound/{name}",
     connection="AzureWebJobsStorage",
+    source="EventGrid",
 )
 def trakt_blob_trigger(blob: func.InputStream):
     filename = Path(blob.name).name
