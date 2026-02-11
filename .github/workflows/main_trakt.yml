@@ -6,9 +6,6 @@ on:
       - main
   workflow_dispatch:
 
-env:
-  PYTHON_VERSION: '3.11'
-
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -20,16 +17,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Python version
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install dependencies into .python_packages
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt --target=".python_packages/lib/site-packages"
-
       - name: Create deployment package
         run: |
           zip -r deploy.zip \
@@ -38,7 +25,6 @@ jobs:
             requirements.txt \
             engine/ \
             config/ \
-            .python_packages/ \
             -x "*.pyc" "__pycache__/*"
 
       - name: Show package size
@@ -51,9 +37,10 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_EB5C7CA419CB478A891B392422373A3D }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_E4CB93E6899E4A55B8EA48212ABC8295 }}
 
-      - name: Deploy to Azure Functions
+      - name: Deploy to Azure Functions with remote build
         run: |
           az functionapp deployment source config-zip \
             --resource-group trakt \
             --name trakt \
-            --src deploy.zip
+            --src deploy.zip \
+            --build-remote true
