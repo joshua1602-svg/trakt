@@ -17,6 +17,20 @@ import sys
 import subprocess
 import yaml
 import base64
+import io
+
+# ============================
+# Azure Blob Storage integration (optional)
+# ============================
+try:
+    from blob_storage import (
+        is_azure_configured,
+        list_canonical_csvs,
+        download_blob_to_dataframe,
+    )
+    BLOB_STORAGE_AVAILABLE = is_azure_configured()
+except ImportError:
+    BLOB_STORAGE_AVAILABLE = False
 
 # ============================
 # 1. CONFIGURATION & THEME
@@ -267,6 +281,92 @@ def load_data(path: str):
 
     except Exception as e:
         raise
+
+@st.cache_data
+def load_data_from_blob(blob_name: str, container: str | None = None):
+    """Load canonical CSV from Azure Blob Storage and prepare for dashboard."""
+    try:
+        df = download_blob_to_dataframe(blob_name, container)
+        return _prepare_dataframe(df)
+    except Exception:
+        raise
+
+
+def _prepare_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Shared normalization + validation logic used by both local and blob loaders.
+    Extracted from load_data so both paths produce identical results.
+    """
+    # --- Helpers: robust numeric parsing ---
+    def _to_num(series: pd.Series) -> pd.Series:
+        if series is None:
+            return series
+        if pd.api.types.is_numeric_dtype(series):
+            return series
+        s = series.astype("string").str.strip()
+        s = s.str.replace(r"^\((.*)\)$", r"-\1", regex=True)
+        s = s.str.replace(r"[^\d\-\.\,]", "", regex=True)
+        s = s.str.replace(",", "", regex=False)
+        return pd.to_numeric(s, errors="coerce")
+
+    # Interest rate normalization
+    if "current_interest_rate" in df.columns:
+        df["current_interest_rate"] = _to_num(df["current_interest_rate"])
+        non_null = df["current_interest_rate"].dropna()
+        if not non_null.empty and non_null.median() > 1:
+            df["current_interest_rate"] = df["current_interest_rate"] / 100.0
+
+    # LTV normalization (TARGET STATE: 0-100)
+    for ltv_col in ["current_loan_to_value", "original_loan_to_value"]:
+        if ltv_col in df.columns:
+            df[ltv_col] = _to_num(df[ltv_col])
+            non_null = df[ltv_col].dropna()
+            if not non_null.empty and non_null.median() <= 1.0:
+                df[ltv_col] = df[ltv_col] * 100.0
+
+    # Balance columns (robust parse)
+    for bal_col in ["current_outstanding_balance", "current_principal_balance", "total_balance", "arrears_balance"]:
+        if bal_col in df.columns:
+            df[bal_col] = _to_num(df[bal_col]).fillna(0.0)
+
+    if "total_balance" not in df.columns:
+        if "current_outstanding_balance" in df.columns:
+            df["total_balance"] = df["current_outstanding_balance"]
+        elif "current_principal_balance" in df.columns:
+            df["total_balance"] = df["current_principal_balance"]
+        else:
+            df["total_balance"] = 0.0
+
+    if "current_principal_balance" not in df.columns or df["current_principal_balance"].sum() == 0:
+        df["current_principal_balance"] = df["total_balance"]
+
+    if "youngest_borrower_age" in df.columns:
+        df["youngest_borrower_age"] = _to_num(df["youngest_borrower_age"])
+
+    # Date parsing
+    date_cols = ["origination_date", "maturity_date", "application_date"]
+    for col in date_cols:
+        if col in df.columns:
+            s = df[col].astype("string").str.strip()
+            iso_mask = s.str.match(r"^\d{4}-\d{2}-\d{2}")
+            parsed = pd.Series(pd.NaT, index=df.index, dtype="datetime64[ns]")
+            if iso_mask.any():
+                parsed.loc[iso_mask] = pd.to_datetime(s.loc[iso_mask], errors="coerce", format="%Y-%m-%d")
+            non_iso = ~iso_mask
+            if non_iso.any():
+                parsed.loc[non_iso] = pd.to_datetime(s.loc[non_iso], errors="coerce", dayfirst=True)
+            df[col] = parsed
+
+    check_result = mi_prep.assert_trusted_canonical(df)
+    if not check_result.ok:
+        st.warning(f"⚠️ Input may not be canonical pipeline output. Missing: {check_result.missing_required}")
+        for note in check_result.notes:
+            st.info(note)
+
+    df = mi_prep.add_presentation_aliases(df)
+    df = mi_prep.add_buckets(df)
+    return df
+
 
 def fmt_float(x, decimals=1, suffix="", na="N/A"):
     """Safely format floats that may be None/NaN."""
@@ -668,49 +768,88 @@ elif LAST_RUN_TYPED_PATH:
 # --- SIDEBAR CONFIG ---
 with st.sidebar:
     st.markdown("### ⚙️ Configuration")
-    
-    # Input widget with value=default_path
-    input_path = st.text_input(
-        "Path to canonical CSV",
-        value=default_path, 
-        key="canonical_file_path_widget" # Use different key to avoid conflict if manual
+
+    # Data source selector: Local file vs Azure Blob Storage
+    source_options = ["Local file"]
+    if BLOB_STORAGE_AVAILABLE:
+        source_options.append("Azure Blob Storage")
+
+    data_source = st.radio(
+        "Data source",
+        source_options,
+        key="data_source_radio",
+        horizontal=True,
     )
-    
-    # Sync widget back to variable
-    if input_path:
-        st.session_state["canonical_file_path"] = input_path
 
-# --- RESOLVE PATH ---
-# Use input_path if available, otherwise fall back to our default logic
+    input_path = ""
+    selected_blob = ""
+
+    if data_source == "Local file":
+        # Input widget with value=default_path
+        input_path = st.text_input(
+            "Path to canonical CSV",
+            value=default_path,
+            key="canonical_file_path_widget",
+        )
+        # Sync widget back to variable
+        if input_path:
+            st.session_state["canonical_file_path"] = input_path
+    else:
+        # Azure Blob Storage browser
+        st.markdown("##### Browse output files")
+        blob_prefix = st.text_input(
+            "Filter by prefix (e.g. tape/out/)",
+            value="",
+            key="blob_prefix_filter",
+        )
+        try:
+            csv_blobs = list_canonical_csvs(prefix=blob_prefix)
+            if csv_blobs:
+                selected_blob = st.selectbox(
+                    "Select a CSV file",
+                    options=csv_blobs,
+                    key="blob_file_selector",
+                )
+            else:
+                st.info("No CSV files found in the outbound container.")
+        except Exception as e:
+            st.error(f"Could not list blobs: {e}")
+
+# --- RESOLVE PATH & LOAD DATA ---
 final_path_str = input_path if input_path else default_path
+use_blob = data_source == "Azure Blob Storage" and selected_blob
 
-if not final_path_str:
+if not final_path_str and not use_blob:
     if UPLOAD_PAGE_AVAILABLE:
-        # If no file, show upload page (logic omitted for brevity, assuming CLI usage)
         pass
-    st.warning("👈 Please enter a file path in the sidebar to proceed.")
+    st.warning("👈 Please enter a file path or select a blob in the sidebar to proceed.")
     st.stop()
 
 # --- LOAD DATA ---
 try:
-    validated_path = validate_file_path_pure(final_path_str)
-    
-    with st.spinner(f"Loading data from {validated_path.name}..."):
-        df = load_data(str(validated_path))
-        
+    if use_blob:
+        with st.spinner(f"Loading from Azure: {selected_blob}..."):
+            df = load_data_from_blob(selected_blob)
+    else:
+        validated_path = validate_file_path_pure(final_path_str)
+        with st.spinner(f"Loading data from {validated_path.name}..."):
+            df = load_data(str(validated_path))
+
     if df is None or df.empty:
         st.error("❌ Data load returned empty result.")
         st.stop()
-        
+
     # Success
-    st.success(f"✓ Loaded {len(df):,} loans")
-    
-    # Save successful path for next time
-    try:
-        LATEST_TYPED_PATH_FILE.write_text(str(validated_path), encoding="utf-8")
-    except OSError:
-        pass
-    
+    source_label = selected_blob if use_blob else str(validated_path)
+    st.success(f"✓ Loaded {len(df):,} loans from {Path(source_label).name}")
+
+    # Save successful path for next time (local files only)
+    if not use_blob:
+        try:
+            LATEST_TYPED_PATH_FILE.write_text(str(validated_path), encoding="utf-8")
+        except OSError:
+            pass
+
     # Create View Copy
     df_view = df.copy()
 

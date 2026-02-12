@@ -1,0 +1,29 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# System dependencies for lxml and openpyxl
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libxml2-dev libxslt1-dev gcc && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt azure-identity openpyxl
+
+# Copy application code
+COPY analytics/ ./analytics/
+COPY config/ ./config/
+
+# Streamlit configuration: disable CORS/XSRF for Azure App Service proxy
+RUN mkdir -p /root/.streamlit
+RUN printf '[server]\nheadless = true\nport = 8501\nenableCORS = false\nenableXsrfProtection = false\n\n[browser]\ngatherUsageStats = false\n' > /root/.streamlit/config.toml
+
+WORKDIR /app/analytics
+
+EXPOSE 8501
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8501/_stcore/health || exit 1
+
+ENTRYPOINT ["streamlit", "run", "streamlit_app_erm.py", "--server.address=0.0.0.0"]
