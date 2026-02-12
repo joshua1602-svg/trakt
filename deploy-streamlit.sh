@@ -26,7 +26,9 @@ ACR_NAME="${ACR_NAME:-traktregistry}"
 APP_NAME="${APP_NAME:-trakt-dashboard}"
 APP_SERVICE_PLAN="${APP_SERVICE_PLAN:-trakt-dashboard-plan}"
 LOCATION="${LOCATION:-uksouth}"
-IMAGE_TAG="${ACR_NAME}.azurecr.io/trakt-streamlit:latest"
+IMAGE_NAME="trakt-streamlit"
+IMAGE_VERSION="${IMAGE_VERSION:-$(git rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M%S)}"
+IMAGE_TAG="${ACR_NAME}.azurecr.io/${IMAGE_NAME}:${IMAGE_VERSION}"
 
 echo "=== Step 1: Create Azure Container Registry (if needed) ==="
 if az acr show --name "$ACR_NAME" --resource-group "$RESOURCE_GROUP" &>/dev/null; then
@@ -50,12 +52,13 @@ az acr show --name "$ACR_NAME" --resource-group "$RESOURCE_GROUP" --query loginS
 }
 
 echo "=== Step 2: Build and push Docker image ==="
+echo "Building image tag: ${IMAGE_NAME}:${IMAGE_VERSION}"
 az acr build \
   --registry "$ACR_NAME" \
-  --image trakt-streamlit:latest \
+  --image "${IMAGE_NAME}:${IMAGE_VERSION}" \
+  --image "${IMAGE_NAME}:latest" \
   --file Dockerfile.streamlit \
   .
-
 echo "=== Step 3: Create App Service Plan (Linux, B1 tier) ==="
 if az appservice plan show --name "$APP_SERVICE_PLAN" --resource-group "$RESOURCE_GROUP" &>/dev/null; then
   echo "App Service Plan '$APP_SERVICE_PLAN' already exists"
@@ -128,9 +131,11 @@ echo "=== Step 8: Restart App Service to pull fresh image ==="
 az webapp restart \
   --name "$APP_NAME" \
   --resource-group "$RESOURCE_GROUP"
-echo "App Service restarted — new container image will be pulled."
+echo "App Service restarted — image ${IMAGE_TAG} will be pulled."
 
 echo ""
+echo "Deployed image: ${IMAGE_TAG}"
+echo "Image version: ${IMAGE_VERSION}"
 echo "=== Deployment complete ==="
 echo "Dashboard URL: https://${APP_NAME}.azurewebsites.net"
 echo ""

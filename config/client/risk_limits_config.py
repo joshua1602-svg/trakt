@@ -11,6 +11,24 @@ Structure:
     - severity: 'critical' or 'high' (impacts alert priority)
 """
 
+from dataclasses import dataclass
+from typing import Optional
+
+
+@dataclass
+class LimitCheck:
+    """Result of a single risk limit check."""
+    limit_id: str
+    category: str
+    description: str
+    limit_value: float
+    current_value: float
+    status: str  # 'green', 'amber', 'red', 'unknown'
+    utilization_pct: float  # How much of limit is used (0-100+)
+    breach_amount: Optional[float]  # Amount by which limit is breached (if any)
+    severity: str  # 'critical' or 'high'
+
+
 CONCENTRATION_LIMITS = {
     # ------------------------------------------------------------------
     # Regional concentration limits 

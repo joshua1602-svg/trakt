@@ -8,22 +8,7 @@ Calculates current metrics and checks against configured limits.
 from typing import Dict, List, Tuple, Optional
 import pandas as pd
 import numpy as np
-from dataclasses import dataclass
-from risk_limits_config import ALL_LIMITS, LIMIT_CATEGORIES
-
-
-@dataclass
-class LimitCheck:
-    """Result of a single limit check"""
-    limit_id: str
-    category: str
-    description: str
-    limit_value: float
-    current_value: float
-    status: str  # 'green', 'amber', 'red', 'unknown'
-    utilization_pct: float  # How much of limit is used (0-100+)
-    breach_amount: Optional[float]  # Amount by which limit is breached (if any)
-    severity: str  # 'critical' or 'high'
+from config.client.risk_limits_config import ALL_LIMITS, LIMIT_CATEGORIES, LimitCheck
 
 REGION_NAME_TO_CODE = {
     "LONDON": "UKI",
