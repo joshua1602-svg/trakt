@@ -61,20 +61,31 @@ def _get_container_client(container: str | None = None):
 # Public helpers
 # ---------------------------------------------------------------------------
 
-def list_canonical_csvs(container: str | None = None, prefix: str = "") -> list[str]:
+def list_canonical_csvs(
+    container: str | None = None,
+    prefix: str = "",
+    dashboard_only: bool = True,
+) -> list[str]:
     """
     List CSV blobs in the outbound container.
 
-    Returns blob names like:
-        tape/out/canonical_typed.csv
-        tape/out/validation_report.csv
+    When *dashboard_only* is True (the default) only post-transform
+    ``_canonical_typed.csv`` files are returned — these use the **active**
+    schema produced by MI-mode pipeline runs and are the only files the
+    Streamlit dashboard should consume.
+
+    Set *dashboard_only=False* to see every CSV (intermediate artefacts,
+    validation reports, full-schema regulatory outputs, etc.).
     """
     cc = _get_container_client(container)
     blobs = cc.list_blobs(name_starts_with=prefix)
-    return sorted(
+    names = sorted(
         b.name for b in blobs
         if b.name.lower().endswith(".csv")
     )
+    if dashboard_only:
+        names = [n for n in names if "canonical_typed" in n.lower()]
+    return names
 
 
 def download_blob_to_dataframe(

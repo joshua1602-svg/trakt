@@ -166,11 +166,13 @@ def trakt_blob_trigger(event: func.EventGridEvent):
         )
 
     # -- Upload outputs to outbound container -----------------------------
+    # Prefix with mode so MI (active schema) and regulatory (full schema)
+    # outputs are kept separate.  The dashboard only browses mi/ files.
     stem = input_path.stem
-    uploaded = _upload_outputs(out_dir, "outbound", f"{stem}/out")
-    uploaded += _upload_outputs(val_dir, "outbound", f"{stem}/out_validation")
+    uploaded = _upload_outputs(out_dir, "outbound", f"{mode}/{stem}/out")
+    uploaded += _upload_outputs(val_dir, "outbound", f"{mode}/{stem}/out_validation")
 
     logging.info(
         f"Pipeline complete: {len(uploaded)} artifacts uploaded to "
-        f"outbound/{stem}/"
+        f"outbound/{mode}/{stem}/"
     )
