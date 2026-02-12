@@ -230,6 +230,7 @@ def run_common_gates(py: str, args, input_path: Path, out_dir: Path, val_dir: Pa
         "--output-schema", args.output_schema,
         "--registry", args.registry,
         "--output-dir", str(out_dir),
+        "--aliases-dir", str(CONFIG_ROOT / "system"),
     ]
     # For regulatory mode, filter "full" schema to the target annex fields
     if args.mode == "regulatory" and args.regime:
