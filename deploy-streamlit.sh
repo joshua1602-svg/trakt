@@ -124,6 +124,12 @@ az webapp config container set \
   --container-registry-user "$ACR_USER" \
   --container-registry-password "$ACR_PASS"
 
+echo "=== Step 8: Restart App Service to pull fresh image ==="
+az webapp restart \
+  --name "$APP_NAME" \
+  --resource-group "$RESOURCE_GROUP"
+echo "App Service restarted — new container image will be pulled."
+
 echo ""
 echo "=== Deployment complete ==="
 echo "Dashboard URL: https://${APP_NAME}.azurewebsites.net"
