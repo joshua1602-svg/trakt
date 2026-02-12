@@ -9,7 +9,7 @@ from typing import Dict, List, Tuple, Optional
 import pandas as pd
 import numpy as np
 from dataclasses import dataclass
-from risk_limits_config import ALL_LIMITS, LIMIT_CATEGORIES
+from config.client.risk_limits_config import ALL_LIMITS, LIMIT_CATEGORIES
 
 
 @dataclass
