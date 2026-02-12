@@ -93,7 +93,6 @@ except ImportError:
     SCENARIO_ENGINE_AVAILABLE = False
     print("Warning: scenario_engine module not found. Scenario Analysis tab will be disabled.")
 
-import mi_prep
 from mi_prep import (
     assert_trusted_canonical,
     add_presentation_aliases,
@@ -269,14 +268,14 @@ def load_data(path: str):
         # -----------------------------
         # 3) Validate + presentation layer
         # -----------------------------
-        check_result = mi_prep.assert_trusted_canonical(df)
+        check_result = assert_trusted_canonical(df)
         if not check_result.ok:
             st.warning(f"⚠️ Input may not be canonical pipeline output. Missing: {check_result.missing_required}")
             for note in check_result.notes:
                 st.info(note)
 
-        df = mi_prep.add_presentation_aliases(df)
-        df = mi_prep.add_buckets(df)
+        df = add_presentation_aliases(df)
+        df = add_buckets(df)
 
         return df
 
@@ -358,14 +357,14 @@ def _prepare_dataframe(df: pd.DataFrame) -> pd.DataFrame:
                 parsed.loc[non_iso] = pd.to_datetime(s.loc[non_iso], errors="coerce", dayfirst=True)
             df[col] = parsed
 
-    check_result = mi_prep.assert_trusted_canonical(df)
+    check_result = assert_trusted_canonical(df)
     if not check_result.ok:
         st.warning(f"⚠️ Input may not be canonical pipeline output. Missing: {check_result.missing_required}")
         for note in check_result.notes:
             st.info(note)
 
-    df = mi_prep.add_presentation_aliases(df)
-    df = mi_prep.add_buckets(df)
+    df = add_presentation_aliases(df)
+    df = add_buckets(df)
     return df
 
 
@@ -1066,15 +1065,15 @@ with tab1:
     
     # WA calculations (properly handling NaN values)
     if total_balance > 0:
-        wa_current_ltv = mi_prep.weighted_average(df["current_loan_to_value"], df["total_balance"])
+        wa_current_ltv = weighted_average(df["current_loan_to_value"], df["total_balance"])
         if pd.isna(wa_current_ltv):
             wa_current_ltv = 0
             
-        wa_rate = mi_prep.weighted_average(df["current_interest_rate"], df["total_balance"])
+        wa_rate = weighted_average(df["current_interest_rate"], df["total_balance"])
         if pd.isna(wa_rate):
             wa_rate = 0
         
-        wa_age = mi_prep.weighted_average(df["youngest_borrower_age"], df["total_balance"])
+        wa_age = weighted_average(df["youngest_borrower_age"], df["total_balance"])
         if pd.isna(wa_age):
             wa_age = 0
         
@@ -1085,7 +1084,7 @@ with tab1:
     
     # Original LTV calculation
     if "original_loan_to_value" in df.columns and total_balance > 0:
-        wa_original_ltv = mi_prep.weighted_average(df["original_loan_to_value"], df["total_balance"])
+        wa_original_ltv = weighted_average(df["original_loan_to_value"], df["total_balance"])
     else:
         wa_original_ltv = None
     
@@ -1105,7 +1104,7 @@ with tab1:
         st.markdown(f"""
         <div class="kpi-box">
             <div class="kpi-label">Portfolio Balance</div>
-            <div class="kpi-value">{mi_prep.format_currency(total_balance)}</div>
+            <div class="kpi-value">{format_currency(total_balance)}</div>
             <div class="kpi-subtitle">Outstanding + accrued</div>
         </div>
         """, unsafe_allow_html=True)
@@ -1173,7 +1172,7 @@ with tab1:
         st.markdown(f"""
         <div class="kpi-box">
             <div class="kpi-label">Avg. Loan Size</div>
-            <div class="kpi-value">{mi_prep.format_currency(avg_loan_size)}</div>
+            <div class="kpi-value">{format_currency(avg_loan_size)}</div>
             <div class="kpi-subtitle">Balance-weighted average</div>
         </div>
         """, unsafe_allow_html=True)
@@ -1182,7 +1181,7 @@ with tab1:
         st.markdown(f"""
         <div class="kpi-box">
             <div class="kpi-label">Largest Loan</div>
-            <div class="kpi-value">{mi_prep.format_currency(max_loan_size)}</div>
+            <div class="kpi-value">{format_currency(max_loan_size)}</div>
             <div class="kpi-subtitle">Maximum single exposure</div>
         </div>
         """, unsafe_allow_html=True)
@@ -2091,7 +2090,7 @@ with tab2:
                     f"""
                     <div class="kpi-box">
                         <div class="kpi-label">Balance in Year {comparison_year}</div>
-                        <div class="kpi-value">{mi_prep.format_currency(future_balance)}</div>
+                        <div class="kpi-value">{format_currency(future_balance)}</div>
                         <div class="kpi-subtitle" style="color: {'#FF6B35' if balance_change_pct > 0 else '#449C95'};">
                             {balance_change_pct:+.1f}% vs today
                         </div>
@@ -2119,7 +2118,7 @@ with tab2:
                     f"""
                     <div class="kpi-box">
                         <div class="kpi-label">25Y cumulative NNEG</div>
-                        <div class="kpi-value">{mi_prep.format_currency(nneg_25)}</div>
+                        <div class="kpi-value">{format_currency(nneg_25)}</div>
                         <div class="kpi-subtitle">
                             Expected NNEG to Year {year_25}
                         </div>
@@ -2147,7 +2146,7 @@ with tab2:
                     f"""
                     <div class="kpi-box">
                         <div class="kpi-label">Final balance (Year {max_year})</div>
-                        <div class="kpi-value">{mi_prep.format_currency(final_balance)}</div>
+                        <div class="kpi-value">{format_currency(final_balance)}</div>
                         <div class="kpi-subtitle">
                             {final_ratio:.1%} of current
                         </div>
