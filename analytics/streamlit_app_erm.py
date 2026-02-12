@@ -795,13 +795,13 @@ with st.sidebar:
         if input_path:
             st.session_state["canonical_file_path"] = input_path
     else:
-        # Azure Blob Storage browser — defaults to MI (active schema) outputs
+        # Azure Blob Storage browser — only shows _canonical_typed.csv files
         st.markdown("##### Browse output files")
         blob_prefix = st.text_input(
-            "Filter by prefix",
-            value="mi/",
+            "Filter by prefix (optional)",
+            value="",
             key="blob_prefix_filter",
-            help="MI outputs live under mi/. Regulatory (full schema) outputs are under regulatory/.",
+            help="Leave blank to show all MI outputs, or type a prefix to narrow results.",
         )
         try:
             csv_blobs = list_canonical_csvs(prefix=blob_prefix)
