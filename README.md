@@ -55,6 +55,57 @@ streamlit run analytics/streamlit_app_erm.py
 
 A JSON run manifest (`out/run_manifest.json`) is produced at the end of every run with gate statuses, artefact paths, and timing.
 
+## Runtime architecture diagrams
+
+The runtime below is based on `engine/orchestrator/trakt_run.py`: Gates 1-3 are shared, then the pipeline branches by mode.
+
+### 1) MI mode runtime (Gates 1-3)
+
+```mermaid
+flowchart TD
+    A[Input tape\nCSV/XLSX] --> B[Gate 1\nsemantic_alignment.py]
+    B --> C[Transform\ncanonical_transform.py]
+    C --> D[Gate 2\nvalidate_canonical.py]
+    C --> E[Gate 2.5\nlineage_tracker.py]
+    C --> F[Gate 3\nvalidate_business_rules.py]
+    D --> G[Gate 3b\naggregate_validation_results.py]
+    F --> G
+    C --> H[Output\n*_canonical_typed.csv]
+    E --> I[Output\nfield_lineage.json\nvalue_lineage.json]
+    G --> J[Output\nout_validation/*]
+    H --> K[run_manifest.json]
+    I --> K
+    J --> K
+```
+
+### 2) Annex 12 runtime (Gates 1-5)
+
+```mermaid
+flowchart TD
+    A[Input tape\nCSV/XLSX] --> B[Shared Gates 1-3\nsemantic alignment + transform + validation + lineage]
+    B --> C[Gate 4a\nannex12_projector.py]
+    C --> D[Output\nannex12_projected.csv]
+    D --> E[Gate 5\nxml_builder_investor.py\nXML + XSD validation]
+    E --> F[Output\nannex12_final.xml]
+    B --> G[Output\n*_canonical_typed.csv]
+    F --> H[run_manifest.json]
+    G --> H
+```
+
+### 3) Annex 2-9 runtime (Regulatory mode, Gates 1-5)
+
+```mermaid
+flowchart TD
+    A[Input tape\nCSV/XLSX] --> B[Shared Gates 1-3\nsemantic alignment + transform + validation + lineage]
+    B --> C[Gate 4b\nregime_projector.py\n--regime ESMA_Annex2/3/4/8/9]
+    C --> D[Output\nannexX_projected.csv]
+    D --> E[Gate 5\nxml_builder.py]
+    E --> F[Output\nannexX_final.xml]
+    B --> G[Output\n*_canonical_typed.csv]
+    F --> H[run_manifest.json]
+    G --> H
+```
+
 ## Blob storage trigger
 
 `blob_trigger.py` provides automatic pipeline execution when a data tape is uploaded to cloud blob storage (Azure Blob, AWS S3, or local filesystem for testing).
