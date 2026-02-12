@@ -866,167 +866,167 @@ except Exception as e:
 # 2. SIDEBAR FILTERS (Moved to Main Area)
 # ============================
 
-    # --- A. VINTAGE FILTER ---
-    st.markdown("### 📅 Vintage year")
-    if "origination_year" in df.columns:
-        # Use df (original) to get the full list of options, not df_view
-        vintages = sorted(df["origination_year"].dropna().unique())
-        if vintages:
-            sel_vintages = st.multiselect(
-                "Select vintages (leave empty = all)",
-                options=vintages,
-                default=[],
-                key="filter_vintages",
-            )
+# --- A. VINTAGE FILTER ---
+st.markdown("### 📅 Vintage year")
+if "origination_year" in df.columns:
+    # Use df (original) to get the full list of options, not df_view
+    vintages = sorted(df["origination_year"].dropna().unique())
+    if vintages:
+        sel_vintages = st.multiselect(
+            "Select vintages (leave empty = all)",
+            options=vintages,
+            default=[],
+            key="filter_vintages",
+        )
 
-            if sel_vintages:
-                df_view = df_view[df_view["origination_year"].isin(sel_vintages)]
+        if sel_vintages:
+            df_view = df_view[df_view["origination_year"].isin(sel_vintages)]
 
-    # --- B. PRODUCT FILTER ---
-    st.markdown("### 🏠 Product type")
-    if "erm_product_type" in df.columns:
-        # Use df (original) for options
-        products = sorted(df["erm_product_type"].dropna().unique())
-        if products:
-            sel_products = st.multiselect(
-                "Select products",
-                options=products,
-                default=[],
-                key="filter_products",
-            )
-            if sel_products:
-                # FIX: Filter df_view, do NOT overwrite df
-                df_view = df_view[df_view["erm_product_type"].isin(sel_products)]
+# --- B. PRODUCT FILTER ---
+st.markdown("### 🏠 Product type")
+if "erm_product_type" in df.columns:
+    # Use df (original) for options
+    products = sorted(df["erm_product_type"].dropna().unique())
+    if products:
+        sel_products = st.multiselect(
+            "Select products",
+            options=products,
+            default=[],
+            key="filter_products",
+        )
+        if sel_products:
+            # FIX: Filter df_view, do NOT overwrite df
+            df_view = df_view[df_view["erm_product_type"].isin(sel_products)]
 
-    # --- C. GEOGRAPHIC FILTER ---
-    st.markdown("### 🗺️ Geography")
-    if "geographic_region" in df.columns:
-        # Use df (original) for options
-        regions = sorted(df["geographic_region"].dropna().unique())
-        if regions:
-            sel_regions = st.multiselect(
-                "Select regions (leave empty = all)",
-                options=regions,
-                default=[], 
-                key="filter_regions",
-            )
-            if sel_regions:
-                df_view = df_view[df_view["geographic_region"].isin(sel_regions)]
+# --- C. GEOGRAPHIC FILTER ---
+st.markdown("### 🗺️ Geography")
+if "geographic_region" in df.columns:
+    # Use df (original) for options
+    regions = sorted(df["geographic_region"].dropna().unique())
+    if regions:
+        sel_regions = st.multiselect(
+            "Select regions (leave empty = all)",
+            options=regions,
+            default=[], 
+            key="filter_regions",
+        )
+        if sel_regions:
+            df_view = df_view[df_view["geographic_region"].isin(sel_regions)]
 
-    # --- D. FILTER IMPACT & RESET ---
-    # FIX: Compare df_view (Filtered) vs df (Original)
-    if len(df_view) < len(df):
-        reduction = (1 - len(df_view) / len(df)) * 100
-        st.info(f"📊 **{len(df_view):,} of {len(df):,} loans** ({reduction:.1f}% filtered)")
-        
-        if st.button("🔄 Reset all filters"):
-            for k in ["filter_vintages", "filter_products", "filter_regions"]:
-                st.session_state.pop(k, None)
-            st.rerun()
-    else:
-        st.info(f"📊 **{len(df):,} loans** (no filters)")
+# --- D. FILTER IMPACT & RESET ---
+# FIX: Compare df_view (Filtered) vs df (Original)
+if len(df_view) < len(df):
+    reduction = (1 - len(df_view) / len(df)) * 100
+    st.info(f"📊 **{len(df_view):,} of {len(df):,} loans** ({reduction:.1f}% filtered)")
+    
+    if st.button("🔄 Reset all filters"):
+        for k in ["filter_vintages", "filter_products", "filter_regions"]:
+            st.session_state.pop(k, None)
+        st.rerun()
+else:
+    st.info(f"📊 **{len(df):,} loans** (no filters)")
 
-    df = df_view
+df = df_view
 
-    st.markdown("---")
-    st.subheader("📥 Export")
+st.markdown("---")
+st.subheader("📥 Export")
 
-    # CSV Export (filtered view)
-    csv_bytes = df_view.to_csv(index=False).encode("utf-8")
+# CSV Export (filtered view)
+csv_bytes = df_view.to_csv(index=False).encode("utf-8")
+st.download_button(
+    "📄 Download CSV",
+    data=csv_bytes,
+    file_name=f"erm_portfolio_{datetime.now():%Y%m%d}.csv",
+    mime="text/csv",
+    use_container_width=True,
+)
+
+# Excel Export (filtered view)
+try:
+    from io import BytesIO
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df_view.to_excel(writer, index=False, sheet_name="Portfolio")
+    excel_bytes = buffer.getvalue()
+
     st.download_button(
-        "📄 Download CSV",
-        data=csv_bytes,
-        file_name=f"erm_portfolio_{datetime.now():%Y%m%d}.csv",
-        mime="text/csv",
+        "📊 Download Excel",
+        data=excel_bytes,
+        file_name=f"erm_portfolio_{datetime.now():%Y%m%d}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         use_container_width=True,
     )
+except ImportError:
+    pass
 
-    # Excel Export (filtered view)
-    try:
-        from io import BytesIO
-        buffer = BytesIO()
-        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-            df_view.to_excel(writer, index=False, sheet_name="Portfolio")
-        excel_bytes = buffer.getvalue()
+st.markdown("---")
+st.subheader("📊 Generate Report")
 
-        st.download_button(
-            "📊 Download Excel",
-            data=excel_bytes,
-            file_name=f"erm_portfolio_{datetime.now():%Y%m%d}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-        )
-    except ImportError:
-        pass
-
-    st.markdown("---")
-    st.subheader("📊 Generate Report")
-
-    # PPT Generation Button
-    if st.button("🎯 Generate PowerPoint", type="primary", use_container_width=True):
-        with st.spinner("Generating presentation..."):
-            try:
-                # Save current filtered dataset to temp file
-                temp_dir = Path("temp_pptx_data")
-                temp_dir.mkdir(exist_ok=True)
+# PPT Generation Button
+if st.button("🎯 Generate PowerPoint", type="primary", use_container_width=True):
+    with st.spinner("Generating presentation..."):
+        try:
+            # Save current filtered dataset to temp file
+            temp_dir = Path("temp_pptx_data")
+            temp_dir.mkdir(exist_ok=True)
+            
+            temp_csv = temp_dir / f"temp_data_{datetime.now():%Y%m%d_%H%M%S}.csv"
+            df.to_csv(temp_csv, index=False)
+            
+            # Output filename
+            output_pptx = Path("reports") / f"erm_report_{datetime.now():%Y%m%d_%H%M%S}.pptx"
+            output_pptx.parent.mkdir(exist_ok=True)
+            
+            # Run PPTX generator
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "generate_pptx_erm.py",
+                    "--input", str(temp_csv),
+                    "--output", str(output_pptx)
+                ],
+                capture_output=True,
+                text=True,
+                timeout=300  # 5 minute timeout
+            )
+            
+            if result.returncode == 0:
+                # Success - provide download link
+                st.success("✅ Presentation generated successfully!")
                 
-                temp_csv = temp_dir / f"temp_data_{datetime.now():%Y%m%d_%H%M%S}.csv"
-                df.to_csv(temp_csv, index=False)
+                # Read the generated file
+                with open(output_pptx, "rb") as f:
+                    pptx_bytes = f.read()
                 
-                # Output filename
-                output_pptx = Path("reports") / f"erm_report_{datetime.now():%Y%m%d_%H%M%S}.pptx"
-                output_pptx.parent.mkdir(exist_ok=True)
-                
-                # Run PPTX generator
-                result = subprocess.run(
-                    [
-                        sys.executable,
-                        "generate_pptx_erm.py",
-                        "--input", str(temp_csv),
-                        "--output", str(output_pptx)
-                    ],
-                    capture_output=True,
-                    text=True,
-                    timeout=300  # 5 minute timeout
+                # Download button
+                st.download_button(
+                    label="📥 Download PowerPoint",
+                    data=pptx_bytes,
+                    file_name=output_pptx.name,
+                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    use_container_width=True
                 )
                 
-                if result.returncode == 0:
-                    # Success - provide download link
-                    st.success("✅ Presentation generated successfully!")
-                    
-                    # Read the generated file
-                    with open(output_pptx, "rb") as f:
-                        pptx_bytes = f.read()
-                    
-                    # Download button
-                    st.download_button(
-                        label="📥 Download PowerPoint",
-                        data=pptx_bytes,
-                        file_name=output_pptx.name,
-                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                        use_container_width=True
-                    )
-                    
-                    # Show stats
-                    st.info(f"""
-                    **Report Details:**
-                    - 📊 {len(df):,} loans included
-                    - 📄 File: {output_pptx.name}
-                    - 📁 Saved to: reports/
-                    """)
-                    
-                    # Clean up temp file
-                    temp_csv.unlink(missing_ok=True)
-                    
-                else:
-                    st.error(f"❌ Generation failed: {result.stderr}")
-                    
-            except subprocess.TimeoutExpired:
-                st.error("❌ Generation timed out (took >5 minutes)")
-            except Exception as e:
-                st.error(f"❌ Error generating presentation: {e}")
+                # Show stats
+                st.info(f"""
+                **Report Details:**
+                - 📊 {len(df):,} loans included
+                - 📄 File: {output_pptx.name}
+                - 📁 Saved to: reports/
+                """)
+                
+                # Clean up temp file
+                temp_csv.unlink(missing_ok=True)
+                
+            else:
+                st.error(f"❌ Generation failed: {result.stderr}")
+                
+        except subprocess.TimeoutExpired:
+            st.error("❌ Generation timed out (took >5 minutes)")
+        except Exception as e:
+            st.error(f"❌ Error generating presentation: {e}")
 
-    st.caption("💡 Tip: Apply filters before generating to customize your report")
+st.caption("💡 Tip: Apply filters before generating to customize your report")
 
 
 # ============================
