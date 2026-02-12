@@ -146,8 +146,12 @@ def trakt_blob_trigger(event: func.EventGridEvent):
         cmd.extend(["--regime", regime])
 
     # -- Run pipeline -----------------------------------------------------
+    # Pass the worker's sys.path so the subprocess can find installed packages
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join(sys.path)
+
     logging.info(f"Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, env=env)
 
     logging.info(result.stdout)
     if result.returncode != 0:
