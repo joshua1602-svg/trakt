@@ -93,6 +93,11 @@ def trakt_blob_trigger(event: func.EventGridEvent):
     blob_path = parts[1]                      # "mi/tape.csv" or "tape.csv"
     filename = Path(blob_path).name           # "tape.csv"
 
+    # Only process blobs from the inbound container
+    if container != "inbound":
+        logging.info(f"Skipping blob from container '{container}': {blob_path}")
+        return
+
     # Skip non-CSV files
     if not filename.lower().endswith(".csv"):
         logging.info(f"Skipping non-CSV blob: {blob_path}")
