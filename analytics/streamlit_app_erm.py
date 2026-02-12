@@ -93,6 +93,7 @@ except ImportError:
     SCENARIO_ENGINE_AVAILABLE = False
     print("Warning: scenario_engine module not found. Scenario Analysis tab will be disabled.")
 
+import mi_prep
 from mi_prep import (
     assert_trusted_canonical,
     add_presentation_aliases,
