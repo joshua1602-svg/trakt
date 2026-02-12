@@ -795,23 +795,24 @@ with st.sidebar:
         if input_path:
             st.session_state["canonical_file_path"] = input_path
     else:
-        # Azure Blob Storage browser
+        # Azure Blob Storage browser — defaults to MI (active schema) outputs
         st.markdown("##### Browse output files")
         blob_prefix = st.text_input(
-            "Filter by prefix (e.g. tape/out/)",
-            value="",
+            "Filter by prefix",
+            value="mi/",
             key="blob_prefix_filter",
+            help="MI outputs live under mi/. Regulatory (full schema) outputs are under regulatory/.",
         )
         try:
             csv_blobs = list_canonical_csvs(prefix=blob_prefix)
             if csv_blobs:
                 selected_blob = st.selectbox(
-                    "Select a CSV file",
+                    "Select a canonical_typed CSV",
                     options=csv_blobs,
                     key="blob_file_selector",
                 )
             else:
-                st.info("No CSV files found in the outbound container.")
+                st.info("No dashboard-ready CSV files found. Ensure the MI pipeline has run.")
         except Exception as e:
             st.error(f"Could not list blobs: {e}")
 

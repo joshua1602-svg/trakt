@@ -14,6 +14,7 @@ Notes:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
@@ -58,14 +59,22 @@ class CanonicalCheckResult:
     notes: List[str]
 
 
+_ND_RE = re.compile(r"^ND\d*$", re.IGNORECASE)
+
+
 def assert_trusted_canonical(
     df: pd.DataFrame,
     required_core_fields: Optional[List[str]] = None,
 ) -> CanonicalCheckResult:
     """Check whether df looks like pipeline output (best-effort).
 
-    This is intentionally lightweight. It should prevent accidental upload of raw lender files
-    into the dashboard, which causes 'two truths' drift.
+    Guards against:
+    1. Raw lender files (missing canonical headers).
+    2. Full-schema / regulatory outputs loaded into the MI dashboard
+       (many columns are ND-padded because they were never mapped).
+
+    The dashboard should only consume *active-schema* ``_canonical_typed.csv``
+    files produced by ``--mode mi``.
     """
     required_core_fields = required_core_fields or [
         "loan_identifier",
@@ -75,10 +84,30 @@ def assert_trusted_canonical(
     notes: List[str] = []
     if missing:
         notes.append("Missing core fields; input may not be canonical pipeline output.")
-    # crude raw-file heuristics (non-blocking)
-    raw_smells = [c for c in df.columns if c.strip().lower() in {"loan id", "loan policy number", "date of completion"}]
+
+    # Crude raw-file heuristics (non-blocking)
+    raw_smells = [
+        c for c in df.columns
+        if c.strip().lower() in {"loan id", "loan policy number", "date of completion"}
+    ]
     if raw_smells:
         notes.append("Input has lender-style headers; ensure you are using the pipeline canonical output.")
+
+    # Full-schema detection: if >25 % of columns are all-ND the file was
+    # likely produced with --output-schema full (regulatory mode).
+    if len(df) > 0:
+        nd_cols = [
+            c for c in df.columns
+            if df[c].astype(str).str.strip().apply(lambda v: bool(_ND_RE.match(v))).all()
+        ]
+        nd_ratio = len(nd_cols) / max(len(df.columns), 1)
+        if nd_ratio > 0.25:
+            notes.append(
+                f"Data appears to use 'full' schema ({len(nd_cols)} of "
+                f"{len(df.columns)} columns are all-ND). The dashboard "
+                f"expects 'active' schema from --mode mi pipeline runs."
+            )
+
     return CanonicalCheckResult(ok=(len(missing) == 0), missing_required=missing, notes=notes)
 
 
