@@ -16,6 +16,7 @@
 #   ACR_NAME          - Container registry name     (default: traktregistry)
 #   APP_NAME          - App Service name            (default: trakt-dashboard)
 #   APP_SERVICE_PLAN  - App Service plan name       (default: trakt-dashboard-plan)
+#   STORAGE_ACCOUNT   - Blob storage account name   (default: traktstorage)
 #   LOCATION          - Azure region                (default: uksouth)
 
 set -euo pipefail
@@ -28,12 +29,25 @@ LOCATION="${LOCATION:-uksouth}"
 IMAGE_TAG="${ACR_NAME}.azurecr.io/trakt-streamlit:latest"
 
 echo "=== Step 1: Create Azure Container Registry (if needed) ==="
-az acr create \
-  --resource-group "$RESOURCE_GROUP" \
-  --name "$ACR_NAME" \
-  --sku Basic \
-  --admin-enabled true \
-  2>/dev/null || echo "ACR already exists"
+if az acr show --name "$ACR_NAME" --resource-group "$RESOURCE_GROUP" &>/dev/null; then
+  echo "ACR '$ACR_NAME' already exists"
+else
+  echo "Creating ACR '$ACR_NAME'..."
+  az acr create \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$ACR_NAME" \
+    --sku Basic \
+    --admin-enabled true
+fi
+
+# Verify ACR is accessible before proceeding
+echo "Verifying ACR '$ACR_NAME'..."
+az acr show --name "$ACR_NAME" --resource-group "$RESOURCE_GROUP" --query loginServer -o tsv || {
+  echo "ERROR: ACR '$ACR_NAME' not found in resource group '$RESOURCE_GROUP'."
+  echo "Either create it manually or set ACR_NAME=<your-registry> before running this script."
+  echo "  az acr create --resource-group $RESOURCE_GROUP --name <unique-name> --sku Basic --admin-enabled true"
+  exit 1
+}
 
 echo "=== Step 2: Build and push Docker image ==="
 az acr build \
@@ -43,29 +57,48 @@ az acr build \
   .
 
 echo "=== Step 3: Create App Service Plan (Linux, B1 tier) ==="
-az appservice plan create \
-  --name "$APP_SERVICE_PLAN" \
-  --resource-group "$RESOURCE_GROUP" \
-  --location "$LOCATION" \
-  --is-linux \
-  --sku B1 \
-  2>/dev/null || echo "Plan already exists"
+if az appservice plan show --name "$APP_SERVICE_PLAN" --resource-group "$RESOURCE_GROUP" &>/dev/null; then
+  echo "App Service Plan '$APP_SERVICE_PLAN' already exists"
+else
+  az appservice plan create \
+    --name "$APP_SERVICE_PLAN" \
+    --resource-group "$RESOURCE_GROUP" \
+    --location "$LOCATION" \
+    --is-linux \
+    --sku B1
+fi
 
 echo "=== Step 4: Create Web App from container image ==="
-az webapp create \
-  --name "$APP_NAME" \
-  --resource-group "$RESOURCE_GROUP" \
-  --plan "$APP_SERVICE_PLAN" \
-  --container-image-name "$IMAGE_TAG" \
-  --container-registry-url "https://${ACR_NAME}.azurecr.io" \
-  2>/dev/null || echo "Web app already exists"
+if az webapp show --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" &>/dev/null; then
+  echo "Web app '$APP_NAME' already exists — updating container image"
+  az webapp config container set \
+    --name "$APP_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --container-image-name "$IMAGE_TAG" \
+    --container-registry-url "https://${ACR_NAME}.azurecr.io"
+else
+  az webapp create \
+    --name "$APP_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --plan "$APP_SERVICE_PLAN" \
+    --container-image-name "$IMAGE_TAG" \
+    --container-registry-url "https://${ACR_NAME}.azurecr.io"
+fi
+
+STORAGE_ACCOUNT="${STORAGE_ACCOUNT:-traktstorage}"
 
 echo "=== Step 5: Configure app settings ==="
-# Fetch the storage connection string from traktstorage
+# Fetch the storage connection string
+echo "Looking up connection string for storage account '$STORAGE_ACCOUNT'..."
 STORAGE_CONN=$(az storage account show-connection-string \
   --resource-group "$RESOURCE_GROUP" \
-  --name traktstorage \
-  --query connectionString -o tsv)
+  --name "$STORAGE_ACCOUNT" \
+  --query connectionString -o tsv) || {
+  echo "ERROR: Storage account '$STORAGE_ACCOUNT' not found in resource group '$RESOURCE_GROUP'."
+  echo "Set STORAGE_ACCOUNT=<your-account> or create it:"
+  echo "  az storage account create --name <name> --resource-group $RESOURCE_GROUP --location $LOCATION --sku Standard_LRS"
+  exit 1
+}
 
 az webapp config appsettings set \
   --name "$APP_NAME" \
