@@ -116,9 +116,9 @@ try:
     from risk_monitor import RiskMonitor, LimitCheck
     from config.client.risk_limits_config import ALL_LIMITS, LIMIT_CATEGORIES
     RISK_MONITORING_AVAILABLE = True
-except ImportError:
+except ImportError as e:
     RISK_MONITORING_AVAILABLE = False
-    print("Warning: Risk monitoring modules not found. Risk tab will be disabled.")
+    print(f"Warning: Risk monitoring modules not found. Risk tab will be disabled. ImportError: {e}")
 
 # Upload page integration
 try:
