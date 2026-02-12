@@ -19,6 +19,10 @@ import yaml
 import base64
 import io
 
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 # ============================
 # Azure Blob Storage integration (optional)
 # ============================
@@ -50,13 +54,19 @@ CLIENT_DISPLAY_NAME = "Portfolio Analytics Platform"
 
 # Load YAML to override defaults
 def load_client_config():
-    config_path = Path("config_ERM_UK.yaml")
-    if config_path.exists():
-        try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                return yaml.safe_load(f)
-        except Exception:
-            return {}
+    candidate_paths = [
+        Path(__file__).resolve().parent.parent / "config" / "client" / "config_client_ERM_UK.yaml",
+        Path.cwd() / "config" / "client" / "config_client_ERM_UK.yaml",
+        Path("config_client_ERM_UK.yaml"),
+    ]
+
+    for config_path in candidate_paths:
+        if config_path.exists():
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    return yaml.safe_load(f)
+            except Exception:
+                return {}
     return {}
 
 CLIENT_CONFIG = load_client_config()
@@ -104,7 +114,7 @@ from mi_prep import (
 # Risk monitoring
 try:
     from risk_monitor import RiskMonitor, LimitCheck
-    from risk_limits_config import ALL_LIMITS, LIMIT_CATEGORIES
+    from config.client.risk_limits_config import ALL_LIMITS, LIMIT_CATEGORIES
     RISK_MONITORING_AVAILABLE = True
 except ImportError:
     RISK_MONITORING_AVAILABLE = False
