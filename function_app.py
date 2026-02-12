@@ -4,11 +4,17 @@ Azure Event Grid Trigger for the trakt pipeline.
 Upload a CSV to the "inbound" container on traktstorage and the pipeline
 runs automatically. Outputs are written back to the "outbound" container.
 
-Folder convention for mode routing:
-    inbound/mi/<file>.csv           → --mode mi
-    inbound/annex12/<file>.csv      → --mode annex12
-    inbound/regulatory/<file>.csv   → --mode regulatory   (requires metadata)
-    inbound/<file>.csv              → --mode mi  (default)
+Mode routing (checked in order):
+    1. Folder prefix:   inbound/regulatory/tape.csv     → --mode regulatory
+    2. Filename hint:   inbound/tape_regulatory.csv     → --mode regulatory
+    3. Default:         inbound/tape.csv                → --mode mi
+
+Examples:
+    inbound/tape.csv                → MI (active schema, dashboard-ready)
+    inbound/mi/tape.csv             → MI (explicit)
+    inbound/tape_regulatory.csv     → Regulatory (full schema, ESMA Annex 2-9)
+    inbound/regulatory/tape.csv     → Regulatory (folder-based)
+    inbound/tape_annex12.csv        → Annex 12
 
 For annex12 mode, set app setting:
     TRAKT_ANNEX12_CONFIG = <path to annex12 config yaml>
@@ -36,12 +42,26 @@ ORCHESTRATOR = PROJECT_ROOT / "engine" / "orchestrator" / "trakt_run.py"
 
 
 def _parse_mode_from_path(blob_path: str) -> str:
-    """Derive pipeline mode from the blob's folder structure."""
+    """Derive pipeline mode from folder structure or filename.
+
+    Resolution order:
+        1. Folder prefix:  inbound/regulatory/tape.csv  → regulatory
+        2. Filename hint:  inbound/tape_regulatory.csv   → regulatory
+        3. Default:        inbound/tape.csv              → mi (active schema)
+
+    This lets users distinguish runs without creating folders.
+    """
     parts = Path(blob_path).parts  # e.g. ("inbound", "annex12", "tape.csv")
+    # 1. Folder-based routing
     if len(parts) >= 2:
         folder = parts[-2].lower()
         if folder in ("mi", "annex12", "regulatory"):
             return folder
+    # 2. Filename-based fallback
+    stem = Path(blob_path).stem.lower()
+    for mode in ("regulatory", "annex12"):
+        if mode in stem:
+            return mode
     return "mi"
 
 
