@@ -64,6 +64,14 @@ from llm_mapper_agent import (  # noqa: E402
 # HELPERS
 # ---------------------------------------------------------------------------
 
+def safe_float(x, default: float = 0.0) -> float:
+    """B1: Crash-safe float conversion — returns default on any error."""
+    try:
+        return float(x)
+    except (ValueError, TypeError):
+        return default
+
+
 def _run_deterministic_pass(
     input_path: Path,
     portfolio_type: str,
@@ -139,10 +147,8 @@ def _collect_llm_targets(
     deterministic_wins = {"exact", "normalized", "alias"}
     for row in report:
         method = row.get("mapping_method", "unmapped")
-        try:
-            conf = float(row.get("confidence", 0.0))
-        except (ValueError, TypeError):
-            conf = 0.0
+        # B1: Use safe_float to avoid crash on non-numeric confidence values
+        conf = safe_float(row.get("confidence", 0.0))
 
         if method == "unmapped":
             targets.append(row["raw_header"])
@@ -181,6 +187,18 @@ def _load_canonical_fields(registry_path: Path, portfolio_type: str) -> List[str
     return select_registry_fields(registry, portfolio_type)
 
 
+def _resolve_governance_dir(cfg: dict, output_dir: Path) -> Path:
+    """
+    B5: Resolve governance_dir from config.
+    If relative, resolve under output_dir.  If absolute, use as-is.
+    """
+    raw = cfg.get("governance_dir", "governance/agent_sessions")
+    gov_path = Path(raw)
+    if gov_path.is_absolute():
+        return gov_path
+    return output_dir / gov_path
+
+
 # ---------------------------------------------------------------------------
 # ORCHESTRATOR
 # ---------------------------------------------------------------------------
@@ -199,13 +217,15 @@ def run_pipeline(args: argparse.Namespace) -> None:
     # Load agent config
     config_path = Path(args.config) if args.config else None
     cfg = _load_agent_config(config_path)
-    review_threshold = float(args.review_threshold or cfg["review_threshold"])
+    review_threshold = safe_float(args.review_threshold or cfg["review_threshold"])
     auto_approve_threshold = (
-        float(args.auto_approve_above)
+        safe_float(args.auto_approve_above)
         if args.enable_auto_approve and args.auto_approve_above
         else None
     )
-    governance_dir = output_dir / "governance" / "agent_sessions"
+
+    # B5: Resolve governance_dir from config (relative → under output_dir, absolute → as-is)
+    governance_dir = _resolve_governance_dir(cfg, output_dir)
 
     # -----------------------------------------------------------------------
     # STEP 1: Deterministic pass (Tiers 1-6)
@@ -226,10 +246,11 @@ def run_pipeline(args: argparse.Namespace) -> None:
     total_headers = len(det_report)
     mapped_headers = sum(1 for r in det_report if r.get("mapping_method", "unmapped") != "unmapped")
     unmapped_count = total_headers - mapped_headers
+    # B1: Use safe_float to prevent crash on non-numeric confidence values
     low_conf_count = sum(
         1 for r in det_report
         if r.get("mapping_method", "unmapped") not in ("unmapped", "exact", "normalized", "alias")
-        and float(r.get("confidence", 0) or 0) < review_threshold
+        and safe_float(r.get("confidence", 0)) < review_threshold
     )
 
     det_stats = {
@@ -274,7 +295,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
         logger.info("All headers resolved deterministically — no LLM calls needed.")
         _write_governance_skip(
             session_id, str(input_path), args.portfolio_type,
-            det_stats, governance_dir,
+            det_stats, governance_dir, registry_path=registry_path,
         )
         return
 
@@ -289,18 +310,24 @@ def run_pipeline(args: argparse.Namespace) -> None:
     # -----------------------------------------------------------------------
     df_raw = _read_input(input_path)
 
+    # B3: Pass all model params from config into LLMFieldMapper
     llm_mapper = LLMFieldMapper(
         registry_path=registry_path,
         portfolio_type=args.portfolio_type,
         aliases_dir=aliases_dir,
         api_key=os.environ.get("ANTHROPIC_API_KEY", "") if args.api_key is None else args.api_key,
+        model=cfg["model"],
+        temperature=safe_float(cfg["temperature"]),
+        max_tokens=int(cfg["max_tokens"]),
+        batch_size=int(cfg["max_batch_size"]),
+        max_fields_in_catalogue=int(cfg.get("max_fields_in_catalogue", 80)),
     )
 
     suggestions = llm_mapper.suggest_mappings(llm_targets, df_raw, det_report)
     logger.info("LLM returned %d suggestion(s).", len(suggestions))
 
     # -----------------------------------------------------------------------
-    # STEP 5: Auto-approve high-confidence suggestions
+    # STEP 5: Pre-flag high-confidence suggestions (B2: no longer auto-confirms)
     # -----------------------------------------------------------------------
     if auto_approve_threshold is not None:
         for sugg in suggestions:
@@ -309,21 +336,56 @@ def run_pipeline(args: argparse.Namespace) -> None:
                 and sugg.suggested_field
                 and sugg.confidence >= auto_approve_threshold
             ):
-                sugg.status = "confirmed"
-                sugg.confirmed_field = sugg.suggested_field
-                sugg.reviewer_note = f"auto-approved (conf={sugg.confidence:.2f} >= {auto_approve_threshold})"
+                # B2: Only add a reviewer note — status remains "pending" for human review
+                sugg.reviewer_note = (
+                    f"pre-approved candidate (conf={sugg.confidence:.2f} >= {auto_approve_threshold})"
+                )
                 logger.info(
-                    "Auto-approved: '%s' → '%s' (conf=%.2f)",
+                    "Pre-flagged: '%s' → '%s' (conf=%.2f)",
                     sugg.raw_header, sugg.suggested_field, sugg.confidence,
                 )
 
     # -----------------------------------------------------------------------
-    # STEP 6: Human review
+    # STEP 6: Human review (or batch export)
     # -----------------------------------------------------------------------
+    mode = args.mode or "cli"
+
+    # B4: Batch mode — export suggestions and exit without review or alias persistence
+    if mode == "batch":
+        logger.info("STEP 6: Batch mode — writing suggestions to %s", output_dir)
+        stem = input_path.stem
+        sugg_dicts = [s.to_dict() for s in suggestions]
+
+        json_path = output_dir / f"{stem}_llm_suggestions.json"
+        json_path.write_text(
+            __import__("json").dumps(sugg_dicts, indent=2, default=str),
+            encoding="utf-8",
+        )
+        csv_path = output_dir / f"{stem}_llm_suggestions.csv"
+        pd.DataFrame(sugg_dicts).to_csv(csv_path, index=False)
+
+        logger.info("Batch suggestions written to: %s  and  %s", json_path, csv_path)
+        logger.info("Batch mode: skipping human review and alias persistence.")
+
+        gov_logger = GovernanceLogger(governance_dir)
+        gov_logger.write_session(
+            session_id=session_id,
+            input_file=str(input_path),
+            portfolio_type=args.portfolio_type,
+            deterministic_stats=det_stats,
+            suggestions=suggestions,
+            aliases_persisted=0,
+            extra={"note": "batch mode — no human review performed"},
+            model_name=llm_mapper.model,
+            prompt_source=llm_mapper._prompt_source,
+            registry_path=registry_path,
+        )
+        logger.info("=== Session %s complete (batch) ===", session_id)
+        return
+
     canonical_fields = _load_canonical_fields(registry_path, args.portfolio_type)
     reviewer = HumanReviewSession(canonical_fields=canonical_fields)
 
-    mode = args.mode or "cli"
     pending = [s for s in suggestions if s.status == "pending"]
     if pending:
         logger.info("STEP 6: Human review of %d suggestion(s) (mode=%s)", len(pending), mode)
@@ -332,10 +394,11 @@ def run_pipeline(args: argparse.Namespace) -> None:
         else:
             suggestions = reviewer.review_cli(suggestions)
     else:
-        logger.info("STEP 6: All suggestions already resolved (auto-approve) — skipping review.")
+        logger.info("STEP 6: No pending suggestions — skipping review.")
 
     # -----------------------------------------------------------------------
     # STEP 7: Persist confirmed aliases
+    # B2: Only persist for status in ("confirmed", "remapped") — never "pending"
     # -----------------------------------------------------------------------
     confirmed = [s for s in suggestions if s.status in ("confirmed", "remapped")]
     learner = AliasLearner()
@@ -365,6 +428,10 @@ def run_pipeline(args: argparse.Namespace) -> None:
         deterministic_stats=det_stats,
         suggestions=suggestions,
         aliases_persisted=aliases_added,
+        # A6/B3: Pass model provenance metadata
+        model_name=llm_mapper.model,
+        prompt_source=llm_mapper._prompt_source,
+        registry_path=registry_path,
     )
     logger.info("STEP 9: Governance artifact: %s", artifact_path)
     logger.info("=== Session %s complete ===", session_id)
@@ -376,6 +443,7 @@ def _write_governance_skip(
     portfolio_type: str,
     det_stats: dict,
     governance_dir: Path,
+    registry_path: Optional[Path] = None,
 ) -> None:
     gov_logger = GovernanceLogger(governance_dir)
     gov_logger.write_session(
@@ -386,6 +454,7 @@ def _write_governance_skip(
         suggestions=[],
         aliases_persisted=0,
         extra={"note": "All headers mapped deterministically — LLM not invoked."},
+        registry_path=registry_path,
     )
 
 
@@ -428,19 +497,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--mode",
         choices=["cli", "streamlit", "batch"],
         default="cli",
-        help="Human review mode",
+        help="Human review mode (batch: no interactive review, writes suggestion files)",
     )
     p.add_argument(
         "--auto-approve-above",
         type=float,
         default=None,
-        help="Auto-approve LLM suggestions above this confidence (requires --enable-auto-approve)",
+        help="Pre-flag LLM suggestions above this confidence (requires --enable-auto-approve)",
     )
     p.add_argument(
         "--enable-auto-approve",
         action="store_true",
         default=False,
-        help="Enable auto-approve for high-confidence suggestions (off by default for regulatory safety)",
+        help="Enable pre-flagging of high-confidence suggestions (still requires human review)",
     )
     p.add_argument(
         "--review-threshold",

@@ -16,6 +16,7 @@ resolve at Tier 3 (alias) with zero LLM involvement.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -83,7 +84,7 @@ def _build_catalogue_subset(
     """
     Return a trimmed list of canonical field dicts for inclusion in the prompt.
 
-    Priority order (to fill the 80-field budget):
+    Priority order (to fill the budget):
       1. common portfolio_type fields
       2. fields matching the requested portfolio_type
       3. any remaining fields (breadth cover)
@@ -128,10 +129,11 @@ class LLMFieldMapper:
     headers.  Never mutates the canonical dataset directly.
     """
 
-    MODEL = "claude-sonnet-4-20250514"
-    TEMPERATURE = 0.0
-    MAX_TOKENS = 4096
-    BATCH_SIZE = 10
+    _DEFAULT_MODEL = "claude-sonnet-4-20250514"
+    _DEFAULT_TEMPERATURE = 0.0
+    _DEFAULT_MAX_TOKENS = 4096
+    _DEFAULT_BATCH_SIZE = 10
+    _DEFAULT_MAX_FIELDS = 80
 
     def __init__(
         self,
@@ -139,24 +141,40 @@ class LLMFieldMapper:
         portfolio_type: str,
         aliases_dir: Path,
         api_key: Optional[str] = None,
+        model: str = _DEFAULT_MODEL,
+        temperature: float = _DEFAULT_TEMPERATURE,
+        max_tokens: int = _DEFAULT_MAX_TOKENS,
+        batch_size: int = _DEFAULT_BATCH_SIZE,
+        max_fields_in_catalogue: int = _DEFAULT_MAX_FIELDS,
     ) -> None:
         self.registry_path = Path(registry_path)
         self.portfolio_type = portfolio_type
         self.aliases_dir = Path(aliases_dir)
         self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
 
+        # A5: Instance-level model parameters (replaces class-level constants)
+        self.model = model
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+        self.batch_size = batch_size
+        self.max_fields_in_catalogue = max_fields_in_catalogue
+
         self.registry = _load_registry(self.registry_path)
         self.canonical_set: set = set(self.registry["fields"].keys())
-        self.catalogue_subset = _build_catalogue_subset(self.registry, portfolio_type)
+        self.catalogue_subset = _build_catalogue_subset(
+            self.registry, portfolio_type, max_fields=self.max_fields_in_catalogue
+        )
 
         self._system_prompt: Optional[str] = None
+        self._prompt_source: str = "inline"   # "file" or "inline" — set in _get_system_prompt
         self._client = None  # lazy-init to avoid import error if anthropic not installed
 
         logger.info(
-            "LLMFieldMapper ready — registry=%s  portfolio=%s  catalogue_fields=%d",
+            "LLMFieldMapper ready — registry=%s  portfolio=%s  catalogue_fields=%d  model=%s",
             self.registry_path.name,
             self.portfolio_type,
             len(self.catalogue_subset),
+            self.model,
         )
 
     # ------------------------------------------------------------------
@@ -171,7 +189,7 @@ class LLMFieldMapper:
     ) -> List[LLMSuggestion]:
         """
         For each header in *unmapped_headers*, build a feature envelope and call
-        the LLM in batches of BATCH_SIZE.  Returns one LLMSuggestion per header.
+        the LLM in batches of batch_size.  Returns one LLMSuggestion per header.
         """
         if not unmapped_headers:
             return []
@@ -184,8 +202,8 @@ class LLMFieldMapper:
 
         # Batch and call Claude
         suggestions: List[LLMSuggestion] = []
-        for batch_start in range(0, len(envelopes), self.BATCH_SIZE):
-            batch = envelopes[batch_start: batch_start + self.BATCH_SIZE]
+        for batch_start in range(0, len(envelopes), self.batch_size):
+            batch = envelopes[batch_start: batch_start + self.batch_size]
             raw_responses = self._call_llm(batch)
             for envelope, response in zip(batch, raw_responses):
                 sugg = self._parse_response(envelope, response)
@@ -203,11 +221,55 @@ class LLMFieldMapper:
         return suggestions
 
     # ------------------------------------------------------------------
+    # INTERNAL: PII REDACTION
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _redact_sample(s: str) -> str:
+        """
+        Redact PII and long identifiers from a sample value string before
+        sending to the LLM.  Applied to every sample value in _build_envelope.
+        """
+        # A4: Truncate to max 32 characters first
+        s = s[:32]
+
+        # UK postcode: e.g. SW1A 2AA, EC1A 1BB, W1A 0AX
+        s = re.sub(
+            r'\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b',
+            '<UK_POSTCODE>',
+            s,
+            flags=re.IGNORECASE,
+        )
+
+        # Email addresses
+        s = re.sub(
+            r'\b[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}\b',
+            '<EMAIL>',
+            s,
+        )
+
+        # Phone-like patterns (7+ digits with optional spaces, dashes, parens, +)
+        s = re.sub(
+            r'(\+?\d[\d\s\-().]{5,}\d)',
+            '<PHONE>',
+            s,
+        )
+
+        # Long numeric identifiers (8+ consecutive digits)
+        s = re.sub(
+            r'\b\d{8,}\b',
+            '<ID>',
+            s,
+        )
+
+        return s
+
+    # ------------------------------------------------------------------
     # INTERNAL: FEATURE ENVELOPE
     # ------------------------------------------------------------------
 
     def _build_envelope(self, header: str, df_raw: pd.DataFrame) -> dict:
-        """Collect column statistics and sample values for the prompt payload."""
+        """Collect column statistics and redacted sample values for the prompt payload."""
         envelope: dict = {"header": header, "samples": [], "dtype": "unknown", "stats": {}}
 
         if header not in df_raw.columns:
@@ -222,9 +284,9 @@ class LLMFieldMapper:
         null_pct = round(n_null / total * 100, 1) if total else 0.0
         n_unique = int(non_null.nunique())
 
-        # Up to 5 deduplicated, non-null sample values (cast to str for JSON safety)
+        # Up to 5 deduplicated, non-null sample values — redacted before sending to LLM
         sample_pool = non_null.drop_duplicates().head(20)
-        samples = [str(v) for v in sample_pool.head(5).tolist()]
+        samples = [self._redact_sample(str(v)) for v in sample_pool.head(5).tolist()]
         envelope["samples"] = samples
 
         stats: dict = {"nunique": n_unique, "null_pct": null_pct}
@@ -255,9 +317,11 @@ class LLMFieldMapper:
             prompt_file = Path(__file__).parent / "prompts" / "field_mapper_system.txt"
             if prompt_file.exists():
                 self._system_prompt = prompt_file.read_text(encoding="utf-8").strip()
+                self._prompt_source = "file"
             else:
                 logger.warning("System prompt file not found at %s; using inline fallback.", prompt_file)
                 self._system_prompt = _INLINE_SYSTEM_PROMPT
+                self._prompt_source = "inline"
         return self._system_prompt
 
     def _call_llm(self, batch: List[dict]) -> List[dict]:
@@ -305,14 +369,20 @@ class LLMFieldMapper:
 
         try:
             message = client.messages.create(
-                model=self.MODEL,
-                max_tokens=self.MAX_TOKENS,
-                temperature=self.TEMPERATURE,
+                model=self.model,
+                max_tokens=self.max_tokens,
+                temperature=self.temperature,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_content}],
             )
             raw_text = message.content[0].text.strip()
-            parsed = self._extract_json(raw_text)
+
+            # A3: Catch JSON parsing errors separately and return null responses
+            try:
+                parsed = self._extract_json(raw_text)
+            except ValueError as parse_exc:
+                logger.error("JSON parsing failed for LLM response: %s", parse_exc)
+                return [null_resp.copy() for _ in batch]
 
             if not isinstance(parsed, list):
                 parsed = [parsed] if isinstance(parsed, dict) else []
@@ -329,11 +399,45 @@ class LLMFieldMapper:
 
     @staticmethod
     def _extract_json(text: str) -> object:
-        """Strip markdown fences and parse JSON from LLM response."""
-        # Remove ```json ... ``` fences if present
+        """
+        A3: Defensively parse JSON from LLM response.
+        - Strips markdown fences.
+        - Locates the first '[' or '{' and the last ']' or '}'.
+        - Attempts json.loads() on the extracted substring.
+        - Raises ValueError with a short snippet on failure.
+        """
+        # Strip markdown fences
         text = re.sub(r"```(?:json)?\s*", "", text)
-        text = re.sub(r"```\s*$", "", text)
-        return json.loads(text.strip())
+        text = re.sub(r"```\s*", "", text)
+        text = text.strip()
+
+        # Locate first '[' or '{' and last ']' or '}'
+        start = -1
+        for i, ch in enumerate(text):
+            if ch in ('[', '{'):
+                start = i
+                break
+
+        end = -1
+        for i in range(len(text) - 1, -1, -1):
+            if text[i] in (']', '}'):
+                end = i
+                break
+
+        if start == -1 or end == -1 or end < start:
+            snippet = text[:200]
+            raise ValueError(
+                f"No JSON object/array found in LLM response. Snippet: {snippet!r}"
+            )
+
+        candidate = text[start: end + 1]
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError as exc:
+            snippet = text[:200]
+            raise ValueError(
+                f"JSON decode error ({exc}). Snippet: {snippet!r}"
+            ) from exc
 
     # ------------------------------------------------------------------
     # INTERNAL: RESPONSE PARSING
@@ -386,6 +490,7 @@ class HumanReviewSession:
 
     def __init__(self, canonical_fields: Optional[List[str]] = None) -> None:
         self.canonical_fields = canonical_fields or []
+        self._canonical_set: set = set(self.canonical_fields)
 
     def review_cli(self, suggestions: List[LLMSuggestion]) -> List[LLMSuggestion]:
         """
@@ -405,10 +510,17 @@ class HumanReviewSession:
 
             while True:
                 choice = input(
-                    "[C]onfirm  [R]emap to different field  [S]kip  [Q]uit review\n> "
+                    "[C]onfirm  [R]emap to different field  [S]kip  [X]eject  [Q]uit review\n> "
                 ).strip().upper()
 
                 if choice == "C":
+                    # A1: Disallow Confirm when LLM returned no suggestion
+                    if sugg.suggested_field is None:
+                        print(
+                            "  Cannot Confirm: LLM returned no suggestion. "
+                            "Choose Remap or Skip."
+                        )
+                        continue
                     sugg.status = "confirmed"
                     sugg.confirmed_field = sugg.suggested_field
                     note = input("Reviewer note (optional, press Enter to skip): ").strip()
@@ -434,6 +546,15 @@ class HumanReviewSession:
                     print("  Skipped.")
                     break
 
+                elif choice == "X":
+                    # A2: Explicit Reject — suggestion is wrong, mapping stays unresolved
+                    sugg.status = "rejected"
+                    sugg.confirmed_field = None
+                    note = input("Reviewer note (optional): ").strip()
+                    sugg.reviewer_note = note
+                    print("  Rejected.")
+                    break
+
                 elif choice == "Q":
                     print("\nReview session terminated by user.")
                     # Mark all remaining as skipped
@@ -443,7 +564,7 @@ class HumanReviewSession:
                     return suggestions
 
                 else:
-                    print("  Invalid choice. Enter C, R, S, or Q.")
+                    print("  Invalid choice. Enter C, R, S, X, or Q.")
 
         confirmed_count = sum(1 for s in suggestions if s.status in ("confirmed", "remapped"))
         print(f"\nReview complete — {confirmed_count} mapping(s) confirmed.\n")
@@ -466,7 +587,10 @@ class HumanReviewSession:
         print(_DIVIDER)
 
     def _remap_prompt(self, sugg: LLMSuggestion) -> Optional[str]:
-        """Prompt user to type a canonical field name, with fuzzy suggestion help."""
+        """
+        Prompt user to type a canonical field name, with fuzzy suggestion help.
+        A1: Non-canonical fields are rejected — no 'use anyway' escape hatch.
+        """
         print("\nEnter canonical field name (or part of it for suggestions):")
         query = input("  > ").strip()
         if not query:
@@ -487,18 +611,18 @@ class HumanReviewSession:
                     if sel.isdigit():
                         idx = int(sel) - 1
                         if 0 <= idx < len(matches):
-                            return matches[idx][0]
+                            selected = matches[idx][0]
+                            # Selection from fuzzy list is always canonical — return it
+                            return selected
             except Exception:
                 pass  # rapidfuzz not available — fall through
 
-        # Validate exact match
-        if query in set(self.canonical_fields):
+        # A1: Strict canonical validation — non-canonical input is rejected outright
+        if query in self._canonical_set:
             return query
 
-        confirm = input(
-            f'  "{query}" is not in the canonical registry. Use anyway? [y/N] '
-        ).strip().lower()
-        return query if confirm == "y" else None
+        print(f'  "{query}" is not in the canonical registry. Remap rejected.')
+        return None
 
     def review_streamlit(self, suggestions: List[LLMSuggestion]) -> List[LLMSuggestion]:
         """
@@ -536,12 +660,14 @@ class HumanReviewSession:
                     st.write("**Samples:**", sugg.sample_values[:5])
                 with col2:
                     st.write("**Alternative:**", sugg.alternative_field or "—")
+                    # A2: Add Reject option to radio
                     action = st.radio(
                         "Decision",
-                        ["Confirm", "Remap", "Skip"],
+                        ["Confirm", "Remap", "Skip", "Reject"],
                         key=f"action_{sugg.raw_header}",
                         horizontal=True,
                     )
+                    remap_val = ""
                     if action == "Remap":
                         remap_val = st.text_input(
                             "Canonical field to map to:", key=f"remap_{sugg.raw_header}"
@@ -549,16 +675,40 @@ class HumanReviewSession:
                     note = st.text_input("Reviewer note:", key=f"note_{sugg.raw_header}")
 
                 if st.button("Apply", key=f"apply_{sugg.raw_header}"):
+                    # A1: Validate before applying
                     if action == "Confirm":
-                        sugg.status = "confirmed"
-                        sugg.confirmed_field = sugg.suggested_field
+                        if sugg.suggested_field is None:
+                            st.error(
+                                "Cannot Confirm: LLM returned no suggestion. "
+                                "Choose Remap or Skip."
+                            )
+                        else:
+                            sugg.status = "confirmed"
+                            sugg.confirmed_field = sugg.suggested_field
+                            sugg.reviewer_note = note
+                            st.rerun()
                     elif action == "Remap":
-                        sugg.status = "remapped"
-                        sugg.confirmed_field = remap_val  # type: ignore[possibly-undefined]
+                        # A1: Reject non-canonical remap targets
+                        if not remap_val or remap_val not in self._canonical_set:
+                            st.error(
+                                f'"{remap_val}" is not a canonical field. '
+                                "Enter an exact name from the registry."
+                            )
+                        else:
+                            sugg.status = "remapped"
+                            sugg.confirmed_field = remap_val
+                            sugg.reviewer_note = note
+                            st.rerun()
+                    elif action == "Reject":
+                        # A2: Reject — LLM suggestion is wrong, mapping stays unresolved
+                        sugg.status = "rejected"
+                        sugg.confirmed_field = None
+                        sugg.reviewer_note = note
+                        st.rerun()
                     else:
                         sugg.status = "skipped"
-                    sugg.reviewer_note = note
-                    st.rerun()
+                        sugg.reviewer_note = note
+                        st.rerun()
 
         return suggestions
 
@@ -576,15 +726,26 @@ class AliasLearner:
 
     OUTPUT_FILENAME = "aliases_llm_confirmed.yaml"
 
+    @staticmethod
+    def _normalise_alias(s: str) -> str:
+        """Normalise alias for case-insensitive, whitespace-collapsed deduplication."""
+        return re.sub(r'\s+', ' ', s.strip()).lower()
+
     def persist_confirmed(
         self,
         confirmed: List[LLMSuggestion],
         aliases_dir: Path,
         session_id: str = "",
+        namespace: Optional[str] = None,
     ) -> int:
         """
         Append confirmed raw_header → canonical_field aliases to
         aliases_llm_confirmed.yaml.  Returns the count of NEW aliases added.
+
+        A7: If namespace is provided, aliases are stored under
+        existing_data[namespace][target_field].  Old flat-format files are
+        migrated in-memory to namespace format (under "global") when a namespace
+        is supplied.  Deduplication is case-insensitive and whitespace-normalised.
         """
         aliases_dir = Path(aliases_dir)
         aliases_dir.mkdir(parents=True, exist_ok=True)
@@ -601,19 +762,26 @@ class AliasLearner:
             except Exception as exc:
                 logger.warning("Could not parse %s: %s — starting fresh.", output_path, exc)
 
-        # Build a set of all aliases already known across ALL alias files
-        all_known_aliases: set = set()
+        # A7: If namespace provided, migrate old flat format in-memory
+        if namespace is not None:
+            existing_data = self._migrate_to_namespace(existing_data)
+
+        # Determine the working dict (namespaced or root)
+        if namespace is not None:
+            if namespace not in existing_data:
+                existing_data[namespace] = {}
+            working_dict = existing_data[namespace]
+        else:
+            working_dict = existing_data
+
+        # Build a set of all normalised aliases already known across ALL alias files
+        all_known_normalised: set = set()
         for yaml_file in aliases_dir.glob("aliases_*.yaml"):
             try:
                 data = yaml.safe_load(yaml_file.read_text(encoding="utf-8")) or {}
                 if not isinstance(data, dict):
                     continue
-                for canon, meta in data.items():
-                    if isinstance(meta, list):
-                        aliases = meta
-                    else:
-                        aliases = (meta or {}).get("aliases", []) or []
-                    all_known_aliases.update(str(a).strip() for a in aliases)
+                self._collect_all_aliases(data, all_known_normalised)
             except Exception:
                 pass
 
@@ -626,30 +794,33 @@ class AliasLearner:
 
             if not target_field or not raw:
                 continue
-            if raw in all_known_aliases:
-                logger.debug("Alias '%s' already exists — skipping.", raw)
+
+            raw_norm = self._normalise_alias(raw)
+            if raw_norm in all_known_normalised:
+                logger.debug("Alias '%s' already exists (normalised) — skipping.", raw)
                 continue
 
-            # Merge into output dict
-            if target_field not in existing_data:
-                existing_data[target_field] = {
+            # Merge into working_dict
+            if target_field not in working_dict:
+                working_dict[target_field] = {
                     "aliases": [],
                     "source": "llm_agent",
                     "confirmed_by": "human",
                 }
-            entry = existing_data[target_field]
+            entry = working_dict[target_field]
             if isinstance(entry, list):
                 # Normalise shorthand to long form
-                existing_data[target_field] = {
+                working_dict[target_field] = {
                     "aliases": list(entry),
                     "source": "llm_agent",
                     "confirmed_by": "human",
                 }
-                entry = existing_data[target_field]
+                entry = working_dict[target_field]
 
-            if raw not in entry.get("aliases", []):
+            existing_norms = {self._normalise_alias(a) for a in entry.get("aliases", [])}
+            if raw_norm not in existing_norms:
                 entry.setdefault("aliases", []).append(raw)
-                all_known_aliases.add(raw)
+                all_known_normalised.add(raw_norm)
                 added += 1
                 logger.info("Alias persisted: '%s' → '%s'", raw, target_field)
 
@@ -669,6 +840,43 @@ class AliasLearner:
             logger.info("No new aliases to persist.")
 
         return added
+
+    @staticmethod
+    def _migrate_to_namespace(data: dict) -> dict:
+        """
+        A7: If data is in old flat format (target_field → {aliases: [...]}),
+        migrate it to namespace format by placing all entries under "global".
+        Returns the (possibly migrated) data unchanged if already in namespace format.
+        """
+        if not data:
+            return data
+
+        # Heuristic: flat format has values that are lists or dicts with "aliases" key.
+        # Namespace format has values that are dicts of target_field → entry (no "aliases" at top level).
+        for v in data.values():
+            if isinstance(v, list):
+                return {"global": data}
+            if isinstance(v, dict) and "aliases" in v:
+                return {"global": data}
+            # First value looks like a namespace sub-dict — already migrated
+            break
+
+        return data
+
+    @staticmethod
+    def _collect_all_aliases(data: dict, result_set: set) -> None:
+        """Recursively collect all alias strings (normalised) from alias data."""
+        for key, value in data.items():
+            if isinstance(value, list):
+                for a in value:
+                    result_set.add(re.sub(r'\s+', ' ', str(a).strip()).lower())
+            elif isinstance(value, dict):
+                if "aliases" in value:
+                    for a in value.get("aliases", []):
+                        result_set.add(re.sub(r'\s+', ' ', str(a).strip()).lower())
+                else:
+                    # Namespace sub-dict — recurse
+                    AliasLearner._collect_all_aliases(value, result_set)
 
 
 # ---------------------------------------------------------------------------
@@ -694,13 +902,17 @@ class GovernanceLogger:
         suggestions: List[LLMSuggestion],
         aliases_persisted: int,
         extra: Optional[dict] = None,
+        # A6: Metadata parameters
+        model_name: Optional[str] = None,
+        prompt_source: Optional[str] = None,
+        registry_path: Optional[Path] = None,
     ) -> Path:
         """
         Assemble and write the governance artifact JSON.  Returns the artifact path.
         """
         now_utc = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
-        llm_suggestions = [s for s in suggestions if s.deterministic_method in ("unmapped",) or True]
+        # A6: Fix meaningless `or True` — sent_to_llm is simply the list length
         sent_to_llm = len(suggestions)
         null_suggestions = sum(1 for s in suggestions if not s.suggested_field)
         avg_confidence = (
@@ -711,12 +923,31 @@ class GovernanceLogger:
         human_rejected = sum(1 for s in suggestions if s.status == "rejected")
         human_remapped = sum(1 for s in suggestions if s.status == "remapped")
         human_skipped = sum(1 for s in suggestions if s.status == "skipped")
+        human_pending = sum(1 for s in suggestions if s.status == "pending")
+
+        # A6: Registry hash for provenance
+        registry_name: Optional[str] = None
+        registry_hash: Optional[str] = None
+        if registry_path is not None:
+            _rp = Path(registry_path)
+            registry_name = _rp.name
+            try:
+                registry_hash = hashlib.sha256(_rp.read_bytes()).hexdigest()[:16]
+            except Exception:
+                registry_hash = "unavailable"
 
         artifact = {
             "session_id": session_id,
             "timestamp": now_utc,
             "input_file": input_file,
             "portfolio_type": portfolio_type,
+            # A6: Model + prompt provenance metadata
+            "metadata": {
+                "model": model_name,
+                "prompt_source": prompt_source,
+                "registry_name": registry_name,
+                "registry_sha256_prefix": registry_hash,
+            },
             "deterministic_pass": deterministic_stats,
             "llm_pass": {
                 "sent_to_llm": sent_to_llm,
@@ -724,11 +955,13 @@ class GovernanceLogger:
                 "null_suggestions": null_suggestions,
                 "avg_confidence": round(avg_confidence, 4),
             },
+            # A6: Include rejected count; A2: rejected is a first-class status
             "human_review": {
                 "confirmed": human_confirmed,
                 "rejected": human_rejected,
                 "remapped": human_remapped,
                 "skipped": human_skipped,
+                "pending": human_pending,
             },
             "aliases_persisted": aliases_persisted,
             "suggestions": [s.to_dict() for s in suggestions],
