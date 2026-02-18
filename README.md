@@ -108,19 +108,29 @@ flowchart TD
 
 ## Blob storage trigger
 
-`blob_trigger.py` provides automatic pipeline execution when a data tape is uploaded to cloud blob storage (Azure Blob, AWS S3, or local filesystem for testing).
+`function_app.py` (Azure Event Grid trigger) provides automatic pipeline execution when a CSV is uploaded to the `inbound` container of the Azure Blob Storage account. The trigger downloads the file, runs `trakt_run.py` as a subprocess, then uploads all outputs to the `outbound` container.
 
-Upload path convention determines the mode:
+Upload path convention determines the pipeline mode:
 ```
-uploads/{client_id}/mi/tape.csv          → MI mode
-uploads/{client_id}/annex12/tape.csv     → Annex 12 mode
-uploads/{client_id}/regulatory/tape.csv  → Regulatory mode (regime from filename)
+inbound/tape.csv                  → MI mode (default)
+inbound/mi/tape.csv               → MI mode (explicit folder)
+inbound/annex12/tape.csv          → Annex 12 mode
+inbound/tape_annex12.csv          → Annex 12 mode (filename hint)
+inbound/regulatory/tape.csv       → Regulatory mode
+inbound/tape_regulatory.csv       → Regulatory mode (filename hint)
 ```
 
-Local testing:
-```bash
-python engine/orchestrator/blob_trigger.py \
-  --provider local --path tape.csv --mode mi
+Outputs are written back to blob storage under:
+```
+outbound/{mode}/{stem}/out/               → canonical CSV, XML, manifest
+outbound/{mode}/{stem}/out_validation/    → validation reports
+```
+
+Required app settings:
+```
+DATA_STORAGE_CONNECTION   → Azure Storage connection string
+TRAKT_ANNEX12_CONFIG      → path to annex12 config YAML (annex12 mode)
+TRAKT_REGIME              → target regime e.g. ESMA_Annex2 (regulatory mode)
 ```
 
 ## Analytics dashboard
@@ -133,17 +143,58 @@ python engine/orchestrator/blob_trigger.py \
 
 Optional modules (`risk_monitor.py`, `risk_limits_config.py`) add concentration-limit monitoring when present.
 
+## LLM agent (Tier 7 field mapper)
+
+When raw loan tape headers cannot be resolved by the deterministic tiers (Tiers 1-6 in `semantic_alignment.py`), `agent_orchestrator.py` invokes `llm_mapper_agent.py` to call Claude Sonnet for a suggestion. **Human confirmation is mandatory before any mapping is applied.** Confirmed mappings are written to `aliases_llm_confirmed.yaml` so future runs resolve at Tier 3 (alias lookup) with no LLM involvement.
+
+```bash
+# Run the agent on a tape that has unmapped headers
+python engine/gate_1_alignment/agent_orchestrator.py \
+  --input loan_portfolio_112025.csv \
+  --portfolio-type equity_release \
+  --registry config/system/fields_registry.yaml \
+  --aliases-dir engine/gate_1_alignment/aliases \
+  --config config/system/config_agent.yaml \
+  --mode cli \
+  --output-dir out
+```
+
+Pipeline steps inside the agent orchestrator:
+
+1. **Deterministic pass** — runs `semantic_alignment.py` (Tiers 1-6: exact, normalised, alias, token-set Jaccard, RapidFuzz)
+2. **LLM targets** — collects headers still `unmapped` or with confidence below `review_threshold` (default 0.92)
+3. **LLM suggestions** — batches headers (up to 10 per call) with sample values and column stats to Claude Sonnet; nulls any hallucinated field names not in the registry
+4. **Auto-approve** — optionally accepts high-confidence suggestions above `auto_approve_threshold` without human input (off by default for regulatory safety)
+5. **Human review** — presents each suggestion via CLI or Streamlit UI (Confirm / Remap / Skip / Quit)
+6. **Alias learning** — persists confirmed mappings to `aliases_llm_confirmed.yaml`; deduplicates across all alias files
+7. **Second deterministic pass** — re-runs `semantic_alignment.py` with the augmented aliases
+8. **Governance artifact** — writes a versioned JSON session record to `governance/agent_sessions/`
+
+The agent is a pre-processing step, not part of the automated blob trigger pipeline. Run it interactively when a new lender's tape format is encountered; once aliases are confirmed, all subsequent automated runs resolve deterministically.
+
+Key agent configuration (`config/system/config_agent.yaml`):
+
+| Setting | Default | Purpose |
+|---------|---------|---------|
+| `model` | `claude-sonnet-4-20250514` | Claude model used for suggestions |
+| `temperature` | `0.0` | Deterministic output |
+| `review_threshold` | `0.92` | Confidence floor; below this triggers LLM |
+| `auto_approve_threshold` | `null` | Auto-approve above this (requires `--enable-auto-approve`) |
+| `max_batch_size` | `10` | Headers per API call |
+| `max_api_calls_per_session` | `10` | Budget cap |
+
 ## Configuration
 
 | File | Role |
 |------|------|
-| `config_ERM_UK.yaml` | Master client config -- identity, transformations, enrichment rules, UI branding |
-| `config_ere_annex12.yaml` | ESMA Annex 12 deal metadata and structural overlay |
-| `fields_registry.yaml` | Canonical field definitions |
-| `annex12_field_constraints.yaml` | Field-level validation constraints |
-| `annex12_rules.yaml` | Business rule definitions |
-| `product_defaults_ERM.yaml` | Default values for equity release mortgage fields |
-| `aliases/` | Field alias mappings for data reconciliation |
+| `config/client/config_client_ERM_UK.yaml` | Master client config — identity, transformations, enrichment rules, UI branding |
+| `config/client/config_client_annex12.yaml` | ESMA Annex 12 deal metadata and structural overlay |
+| `config/system/fields_registry.yaml` | Canonical field definitions (200+ fields, all portfolio types) |
+| `config/system/config_agent.yaml` | LLM Tier 7 agent settings (model, thresholds, budget caps) |
+| `config/regime/annex12_field_constraints.yaml` | Field-level validation constraints |
+| `config/regime/annex12_rules.yaml` | Business rule definitions |
+| `config/asset/product_defaults_ERM.yaml` | Default values for equity release mortgage fields |
+| `config/system/aliases_*.yaml` | Field alias mappings for deterministic header matching |
 
 ## Key outputs
 
@@ -160,14 +211,18 @@ Optional modules (`risk_monitor.py`, `risk_limits_config.py`) add concentration-
 
 ```
 trakt/
+  function_app.py                    # Azure Event Grid trigger (blob upload → pipeline)
   engine/
     orchestrator/
       trakt_run.py                   # Pipeline orchestrator (entry point)
-      blob_trigger.py                # Cloud blob-storage trigger (Azure/AWS/local)
     gate_1_alignment/
-      semantic_alignment.py          # Gate 1: semantic alignment
+      semantic_alignment.py          # Gate 1: deterministic semantic alignment (Tiers 1-6)
+      agent_orchestrator.py          # LLM Tier 7 orchestrator (human-in-the-loop)
+      llm_mapper_agent.py            # LLM field mapper, human review, alias learner
       aliases/
         alias_builder.py             # TF-IDF alias generation
+      prompts/
+        field_mapper_system.txt      # Claude system prompt for field mapping
     gate_2_transform/
       canonical_transform.py         # Transform: typing & derivation
       lineage_tracker.py             # Gate 2.5: data lineage
@@ -175,24 +230,28 @@ trakt/
     gate_3_validation/
       validate_canonical.py          # Gate 2: canonical validation
       validate_business_rules.py     # Gate 3: business rule validation
-      aggregate_validation_results.py # Validation results aggregation
-      validate_only.py               # Standalone validation utility
+      aggregate_validation_results.py # Gate 3b: validation results aggregation
     gate_4_projection/
-      annex12_projector.py           # Gate 4: regime projection
-      regime_projector.py            # Alternative regime projector
+      annex12_projector.py           # Gate 4a: Annex 12 projection
+      regime_projector.py            # Gate 4b: Annex 2-9 regime projector
     gate_5_delivery/
-      xml_builder_investor.py        # Gate 5: XML generation
-      xml_builder.py                 # Alternative XML builder
+      xml_builder_investor.py        # Gate 5: ESMA XML generation + XSD validation
+      xml_builder.py                 # Gate 5: Jinja2-based XML builder (regulatory)
   analytics/
     streamlit_app_erm.py             # Analytics dashboard (entry point)
     mi_prep.py                       # Dashboard data preparation layer
+    blob_storage.py                  # Azure Blob integration for dashboard data
     charts_plotly.py                 # Plotly chart factories
     scenario_engine.py               # Cashflow projection engine
     static_pools_core.py             # Static pool analysis engine
     risk_monitor.py                  # Concentration-limit monitoring
   config/
     system/
-      fields_registry.yaml           # Canonical field definitions
+      fields_registry.yaml           # Canonical field definitions (200+ fields)
+      config_agent.yaml              # LLM agent configuration
+      aliases_mandatory.yaml         # Mandatory field aliases
+      aliases_optional.yaml          # Optional field aliases
+      aliases_analytics.yaml         # Analytics-specific aliases
     client/
       config_client_ERM_UK.yaml      # Master client configuration
       config_client_annex12.yaml     # ESMA Annex 12 configuration
