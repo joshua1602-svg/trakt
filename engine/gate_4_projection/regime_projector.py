@@ -38,6 +38,14 @@ from typing import Dict, Any, List, Optional, Tuple
 import pandas as pd
 import yaml
 
+try:
+    from engine.enum_agent.enum_mapping_agent import resolve_enums_for_field
+except ModuleNotFoundError:
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from engine.enum_agent.enum_mapping_agent import resolve_enums_for_field
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -237,7 +245,9 @@ def apply_enum_mappings(
     df: pd.DataFrame,
     registry: Dict[str, Any],
     enum_mapping: Dict[str, Any],
-    regime: str
+    regime: str,
+    namespace: str = "global",
+    allow_unreviewed: bool = False,
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """
     Convert canonical enum values to regime-specific codes using enum_mapping.yaml.
@@ -249,7 +259,7 @@ def apply_enum_mappings(
     Returns:
         (transformed_df, transformation_report)
     """
-    report: Dict[str, Any] = {"transformed_fields": {}, "unmapped_values": {}}
+    report: Dict[str, Any] = {"transformed_fields": {}, "unmapped_values": {}, "enum_review_candidates": {}}
     
     regime_enums = enum_mapping.get(regime, {})
     if not regime_enums:
@@ -268,8 +278,26 @@ def apply_enum_mappings(
         if col not in regime_enums:
             logging.debug(f"No enum mapping for field '{col}' (allowed_values: {allowed_values})")
             continue
-        
+
         field_enum_map = regime_enums[col]
+
+        # Shared enum resolver in front of regime mapping (canonical enum normalization).
+        canonical_values = sorted([str(k) for k in field_enum_map.keys()])
+        resolved_series, enum_report, review_candidates, _ = resolve_enums_for_field(
+            field_name=col,
+            series=df[col],
+            allowed_values=canonical_values,
+            namespace=namespace,
+            regime=regime,
+        )
+        df[col] = resolved_series
+        if review_candidates:
+            report["enum_review_candidates"][col] = [c.to_dict() for c in review_candidates]
+            if not allow_unreviewed:
+                raise ValueError(
+                    f"Field '{col}' has {len(review_candidates)} enum values pending review. "
+                    "Run enum agent orchestrator and confirm mappings, or set allow_unreviewed=True."
+                )
         
         # Apply mapping
         original = df[col].copy()
@@ -463,7 +491,9 @@ def project_to_regime(
     config: Dict[str, Any],
     regime: str,
     portfolio_type: str,
-    template_order: List[str]
+    template_order: List[str],
+    namespace: str = "global",
+    allow_unreviewed: bool = False,
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """
     Main projection function: canonical truth set → regime projection.
@@ -536,7 +566,14 @@ def project_to_regime(
     regime_df = regime_df[[f for f, _ in fields_list if f in regime_df.columns]]
     
     # Step 4: Apply enum mappings
-    regime_df, enum_report = apply_enum_mappings(regime_df, registry, enum_mapping, regime)
+    regime_df, enum_report = apply_enum_mappings(
+        regime_df,
+        registry,
+        enum_mapping,
+        regime,
+        namespace=namespace,
+        allow_unreviewed=allow_unreviewed,
+    )
     report["enum_mapping"] = enum_report
     
     # Step 5: Apply ND defaults
@@ -573,6 +610,8 @@ def main() -> None:
     ap.add_argument("--portfolio-type", default="equity_release", help="Portfolio type (e.g., equity_release, sme, cre)")
     ap.add_argument("--output-dir", default="out", help="Output directory")
     ap.add_argument("--output-prefix", default=None, help="Override output stem")
+    ap.add_argument("--namespace", default="global", help="Client/lender namespace for learned enum aliases")
+    ap.add_argument("--allow-unreviewed", action="store_true", help="Allow unresolved enum candidates without human review")
     args = ap.parse_args()
     
     # Load inputs
@@ -661,7 +700,9 @@ def main() -> None:
         config,
         args.regime,
         args.portfolio_type,
-        template_order
+        template_order,
+        namespace=args.namespace,
+        allow_unreviewed=args.allow_unreviewed,
     )
     
     # Write outputs
