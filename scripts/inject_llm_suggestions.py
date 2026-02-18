@@ -381,5 +381,195 @@ def main():
         print(f"  {r['raw_header']}")
 
 
+
+# ---------------------------------------------------------------------------
+# Batch 2 — LLM-only mapping (no deterministic pre-pass)
+# ---------------------------------------------------------------------------
+LLM_SUGGESTIONS_BATCH_2 = {
+    "Cut-Off Date": (
+        "data_cut_off_date", 0.95,
+        "'Cut-Off Date' is the reporting period cut-off date — the standard name for "
+        "data_cut_off_date across ESMA loan-level templates."
+    ),
+    "Account Number": (
+        "original_underlying_exposure_identifier", 0.85,
+        "The primary account/loan identifier supplied by the servicer. "
+        "original_underlying_exposure_identifier is the canonical field for the "
+        "originator-assigned loan reference number."
+    ),
+    "Origination Date": (
+        "origination_date", 0.98,
+        "Direct semantic match — the date the loan was originated/completed."
+    ),
+    "Loan Type": (
+        "type_of_loan", 0.92,
+        "Classification of the loan product (lifetime mortgage, home reversion, etc.). "
+        "type_of_loan is the canonical field for loan-type classification."
+    ),
+    "Last Advance Date": (
+        "further_advance_date", 0.88,
+        "Date of the most recent advance/drawdown taken. further_advance_date records "
+        "the date of the last drawdown event on a drawdown equity release product."
+    ),
+    "Current Balance": (
+        "current_outstanding_balance", 0.90,
+        "Outstanding loan balance at the reporting date. current_outstanding_balance "
+        "is the canonical analytics field for the current total balance."
+    ),
+    "Drawdown Remaining": (
+        "drawdown_facility", 0.88,
+        "Remaining drawdown capacity available to the borrower. drawdown_facility "
+        "captures the residual undrawn facility on a drawdown equity release product."
+    ),
+    "Interest Rate": (
+        "current_interest_rate", 0.92,
+        "The current contractual interest rate on the loan. current_interest_rate "
+        "is the standard regulatory field for the live rate."
+    ),
+    "Index": (
+        "current_interest_rate_index", 0.78,
+        "The reference/benchmark rate index to which the loan rate is linked "
+        "(e.g. Bank of England Base Rate, SONIA). current_interest_rate_index "
+        "holds the index type as a list value."
+    ),
+    "Valuation": (
+        "current_valuation_amount", 0.85,
+        "'Valuation' without qualifier refers to the most recent property valuation. "
+        "current_valuation_amount is the canonical field for the latest collateral value."
+    ),
+    "Protected Equity": (
+        "protected_equity_percentage", 0.80,
+        "The percentage of property equity ring-fenced from the loan balance. "
+        "protected_equity_percentage holds this value. If the source column contains "
+        "Y/N values, remap to protected_equity_flag instead."
+    ),
+    "iLTV": (
+        "indexed_loan_to_value", 0.92,
+        "'iLTV' is a standard industry abbreviation for Indexed LTV — the loan-to-value "
+        "ratio calculated using the HPI-indexed property value rather than a fresh "
+        "valuation. indexed_loan_to_value is the direct canonical field."
+    ),
+    "Region": (
+        "geographic_region_classification", 0.90,
+        "Geographic region of the property (e.g. South East, North West). "
+        "geographic_region_classification is the canonical regulatory field for region."
+    ),
+    "Borrower 1 DOB": (
+        "borrower_1_DOB", 0.98,
+        "DOB = Date of Birth for the primary borrower. borrower_1_DOB is the direct "
+        "canonical field."
+    ),
+    "Borrower 1 DOD": (
+        "borrower_1_date_of_death", 0.95,
+        "DOD = Date of Death for the primary borrower. borrower_1_date_of_death is "
+        "the direct canonical field."
+    ),
+    "Borrower 1 Sex": (
+        "borrower_1_gender", 0.92,
+        "'Sex' and 'Gender' are synonymous in this context. borrower_1_gender is the "
+        "canonical field for the primary borrower's gender."
+    ),
+    "Borrower 2 DOB": (
+        "borrower_2_DOB", 0.98,
+        "DOB = Date of Birth for the second borrower. borrower_2_DOB is the direct "
+        "canonical field."
+    ),
+    "Borrower 2 DOD": (
+        "borrower_2_date_of_death", 0.95,
+        "DOD = Date of Death for the second borrower. borrower_2_date_of_death is "
+        "the direct canonical field."
+    ),
+    "Borrower 2 Sex": (
+        "borrower_2_gender", 0.92,
+        "'Sex' and 'Gender' are synonymous in this context. borrower_2_gender is the "
+        "canonical field for the second borrower's gender."
+    ),
+    "original loan amount": (
+        "original_principal_balance", 0.95,
+        "The original loan amount at origination. original_principal_balance is the "
+        "canonical regulatory field for the initial loan principal."
+    ),
+    "last valuation": (
+        "current_valuation_amount", 0.88,
+        "'Last valuation' = the most recent property valuation amount. "
+        "current_valuation_amount is the canonical field for the latest collateral value."
+    ),
+    "last valuation dt": (
+        "current_valuation_date", 0.92,
+        "'dt' is a standard abbreviation for date. 'last valuation dt' = date of the "
+        "most recent valuation. current_valuation_date is the direct canonical field."
+    ),
+    "valuation type": (
+        "current_valuation_method", 0.82,
+        "The methodology used for the valuation (RICS, AVM, desktop, drive-by, etc.). "
+        "current_valuation_method captures the valuation approach as a list value."
+    ),
+    "total accrued": (
+        "cumulative_accrued_interest", 0.88,
+        "Total interest accrued over the life of the loan. cumulative_accrued_interest "
+        "is the canonical field for the running total of rolled-up/accrued interest."
+    ),
+    "original valuation": (
+        "original_valuation_amount", 0.95,
+        "The property valuation at the time of loan origination. "
+        "original_valuation_amount is the direct canonical field."
+    ),
+    "orig ltv": (
+        "original_loan_to_value", 0.95,
+        "'orig ltv' = original loan-to-value ratio at origination. "
+        "original_loan_to_value is the direct canonical field."
+    ),
+    "channel": (
+        "origination_channel", 0.88,
+        "The distribution channel through which the loan was originated "
+        "(broker, direct, IFA, etc.). origination_channel is the canonical "
+        "regulatory field for origination channel classification."
+    ),
+}
+
+BATCH_2_OUTPUT = Path("out/batch2_llm_mapping_report.csv")
+
+
+def map_standalone():
+    """LLM-only mapping for Batch 2 — no prior deterministic pass."""
+    rows = []
+    for raw_header, (canon, conf, reasoning) in LLM_SUGGESTIONS_BATCH_2.items():
+        rows.append({
+            "raw_header": raw_header,
+            "canonical_field": canon if canon else "",
+            "mapping_method": "llm" if canon else "unmapped",
+            "confidence": conf,
+            "reasoning": reasoning,
+        })
+
+    out_df = pd.DataFrame(rows)
+    out_df.to_csv(BATCH_2_OUTPUT, index=False)
+    print(f"Written: {BATCH_2_OUTPUT}")
+
+    mapped   = out_df[out_df["mapping_method"] == "llm"]
+    unmapped = out_df[out_df["mapping_method"] == "unmapped"]
+    total    = len(out_df)
+
+    print(f"\n{'='*60}")
+    print(f"BATCH 2 — LLM-ONLY MAPPING SUMMARY  ({total} headers)")
+    print(f"{'='*60}")
+    print(f"  LLM Tier 7 mapped  : {len(mapped):>3}  ({len(mapped)/total*100:.1f}%)")
+    print(f"  Unmapped           : {len(unmapped):>3}  ({len(unmapped)/total*100:.1f}%)")
+    print(f"{'='*60}")
+
+    print("\n--- MAPPED ---")
+    for _, r in mapped.iterrows():
+        print(f"  {r['raw_header']:<35} → {r['canonical_field']:<45} (conf={r['confidence']:.2f})")
+
+    if not unmapped.empty:
+        print("\n--- UNMAPPED ---")
+        for _, r in unmapped.iterrows():
+            print(f"  {r['raw_header']}")
+
+
 if __name__ == "__main__":
-    main()
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "batch2":
+        map_standalone()
+    else:
+        main()
