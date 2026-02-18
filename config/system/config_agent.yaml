@@ -1,0 +1,37 @@
+# config_agent.yaml
+# LLM Tier 7 Agent Configuration
+# Used by agent_orchestrator.py and LLMFieldMapper
+
+agent:
+  # Claude model to use for field mapping suggestions
+  model: claude-sonnet-4-20250514
+
+  # Temperature for deterministic output (do not change)
+  temperature: 0.0
+
+  # Maximum tokens in LLM response
+  max_tokens: 4096
+
+  # Confidence threshold below which headers are sent to the LLM agent.
+  # Headers mapped by Tiers 1-6 with confidence >= this value are NOT sent.
+  # Tiers 1-3 (exact/normalized/alias) always win regardless of this setting.
+  review_threshold: 0.92
+
+  # Auto-approve confidence threshold.
+  # Set to a float (e.g. 0.95) to enable auto-approval of very high-confidence
+  # suggestions WITHOUT human review.
+  # WARNING: Off by default for regulatory compliance. Requires --enable-auto-approve
+  # flag to be passed to agent_orchestrator.py.
+  auto_approve_threshold: null
+
+  # Maximum headers to include in a single API call (cost/token control)
+  max_batch_size: 10
+
+  # Maximum number of API calls allowed per session (budget cap)
+  max_api_calls_per_session: 10
+
+  # Output file name for LLM-confirmed aliases (placed in aliases_dir)
+  alias_output_file: aliases_llm_confirmed.yaml
+
+  # Directory for governance audit trail JSON artifacts (relative to output_dir)
+  governance_dir: governance/agent_sessions
