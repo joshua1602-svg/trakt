@@ -37,6 +37,7 @@ def review_cli(suggestions: List[EnumSuggestion]) -> List[EnumSuggestion]:
                 note = input("note(optional): ").strip()
                 item.skip(note)
                 break
+            print("  Invalid choice. Enter C, R, J or S.")
     return suggestions
 
 
@@ -72,6 +73,10 @@ def review_streamlit(suggestions: List[EnumSuggestion]) -> List[EnumSuggestion]:
                         item.skip(note)
                 except ValueError as exc:
                     st.error(str(exc))
-                st.rerun()
+                # st.rerun() added in Streamlit 1.18; fall back for older installs.
+                if hasattr(st, "rerun"):
+                    st.rerun()
+                else:
+                    st.experimental_rerun()  # type: ignore[attr-defined]
 
     return suggestions

@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -14,11 +15,22 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
+# Strips all non-word, non-space punctuation (e.g. "N/A" → "NA").
+# Applied to both raw values and allowed_values before comparison; synonym
+# YAML keys must therefore be stored pre-normalized.
 _NORMALIZE_RE = re.compile(r"[^\w\s]+", re.UNICODE)
 _EMAIL_RE = re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.IGNORECASE)
 _PHONE_RE = re.compile(r"\+?\d[\d\s().-]{6,}\d")
 _ID_RE = re.compile(r"\b\d{6,}\b")
 _POSTCODE_RE = re.compile(r"\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b", re.IGNORECASE)
+# Shields date patterns from _PHONE_RE / _ID_RE false positives.
+# e.g. "2024-01-15" would otherwise match _PHONE_RE via its [-. ] char class.
+_DATE_RE = re.compile(
+    r"\b(?:\d{4}[-./]\d{1,2}[-./]\d{1,2}"   # YYYY-MM-DD / YYYY.MM.DD
+    r"|\d{1,2}[-./]\d{1,2}[-./]\d{2,4}"     # DD-MM-YYYY / DD.MM.YY
+    r"|20\d{6}|19\d{6})\b",                  # YYYYMMDD undelimited (20xx/19xx)
+    re.ASCII,
+)
 
 
 @dataclass
@@ -92,11 +104,24 @@ def _hash_allowed_values(allowed_values: List[str]) -> str:
 
 
 def _redact_sample(value: str, max_len: int = 120) -> str:
-    redacted = _EMAIL_RE.sub("[EMAIL]", value)
-    redacted = _PHONE_RE.sub("[PHONE]", redacted)
-    redacted = _POSTCODE_RE.sub("[POSTCODE]", redacted)
-    redacted = _ID_RE.sub("[ID]", redacted)
-    return redacted[:max_len]
+    # Shield date patterns before phone/ID regexes to prevent false positives.
+    # Dates are restored after redaction — they are not PII in enum contexts.
+    shielded_dates: list = []
+
+    def _shield(m: re.Match) -> str:  # type: ignore[type-arg]
+        shielded_dates.append(m.group())
+        return f"\x00D{len(shielded_dates) - 1}\x00"
+
+    working = _DATE_RE.sub(_shield, value)
+    working = _EMAIL_RE.sub("[EMAIL]", working)
+    working = _PHONE_RE.sub("[PHONE]", working)
+    working = _POSTCODE_RE.sub("[POSTCODE]", working)
+    working = _ID_RE.sub("[ID]", working)
+
+    for idx, date_str in enumerate(shielded_dates):
+        working = working.replace(f"\x00D{idx}\x00", date_str, 1)
+
+    return working[:max_len]
 
 
 class EnumResolutionEngine:
@@ -233,8 +258,12 @@ class EnumResolutionEngine:
         return series.map(_map_cell), report, candidates
 
 
+_LLM_MAX_RETRIES = 3
+_LLM_RETRY_BASE_DELAY = 2.0
+
+
 class LLMEnumMapper:
-    DEFAULT_MODEL = "claude-sonnet-4-20250514"
+    DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
 
     def __init__(
         self,
@@ -287,13 +316,33 @@ class LLMEnumMapper:
                     item["sample_values"] = [_redact_sample(str(s)) for s in samples[:5]]
                 user_payload.append(item)
 
-            response = client.messages.create(
-                model=self.model,
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-                system=self._system_prompt(),
-                messages=[{"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)}],
-            )
+            response = None
+            last_exc: Optional[Exception] = None
+            for attempt in range(_LLM_MAX_RETRIES):
+                try:
+                    response = client.messages.create(
+                        model=self.model,
+                        temperature=self.temperature,
+                        max_tokens=self.max_tokens,
+                        system=self._system_prompt(),
+                        messages=[{"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)}],
+                    )
+                    break
+                except Exception as exc:
+                    last_exc = exc
+                    wait = _LLM_RETRY_BASE_DELAY * (2 ** attempt)
+                    logger.warning(
+                        "LLM API call failed (attempt %d/%d): %s; retrying in %.1fs",
+                        attempt + 1, _LLM_MAX_RETRIES, exc, wait,
+                    )
+                    time.sleep(wait)
+
+            if response is None:
+                logger.error(
+                    "LLM API call failed after %d retries: %s; batch left unresolved",
+                    _LLM_MAX_RETRIES, last_exc,
+                )
+                continue
 
             parsed = self._extract_json(response.content[0].text)
             if not isinstance(parsed, list):
@@ -380,7 +429,9 @@ def load_enum_synonyms(
     regime: str,
 ) -> Dict[str, str]:
     merged: Dict[str, str] = {}
-    base_data = yaml.safe_load(Path(base_path).read_text(encoding="utf-8")) or {}
+    base_path = Path(base_path)
+    base_data = yaml.safe_load(base_path.read_text(encoding="utf-8")) if base_path.exists() else {}
+    base_data = base_data or {}
     field_node = base_data.get(field_name, {}) if isinstance(base_data, dict) else {}
 
     for branch in ("manual", "learned"):
@@ -414,6 +465,15 @@ def resolve_enums_for_field(
     synonyms_base_path: Path = Path("config/system/enum_synonyms.yaml"),
     synonyms_confirmed_path: Path = Path("config/system/enum_synonyms_confirmed.yaml"),
 ) -> Tuple[pd.Series, List[EnumSuggestion], List[EnumSuggestion], Dict[str, Any]]:
+    """Deterministically resolve enum values for a single field.
+
+    By design, LLM suggestions are NOT applied to the returned series directly.
+    They are captured in ``candidates`` for human review. Only after a reviewer
+    confirms or remaps a suggestion (Pass 2 of the orchestrator) and the alias is
+    persisted to ``synonyms_confirmed_path`` will it be applied — on the next call
+    to this function (Pass 3). This ensures no LLM output reaches the canonical
+    dataset without explicit human sign-off.
+    """
     synonyms = load_enum_synonyms(synonyms_base_path, synonyms_confirmed_path, field_name, namespace, regime)
     engine = EnumResolutionEngine(fuzzy_threshold=fuzzy_threshold, review_threshold=review_threshold)
     mapped, report, candidates = engine.resolve(
