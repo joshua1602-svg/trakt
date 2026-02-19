@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import subprocess
 import sys
 import os
@@ -27,6 +28,8 @@ from pathlib import Path
 from typing import Optional, Dict, Any, Tuple, List
 
 import pandas as pd
+
+_log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -68,16 +71,32 @@ def _script(name: str) -> str:
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _run(args: List[str], allow_fail: bool = False) -> int:
-    """Run a subprocess with UTF-8 encoding. Returns exit code."""
+def _run(args: List[str], allow_fail: bool = False) -> Tuple[int, str]:
+    """Run a subprocess with UTF-8 encoding.
+
+    stdout is NOT captured — it streams to console in real time so gate
+    progress is visible during interactive runs and in Azure Function logs.
+    stderr IS captured so gate error output is available for logging rather
+    than silently disappearing on failure.
+
+    Returns:
+        (exit_code, stderr_text) — stderr_text is empty string on success.
+    """
     env = dict(os.environ)
     env["PYTHONUTF8"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
 
-    result = subprocess.run(args, env=env)
-    if result.returncode != 0 and not allow_fail:
-        raise subprocess.CalledProcessError(result.returncode, args)
-    return result.returncode
+    result = subprocess.run(args, env=env, stderr=subprocess.PIPE, text=True)
+    stderr = (result.stderr or "").strip()
+
+    if result.returncode != 0:
+        script_name = Path(args[1]).name if len(args) > 1 else args[0]
+        if stderr:
+            _log.error("[%s] exited %d — stderr:\n%s", script_name, result.returncode, stderr)
+        if not allow_fail:
+            raise subprocess.CalledProcessError(result.returncode, args)
+
+    return result.returncode, stderr
 
 
 def _count_rows_quick(csv_path: Path) -> int:
@@ -269,7 +288,7 @@ def run_common_gates(py: str, args, input_path: Path, out_dir: Path, val_dir: Pa
     print("[Transform] Canonical transform.......... OK")
 
     # -- Gate 2: Canonical validation --------------------------------------
-    canon_rc = _run([
+    canon_rc, _ = _run([
         py, _script("validate_canonical"),
         str(canonical_typed),
         "--registry", args.registry,
@@ -322,7 +341,7 @@ def run_common_gates(py: str, args, input_path: Path, out_dir: Path, val_dir: Pa
     if hasattr(args, "regime") and args.regime:
         biz_cmd.extend(["--regime", args.regime])
 
-    biz_rc = _run(biz_cmd, allow_fail=True)
+    biz_rc, _ = _run(biz_cmd, allow_fail=True)
 
     # Re-resolve biz_viol_path now that Gate 3 has written the file
     biz_viol_path = biz_report if biz_report.exists() else None

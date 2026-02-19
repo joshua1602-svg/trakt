@@ -3,13 +3,15 @@ from __future__ import annotations
 import argparse
 import uuid
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Literal
 
 import pandas as pd
 
 from .enum_governance import write_enum_governance_artifact
 from .enum_mapping_agent import EnumAliasLearner, LLMEnumMapper, resolve_enums_for_field
-from .enum_review import review_cli
+from .enum_review import review_cli, review_streamlit
+
+ReviewMode = Literal["cli", "streamlit", "none"]
 
 
 def run_orchestrator(
@@ -19,6 +21,7 @@ def run_orchestrator(
     regime: str,
     output_dir: Path,
     input_file: str = "",
+    review_mode: ReviewMode = "cli",
 ) -> pd.DataFrame:
     session_id = str(uuid.uuid4())
     mapper = LLMEnumMapper()
@@ -37,11 +40,16 @@ def run_orchestrator(
         df[field_name] = mapped
         hashes[field_name] = meta["allowed_values_hash"]
         if candidates:
-            mapper.suggest(candidates)
+            candidates = mapper.suggest(candidates)
         all_suggestions.extend(report)
 
     # Pass 2: human review + persistence
-    review_cli(all_suggestions)
+    if review_mode == "cli":
+        review_cli(all_suggestions)
+    elif review_mode == "streamlit":
+        review_streamlit(all_suggestions)
+    # review_mode == "none": skip interactive review (CI / batch runs)
+
     learner = EnumAliasLearner(Path("config/system/enum_synonyms_confirmed.yaml"))
     persisted = learner.persist_confirmed(all_suggestions)
 
@@ -84,8 +92,19 @@ def main() -> None:
     ap.add_argument("--input-csv", required=True)
     ap.add_argument("--namespace", default="global")
     ap.add_argument("--regime", default="")
-    ap.add_argument("--enum-field", action="append", default=[], help="field=ALLOWED1,ALLOWED2")
+    ap.add_argument(
+        "--enum-field",
+        action="append",
+        default=[],
+        help="Repeatable. Format: field=ALLOWED1,ALLOWED2 (e.g. --enum-field gender=M,F,Unknown)",
+    )
     ap.add_argument("--output-dir", default="out")
+    ap.add_argument(
+        "--review-mode",
+        choices=["cli", "streamlit", "none"],
+        default="cli",
+        help="'cli' for interactive terminal review, 'streamlit' for browser UI, 'none' to skip (CI/batch)",
+    )
     args = ap.parse_args()
 
     df = pd.read_csv(args.input_csv)
@@ -97,6 +116,7 @@ def main() -> None:
         regime=args.regime,
         output_dir=Path(args.output_dir),
         input_file=args.input_csv,
+        review_mode=args.review_mode,
     )
 
 
