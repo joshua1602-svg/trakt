@@ -2787,7 +2787,7 @@ st.markdown(
     f"""
     <div style='text-align: center; color: {TEXT_LIGHT}; font-size: 11px; padding: 0.5rem 0 1rem 0;'>
         <b>Confidential</b> • Powered by trakt •
-        Data as of {datetime.now():%B %d, %Y}
+        Data as of {REPORTING_DATE}
         {build_line}
     </div>
     """,

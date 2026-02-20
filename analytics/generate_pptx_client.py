@@ -2112,6 +2112,346 @@ def render_risk_limits_table_png(results, out_path: str, max_rows: int = 20) -> 
         return False
 
 
+# ============================
+# STATIC POOLS SLIDES
+# ============================
+
+def save_static_pool_cohort_chart(
+    panel: pd.DataFrame,
+    spec,
+    metric: str,
+    agg: str,
+    title: str,
+    out_path: str,
+) -> bool:
+    """Generate a single static pool cohort chart (line or bar) for PPTX.
+
+    Mirrors the individual chart panels shown in Tab 3 (Static Pools) of
+    the dashboard, aggregated at the total-portfolio level.
+    """
+    orig_month_col = spec.origination_month
+    balance_col = spec.principal_outstanding
+
+    if orig_month_col not in panel.columns or metric not in panel.columns:
+        return False
+
+    dims = [orig_month_col]
+
+    if agg == "mean":
+        def _weighted_mean(group: pd.DataFrame):
+            w = group[balance_col].sum()
+            if w == 0:
+                return float("nan")
+            return float(np.average(group[metric], weights=group[balance_col]))
+
+        agg_df = (
+            panel.groupby(dims, dropna=False)
+            .apply(_weighted_mean)
+            .reset_index(name="value")
+        )
+    else:
+        agg_df = (
+            panel.groupby(dims, dropna=False)[metric]
+            .sum()
+            .reset_index(name="value")
+        )
+
+    if agg_df.empty or agg_df["value"].isna().all():
+        return False
+
+    # Normalise origination month to datetime for sorting
+    try:
+        if pd.api.types.is_period_dtype(agg_df[orig_month_col]):
+            agg_df["_sort_dt"] = agg_df[orig_month_col].dt.to_timestamp()
+        else:
+            agg_df["_sort_dt"] = pd.to_datetime(agg_df[orig_month_col], errors="coerce")
+    except Exception:
+        agg_df["_sort_dt"] = pd.to_datetime(agg_df[orig_month_col], errors="coerce")
+
+    agg_df = agg_df.dropna(subset=["_sort_dt"]).sort_values("_sort_dt")
+    agg_df["vintage_label"] = agg_df["_sort_dt"].dt.strftime("%b-%Y")
+
+    if agg_df.empty:
+        return False
+
+    # Detect % metrics (LTV, interest rate) and scale accordingly
+    is_pct = any(k in metric.lower() for k in ["ltv", "rate", "cpr", "pct", "ratio"])
+    scale = 100.0 if (is_pct and agg_df["value"].abs().max() <= 1.5) else 1.0
+
+    fig, ax = plt.subplots(figsize=(14, 7))
+
+    if agg == "mean":
+        ax.plot(
+            agg_df["vintage_label"],
+            agg_df["value"] * scale,
+            color=PRIMARY_COLOR,
+            linewidth=2.5,
+            marker="o",
+            markersize=5,
+        )
+        if is_pct:
+            ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:.1f}%"))
+    else:
+        ax.bar(agg_df["vintage_label"], agg_df["value"], color=PRIMARY_COLOR, alpha=0.85)
+        ax.yaxis.set_major_formatter(FuncFormatter(millions_formatter))
+
+    ax.set_title(title, pad=20, fontweight="bold", color=TEXT_DARK, fontsize=16, loc="center")
+    ax.set_xlabel("Origination Cohort (Vintage Month)", fontweight="bold", fontsize=12, labelpad=10)
+    plt.xticks(rotation=45, ha="right", fontsize=9)
+    ax.grid(True, linestyle="--", alpha=0.25, linewidth=0.8)
+    ax.set_axisbelow(True)
+
+    plt.tight_layout(pad=1.5)
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=300, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    return True
+
+
+def add_static_pools_slides(prs, df: pd.DataFrame, logo_path=None) -> None:
+    """Add Static Pool cohort chart slides to the PPTX deck.
+
+    Mirrors Tab 3 (Static Pools) of the Streamlit dashboard.  Reads the
+    same static_pools_config_erm.yaml used by the dashboard so chart
+    definitions stay in sync automatically.
+    """
+    # Optional dependency — skip gracefully if not installed
+    try:
+        from static_pools_core import build_static_pools_panel, StaticPoolsSpec as _Spec
+    except ImportError:
+        print("   > Skipping Static Pools slides (static_pools_core not available)")
+        return
+
+    if "origination_date" not in df.columns:
+        print("   > Skipping Static Pools slides (origination_date column missing)")
+        return
+
+    # --- Load chart definitions from YAML (same file as dashboard) ---
+    config_candidates = [
+        Path(__file__).resolve().parent.parent / "config" / "asset" / "static_pools_config_erm.yaml",
+        Path.cwd() / "config" / "asset" / "static_pools_config_erm.yaml",
+        Path("static_pools_config_erm.yaml"),
+    ]
+    chart_defs: list = []
+    for p in config_candidates:
+        if p.exists():
+            try:
+                with open(p, "r", encoding="utf-8") as fh:
+                    cfg = _yaml.safe_load(fh) or {}
+                chart_defs = cfg.get("static_pools", {}).get("charts", [])
+                if chart_defs:
+                    break
+            except Exception:
+                pass
+
+    if not chart_defs:
+        # Fallback mirrors dashboard fallback
+        chart_defs = [
+            {"title": "Origination Quality: LTV by Cohort", "metric": "current_ltv", "agg": "mean"},
+            {"title": "Pricing Discipline: Yield by Cohort", "metric": "interest_rate", "agg": "mean"},
+            {"title": "Prepayment Speed (CPR)", "metric": "prepayment_amount", "agg": "sum"},
+        ]
+
+    # --- Prepare data (mirrors Tab 3 data prep exactly) ---
+    df_sp = df.copy()
+
+    id_col = next(
+        (c for c in ["loan_id", "account_id", "unique_identifier", "id"] if c in df_sp.columns),
+        None,
+    )
+    if id_col is None:
+        df_sp["account_id"] = [f"ACC_{i:06d}" for i in range(len(df_sp))]
+        id_col = "account_id"
+
+    asof_col = next(
+        (c for c in ["data_cut_off_date", "as_of_date", "reporting_date", "cut_off_date"] if c in df_sp.columns),
+        None,
+    )
+    if asof_col is None:
+        df_sp["as_of_date"] = pd.Timestamp.today().normalize()
+        asof_col = "as_of_date"
+    else:
+        df_sp[asof_col] = pd.to_datetime(df_sp[asof_col], errors="coerce")
+        df_sp[asof_col] = df_sp[asof_col].fillna(pd.Timestamp.today().normalize())
+
+    status_col = next(
+        (c for c in ["account_status", "loan_status", "performance_status", "status"] if c in df_sp.columns),
+        None,
+    )
+    if status_col is None:
+        df_sp["account_status"] = "Unknown"
+        status_col = "account_status"
+
+    df_sp["origination_date"] = pd.to_datetime(df_sp["origination_date"], errors="coerce")
+
+    # LTV normalisation
+    if "current_ltv" not in df_sp.columns:
+        ltv_src = next((c for c in ["current_loan_to_value"] if c in df_sp.columns), None)
+        if ltv_src:
+            df_sp["current_ltv"] = pd.to_numeric(df_sp[ltv_src], errors="coerce")
+            if df_sp["current_ltv"].median(skipna=True) > 1:
+                df_sp["current_ltv"] = df_sp["current_ltv"] / 100
+        else:
+            df_sp["current_ltv"] = np.nan
+
+    # Interest rate normalisation
+    if "interest_rate" not in df_sp.columns:
+        rate_src = next((c for c in ["current_interest_rate"] if c in df_sp.columns), None)
+        if rate_src:
+            df_sp["interest_rate"] = pd.to_numeric(df_sp[rate_src], errors="coerce")
+            if df_sp["interest_rate"].median(skipna=True) > 1:
+                df_sp["interest_rate"] = df_sp["interest_rate"] / 100
+        else:
+            df_sp["interest_rate"] = np.nan
+
+    for opt_col in ["interest_accrued", "prepayment_amount"]:
+        if opt_col not in df_sp.columns:
+            df_sp[opt_col] = 0.0
+
+    if "original_loan_to_value" in df_sp.columns:
+        _ltv = pd.to_numeric(df_sp["original_loan_to_value"], errors="coerce")
+        if _ltv.median() > 1:
+            _ltv = _ltv / 100
+        df_sp["risk_bucket"] = pd.cut(
+            _ltv,
+            bins=[0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, float("inf")],
+            labels=["<50%", "50-60%", "60-70%", "70-80%", "80-90%", "90-100%", ">100%"],
+            include_lowest=True,
+        ).astype(str).fillna("Unknown")
+    else:
+        df_sp["risk_bucket"] = "ALL"
+
+    sp_spec = _Spec(
+        account_id=id_col,
+        as_of_date=asof_col,
+        origination_date="origination_date",
+        geo_region="geographic_region_classification",
+        product_type="erm_product_type",
+        risk_bucket="risk_bucket",
+        account_status=status_col,
+        principal_outstanding="total_balance",
+        interest_accrued="interest_accrued",
+        prepayment_amount="prepayment_amount",
+    )
+
+    try:
+        panel = build_static_pools_panel(df_sp, spec=sp_spec)
+    except Exception as e:
+        print(f"   > Skipping Static Pools slides (panel build failed: {e})")
+        return
+
+    if panel is None or panel.empty:
+        print("   > Skipping Static Pools slides (empty panel)")
+        return
+
+    unique_dates = sorted(panel[sp_spec.as_of_date].dropna().unique())
+    if not unique_dates:
+        print("   > Skipping Static Pools slides (no dates in panel)")
+        return
+
+    panel_current = panel[panel[sp_spec.as_of_date] == unique_dates[-1]].copy()
+
+    chart_dir = Path("_pptx_charts")
+    chart_dir.mkdir(exist_ok=True)
+
+    for chart_def in chart_defs:
+        title = chart_def.get("title", "Static Pool Chart")
+        metric = chart_def.get("metric", "")
+        agg = chart_def.get("agg", "sum")
+
+        if not metric or metric not in panel_current.columns:
+            print(f"   > Skipping Static Pool chart '{title}' (metric '{metric}' not in panel)")
+            continue
+
+        safe_name = metric.replace("/", "_").replace(" ", "_")
+        out_path = chart_dir / f"static_pool_{safe_name}_{agg}.png"
+
+        if save_static_pool_cohort_chart(panel_current, sp_spec, metric, agg, title, str(out_path)):
+            add_chart_slide(prs, title, str(out_path), logo_path, "Segmented by origination vintage cohort")
+            print(f"   ✓ Static Pool: {title}")
+        else:
+            print(f"   ✗ Static Pool: {title} FAILED")
+
+
+# ============================
+# RISK LIMIT UTILIZATION CHART
+# ============================
+
+def save_breach_utilization_chart(results: list, out_path: str, max_items: int = 20) -> bool:
+    """Generate a horizontal bar chart of limit utilization, coloured by status.
+
+    Provides a static equivalent of the per-breach gauge charts shown in the
+    dashboard's 'Breach Details' drill-down section.  Limits are sorted
+    descending by utilization so the most stressed limits appear at the top.
+    """
+    if not results:
+        return False
+
+    items = sorted(results, key=lambda r: -float(getattr(r, "utilization_pct", 0) or 0))[:max_items]
+
+    labels = [
+        f"{getattr(r, 'category', '')} — {str(getattr(r, 'description', ''))[:50]}"
+        for r in items
+    ]
+    utils = [min(float(getattr(r, "utilization_pct", 0) or 0), 150) for r in items]
+
+    status_colors = {
+        "red": "#DC3545",
+        "amber": "#FFC107",
+        "green": "#28A745",
+        "unknown": "#B0B0B0",
+    }
+    bar_colors = [status_colors.get(str(getattr(r, "status", "unknown")), "#B0B0B0") for r in items]
+
+    n = len(items)
+    fig_h = max(5.0, n * 0.45 + 1.5)
+    fig, ax = plt.subplots(figsize=(14, fig_h))
+
+    bars = ax.barh(range(n), utils, color=bar_colors, alpha=0.88, edgecolor="white", linewidth=0.5)
+
+    # 100% limit line
+    ax.axvline(100, color="#DC3545", linestyle="--", linewidth=1.5, alpha=0.7, label="Limit (100%)")
+
+    # Value labels inside/beside bars
+    for i, (bar, val) in enumerate(zip(bars, utils)):
+        label_x = val + 1.5 if val < 130 else val - 3
+        ax.text(
+            label_x, i, f"{val:.0f}%",
+            va="center", ha="left" if val < 130 else "right",
+            fontsize=8.5, color=TEXT_DARK, fontweight="bold",
+        )
+
+    ax.set_yticks(range(n))
+    ax.set_yticklabels(labels, fontsize=9)
+    ax.set_xlabel("Utilization (%)", fontweight="bold", fontsize=12, labelpad=10)
+    ax.set_title(
+        "Risk Limit Utilization — All Monitored Limits",
+        pad=20, fontweight="bold", color=TEXT_DARK, fontsize=16, loc="center",
+    )
+    ax.set_xlim(0, max(max(utils) * 1.12, 120))
+    ax.invert_yaxis()
+
+    # Legend patches
+    legend_handles = [
+        mpatches.Patch(color="#DC3545", label="Breach"),
+        mpatches.Patch(color="#FFC107", label="Warning"),
+        mpatches.Patch(color="#28A745", label="Compliant"),
+    ]
+    ax.legend(
+        handles=legend_handles, loc="lower right",
+        fontsize=9, frameon=True, framealpha=0.9,
+    )
+
+    ax.grid(True, linestyle="--", alpha=0.25, linewidth=0.8, axis="x")
+    ax.set_axisbelow(True)
+
+    plt.tight_layout(pad=1.5)
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=300, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    return True
+
+
 def add_risk_monitoring_slide(prs, df, logo_path=None):
     """
     Add risk monitoring summary slide with KPIs and breach table.
@@ -2317,6 +2657,25 @@ def add_risk_monitoring_slide(prs, df, logo_path=None):
 
 
         add_footer(slide, REPORT_FOOTER)
+        print("   > Risk Monitoring summary slide added")
+
+        # --- Second slide: limit utilization bar chart ---
+        # Provides a static equivalent of the per-breach gauge charts shown in
+        # the dashboard's Breach Details drill-down (Tab 4 Risk Monitoring).
+        try:
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            util_path = chart_dir / f"risk_utilization_{ts}.png"
+            if save_breach_utilization_chart(results, str(util_path)):
+                add_chart_slide(
+                    prs,
+                    "Risk Limit Utilization — All Monitored Limits",
+                    str(util_path),
+                    logo_path,
+                    "Sorted by utilization.  Red = breach  \u2022  Amber = warning  \u2022  Green = compliant.",
+                )
+                print("   > Risk Utilization chart slide added")
+        except Exception as e:
+            print(f"   > WARNING: Could not add utilization chart slide: {e}")
 
     except Exception as e:
         print(f"   Warning: Could not create risk monitoring slide: {e}")
@@ -2478,7 +2837,7 @@ def generate_pptx(
         print("   Install with: pip install squarify\n")
     
     # Load data
-    print("[1/7] Loading portfolio data...")
+    print("[1/10] Loading portfolio data...")
     df = load_data(input_path)
     
     # Create presentation
@@ -2510,7 +2869,7 @@ def generate_pptx(
         print(f"   🖼 Logo exists: {os.path.exists(logo_path)}")
 
     # Cover slide
-    print("[2/9] Creating cover slide...")
+    print("[2/10] Creating cover slide...")
     add_cover_slide(
         prs,
         logo_path,
@@ -2518,14 +2877,14 @@ def generate_pptx(
     )
     
     # KPI dashboard
-    print("[3/9] Creating KPI dashboard...")
+    print("[3/10] Creating KPI dashboard...")
     add_kpi_slide(prs, df, logo_path)
     
     # Generate charts
     chart_dir = Path("_pptx_charts")
     chart_dir.mkdir(exist_ok=True)
     
-    print("\n[4/9] Generating charts...")
+    print("\n[4/10] Generating charts...")
     print(f"   Data: {len(df):,} loans, {len(df.columns)} columns")
 
     charts = []
@@ -2613,26 +2972,30 @@ def generate_pptx(
     # Add chart slides
     n_expected = 10
     print(f"\n   Summary: Generated {len(charts)} of {n_expected} charts")
-    print(f"[5/9] Adding chart slides...")
+    print(f"[5/10] Adding chart slides...")
     for title, path, caption in charts:
         add_chart_slide(prs, title, path, logo_path, caption)
     
     # Risk monitoring slide (if available)
-    print("\n[6/9] Checking risk monitoring...")
+    print("\n[6/10] Checking risk monitoring...")
     add_risk_monitoring_slide(prs, df, logo_path)
 
+    # Static Pools cohort slides — mirrors Tab 3 of the dashboard
+    print("\n[7/10] Adding Static Pools cohort slides...")
+    add_static_pools_slides(prs, df, logo_path)
+
     # Scenario analysis slides (if available)
-    print("\n[7/9] Adding scenario analysis slides...")
+    print("\n[8/10] Adding scenario analysis slides...")
     add_scenario_analysis_slide(prs, df, logo_path)
 
-    print("\n[8/9] Adding end slide...")
+    print("\n[9/10] Adding end slide...")
     add_end_slide(prs, logo_path)
     
     # Save presentation
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
-    print(f"\n[9/9] Saving presentation to: {output_path}")
+    print(f"\n[10/10] Saving presentation to: {output_path}")
     # Add page numbers (exclude cover + end)
     add_page_numbers(prs)
     
