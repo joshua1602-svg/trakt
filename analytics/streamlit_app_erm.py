@@ -484,8 +484,9 @@ div[data-testid="stDecoration"], header {{
 }}
 
 /* Hide sidebar collapse button icon token text (e.g., keyboard_double_arrow_left) */
-div[data-testid="stSidebarCollapseButton"] {{
-    display: none !important;
+div[data-testid="stSidebarCollapseButton"] button {{
+    color: {PRIMARY_COLOR} !important;
+    font-size: 18px !important;
 }}
 
 .block-container {{
