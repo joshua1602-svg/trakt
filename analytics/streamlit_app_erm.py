@@ -511,7 +511,7 @@ header[data-testid="stHeader"] {{
     box-shadow: none !important;
 }}
 
-/* Sidebar collapse/expand toggle — styled to be clearly visible */
+/* Sidebar collapse button (inside the open sidebar) */
 div[data-testid="stSidebarCollapseButton"] {{
     background-color: {PRIMARY_COLOR} !important;
     border-radius: 0 6px 6px 0 !important;
@@ -523,6 +523,27 @@ div[data-testid="stSidebarCollapseButton"] > button {{
     background: transparent !important;
 }}
 div[data-testid="stSidebarCollapseButton"] > button > svg {{
+    fill: white !important;
+    stroke: white !important;
+}}
+/* Sidebar expand button (shown in main area when sidebar is collapsed).
+   Fixed position with high z-index so it sits above the custom header banner. */
+section[data-testid="stSidebarCollapsedControl"] {{
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    z-index: 999999 !important;
+    position: fixed !important;
+    top: 0.4rem !important;
+    left: 0 !important;
+}}
+section[data-testid="stSidebarCollapsedControl"] button {{
+    background-color: {PRIMARY_COLOR} !important;
+    color: white !important;
+    border-radius: 0 6px 6px 0 !important;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.25) !important;
+}}
+section[data-testid="stSidebarCollapsedControl"] button svg {{
     fill: white !important;
     stroke: white !important;
 }}
@@ -2485,6 +2506,75 @@ with tab3:
             {"title": "Weighted Avg LTV", "metric": "current_ltv", "agg": "mean", "format": ".1%"},
             {"title": "Weighted Avg Interest Rate", "metric": "interest_rate", "agg": "mean", "format": ".2%"}
         ]
+
+    # ── BALANCE EVOLUTION (calendar-time view) ─────────────────────────
+    st.markdown("---")
+    st.subheader("📊 Portfolio Balance Through Time")
+
+    has_multi_dates = panel[sp_spec.as_of_date].nunique() > 1
+    if not has_multi_dates:
+        st.info("Only one reporting date in the data — balance evolution requires multiple snapshots.")
+    else:
+        _bal_col1, _bal_col2 = st.columns([3, 1])
+        with _bal_col1:
+            split_by_year = st.checkbox(
+                "Split by Year of Origination",
+                value=True,
+                key="balance_split_year",
+                help="Show 2025, 2026 etc. as separate bands to see how each cohort contributes to total balance over time."
+            )
+        with _bal_col2:
+            bal_chart_type = st.radio("Chart type", ["Area", "Bar"], horizontal=True, key="bal_chart_type")
+
+        _has_orig_year = "origination_year" in panel.columns and split_by_year
+        if _has_orig_year:
+            _bal_grp = panel.groupby(
+                [sp_spec.as_of_date, "origination_year"], dropna=False, as_index=False
+            )[sp_spec.principal_outstanding].sum()
+            _bal_grp["origination_year"] = _bal_grp["origination_year"].astype(str)
+            _color_bal = "origination_year"
+        else:
+            _bal_grp = panel.groupby(
+                [sp_spec.as_of_date], dropna=False, as_index=False
+            )[sp_spec.principal_outstanding].sum()
+            _color_bal = None
+
+        _bal_grp = _bal_grp.sort_values(sp_spec.as_of_date)
+
+        # Scale to millions for readability
+        _bal_grp["_bal_m"] = _bal_grp[sp_spec.principal_outstanding] / 1_000_000
+
+        _bal_labels = {
+            "_bal_m": "Balance (£m)",
+            sp_spec.as_of_date: "Date",
+            "origination_year": "Origination Year",
+        }
+
+        if bal_chart_type == "Area":
+            fig_bal = px.area(
+                _bal_grp,
+                x=sp_spec.as_of_date,
+                y="_bal_m",
+                color=_color_bal,
+                labels=_bal_labels,
+            )
+        else:
+            fig_bal = px.bar(
+                _bal_grp,
+                x=sp_spec.as_of_date,
+                y="_bal_m",
+                color=_color_bal,
+                barmode="stack",
+                labels=_bal_labels,
+            )
+
+        fig_bal = apply_chart_theme(fig_bal, "Portfolio Balance Through Time")
+        fig_bal.update_yaxes(title_text="Balance (£m)", tickformat=",.0f")
+        fig_bal.update_xaxes(title_text="Date")
+        st.plotly_chart(fig_bal, use_container_width=True)
+
+    st.markdown("---")
+    st.subheader("📈 Vintage Analysis (by Origination Month)")
 
     # ── SNAPSHOT SELECTOR ──────────────────────────────────────────────
     unique_dates = sorted(panel[sp_spec.as_of_date].dropna().unique())
