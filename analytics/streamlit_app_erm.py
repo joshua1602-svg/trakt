@@ -499,9 +499,20 @@ div[data-testid="stDecoration"], header {{
     display: none !important;
 }}
 
-/* Hide sidebar collapse button icon token text (e.g., keyboard_double_arrow_left) */
+/* Sidebar collapse/expand toggle — styled to be clearly visible */
 div[data-testid="stSidebarCollapseButton"] {{
-    display: none !important;
+    background-color: {PRIMARY_COLOR} !important;
+    border-radius: 0 6px 6px 0 !important;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.18) !important;
+    opacity: 1 !important;
+}}
+div[data-testid="stSidebarCollapseButton"] > button {{
+    color: white !important;
+    background: transparent !important;
+}}
+div[data-testid="stSidebarCollapseButton"] > button > svg {{
+    fill: white !important;
+    stroke: white !important;
 }}
 
 .block-container {{
