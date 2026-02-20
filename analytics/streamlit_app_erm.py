@@ -113,12 +113,18 @@ from mi_prep import (
 
 # Risk monitoring
 try:
-    from risk_monitor import RiskMonitor, LimitCheck
-    from config.client.risk_limits_config import ALL_LIMITS, LIMIT_CATEGORIES
+    from analytics.risk_monitor import RiskMonitor
+    from config.client.risk_limits_config import ALL_LIMITS, LIMIT_CATEGORIES, LimitCheck
     RISK_MONITORING_AVAILABLE = True
-except ImportError as e:
-    RISK_MONITORING_AVAILABLE = False
-    print(f"Warning: Risk monitoring modules not found. Risk tab will be disabled. ImportError: {e}")
+except ImportError:
+    try:
+        # Fallback for direct execution contexts where analytics is already on sys.path
+        from risk_monitor import RiskMonitor
+        from config.client.risk_limits_config import ALL_LIMITS, LIMIT_CATEGORIES, LimitCheck
+        RISK_MONITORING_AVAILABLE = True
+    except ImportError as e:
+        RISK_MONITORING_AVAILABLE = False
+        print(f"Warning: Risk monitoring modules not found. Risk tab will be disabled. ImportError: {e}")
 
 # Upload page integration
 try:
@@ -873,68 +879,63 @@ except Exception as e:
     st.stop()
 
 # ============================
-# 2. SIDEBAR FILTERS (Moved to Main Area)
+# 2. SIDEBAR FILTERS
 # ============================
+with st.sidebar:
+    st.markdown("---")
+    st.markdown("### 🔎 Filters")
 
-# --- A. VINTAGE FILTER ---
-st.markdown("### 📅 Vintage year")
-if "origination_year" in df.columns:
-    # Use df (original) to get the full list of options, not df_view
-    vintages = sorted(df["origination_year"].dropna().unique())
-    if vintages:
-        sel_vintages = st.multiselect(
-            "Select vintages (leave empty = all)",
-            options=vintages,
-            default=[],
-            key="filter_vintages",
-        )
+    # --- A. VINTAGE FILTER ---
+    if "origination_year" in df.columns:
+        vintages = sorted(df["origination_year"].dropna().unique())
+        if vintages:
+            sel_vintages = st.multiselect(
+                "📅 Vintage Year",
+                options=vintages,
+                default=[],
+                key="filter_vintages",
+            )
 
-        if sel_vintages:
-            df_view = df_view[df_view["origination_year"].isin(sel_vintages)]
+            if sel_vintages:
+                df_view = df_view[df_view["origination_year"].isin(sel_vintages)]
 
-# --- B. PRODUCT FILTER ---
-st.markdown("### 🏠 Product type")
-if "erm_product_type" in df.columns:
-    # Use df (original) for options
-    products = sorted(df["erm_product_type"].dropna().unique())
-    if products:
-        sel_products = st.multiselect(
-            "Select products",
-            options=products,
-            default=[],
-            key="filter_products",
-        )
-        if sel_products:
-            # FIX: Filter df_view, do NOT overwrite df
-            df_view = df_view[df_view["erm_product_type"].isin(sel_products)]
+    # --- B. PRODUCT FILTER ---
+    if "erm_product_type" in df.columns:
+        products = sorted(df["erm_product_type"].dropna().unique())
+        if products:
+            sel_products = st.multiselect(
+                "🏠 Product Type",
+                options=products,
+                default=[],
+                key="filter_products",
+            )
+            if sel_products:
+                df_view = df_view[df_view["erm_product_type"].isin(sel_products)]
 
-# --- C. GEOGRAPHIC FILTER ---
-st.markdown("### 🗺️ Geography")
-if "geographic_region" in df.columns:
-    # Use df (original) for options
-    regions = sorted(df["geographic_region"].dropna().unique())
-    if regions:
-        sel_regions = st.multiselect(
-            "Select regions (leave empty = all)",
-            options=regions,
-            default=[], 
-            key="filter_regions",
-        )
-        if sel_regions:
-            df_view = df_view[df_view["geographic_region"].isin(sel_regions)]
+    # --- C. GEOGRAPHIC FILTER ---
+    if "geographic_region" in df.columns:
+        regions = sorted(df["geographic_region"].dropna().unique())
+        if regions:
+            sel_regions = st.multiselect(
+                "🗺️ Geography",
+                options=regions,
+                default=[],
+                key="filter_regions",
+            )
+            if sel_regions:
+                df_view = df_view[df_view["geographic_region"].isin(sel_regions)]
 
-# --- D. FILTER IMPACT & RESET ---
-# FIX: Compare df_view (Filtered) vs df (Original)
-if len(df_view) < len(df):
-    reduction = (1 - len(df_view) / len(df)) * 100
-    st.info(f"📊 **{len(df_view):,} of {len(df):,} loans** ({reduction:.1f}% filtered)")
-    
-    if st.button("🔄 Reset all filters"):
-        for k in ["filter_vintages", "filter_products", "filter_regions"]:
-            st.session_state.pop(k, None)
-        st.rerun()
-else:
-    st.info(f"📊 **{len(df):,} loans** (no filters)")
+    # --- D. FILTER IMPACT & RESET ---
+    if len(df_view) < len(df):
+        reduction = (1 - len(df_view) / len(df)) * 100
+        st.info(f"📊 **{len(df_view):,} of {len(df):,} loans** ({reduction:.1f}% filtered)")
+
+        if st.button("🔄 Reset all filters", use_container_width=True):
+            for k in ["filter_vintages", "filter_products", "filter_regions"]:
+                st.session_state.pop(k, None)
+            st.rerun()
+    else:
+        st.info(f"📊 **{len(df):,} loans** (no filters)")
 
 df = df_view
 
@@ -1600,6 +1601,7 @@ with tab1:
         )
 
         fig = apply_chart_theme(fig, "Outstanding Balance vs Current Property Value")
+        fig.update_layout(legend_title_text="")
         fig.update_traces(marker=dict(opacity=0.7, line=dict(width=0.5, color="white")))
         fig.update_xaxes(title_text="Current Property Value (£)")
         fig.update_yaxes(title_text="Outstanding Balance (£)")
@@ -1639,6 +1641,7 @@ with tab1:
         )
         
         fig = apply_chart_theme(fig, "LTV vs Youngest Borrower Age")
+        fig.update_layout(legend_title_text="")
         fig.update_traces(marker=dict(opacity=0.7, line=dict(width=0.5, color="white")))
         fig.update_xaxes(title_text="Youngest Borrower Age (years)")
         fig.update_yaxes(title_text="Current LTV (%)")
@@ -2841,7 +2844,7 @@ st.markdown("---")
 st.markdown(
     f"""
     <div style='text-align: center; color: {TEXT_LIGHT}; font-size: 11px; padding: 0.5rem 0 1rem 0;'>
-        <b>Confidential</b> • Powered by Digifin •
+        <b>Confidential</b> • Powered by trakt •
         Data as of {datetime.now():%B %d, %Y}
     </div>
     """,
