@@ -2,35 +2,32 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# System dependencies for lxml and openpyxl
+# Streamlit and Azure diagnostics are easier with unbuffered output.
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# System dependencies for lxml/openpyxl and container health probing.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends libxml2-dev libxslt1-dev gcc curl && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Install Python dependencies.
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt azure-identity openpyxl
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy application code required by the dashboard.
 COPY analytics/ ./analytics/
 COPY config/ ./config/
 
-# Streamlit configuration: disable CORS/XSRF for Azure App Service proxy
-RUN mkdir -p /root/.streamlit
-RUN printf '[server]\nheadless = true\nenableCORS = false\nenableXsrfProtection = false\n\n[browser]\ngatherUsageStats = false\n' > /root/.streamlit/config.toml
+# Streamlit settings for reverse-proxy/container environments.
+RUN mkdir -p /root/.streamlit && \
+    printf '[server]\nheadless = true\nenableCORS = false\nenableXsrfProtection = false\n\n[browser]\ngatherUsageStats = false\n' > /root/.streamlit/config.toml
 
 WORKDIR /app/analytics
 
-# Healthcheck uses the port Azure provides (PORT). Default to 8080 if not set.
+# Health check against Streamlit's internal health endpoint.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=5 \
-    CMD sh -c 'curl -f http://127.0.0.1:${PORT:-8080}/_stcore/health || exit 1'
+    CMD sh -c 'curl -fsS http://127.0.0.1:${PORT:-8080}/_stcore/health || exit 1'
 
-<<<<<<< claude/streamlit-dashboard-review-DNJV7
-HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=5 \
-    CMD curl -f http://localhost:8501/_stcore/health || exit 1
-
-ENTRYPOINT ["streamlit", "run", "streamlit_app_erm.py", "--server.address=0.0.0.0"]
-=======
-# Run Streamlit on the port Azure expects
+# Bind to the port Azure injects (defaults to 8080 for local runs).
 ENTRYPOINT ["sh", "-c", "streamlit run streamlit_app_erm.py --server.address=0.0.0.0 --server.port=${PORT:-8080} --server.headless=true"]
->>>>>>> main
