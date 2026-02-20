@@ -77,7 +77,9 @@ jobs:
           az webapp config appsettings set \
             --name "${APP_NAME}" \
             --resource-group "${RESOURCE_GROUP}" \
-            --settings TRAKT_DASHBOARD_BUILD_SHA="${GITHUB_SHA}" >/dev/null
+            --settings \
+              WEBSITES_PORT=8501 \
+              TRAKT_DASHBOARD_BUILD_SHA="${GITHUB_SHA}" >/dev/null
 
       - name: Restart Web App
         shell: bash
