@@ -22,7 +22,7 @@ RUN printf '[server]\nheadless = true\nenableCORS = false\nenableXsrfProtection 
 WORKDIR /app/analytics
 
 # Healthcheck uses the port Azure provides (PORT). Default to 8080 if not set.
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=6 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=5 \
     CMD sh -c 'curl -f http://127.0.0.1:${PORT:-8080}/_stcore/health || exit 1'
 
 <<<<<<< claude/streamlit-dashboard-review-DNJV7
