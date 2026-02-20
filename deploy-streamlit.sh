@@ -1,68 +1,71 @@
 #!/usr/bin/env bash
-#
-# Deploy the Streamlit dashboard to Azure App Service (Linux container).
-#
-# Prerequisites:
-#   - Azure CLI (az) logged in
-#   - Docker installed
-#   - An Azure Container Registry (ACR) or use the existing traktstorage account
-#
-# Usage:
-#   chmod +x deploy-streamlit.sh
-#   ./deploy-streamlit.sh
-#
-# Environment variables (override defaults):
-#   RESOURCE_GROUP    - Azure resource group        (default: trakt)
-#   ACR_NAME          - Container registry name     (default: traktregistry)
-#   APP_NAME          - App Service name            (default: trakt-dashboard)
-#   APP_SERVICE_PLAN  - App Service plan name       (default: trakt-dashboard-plan)
-#   STORAGE_ACCOUNT   - Blob storage account name   (default: traktstorage)
-#   LOCATION          - Azure region                (default: uksouth)
+# Deterministic Streamlit deployment to Azure App Service (Linux container).
+# - Builds immutable SHA-tagged image in ACR
+# - Updates web app to that exact tag
+# - Restarts app and verifies configured image
 
 set -euo pipefail
 
 RESOURCE_GROUP="${RESOURCE_GROUP:-trakt}"
-ACR_NAME="${ACR_NAME:-traktregistry}"
+ACR_NAME="${ACR_NAME:-}"
 APP_NAME="${APP_NAME:-trakt-dashboard}"
 APP_SERVICE_PLAN="${APP_SERVICE_PLAN:-trakt-dashboard-plan}"
 LOCATION="${LOCATION:-uksouth}"
-IMAGE_NAME="trakt-streamlit"
-IMAGE_VERSION="${IMAGE_VERSION:-$(git rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M%S)}"
+STORAGE_ACCOUNT="${STORAGE_ACCOUNT:-traktstorage}"
+IMAGE_NAME="${IMAGE_NAME:-trakt-streamlit}"
+if [[ -z "${ACR_NAME}" ]]; then
+  # Auto-discover ACR from current Web App container config when available.
+  CURRENT_LINUX_FX="$(az webapp config show --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" --query linuxFxVersion -o tsv 2>/dev/null || true)"
+  REGISTRY_HOST="$(echo "$CURRENT_LINUX_FX" | sed -E 's#^DOCKER\|([^/]+)/.*#\1#')"
+  if [[ -n "$REGISTRY_HOST" && "$REGISTRY_HOST" != "$CURRENT_LINUX_FX" ]]; then
+    ACR_NAME="${REGISTRY_HOST%%.*}"
+  else
+    echo "ERROR: ACR_NAME not provided and auto-discovery failed from linuxFxVersion='$CURRENT_LINUX_FX'."
+    echo "Set ACR_NAME=<your-registry-name> and rerun."
+    exit 1
+  fi
+fi
+
+# Use full SHA for immutability; fallback to timestamp outside git worktrees.
+IMAGE_VERSION="${IMAGE_VERSION:-$(git rev-parse HEAD 2>/dev/null || date +%Y%m%d%H%M%S)}"
 IMAGE_TAG="${ACR_NAME}.azurecr.io/${IMAGE_NAME}:${IMAGE_VERSION}"
 
-echo "=== Step 1: Create Azure Container Registry (if needed) ==="
-if az acr show --name "$ACR_NAME" --resource-group "$RESOURCE_GROUP" &>/dev/null; then
-  echo "ACR '$ACR_NAME' already exists"
-else
-  echo "Creating ACR '$ACR_NAME'..."
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || { echo "ERROR: missing required command '$1'"; exit 1; }
+}
+
+require_cmd az
+
+# Make CLI failures visible in logs.
+az config set core.only_show_errors=true >/dev/null
+
+echo "==> Deploy target"
+echo "Resource Group : ${RESOURCE_GROUP}"
+echo "ACR            : ${ACR_NAME}"
+echo "Web App        : ${APP_NAME}"
+echo "Image          : ${IMAGE_TAG}"
+
+# 1) Ensure ACR exists.
+if ! az acr show --name "$ACR_NAME" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
+  echo "==> Creating ACR '${ACR_NAME}'"
   az acr create \
     --resource-group "$RESOURCE_GROUP" \
     --name "$ACR_NAME" \
-    --sku Basic \
-    --admin-enabled true
+    --sku Basic
 fi
+ACR_LOGIN_SERVER="$(az acr show --name "$ACR_NAME" --resource-group "$RESOURCE_GROUP" --query loginServer -o tsv)"
 
-# Verify ACR is accessible before proceeding
-echo "Verifying ACR '$ACR_NAME'..."
-az acr show --name "$ACR_NAME" --resource-group "$RESOURCE_GROUP" --query loginServer -o tsv || {
-  echo "ERROR: ACR '$ACR_NAME' not found in resource group '$RESOURCE_GROUP'."
-  echo "Either create it manually or set ACR_NAME=<your-registry> before running this script."
-  echo "  az acr create --resource-group $RESOURCE_GROUP --name <unique-name> --sku Basic --admin-enabled true"
-  exit 1
-}
-
-echo "=== Step 2: Build and push Docker image ==="
-echo "Building image tag: ${IMAGE_NAME}:${IMAGE_VERSION}"
+# 2) Build immutable image tag only (no :latest).
+echo "==> Building/pushing ${IMAGE_NAME}:${IMAGE_VERSION}"
 az acr build \
   --registry "$ACR_NAME" \
   --image "${IMAGE_NAME}:${IMAGE_VERSION}" \
-  --image "${IMAGE_NAME}:latest" \
   --file Dockerfile.streamlit \
   .
-echo "=== Step 3: Create App Service Plan (Linux, B1 tier) ==="
-if az appservice plan show --name "$APP_SERVICE_PLAN" --resource-group "$RESOURCE_GROUP" &>/dev/null; then
-  echo "App Service Plan '$APP_SERVICE_PLAN' already exists"
-else
+
+# 3) Ensure App Service plan exists.
+if ! az appservice plan show --name "$APP_SERVICE_PLAN" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
+  echo "==> Creating App Service plan '${APP_SERVICE_PLAN}'"
   az appservice plan create \
     --name "$APP_SERVICE_PLAN" \
     --resource-group "$RESOURCE_GROUP" \
@@ -71,80 +74,76 @@ else
     --sku B1
 fi
 
-echo "=== Step 4: Create Web App from container image ==="
-if az webapp show --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" &>/dev/null; then
-  echo "Web app '$APP_NAME' already exists — updating container image"
-  az webapp config container set \
-    --name "$APP_NAME" \
-    --resource-group "$RESOURCE_GROUP" \
-    --container-image-name "$IMAGE_TAG" \
-    --container-registry-url "https://${ACR_NAME}.azurecr.io"
-else
+# 4) Ensure Web App exists (create if needed).
+if ! az webapp show --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
+  echo "==> Creating Web App '${APP_NAME}'"
   az webapp create \
     --name "$APP_NAME" \
     --resource-group "$RESOURCE_GROUP" \
     --plan "$APP_SERVICE_PLAN" \
-    --container-image-name "$IMAGE_TAG" \
-    --container-registry-url "https://${ACR_NAME}.azurecr.io"
+    --container-image-name "$IMAGE_TAG"
 fi
 
-STORAGE_ACCOUNT="${STORAGE_ACCOUNT:-traktstorage}"
-
-echo "=== Step 5: Configure app settings ==="
-# Fetch the storage connection string
-echo "Looking up connection string for storage account '$STORAGE_ACCOUNT'..."
-STORAGE_CONN=$(az storage account show-connection-string \
+# 5) App settings (idempotent).
+echo "==> Configuring app settings"
+STORAGE_CONN="$(az storage account show-connection-string \
   --resource-group "$RESOURCE_GROUP" \
   --name "$STORAGE_ACCOUNT" \
-  --query connectionString -o tsv) || {
-  echo "ERROR: Storage account '$STORAGE_ACCOUNT' not found in resource group '$RESOURCE_GROUP'."
-  echo "Set STORAGE_ACCOUNT=<your-account> or create it:"
-  echo "  az storage account create --name <name> --resource-group $RESOURCE_GROUP --location $LOCATION --sku Standard_LRS"
-  exit 1
-}
+  --query connectionString -o tsv)"
 
 az webapp config appsettings set \
   --name "$APP_NAME" \
   --resource-group "$RESOURCE_GROUP" \
   --settings \
     DATA_STORAGE_CONNECTION="$STORAGE_CONN" \
-    WEBSITES_PORT=8501
+    WEBSITES_PORT=8501 \
+    TRAKT_DASHBOARD_BUILD_SHA="$IMAGE_VERSION" >/dev/null
 
-echo "=== Step 6: Enable system-assigned Managed Identity ==="
-az webapp identity assign \
+# 6) Managed identity + AcrPull role assignment (production-safe pull auth).
+echo "==> Configuring managed identity pull from ACR"
+PRINCIPAL_ID="$(az webapp identity assign --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" --query principalId -o tsv)"
+ACR_ID="$(az acr show --name "$ACR_NAME" --resource-group "$RESOURCE_GROUP" --query id -o tsv)"
+
+if ! az role assignment list \
+  --assignee-object-id "$PRINCIPAL_ID" \
+  --scope "$ACR_ID" \
+  --role "AcrPull" \
+  --query "[0].id" -o tsv | grep -q .; then
+  az role assignment create \
+    --assignee-object-id "$PRINCIPAL_ID" \
+    --assignee-principal-type ServicePrincipal \
+    --scope "$ACR_ID" \
+    --role "AcrPull" >/dev/null
+fi
+
+# Tell App Service to use MI creds for ACR pulls.
+az webapp config set \
   --name "$APP_NAME" \
-  --resource-group "$RESOURCE_GROUP"
+  --resource-group "$RESOURCE_GROUP" \
+  --generic-configurations '{"acrUseManagedIdentityCreds": true}' >/dev/null
 
-echo "=== Step 7: Configure ACR pull credentials ==="
-ACR_USER=$(az acr credential show --name "$ACR_NAME" --query username -o tsv)
-ACR_PASS=$(az acr credential show --name "$ACR_NAME" --query "passwords[0].value" -o tsv)
-
+# 7) Update container image to immutable SHA tag.
+echo "==> Updating Web App container image"
 az webapp config container set \
   --name "$APP_NAME" \
   --resource-group "$RESOURCE_GROUP" \
   --container-image-name "$IMAGE_TAG" \
-  --container-registry-url "https://${ACR_NAME}.azurecr.io" \
-  --container-registry-user "$ACR_USER" \
-  --container-registry-password "$ACR_PASS"
+  --container-registry-url "https://${ACR_LOGIN_SERVER}" >/dev/null
 
-echo "=== Step 8: Restart App Service to pull fresh image ==="
-az webapp restart \
-  --name "$APP_NAME" \
-  --resource-group "$RESOURCE_GROUP"
-echo "App Service restarted — image ${IMAGE_TAG} will be pulled."
+# 8) Force refresh and verify configured image.
+echo "==> Restarting Web App"
+az webapp restart --name "$APP_NAME" --resource-group "$RESOURCE_GROUP"
+
+EXPECTED_LINUX_FX="DOCKER|${IMAGE_TAG}"
+ACTUAL_LINUX_FX="$(az webapp config show --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" --query linuxFxVersion -o tsv)"
+if [[ "$ACTUAL_LINUX_FX" != "$EXPECTED_LINUX_FX" ]]; then
+  echo "ERROR: Web App linuxFxVersion mismatch"
+  echo "Expected: ${EXPECTED_LINUX_FX}"
+  echo "Actual  : ${ACTUAL_LINUX_FX}"
+  exit 1
+fi
 
 echo ""
-echo "Deployed image: ${IMAGE_TAG}"
-echo "Image version: ${IMAGE_VERSION}"
-echo "=== Deployment complete ==="
-echo "Dashboard URL: https://${APP_NAME}.azurewebsites.net"
-echo ""
-echo "--- Client access options ---"
-echo "1. Azure AD Authentication (recommended):"
-echo "   az webapp auth update --name $APP_NAME --resource-group $RESOURCE_GROUP \\"
-echo "     --enabled true --action LoginWithAzureActiveDirectory"
-echo ""
-echo "2. Restrict by IP (quick):"
-echo "   az webapp config access-restriction add --name $APP_NAME \\"
-echo "     --resource-group $RESOURCE_GROUP --priority 100 \\"
-echo "     --rule-name 'ClientOffice' --action Allow --ip-address <CLIENT_IP>/32"
+echo "Deployment successful"
+echo "Image deployed: ${IMAGE_TAG}"
+echo "Dashboard URL : https://${APP_NAME}.azurewebsites.net"
