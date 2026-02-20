@@ -3,7 +3,7 @@
 
 client:
   client_id: ere_funding_uk
-  display_name: "ERE Funding"   # Used for UI/Reports only
+  display_name: "ERE Funding - Equity Release Mortgages"   # Used for UI/Reports only
   environment: production
 
 portfolio:
@@ -39,6 +39,6 @@ enrichment:
 # --- MI & DISPLAY ---
 mi:
   branding:
-    app_title: "ERE Funding — Portfolio MI"
+    app_title: "Portfolio MI Dashboard"
     theme:
       primary_color: "#0B1F3B"

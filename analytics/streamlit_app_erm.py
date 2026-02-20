@@ -494,9 +494,21 @@ body, p, span, h1, h2, h3, h4, h5, h6, .stMarkdown, .stText, .stMetric {{
     color: {TEXT_DARK};
 }}
 
-/* Hide Streamlit Elements */
-div[data-testid="stDecoration"], header {{
+/* Hide Streamlit decorative chrome only — do NOT hide header entirely
+   because it hosts the sidebar expand button when the sidebar is closed */
+div[data-testid="stDecoration"] {{
     display: none !important;
+}}
+/* Hide the top toolbar icons (deploy/share/menu) but keep the header shell */
+div[data-testid="stToolbar"],
+div[data-testid="stStatusWidget"],
+div[data-testid="stMainMenu"] {{
+    display: none !important;
+}}
+/* Make the header bar itself transparent so it doesn't add visual clutter */
+header[data-testid="stHeader"] {{
+    background: transparent !important;
+    box-shadow: none !important;
 }}
 
 /* Sidebar collapse/expand toggle — styled to be clearly visible */
@@ -641,7 +653,7 @@ div[data-testid="stSidebarCollapseButton"] > button > svg {{
 /* ===== BUTTONS ===== */
 .stButton > button {{
     background-color: {PRIMARY_COLOR};
-    color: white;
+    color: white !important;
     border: none;
     border-radius: 8px;
     padding: 0.5rem 2rem;
@@ -649,6 +661,18 @@ div[data-testid="stSidebarCollapseButton"] > button > svg {{
 }}
 .stButton > button:hover {{
     background-color: {SECONDARY_COLOR};
+    color: white !important;
+}}
+/* Primary-type buttons (type="primary") must always have white text */
+button[data-testid="stBaseButton-primary"],
+button[kind="primary"] {{
+    color: white !important;
+    background-color: {PRIMARY_COLOR} !important;
+}}
+button[data-testid="stBaseButton-primary"]:hover,
+button[kind="primary"]:hover {{
+    background-color: {SECONDARY_COLOR} !important;
+    color: white !important;
 }}
 
 /* ===== SIDEBAR ===== */
@@ -889,106 +913,107 @@ with st.sidebar:
 
 df = df_view
 
-st.markdown("---")
-st.subheader("📥 Export")
+with st.sidebar:
+    st.markdown("---")
+    st.markdown("### 📥 Export")
 
-# CSV Export (filtered view)
-csv_bytes = df_view.to_csv(index=False).encode("utf-8")
-st.download_button(
-    "📄 Download CSV",
-    data=csv_bytes,
-    file_name=f"erm_portfolio_{datetime.now():%Y%m%d}.csv",
-    mime="text/csv",
-    use_container_width=True,
-)
-
-# Excel Export (filtered view)
-try:
-    from io import BytesIO
-    buffer = BytesIO()
-    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-        df_view.to_excel(writer, index=False, sheet_name="Portfolio")
-    excel_bytes = buffer.getvalue()
-
+    # CSV Export (filtered view)
+    csv_bytes = df_view.to_csv(index=False).encode("utf-8")
     st.download_button(
-        "📊 Download Excel",
-        data=excel_bytes,
-        file_name=f"erm_portfolio_{datetime.now():%Y%m%d}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "📄 Download CSV",
+        data=csv_bytes,
+        file_name=f"erm_portfolio_{datetime.now():%Y%m%d}.csv",
+        mime="text/csv",
         use_container_width=True,
     )
-except ImportError:
-    pass
 
-st.markdown("---")
-st.subheader("📊 Generate Report")
+    # Excel Export (filtered view)
+    try:
+        from io import BytesIO
+        buffer = BytesIO()
+        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            df_view.to_excel(writer, index=False, sheet_name="Portfolio")
+        excel_bytes = buffer.getvalue()
 
-# PPT Generation Button
-if st.button("🎯 Generate PowerPoint", type="primary", use_container_width=True):
-    with st.spinner("Generating presentation..."):
-        try:
-            # Save current filtered dataset to temp file
-            temp_dir = Path("temp_pptx_data")
-            temp_dir.mkdir(exist_ok=True)
-            
-            temp_csv = temp_dir / f"temp_data_{datetime.now():%Y%m%d_%H%M%S}.csv"
-            df.to_csv(temp_csv, index=False)
-            
-            # Output filename
-            output_pptx = Path("reports") / f"erm_report_{datetime.now():%Y%m%d_%H%M%S}.pptx"
-            output_pptx.parent.mkdir(exist_ok=True)
-            
-            # Run PPTX generator
-            pptx_script = str(Path(__file__).resolve().parent / "generate_pptx_client.py")
-            result = subprocess.run(
-                [
-                    sys.executable,
-                    pptx_script,
-                    "--input", str(temp_csv),
-                    "--output", str(output_pptx)
-                ],
-                capture_output=True,
-                text=True,
-                timeout=300  # 5 minute timeout
-            )
-            
-            if result.returncode == 0:
-                # Success - provide download link
-                st.success("✅ Presentation generated successfully!")
-                
-                # Read the generated file
-                with open(output_pptx, "rb") as f:
-                    pptx_bytes = f.read()
-                
-                # Download button
-                st.download_button(
-                    label="📥 Download PowerPoint",
-                    data=pptx_bytes,
-                    file_name=output_pptx.name,
-                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                    use_container_width=True
+        st.download_button(
+            "📊 Download Excel",
+            data=excel_bytes,
+            file_name=f"erm_portfolio_{datetime.now():%Y%m%d}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
+    except ImportError:
+        pass
+
+    st.markdown("---")
+    st.markdown("### 📊 Generate Report")
+
+    # PPT Generation Button
+    if st.button("🎯 Generate PowerPoint", type="primary", use_container_width=True):
+        with st.spinner("Generating presentation..."):
+            try:
+                # Save current filtered dataset to temp file
+                temp_dir = Path("temp_pptx_data")
+                temp_dir.mkdir(exist_ok=True)
+
+                temp_csv = temp_dir / f"temp_data_{datetime.now():%Y%m%d_%H%M%S}.csv"
+                df.to_csv(temp_csv, index=False)
+
+                # Output filename
+                output_pptx = Path("reports") / f"erm_report_{datetime.now():%Y%m%d_%H%M%S}.pptx"
+                output_pptx.parent.mkdir(exist_ok=True)
+
+                # Run PPTX generator
+                pptx_script = str(Path(__file__).resolve().parent / "generate_pptx_client.py")
+                result = subprocess.run(
+                    [
+                        sys.executable,
+                        pptx_script,
+                        "--input", str(temp_csv),
+                        "--output", str(output_pptx)
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=300  # 5 minute timeout
                 )
-                
-                # Show stats
-                st.info(f"""
-                **Report Details:**
-                - 📊 {len(df):,} loans included
-                - 📄 File: {output_pptx.name}
-                - 📁 Saved to: reports/
-                """)
-                
-                # Clean up temp file
-                temp_csv.unlink(missing_ok=True)
-                
-            else:
-                st.error(f"❌ Generation failed: {result.stderr}")
-                
-        except subprocess.TimeoutExpired:
-            st.error("❌ Generation timed out (took >5 minutes)")
-        except Exception as e:
-            st.error(f"❌ Error generating presentation: {e}")
 
-st.caption("💡 Tip: Apply filters before generating to customize your report")
+                if result.returncode == 0:
+                    # Success - provide download link
+                    st.success("✅ Presentation generated successfully!")
+
+                    # Read the generated file
+                    with open(output_pptx, "rb") as f:
+                        pptx_bytes = f.read()
+
+                    # Download button
+                    st.download_button(
+                        label="📥 Download PowerPoint",
+                        data=pptx_bytes,
+                        file_name=output_pptx.name,
+                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                        use_container_width=True
+                    )
+
+                    # Show stats
+                    st.info(f"""
+                    **Report Details:**
+                    - 📊 {len(df):,} loans included
+                    - 📄 File: {output_pptx.name}
+                    - 📁 Saved to: reports/
+                    """)
+
+                    # Clean up temp file
+                    temp_csv.unlink(missing_ok=True)
+
+                else:
+                    st.error(f"❌ Generation failed: {result.stderr}")
+
+            except subprocess.TimeoutExpired:
+                st.error("❌ Generation timed out (took >5 minutes)")
+            except Exception as e:
+                st.error(f"❌ Error generating presentation: {e}")
+
+    st.caption("💡 Tip: Apply filters before generating to customise your report")
 
 
 # ============================
@@ -1300,7 +1325,7 @@ with tab1:
                 fmt = "%b-%y"   # e.g., Jan-25
             elif granularity == "Quarter":
                 tmp["cohort"] = tmp["origination_date"].dt.to_period("Q")
-                fmt = "Q%q %Y"  # e.g., Q1 2025
+                fmt = None  # handled specially below — Period.strftime(%q) not supported on Timestamps
             else:
                 tmp["cohort"] = tmp["origination_date"].dt.to_period("Y")
                 fmt = "%Y"      # e.g., 2025
@@ -1321,10 +1346,15 @@ with tab1:
                 .sort_values("cohort")
             )
 
-            # Create Display Labels (Convert Period -> Timestamp -> String)
-            # This ensures Plotly treats the axis as Categories, preventing timeline squashing
-            v_bal["label"] = v_bal["cohort"].dt.to_timestamp().dt.strftime(fmt)
-            v_cnt["label"] = v_cnt["cohort"].dt.to_timestamp().dt.strftime(fmt)
+            # Create Display Labels (Convert Period -> String)
+            # For quarterly, format directly from the Period to avoid %q being passed to
+            # Timestamp.strftime() where it is not a recognised directive (renders as "Q%q2025").
+            if granularity == "Quarter":
+                v_bal["label"] = v_bal["cohort"].apply(lambda p: f"{p.quarter}Q{p.year}")
+                v_cnt["label"] = v_cnt["cohort"].apply(lambda p: f"{p.quarter}Q{p.year}")
+            else:
+                v_bal["label"] = v_bal["cohort"].dt.to_timestamp().dt.strftime(fmt)
+                v_cnt["label"] = v_cnt["cohort"].dt.to_timestamp().dt.strftime(fmt)
 
             # 3. Plotting
             col1, col2 = st.columns(2)
@@ -2762,29 +2792,6 @@ if RISK_MONITORING_AVAILABLE:
                         
                         st.plotly_chart(fig_gauge, use_container_width=True)
         
-        # ===== CONFIGURATION INFO =====
-        st.markdown("### ℹ️ About Risk Limits")
-        st.markdown("""
-            **Risk Limit Framework**
-            
-            This dashboard monitors portfolio compliance against pre-defined risk limits across six categories:
-            
-            1. **Single Exposure**: Maximum ticket size and concentration in individual loans
-            2. **Concentration**: Geographic, broker, and top-N exposure limits
-            3. **Credit Quality**: LTV thresholds and delinquency limits
-            4. **Borrower Characteristics**: Age constraints and portfolio averages
-            5. **Portfolio Metrics**: Weighted average LTV, rate, and portfolio size
-            6. **ERM-Specific**: NNEG exposure and product mix requirements
-            
-            **Status Indicators:**
-            - 🟢 **Green**: Within limits (compliant)
-            - 🟡 **Amber**: Approaching limit (warning zone, typically >80% utilization)
-            - 🔴 **Red**: Limit breached (immediate action required)
-            
-            **Updating Limits:**
-            Limits are configured in `risk_limits_config.py`. Contact your portfolio manager 
-            to adjust thresholds based on mandate requirements.
-            """)
 
 
 # ============================
