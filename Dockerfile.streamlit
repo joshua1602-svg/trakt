@@ -18,6 +18,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code required by the dashboard.
 COPY analytics/ ./analytics/
 COPY config/ ./config/
+COPY docker/start-streamlit.sh /usr/local/bin/start-streamlit.sh
 
 # Streamlit settings for reverse-proxy/container environments.
 RUN mkdir -p /root/.streamlit && \
@@ -30,4 +31,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=5 \
     CMD sh -c 'curl -fsS http://127.0.0.1:${PORT:-8080}/_stcore/health || exit 1'
 
 # Bind to the port Azure injects (defaults to 8080 for local runs).
-ENTRYPOINT ["sh", "-c", "streamlit run streamlit_app_erm.py --server.address=0.0.0.0 --server.port=${PORT:-8080} --server.headless=true"]
+ENTRYPOINT ["/usr/local/bin/start-streamlit.sh"]
