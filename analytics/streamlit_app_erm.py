@@ -77,20 +77,36 @@ CLIENT_CONFIG = load_client_config()
 if CLIENT_CONFIG.get("client", {}).get("display_name"):
     CLIENT_DISPLAY_NAME = CLIENT_CONFIG["client"]["display_name"]
 
+# App title (shown in browser tab and header)
+APP_TITLE = (
+    CLIENT_CONFIG.get("mi", {}).get("branding", {}).get("app_title")
+    or f"{CLIENT_DISPLAY_NAME} — Portfolio Analytics"
+)
+
+# Reporting date: prefer static_reporting_date from YAML over today's date
+_static_date = CLIENT_CONFIG.get("portfolio", {}).get("static_reporting_date", "")
+if _static_date:
+    try:
+        REPORTING_DATE = datetime.strptime(_static_date, "%Y-%m-%d").strftime("%d %B %Y")
+    except ValueError:
+        REPORTING_DATE = datetime.now().strftime("%d %B %Y")
+else:
+    REPORTING_DATE = datetime.now().strftime("%d %B %Y")
+
 theme_conf = CLIENT_CONFIG.get("mi", {}).get("branding", {}).get("theme", {})
 if theme_conf:
     PRIMARY_COLOR = theme_conf.get("primary_color", PRIMARY_COLOR)
     SECONDARY_COLOR = theme_conf.get("secondary_color", SECONDARY_COLOR)
     # Note: We keep BORDER_COLOR neutral, but allow Accent to change for highlights
     ACCENT_COLOR = theme_conf.get("accent_color", ACCENT_COLOR)
-    
+
     # Rebuild Chart Palette dynamically
     CHART_COLORS = [
-        PRIMARY_COLOR, 
-        SECONDARY_COLOR, 
-        ACCENT_COLOR, 
-        "#7EBAB5", # Teal-ish fallback
-        "#A3CCC9"  # Light teal fallback
+        PRIMARY_COLOR,
+        SECONDARY_COLOR,
+        ACCENT_COLOR,
+        "#7EBAB5",  # Teal-ish fallback
+        "#A3CCC9",  # Light teal fallback
     ]
       
 try:
@@ -448,7 +464,7 @@ if LATEST_TYPED_PATH_FILE.exists():
 # ============================
 
 st.set_page_config(
-    page_title="ERM Analytics Dashboard",
+    page_title=APP_TITLE,
     page_icon="🏠",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -483,10 +499,20 @@ div[data-testid="stDecoration"], header {{
     display: none !important;
 }}
 
-/* Hide sidebar collapse button icon token text (e.g., keyboard_double_arrow_left) */
-div[data-testid="stSidebarCollapseButton"] button {{
-    color: {PRIMARY_COLOR} !important;
-    font-size: 18px !important;
+/* Sidebar collapse/expand toggle — styled to be clearly visible */
+div[data-testid="stSidebarCollapseButton"] {{
+    background-color: {PRIMARY_COLOR} !important;
+    border-radius: 0 6px 6px 0 !important;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.18) !important;
+    opacity: 1 !important;
+}}
+div[data-testid="stSidebarCollapseButton"] > button {{
+    color: white !important;
+    background: transparent !important;
+}}
+div[data-testid="stSidebarCollapseButton"] > button > svg {{
+    fill: white !important;
+    stroke: white !important;
 }}
 
 .block-container {{
@@ -550,50 +576,6 @@ div[data-testid="stSidebarCollapseButton"] button {{
 .kpi-label {{ font-size: 12px; color: {TEXT_LIGHT}; font-weight: 600; text-transform: uppercase; margin-bottom: 0.5rem; }}
 .kpi-value {{ font-size: 32px; font-weight: 700; color: {PRIMARY_COLOR}; margin: 0.2rem 0; line-height: 1.2; }}
 .kpi-subtitle {{ font-size: 11px; color: {TEXT_LIGHT}; margin-top: 0.5rem; }}
-
-/* ===== TABS (Readable Text) ===== */
-.stTabs [data-baseweb="tab-list"] {{
-    gap: 8px;
-    background-color: {BACKGROUND_LIGHT};
-    padding: 0.5rem;
-    border-radius: 8px;
-}}
-
-.stTabs [data-baseweb="tab"] {{
-    flex: 1;
-    background-color: white;
-    border: 1px solid {BORDER_COLOR};
-    border-radius: 6px;
-    padding: 0.5rem 1rem;
-    font-weight: 600;
-    color: {TEXT_DARK};
-    text-align: center;
-}}
-
-/* Active Tab Styling */
-.stTabs [aria-selected="true"] {{
-    background-color: {PRIMARY_COLOR} !important;
-    border-color: {PRIMARY_COLOR} !important;
-}}
-
-/* Force Text White in Active Tab */
-.stTabs [data-baseweb="tab"][aria-selected="true"] p, 
-.stTabs [data-baseweb="tab"][aria-selected="true"] span {{
-    color: #FFFFFF !important;
-}}
-
-/* ===== BUTTONS ===== */
-.stButton > button {{
-    background-color: {PRIMARY_COLOR};
-    color: white;
-    border: none;
-    border-radius: 8px;
-    padding: 0.5rem 2rem;
-    font-weight: 600;
-}}
-.stButton > button:hover {{
-    background-color: {SECONDARY_COLOR};
-}}
 
 /* ===== RISK CARDS ===== */
 .risk-status-card {{
@@ -712,13 +694,13 @@ def get_logo_html(path):
 st.markdown(f"""
 <div class="header-container">
     <div class="header-left">
-        <div class="header-title" style="color:#FFFFFF !important; -webkit-text-fill-color:#FFFFFF !important;">Portfolio Analytics Dashboard</div>
+        <div class="header-title" style="color:#FFFFFF !important; -webkit-text-fill-color:#FFFFFF !important;">{APP_TITLE}</div>
         <p>{CLIENT_DISPLAY_NAME}</p>
     </div>
     <div class="header-right">
         <div class="header-date">
             <span class="date-label">Data as of</span>
-            <span class="date-value">{datetime.now().strftime('%d %B %Y')}</span>
+            <span class="date-value">{REPORTING_DATE}</span>
         </div>
         <div class="header-logo-box">
             {get_logo_html(logo_path)}
@@ -746,19 +728,24 @@ elif LAST_RUN_TYPED_PATH:
 
 # --- SIDEBAR CONFIG ---
 with st.sidebar:
-    st.markdown("### ⚙️ Configuration")
+    # In managed (cloud) mode, only Azure Blob Storage is available.
+    # The local file path input is intentionally hidden so clients cannot
+    # navigate the underlying file system.
+    MANAGED_MODE = BLOB_STORAGE_AVAILABLE
 
-    # Data source selector: Local file vs Azure Blob Storage
-    source_options = ["Local file"]
-    if BLOB_STORAGE_AVAILABLE:
-        source_options.append("Azure Blob Storage")
-
-    data_source = st.radio(
-        "Data source",
-        source_options,
-        key="data_source_radio",
-        horizontal=True,
-    )
+    if MANAGED_MODE:
+        # No Configuration section needed — blob is the only source.
+        data_source = "Azure Blob Storage"
+    else:
+        st.markdown("### ⚙️ Configuration")
+        # Developer / local mode: allow both local file and blob
+        source_options = ["Local file", "Azure Blob Storage"] if BLOB_STORAGE_AVAILABLE else ["Local file"]
+        data_source = st.radio(
+            "Data source",
+            source_options,
+            key="data_source_radio",
+            horizontal=True,
+        )
 
     input_path = ""
     selected_blob = ""
@@ -952,10 +939,11 @@ if st.button("🎯 Generate PowerPoint", type="primary", use_container_width=Tru
             output_pptx.parent.mkdir(exist_ok=True)
             
             # Run PPTX generator
+            pptx_script = str(Path(__file__).resolve().parent / "generate_pptx_client.py")
             result = subprocess.run(
                 [
                     sys.executable,
-                    "generate_pptx_erm.py",
+                    pptx_script,
                     "--input", str(temp_csv),
                     "--output", str(output_pptx)
                 ],
@@ -2810,7 +2798,7 @@ st.markdown(
     f"""
     <div style='text-align: center; color: {TEXT_LIGHT}; font-size: 11px; padding: 0.5rem 0 1rem 0;'>
         <b>Confidential</b> • Powered by trakt •
-        Data as of {datetime.now():%B %d, %Y}
+        Data as of {REPORTING_DATE}
         {build_line}
     </div>
     """,
