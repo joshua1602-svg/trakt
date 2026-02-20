@@ -63,6 +63,15 @@ jobs:
             --container-image-name "${IMAGE_TAG}" \
             --container-registry-url "https://${ACR_LOGIN_SERVER}"
 
+      - name: Set build metadata app settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          az webapp config appsettings set \
+            --name "${APP_NAME}" \
+            --resource-group "${RESOURCE_GROUP}" \
+            --settings TRAKT_DASHBOARD_BUILD_SHA="${GITHUB_SHA}" >/dev/null
+
       - name: Restart Web App
         shell: bash
         run: |

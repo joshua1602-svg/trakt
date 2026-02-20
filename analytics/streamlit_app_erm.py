@@ -18,6 +18,7 @@ import subprocess
 import yaml
 import base64
 import io
+import os
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
@@ -51,6 +52,7 @@ BORDER_COLOR = "#E0E0E0"     # NEW: Neutral grey for UI borders (decoupled from 
 CHART_COLORS = [PRIMARY_COLOR, SECONDARY_COLOR, ACCENT_COLOR]
 MAX_ROWS = 100000
 CLIENT_DISPLAY_NAME = "Portfolio Analytics Platform"
+DASHBOARD_BUILD_SHA = os.getenv("TRAKT_DASHBOARD_BUILD_SHA", "").strip()
 
 # Load YAML to override defaults
 def load_client_config():
@@ -2801,11 +2803,14 @@ if RISK_MONITORING_AVAILABLE:
 # ============================
 
 st.markdown("---")
+build_line = f"<br>Build: <code>{DASHBOARD_BUILD_SHA[:12]}</code>" if DASHBOARD_BUILD_SHA else ""
+
 st.markdown(
     f"""
     <div style='text-align: center; color: {TEXT_LIGHT}; font-size: 11px; padding: 0.5rem 0 1rem 0;'>
         <b>Confidential</b> • Powered by trakt •
         Data as of {datetime.now():%B %d, %Y}
+        {build_line}
     </div>
     """,
     unsafe_allow_html=True,

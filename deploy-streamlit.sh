@@ -83,7 +83,8 @@ az webapp config appsettings set \
   --resource-group "$RESOURCE_GROUP" \
   --settings \
     DATA_STORAGE_CONNECTION="$STORAGE_CONN" \
-    WEBSITES_PORT=8501 >/dev/null
+    WEBSITES_PORT=8501 \
+    TRAKT_DASHBOARD_BUILD_SHA="$IMAGE_VERSION" >/dev/null
 
 # 6) Managed identity + AcrPull role assignment (production-safe pull auth).
 echo "==> Configuring managed identity pull from ACR"
