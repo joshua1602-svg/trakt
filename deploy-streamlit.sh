@@ -13,6 +13,7 @@ APP_SERVICE_PLAN="${APP_SERVICE_PLAN:-trakt-dashboard-plan}"
 LOCATION="${LOCATION:-uksouth}"
 STORAGE_ACCOUNT="${STORAGE_ACCOUNT:-traktstorage}"
 IMAGE_NAME="${IMAGE_NAME:-trakt-streamlit}"
+APP_PORT="${APP_PORT:-8080}"
 if [[ -z "${ACR_NAME}" ]]; then
   # Auto-discover ACR from current Web App container config when available.
   CURRENT_LINUX_FX="$(az webapp config show --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" --query linuxFxVersion -o tsv 2>/dev/null || true)"
@@ -44,6 +45,7 @@ echo "Resource Group : ${RESOURCE_GROUP}"
 echo "ACR            : ${ACR_NAME}"
 echo "Web App        : ${APP_NAME}"
 echo "Image          : ${IMAGE_TAG}"
+echo "App Port       : ${APP_PORT}"
 
 # 1) Ensure ACR exists.
 if ! az acr show --name "$ACR_NAME" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
@@ -96,7 +98,8 @@ az webapp config appsettings set \
   --resource-group "$RESOURCE_GROUP" \
   --settings \
     DATA_STORAGE_CONNECTION="$STORAGE_CONN" \
-    WEBSITES_PORT=8501 \
+    WEBSITES_PORT="$APP_PORT" \
+    PORT="$APP_PORT" \
     TRAKT_DASHBOARD_BUILD_SHA="$IMAGE_VERSION" >/dev/null
 
 # 6) Managed identity + AcrPull role assignment (production-safe pull auth).
