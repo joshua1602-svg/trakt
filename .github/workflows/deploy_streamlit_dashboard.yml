@@ -1,0 +1,91 @@
+name: Build and deploy Streamlit dashboard to Azure Web App
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'analytics/**'
+      - 'config/**'
+      - 'Dockerfile.streamlit'
+      - 'requirements.txt'
+      - 'deploy-streamlit.sh'
+      - '.github/workflows/deploy_streamlit_dashboard.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  RESOURCE_GROUP: trakt
+  ACR_NAME: traktregistry
+  APP_NAME: trakt-dashboard
+  IMAGE_NAME: trakt-streamlit
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_B782B4EF4C084DB68754745782B83A82 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_EB5C7CA419CB478A891B392422373A3D }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_E4CB93E6899E4A55B8EA48212ABC8295 }}
+
+      - name: Build and push immutable image to ACR
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE_TAG="${ACR_NAME}.azurecr.io/${IMAGE_NAME}:${GITHUB_SHA}"
+          echo "IMAGE_TAG=${IMAGE_TAG}" >> "$GITHUB_ENV"
+
+          az acr build \
+            --registry "${ACR_NAME}" \
+            --image "${IMAGE_NAME}:${GITHUB_SHA}" \
+            --file Dockerfile.streamlit \
+            .
+
+      - name: Update Web App container to SHA tag
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ACR_LOGIN_SERVER="$(az acr show --name "${ACR_NAME}" --resource-group "${RESOURCE_GROUP}" --query loginServer -o tsv)"
+
+          az webapp config container set \
+            --name "${APP_NAME}" \
+            --resource-group "${RESOURCE_GROUP}" \
+            --container-image-name "${IMAGE_TAG}" \
+            --container-registry-url "https://${ACR_LOGIN_SERVER}"
+
+      - name: Set build metadata app settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          az webapp config appsettings set \
+            --name "${APP_NAME}" \
+            --resource-group "${RESOURCE_GROUP}" \
+            --settings TRAKT_DASHBOARD_BUILD_SHA="${GITHUB_SHA}" >/dev/null
+
+      - name: Restart Web App
+        shell: bash
+        run: |
+          set -euo pipefail
+          az webapp restart --name "${APP_NAME}" --resource-group "${RESOURCE_GROUP}"
+
+      - name: Verify deployed image
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED="DOCKER|${IMAGE_TAG}"
+          ACTUAL="$(az webapp config show --name "${APP_NAME}" --resource-group "${RESOURCE_GROUP}" --query linuxFxVersion -o tsv)"
+
+          echo "Expected linuxFxVersion: ${EXPECTED}"
+          echo "Actual linuxFxVersion  : ${ACTUAL}"
+
+          test "${ACTUAL}" = "${EXPECTED}"
