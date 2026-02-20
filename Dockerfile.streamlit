@@ -7,17 +7,18 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends libxml2-dev libxslt1-dev gcc curl && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Install Python dependencies.
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt azure-identity openpyxl
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy application code required by the dashboard.
 COPY analytics/ ./analytics/
 COPY config/ ./config/
+COPY docker/start-streamlit.sh /usr/local/bin/start-streamlit.sh
 
-# Streamlit configuration: disable CORS/XSRF for Azure App Service proxy
-RUN mkdir -p /root/.streamlit
-RUN printf '[server]\nheadless = true\nenableCORS = false\nenableXsrfProtection = false\n\n[browser]\ngatherUsageStats = false\n' > /root/.streamlit/config.toml
+# Streamlit settings for reverse-proxy/container environments.
+RUN mkdir -p /root/.streamlit && \
+    printf '[server]\nheadless = true\nenableCORS = false\nenableXsrfProtection = false\n\n[browser]\ngatherUsageStats = false\n' > /root/.streamlit/config.toml
 
 WORKDIR /app/analytics
 

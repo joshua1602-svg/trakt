@@ -13,6 +13,12 @@ APP_SERVICE_PLAN="${APP_SERVICE_PLAN:-trakt-dashboard-plan}"
 LOCATION="${LOCATION:-uksouth}"
 STORAGE_ACCOUNT="${STORAGE_ACCOUNT:-traktstorage}"
 IMAGE_NAME="${IMAGE_NAME:-trakt-streamlit}"
+APP_PORT="${APP_PORT:-8080}"
+
+if [[ ! "$APP_PORT" =~ ^[0-9]+$ ]] || (( APP_PORT < 1 || APP_PORT > 65535 )); then
+  echo "ERROR: APP_PORT must be an integer between 1 and 65535 (got '$APP_PORT')."
+  exit 1
+fi
 if [[ -z "${ACR_NAME}" ]]; then
   # Auto-discover ACR from current Web App container config when available.
   CURRENT_LINUX_FX="$(az webapp config show --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" --query linuxFxVersion -o tsv 2>/dev/null || true)"
@@ -44,6 +50,7 @@ echo "Resource Group : ${RESOURCE_GROUP}"
 echo "ACR            : ${ACR_NAME}"
 echo "Web App        : ${APP_NAME}"
 echo "Image          : ${IMAGE_TAG}"
+echo "App Port       : ${APP_PORT}"
 
 # 1) Ensure ACR exists.
 if ! az acr show --name "$ACR_NAME" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
@@ -96,7 +103,8 @@ az webapp config appsettings set \
   --resource-group "$RESOURCE_GROUP" \
   --settings \
     DATA_STORAGE_CONNECTION="$STORAGE_CONN" \
-    WEBSITES_PORT=8501 \
+    WEBSITES_PORT="$APP_PORT" \
+    PORT="$APP_PORT" \
     TRAKT_DASHBOARD_BUILD_SHA="$IMAGE_VERSION" >/dev/null
 
 # 6) Managed identity + AcrPull role assignment (production-safe pull auth).
@@ -146,4 +154,23 @@ fi
 echo ""
 echo "Deployment successful"
 echo "Image deployed: ${IMAGE_TAG}"
+
+# 9) Smoke test public health endpoint with retries.
+echo "==> Waiting for dashboard health endpoint"
+HEALTH_URL="https://${APP_NAME}.azurewebsites.net/_stcore/health"
+for attempt in {1..20}; do
+  if curl -fsS "$HEALTH_URL" >/dev/null; then
+    echo "Health check passed: ${HEALTH_URL}"
+    break
+  fi
+
+  if [[ "$attempt" -eq 20 ]]; then
+    echo "ERROR: Dashboard health check failed after ${attempt} attempts: ${HEALTH_URL}"
+    echo "Tip: inspect logs with: az webapp log tail --name ${APP_NAME} --resource-group ${RESOURCE_GROUP}"
+    exit 1
+  fi
+
+  sleep 5
+done
+
 echo "Dashboard URL : https://${APP_NAME}.azurewebsites.net"
