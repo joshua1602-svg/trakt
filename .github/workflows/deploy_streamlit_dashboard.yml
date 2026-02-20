@@ -1,4 +1,4 @@
-name: Build and deploy Streamlit dashboard to Azure Web App
+name: Deploy Streamlit App to Azure Web App
 
 on:
   push:
@@ -18,8 +18,9 @@ permissions:
 
 env:
   RESOURCE_GROUP: trakt
-  ACR_NAME: traktregistry
   APP_NAME: trakt-dashboard
+  ACR_NAME: traktregistry1602
+  ACR_LOGIN_SERVER: traktregistry1602.azurecr.io
   IMAGE_NAME: trakt-streamlit
 
 jobs:
@@ -37,11 +38,17 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_EB5C7CA419CB478A891B392422373A3D }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_E4CB93E6899E4A55B8EA48212ABC8295 }}
 
+      - name: Validate ACR exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          az acr show --name "${ACR_NAME}" --resource-group "${RESOURCE_GROUP}" --output table
+
       - name: Build and push immutable image to ACR
         shell: bash
         run: |
           set -euo pipefail
-          IMAGE_TAG="${ACR_NAME}.azurecr.io/${IMAGE_NAME}:${GITHUB_SHA}"
+          IMAGE_TAG="${ACR_LOGIN_SERVER}/${IMAGE_NAME}:${GITHUB_SHA}"
           echo "IMAGE_TAG=${IMAGE_TAG}" >> "$GITHUB_ENV"
 
           az acr build \
@@ -54,9 +61,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
-          ACR_LOGIN_SERVER="$(az acr show --name "${ACR_NAME}" --resource-group "${RESOURCE_GROUP}" --query loginServer -o tsv)"
-
           az webapp config container set \
             --name "${APP_NAME}" \
             --resource-group "${RESOURCE_GROUP}" \

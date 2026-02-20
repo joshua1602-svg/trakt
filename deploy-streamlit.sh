@@ -7,12 +7,25 @@
 set -euo pipefail
 
 RESOURCE_GROUP="${RESOURCE_GROUP:-trakt}"
-ACR_NAME="${ACR_NAME:-traktregistry}"
+ACR_NAME="${ACR_NAME:-}"
 APP_NAME="${APP_NAME:-trakt-dashboard}"
 APP_SERVICE_PLAN="${APP_SERVICE_PLAN:-trakt-dashboard-plan}"
 LOCATION="${LOCATION:-uksouth}"
 STORAGE_ACCOUNT="${STORAGE_ACCOUNT:-traktstorage}"
 IMAGE_NAME="${IMAGE_NAME:-trakt-streamlit}"
+if [[ -z "${ACR_NAME}" ]]; then
+  # Auto-discover ACR from current Web App container config when available.
+  CURRENT_LINUX_FX="$(az webapp config show --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" --query linuxFxVersion -o tsv 2>/dev/null || true)"
+  REGISTRY_HOST="$(echo "$CURRENT_LINUX_FX" | sed -E 's#^DOCKER\|([^/]+)/.*#\1#')"
+  if [[ -n "$REGISTRY_HOST" && "$REGISTRY_HOST" != "$CURRENT_LINUX_FX" ]]; then
+    ACR_NAME="${REGISTRY_HOST%%.*}"
+  else
+    echo "ERROR: ACR_NAME not provided and auto-discovery failed from linuxFxVersion='$CURRENT_LINUX_FX'."
+    echo "Set ACR_NAME=<your-registry-name> and rerun."
+    exit 1
+  fi
+fi
+
 # Use full SHA for immutability; fallback to timestamp outside git worktrees.
 IMAGE_VERSION="${IMAGE_VERSION:-$(git rev-parse HEAD 2>/dev/null || date +%Y%m%d%H%M%S)}"
 IMAGE_TAG="${ACR_NAME}.azurecr.io/${IMAGE_NAME}:${IMAGE_VERSION}"
