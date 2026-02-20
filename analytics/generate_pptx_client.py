@@ -61,6 +61,46 @@ from config import (
     MAX_PPTX_ROWS,
 )
 
+# ============================
+# CLIENT CONFIG (YAML-driven)
+# ============================
+
+import yaml as _yaml
+
+def _load_client_config() -> dict:
+    """Load client YAML config, searching common locations."""
+    candidates = [
+        Path(__file__).resolve().parent.parent / "config" / "client" / "config_client_ERM_UK.yaml",
+        Path.cwd() / "config" / "client" / "config_client_ERM_UK.yaml",
+        Path("config_client_ERM_UK.yaml"),
+    ]
+    for p in candidates:
+        if p.exists():
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    return _yaml.safe_load(f) or {}
+            except Exception:
+                return {}
+    return {}
+
+_CLIENT_CFG = _load_client_config()
+
+# Resolve display names from YAML, fall back to safe defaults
+ENTITY_NAME: str = (
+    _CLIENT_CFG.get("defaults", {}).get("originator_name")
+    or _CLIENT_CFG.get("client", {}).get("display_name")
+    or "Portfolio Analytics"
+)
+CLIENT_DISPLAY_NAME: str = (
+    _CLIENT_CFG.get("client", {}).get("display_name")
+    or ENTITY_NAME
+)
+REPORT_FOOTER: str = f"Confidential \u2022 {ENTITY_NAME}"
+COVER_TITLE: str = f"{CLIENT_DISPLAY_NAME} \u2014 Portfolio Overview"
+STATIC_REPORTING_DATE: str = (
+    _CLIENT_CFG.get("portfolio", {}).get("static_reporting_date") or ""
+)
+
 # Risk monitoring (optional)
 try:
     from risk_monitor import RiskMonitor, LimitCheck
@@ -513,20 +553,6 @@ def load_data(path: str) -> pd.DataFrame:
     else:
         df["youngest_borrower_age"] = np.nan
 
-    # DIAGNOSTIC: Report age data quality
-    if "youngest_borrower_age" in df.columns:
-        non_null_ages = df["youngest_borrower_age"].notna().sum()
-        print(f"   >>> AGE DATA: {non_null_ages}/{len(df)} loans have valid age ({non_null_ages/len(df)*100:.1f}%)")
-        if non_null_ages > 0:
-            print(f"   >>> AGE RANGE: {df['youngest_borrower_age'].min():.0f} - {df['youngest_borrower_age'].max():.0f}, mean: {df['youngest_borrower_age'].mean():.1f}")
-            # Check correlation with balance
-            age_with_balance = df[df["youngest_borrower_age"].notna() & (df["total_balance"] > 0)]
-            print(f"   >>> BALANCE+AGE: {len(age_with_balance)} loans have both valid age and positive balance")
-        else:
-            print(f"   >>> WARNING: No valid age data found! Age charts will fail.")
-    else:
-        print(f"   >>> ERROR: youngest_borrower_age column not created!")
-
     # Origination year for stratifications
     if "origination_date" in df.columns:
         df["origination_year"] = df["origination_date"].dt.year
@@ -677,6 +703,93 @@ def save_geographic_region_dual_chart(df: pd.DataFrame, out_path: str, top_n: in
         out_path,
         f"Geographic Distribution (Top {top_n})",
     )
+
+
+def save_product_type_dual_chart(df: pd.DataFrame, out_path: str) -> bool:
+    """Generate dual product type distribution chart (balance + count).
+
+    Mirrors the 'Product Type Distribution' section in the Stratifications tab.
+    """
+    col = next(
+        (c for c in ["erm_product_type", "product_type"] if c in df.columns),
+        None,
+    )
+    if col is None or "total_balance" not in df.columns:
+        return False
+
+    return save_dual_bar_chart(df, col, out_path, "Product Type Distribution")
+
+
+def save_geographic_count_treemap(df: pd.DataFrame, out_path: str) -> bool:
+    """Generate geographic distribution treemap coloured by loan count.
+
+    Mirrors the right-hand 'Loan Count by Region' treemap in the dashboard.
+    Falls back to a dual bar chart if squarify is not installed.
+    """
+    if "geographic_region" not in df.columns:
+        return False
+
+    geo_data = (
+        df.groupby("geographic_region")
+        .size()
+        .reset_index(name="loan_count")
+        .sort_values("loan_count", ascending=False)
+        .head(12)
+    )
+    geo_data = geo_data[geo_data["loan_count"] > 0]
+
+    if geo_data.empty:
+        return False
+
+    if not HAS_SQUARIFY:
+        # Fallback: dual bar chart showing count
+        top_regions = geo_data["geographic_region"].tolist()
+        df_filtered = df[df["geographic_region"].isin(top_regions)].copy()
+        return save_dual_bar_chart(
+            df_filtered,
+            "geographic_region",
+            out_path,
+            "Geographic Distribution: Loans by Region (Top 10)",
+        )
+
+    fig, ax = plt.subplots(figsize=(14, 8))
+
+    colors = [SECONDARY_COLOR, PRIMARY_COLOR, "#7EBAB5", "#5AA9A3",
+              "#A3CCC9", "#FFB84D", "#FF9933", "#919DD1"] * 2
+
+    labels = [
+        f"{region}\n{count:,} loans"
+        for region, count in zip(
+            geo_data["geographic_region"].values,
+            geo_data["loan_count"].values,
+        )
+    ]
+    squarify.plot(
+        sizes=geo_data["loan_count"].values,
+        label=labels,
+        color=colors[: len(geo_data)],
+        alpha=0.85,
+        ax=ax,
+        text_kwargs={"fontsize": 9, "weight": "bold", "color": "white"},
+        edgecolor="white",
+        linewidth=2,
+    )
+    ax.axis("off")
+    ax.set_title(
+        "Geographic Concentration: Loan Count by Region",
+        pad=20,
+        fontweight="bold",
+        color=TEXT_DARK,
+        fontsize=20,
+        loc="center",
+    )
+
+    plt.tight_layout(pad=1.5)
+    fig.savefig(out_path, dpi=300, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    return True
+
+
 def save_ltv_distribution(df: pd.DataFrame, out_path: str) -> bool:
     """Generate LTV distribution bar chart."""
     if "current_loan_to_value" not in df.columns or "total_balance" not in df.columns:
@@ -747,21 +860,16 @@ def save_ltv_distribution(df: pd.DataFrame, out_path: str) -> bool:
 def save_age_distribution(df: pd.DataFrame, out_path: str) -> bool:
     """Generate borrower age distribution bar chart."""
     if "youngest_borrower_age" not in df.columns or "total_balance" not in df.columns:
-        print(f"   >>> DEBUG: Missing columns for age chart")
         return False
 
     # Filter: Valid ages (not NaN, > 0, >= 18)
     df_work = df[
-        df["youngest_borrower_age"].notna() & 
-        (df["youngest_borrower_age"] > 0) & 
+        df["youngest_borrower_age"].notna() &
+        (df["youngest_borrower_age"] > 0) &
         (df["youngest_borrower_age"] >= 18)
     ].copy()
-    
+
     if df_work.empty:
-        print(f"   >>> WARNING: No valid age data (need age >= 18)")
-        print(f"   >>> Total rows: {len(df)}, Rows with notna age: {df['youngest_borrower_age'].notna().sum()}")
-        if df['youngest_borrower_age'].notna().any():
-            print(f"   >>> Age values present: min={df['youngest_borrower_age'].min()}, max={df['youngest_borrower_age'].max()}")
         return False
     
     df_work["age_bucket"] = create_bucket_column(df_work, "youngest_borrower_age", "age")
@@ -773,7 +881,6 @@ def save_age_distribution(df: pd.DataFrame, out_path: str) -> bool:
     grouped["loan_count"] = df_work.groupby("age_bucket").size().values
     
     if grouped.empty or grouped["total_balance"].sum() == 0:
-        print(f"   >>> WARNING: Age distribution has no balance data")
         return False
 
     fig, ax = plt.subplots(figsize=(14, 8))
@@ -1035,140 +1142,228 @@ def save_broker_channel_distribution(df: pd.DataFrame, out_path: str) -> bool:
     return True
 
 def save_bubble_balance_vs_value(df: pd.DataFrame, out_path: str) -> bool:
-    """Generate bubble chart: Current Outstanding Balance vs. Current Property Value."""
+    """Generate bubble chart: Current Outstanding Balance vs. Current Property Value.
+
+    Mirrors the dashboard 'Balance vs Current Property Value' scatter chart.
+    Points are coloured by geographic region (categorical) when available,
+    matching the dashboard's colour dimension.
+    """
     required_cols = ["current_principal_balance", "current_valuation_amount", "current_loan_to_value"]
     if not all(col in df.columns for col in required_cols):
         return False
 
-    df_plot = df[required_cols].dropna()
+    work_cols = required_cols + (["geographic_region"] if "geographic_region" in df.columns else [])
+    df_plot = df[work_cols].dropna(subset=required_cols)
     if df_plot.empty or len(df_plot) < 10:
         return False
-    
+
     # Sample if too many loans
-    if len(df_plot) > 500:
-        df_plot = df_plot.sample(500, random_state=42)
+    if len(df_plot) > 1000:
+        df_plot = df_plot.sample(1000, random_state=42)
 
     fig, ax = plt.subplots(figsize=(14, 8))
-    
-    # Use brand colors - create custom colormap from light to dark accent
-    from matplotlib.colors import LinearSegmentedColormap
-    brand_cmap = LinearSegmentedColormap.from_list(
-        'brand_blue', 
-        ['#E8F4F8', ACCENT_COLOR, PRIMARY_COLOR],  # Light blue -> Accent -> Dark blue
-        N=256
+
+    has_region = "geographic_region" in df_plot.columns and df_plot["geographic_region"].notna().any()
+
+    if has_region:
+        # Categorical coloring by geographic_region — matches dashboard
+        regions = df_plot["geographic_region"].fillna("Unknown").unique()
+        color_cycle = CHART_COLORS + [
+            "#7EBAB5", "#5AA9A3", "#A3CCC9", "#FFB84D", "#FF9933",
+            "#449C95", "#E07B54", "#6C5B7B",
+        ]
+        region_color = {r: color_cycle[i % len(color_cycle)] for i, r in enumerate(regions)}
+        colors_array = [region_color[r] for r in df_plot["geographic_region"].fillna("Unknown")]
+
+        scatter = ax.scatter(
+            df_plot["current_valuation_amount"],
+            df_plot["current_principal_balance"],
+            s=80,
+            c=colors_array,
+            alpha=0.7,
+            edgecolor="white",
+            linewidth=0.5,
+        )
+
+        # Legend patches (top 10 regions by count)
+        top_regions = (
+            df_plot["geographic_region"].fillna("Unknown")
+            .value_counts()
+            .head(10)
+            .index
+        )
+        handles = [
+            mpatches.Patch(color=region_color[r], label=r)
+            for r in top_regions
+            if r in region_color
+        ]
+        ax.legend(
+            handles=handles,
+            title="Region",
+            loc="upper left",
+            fontsize=8,
+            title_fontsize=9,
+            frameon=False,
+            ncol=2,
+        )
+    else:
+        # Fallback: continuous colormap by LTV
+        from matplotlib.colors import LinearSegmentedColormap
+        brand_cmap = LinearSegmentedColormap.from_list(
+            "brand_blue",
+            ["#E8F4F8", ACCENT_COLOR, PRIMARY_COLOR],
+            N=256,
+        )
+        scatter = ax.scatter(
+            df_plot["current_valuation_amount"],
+            df_plot["current_principal_balance"],
+            s=80,
+            c=df_plot["current_loan_to_value"] * 100,
+            cmap=brand_cmap,
+            alpha=0.7,
+            edgecolor="white",
+            linewidth=0.5,
+        )
+        cbar = plt.colorbar(scatter, ax=ax)
+        cbar.set_label("Current LTV (%)", rotation=270, labelpad=20, fontweight="bold")
+
+    # Diagonal reference line (balance = value)
+    max_val = max(
+        df_plot["current_valuation_amount"].max(),
+        df_plot["current_principal_balance"].max(),
     )
-    
-    scatter = ax.scatter(
-        df_plot["current_valuation_amount"],
-        df_plot["current_principal_balance"],
-        s=100,  # Fixed size for clarity
-        c=df_plot["current_loan_to_value"] * 100,  # Color by LTV %
-        cmap=brand_cmap,  
-        alpha=0.7,
-        edgecolor=TEXT_DARK,
-        linewidth=0.5,
-    )
-    
-    # Add diagonal reference line (balance = value)
-    max_val = max(df_plot["current_valuation_amount"].max(), df_plot["current_principal_balance"].max())
-    ax.plot([0, max_val], [0, max_val], 'k--', alpha=0.3, linewidth=1, label="Balance = Value")
-    
+    ax.plot([0, max_val], [0, max_val], "k--", alpha=0.3, linewidth=1, label="Balance = Value")
+
     ax.set_title(
         "Current Outstanding Balance vs. Current Property Value",
         pad=20,
         fontweight="bold",
         color=TEXT_DARK,
-        fontsize=12,
-        loc='center'
+        fontsize=14,
+        loc="center",
     )
-    ax.set_xlabel("Current Property Value (£)", fontweight="bold", color=TEXT_DARK, fontsize=10, labelpad=10)
-    ax.set_ylabel("Current Outstanding Balance (£)", fontweight="bold", color=TEXT_DARK, fontsize=10)
-    
+    ax.set_xlabel("Current Property Value (£)", fontweight="bold", color=TEXT_DARK, fontsize=12, labelpad=10)
+    ax.set_ylabel("Current Outstanding Balance (£)", fontweight="bold", color=TEXT_DARK, fontsize=12)
+
     ax.xaxis.set_major_formatter(FuncFormatter(millions_formatter))
     ax.yaxis.set_major_formatter(FuncFormatter(millions_formatter))
-    
-    # Colorbar
-    cbar = plt.colorbar(scatter, ax=ax)
-    cbar.set_label("Current LTV (%)", rotation=270, labelpad=20, fontweight="bold")
-    
+
     ax.grid(True, linestyle="--", alpha=0.25, linewidth=0.8)
     ax.set_axisbelow(True)
-    
+
     plt.tight_layout(pad=1.5)
-    fig.subplots_adjust(bottom=0.18)
     fig.savefig(out_path, dpi=300, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     return True
 
 
 def save_bubble_ltv_vs_age(df: pd.DataFrame, out_path: str) -> bool:
-    """Generate bubble chart: LTV vs Borrower Age."""
+    """Generate bubble chart: LTV vs Borrower Age.
+
+    Mirrors the dashboard 'LTV vs Youngest Borrower Age' scatter chart.
+    Points are coloured by product type (categorical) when available,
+    matching the dashboard's colour dimension. Bubble size is proportional
+    to loan balance.
+    """
     required_cols = ["current_loan_to_value", "youngest_borrower_age", "total_balance"]
     if not all(col in df.columns for col in required_cols):
-        print(f"   >>> DEBUG: Missing columns for LTV vs Age bubble chart")
         return False
 
-    # Filter: Valid data (not NaN) AND valid ages (> 0, >= 18)
-    df_plot = df[required_cols].copy()
-    df_plot = df_plot.dropna()
+    product_col = next(
+        (c for c in ["erm_product_type", "product_type"] if c in df.columns),
+        None,
+    )
+    work_cols = required_cols + ([product_col] if product_col else [])
+    df_plot = df[work_cols].copy()
+    df_plot = df_plot.dropna(subset=required_cols)
     df_plot = df_plot[
-        (df_plot["youngest_borrower_age"] > 0) & 
+        (df_plot["youngest_borrower_age"] > 0) &
         (df_plot["youngest_borrower_age"] >= 18)
     ]
-    
+
     if df_plot.empty or len(df_plot) < 10:
-        print(f"   >>> WARNING: Insufficient data for LTV vs Age bubble (need >= 10 rows with valid age >= 18)")
         return False
-    
+
     # Sample if too many loans
-    if len(df_plot) > 500:
-        df_plot = df_plot.sample(500, random_state=42)
+    if len(df_plot) > 2000:
+        df_plot = df_plot.sample(2000, random_state=42)
 
     fig, ax = plt.subplots(figsize=(14, 8))
 
-    # Use brand colors - create custom colormap
-    from matplotlib.colors import LinearSegmentedColormap
-    brand_cmap = LinearSegmentedColormap.from_list(
-        'brand_accent', 
-        ['#E8F4F8', ACCENT_COLOR, PRIMARY_COLOR],  # Light -> Accent -> Dark
-        N=256
-    )
-        
     # Size by balance (normalized)
     sizes = (df_plot["total_balance"] / df_plot["total_balance"].max() * 300).clip(20, 300)
-    
-    scatter = ax.scatter(
-        df_plot["youngest_borrower_age"],
-        df_plot["current_loan_to_value"] * 100,  # Convert to percentage
-        s=sizes,
-        c=df_plot["total_balance"],
-        cmap=brand_cmap,
-        alpha=0.6,
-        edgecolor=TEXT_DARK,
-        linewidth=0.5,
-    )
-    
+
+    has_product = product_col and product_col in df_plot.columns and df_plot[product_col].notna().any()
+
+    if has_product:
+        # Categorical coloring by product type — matches dashboard
+        products = df_plot[product_col].fillna("Unknown").unique()
+        color_cycle = CHART_COLORS + [
+            "#7EBAB5", "#5AA9A3", "#A3CCC9", "#FFB84D", "#FF9933",
+        ]
+        product_color = {p: color_cycle[i % len(color_cycle)] for i, p in enumerate(products)}
+        colors_array = [product_color[p] for p in df_plot[product_col].fillna("Unknown")]
+
+        ax.scatter(
+            df_plot["youngest_borrower_age"],
+            df_plot["current_loan_to_value"] * 100,
+            s=sizes,
+            c=colors_array,
+            alpha=0.65,
+            edgecolor="white",
+            linewidth=0.4,
+        )
+
+        handles = [
+            mpatches.Patch(color=product_color[p], label=p)
+            for p in products
+            if p in product_color
+        ]
+        ax.legend(
+            handles=handles,
+            title="Product Type",
+            loc="upper right",
+            fontsize=9,
+            title_fontsize=10,
+            frameon=False,
+        )
+    else:
+        # Fallback: continuous colormap by balance
+        from matplotlib.colors import LinearSegmentedColormap
+        brand_cmap = LinearSegmentedColormap.from_list(
+            "brand_accent",
+            ["#E8F4F8", ACCENT_COLOR, PRIMARY_COLOR],
+            N=256,
+        )
+        scatter = ax.scatter(
+            df_plot["youngest_borrower_age"],
+            df_plot["current_loan_to_value"] * 100,
+            s=sizes,
+            c=df_plot["total_balance"],
+            cmap=brand_cmap,
+            alpha=0.65,
+            edgecolor="white",
+            linewidth=0.4,
+        )
+        cbar = plt.colorbar(scatter, ax=ax)
+        cbar.set_label("Loan Balance (£)", rotation=270, labelpad=20, fontweight="bold")
+        cbar.ax.yaxis.set_major_formatter(FuncFormatter(millions_formatter))
+
     ax.set_title(
         "Current LTV vs. Borrower Age (Youngest)",
         pad=20,
         fontweight="bold",
         color=TEXT_DARK,
-        fontsize=12,
-        loc='center'
+        fontsize=14,
+        loc="center",
     )
-    ax.set_xlabel("Borrower Age (Youngest)", fontweight="bold", color=TEXT_DARK, fontsize=10, labelpad=10)
-    ax.set_ylabel("Current LTV (%)", fontweight="bold", color=TEXT_DARK, fontsize=10)
-    
-    # Colorbar
-    cbar = plt.colorbar(scatter, ax=ax)
-    cbar.set_label("Loan Balance (£)", rotation=270, labelpad=20, fontweight="bold")
-    cbar.ax.yaxis.set_major_formatter(FuncFormatter(millions_formatter))
-    
+    ax.set_xlabel("Borrower Age (Youngest)", fontweight="bold", color=TEXT_DARK, fontsize=12, labelpad=10)
+    ax.set_ylabel("Current LTV (%)", fontweight="bold", color=TEXT_DARK, fontsize=12)
+
     ax.grid(True, linestyle="--", alpha=0.25, linewidth=0.8)
     ax.set_axisbelow(True)
-    
+
     plt.tight_layout(pad=1.5)
-    fig.subplots_adjust(bottom=0.18)
     fig.savefig(out_path, dpi=300, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     return True
@@ -1345,7 +1540,12 @@ def add_cover_slide(prs: Presentation, logo_path: Optional[str], title: str):
         Inches(0.5),
     )
     tf = sub_box.text_frame
-    tf.text = f"Confidential • {datetime.now():%B %d, %Y}"
+    _report_date = (
+        datetime.strptime(STATIC_REPORTING_DATE, "%Y-%m-%d").strftime("%B %d, %Y")
+        if STATIC_REPORTING_DATE
+        else datetime.now().strftime("%B %d, %Y")
+    )
+    tf.text = f"Confidential \u2022 Data as of {_report_date}"
     p = tf.paragraphs[0]
     p.font.name = FONT_BODY
     p.font.size = Pt(14)
@@ -1422,7 +1622,7 @@ def style_content_title(prs: Presentation, slide, title_text: str, logo_path: Op
         Inches(0.3)
     )
     subtitle_frame = subtitle_box.text_frame
-    subtitle_frame.text = "[Insert management commentary...]" 
+    subtitle_frame.text = ""
     subtitle_frame.word_wrap = False
     
     p = subtitle_frame.paragraphs[0]
@@ -1460,17 +1660,8 @@ def add_kpi_slide(prs: Presentation, df: pd.DataFrame, logo_path: Optional[str])
         
         # Age calculation - keep as None if no valid data
         wa_age = weighted_average(df["youngest_borrower_age"], df["total_balance"])
-        # DEBUG: Show what's happening with age calculation
         if pd.isna(wa_age):
-            print(f"   >>> DEBUG: wa_age is NaN")
-            print(f"   >>> youngest_borrower_age column exists: {'youngest_borrower_age' in df.columns}")
-            if 'youngest_borrower_age' in df.columns:
-                valid_ages = df[df["youngest_borrower_age"].notna()]
-                print(f"   >>> Valid ages: {len(valid_ages)} out of {len(df)} rows")
-                if len(valid_ages) > 0:
-                    print(f"   >>> Age range: {valid_ages['youngest_borrower_age'].min():.0f} to {valid_ages['youngest_borrower_age'].max():.0f}")
-                    print(f"   >>> Total balance with valid age: {valid_ages['total_balance'].sum()/1_000_000:.1f}M")
-            wa_age = None  # Keep as None instead of 0
+            wa_age = None
         
         wa_nneg = weighted_average(df["nneg_ratio"] if "nneg_ratio" in df.columns else pd.Series(np.nan, index=df.index), df["total_balance"])
         if not pd.isna(wa_nneg):
@@ -1604,8 +1795,6 @@ def add_kpi_slide(prs: Presentation, df: pd.DataFrame, logo_path: Optional[str])
         p.font.color.rgb = RGBColor(*hex_to_rgb(TEXT_LIGHT))
         p.alignment = PP_ALIGN.CENTER
 
-# ADD BEFORE: add_footer(slide, "Confidential • Equity Release Europe")
-    
     # Risk monitoring tiles (if available)
     if RISK_MONITORING_AVAILABLE:
         try:
@@ -1680,7 +1869,7 @@ def add_kpi_slide(prs: Presentation, df: pd.DataFrame, logo_path: Optional[str])
         except Exception as e:
             print(f"   Warning: Could not add risk tiles: {e}")
     
-    add_footer(slide, "Confidential • Equity Release Europe")
+    add_footer(slide, REPORT_FOOTER)
 
 def add_chart_slide(
     prs: Presentation,
@@ -1715,7 +1904,7 @@ def add_chart_slide(
         p.font.color.rgb = RGBColor(*hex_to_rgb(TEXT_LIGHT))
         p.alignment = PP_ALIGN.CENTER
 
-    add_footer(slide, "Confidential • Equity Release Europe")
+    add_footer(slide, REPORT_FOOTER)
 
 
 # ============================
@@ -2076,7 +2265,7 @@ def add_risk_monitoring_slide(prs, df, logo_path=None):
             p.font.name = FONT_TITLE
             p.font.color.rgb = RGBColor(*hex_to_rgb(TEXT_DARK))
             p.alignment = PP_ALIGN.CENTER
-            add_footer(slide, "Confidential • Equity Release Europe")
+            add_footer(slide, REPORT_FOOTER)
             print("   > Risk monitoring slide added (no matching limits)")
             return
         # Render the Detailed Limit Status table to PNG (Streamlit-like) and insert into slide
@@ -2100,7 +2289,7 @@ def add_risk_monitoring_slide(prs, df, logo_path=None):
                 p.font.name = FONT_TITLE
                 p.font.color.rgb = RGBColor(*hex_to_rgb(TEXT_DARK))
                 p.alignment = PP_ALIGN.CENTER
-                add_footer(slide, "Confidential • Equity Release Europe")
+                add_footer(slide, REPORT_FOOTER)
                 print("   > Risk monitoring slide added (no matching limits)")
                 return
 
@@ -2127,7 +2316,7 @@ def add_risk_monitoring_slide(prs, df, logo_path=None):
             traceback.print_exc()
 
 
-        add_footer(slide, "Confidential • Equity Release Europe")
+        add_footer(slide, REPORT_FOOTER)
 
     except Exception as e:
         print(f"   Warning: Could not create risk monitoring slide: {e}")
@@ -2241,7 +2430,7 @@ def add_end_slide(prs: Presentation, logo_path: Optional[str]):
         Inches(1.5),
     )
     tf = text_box.text_frame
-    tf.text = "ERE Funding Limited"
+    tf.text = ENTITY_NAME
     p = tf.paragraphs[0]
     p.font.name = FONT_TITLE
     p.font.size = Pt(26)
@@ -2303,7 +2492,6 @@ def generate_pptx(
             Path(__file__).resolve().parent,
             Path(input_path).resolve().parent,
             Path.cwd(),
-            Path(r"C:\Users\joshu\OneDrive\Documents\ESMA CANONICAL WORKINGS"),
         ]
         candidates = ["ere_logo.png", "ERE_logo.png", "logo.png",
                     "equity_release_europe_logo_highres.png", "buecor_logo.png"]
@@ -2322,124 +2510,129 @@ def generate_pptx(
         print(f"   🖼 Logo exists: {os.path.exists(logo_path)}")
 
     # Cover slide
-    print("[2/7] Creating cover slide...")
+    print("[2/9] Creating cover slide...")
     add_cover_slide(
         prs,
         logo_path,
-        "ERE Funding Portfolio Overview"
+        COVER_TITLE,
     )
     
     # KPI dashboard
-    print("[3/7] Creating KPI dashboard...")
+    print("[3/9] Creating KPI dashboard...")
     add_kpi_slide(prs, df, logo_path)
     
     # Generate charts
     chart_dir = Path("_pptx_charts")
     chart_dir.mkdir(exist_ok=True)
     
-    print("\n[4/7] Generating charts...")
-    print(f"   📊 Data: {len(df)} loans, {len(df.columns)} columns")
-    print(f"   📂 Chart directory: {chart_dir}")
-    
-    # Check key columns
-    key_cols = ['youngest_borrower_age', 'current_loan_to_value', 'product_type', 'broker_channel', 'geographic_region']
-    missing = [c for c in key_cols if c not in df.columns]
-    if missing:
-        print(f"   ⚠ WARNING: Missing columns: {missing}")
-    
-    # DETAILED AGE DEBUGGING
-    if 'youngest_borrower_age' in df.columns:
-        age_valid = df[df['youngest_borrower_age'].notna()]
-        age_with_balance = age_valid[age_valid['total_balance'] > 0] if 'total_balance' in df.columns else age_valid
-        print(f"   🔍 AGE DEBUG: {len(age_valid)} of {len(df)} rows have valid age")
-        if len(age_valid) > 0:
-            print(f"   🔍 AGE DEBUG: Age range {age_valid['youngest_borrower_age'].min():.0f} to {age_valid['youngest_borrower_age'].max():.0f}")
-        if len(age_with_balance) > 0 and 'total_balance' in df.columns:
-            print(f"   🔍 AGE DEBUG: Total balance with age: {age_with_balance['total_balance'].sum()/1_000_000:.1f}M")
-    
+    print("\n[4/9] Generating charts...")
+    print(f"   Data: {len(df):,} loans, {len(df.columns)} columns")
+
     charts = []
-    
-    # LTV Distribution (DUAL: balance + count)
+
+    # 1. LTV Distribution (DUAL: balance + count)
     ltv_path = chart_dir / "ltv_distribution_dual.png"
     if save_ltv_dual_chart(df, str(ltv_path)):
         charts.append(("Current LTV Distribution", str(ltv_path), ""))
-        print(f"   ✓ LTV Distribution chart generated")
+        print(f"   ✓ LTV Distribution")
     else:
-        print(f"   ✗ LTV Distribution FAILED - check 'current_loan_to_value' column")
-    
-    # Geographic Distribution (TREEMAP)
+        print(f"   ✗ LTV Distribution FAILED")
+
+    # 2. Product Type Distribution (DUAL: balance + count) — mirrors Stratifications tab
+    product_path = chart_dir / "product_type_distribution_dual.png"
+    if save_product_type_dual_chart(df, str(product_path)):
+        charts.append(("Product Type Distribution", str(product_path), ""))
+        print(f"   ✓ Product Type Distribution")
+    else:
+        print(f"   ✗ Product Type Distribution FAILED (column missing or no data)")
+
+    # 3. Geographic Distribution — Balance treemap (mirrors dashboard left panel)
     geo_path = chart_dir / "geographic_treemap.png"
     if save_geographic_treemap(df, str(geo_path)):
-        charts.append(("Geographic Distribution", str(geo_path), ""))
-        print(f"   ✓ Geographic Distribution chart generated")
+        charts.append(("Geographic Distribution: Balance by Region", str(geo_path), ""))
+        print(f"   ✓ Geographic Distribution (balance)")
     else:
-        print(f"   ✗ Geographic Distribution FAILED - check 'geographic_region' column")
-    
-    # Borrower Age Distribution (DUAL: balance + count)
+        print(f"   ✗ Geographic Distribution (balance) FAILED")
+
+    # 4. Geographic Distribution — Loan Count treemap (mirrors dashboard right panel)
+    geo_cnt_path = chart_dir / "geographic_count_treemap.png"
+    if save_geographic_count_treemap(df, str(geo_cnt_path)):
+        charts.append(("Geographic Distribution: Loans by Region", str(geo_cnt_path), ""))
+        print(f"   ✓ Geographic Distribution (count)")
+    else:
+        print(f"   ✗ Geographic Distribution (count) FAILED")
+
+    # 5. Borrower Age Distribution (DUAL: balance + count)
     age_path = chart_dir / "age_distribution_dual.png"
     if save_age_dual_chart(df, str(age_path)):
         charts.append(("Borrower Age Distribution", str(age_path), ""))
-        print(f"   ✓ Borrower Age Distribution chart generated")
+        print(f"   ✓ Borrower Age Distribution")
     else:
-        print(f"   ✗ Borrower Age Distribution FAILED - check 'youngest_borrower_age' column and data")
-    
-    # Broker Channel Distribution (DUAL: balance + count)
+        print(f"   ✗ Borrower Age Distribution FAILED")
+
+    # 6. Vintage Distribution (balance bars + count line — mirrors Vintage Distribution section)
+    vintage_path = chart_dir / "vintage_distribution.png"
+    if save_vintage_distribution(df, str(vintage_path)):
+        charts.append(("Portfolio by Vintage Year", str(vintage_path), ""))
+        print(f"   ✓ Vintage Distribution")
+    else:
+        print(f"   ✗ Vintage Distribution FAILED")
+
+    # 7. Broker Channel Distribution (DUAL: balance + count)
     broker_path = chart_dir / "broker_distribution_dual.png"
     if save_broker_dual_chart(df, str(broker_path)):
-        charts.append(("Broker Channel Distribution", str(broker_path), ""))
-        print(f"   ✓ Broker Channel Distribution chart generated")
+        charts.append(("Broker Channel Distribution (Top 10)", str(broker_path), ""))
+        print(f"   ✓ Broker Channel Distribution")
     else:
-        print(f"   ✗ Broker Channel Distribution FAILED - check 'broker_channel' column")
-    
-    # Ticket Size Distribution (DUAL: balance + count)
+        print(f"   ✗ Broker Channel Distribution FAILED")
+
+    # 8. Ticket Size Distribution (DUAL: balance + count)
     ticket_path = chart_dir / "ticket_size_distribution_dual.png"
     if save_ticket_size_dual_chart(df, str(ticket_path)):
         charts.append(("Balance by Ticket Size", str(ticket_path), ""))
-        print(f"   ✓ Ticket Size Distribution chart generated")
+        print(f"   ✓ Ticket Size Distribution")
     else:
-        print(f"   ✗ Ticket Size Distribution FAILED - check 'total_balance' column")
-    
-    # Bubble Chart 1: Balance vs Value
+        print(f"   ✗ Ticket Size Distribution FAILED")
+
+    # 9. Bubble Chart 1: Balance vs Property Value (colored by geographic region)
     bubble1_path = chart_dir / "bubble_balance_vs_value.png"
     if save_bubble_balance_vs_value(df, str(bubble1_path)):
         charts.append(("Outstanding Balance vs. Property Value", str(bubble1_path), ""))
-        print(f"   ✓ Balance vs Value bubble chart generated")
+        print(f"   ✓ Balance vs Value bubble chart")
     else:
         print(f"   ✗ Balance vs Value bubble FAILED")
-    
-    # Bubble Chart 2: LTV vs Age
+
+    # 10. Bubble Chart 2: LTV vs Borrower Age (colored by product type)
     bubble2_path = chart_dir / "bubble_ltv_vs_age.png"
     if save_bubble_ltv_vs_age(df, str(bubble2_path)):
         charts.append(("LTV vs. Borrower Age", str(bubble2_path), ""))
-        print(f"   ✓ LTV vs Borrower Age bubble chart generated")
+        print(f"   ✓ LTV vs Borrower Age bubble chart")
     else:
-        print(f"   ✗ LTV vs Borrower Age bubble FAILED - check 'youngest_borrower_age' and 'current_loan_to_value' columns")
-    
+        print(f"   ✗ LTV vs Borrower Age bubble FAILED")
+
     # Add chart slides
-    print(f"\n   📊 Summary: Generated {len(charts)} of 7 charts")
-    if len(charts) < 7:
-        print(f"   ⚠ WARNING: {7 - len(charts)} charts failed - see errors above")
-    print("[5/7] Adding chart slides...")
+    n_expected = 10
+    print(f"\n   Summary: Generated {len(charts)} of {n_expected} charts")
+    print(f"[5/9] Adding chart slides...")
     for title, path, caption in charts:
-        print(f"   > Adding slide: {title}")
         add_chart_slide(prs, title, path, logo_path, caption)
     
     # Risk monitoring slide (if available)
-    print("\n[6/7] Checking risk monitoring...")
+    print("\n[6/9] Checking risk monitoring...")
     add_risk_monitoring_slide(prs, df, logo_path)
 
-    # Scenario analysis slide (if available)
+    # Scenario analysis slides (if available)
+    print("\n[7/9] Adding scenario analysis slides...")
     add_scenario_analysis_slide(prs, df, logo_path)
 
-    # Add end slide
-    print("\n[7/8] Adding end slide...")
+    print("\n[8/9] Adding end slide...")
     add_end_slide(prs, logo_path)
     
     # Save presentation
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
-    print(f"\n[7/7] Saving presentation to: {output_path}")
+    print(f"\n[9/9] Saving presentation to: {output_path}")
     # Add page numbers (exclude cover + end)
     add_page_numbers(prs)
     
