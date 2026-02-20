@@ -1,4 +1,4 @@
-name: Build and deploy Streamlit dashboard to Azure Web App
+name: Deploy Streamlit App to Azure Web App
 
 on:
   push:
@@ -19,6 +19,8 @@ permissions:
 env:
   RESOURCE_GROUP: trakt
   APP_NAME: trakt-dashboard
+  ACR_NAME: traktregistry1602
+  ACR_LOGIN_SERVER: traktregistry1602.azurecr.io
   IMAGE_NAME: trakt-streamlit
 
 jobs:
@@ -36,51 +38,17 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_EB5C7CA419CB478A891B392422373A3D }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_E4CB93E6899E4A55B8EA48212ABC8295 }}
 
-      - name: Resolve ACR target
+      - name: Validate ACR exists
         shell: bash
         run: |
           set -euo pipefail
-
-          # Optional override via repo/organization variable.
-          ACR_NAME_INPUT="${{ vars.ACR_NAME }}"
-
-          if [[ -n "${ACR_NAME_INPUT}" ]]; then
-            if az acr show --name "${ACR_NAME_INPUT}" >/dev/null 2>&1; then
-              ACR_NAME="${ACR_NAME_INPUT}"
-            else
-              echo "ERROR: vars.ACR_NAME='${ACR_NAME_INPUT}' does not exist or is not accessible in this subscription."
-              exit 1
-            fi
-          else
-            # Auto-discover from existing Web App container image.
-            CURRENT_LINUX_FX="$(az webapp config show --name "${APP_NAME}" --resource-group "${RESOURCE_GROUP}" --query linuxFxVersion -o tsv || true)"
-            # expected format: DOCKER|<registry>.azurecr.io/<image>:<tag>
-            REGISTRY_HOST="$(echo "${CURRENT_LINUX_FX}" | sed -E 's#^DOCKER\|([^/]+)/.*#\1#')"
-
-            if [[ -z "${REGISTRY_HOST}" || "${REGISTRY_HOST}" == "${CURRENT_LINUX_FX}" ]]; then
-              echo "ERROR: Unable to auto-discover ACR from ${APP_NAME} linuxFxVersion='${CURRENT_LINUX_FX}'."
-              echo "Set repository variable ACR_NAME to your registry name (e.g. myregistry)."
-              exit 1
-            fi
-
-            ACR_NAME="${REGISTRY_HOST%%.*}"
-            if ! az acr show --name "${ACR_NAME}" >/dev/null 2>&1; then
-              echo "ERROR: Auto-discovered ACR '${ACR_NAME}' from '${REGISTRY_HOST}', but az acr show failed."
-              echo "Set repository variable ACR_NAME explicitly."
-              exit 1
-            fi
-          fi
-
-          ACR_LOGIN_SERVER="$(az acr show --name "${ACR_NAME}" --query loginServer -o tsv)"
-          echo "Using ACR_NAME=${ACR_NAME}"
-          echo "ACR_NAME=${ACR_NAME}" >> "$GITHUB_ENV"
-          echo "ACR_LOGIN_SERVER=${ACR_LOGIN_SERVER}" >> "$GITHUB_ENV"
+          az acr show --name "${ACR_NAME}" --resource-group "${RESOURCE_GROUP}" --output table
 
       - name: Build and push immutable image to ACR
         shell: bash
         run: |
           set -euo pipefail
-          IMAGE_TAG="${ACR_NAME}.azurecr.io/${IMAGE_NAME}:${GITHUB_SHA}"
+          IMAGE_TAG="${ACR_LOGIN_SERVER}/${IMAGE_NAME}:${GITHUB_SHA}"
           echo "IMAGE_TAG=${IMAGE_TAG}" >> "$GITHUB_ENV"
 
           az acr build \
@@ -93,7 +61,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           az webapp config container set \
             --name "${APP_NAME}" \
             --resource-group "${RESOURCE_GROUP}" \
