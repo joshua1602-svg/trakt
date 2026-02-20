@@ -37,13 +37,7 @@ jobs:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_B782B4EF4C084DB68754745782B83A82 }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_EB5C7CA419CB478A891B392422373A3D }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_E4CB93E6899E4A55B8EA48212ABC8295 }}
-
-      - name: Validate ACR exists
-        shell: bash
-        run: |
-          set -euo pipefail
-          az acr show --name "${ACR_NAME}" --resource-group "${RESOURCE_GROUP}" --output table
-
+     
       - name: Build and push immutable image to ACR
         shell: bash
         run: |
@@ -65,7 +59,7 @@ jobs:
             --name "${APP_NAME}" \
             --resource-group "${RESOURCE_GROUP}" \
             --container-image-name "${IMAGE_TAG}" \
-            --container-registry-url "https://${ACR_LOGIN_SERVER}"
+            --container-registry-url "https://${ACR_LOGIN_SERVER}" \
             --enable-managed-identity-pull true
            
       - name: Set build metadata app settings
