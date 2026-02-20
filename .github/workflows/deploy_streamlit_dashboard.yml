@@ -37,19 +37,18 @@ jobs:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_B782B4EF4C084DB68754745782B83A82 }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_EB5C7CA419CB478A891B392422373A3D }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_E4CB93E6899E4A55B8EA48212ABC8295 }}
-     
-      - name: Build and push immutable image to ACR
+           
+      - name: Build and push image (Docker)
         shell: bash
         run: |
           set -euo pipefail
           IMAGE_TAG="${ACR_LOGIN_SERVER}/${IMAGE_NAME}:${GITHUB_SHA}"
           echo "IMAGE_TAG=${IMAGE_TAG}" >> "$GITHUB_ENV"
-
-          az acr build \
-            --registry "${ACR_NAME}" \
-            --image "${IMAGE_NAME}:${GITHUB_SHA}" \
-            --file Dockerfile.streamlit \
-            .
+      
+          az acr login --name "${ACR_NAME}"
+      
+          docker build -f Dockerfile.streamlit -t "${IMAGE_TAG}" .
+          docker push "${IMAGE_TAG}"
 
       - name: Update Web App container to SHA tag
         shell: bash
