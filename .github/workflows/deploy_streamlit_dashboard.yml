@@ -66,7 +66,8 @@ jobs:
             --resource-group "${RESOURCE_GROUP}" \
             --container-image-name "${IMAGE_TAG}" \
             --container-registry-url "https://${ACR_LOGIN_SERVER}"
-
+            --enable-managed-identity-pull true
+           
       - name: Set build metadata app settings
         shell: bash
         run: |
