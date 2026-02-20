@@ -25,5 +25,12 @@ WORKDIR /app/analytics
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=6 \
     CMD sh -c 'curl -f http://127.0.0.1:${PORT:-8080}/_stcore/health || exit 1'
 
+<<<<<<< claude/streamlit-dashboard-review-DNJV7
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=5 \
+    CMD curl -f http://localhost:8501/_stcore/health || exit 1
+
+ENTRYPOINT ["streamlit", "run", "streamlit_app_erm.py", "--server.address=0.0.0.0"]
+=======
 # Run Streamlit on the port Azure expects
 ENTRYPOINT ["sh", "-c", "streamlit run streamlit_app_erm.py --server.address=0.0.0.0 --server.port=${PORT:-8080} --server.headless=true"]
+>>>>>>> main
