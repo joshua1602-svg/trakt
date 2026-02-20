@@ -284,11 +284,8 @@ def load_data(path: str):
         # -----------------------------
         # 3) Validate + presentation layer
         # -----------------------------
-        check_result = assert_trusted_canonical(df)
-        if not check_result.ok:
-            st.warning(f"⚠️ Input may not be canonical pipeline output. Missing: {check_result.missing_required}")
-            for note in check_result.notes:
-                st.info(note)
+        # Run validation silently (no warning banners in UI)
+        assert_trusted_canonical(df)
 
         df = add_presentation_aliases(df)
         df = add_buckets(df)
@@ -373,11 +370,8 @@ def _prepare_dataframe(df: pd.DataFrame) -> pd.DataFrame:
                 parsed.loc[non_iso] = pd.to_datetime(s.loc[non_iso], errors="coerce", dayfirst=True)
             df[col] = parsed
 
-    check_result = assert_trusted_canonical(df)
-    if not check_result.ok:
-        st.warning(f"⚠️ Input may not be canonical pipeline output. Missing: {check_result.missing_required}")
-        for note in check_result.notes:
-            st.info(note)
+    # Run validation silently (no warning banners in UI)
+    assert_trusted_canonical(df)
 
     df = add_presentation_aliases(df)
     df = add_buckets(df)
@@ -459,45 +453,6 @@ st.set_page_config(
 )
 
 
-# ===========================================================================
-# MATERIAL ICONS - START
-# ===========================================================================
-
-st.markdown("""
-<style>
-/* Ultra-simple fix: Hide ALL Material Icons text, don't try to render them */
-
-/* Hide dropdown arrow text - Streamlit has default arrows anyway */
-[data-baseweb="select"] svg,
-[data-baseweb="select"] [class*="IconContainer"],
-.stSelectbox svg,
-.stMultiSelect svg {
-    font-size: 0 !important;
-    color: transparent !important;
-}
-
-/* Hide expander arrow text - Streamlit has default arrows */
-[data-testid="stExpanderToggleIcon"] {
-    font-size: 0 !important;
-    color: transparent !important;
-}
-
-/* Nuclear option: Hide ANY text containing "keyboard" */
-body * {
-    text-rendering: optimizeLegibility;
-}
-
-/* Hide any element that has keyboard in its content */
-*:not(script):not(style) {
-    font-variant-ligatures: none !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# ===========================================================================
-# MATERIAL ICONS - END
-# ===========================================================================
-
 # Upload page routing
 if UPLOAD_PAGE_AVAILABLE:
     show_upload_ui = not CLI_FILE_PATH and not LAST_RUN_TYPED_PATH
@@ -516,13 +471,18 @@ if UPLOAD_PAGE_AVAILABLE:
 st.markdown(f"""
 <style>
 /* Global Font & Reset */
-body, p, div, span, h1, h2, h3, h4, h5, h6, .stMarkdown, .stText, .stMetric {{
+body, p, span, h1, h2, h3, h4, h5, h6, .stMarkdown, .stText, .stMetric {{
     font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif !important;
     color: {TEXT_DARK};
 }}
 
 /* Hide Streamlit Elements */
 div[data-testid="stDecoration"], header {{
+    display: none !important;
+}}
+
+/* Hide sidebar collapse button icon token text (e.g., keyboard_double_arrow_left) */
+div[data-testid="stSidebarCollapseButton"] {{
     display: none !important;
 }}
 
@@ -749,7 +709,7 @@ def get_logo_html(path):
 st.markdown(f"""
 <div class="header-container">
     <div class="header-left">
-        <h1>Portfolio Analytics Dashboard</h1>
+        <div class="header-title" style="color:#FFFFFF !important; -webkit-text-fill-color:#FFFFFF !important;">Portfolio Analytics Dashboard</div>
         <p>{CLIENT_DISPLAY_NAME}</p>
     </div>
     <div class="header-right">
