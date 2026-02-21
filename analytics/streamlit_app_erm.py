@@ -10,6 +10,7 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -32,6 +33,8 @@ try:
         is_azure_configured,
         list_canonical_csvs,
         download_blob_to_dataframe,
+        write_portfolio_snapshot,
+        load_all_portfolio_snapshots,
     )
     BLOB_STORAGE_AVAILABLE = is_azure_configured()
 except ImportError:
@@ -523,6 +526,40 @@ st.set_page_config(
     page_icon="🏠",
     layout="wide",
     initial_sidebar_state="expanded",
+)
+
+# JavaScript: ensure the sidebar expand/collapse button is always visible
+# and clickable regardless of custom CSS layering. Runs in an iframe so
+# window.parent.document reaches the actual Streamlit page.
+components.html(
+    """
+    <script>
+    (function () {
+        function fixSidebarBtn() {
+            var doc = window.parent.document;
+            var el = doc.querySelector('[data-testid="stSidebarCollapsedControl"]');
+            if (el) {
+                el.style.setProperty('display',        'flex',    'important');
+                el.style.setProperty('visibility',     'visible', 'important');
+                el.style.setProperty('opacity',        '1',       'important');
+                el.style.setProperty('z-index',        '999999',  'important');
+                el.style.setProperty('pointer-events', 'auto',    'important');
+                el.style.setProperty('position',       'fixed',   'important');
+                el.style.setProperty('top',            '0.5rem',  'important');
+                el.style.setProperty('left',           '0',       'important');
+            }
+        }
+        fixSidebarBtn();
+        var observer = new MutationObserver(fixSidebarBtn);
+        observer.observe(
+            window.parent.document.body,
+            { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] }
+        );
+    })();
+    </script>
+    """,
+    height=0,
+    scrolling=False,
 )
 
 
@@ -2546,6 +2583,23 @@ with tab3:
         st.info("No valid data for static pool analysis.")
         st.stop()
 
+    # ── AUTO-SAVE SNAPSHOT TO BLOB ─────────────────────────────────────
+    # Silently write a compact summary so future dashboard sessions can
+    # build the Balance Evolution chart without re-uploading old CSVs.
+    if BLOB_STORAGE_AVAILABLE:
+        try:
+            _snap_as_of = pd.Timestamp(panel[sp_spec.as_of_date].max()).strftime("%Y-%m-%d")
+            write_portfolio_snapshot(
+                df=df_sp,
+                as_of_date=_snap_as_of,
+                balance_col=sp_spec.principal_outstanding,
+                orig_date_col="origination_date",
+                ltv_col="current_ltv" if "current_ltv" in df_sp.columns else None,
+                rate_col="interest_rate" if "interest_rate" in df_sp.columns else None,
+            )
+        except Exception:
+            pass  # Non-critical; never block the user
+
     # ── CONFIG LOADER ──────────────────────────────────────────────────
     config_path = "static_pools_config_erm.yaml"
     try:
@@ -2563,62 +2617,71 @@ with tab3:
     st.markdown("---")
     st.subheader("📊 Portfolio Balance Through Time")
 
-    has_multi_dates = panel[sp_spec.as_of_date].nunique() > 1
-    if not has_multi_dates:
-        st.info("Only one reporting date in the data — balance evolution requires multiple snapshots.")
+    # Build balance series from current panel (all dates present in this file)
+    _bal_from_panel = (
+        panel.groupby([sp_spec.as_of_date, "origination_year"], dropna=False, as_index=False)
+        [sp_spec.principal_outstanding].sum()
+        .rename(columns={sp_spec.as_of_date: "as_of_date",
+                         "origination_year": "origination_year",
+                         sp_spec.principal_outstanding: "total_balance"})
+    )
+    _bal_from_panel["as_of_date"] = pd.to_datetime(_bal_from_panel["as_of_date"])
+    _bal_from_panel["origination_year"] = _bal_from_panel["origination_year"].astype(str)
+
+    # Augment with historical monthly snapshots from Azure Blob Storage
+    _bal_full = _bal_from_panel.copy()
+    if BLOB_STORAGE_AVAILABLE:
+        try:
+            _hist = load_all_portfolio_snapshots()
+            if not _hist.empty and "total_balance" in _hist.columns:
+                _hist["origination_year"] = _hist["origination_year"].astype(str)
+                # Exclude dates already covered by the current upload (current is source of truth)
+                _current_dates = set(_bal_from_panel["as_of_date"].unique())
+                _hist = _hist[~_hist["as_of_date"].isin(_current_dates)]
+                _bal_full = pd.concat(
+                    [_hist[["as_of_date", "origination_year", "total_balance"]], _bal_from_panel],
+                    ignore_index=True,
+                )
+        except Exception:
+            pass  # Fall back to current-file data only
+
+    _bal_full = _bal_full.sort_values("as_of_date")
+    _has_multi = _bal_full["as_of_date"].nunique() > 1
+
+    # Controls
+    _bc1, _bc2 = st.columns([3, 1])
+    with _bc1:
+        split_by_year = st.checkbox(
+            "Split by Year of Origination",
+            value=True,
+            key="balance_split_year",
+            help="Show 2025, 2026 etc. as separate bands to see how each cohort contributes to total balance over time.",
+        )
+    with _bc2:
+        bal_chart_type = st.radio("Chart type", ["Area", "Bar"], horizontal=True, key="bal_chart_type")
+
+    if not _has_multi:
+        st.info(
+            "Only one reporting date available. Load the next month's file and the "
+            "snapshot for this month will be retrieved automatically from Azure."
+            if BLOB_STORAGE_AVAILABLE
+            else "Only one reporting date in the data — upload multiple monthly CSVs to see balance evolution."
+        )
     else:
-        _bal_col1, _bal_col2 = st.columns([3, 1])
-        with _bal_col1:
-            split_by_year = st.checkbox(
-                "Split by Year of Origination",
-                value=True,
-                key="balance_split_year",
-                help="Show 2025, 2026 etc. as separate bands to see how each cohort contributes to total balance over time."
-            )
-        with _bal_col2:
-            bal_chart_type = st.radio("Chart type", ["Area", "Bar"], horizontal=True, key="bal_chart_type")
+        _color_bal = "origination_year" if split_by_year else None
+        _plot_df = _bal_full if split_by_year else (
+            _bal_full.groupby("as_of_date", as_index=False)["total_balance"].sum()
+        )
+        _plot_df = _plot_df.copy()
+        _plot_df["_bal_m"] = _plot_df["total_balance"] / 1_000_000
 
-        _has_orig_year = "origination_year" in panel.columns and split_by_year
-        if _has_orig_year:
-            _bal_grp = panel.groupby(
-                [sp_spec.as_of_date, "origination_year"], dropna=False, as_index=False
-            )[sp_spec.principal_outstanding].sum()
-            _bal_grp["origination_year"] = _bal_grp["origination_year"].astype(str)
-            _color_bal = "origination_year"
-        else:
-            _bal_grp = panel.groupby(
-                [sp_spec.as_of_date], dropna=False, as_index=False
-            )[sp_spec.principal_outstanding].sum()
-            _color_bal = None
-
-        _bal_grp = _bal_grp.sort_values(sp_spec.as_of_date)
-
-        # Scale to millions for readability
-        _bal_grp["_bal_m"] = _bal_grp[sp_spec.principal_outstanding] / 1_000_000
-
-        _bal_labels = {
-            "_bal_m": "Balance (£m)",
-            sp_spec.as_of_date: "Date",
-            "origination_year": "Origination Year",
-        }
+        _bal_labels = {"_bal_m": "Balance (£m)", "as_of_date": "Date", "origination_year": "Origination Year"}
 
         if bal_chart_type == "Area":
-            fig_bal = px.area(
-                _bal_grp,
-                x=sp_spec.as_of_date,
-                y="_bal_m",
-                color=_color_bal,
-                labels=_bal_labels,
-            )
+            fig_bal = px.area(_plot_df, x="as_of_date", y="_bal_m", color=_color_bal, labels=_bal_labels)
         else:
-            fig_bal = px.bar(
-                _bal_grp,
-                x=sp_spec.as_of_date,
-                y="_bal_m",
-                color=_color_bal,
-                barmode="stack",
-                labels=_bal_labels,
-            )
+            fig_bal = px.bar(_plot_df, x="as_of_date", y="_bal_m", color=_color_bal,
+                             barmode="stack", labels=_bal_labels)
 
         fig_bal = apply_chart_theme(fig_bal, "Portfolio Balance Through Time")
         fig_bal.update_yaxes(title_text="Balance (£m)", tickformat=",.0f")
