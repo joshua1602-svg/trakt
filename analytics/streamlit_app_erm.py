@@ -323,6 +323,61 @@ def load_data_from_blob(blob_name: str, container: str | None = None):
         raise
 
 
+@st.cache_data(show_spinner=False)
+def get_filter_options(df: pd.DataFrame) -> dict[str, list]:
+    """Precompute sidebar filter options once per loaded dataset."""
+    options: dict[str, list] = {"vintages": [], "products": [], "regions": []}
+
+    if "origination_year" in df.columns:
+        options["vintages"] = sorted(df["origination_year"].dropna().unique().tolist())
+    if "erm_product_type" in df.columns:
+        options["products"] = sorted(df["erm_product_type"].dropna().unique().tolist())
+    if "geographic_region" in df.columns:
+        options["regions"] = sorted(df["geographic_region"].dropna().unique().tolist())
+
+    return options
+
+
+@st.cache_data(show_spinner=False)
+def apply_filters_cached(
+    df: pd.DataFrame,
+    selected_vintages: tuple,
+    selected_products: tuple,
+    selected_regions: tuple,
+) -> pd.DataFrame:
+    """Apply sidebar filters using cache-friendly immutable tuples."""
+    if not selected_vintages and not selected_products and not selected_regions:
+        return df
+
+    mask = pd.Series(True, index=df.index)
+
+    if selected_vintages and "origination_year" in df.columns:
+        mask &= df["origination_year"].isin(selected_vintages)
+    if selected_products and "erm_product_type" in df.columns:
+        mask &= df["erm_product_type"].isin(selected_products)
+    if selected_regions and "geographic_region" in df.columns:
+        mask &= df["geographic_region"].isin(selected_regions)
+
+    return df[mask]
+
+
+@st.cache_data(show_spinner=False)
+def df_to_csv_bytes(df: pd.DataFrame) -> bytes:
+    """Cached CSV export payload to avoid re-encoding on every rerun."""
+    return df.to_csv(index=False).encode("utf-8")
+
+
+@st.cache_data(show_spinner=False)
+def df_to_excel_bytes(df: pd.DataFrame) -> bytes:
+    """Cached Excel export payload to avoid regenerating workbook on every rerun."""
+    from io import BytesIO
+
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Portfolio")
+    return buffer.getvalue()
+
+
 def _prepare_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """
     Shared normalization + validation logic used by both local and blob loaders.
@@ -862,8 +917,7 @@ try:
         except OSError:
             pass
 
-    # Create View Copy
-    df_view = df.copy()
+    filter_options = get_filter_options(df)
 
 except ValueError as e:
     st.error(f"❌ {e}")
@@ -880,9 +934,13 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 🔎 Filters")
 
+    sel_vintages = []
+    sel_products = []
+    sel_regions = []
+
     # --- A. VINTAGE FILTER ---
     if "origination_year" in df.columns:
-        vintages = sorted(df["origination_year"].dropna().unique())
+        vintages = filter_options["vintages"]
         if vintages:
             sel_vintages = st.multiselect(
                 "📅 Vintage Year",
@@ -891,12 +949,9 @@ with st.sidebar:
                 key="filter_vintages",
             )
 
-            if sel_vintages:
-                df_view = df_view[df_view["origination_year"].isin(sel_vintages)]
-
     # --- B. PRODUCT FILTER ---
     if "erm_product_type" in df.columns:
-        products = sorted(df["erm_product_type"].dropna().unique())
+        products = filter_options["products"]
         if products:
             sel_products = st.multiselect(
                 "🏠 Product Type",
@@ -904,12 +959,9 @@ with st.sidebar:
                 default=[],
                 key="filter_products",
             )
-            if sel_products:
-                df_view = df_view[df_view["erm_product_type"].isin(sel_products)]
-
     # --- C. GEOGRAPHIC FILTER ---
     if "geographic_region" in df.columns:
-        regions = sorted(df["geographic_region"].dropna().unique())
+        regions = filter_options["regions"]
         if regions:
             sel_regions = st.multiselect(
                 "🗺️ Geography",
@@ -917,8 +969,12 @@ with st.sidebar:
                 default=[],
                 key="filter_regions",
             )
-            if sel_regions:
-                df_view = df_view[df_view["geographic_region"].isin(sel_regions)]
+    df_view = apply_filters_cached(
+        df,
+        tuple(sel_vintages),
+        tuple(sel_products),
+        tuple(sel_regions),
+    )
 
     # --- D. FILTER IMPACT & RESET ---
     if len(df_view) < len(df):
@@ -939,7 +995,7 @@ with st.sidebar:
     st.markdown("### 📥 Export")
 
     # CSV Export (filtered view)
-    csv_bytes = df_view.to_csv(index=False).encode("utf-8")
+    csv_bytes = df_to_csv_bytes(df_view)
     st.download_button(
         "📄 Download CSV",
         data=csv_bytes,
@@ -950,11 +1006,7 @@ with st.sidebar:
 
     # Excel Export (filtered view)
     try:
-        from io import BytesIO
-        buffer = BytesIO()
-        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-            df_view.to_excel(writer, index=False, sheet_name="Portfolio")
-        excel_bytes = buffer.getvalue()
+        excel_bytes = df_to_excel_bytes(df_view)
 
         st.download_button(
             "📊 Download Excel",
