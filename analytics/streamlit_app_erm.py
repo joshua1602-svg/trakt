@@ -581,24 +581,24 @@ div[data-testid="stSidebarCollapseButton"] > button > svg {{
     fill: white !important;
     stroke: white !important;
 }}
-/* Sidebar expand button (shown in main area when sidebar is collapsed).
-   Fixed position with high z-index so it sits above the custom header banner. */
-section[data-testid="stSidebarCollapsedControl"] {{
+/* Sidebar expand button (shown when sidebar is collapsed).
+   Do NOT override position — let Streamlit place it. Only force z-index
+   so it sits above the custom header banner, and style it to match. */
+[data-testid="stSidebarCollapsedControl"] {{
     display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
     z-index: 999999 !important;
-    position: fixed !important;
-    top: 0.4rem !important;
-    left: 0 !important;
 }}
-section[data-testid="stSidebarCollapsedControl"] button {{
+[data-testid="stSidebarCollapsedControl"] button,
+button[data-testid="stSidebarCollapsedControl"] {{
     background-color: {PRIMARY_COLOR} !important;
     color: white !important;
     border-radius: 0 6px 6px 0 !important;
     box-shadow: 2px 0 8px rgba(0, 0, 0, 0.25) !important;
 }}
-section[data-testid="stSidebarCollapsedControl"] button svg {{
+[data-testid="stSidebarCollapsedControl"] svg,
+button[data-testid="stSidebarCollapsedControl"] svg {{
     fill: white !important;
     stroke: white !important;
 }}
