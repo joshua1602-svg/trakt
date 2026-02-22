@@ -80,8 +80,8 @@ def list_canonical_csvs(
     cc = _get_container_client(container)
     blobs = cc.list_blobs(name_starts_with=prefix)
     names = sorted(
-        b.name for b in blobs
-        if b.name.lower().endswith(".csv")
+        (b.name for b in blobs if b.name.lower().endswith(".csv")),
+        reverse=True,  # newest file first so the selectbox defaults to the latest month
     )
     if dashboard_only:
         names = [n for n in names if "canonical_typed" in n.lower()]

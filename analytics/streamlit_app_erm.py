@@ -568,7 +568,17 @@ header[data-testid="stHeader"] {{
     box-shadow: none !important;
 }}
 
-/* Sidebar collapse/expand buttons — keep visible so users can toggle the panel */
+/* Preserve Material Icons font for Streamlit icon spans (sidebar toggle, expanders, etc.)
+   MUST come after the global span rule above to override it */
+span.material-icons,
+span.material-icons-round,
+span.material-icons-outlined,
+span.material-symbols-rounded,
+span[class*="material-icon"],
+span[class*="material-symbol"] {{
+    font-family: 'Material Icons', 'Material Icons Round', 'Material Symbols Rounded' !important;
+    color: inherit;
+}}
 
 .block-container {{
     padding-top: 1rem;
