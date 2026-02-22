@@ -10,7 +10,6 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -523,43 +522,35 @@ if LATEST_TYPED_PATH_FILE.exists():
 
 st.set_page_config(
     page_title=APP_TITLE,
-    page_icon="🏠",
+    page_icon=None,
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# JavaScript: ensure the sidebar expand/collapse button is always visible
-# and clickable regardless of custom CSS layering. Runs in an iframe so
-# window.parent.document reaches the actual Streamlit page.
-components.html(
-    """
-    <script>
-    (function () {
-        function fixSidebarBtn() {
-            var doc = window.parent.document;
-            var el = doc.querySelector('[data-testid="stSidebarCollapsedControl"]');
-            if (el) {
-                el.style.setProperty('display',        'flex',    'important');
-                el.style.setProperty('visibility',     'visible', 'important');
-                el.style.setProperty('opacity',        '1',       'important');
-                el.style.setProperty('z-index',        '999999',  'important');
-                el.style.setProperty('pointer-events', 'auto',    'important');
-                el.style.setProperty('position',       'fixed',   'important');
-                el.style.setProperty('top',            '0.5rem',  'important');
-                el.style.setProperty('left',           '0',       'important');
-            }
-        }
-        fixSidebarBtn();
-        var observer = new MutationObserver(fixSidebarBtn);
-        observer.observe(
-            window.parent.document.body,
-            { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] }
-        );
-    })();
-    </script>
+# Sidebar toggle: a fixed-position button rendered directly in the page
+# (not in an iframe) so onclick has full document access. Clicking it
+# programmatically triggers whichever native Streamlit sidebar button
+# is currently in the DOM — works whether sidebar is open or closed.
+st.markdown(
+    f"""
+    <button
+        id="sidebar-toggle-btn"
+        onclick="(function(){{
+            var o=document.querySelector('[data-testid=\\'stSidebarCollapsedControl\\']');
+            var c=document.querySelector('[data-testid=\\'stSidebarCollapseButton\\'] button');
+            if(o){{o.click();}}else if(c){{c.click();}}
+        }})();"
+        style="
+            position:fixed;top:0.4rem;left:0;z-index:9999999;
+            background:{PRIMARY_COLOR};color:#fff;border:none;
+            border-radius:0 6px 6px 0;padding:6px 14px;cursor:pointer;
+            font-size:13px;font-weight:600;
+            font-family:'Segoe UI',Arial,sans-serif;
+            box-shadow:2px 2px 8px rgba(0,0,0,0.35);
+        "
+    >Filters</button>
     """,
-    height=0,
-    scrolling=False,
+    unsafe_allow_html=True,
 )
 
 
@@ -874,7 +865,7 @@ with st.sidebar:
         # No Configuration section needed — blob is the only source.
         data_source = "Azure Blob Storage"
     else:
-        st.markdown("### ⚙️ Configuration")
+        st.markdown("### Configuration")
         # Developer / local mode: allow both local file and blob
         source_options = ["Local file", "Azure Blob Storage"] if BLOB_STORAGE_AVAILABLE else ["Local file"]
         data_source = st.radio(
@@ -926,7 +917,7 @@ use_blob = data_source == "Azure Blob Storage" and selected_blob
 if not final_path_str and not use_blob:
     if UPLOAD_PAGE_AVAILABLE:
         pass
-    st.warning("👈 Please enter a file path or select a blob in the sidebar to proceed.")
+    st.warning("Please enter a file path or select a blob in the sidebar to proceed.")
     st.stop()
 
 # --- LOAD DATA ---
@@ -940,12 +931,12 @@ try:
             df = load_data(str(validated_path))
 
     if df is None or df.empty:
-        st.error("❌ Data load returned empty result.")
+        st.error("Data load returned empty result.")
         st.stop()
 
     # Success
     source_label = selected_blob if use_blob else str(validated_path)
-    st.success(f"✓ Loaded {len(df):,} loans from {Path(source_label).name}")
+    st.success(f"Loaded {len(df):,} loans from {Path(source_label).name}")
 
     # Save successful path for next time (local files only)
     if not use_blob:
@@ -956,11 +947,41 @@ try:
 
     filter_options = get_filter_options(df)
 
+    # Auto-save snapshot on every data load so Balance Evolution accumulates
+    # monthly history without requiring the user to visit the Static Pools tab.
+    if BLOB_STORAGE_AVAILABLE:
+        try:
+            _asof_candidates = [
+                "data_cut_off_date", "as_of_date", "reporting_date",
+                "cut_off_date", "cutoff_date",
+            ]
+            _asof_snap_col = next((c for c in _asof_candidates if c in df.columns), None)
+            _asof_snap = (
+                pd.Timestamp(
+                    pd.to_datetime(df[_asof_snap_col], errors="coerce").max()
+                ).strftime("%Y-%m-%d")
+                if _asof_snap_col
+                else pd.Timestamp.today().strftime("%Y-%m-%d")
+            )
+            write_portfolio_snapshot(
+                df=df,
+                as_of_date=_asof_snap,
+                balance_col=next(
+                    (c for c in ["total_balance", "principal_outstanding"] if c in df.columns),
+                    df.columns[0],
+                ),
+                orig_date_col="origination_date" if "origination_date" in df.columns else "origination_year",
+                ltv_col="current_ltv" if "current_ltv" in df.columns else None,
+                rate_col="interest_rate" if "interest_rate" in df.columns else None,
+            )
+        except Exception:
+            pass  # Non-critical; never block the user
+
 except ValueError as e:
-    st.error(f"❌ {e}")
+    st.error(f"{e}")
     st.stop()
 except Exception as e:
-    st.error("❌ Critical Error during load:")
+    st.error("Critical Error during load:")
     st.exception(e)
     st.stop()
 
@@ -969,7 +990,7 @@ except Exception as e:
 # ============================
 with st.sidebar:
     st.markdown("---")
-    st.markdown("### 🔎 Filters")
+    st.markdown("### Filters")
 
     sel_vintages = []
     sel_products = []
@@ -980,7 +1001,7 @@ with st.sidebar:
         vintages = filter_options["vintages"]
         if vintages:
             sel_vintages = st.multiselect(
-                "📅 Vintage Year",
+                "Vintage Year",
                 options=vintages,
                 default=[],
                 key="filter_vintages",
@@ -991,7 +1012,7 @@ with st.sidebar:
         products = filter_options["products"]
         if products:
             sel_products = st.multiselect(
-                "🏠 Product Type",
+                "Product Type",
                 options=products,
                 default=[],
                 key="filter_products",
@@ -1001,7 +1022,7 @@ with st.sidebar:
         regions = filter_options["regions"]
         if regions:
             sel_regions = st.multiselect(
-                "🗺️ Geography",
+                "Geography",
                 options=regions,
                 default=[],
                 key="filter_regions",
@@ -1016,25 +1037,25 @@ with st.sidebar:
     # --- D. FILTER IMPACT & RESET ---
     if len(df_view) < len(df):
         reduction = (1 - len(df_view) / len(df)) * 100
-        st.info(f"📊 **{len(df_view):,} of {len(df):,} loans** ({reduction:.1f}% filtered)")
+        st.info(f"**{len(df_view):,} of {len(df):,} loans** ({reduction:.1f}% filtered)")
 
-        if st.button("🔄 Reset all filters", use_container_width=True):
+        if st.button("Reset all filters", use_container_width=True):
             for k in ["filter_vintages", "filter_products", "filter_regions"]:
                 st.session_state.pop(k, None)
             st.rerun()
     else:
-        st.info(f"📊 **{len(df):,} loans** (no filters)")
+        st.info(f"**{len(df):,} loans** (no filters)")
 
 df = df_view
 
 with st.sidebar:
     st.markdown("---")
-    st.markdown("### 📥 Export")
+    st.markdown("### Export")
 
     # CSV Export (filtered view)
     csv_bytes = df_to_csv_bytes(df_view)
     st.download_button(
-        "📄 Download CSV",
+        "Download CSV",
         data=csv_bytes,
         file_name=f"erm_portfolio_{datetime.now():%Y%m%d}.csv",
         mime="text/csv",
@@ -1046,7 +1067,7 @@ with st.sidebar:
         excel_bytes = df_to_excel_bytes(df_view)
 
         st.download_button(
-            "📊 Download Excel",
+            "Download Excel",
             data=excel_bytes,
             file_name=f"erm_portfolio_{datetime.now():%Y%m%d}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1056,10 +1077,10 @@ with st.sidebar:
         pass
 
     st.markdown("---")
-    st.markdown("### 📊 Generate Report")
+    st.markdown("### Generate Report")
 
     # PPT Generation Button
-    if st.button("🎯 Generate PowerPoint", type="primary", use_container_width=True):
+    if st.button("Generate PowerPoint", type="primary", use_container_width=True):
         with st.spinner("Generating presentation..."):
             try:
                 # Save current filtered dataset to temp file
@@ -1089,7 +1110,7 @@ with st.sidebar:
 
                 if result.returncode == 0:
                     # Success - provide download link
-                    st.success("✅ Presentation generated successfully!")
+                    st.success("Presentation generated successfully.")
 
                     # Read the generated file
                     with open(output_pptx, "rb") as f:
@@ -1097,7 +1118,7 @@ with st.sidebar:
 
                     # Download button
                     st.download_button(
-                        label="📥 Download PowerPoint",
+                        label="Download PowerPoint",
                         data=pptx_bytes,
                         file_name=output_pptx.name,
                         mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
@@ -1107,23 +1128,23 @@ with st.sidebar:
                     # Show stats
                     st.info(f"""
                     **Report Details:**
-                    - 📊 {len(df):,} loans included
-                    - 📄 File: {output_pptx.name}
-                    - 📁 Saved to: reports/
+                    - {len(df):,} loans included
+                    - File: {output_pptx.name}
+                    - Saved to: reports/
                     """)
 
                     # Clean up temp file
                     temp_csv.unlink(missing_ok=True)
 
                 else:
-                    st.error(f"❌ Generation failed: {result.stderr}")
+                    st.error(f"Generation failed: {result.stderr}")
 
             except subprocess.TimeoutExpired:
-                st.error("❌ Generation timed out (took >5 minutes)")
+                st.error("Generation timed out (took >5 minutes)")
             except Exception as e:
-                st.error(f"❌ Error generating presentation: {e}")
+                st.error(f"Error generating presentation: {e}")
 
-    st.caption("💡 Tip: Apply filters before generating to customise your report")
+    st.caption("Tip: Apply filters before generating to customise your report")
 
 
 # ============================
@@ -1131,13 +1152,13 @@ with st.sidebar:
 # ============================
 
 tab_names = [
-    "📊 Stratifications",
-    "🎯 Scenario Analysis",
-    "📈 Static Pools"
+    "Stratifications",
+    "Scenario Analysis",
+    "Static Pools"
 ]
 
 if RISK_MONITORING_AVAILABLE:
-    tab_names.append("🚦 Risk Monitoring")
+    tab_names.append("Risk Monitoring")
     tab1, tab2, tab3, tab4 = st.tabs(tab_names)
 else:
     tab1, tab2, tab3 = st.tabs(tab_names)
@@ -1151,7 +1172,7 @@ with tab1:
     st.markdown("<br>", unsafe_allow_html=True)
     
     # ===== KPI STRIP =====
-    st.markdown("### 📋 Portfolio Overview")
+    st.markdown("### Portfolio Overview")
     st.markdown("#### Portfolio Metrics")  # NEW: Subheading for metrics
     
     total_loans = len(df)
@@ -1303,7 +1324,7 @@ with tab1:
         """, unsafe_allow_html=True)
     
     # ===== STRATIFICATION CHARTS =====
-    st.markdown("### 📊 Portfolio Stratifications")
+    st.markdown("### Portfolio Stratifications")
     
     # LTV Distribution
     st.markdown("#### Current LTV Distribution")
@@ -1654,7 +1675,7 @@ with tab1:
             st.info("No broker data available")
         
     # ===== BUBBLE CHARTS =====
-    st.markdown("### 🫧 Relationship Analysis")
+    st.markdown("### Relationship Analysis")
     
     # Bubble 1: Outstanding Balance vs Property Value
     st.markdown("#### Balance vs Current Property Value")
@@ -1669,7 +1690,7 @@ with tab1:
         # Sample for performance if large
         if len(bubble_df) > 1000:
             bubble_df = bubble_df.sample(1000, random_state=42)
-            st.caption("📊 Showing 1,000 random loans for performance")
+            st.caption("Showing 1,000 random loans for performance")
         
         if "loan_identifier" in bubble_df.columns and "loan_id" not in bubble_df.columns:
             bubble_df["loan_id"] = bubble_df["loan_identifier"]
@@ -1713,7 +1734,7 @@ with tab1:
     if not bubble_df2.empty:
         if len(bubble_df2) > 2000:
             bubble_df2 = bubble_df2.sample(2000, random_state=42)
-            st.caption("📊 Showing 2,000 random loans for performance")
+            st.caption("Showing 2,000 random loans for performance")
         
         fig = px.scatter(
             bubble_df2,
@@ -1744,7 +1765,7 @@ with tab1:
 # ... (End of Bubble Charts section) ...
 
     st.markdown("---")
-    st.markdown("### 🔎 Portfolio Concentration Matrix")
+    st.markdown("### Portfolio Concentration Matrix")
     st.caption("Deep dive into the intersection of any two risk dimensions.")
     
     # 1. Configuration Controls
@@ -1859,7 +1880,7 @@ with tab1:
 
 with tab2:
     st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("### 🎯 Scenario Analysis")
+    st.markdown("### Scenario Analysis")
 
     if not SCENARIO_ENGINE_AVAILABLE:
         st.warning("Scenario Analysis is unavailable — the `scenario_engine` module was not found.")
@@ -1875,12 +1896,12 @@ with tab2:
     
     if missing_cols:
         st.error(
-            "❌ Missing required columns for scenario analysis: "
+            "Missing required columns for scenario analysis: "
             + ", ".join(missing_cols)
         )
     else:
         # ==================== SCENARIO CONFIGURATION ====================
-        st.markdown("#### ⚙️ Scenario Configuration")
+        st.markdown("#### Scenario Configuration")
         
         col_config1, col_config2 = st.columns([2, 1])
         
@@ -1911,7 +1932,7 @@ with tab2:
         st.markdown("---")
         
         # ==================== ASSUMPTION INPUTS ====================
-        st.markdown("#### 📊 Scenario Assumptions")
+        st.markdown("#### Scenario Assumptions")
         
         # Defaults from preset or sensible base case
         if preset_assumptions:
@@ -1932,7 +1953,7 @@ with tab2:
         col_a1, col_a2, col_a3 = st.columns(3)
         
         with col_a1:
-            st.markdown("**🏠 Economic assumptions**")
+            st.markdown("**Economic assumptions**")
             
             hpi_rate = (
                 st.number_input(
@@ -1972,7 +1993,7 @@ with tab2:
             )
         
         with col_a2:
-            st.markdown("**👤 Borrower behaviour**")
+            st.markdown("**Borrower behaviour**")
             
             voluntary_prepay = (
                 st.number_input(
@@ -2011,7 +2032,7 @@ with tab2:
             )
         
         with col_a3:
-            st.markdown("**📈 Combined metrics**")
+            st.markdown("**Combined metrics**")
             
             # Combined annual exit rate
             p_exit = 1.0 - (
@@ -2059,7 +2080,7 @@ with tab2:
         
         with col_run1:
             run_button = st.button(
-                "🚀 Run scenario",
+                " Run scenario",
                 type="primary",
                 use_container_width=True,
             )
@@ -2127,10 +2148,10 @@ with tab2:
                         comparison = compare_scenarios(df, scenarios)
                         st.session_state["scenario_comparison"] = comparison
                     
-                    st.success("✅ Scenario projection complete.")
+                    st.success("Scenario projection complete.")
                 
                 except Exception as e:
-                    st.error(f"❌ Scenario projection failed: {e}")
+                    st.error(f"Scenario projection failed: {e}")
         
         # ==================== DISPLAY RESULTS ====================
         if "scenario_projection" in st.session_state:
@@ -2140,7 +2161,7 @@ with tab2:
             comparison = st.session_state.get("scenario_comparison")
 
             st.markdown("---")
-            st.markdown("#### 🎯 Key Projections")
+            st.markdown("#### Key Projections")
 
             # Determine key years
             max_year = int(projection["year"].max())
@@ -2263,7 +2284,7 @@ with tab2:
             st.markdown("<br>", unsafe_allow_html=True)
 
             # ==================== CHARTS ====================
-            st.markdown("#### 📈 Scenario charts")
+            st.markdown("#### Scenario Charts")
             ctab1, ctab2, ctab3 = st.tabs(
                 ["Balance runoff", "NNEG losses", "LTV over time"]
             )
@@ -2372,7 +2393,7 @@ with tab2:
             # ==================== LOAN-LEVEL DETAIL (OPTIONAL) ====================
             if loan_detail is not None:
                 st.markdown("---")
-                st.markdown("#### 🔍 Loan-level drill-down")
+                st.markdown("#### Loan-level Drill-down")
                 st.markdown("### View loan-level summary projections")
                 display_detail = loan_detail.copy()
                 for col in display_detail.columns:
@@ -2393,7 +2414,7 @@ with tab2:
 
                     csv_ld = loan_detail.to_csv(index=False).encode("utf-8")
                     st.download_button(
-                        "📥 Download loan-level CSV",
+                        "Download loan-level CSV",
                         data=csv_ld,
                         file_name=f"erm_scenario_loan_detail_{datetime.now():%Y%m%d}.csv",
                         mime="text/csv",
@@ -2401,14 +2422,14 @@ with tab2:
 
             # ==================== EXPORT ====================
             st.markdown("---")
-            st.markdown("#### 📥 Export scenario results")
+            st.markdown("#### Export scenario results")
 
             col_e1, col_e2, col_e3 = st.columns(3)
 
             with col_e1:
                 csv_proj = projection.to_csv(index=False).encode("utf-8")
                 st.download_button(
-                    "📊 Download projection CSV",
+                    "Download projection CSV",
                     data=csv_proj,
                     file_name=f"erm_scenario_projection_{datetime.now():%Y%m%d}.csv",
                     mime="text/csv",
@@ -2420,7 +2441,7 @@ with tab2:
 
                 assumptions_json = _json.dumps(assumptions.to_dict(), indent=2)
                 st.download_button(
-                    "⚙️ Download assumptions JSON",
+                    "Download assumptions JSON",
                     data=assumptions_json,
                     file_name=f"erm_scenario_assumptions_{datetime.now():%Y%m%d}.json",
                     mime="application/json",
@@ -2431,7 +2452,7 @@ with tab2:
                 if comparison is not None:
                     csv_cmp = comparison.to_csv(index=False).encode("utf-8")
                     st.download_button(
-                        "📈 Download comparison CSV",
+                        "Download comparison CSV",
                         data=csv_cmp,
                         file_name=f"erm_scenario_comparison_{datetime.now():%Y%m%d}.csv",
                         mime="text/csv",
@@ -2453,7 +2474,7 @@ with tab2:
 
 with tab3:
     st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("### 📈 Static Pool Analysis – Equity Release")
+    st.markdown("###  Static Pool Analysis – Equity Release")
 
     # ── Prepare data ──────────────────────────────────────────────────
     df_sp = df.copy()
@@ -2502,7 +2523,7 @@ with tab3:
 
     # 4. Origination Date
     if "origination_date" not in df_sp.columns:
-        st.error("❌ Missing required field: origination_date")
+        st.error("Missing required field: origination_date")
         st.stop()
     df_sp["origination_date"] = coerce_datetime(df_sp["origination_date"], dayfirst=True)
 
@@ -2583,23 +2604,6 @@ with tab3:
         st.info("No valid data for static pool analysis.")
         st.stop()
 
-    # ── AUTO-SAVE SNAPSHOT TO BLOB ─────────────────────────────────────
-    # Silently write a compact summary so future dashboard sessions can
-    # build the Balance Evolution chart without re-uploading old CSVs.
-    if BLOB_STORAGE_AVAILABLE:
-        try:
-            _snap_as_of = pd.Timestamp(panel[sp_spec.as_of_date].max()).strftime("%Y-%m-%d")
-            write_portfolio_snapshot(
-                df=df_sp,
-                as_of_date=_snap_as_of,
-                balance_col=sp_spec.principal_outstanding,
-                orig_date_col="origination_date",
-                ltv_col="current_ltv" if "current_ltv" in df_sp.columns else None,
-                rate_col="interest_rate" if "interest_rate" in df_sp.columns else None,
-            )
-        except Exception:
-            pass  # Non-critical; never block the user
-
     # ── CONFIG LOADER ──────────────────────────────────────────────────
     config_path = "static_pools_config_erm.yaml"
     try:
@@ -2615,7 +2619,7 @@ with tab3:
 
     # ── BALANCE EVOLUTION (calendar-time view) ─────────────────────────
     st.markdown("---")
-    st.subheader("📊 Portfolio Balance Through Time")
+    st.subheader("Portfolio Balance Through Time")
 
     # Build balance series from current panel (all dates present in this file)
     _bal_from_panel = (
@@ -2689,7 +2693,7 @@ with tab3:
         st.plotly_chart(fig_bal, use_container_width=True)
 
     st.markdown("---")
-    st.subheader("📈 Vintage Analysis (by Origination Month)")
+    st.subheader("Vintage Analysis (by Origination Month)")
 
     # ── SNAPSHOT SELECTOR ──────────────────────────────────────────────
     unique_dates = sorted(panel[sp_spec.as_of_date].dropna().unique())
@@ -2796,7 +2800,7 @@ with tab3:
 
 if RISK_MONITORING_AVAILABLE:
     with tab4:
-        st.markdown("### 🚦 Risk Limit Monitoring")
+        st.markdown("### Risk Limit Monitoring")
         st.markdown("<br>", unsafe_allow_html=True)
         
         # Initialize risk monitor
@@ -2819,7 +2823,7 @@ if RISK_MONITORING_AVAILABLE:
         with col2:
             st.markdown(f"""
             <div class="kpi-box" style="border-left: 4px solid #DC3545;">
-                <div class="kpi-label">🔴 Breaches</div>
+                <div class="kpi-label">Breaches</div>
                 <div class="kpi-value" style="color: #DC3545;">{summary['breaches']}</div>
                 <div class="kpi-subtitle">Limits exceeded</div>
             </div>
@@ -2828,7 +2832,7 @@ if RISK_MONITORING_AVAILABLE:
         with col3:
             st.markdown(f"""
             <div class="kpi-box" style="border-left: 4px solid #FFC107;">
-                <div class="kpi-label">🟡 Warnings</div>
+                <div class="kpi-label">Warnings</div>
                 <div class="kpi-value" style="color: #FFC107;">{summary['warnings']}</div>
                 <div class="kpi-subtitle">Approaching limits</div>
             </div>
@@ -2837,7 +2841,7 @@ if RISK_MONITORING_AVAILABLE:
         with col4:
             st.markdown(f"""
             <div class="kpi-box" style="border-left: 4px solid #28A745;">
-                <div class="kpi-label">🟢 Compliant</div>
+                <div class="kpi-label">Compliant</div>
                 <div class="kpi-value" style="color: #28A745;">{summary['compliant']}</div>
                 <div class="kpi-subtitle">Within limits</div>
             </div>
@@ -2882,10 +2886,10 @@ if RISK_MONITORING_AVAILABLE:
         for r in filtered_results:
             # Status indicator
             status_icon = {
-                "red": "🔴",
-                "amber": "🟡",
-                "green": "🟢",
-                "unknown": "⚪"
+                "red": "BREACH",
+                "amber": "WARNING",
+                "green": "OK",
+                "unknown": "N/A"
             }[r.status]
             
             # Format values based on type
@@ -2932,7 +2936,7 @@ if RISK_MONITORING_AVAILABLE:
             # Export button
             csv = df_table.to_csv(index=False).encode('utf-8')
             st.download_button(
-                "📥 Download Limit Report",
+                "Download Limit Report",
                 data=csv,
                 file_name=f"risk_limits_{datetime.now():%Y%m%d}.csv",
                 mime="text/csv",
@@ -2944,7 +2948,7 @@ if RISK_MONITORING_AVAILABLE:
         # ===== BREACH DRILL-DOWN =====
         if summary["breaches"] > 0:
             st.markdown("---")
-            st.markdown("#### 🚨 Breach Details")
+            st.markdown("#### Breach Details")
             
             breached = [r for r in results if r.status == "red"]
             breached.sort(key=lambda r: (r.severity == "high", -r.utilization_pct))
@@ -2952,7 +2956,7 @@ if RISK_MONITORING_AVAILABLE:
             for r in breached:
                 severity_color = "#DC3545" if r.severity == "critical" else "#FF6B35"
                 
-                if st.checkbox(f"{'🚨' if r.severity == 'critical' else '⚠️'} {r.description}", 
+                if st.checkbox(f"{'' if r.severity == 'critical' else ''} {r.description}", 
                             value=(r.severity == "critical"), 
                             key=f"breach_{r.limit_id}"):
                     col1, col2 = st.columns([2, 1])
