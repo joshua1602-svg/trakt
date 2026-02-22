@@ -527,32 +527,6 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Sidebar toggle: a fixed-position button rendered directly in the page
-# (not in an iframe) so onclick has full document access. Clicking it
-# programmatically triggers whichever native Streamlit sidebar button
-# is currently in the DOM — works whether sidebar is open or closed.
-st.markdown(
-    f"""
-    <button
-        id="sidebar-toggle-btn"
-        onclick="(function(){{
-            var o=document.querySelector('[data-testid=\\'stSidebarCollapsedControl\\']');
-            var c=document.querySelector('[data-testid=\\'stSidebarCollapseButton\\'] button');
-            if(o){{o.click();}}else if(c){{c.click();}}
-        }})();"
-        style="
-            position:fixed;top:0.4rem;left:0;z-index:9999999;
-            background:{PRIMARY_COLOR};color:#fff;border:none;
-            border-radius:0 6px 6px 0;padding:6px 14px;cursor:pointer;
-            font-size:13px;font-weight:600;
-            font-family:'Segoe UI',Arial,sans-serif;
-            box-shadow:2px 2px 8px rgba(0,0,0,0.35);
-        "
-    >Filters</button>
-    """,
-    unsafe_allow_html=True,
-)
-
 
 # Upload page routing
 if UPLOAD_PAGE_AVAILABLE:
@@ -594,41 +568,11 @@ header[data-testid="stHeader"] {{
     box-shadow: none !important;
 }}
 
-/* Sidebar collapse button (inside the open sidebar) */
-div[data-testid="stSidebarCollapseButton"] {{
-    background-color: {PRIMARY_COLOR} !important;
-    border-radius: 0 6px 6px 0 !important;
-    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.18) !important;
-    opacity: 1 !important;
-}}
-div[data-testid="stSidebarCollapseButton"] > button {{
-    color: white !important;
-    background: transparent !important;
-}}
-div[data-testid="stSidebarCollapseButton"] > button > svg {{
-    fill: white !important;
-    stroke: white !important;
-}}
-/* Sidebar expand button (shown when sidebar is collapsed).
-   Do NOT override position — let Streamlit place it. Only force z-index
-   so it sits above the custom header banner, and style it to match. */
+/* Sidebar: hide the collapse button so the panel always stays open.
+   Critical controls (filters, export, PPTX) live here. */
+div[data-testid="stSidebarCollapseButton"],
 [data-testid="stSidebarCollapsedControl"] {{
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    z-index: 999999 !important;
-}}
-[data-testid="stSidebarCollapsedControl"] button,
-button[data-testid="stSidebarCollapsedControl"] {{
-    background-color: {PRIMARY_COLOR} !important;
-    color: white !important;
-    border-radius: 0 6px 6px 0 !important;
-    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.25) !important;
-}}
-[data-testid="stSidebarCollapsedControl"] svg,
-button[data-testid="stSidebarCollapsedControl"] svg {{
-    fill: white !important;
-    stroke: white !important;
+    display: none !important;
 }}
 
 .block-container {{
