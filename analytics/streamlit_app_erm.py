@@ -568,12 +568,7 @@ header[data-testid="stHeader"] {{
     box-shadow: none !important;
 }}
 
-/* Sidebar: hide the collapse button so the panel always stays open.
-   Critical controls (filters, export, PPTX) live here. */
-div[data-testid="stSidebarCollapseButton"],
-[data-testid="stSidebarCollapsedControl"] {{
-    display: none !important;
-}}
+/* Sidebar collapse/expand buttons — keep visible so users can toggle the panel */
 
 .block-container {{
     padding-top: 1rem;
@@ -930,47 +925,51 @@ except Exception as e:
     st.stop()
 
 # ============================
-# 2. SIDEBAR FILTERS
+# 2. FILTERS (main content)
 # ============================
-with st.sidebar:
-    st.markdown("---")
-    st.markdown("### Filters")
+sel_vintages = []
+sel_products = []
+sel_regions = []
 
-    sel_vintages = []
-    sel_products = []
-    sel_regions = []
+with st.expander("Filters", expanded=False):
+    cols_f = st.columns(3)
 
     # --- A. VINTAGE FILTER ---
-    if "origination_year" in df.columns:
-        vintages = filter_options["vintages"]
-        if vintages:
-            sel_vintages = st.multiselect(
-                "Vintage Year",
-                options=vintages,
-                default=[],
-                key="filter_vintages",
-            )
+    with cols_f[0]:
+        if "origination_year" in df.columns:
+            vintages = filter_options["vintages"]
+            if vintages:
+                sel_vintages = st.multiselect(
+                    "Vintage Year",
+                    options=vintages,
+                    default=[],
+                    key="filter_vintages",
+                )
 
     # --- B. PRODUCT FILTER ---
-    if "erm_product_type" in df.columns:
-        products = filter_options["products"]
-        if products:
-            sel_products = st.multiselect(
-                "Product Type",
-                options=products,
-                default=[],
-                key="filter_products",
-            )
+    with cols_f[1]:
+        if "erm_product_type" in df.columns:
+            products = filter_options["products"]
+            if products:
+                sel_products = st.multiselect(
+                    "Product Type",
+                    options=products,
+                    default=[],
+                    key="filter_products",
+                )
+
     # --- C. GEOGRAPHIC FILTER ---
-    if "geographic_region" in df.columns:
-        regions = filter_options["regions"]
-        if regions:
-            sel_regions = st.multiselect(
-                "Geography",
-                options=regions,
-                default=[],
-                key="filter_regions",
-            )
+    with cols_f[2]:
+        if "geographic_region" in df.columns:
+            regions = filter_options["regions"]
+            if regions:
+                sel_regions = st.multiselect(
+                    "Geography",
+                    options=regions,
+                    default=[],
+                    key="filter_regions",
+                )
+
     df_view = apply_filters_cached(
         df,
         tuple(sel_vintages),
@@ -982,113 +981,88 @@ with st.sidebar:
     if len(df_view) < len(df):
         reduction = (1 - len(df_view) / len(df)) * 100
         st.info(f"**{len(df_view):,} of {len(df):,} loans** ({reduction:.1f}% filtered)")
-
         if st.button("Reset all filters", use_container_width=True):
             for k in ["filter_vintages", "filter_products", "filter_regions"]:
                 st.session_state.pop(k, None)
             st.rerun()
     else:
-        st.info(f"**{len(df):,} loans** (no filters)")
+        st.info(f"**{len(df):,} loans** (no filters applied)")
 
 df = df_view
 
-with st.sidebar:
-    st.markdown("---")
-    st.markdown("### Export")
+# ============================
+# 3. EXPORT & REPORT (main content)
+# ============================
+with st.expander("Export & Report", expanded=False):
+    exp_cols = st.columns([1, 1, 2])
 
-    # CSV Export (filtered view)
-    csv_bytes = df_to_csv_bytes(df_view)
-    st.download_button(
-        "Download CSV",
-        data=csv_bytes,
-        file_name=f"erm_portfolio_{datetime.now():%Y%m%d}.csv",
-        mime="text/csv",
-        use_container_width=True,
-    )
-
-    # Excel Export (filtered view)
-    try:
-        excel_bytes = df_to_excel_bytes(df_view)
-
+    # CSV Export
+    with exp_cols[0]:
+        csv_bytes = df_to_csv_bytes(df_view)
         st.download_button(
-            "Download Excel",
-            data=excel_bytes,
-            file_name=f"erm_portfolio_{datetime.now():%Y%m%d}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "Download CSV",
+            data=csv_bytes,
+            file_name=f"erm_portfolio_{datetime.now():%Y%m%d}.csv",
+            mime="text/csv",
             use_container_width=True,
         )
-    except ImportError:
-        pass
 
-    st.markdown("---")
-    st.markdown("### Generate Report")
+    # Excel Export
+    with exp_cols[1]:
+        try:
+            excel_bytes = df_to_excel_bytes(df_view)
+            st.download_button(
+                "Download Excel",
+                data=excel_bytes,
+                file_name=f"erm_portfolio_{datetime.now():%Y%m%d}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
+        except ImportError:
+            pass
 
-    # PPT Generation Button
-    if st.button("Generate PowerPoint", type="primary", use_container_width=True):
-        with st.spinner("Generating presentation..."):
-            try:
-                # Save current filtered dataset to temp file
-                temp_dir = Path("temp_pptx_data")
-                temp_dir.mkdir(exist_ok=True)
+    # PPTX Generation
+    with exp_cols[2]:
+        st.caption("Apply filters above before generating to customise your report.")
+        if st.button("Generate PowerPoint", type="primary", use_container_width=True):
+            with st.spinner("Generating presentation..."):
+                try:
+                    temp_dir = Path("temp_pptx_data")
+                    temp_dir.mkdir(exist_ok=True)
+                    temp_csv = temp_dir / f"temp_data_{datetime.now():%Y%m%d_%H%M%S}.csv"
+                    df.to_csv(temp_csv, index=False)
 
-                temp_csv = temp_dir / f"temp_data_{datetime.now():%Y%m%d_%H%M%S}.csv"
-                df.to_csv(temp_csv, index=False)
+                    output_pptx = Path("reports") / f"erm_report_{datetime.now():%Y%m%d_%H%M%S}.pptx"
+                    output_pptx.parent.mkdir(exist_ok=True)
 
-                # Output filename
-                output_pptx = Path("reports") / f"erm_report_{datetime.now():%Y%m%d_%H%M%S}.pptx"
-                output_pptx.parent.mkdir(exist_ok=True)
-
-                # Run PPTX generator
-                pptx_script = str(Path(__file__).resolve().parent / "generate_pptx_client.py")
-                result = subprocess.run(
-                    [
-                        sys.executable,
-                        pptx_script,
-                        "--input", str(temp_csv),
-                        "--output", str(output_pptx)
-                    ],
-                    capture_output=True,
-                    text=True,
-                    timeout=300  # 5 minute timeout
-                )
-
-                if result.returncode == 0:
-                    # Success - provide download link
-                    st.success("Presentation generated successfully.")
-
-                    # Read the generated file
-                    with open(output_pptx, "rb") as f:
-                        pptx_bytes = f.read()
-
-                    # Download button
-                    st.download_button(
-                        label="Download PowerPoint",
-                        data=pptx_bytes,
-                        file_name=output_pptx.name,
-                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                        use_container_width=True
+                    pptx_script = str(Path(__file__).resolve().parent / "generate_pptx_client.py")
+                    result = subprocess.run(
+                        [sys.executable, pptx_script, "--input", str(temp_csv), "--output", str(output_pptx)],
+                        capture_output=True,
+                        text=True,
+                        timeout=300,
                     )
 
-                    # Show stats
-                    st.info(f"""
-                    **Report Details:**
-                    - {len(df):,} loans included
-                    - File: {output_pptx.name}
-                    - Saved to: reports/
-                    """)
+                    if result.returncode == 0:
+                        st.success("Presentation generated successfully.")
+                        with open(output_pptx, "rb") as fh:
+                            pptx_bytes = fh.read()
+                        st.download_button(
+                            label="Download PowerPoint",
+                            data=pptx_bytes,
+                            file_name=output_pptx.name,
+                            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                            use_container_width=True,
+                        )
+                        st.info(f"**{len(df):,} loans included** — saved to reports/")
+                        temp_csv.unlink(missing_ok=True)
+                    else:
+                        st.error(f"Generation failed: {result.stderr}")
 
-                    # Clean up temp file
-                    temp_csv.unlink(missing_ok=True)
-
-                else:
-                    st.error(f"Generation failed: {result.stderr}")
-
-            except subprocess.TimeoutExpired:
-                st.error("Generation timed out (took >5 minutes)")
-            except Exception as e:
-                st.error(f"Error generating presentation: {e}")
-
-    st.caption("Tip: Apply filters before generating to customise your report")
+                except subprocess.TimeoutExpired:
+                    st.error("Generation timed out (took >5 minutes)")
+                except Exception as e:
+                    st.error(f"Error generating presentation: {e}")
 
 
 # ============================
