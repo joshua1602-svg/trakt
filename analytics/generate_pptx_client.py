@@ -48,6 +48,13 @@ try:
 except ImportError:
     HAS_SQUARIFY = False
 
+# Ensure config/system/ is importable when running as a subprocess.
+# The shared config.py lives at <repo>/config/system/config.py; add that
+# directory to sys.path so `from config import ...` resolves correctly.
+_CONFIG_SYSTEM_DIR = str(Path(__file__).resolve().parent.parent / "config" / "system")
+if _CONFIG_SYSTEM_DIR not in sys.path:
+    sys.path.insert(0, _CONFIG_SYSTEM_DIR)
+
 # Local modules
 from config import (
     PRIMARY_COLOR,
