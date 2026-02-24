@@ -114,11 +114,16 @@ STATIC_REPORTING_DATE: str = (
 # Risk monitoring (optional)
 try:
     from risk_monitor import RiskMonitor, LimitCheck
-    from risk_limits_config import ALL_LIMITS, LIMIT_CATEGORIES, CONCENTRATION_LIMITS
+    from config.client.risk_limits_config import ALL_LIMITS, LIMIT_CATEGORIES, CONCENTRATION_LIMITS
     RISK_MONITORING_AVAILABLE = True
 except ImportError:
-    RISK_MONITORING_AVAILABLE = False
-    print("Warning: Risk monitoring modules not found. Risk slide will be skipped.")
+    try:
+        from analytics.risk_monitor import RiskMonitor, LimitCheck
+        from config.client.risk_limits_config import ALL_LIMITS, LIMIT_CATEGORIES, CONCENTRATION_LIMITS
+        RISK_MONITORING_AVAILABLE = True
+    except ImportError:
+        RISK_MONITORING_AVAILABLE = False
+        print("Warning: Risk monitoring modules not found. Risk slide will be skipped.")
 
 
 # Scenario analysis (optional)
@@ -1240,10 +1245,6 @@ def save_bubble_balance_vs_value(df: pd.DataFrame, out_path: str) -> bool:
     y_max = df_plot["current_principal_balance"].max()
     ax.set_xlim(0, x_max * 1.05)
     ax.set_ylim(0, y_max * 1.05)
-
-    # Diagonal reference line (balance = value)
-    diag_max = max(x_max, y_max) * 1.05
-    ax.plot([0, diag_max], [0, diag_max], "k--", alpha=0.3, linewidth=1, label="Balance = Value")
 
     ax.set_title(
         "Current Outstanding Balance vs. Current Property Value",
@@ -2869,6 +2870,8 @@ def save_concentration_matrix_chart(
                         fontsize=8, color=text_color, fontweight="bold")
 
     ax.set_title(title, pad=20, fontweight="bold", color=TEXT_DARK, fontsize=16, loc="center")
+    ax.tick_params(axis="both", which="both", length=0)
+    ax.grid(False)
 
     cbar = fig.colorbar(im, ax=ax, shrink=0.8)
     cbar.set_label("Balance (£m)", fontweight="bold", fontsize=11)
@@ -3087,16 +3090,7 @@ def generate_pptx(
     for title, path, caption in charts:
         add_chart_slide(prs, title, path, logo_path, caption)
 
-    # Portfolio Balance Through Time (replaces CPR slide)
-    print("\n[6/10] Adding Portfolio Balance Through Time...")
-    bal_time_path = chart_dir / "balance_through_time.png"
-    if save_balance_through_time_chart(df, str(bal_time_path)):
-        add_chart_slide(prs, "Portfolio Balance Through Time", str(bal_time_path), logo_path)
-        print(f"   ✓ Portfolio Balance Through Time")
-    else:
-        print(f"   ✗ Portfolio Balance Through Time FAILED")
-
-    # 3x Portfolio Concentration Matrix slides
+    # 3x Concentration Matrix slides
     print("\n[7/10] Adding Concentration Matrix slides...")
     # Prepare LTV buckets for matrix
     if "current_loan_to_value" in df.columns:
@@ -3105,14 +3099,14 @@ def generate_pptx(
         df["_age_bucket"] = create_bucket_column(df, "youngest_borrower_age", "age")
 
     matrix_defs = [
-        ("Region", "geographic_region", "_ltv_bucket", "Region x LTV Bucket x Balance"),
-        ("Age", "_age_bucket", "_ltv_bucket", "Age x LTV Bucket x Balance"),
-        ("Product", "erm_product_type", "_ltv_bucket", "Product Type x LTV Bucket x Balance"),
+        ("Region", "geographic_region", "_ltv_bucket", "Region x LTV x Balance"),
+        ("Age", "_age_bucket", "_ltv_bucket", "Age x LTV x Balance"),
+        ("Product", "erm_product_type", "_ltv_bucket", "Product x LTV x Balance"),
     ]
     for tag, row_col, col_col, mtitle in matrix_defs:
         m_path = chart_dir / f"concentration_{tag.lower()}.png"
         if save_concentration_matrix_chart(df, row_col, col_col, "total_balance", mtitle, str(m_path)):
-            add_chart_slide(prs, f"Portfolio Concentration Matrix: {mtitle}", str(m_path), logo_path)
+            add_chart_slide(prs, f"Concentration Matrix: {mtitle}", str(m_path), logo_path)
             print(f"   ✓ Concentration Matrix: {mtitle}")
         else:
             print(f"   ✗ Concentration Matrix: {mtitle} FAILED (columns missing)")

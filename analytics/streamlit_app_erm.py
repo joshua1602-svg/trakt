@@ -697,8 +697,9 @@ with st.sidebar:
     MANAGED_MODE = BLOB_STORAGE_AVAILABLE
 
     if MANAGED_MODE:
-        # No Configuration section needed — blob is the only source.
+        # Managed (cloud) mode: blob storage is the only source.
         data_source = "Azure Blob Storage"
+        st.markdown("##### Browse output files")
     else:
         st.markdown("### Configuration")
         # Developer / local mode: allow both local file and blob
@@ -748,9 +749,10 @@ with st.sidebar:
         # Sync widget back to variable
         if input_path:
             st.session_state["canonical_file_path"] = input_path
-    else:
+    if data_source == "Azure Blob Storage":
         # Azure Blob Storage browser
-        st.markdown("##### Browse output files")
+        if not MANAGED_MODE:
+            st.markdown("##### Browse output files")
         blob_prefix = st.text_input(
             "Filter by prefix (optional)",
             value="",
@@ -768,6 +770,12 @@ with st.sidebar:
                 prefix=blob_prefix,
                 dashboard_only=not show_all_csvs,
             )
+            # Fallback: if dashboard_only yielded nothing, show all CSVs
+            if not csv_blobs and not show_all_csvs:
+                csv_blobs = list_canonical_csvs(
+                    prefix=blob_prefix,
+                    dashboard_only=False,
+                )
             if csv_blobs:
                 selected_blob = st.selectbox(
                     "Select a CSV file",
@@ -803,9 +811,7 @@ try:
         st.error("Data load returned empty result.")
         st.stop()
 
-    # Success
-    source_label = selected_blob if use_blob else str(validated_path)
-    st.success(f"Loaded {len(df):,} loans from {Path(source_label).name}")
+    # Success — continue silently (no banner)
 
     # Save successful path for next time (local files only)
     if not use_blob:
