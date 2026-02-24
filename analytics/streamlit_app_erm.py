@@ -759,7 +759,7 @@ with st.sidebar:
         )
         show_all_csvs = st.checkbox(
             "Show all CSV files",
-            value=True,
+            value=False,
             key="blob_show_all",
             help="When unchecked, only canonical_typed pipeline outputs are listed.",
         )
@@ -1037,24 +1037,23 @@ with tab1:
     avg_loan_size = total_balance / total_loans if total_loans > 0 else 0.0
     max_loan_size = df["total_balance"].max() if "total_balance" in df.columns else 0.0
     
-    # WA calculations (properly handling NaN values)
+    # WA calculations (guard missing columns so non-canonical CSVs don't crash)
+    wa_current_ltv = 0
+    wa_rate = 0
+    wa_age = 0
     if total_balance > 0:
-        wa_current_ltv = weighted_average(df["current_loan_to_value"], df["total_balance"])
-        if pd.isna(wa_current_ltv):
-            wa_current_ltv = 0
-            
-        wa_rate = weighted_average(df["current_interest_rate"], df["total_balance"])
-        if pd.isna(wa_rate):
-            wa_rate = 0
-        
-        wa_age = weighted_average(df["youngest_borrower_age"], df["total_balance"])
-        if pd.isna(wa_age):
-            wa_age = 0
-        
-    else:
-        wa_current_ltv = 0
-        wa_rate = 0
-        wa_age = 0
+        if "current_loan_to_value" in df.columns:
+            wa_current_ltv = weighted_average(df["current_loan_to_value"], df["total_balance"])
+            if pd.isna(wa_current_ltv):
+                wa_current_ltv = 0
+        if "current_interest_rate" in df.columns:
+            wa_rate = weighted_average(df["current_interest_rate"], df["total_balance"])
+            if pd.isna(wa_rate):
+                wa_rate = 0
+        if "youngest_borrower_age" in df.columns:
+            wa_age = weighted_average(df["youngest_borrower_age"], df["total_balance"])
+            if pd.isna(wa_age):
+                wa_age = 0
     
     # Original LTV calculation
     if "original_loan_to_value" in df.columns and total_balance > 0:
