@@ -176,36 +176,66 @@ def add_missing_optional_columns(df: pd.DataFrame, spec: StaticPoolsSpec) -> pd.
 
 def derive_origination_cohorts(df: pd.DataFrame, spec: StaticPoolsSpec) -> pd.DataFrame:
     """
-    If origination_date is provided, derive origination_year and origination_month.
-    If origination_year already exists, leaves as-is.
+    Derive origination_year and origination_month from origination_date.
+
+    When origination_date is present, year and month are ALWAYS derived from it
+    (any existing origination_year column is overwritten) so that the values are
+    guaranteed to be clean integers regardless of what the source CSV contained.
+
+    When origination_date is absent but origination_year exists, the function
+    attempts numeric coercion and, as a fallback, date-string parsing.
     """
     out = df.copy()
 
-    # If origination_date exists, derive year/month as needed
     if spec.origination_date in out.columns:
         out = _ensure_datetime(out, spec.origination_date)
 
-        if spec.origination_year not in out.columns:
-            out[spec.origination_year] = out[spec.origination_date].dt.year
+        # Drop rows where origination_date could not be parsed (NaT)
+        _valid = out[spec.origination_date].notna()
+        _n_dropped = int((~_valid).sum())
+        if _n_dropped:
+            import logging as _log
+            _log.getLogger(__name__).info(
+                "Dropped %d rows with unparseable origination_date", _n_dropped
+            )
+        out = out[_valid].copy()
 
-        if spec.origination_month not in out.columns:
-            # Represent month as YYYY-MM (string) to be chart-friendly and stable
-            out[spec.origination_month] = (
-                out[spec.origination_date]
-                .dt.to_period("M")
-                .astype(str)
+        if out.empty:
+            raise ValueError(
+                "Every origination_date value is null/unparseable — "
+                "cannot build static pool cohorts."
             )
 
-    # Coerce origination_year to int; drop rows where it cannot be derived
-    if spec.origination_year in out.columns:
+        # Always derive from the parsed date (overwrites any stale CSV column)
+        out[spec.origination_year] = out[spec.origination_date].dt.year.astype(int)
+        out[spec.origination_month] = (
+            out[spec.origination_date].dt.to_period("M").astype(str)
+        )
+
+    elif spec.origination_year in out.columns:
+        # No origination_date — try to salvage origination_year directly
         coerced = pd.to_numeric(out[spec.origination_year], errors="coerce")
+
+        # Fallback: origination_year may contain date strings (e.g. "2020-01-15")
+        if coerced.isna().all():
+            parsed = pd.to_datetime(out[spec.origination_year], errors="coerce")
+            if parsed.notna().any():
+                out = out[parsed.notna()].copy()
+                out[spec.origination_year] = parsed[parsed.notna()].dt.year.astype(int)
+                out[spec.origination_month] = (
+                    parsed[parsed.notna()].dt.to_period("M").astype(str)
+                )
+                return out
+
         _n_before = len(out)
         out = out[coerced.notna()].copy()
         coerced = coerced[coerced.notna()]
         if out.empty:
-            raise ValueError("origination_year must be numeric/int-like (or derivable from origination_date).")
+            raise ValueError(
+                "origination_year contains no numeric or date-parseable values."
+            )
         _n_dropped = _n_before - len(out)
-        if _n_dropped > 0:
+        if _n_dropped:
             import logging as _log
             _log.getLogger(__name__).info(
                 "Dropped %d rows with unparseable origination_year", _n_dropped

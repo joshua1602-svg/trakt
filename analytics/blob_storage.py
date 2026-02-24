@@ -78,14 +78,13 @@ def list_canonical_csvs(
     validation reports, full-schema regulatory outputs, etc.).
     """
     cc = _get_container_client(container)
-    blobs = cc.list_blobs(name_starts_with=prefix)
-    names = sorted(
-        b.name for b in blobs
-        if b.name.lower().endswith(".csv")
-    )
+    blobs = list(cc.list_blobs(name_starts_with=prefix))
+    csv_blobs = [b for b in blobs if b.name.lower().endswith(".csv")]
     if dashboard_only:
-        names = [n for n in names if "canonical_typed" in n.lower()]
-    return names
+        csv_blobs = [b for b in csv_blobs if "canonical_typed" in b.name.lower()]
+    # Most recently modified first so the latest file is pre-selected
+    csv_blobs.sort(key=lambda b: b.last_modified or "", reverse=True)
+    return [b.name for b in csv_blobs]
 
 
 def download_blob_to_dataframe(
