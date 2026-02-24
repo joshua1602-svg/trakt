@@ -196,11 +196,20 @@ def derive_origination_cohorts(df: pd.DataFrame, spec: StaticPoolsSpec) -> pd.Da
                 .astype(str)
             )
 
-    # Validate origination_year numeric/int-like
+    # Coerce origination_year to int; drop rows where it cannot be derived
     if spec.origination_year in out.columns:
         coerced = pd.to_numeric(out[spec.origination_year], errors="coerce")
-        if coerced.isna().any():
+        _n_before = len(out)
+        out = out[coerced.notna()].copy()
+        coerced = coerced[coerced.notna()]
+        if out.empty:
             raise ValueError("origination_year must be numeric/int-like (or derivable from origination_date).")
+        _n_dropped = _n_before - len(out)
+        if _n_dropped > 0:
+            import logging as _log
+            _log.getLogger(__name__).info(
+                "Dropped %d rows with unparseable origination_year", _n_dropped
+            )
         out[spec.origination_year] = coerced.astype(int)
 
     return out

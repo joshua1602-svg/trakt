@@ -767,8 +767,11 @@ def get_logo_html(path):
             return ""
     return "<span style='color:#232D55; font-weight:bold;'>ERE</span>" # Text fallback
 
-# Render Header
-st.markdown(f"""
+# Render Header (placeholder — updated after data load with actual cut-off date)
+_header_placeholder = st.empty()
+
+def _render_header(reporting_date: str):
+    _header_placeholder.markdown(f"""
 <div class="header-container">
     <div class="header-left">
         <div class="header-title" style="color:#FFFFFF !important; -webkit-text-fill-color:#FFFFFF !important;">{APP_TITLE}</div>
@@ -777,7 +780,7 @@ st.markdown(f"""
     <div class="header-right">
         <div class="header-date">
             <span class="date-label">Data as of</span>
-            <span class="date-value">{REPORTING_DATE}</span>
+            <span class="date-value">{reporting_date}</span>
         </div>
         <div class="header-logo-box">
             {get_logo_html(logo_path)}
@@ -785,6 +788,8 @@ st.markdown(f"""
     </div>
 </div>
 """, unsafe_allow_html=True)
+
+_render_header(REPORTING_DATE)  # initial render with YAML/fallback date
 
 # ============================
 # 7. MAIN LOGIC (Sidebar & Loading)
@@ -828,12 +833,37 @@ with st.sidebar:
     selected_blob = ""
 
     if data_source == "Local file":
-        # Input widget with value=default_path
-        input_path = st.text_input(
-            "Path to canonical CSV",
-            value=default_path,
-            key="canonical_file_path_widget",
-        )
+        # Scan working directory (and parent) for CSV files
+        _local_csv_dirs = [Path.cwd(), Path.cwd().parent]
+        _local_csvs: list[str] = []
+        for _d in _local_csv_dirs:
+            if _d.is_dir():
+                _local_csvs.extend(
+                    str(p) for p in sorted(_d.glob("*.csv"), key=lambda p: p.stat().st_mtime, reverse=True)
+                )
+        # De-duplicate while preserving order
+        _seen: set[str] = set()
+        _local_csvs_unique: list[str] = []
+        for _csv in _local_csvs:
+            if _csv not in _seen:
+                _seen.add(_csv)
+                _local_csvs_unique.append(_csv)
+
+        if len(_local_csvs_unique) > 1:
+            input_path = st.selectbox(
+                "Select a CSV file",
+                options=_local_csvs_unique,
+                index=_local_csvs_unique.index(default_path) if default_path in _local_csvs_unique else 0,
+                key="local_csv_selector",
+                format_func=lambda p: Path(p).name,
+            )
+        else:
+            # Fallback: manual text input
+            input_path = st.text_input(
+                "Path to canonical CSV",
+                value=default_path,
+                key="canonical_file_path_widget",
+            )
         # Sync widget back to variable
         if input_path:
             st.session_state["canonical_file_path"] = input_path
@@ -904,6 +934,14 @@ try:
             pass
 
     filter_options = get_filter_options(df)
+
+    # Derive reporting date from actual data cut-off date (overrides YAML)
+    _date_candidates = ["data_cut_off_date", "as_of_date", "reporting_date", "cut_off_date"]
+    _date_col = next((c for c in _date_candidates if c in df.columns), None)
+    if _date_col:
+        _data_date = pd.to_datetime(df[_date_col], errors="coerce").max()
+        if pd.notna(_data_date):
+            _render_header(_data_date.strftime("%d %B %Y"))
 
     # Auto-save snapshot on every data load so Balance Evolution accumulates
     # monthly history without requiring the user to visit the Static Pools tab.
@@ -2484,6 +2522,18 @@ with tab3:
         st.error("Missing required field: origination_date")
         st.stop()
     df_sp["origination_date"] = coerce_datetime(df_sp["origination_date"], dayfirst=True)
+
+    # Drop rows with unparseable origination dates (NaT) BEFORE building
+    # the static-pools panel — these cannot be assigned to a cohort.
+    _nat_mask = df_sp["origination_date"].isna()
+    if _nat_mask.any():
+        st.caption(f"{_nat_mask.sum()} loans with unparseable origination dates excluded from static pool analysis.")
+        df_sp = df_sp[~_nat_mask].copy()
+
+    # Ensure origination_year is a clean numeric column (Int64 from
+    # mi_prep may carry <NA>; force re-derive from the parsed date)
+    df_sp["origination_year"] = df_sp["origination_date"].dt.year.astype(int)
+    df_sp["origination_month"] = df_sp["origination_date"].dt.to_period("M").astype(str)
 
     # ── CRITICAL DATA PREP (Restored) ──────────────────────────────────
     
