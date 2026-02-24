@@ -545,8 +545,18 @@ if UPLOAD_PAGE_AVAILABLE:
 
 st.markdown(f"""
 <style>
+/* Ensure Material Symbols icon font is available (prevents _arrow_down text) */
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
+
+/* Fallback: hide raw icon-name text if the font still fails to load */
+span[data-testid="stIconMaterial"] {{
+    font-family: 'Material Symbols Rounded', sans-serif !important;
+    -webkit-font-feature-settings: 'liga';
+    font-feature-settings: 'liga';
+}}
+
 /* Global Font & Reset */
-body, p, span, h1, h2, h3, h4, h5, h6, .stMarkdown, .stText, .stMetric {{
+body, p, span:not([data-testid="stIconMaterial"]), h1, h2, h3, h4, h5, h6, .stMarkdown, .stText, .stMetric {{
     font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif !important;
     color: {TEXT_DARK};
 }}
@@ -828,24 +838,33 @@ with st.sidebar:
         if input_path:
             st.session_state["canonical_file_path"] = input_path
     else:
-        # Azure Blob Storage browser — only shows _canonical_typed.csv files
+        # Azure Blob Storage browser
         st.markdown("##### Browse output files")
         blob_prefix = st.text_input(
             "Filter by prefix (optional)",
             value="",
             key="blob_prefix_filter",
-            help="Leave blank to show all MI outputs, or type a prefix to narrow results.",
+            help="Leave blank to show all outputs, or type a prefix to narrow results.",
+        )
+        show_all_csvs = st.checkbox(
+            "Show all CSV files",
+            value=False,
+            key="blob_show_all",
+            help="When unchecked, only canonical_typed pipeline outputs are listed.",
         )
         try:
-            csv_blobs = list_canonical_csvs(prefix=blob_prefix)
+            csv_blobs = list_canonical_csvs(
+                prefix=blob_prefix,
+                dashboard_only=not show_all_csvs,
+            )
             if csv_blobs:
                 selected_blob = st.selectbox(
-                    "Select a canonical_typed CSV",
+                    "Select a CSV file",
                     options=csv_blobs,
                     key="blob_file_selector",
                 )
             else:
-                st.info("No dashboard-ready CSV files found. Ensure the MI pipeline has run.")
+                st.info("No CSV files found. Ensure the MI pipeline has run.")
         except Exception as e:
             st.error(f"Could not list blobs: {e}")
 
@@ -1023,7 +1042,6 @@ with st.expander("Export & Report", expanded=False):
 
     # PPTX Generation
     with exp_cols[2]:
-        st.caption("Apply filters above before generating to customise your report.")
         if st.button("Generate PowerPoint", type="primary", use_container_width=True):
             with st.spinner("Generating presentation..."):
                 try:
@@ -2688,22 +2706,14 @@ with tab3:
             # 3. Sort correctly
             agg_df = agg_df.sort_values("_sort_date")
 
-        # 4. Plot using the LABEL, not the date
-        if agg == "mean":
-            fig = px.line(
-                agg_df, 
-                x="vintage_label",  # <--- CHANGE THIS
-                y="value", 
-                color=color_col,
-                markers=True
-            )
-        else:
-            fig = px.bar(
-                agg_df, 
-                x="vintage_label", # <--- CHANGE THIS
-                y="value", 
-                color=color_col
-            )
+        # 4. Plot using the LABEL, not the date (stacked area for all metrics)
+        fig = px.area(
+            agg_df,
+            x="vintage_label",
+            y="value",
+            color=color_col,
+            groupnorm=None,
+        )
             
         # 5. Force category type (Strict safety net)
         fig.update_xaxes(type="category", title_text="Origination Vintage")
