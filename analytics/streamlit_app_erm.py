@@ -2523,6 +2523,18 @@ with tab3:
         st.stop()
     df_sp["origination_date"] = coerce_datetime(df_sp["origination_date"], dayfirst=True)
 
+    # Drop rows with unparseable origination dates (NaT) BEFORE building
+    # the static-pools panel — these cannot be assigned to a cohort.
+    _nat_mask = df_sp["origination_date"].isna()
+    if _nat_mask.any():
+        st.caption(f"{_nat_mask.sum()} loans with unparseable origination dates excluded from static pool analysis.")
+        df_sp = df_sp[~_nat_mask].copy()
+
+    # Ensure origination_year is a clean numeric column (Int64 from
+    # mi_prep may carry <NA>; force re-derive from the parsed date)
+    df_sp["origination_year"] = df_sp["origination_date"].dt.year.astype(int)
+    df_sp["origination_month"] = df_sp["origination_date"].dt.to_period("M").astype(str)
+
     # ── CRITICAL DATA PREP (Restored) ──────────────────────────────────
     
     # A. Create Risk Buckets (Original LTV)
