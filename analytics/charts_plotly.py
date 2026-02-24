@@ -48,11 +48,11 @@ def apply_chart_theme(fig: go.Figure, title: str = "") -> go.Figure:
 
     # Common axis style dict to ensure identical rendering
     axis_style = dict(
-        showgrid=True,
+        showgrid=False,
         gridcolor="#F0F0F0",
         gridwidth=1,
         title=dict(font=dict(family="Calibri", size=13, color=PRIMARY_COLOR)),
-        tickfont=dict(family="Calibri", size=11),
+        tickfont=dict(family="Calibri", size=11, color=PRIMARY_COLOR),
         showline=True,
         linewidth=2,
         linecolor=ACCENT_COLOR,

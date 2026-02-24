@@ -48,12 +48,15 @@ try:
 except ImportError:
     HAS_SQUARIFY = False
 
-# Ensure config/system/ is importable when running as a subprocess.
-# The shared config.py lives at <repo>/config/system/config.py; add that
-# directory to sys.path so `from config import ...` resolves correctly.
+# Ensure imports resolve when running as a subprocess.
+# 1. ROOT_DIR: needed so `from config.client.risk_limits_config import ...`
+#    (used by risk_monitor.py) resolves through the package hierarchy.
+# 2. config/system/: needed so `from config import ...` resolves to config.py.
+_ROOT_DIR = str(Path(__file__).resolve().parent.parent)
 _CONFIG_SYSTEM_DIR = str(Path(__file__).resolve().parent.parent / "config" / "system")
-if _CONFIG_SYSTEM_DIR not in sys.path:
-    sys.path.insert(0, _CONFIG_SYSTEM_DIR)
+for _p in (_ROOT_DIR, _CONFIG_SYSTEM_DIR):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 # Local modules
 from config import (
@@ -1050,10 +1053,9 @@ def save_geographic_treemap(df: pd.DataFrame, out_path: str) -> bool:
             "Geographic Distribution (Top 10)",
         )
 
-    # Primary path: treemap
-    # Primary path: treemap
-    colors = [PRIMARY_COLOR, ACCENT_COLOR, "#7EBAB5", "#5AA9A3", 
-              "#A3CCC9", "#FFB84D", "#FF9933", "#919DD1"] * 2
+    # Primary path: treemap — colours aligned with dashboard gradient
+    colors = [PRIMARY_COLOR, SECONDARY_COLOR, ACCENT_COLOR, "#7EBAB5",
+              "#A3CCC9"] * 3
     
     labels = [
         f"{region}\n£{val/1_000_000:.1f}M"
@@ -1173,11 +1175,10 @@ def save_bubble_balance_vs_value(df: pd.DataFrame, out_path: str) -> bool:
     has_region = "geographic_region" in df_plot.columns and df_plot["geographic_region"].notna().any()
 
     if has_region:
-        # Categorical coloring by geographic_region — matches dashboard
+        # Categorical coloring by geographic_region — matches dashboard palette
         regions = df_plot["geographic_region"].fillna("Unknown").unique()
         color_cycle = CHART_COLORS + [
-            "#7EBAB5", "#5AA9A3", "#A3CCC9", "#FFB84D", "#FF9933",
-            "#449C95", "#E07B54", "#6C5B7B",
+            "#7EBAB5", "#A3CCC9",
         ]
         region_color = {r: color_cycle[i % len(color_cycle)] for i, r in enumerate(regions)}
         colors_array = [region_color[r] for r in df_plot["geographic_region"].fillna("Unknown")]
@@ -1234,12 +1235,15 @@ def save_bubble_balance_vs_value(df: pd.DataFrame, out_path: str) -> bool:
         cbar = plt.colorbar(scatter, ax=ax)
         cbar.set_label("Current LTV (%)", rotation=270, labelpad=20, fontweight="bold")
 
+    # Dynamic axis limits based on data (with 5% padding)
+    x_max = df_plot["current_valuation_amount"].max()
+    y_max = df_plot["current_principal_balance"].max()
+    ax.set_xlim(0, x_max * 1.05)
+    ax.set_ylim(0, y_max * 1.05)
+
     # Diagonal reference line (balance = value)
-    max_val = max(
-        df_plot["current_valuation_amount"].max(),
-        df_plot["current_principal_balance"].max(),
-    )
-    ax.plot([0, max_val], [0, max_val], "k--", alpha=0.3, linewidth=1, label="Balance = Value")
+    diag_max = max(x_max, y_max) * 1.05
+    ax.plot([0, diag_max], [0, diag_max], "k--", alpha=0.3, linewidth=1, label="Balance = Value")
 
     ax.set_title(
         "Current Outstanding Balance vs. Current Property Value",
@@ -1303,10 +1307,10 @@ def save_bubble_ltv_vs_age(df: pd.DataFrame, out_path: str) -> bool:
     has_product = product_col and product_col in df_plot.columns and df_plot[product_col].notna().any()
 
     if has_product:
-        # Categorical coloring by product type — matches dashboard
+        # Categorical coloring by product type — matches dashboard palette
         products = df_plot[product_col].fillna("Unknown").unique()
         color_cycle = CHART_COLORS + [
-            "#7EBAB5", "#5AA9A3", "#A3CCC9", "#FFB84D", "#FF9933",
+            "#7EBAB5", "#A3CCC9",
         ]
         product_color = {p: color_cycle[i % len(color_cycle)] for i, p in enumerate(products)}
         colors_array = [product_color[p] for p in df_plot[product_col].fillna("Unknown")]
@@ -1528,15 +1532,16 @@ def add_cover_slide(prs: Presentation, logo_path: Optional[str], title: str):
         Inches(0.5),
         Inches(3.0),
         Inches(9.0),
-        Inches(1.0),
+        Inches(1.5),
     )
     tf = title_box.text_frame
+    tf.word_wrap = True
     tf.text = title
     p = tf.paragraphs[0]
     p.font.name = FONT_TITLE
-    p.font.size = Pt(32)
+    p.font.size = Pt(28)
     p.font.bold = True
-    p.font.color.rgb = RGBColor(*hex_to_rgb(PRIMARY_COLOR))  
+    p.font.color.rgb = RGBColor(*hex_to_rgb(PRIMARY_COLOR))
     p.alignment = PP_ALIGN.CENTER
 
     # Subtitle
@@ -1621,7 +1626,7 @@ def style_content_title(prs: Presentation, slide, title_text: str, logo_path: Op
         else:
             print(f"   ⚠ Logo file not found: {logo_path}")
     
-    # 4. Add subtitle placeholder
+    # 4. Add subtitle placeholder (strapline for LLM auto-population)
     subtitle_box = slide.shapes.add_textbox(
         Inches(0.25),
         Inches(0.95),
@@ -1629,7 +1634,7 @@ def style_content_title(prs: Presentation, slide, title_text: str, logo_path: Op
         Inches(0.3)
     )
     subtitle_frame = subtitle_box.text_frame
-    subtitle_frame.text = ""
+    subtitle_frame.text = "[insert]"
     subtitle_frame.word_wrap = False
     
     p = subtitle_frame.paragraphs[0]
@@ -1805,8 +1810,8 @@ def add_kpi_slide(prs: Presentation, df: pd.DataFrame, logo_path: Optional[str])
     # Risk monitoring tiles (if available)
     if RISK_MONITORING_AVAILABLE:
         try:
-            monitor = RiskMonitor(ALL_LIMITS)
-            results = monitor.run_all_checks(df)
+            monitor = RiskMonitor(df)
+            results = monitor.check_all_limits()
             
             # Count status
             red_count = sum(1 for r in results if r.status == "red")
@@ -2256,7 +2261,6 @@ def add_static_pools_slides(prs, df: pd.DataFrame, logo_path=None) -> None:
         chart_defs = [
             {"title": "Origination Quality: LTV by Cohort", "metric": "current_ltv", "agg": "mean"},
             {"title": "Pricing Discipline: Yield by Cohort", "metric": "interest_rate", "agg": "mean"},
-            {"title": "Prepayment Speed (CPR)", "metric": "prepayment_amount", "agg": "sum"},
         ]
 
     # --- Prepare data (mirrors Tab 3 data prep exactly) ---
@@ -2615,7 +2619,7 @@ def add_risk_monitoring_slide(prs, df, logo_path=None):
             add_footer(slide, REPORT_FOOTER)
             print("   > Risk monitoring slide added (no matching limits)")
             return
-        # Render the Detailed Limit Status table to PNG (Streamlit-like) and insert into slide
+        # Render the Detailed Limit Status table as PNG and insert into slide
         try:
             chart_dir = Path("_pptx_charts")
             chart_dir.mkdir(exist_ok=True)
@@ -2758,6 +2762,123 @@ def add_scenario_analysis_slide(prs, df, logo_path=None):
 # ============================
 # MAIN GENERATOR
 # ============================
+
+def save_balance_through_time_chart(df: pd.DataFrame, out_path: str) -> bool:
+    """Generate stacked area chart of portfolio balance by origination year.
+
+    Mirrors the 'Portfolio Balance Through Time' chart from the Static Pools
+    tab of the dashboard.
+    """
+    if "origination_year" not in df.columns or "total_balance" not in df.columns:
+        return False
+
+    bal = (
+        df.groupby("origination_year", dropna=False)["total_balance"]
+        .sum()
+        .reset_index()
+        .sort_values("origination_year")
+    )
+    bal = bal[bal["origination_year"].notna() & (bal["total_balance"] > 0)]
+    if bal.empty:
+        return False
+
+    bal["bal_m"] = bal["total_balance"] / 1_000_000
+
+    fig, ax = plt.subplots(figsize=(14, 7))
+    ax.fill_between(
+        bal["origination_year"].astype(str),
+        bal["bal_m"],
+        color=PRIMARY_COLOR,
+        alpha=0.75,
+    )
+    ax.plot(
+        bal["origination_year"].astype(str),
+        bal["bal_m"],
+        color=PRIMARY_COLOR,
+        linewidth=2,
+    )
+
+    ax.set_title(
+        "Portfolio Balance Through Time",
+        pad=20, fontweight="bold", color=TEXT_DARK, fontsize=16, loc="center",
+    )
+    ax.set_xlabel("Origination Year", fontweight="bold", fontsize=12, labelpad=10)
+    ax.set_ylabel("Balance (£m)", fontweight="bold", fontsize=12)
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"£{x:,.0f}M"))
+    plt.xticks(rotation=45, ha="right", fontsize=9)
+    ax.grid(True, linestyle="--", alpha=0.25, linewidth=0.8, axis="y")
+    ax.set_axisbelow(True)
+
+    plt.tight_layout(pad=1.5)
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=300, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    return True
+
+
+def save_concentration_matrix_chart(
+    df: pd.DataFrame,
+    row_col: str,
+    col_col: str,
+    value_col: str,
+    title: str,
+    out_path: str,
+) -> bool:
+    """Generate a heatmap concentration matrix (row_dim x col_dim x balance).
+
+    Used for Region x LTV, Age x LTV, and Product x LTV matrix slides.
+    """
+    if row_col not in df.columns or col_col not in df.columns or value_col not in df.columns:
+        return False
+
+    pivot = (
+        df.groupby([row_col, col_col], dropna=False, observed=True)[value_col]
+        .sum()
+        .reset_index()
+    )
+    pivot_table = pivot.pivot_table(index=row_col, columns=col_col, values=value_col, aggfunc="sum", fill_value=0)
+
+    if pivot_table.empty:
+        return False
+
+    # Millions for readability
+    pivot_m = pivot_table / 1_000_000
+
+    fig, ax = plt.subplots(figsize=(16, max(6, len(pivot_m) * 0.6 + 2)))
+
+    from matplotlib.colors import LinearSegmentedColormap
+    brand_cmap = LinearSegmentedColormap.from_list(
+        "brand", ["#FFFFFF", SECONDARY_COLOR, PRIMARY_COLOR], N=256,
+    )
+
+    im = ax.imshow(pivot_m.values, cmap=brand_cmap, aspect="auto")
+
+    # Tick labels
+    ax.set_xticks(range(len(pivot_m.columns)))
+    ax.set_xticklabels([str(c) for c in pivot_m.columns], rotation=45, ha="right", fontsize=10)
+    ax.set_yticks(range(len(pivot_m.index)))
+    ax.set_yticklabels([str(i) for i in pivot_m.index], fontsize=10)
+
+    # Annotate cells with values
+    for i in range(len(pivot_m.index)):
+        for j in range(len(pivot_m.columns)):
+            val = pivot_m.values[i, j]
+            if val > 0:
+                text_color = "white" if val > pivot_m.values.max() * 0.5 else TEXT_DARK
+                ax.text(j, i, f"£{val:.1f}M", ha="center", va="center",
+                        fontsize=8, color=text_color, fontweight="bold")
+
+    ax.set_title(title, pad=20, fontweight="bold", color=TEXT_DARK, fontsize=16, loc="center")
+
+    cbar = fig.colorbar(im, ax=ax, shrink=0.8)
+    cbar.set_label("Balance (£m)", fontweight="bold", fontsize=11)
+
+    plt.tight_layout(pad=1.5)
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=300, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    return True
+
 
 def add_end_slide(prs: Presentation, logo_path: Optional[str]):
     """Create branded end slide."""
@@ -2912,37 +3033,21 @@ def generate_pptx(
     else:
         print(f"   ✗ Product Type Distribution FAILED (column missing or no data)")
 
-    # 3. Geographic Distribution — Balance treemap (mirrors dashboard left panel)
+    # 3. Geographic Distribution — Balance treemap (single slide only)
     geo_path = chart_dir / "geographic_treemap.png"
     if save_geographic_treemap(df, str(geo_path)):
-        charts.append(("Geographic Distribution: Balance by Region", str(geo_path), ""))
-        print(f"   ✓ Geographic Distribution (balance)")
+        charts.append(("Geographic Distribution", str(geo_path), ""))
+        print(f"   ✓ Geographic Distribution")
     else:
-        print(f"   ✗ Geographic Distribution (balance) FAILED")
+        print(f"   ✗ Geographic Distribution FAILED")
 
-    # 4. Geographic Distribution — Loan Count treemap (mirrors dashboard right panel)
-    geo_cnt_path = chart_dir / "geographic_count_treemap.png"
-    if save_geographic_count_treemap(df, str(geo_cnt_path)):
-        charts.append(("Geographic Distribution: Loans by Region", str(geo_cnt_path), ""))
-        print(f"   ✓ Geographic Distribution (count)")
-    else:
-        print(f"   ✗ Geographic Distribution (count) FAILED")
-
-    # 5. Borrower Age Distribution (DUAL: balance + count)
+    # 4. Borrower Age Distribution (DUAL: balance + count)
     age_path = chart_dir / "age_distribution_dual.png"
     if save_age_dual_chart(df, str(age_path)):
         charts.append(("Borrower Age Distribution", str(age_path), ""))
         print(f"   ✓ Borrower Age Distribution")
     else:
         print(f"   ✗ Borrower Age Distribution FAILED")
-
-    # 6. Vintage Distribution (balance bars + count line — mirrors Vintage Distribution section)
-    vintage_path = chart_dir / "vintage_distribution.png"
-    if save_vintage_distribution(df, str(vintage_path)):
-        charts.append(("Portfolio by Vintage Year", str(vintage_path), ""))
-        print(f"   ✓ Vintage Distribution")
-    else:
-        print(f"   ✗ Vintage Distribution FAILED")
 
     # 7. Broker Channel Distribution (DUAL: balance + count)
     broker_path = chart_dir / "broker_distribution_dual.png"
@@ -2977,32 +3082,61 @@ def generate_pptx(
         print(f"   ✗ LTV vs Borrower Age bubble FAILED")
 
     # Add chart slides
-    n_expected = 10
-    print(f"\n   Summary: Generated {len(charts)} of {n_expected} charts")
+    print(f"\n   Summary: Generated {len(charts)} charts")
     print(f"[5/10] Adding chart slides...")
     for title, path, caption in charts:
         add_chart_slide(prs, title, path, logo_path, caption)
-    
+
+    # Portfolio Balance Through Time (replaces CPR slide)
+    print("\n[6/10] Adding Portfolio Balance Through Time...")
+    bal_time_path = chart_dir / "balance_through_time.png"
+    if save_balance_through_time_chart(df, str(bal_time_path)):
+        add_chart_slide(prs, "Portfolio Balance Through Time", str(bal_time_path), logo_path)
+        print(f"   ✓ Portfolio Balance Through Time")
+    else:
+        print(f"   ✗ Portfolio Balance Through Time FAILED")
+
+    # 3x Portfolio Concentration Matrix slides
+    print("\n[7/10] Adding Concentration Matrix slides...")
+    # Prepare LTV buckets for matrix
+    if "current_loan_to_value" in df.columns:
+        df["_ltv_bucket"] = create_bucket_column(df, "current_loan_to_value", "ltv")
+    if "youngest_borrower_age" in df.columns:
+        df["_age_bucket"] = create_bucket_column(df, "youngest_borrower_age", "age")
+
+    matrix_defs = [
+        ("Region", "geographic_region", "_ltv_bucket", "Region x LTV Bucket x Balance"),
+        ("Age", "_age_bucket", "_ltv_bucket", "Age x LTV Bucket x Balance"),
+        ("Product", "erm_product_type", "_ltv_bucket", "Product Type x LTV Bucket x Balance"),
+    ]
+    for tag, row_col, col_col, mtitle in matrix_defs:
+        m_path = chart_dir / f"concentration_{tag.lower()}.png"
+        if save_concentration_matrix_chart(df, row_col, col_col, "total_balance", mtitle, str(m_path)):
+            add_chart_slide(prs, f"Portfolio Concentration Matrix: {mtitle}", str(m_path), logo_path)
+            print(f"   ✓ Concentration Matrix: {mtitle}")
+        else:
+            print(f"   ✗ Concentration Matrix: {mtitle} FAILED (columns missing)")
+
     # Risk monitoring slide (if available)
-    print("\n[6/10] Checking risk monitoring...")
+    print("\n[8/10] Checking risk monitoring...")
     add_risk_monitoring_slide(prs, df, logo_path)
 
     # Static Pools cohort slides — mirrors Tab 3 of the dashboard
-    print("\n[7/10] Adding Static Pools cohort slides...")
+    print("\n[9/10] Adding Static Pools cohort slides...")
     add_static_pools_slides(prs, df, logo_path)
 
     # Scenario analysis slides (if available)
-    print("\n[8/10] Adding scenario analysis slides...")
+    print("\n[10/10] Adding scenario analysis slides...")
     add_scenario_analysis_slide(prs, df, logo_path)
 
-    print("\n[9/10] Adding end slide...")
+    print("\nAdding end slide...")
     add_end_slide(prs, logo_path)
-    
+
     # Save presentation
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    print(f"\n[10/10] Saving presentation to: {output_path}")
+
+    print(f"\nSaving presentation to: {output_path}")
     # Add page numbers (exclude cover + end)
     add_page_numbers(prs)
     

@@ -848,7 +848,7 @@ with st.sidebar:
         )
         show_all_csvs = st.checkbox(
             "Show all CSV files",
-            value=False,
+            value=True,
             key="blob_show_all",
             help="When unchecked, only canonical_typed pipeline outputs are listed.",
         )
@@ -1276,6 +1276,28 @@ with tab1:
         if fig is not None:
             st.plotly_chart(fig, use_container_width=True)
     
+    # Interest Rate Distribution
+    if "current_interest_rate" in df.columns:
+        st.markdown("#### Interest Rate Distribution")
+        _rate_df = df.copy()
+        _rate_bins = [0, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 1.0]
+        _rate_labels = ["<3%", "3-4%", "4-5%", "5-6%", "6-7%", "7-8%", "8%+"]
+        _rate_df["rate_bucket"] = pd.cut(
+            _rate_df["current_interest_rate"],
+            bins=_rate_bins,
+            labels=_rate_labels,
+            include_lowest=True,
+        )
+        col1, col2 = st.columns(2)
+        with col1:
+            fig = strat_bar_chart(_rate_df, "rate_bucket", "total_balance", "sum", "Balance by Interest Rate")
+            if fig is not None:
+                st.plotly_chart(fig, use_container_width=True)
+        with col2:
+            fig = strat_bar_chart(_rate_df, "rate_bucket", "loan_id", "count", "Loan Count by Interest Rate")
+            if fig is not None:
+                st.plotly_chart(fig, use_container_width=True)
+
     # Product Type
     st.markdown("#### Product Type Distribution")
     col1, col2 = st.columns(2)
