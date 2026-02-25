@@ -2777,21 +2777,31 @@ def add_scenario_analysis_slide(prs, df, logo_path=None):
 # ============================
 
 def save_balance_through_time_chart(df: pd.DataFrame, out_path: str) -> bool:
-    """Generate stacked area chart of portfolio balance by origination year.
+    """Generate area chart of portfolio balance by origination month.
 
     Mirrors the 'Portfolio Balance Through Time' chart from the Static Pools
-    tab of the dashboard.
+    tab of the dashboard.  Monthly granularity means the chart gains a new
+    data-point with every monthly CSV upload.
     """
-    if "origination_year" not in df.columns or "total_balance" not in df.columns:
+    if "total_balance" not in df.columns:
         return False
 
+    # Derive origination_month (YYYY-MM string) from origination_date if needed.
+    if "origination_month" not in df.columns:
+        if "origination_date" not in df.columns:
+            return False
+        df = df.copy()
+        df["origination_month"] = pd.to_datetime(
+            df["origination_date"], errors="coerce"
+        ).dt.strftime("%Y-%m")
+
     bal = (
-        df.groupby("origination_year", dropna=False)["total_balance"]
+        df.groupby("origination_month", dropna=False)["total_balance"]
         .sum()
         .reset_index()
-        .sort_values("origination_year")
+        .sort_values("origination_month")
     )
-    bal = bal[bal["origination_year"].notna() & (bal["total_balance"] > 0)]
+    bal = bal[bal["origination_month"].notna() & (bal["total_balance"] > 0)]
     if bal.empty:
         return False
 
@@ -2799,13 +2809,13 @@ def save_balance_through_time_chart(df: pd.DataFrame, out_path: str) -> bool:
 
     fig, ax = plt.subplots(figsize=(14, 7))
     ax.fill_between(
-        bal["origination_year"].astype(str),
+        bal["origination_month"],
         bal["bal_m"],
         color=PRIMARY_COLOR,
         alpha=0.75,
     )
     ax.plot(
-        bal["origination_year"].astype(str),
+        bal["origination_month"],
         bal["bal_m"],
         color=PRIMARY_COLOR,
         linewidth=2,
@@ -2815,7 +2825,7 @@ def save_balance_through_time_chart(df: pd.DataFrame, out_path: str) -> bool:
         "Portfolio Balance Through Time",
         pad=20, fontweight="bold", color=TEXT_DARK, fontsize=16, loc="center",
     )
-    ax.set_xlabel("Origination Year", fontweight="bold", fontsize=12, labelpad=10)
+    ax.set_xlabel("Origination Month", fontweight="bold", fontsize=12, labelpad=10)
     ax.set_ylabel("Balance (£m)", fontweight="bold", fontsize=12)
     ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"£{x:,.0f}M"))
     plt.xticks(rotation=45, ha="right", fontsize=9)

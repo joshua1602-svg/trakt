@@ -2522,42 +2522,42 @@ with tab3:
             {"title": "Weighted Avg Interest Rate", "metric": "interest_rate", "agg": "mean", "format": ".2%"}
         ]
 
-    # ── PORTFOLIO BALANCE THROUGH TIME (by origination year) ───────────
+    # ── PORTFOLIO BALANCE THROUGH TIME (by origination month) ──────────
     st.markdown("---")
     st.subheader("Portfolio Balance Through Time")
 
-    # Mirror the PPTX "Portfolio Balance Through Time" slide: group by
-    # origination year so the chart shows how the portfolio was built up
-    # across vintage cohorts rather than a calendar-time run-off profile.
+    # Group by origination month (YYYY-MM) so the chart gains a new data-point
+    # with every monthly CSV upload, matching the PPTX slide exactly.
     _bal_col = "total_balance" if "total_balance" in df.columns else sp_spec.principal_outstanding
-    if "origination_year" in df.columns and _bal_col in df.columns:
-        _bal_by_year = (
-            df.groupby("origination_year", dropna=False)[_bal_col]
+    if "origination_month" in df.columns and _bal_col in df.columns:
+        _bal_by_month = (
+            df.groupby("origination_month", dropna=False)[_bal_col]
             .sum()
             .reset_index()
-            .sort_values("origination_year")
+            .sort_values("origination_month")
         )
-        _bal_by_year = _bal_by_year[
-            _bal_by_year["origination_year"].notna() & (_bal_by_year[_bal_col] > 0)
+        _bal_by_month = _bal_by_month[
+            _bal_by_month["origination_month"].notna() & (_bal_by_month[_bal_col] > 0)
         ].copy()
-        _bal_by_year["_bal_m"] = _bal_by_year[_bal_col] / 1_000_000
-        _bal_by_year["origination_year"] = _bal_by_year["origination_year"].astype(str)
+        _bal_by_month["_bal_m"] = _bal_by_month[_bal_col] / 1_000_000
+        # Period objects must be stringified for Plotly
+        _bal_by_month["origination_month"] = _bal_by_month["origination_month"].astype(str)
 
         bal_chart_type = st.radio("Chart type", ["Area", "Bar"], horizontal=True, key="bal_chart_type")
 
-        _bal_labels = {"_bal_m": "Balance (£m)", "origination_year": "Origination Year"}
+        _bal_labels = {"_bal_m": "Balance (£m)", "origination_month": "Origination Month"}
         if bal_chart_type == "Area":
             fig_bal = px.area(
-                _bal_by_year,
-                x="origination_year",
+                _bal_by_month,
+                x="origination_month",
                 y="_bal_m",
                 labels=_bal_labels,
                 color_discrete_sequence=[PRIMARY_COLOR],
             )
         else:
             fig_bal = px.bar(
-                _bal_by_year,
-                x="origination_year",
+                _bal_by_month,
+                x="origination_month",
                 y="_bal_m",
                 labels=_bal_labels,
                 color_discrete_sequence=[PRIMARY_COLOR],
@@ -2565,10 +2565,10 @@ with tab3:
 
         fig_bal = apply_chart_theme(fig_bal, "Portfolio Balance Through Time")
         fig_bal.update_yaxes(title_text="Balance (£m)", tickformat=",.1f")
-        fig_bal.update_xaxes(title_text="Origination Year")
+        fig_bal.update_xaxes(title_text="Origination Month")
         st.plotly_chart(fig_bal, use_container_width=True)
     else:
-        st.info("origination_year or balance data not available for this dataset.")
+        st.info("origination_month or balance data not available for this dataset.")
 
     st.markdown("---")
     st.subheader("Vintage Analysis (by Origination Month)")
