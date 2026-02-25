@@ -1822,8 +1822,9 @@ def add_kpi_slide(prs: Presentation, df: pd.DataFrame, logo_path: Optional[str])
             risk_tile_w = Inches(2.8)
             risk_tile_h = Inches(0.8)
             risk_start_top = start_top + 2 * (card_h + v_gap) + Inches(0.3)
-            risk_margin_left = Inches(1.5)
             risk_h_gap = Inches(0.2)
+            # Centre the 3 tiles: 3×2.8 + 2×0.2 = 8.8 in; slide is 10 in wide
+            risk_margin_left = (prs.slide_width - 3 * risk_tile_w - 2 * risk_h_gap) / 2
             
             risk_tiles = [
                 ("Limits Breached", red_count, "#DC3545" if red_count > 0 else "#28A745"),
@@ -2402,7 +2403,7 @@ def add_static_pools_slides(prs, df: pd.DataFrame, logo_path=None) -> None:
         out_path = chart_dir / f"static_pool_{safe_name}_{agg}.png"
 
         if save_static_pool_cohort_chart(panel_current, sp_spec, metric, agg, title, str(out_path)):
-            add_chart_slide(prs, title, str(out_path), logo_path, "Segmented by origination vintage cohort")
+            add_chart_slide(prs, title, str(out_path), logo_path, "")
             print(f"   ✓ Static Pool: {title}")
         else:
             print(f"   ✗ Static Pool: {title} FAILED")
@@ -2699,24 +2700,6 @@ def add_risk_monitoring_slide(prs, df, logo_path=None):
 
         add_footer(slide, REPORT_FOOTER)
         print("   > Risk Monitoring summary slide added")
-
-        # --- Second slide: limit utilization bar chart ---
-        # Provides a static equivalent of the per-breach gauge charts shown in
-        # the dashboard's Breach Details drill-down (Tab 4 Risk Monitoring).
-        try:
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            util_path = chart_dir / f"risk_utilization_{ts}.png"
-            if save_breach_utilization_chart(results, str(util_path)):
-                add_chart_slide(
-                    prs,
-                    "Risk Limit Utilization — All Monitored Limits",
-                    str(util_path),
-                    logo_path,
-                    "Sorted by utilization.  Red = breach  \u2022  Amber = warning  \u2022  Green = compliant.",
-                )
-                print("   > Risk Utilization chart slide added")
-        except Exception as e:
-            print(f"   > WARNING: Could not add utilization chart slide: {e}")
 
     except Exception as e:
         print(f"   Warning: Could not create risk monitoring slide: {e}")
