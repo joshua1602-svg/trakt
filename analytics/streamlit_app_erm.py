@@ -777,9 +777,12 @@ with st.sidebar:
                     dashboard_only=False,
                 )
             if csv_blobs:
+                # Default to latest entry in the blob list so the dashboard
+                # opens the most recent pipeline output by default.
                 selected_blob = st.selectbox(
                     "Select a CSV file",
                     options=csv_blobs,
+                    index=max(len(csv_blobs) - 1, 0),
                     key="blob_file_selector",
                 )
             else:
@@ -2576,7 +2579,14 @@ with tab3:
         _bal_labels = {"_bal_m": "Balance (£m)", "as_of_date": "Date", "origination_year": "Origination Year"}
 
         if bal_chart_type == "Area":
-            fig_bal = px.area(_plot_df, x="as_of_date", y="_bal_m", color=_color_bal, labels=_bal_labels)
+            fig_bal = px.area(
+                _plot_df,
+                x="as_of_date",
+                y="_bal_m",
+                color=_color_bal,
+                labels=_bal_labels,
+                color_discrete_sequence=CHART_COLORS,
+            )
         else:
             fig_bal = px.bar(_plot_df, x="as_of_date", y="_bal_m", color=_color_bal,
                              barmode="stack", labels=_bal_labels)
@@ -2671,6 +2681,7 @@ with tab3:
             y="value",
             color=color_col,
             groupnorm=None,
+            color_discrete_sequence=CHART_COLORS,
         )
             
         # 5. Force category type (Strict safety net)

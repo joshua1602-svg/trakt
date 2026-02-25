@@ -53,13 +53,12 @@ except ImportError:
 #    (used by risk_monitor.py) resolves through the package hierarchy.
 # 2. config/system/: needed so `from config import ...` resolves to config.py.
 _ROOT_DIR = str(Path(__file__).resolve().parent.parent)
-_CONFIG_SYSTEM_DIR = str(Path(__file__).resolve().parent.parent / "config" / "system")
-for _p in (_ROOT_DIR, _CONFIG_SYSTEM_DIR):
+for _p in (_ROOT_DIR,):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
 # Local modules
-from config import (
+from config.system.config import (
     PRIMARY_COLOR,
     SECONDARY_COLOR,
     ACCENT_COLOR,
@@ -1561,7 +1560,7 @@ def add_cover_slide(prs: Presentation, logo_path: Optional[str], title: str):
     tf.text = f"Confidential \u2022 Data as of {_report_date}"
     p = tf.paragraphs[0]
     p.font.name = FONT_BODY
-    p.font.size = Pt(14)
+    p.font.size = Pt(13)
     p.font.color.rgb = RGBColor(*hex_to_rgb(PRIMARY_COLOR))  
     p.alignment = PP_ALIGN.CENTER
 
@@ -1610,7 +1609,7 @@ def style_content_title(prs: Presentation, slide, title_text: str, logo_path: Op
     
     p = title_frame.paragraphs[0]
     p.font.name = FONT_TITLE
-    p.font.size = Pt(24)
+    p.font.size = Pt(23)
     p.font.bold = True
     p.font.color.rgb = RGBColor(255, 255, 255)  
     p.alignment = PP_ALIGN.LEFT
@@ -1640,7 +1639,7 @@ def style_content_title(prs: Presentation, slide, title_text: str, logo_path: Op
     
     p = subtitle_frame.paragraphs[0]
     p.font.name = FONT_BODY
-    p.font.size = Pt(14)
+    p.font.size = Pt(13)
     p.font.color.rgb = RGBColor(*hex_to_rgb(TEXT_LIGHT))
     p.alignment = PP_ALIGN.LEFT
 
@@ -2137,7 +2136,7 @@ def save_static_pool_cohort_chart(
     title: str,
     out_path: str,
 ) -> bool:
-    """Generate a single static pool cohort chart (line or bar) for PPTX.
+    """Generate a single static pool cohort chart (stacked area) for PPTX.
 
     Mirrors the individual chart panels shown in Tab 3 (Static Pools) of
     the dashboard, aggregated at the total-portfolio level.
@@ -2193,19 +2192,22 @@ def save_static_pool_cohort_chart(
 
     fig, ax = plt.subplots(figsize=(14, 7))
 
-    if agg == "mean":
-        ax.plot(
-            agg_df["vintage_label"],
-            agg_df["value"] * scale,
-            color=PRIMARY_COLOR,
-            linewidth=2.5,
-            marker="o",
-            markersize=5,
-        )
-        if is_pct:
-            ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:.1f}%"))
-    else:
-        ax.bar(agg_df["vintage_label"], agg_df["value"], color=PRIMARY_COLOR, alpha=0.85)
+    y_values = agg_df["value"] * scale
+    ax.fill_between(
+        agg_df["vintage_label"],
+        y_values,
+        color=PRIMARY_COLOR,
+        alpha=0.75,
+    )
+    ax.plot(
+        agg_df["vintage_label"],
+        y_values,
+        color=PRIMARY_COLOR,
+        linewidth=2.2,
+    )
+    if is_pct:
+        ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:.1f}%"))
+    elif metric in {"prepayment_amount", "total_balance", "current_principal_balance", "principal_outstanding"}:
         ax.yaxis.set_major_formatter(FuncFormatter(millions_formatter))
 
     ax.set_title(title, pad=20, fontweight="bold", color=TEXT_DARK, fontsize=16, loc="center")
@@ -2262,6 +2264,27 @@ def add_static_pools_slides(prs, df: pd.DataFrame, logo_path=None) -> None:
         chart_defs = [
             {"title": "Origination Quality: LTV by Cohort", "metric": "current_ltv", "agg": "mean"},
             {"title": "Pricing Discipline: Yield by Cohort", "metric": "interest_rate", "agg": "mean"},
+        ]
+
+    # Requested by client: remove CPR slide from generated PPTX.
+    chart_defs = [
+        c for c in chart_defs
+        if str(c.get("title", "")).strip().lower() != "prepayment speed (cpr)"
+    ]
+
+    # Ensure Portfolio Balance Through Time slide is rendered from static pools panel.
+    has_balance_chart = any(
+        str(c.get("title", "")).strip().lower() == "portfolio balance through time"
+        for c in chart_defs
+    )
+    if not has_balance_chart:
+        chart_defs = [
+            {
+                "title": "Portfolio Balance Through Time",
+                "metric": "total_balance",
+                "agg": "sum",
+            },
+            *chart_defs,
         ]
 
     # --- Prepare data (mirrors Tab 3 data prep exactly) ---
@@ -2474,8 +2497,14 @@ def add_risk_monitoring_slide(prs, df, logo_path=None):
         return
     
     try:
-        # Run risk monitor
-        monitor = RiskMonitor(df)
+        # Run risk monitor (normalize balance column expected by RiskMonitor)
+        monitor_df = df.copy()
+        if "current_principal_balance" not in monitor_df.columns and "total_balance" in monitor_df.columns:
+            monitor_df["current_principal_balance"] = pd.to_numeric(
+                monitor_df["total_balance"], errors="coerce"
+            ).fillna(0.0)
+
+        monitor = RiskMonitor(monitor_df)
         results = monitor.check_all_limits()
         summary = monitor.get_summary_stats(results)
         
