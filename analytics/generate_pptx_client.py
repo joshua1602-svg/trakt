@@ -1821,10 +1821,27 @@ def add_kpi_slide(prs: Presentation, df: pd.DataFrame, logo_path: Optional[str])
             # Risk tile dimensions
             risk_tile_w = Inches(2.8)
             risk_tile_h = Inches(0.8)
-            risk_start_top = start_top + 2 * (card_h + v_gap) + Inches(0.3)
+            # Increase gap (was 0.3) to make room for the "Risk Limits Monitor" heading
+            risk_start_top = start_top + 2 * (card_h + v_gap) + Inches(0.75)
             risk_h_gap = Inches(0.2)
             # Centre the 3 tiles: 3×2.8 + 2×0.2 = 8.8 in; slide is 10 in wide
             risk_margin_left = (prs.slide_width - 3 * risk_tile_w - 2 * risk_h_gap) / 2
+
+            # "Risk Limits Monitor" sub-heading above the tiles
+            heading_box = slide.shapes.add_textbox(
+                Inches(0),
+                risk_start_top - Inches(0.40),
+                prs.slide_width,
+                Inches(0.35),
+            )
+            tf = heading_box.text_frame
+            tf.text = "Risk Limits Monitor"
+            p = tf.paragraphs[0]
+            p.font.name = FONT_TITLE
+            p.font.size = Pt(12)
+            p.font.bold = True
+            p.font.color.rgb = RGBColor(*hex_to_rgb(TEXT_DARK))
+            p.alignment = PP_ALIGN.CENTER
             
             risk_tiles = [
                 ("Limits Breached", red_count, "#DC3545" if red_count > 0 else "#28A745"),
