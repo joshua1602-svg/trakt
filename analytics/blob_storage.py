@@ -78,14 +78,17 @@ def list_canonical_csvs(
     validation reports, full-schema regulatory outputs, etc.).
     """
     cc = _get_container_client(container)
-    blobs = cc.list_blobs(name_starts_with=prefix)
-    names = sorted(
-        b.name for b in blobs
+    blobs = [
+        b for b in cc.list_blobs(name_starts_with=prefix)
         if b.name.lower().endswith(".csv")
-    )
+    ]
     if dashboard_only:
-        names = [n for n in names if "canonical_typed" in n.lower()]
-    return names
+        blobs = [b for b in blobs if "canonical_typed" in b.name.lower()]
+
+    # Sort by last-modified so the newest triggered pipeline output appears last
+    # (the Streamlit selector defaults to the final option).
+    blobs.sort(key=lambda b: ((b.last_modified or 0), b.name))
+    return [b.name for b in blobs]
 
 
 def download_blob_to_dataframe(
