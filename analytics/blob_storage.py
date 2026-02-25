@@ -16,7 +16,13 @@ from __future__ import annotations
 import io
 import logging
 import os
+from datetime import datetime, timezone
 from functools import lru_cache
+
+# Sentinel used as a sort-key fallback when a blob's last_modified is None.
+# Must be a datetime (not 0 / int) to stay in the same type-space and avoid
+# TypeError when Python compares keys during list.sort().
+_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 import pandas as pd
 
@@ -83,12 +89,44 @@ def list_canonical_csvs(
         if b.name.lower().endswith(".csv")
     ]
     if dashboard_only:
-        blobs = [b for b in blobs if "canonical_typed" in b.name.lower()]
+        # Use endswith (not `in`) so validation artefacts whose paths contain
+        # "canonical_typed" mid-name are never mistakenly included — e.g.
+        # out_validation/<stem>_canonical_typed_canonical_violations.csv
+        blobs = [b for b in blobs if b.name.lower().endswith("_canonical_typed.csv")]
 
-    # Sort by last-modified so the newest triggered pipeline output appears last
-    # (the Streamlit selector defaults to the final option).
-    blobs.sort(key=lambda b: ((b.last_modified or 0), b.name))
+    # Sort ascending by last_modified so the newest pipeline output is last.
+    # The Streamlit selectbox uses index=len-1 to pre-select the final entry.
+    # Use _EPOCH (a datetime) as the None-fallback instead of 0 (an int) —
+    # mixing types would raise TypeError in Python 3 during comparison.
+    blobs.sort(key=lambda b: (b.last_modified or _EPOCH, b.name))
     return [b.name for b in blobs]
+
+
+def get_most_recent_canonical_csv(
+    container: str | None = None,
+    prefix: str = "",
+) -> str | None:
+    """
+    Return the blob name of the most recently uploaded ``_canonical_typed.csv``
+    in the outbound container, or *None* if no matching file exists.
+
+    Selection rules (per product spec):
+      1. File name must end with ``_canonical_typed.csv``.
+      2. Most recently uploaded blob wins (highest ``last_modified`` timestamp).
+
+    Unlike :func:`list_canonical_csvs` this function performs a single
+    ``max`` pass instead of a full sort, making it slightly cheaper when only
+    the latest file is needed.
+    """
+    cc = _get_container_client(container)
+    blobs = [
+        b for b in cc.list_blobs(name_starts_with=prefix)
+        if b.name.lower().endswith("_canonical_typed.csv")
+    ]
+    if not blobs:
+        return None
+    most_recent = max(blobs, key=lambda b: b.last_modified or _EPOCH)
+    return most_recent.name
 
 
 def download_blob_to_dataframe(
