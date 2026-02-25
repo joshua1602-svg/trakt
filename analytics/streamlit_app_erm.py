@@ -2522,87 +2522,78 @@ with tab3:
             {"title": "Weighted Avg Interest Rate", "metric": "interest_rate", "agg": "mean", "format": ".2%"}
         ]
 
-    # ── BALANCE EVOLUTION (calendar-time view) ─────────────────────────
+    # ── PORTFOLIO BALANCE THROUGH TIME (total balance per reporting snapshot) ─
     st.markdown("---")
     st.subheader("Portfolio Balance Through Time")
 
-    # Build balance series from current panel (all dates present in this file)
-    _bal_from_panel = (
-        panel.groupby([sp_spec.as_of_date, "origination_year"], dropna=False, as_index=False)
-        [sp_spec.principal_outstanding].sum()
-        .rename(columns={sp_spec.as_of_date: "as_of_date",
-                         "origination_year": "origination_year",
-                         sp_spec.principal_outstanding: "total_balance"})
-    )
-    _bal_from_panel["as_of_date"] = pd.to_datetime(_bal_from_panel["as_of_date"])
-    _bal_from_panel["origination_year"] = _bal_from_panel["origination_year"].astype(str)
+    # One data-point per uploaded CSV snapshot: Oct-2025 → £4M, Nov-2025 → £9M …
+    # Snapshots are written to blob storage on each data load.  We also inject
+    # the currently-loaded file as the authoritative value for its own date.
+    # Setting xaxis type="category" prevents Plotly treating the date labels as
+    # a continuous axis and drawing a false smooth slope between two points.
+    _bal_col = "total_balance" if "total_balance" in df.columns else sp_spec.principal_outstanding
+    _asof_candidates = ["data_cut_off_date", "as_of_date", "reporting_date", "cut_off_date"]
+    _asof_col = next((c for c in _asof_candidates if c in df.columns), None)
 
-    # Augment with historical monthly snapshots from Azure Blob Storage
-    _bal_full = _bal_from_panel.copy()
+    _snap_rows: list[dict] = []
+
+    # Historical snapshots from Azure blob (all prior monthly loads)
     if BLOB_STORAGE_AVAILABLE:
         try:
             _hist = load_all_portfolio_snapshots()
             if not _hist.empty and "total_balance" in _hist.columns:
-                _hist["origination_year"] = _hist["origination_year"].astype(str)
-                # Exclude dates already covered by the current upload (current is source of truth)
-                _current_dates = set(_bal_from_panel["as_of_date"].unique())
-                _hist = _hist[~_hist["as_of_date"].isin(_current_dates)]
-                _bal_full = pd.concat(
-                    [_hist[["as_of_date", "origination_year", "total_balance"]], _bal_from_panel],
-                    ignore_index=True,
+                _hist_totals = (
+                    _hist.groupby("as_of_date")["total_balance"]
+                    .sum()
+                    .reset_index()
                 )
+                for _, _row in _hist_totals.iterrows():
+                    _snap_rows.append({
+                        "as_of_date": pd.Timestamp(_row["as_of_date"]),
+                        "total_balance": float(_row["total_balance"]),
+                    })
         except Exception:
-            pass  # Fall back to current-file data only
+            pass
 
-    _bal_full = _bal_full.sort_values("as_of_date")
-    _has_multi = _bal_full["as_of_date"].nunique() > 1
+    # Current file's total (source of truth for the most-recently loaded snapshot)
+    if _asof_col and _bal_col in df.columns:
+        _current_asof = pd.to_datetime(df[_asof_col], errors="coerce").max()
+        if pd.notna(_current_asof):
+            _current_total = pd.to_numeric(df[_bal_col], errors="coerce").sum()
+            _snap_rows.append({"as_of_date": _current_asof, "total_balance": _current_total})
 
-    # Controls
-    _bc1, _bc2 = st.columns([3, 1])
-    with _bc1:
-        split_by_year = st.checkbox(
-            "Split by Year of Origination",
-            value=True,
-            key="balance_split_year",
-            help="Show 2025, 2026 etc. as separate bands to see how each cohort contributes to total balance over time.",
+    if _snap_rows:
+        _snap_df = (
+            pd.DataFrame(_snap_rows)
+            .sort_values("as_of_date")
+            .drop_duplicates("as_of_date", keep="last")
         )
-    with _bc2:
+        _snap_df["_bal_m"] = _snap_df["total_balance"] / 1_000_000
+        # "Oct 2025" string labels keep the axis categorical; Plotly will not
+        # interpolate between discrete monthly reporting dates.
+        _snap_df["_label"] = _snap_df["as_of_date"].dt.strftime("%b %Y")
+
         bal_chart_type = st.radio("Chart type", ["Area", "Bar"], horizontal=True, key="bal_chart_type")
-
-    if not _has_multi:
-        st.info(
-            "Only one reporting date available. Load the next month's file and the "
-            "snapshot for this month will be retrieved automatically from Azure."
-            if BLOB_STORAGE_AVAILABLE
-            else "Only one reporting date in the data — upload multiple monthly CSVs to see balance evolution."
-        )
-    else:
-        _color_bal = "origination_year" if split_by_year else None
-        _plot_df = _bal_full if split_by_year else (
-            _bal_full.groupby("as_of_date", as_index=False)["total_balance"].sum()
-        )
-        _plot_df = _plot_df.copy()
-        _plot_df["_bal_m"] = _plot_df["total_balance"] / 1_000_000
-
-        _bal_labels = {"_bal_m": "Balance (£m)", "as_of_date": "Date", "origination_year": "Origination Year"}
-
+        _bal_labels = {"_bal_m": "Balance (£m)", "_label": "Reporting Date"}
         if bal_chart_type == "Area":
             fig_bal = px.area(
-                _plot_df,
-                x="as_of_date",
-                y="_bal_m",
-                color=_color_bal,
+                _snap_df, x="_label", y="_bal_m",
                 labels=_bal_labels,
-                color_discrete_sequence=CHART_COLORS,
+                color_discrete_sequence=[PRIMARY_COLOR],
             )
         else:
-            fig_bal = px.bar(_plot_df, x="as_of_date", y="_bal_m", color=_color_bal,
-                             barmode="stack", labels=_bal_labels)
-
+            fig_bal = px.bar(
+                _snap_df, x="_label", y="_bal_m",
+                labels=_bal_labels,
+                color_discrete_sequence=[PRIMARY_COLOR],
+            )
         fig_bal = apply_chart_theme(fig_bal, "Portfolio Balance Through Time")
-        fig_bal.update_yaxes(title_text="Balance (£m)", tickformat=",.0f")
-        fig_bal.update_xaxes(title_text="Date")
+        fig_bal.update_yaxes(title_text="Balance (£m)", tickformat=",.1f")
+        fig_bal.update_xaxes(title_text="Reporting Date", type="category")
         st.plotly_chart(fig_bal, use_container_width=True)
+        st.caption("Balance shown as total outstanding principal per reporting snapshot.")
+    else:
+        st.info("No snapshot data available. Load a CSV with a reporting date column to populate this chart.")
 
     st.markdown("---")
     st.subheader("Vintage Analysis (by Origination Month)")

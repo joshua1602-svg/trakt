@@ -1821,9 +1821,27 @@ def add_kpi_slide(prs: Presentation, df: pd.DataFrame, logo_path: Optional[str])
             # Risk tile dimensions
             risk_tile_w = Inches(2.8)
             risk_tile_h = Inches(0.8)
-            risk_start_top = start_top + 2 * (card_h + v_gap) + Inches(0.3)
-            risk_margin_left = Inches(1.5)
+            # Increase gap (was 0.3) to make room for the "Risk Limits Monitor" heading
+            risk_start_top = start_top + 2 * (card_h + v_gap) + Inches(0.75)
             risk_h_gap = Inches(0.2)
+            # Centre the 3 tiles: 3×2.8 + 2×0.2 = 8.8 in; slide is 10 in wide
+            risk_margin_left = (prs.slide_width - 3 * risk_tile_w - 2 * risk_h_gap) / 2
+
+            # "Risk Limits Monitor" sub-heading above the tiles
+            heading_box = slide.shapes.add_textbox(
+                Inches(0),
+                risk_start_top - Inches(0.40),
+                prs.slide_width,
+                Inches(0.35),
+            )
+            tf = heading_box.text_frame
+            tf.text = "Risk Limits Monitor"
+            p = tf.paragraphs[0]
+            p.font.name = FONT_TITLE
+            p.font.size = Pt(12)
+            p.font.bold = True
+            p.font.color.rgb = RGBColor(*hex_to_rgb(TEXT_DARK))
+            p.alignment = PP_ALIGN.CENTER
             
             risk_tiles = [
                 ("Limits Breached", red_count, "#DC3545" if red_count > 0 else "#28A745"),
@@ -2402,7 +2420,7 @@ def add_static_pools_slides(prs, df: pd.DataFrame, logo_path=None) -> None:
         out_path = chart_dir / f"static_pool_{safe_name}_{agg}.png"
 
         if save_static_pool_cohort_chart(panel_current, sp_spec, metric, agg, title, str(out_path)):
-            add_chart_slide(prs, title, str(out_path), logo_path, "Segmented by origination vintage cohort")
+            add_chart_slide(prs, title, str(out_path), logo_path, "")
             print(f"   ✓ Static Pool: {title}")
         else:
             print(f"   ✗ Static Pool: {title} FAILED")
@@ -2700,24 +2718,6 @@ def add_risk_monitoring_slide(prs, df, logo_path=None):
         add_footer(slide, REPORT_FOOTER)
         print("   > Risk Monitoring summary slide added")
 
-        # --- Second slide: limit utilization bar chart ---
-        # Provides a static equivalent of the per-breach gauge charts shown in
-        # the dashboard's Breach Details drill-down (Tab 4 Risk Monitoring).
-        try:
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            util_path = chart_dir / f"risk_utilization_{ts}.png"
-            if save_breach_utilization_chart(results, str(util_path)):
-                add_chart_slide(
-                    prs,
-                    "Risk Limit Utilization — All Monitored Limits",
-                    str(util_path),
-                    logo_path,
-                    "Sorted by utilization.  Red = breach  \u2022  Amber = warning  \u2022  Green = compliant.",
-                )
-                print("   > Risk Utilization chart slide added")
-        except Exception as e:
-            print(f"   > WARNING: Could not add utilization chart slide: {e}")
-
     except Exception as e:
         print(f"   Warning: Could not create risk monitoring slide: {e}")
         import traceback
@@ -2794,21 +2794,31 @@ def add_scenario_analysis_slide(prs, df, logo_path=None):
 # ============================
 
 def save_balance_through_time_chart(df: pd.DataFrame, out_path: str) -> bool:
-    """Generate stacked area chart of portfolio balance by origination year.
+    """Generate area chart of portfolio balance by origination month.
 
     Mirrors the 'Portfolio Balance Through Time' chart from the Static Pools
-    tab of the dashboard.
+    tab of the dashboard.  Monthly granularity means the chart gains a new
+    data-point with every monthly CSV upload.
     """
-    if "origination_year" not in df.columns or "total_balance" not in df.columns:
+    if "total_balance" not in df.columns:
         return False
 
+    # Derive origination_month (YYYY-MM string) from origination_date if needed.
+    if "origination_month" not in df.columns:
+        if "origination_date" not in df.columns:
+            return False
+        df = df.copy()
+        df["origination_month"] = pd.to_datetime(
+            df["origination_date"], errors="coerce"
+        ).dt.strftime("%Y-%m")
+
     bal = (
-        df.groupby("origination_year", dropna=False)["total_balance"]
+        df.groupby("origination_month", dropna=False)["total_balance"]
         .sum()
         .reset_index()
-        .sort_values("origination_year")
+        .sort_values("origination_month")
     )
-    bal = bal[bal["origination_year"].notna() & (bal["total_balance"] > 0)]
+    bal = bal[bal["origination_month"].notna() & (bal["total_balance"] > 0)]
     if bal.empty:
         return False
 
@@ -2816,13 +2826,13 @@ def save_balance_through_time_chart(df: pd.DataFrame, out_path: str) -> bool:
 
     fig, ax = plt.subplots(figsize=(14, 7))
     ax.fill_between(
-        bal["origination_year"].astype(str),
+        bal["origination_month"],
         bal["bal_m"],
         color=PRIMARY_COLOR,
         alpha=0.75,
     )
     ax.plot(
-        bal["origination_year"].astype(str),
+        bal["origination_month"],
         bal["bal_m"],
         color=PRIMARY_COLOR,
         linewidth=2,
@@ -2832,7 +2842,7 @@ def save_balance_through_time_chart(df: pd.DataFrame, out_path: str) -> bool:
         "Portfolio Balance Through Time",
         pad=20, fontweight="bold", color=TEXT_DARK, fontsize=16, loc="center",
     )
-    ax.set_xlabel("Origination Year", fontweight="bold", fontsize=12, labelpad=10)
+    ax.set_xlabel("Origination Month", fontweight="bold", fontsize=12, labelpad=10)
     ax.set_ylabel("Balance (£m)", fontweight="bold", fontsize=12)
     ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"£{x:,.0f}M"))
     plt.xticks(rotation=45, ha="right", fontsize=9)
