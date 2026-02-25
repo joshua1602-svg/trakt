@@ -31,6 +31,7 @@ try:
     from blob_storage import (
         is_azure_configured,
         list_canonical_csvs,
+        get_most_recent_canonical_csv,
         download_blob_to_dataframe,
         write_portfolio_snapshot,
         load_all_portfolio_snapshots,
@@ -777,12 +778,19 @@ with st.sidebar:
                     dashboard_only=False,
                 )
             if csv_blobs:
-                # Default to latest entry in the blob list so the dashboard
-                # opens the most recent pipeline output by default.
+                # Determine the default selection: the most recently uploaded
+                # _canonical_typed.csv (rule 1 + rule 2).  get_most_recent_canonical_csv
+                # applies both rules explicitly; fall back to the last list entry
+                # when the "show all" toggle is active and the helper finds nothing.
+                _most_recent = get_most_recent_canonical_csv(prefix=blob_prefix)
+                if _most_recent and _most_recent in csv_blobs:
+                    _default_idx = csv_blobs.index(_most_recent)
+                else:
+                    _default_idx = max(len(csv_blobs) - 1, 0)
                 selected_blob = st.selectbox(
                     "Select a CSV file",
                     options=csv_blobs,
-                    index=max(len(csv_blobs) - 1, 0),
+                    index=_default_idx,
                     key="blob_file_selector",
                 )
             else:
