@@ -50,6 +50,7 @@ SCRIPTS = {
     "regime_projector":     ENGINE_ROOT / "gate_4_projection" / "regime_projector.py",
     "xml_builder_investor": ENGINE_ROOT / "gate_5_delivery"   / "xml_builder_investor.py",
     "xml_builder":          ENGINE_ROOT / "gate_5_delivery"   / "xml_builder.py",
+    "xml_builder_annex2":   ENGINE_ROOT / "gate_5_delivery"   / "xml_builder_annex2.py",
     "aggregate_validation": ENGINE_ROOT / "gate_3_validation" / "aggregate_validation_results.py",
 }
 
@@ -487,12 +488,25 @@ def run_regulatory(py: str, args, ctx: dict, out_dir: Path) -> dict:
     print(f"[Gate 4] Regime projection............... OK {regime}")
 
     # -- Gate 5: XML generation --------------------------------------------
-    _run([
-        py, _script("xml_builder"),
-        "--input", str(projected),
-        "--output", str(xml_out),
-        "--currency", args.currency,
-    ])
+    if regime == "ESMA_Annex2":
+        _run([
+            py, _script("xml_builder_annex2"),
+            "--input", str(projected),
+            "--output", str(xml_out),
+            "--mapping-workbook", args.annex2_mapping_workbook,
+            "--sheet", args.annex2_mapping_sheet,
+            "--code-order-yaml", args.code_order_yaml,
+            "--xsd", args.annex2_xsd,
+            "--performance-mode", args.annex2_performance_mode,
+            "--currency", args.currency,
+        ])
+    else:
+        _run([
+            py, _script("xml_builder"),
+            "--input", str(projected),
+            "--output", str(xml_out),
+            "--currency", args.currency,
+        ])
 
     if not xml_out.exists():
         raise RuntimeError(f"[Gate 5] Failed: did not produce {xml_out}")
@@ -630,6 +644,11 @@ examples:
     ap.add_argument("--regime", default=None,
                      help="Target regime for regulatory mode (e.g. ESMA_Annex2)")
     ap.add_argument("--enum-mapping", default=str(CONFIG_ROOT / "system" / "enum_mapping.yaml"))
+    ap.add_argument("--annex2-mapping-workbook",
+                     default=str(PROJECT_ROOT / "DRAFT1auth.099.001.04_non-ABCP Underlying Exposure Report_Version_1.3.1.xlsx"))
+    ap.add_argument("--annex2-mapping-sheet", default="DRAFT1auth.099.001.04")
+    ap.add_argument("--annex2-xsd", default=str(CONFIG_ROOT / "system" / "DRAFT1auth.099.001.04_1.3.0.xsd"))
+    ap.add_argument("--annex2-performance-mode", choices=["PRF", "NPRF"], default="PRF")
 
     # Shared
     ap.add_argument("--code-order-yaml", default=str(CONFIG_ROOT / "system" / "esma_code_order.yaml"))
