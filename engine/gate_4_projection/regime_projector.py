@@ -480,6 +480,102 @@ def apply_esma_uk_geography_override(
     report["override_value"] = override_value
     return df, report
 
+
+def _blank_mask(series: pd.Series) -> pd.Series:
+    return series.isna() | (series.astype(str).str.strip() == "")
+
+
+def apply_annex2_post_projection_guards(
+    df: pd.DataFrame,
+    config: Dict[str, Any],
+) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """
+    Annex 2-specific shaping/guards on ESMA-coded output.
+
+    RREL1 and RREL6 are header-level in auth.099 and must be pool-level constants.
+    RREC2 is mandatory record-level New Underlying Exposure Identifier and may be
+    deterministically backfilled from RREL3 where missing.
+    """
+    report: Dict[str, Any] = {
+        "header_constants_applied": {},
+        "rrec2_backfilled_rows": 0,
+        "header_constant_checks": {},
+    }
+
+    # Optional explicit header constants from config.
+    # Supports either:
+    #   regime_overrides.ESMA_Annex2.header_constants.{RREL1,RREL6}
+    # or legacy defaults.securitisation_identifier for RREL1.
+    overrides_cfg = (config.get("regime_overrides") or {}).get("ESMA_Annex2") or {}
+    header_constants = (overrides_cfg.get("header_constants") or {}).copy()
+    legacy_sec_id = (config.get("defaults") or {}).get("securitisation_identifier")
+    if legacy_sec_id and "RREL1" not in header_constants:
+        header_constants["RREL1"] = legacy_sec_id
+
+    for code, const_val in header_constants.items():
+        if code in df.columns and str(const_val).strip() != "":
+            df[code] = str(const_val).strip()
+            report["header_constants_applied"][code] = str(const_val).strip()
+
+    # Deterministic backfill for RREC2 (mandatory in Annex2): use RREL3 if blank.
+    if "RREL3" in df.columns and "RREL2" in df.columns:
+        rrel3_blank = _blank_mask(df["RREL3"])
+        rrel3_fillable = rrel3_blank & (~_blank_mask(df["RREL2"]))
+        n_rrel3 = int(rrel3_fillable.sum())
+        if n_rrel3 > 0:
+            df.loc[rrel3_fillable, "RREL3"] = df.loc[rrel3_fillable, "RREL2"]
+        report["rrel3_backfilled_from_rrel2_rows"] = n_rrel3
+
+    # Deterministic backfill for RREC2 (mandatory in Annex2): use RREL3 if blank.
+    if "RREL5" in df.columns and "RREL4" in df.columns:
+        rrel5_blank = _blank_mask(df["RREL5"])
+        rrel5_fillable = rrel5_blank & (~_blank_mask(df["RREL4"]))
+        n_rrel5 = int(rrel5_fillable.sum())
+        if n_rrel5 > 0:
+            df.loc[rrel5_fillable, "RREL5"] = df.loc[rrel5_fillable, "RREL4"]
+        report["rrel5_backfilled_from_rrel4_rows"] = n_rrel5
+
+    # Deterministic backfill for RREC2 (mandatory in Annex2): use RREL3 if blank.
+    if "RREC2" in df.columns and "RREL3" in df.columns:
+        blank = _blank_mask(df["RREC2"])
+        fillable = blank & (~_blank_mask(df["RREL3"]))
+        n_fill = int(fillable.sum())
+        if n_fill > 0:
+            df.loc[fillable, "RREC2"] = df.loc[fillable, "RREL3"]
+        report["rrec2_backfilled_rows"] = n_fill
+
+    # Header-level constant checks (fail early if varying).
+    for code in ("RREL1", "RREL6"):
+        if code not in df.columns:
+            continue
+        vals = df[code].astype(str).str.strip()
+        non_blank = sorted({v for v in vals.tolist() if v and v.lower() != "nan"})
+        report["header_constant_checks"][code] = {"distinct_non_blank": len(non_blank)}
+        if len(non_blank) == 0:
+            raise ValueError(
+                f"Annex2 header field '{code}' is blank for all rows. "
+                "Provide a pool-level constant in config regime_overrides.ESMA_Annex2.header_constants."
+            )
+        if len(non_blank) > 1:
+            raise ValueError(
+                f"Annex2 header field '{code}' varies across rows ({len(non_blank)} distinct values). "
+                "Header-level fields must be pool/report-level constants. "
+                "Set regime_overrides.ESMA_Annex2.header_constants in client config."
+            )
+
+    # Mandatory record-level presence checks (precise early diagnostics).
+    for code in ("RREL3", "RREL5", "RREC2"):
+        if code not in df.columns:
+            continue
+        missing = int(_blank_mask(df[code]).sum())
+        if missing > 0:
+            raise ValueError(
+                f"Annex2 mandatory record-level field '{code}' is blank in {missing} rows "
+                f"(out of {len(df)})."
+            )
+
+    return df, report
+
 # ============================================================
 # MAIN PROJECTION LOGIC
 # ============================================================
@@ -586,6 +682,11 @@ def project_to_regime(
     
     # Step 6: Rename to ESMA codes
     regime_df = rename_to_esma_codes(regime_df, fields_list)
+
+    # Step 7: Annex2-specific post-projection guards (ESMA-coded dataframe)
+    if regime == "ESMA_Annex2":
+        regime_df, annex2_report = apply_annex2_post_projection_guards(regime_df, config)
+        report["annex2_post_projection"] = annex2_report
     
     report["output_fields"] = len(regime_df.columns)
     report["output_rows"] = len(regime_df)
