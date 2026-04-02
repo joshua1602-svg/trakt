@@ -334,6 +334,20 @@ fields:
     portfolio_type: sme
     layer: core
     core_canonical: true
+  borrower_jurisdiction:
+    allowed_values: null
+    category: analytics
+    format: string
+    portfolio_type: common
+    layer: product
+    core_canonical: false
+  borrower_legal_name:
+    allowed_values: null
+    category: analytics
+    format: string
+    portfolio_type: common
+    layer: product
+    core_canonical: false
   breakage_costs_due_from_swap_counterparty:
     allowed_values: null
     category: regulatory
@@ -799,6 +813,20 @@ fields:
       ESMA_Annex3:
         code: CREL120
         priority: Mandatory
+    layer: performance
+    core_canonical: false
+  penalty_interest_balance:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  penalty_interest_rate:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
     layer: performance
     core_canonical: false
   current_index_rate:
@@ -1783,6 +1811,13 @@ fields:
         priority: Optional
     layer: performance
     core_canonical: false
+  first_interest_payment_date:
+    allowed_values: null
+    category: analytics
+    format: date
+    portfolio_type: common
+    layer: core
+    core_canonical: false
   fitch_industry_code:
     allowed_values: null
     category: analytics
@@ -1893,6 +1928,13 @@ fields:
         priority: Optional
     layer: collateral
     core_canonical: false
+  collateral_geography:
+    allowed_values: null
+    category: analytics
+    format: string
+    portfolio_type: common
+    layer: collateral
+    core_canonical: false
   geographic_region_obligor:
     allowed_values: geographic_region_nuts3
     category: regulatory
@@ -1976,6 +2018,13 @@ fields:
       ESMA_Annex2:
         code: RREC23
         priority: Analytics
+    layer: product
+    core_canonical: false
+  guarantee_type:
+    allowed_values: null
+    category: analytics
+    format: string
+    portfolio_type: common
     layer: product
     core_canonical: false
   health_impairment_flag:

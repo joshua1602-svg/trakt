@@ -14,6 +14,21 @@ portfolio:
 
 regime: ESMA_Annex2
 
+pipeline:
+  loan_engine_enabled: false
+  mi_enabled: true
+  esma_enabled: true
+
+loan_engine:
+  day_count_convention: ACT365
+  interest_payment_frequency: QUARTERLY
+  prepayment_lockout_period_quarters: 2
+  legal_maturity_months: 24
+  penalty_interest_rate: 0.15
+  reporting_date: "2025-11-30"
+  ledger_db: "out/loan_ledger.db"
+  payments_file: "input/payments.csv"
+
 # --- DEFAULTS (CRITICAL CHANGE) ---
 # These are moved here so the Projector injects them into the CSV rows.
 defaults:
