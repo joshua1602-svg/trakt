@@ -274,6 +274,13 @@ def process_events(terms: pd.DataFrame, payments: pd.DataFrame, cfg: LoanEngineC
         payments["payment_date"] = pd.to_datetime(payments["payment_date"]).dt.normalize()
         payments["payment_type"] = payments["payment_type"].astype(str).str.upper()
         payments["payment_amount"] = payments["payment_amount"].astype(float)
+        _n_before = len(payments)
+        payments = payments.drop_duplicates(
+            subset=["loan_identifier", "payment_date", "payment_amount", "payment_type"]
+        )
+        _n_removed = _n_before - len(payments)
+        if _n_removed > 0:
+            print(f"[Loan Engine] WARNING: removed {_n_removed} duplicate payment row(s)")
 
     optional_cols = [
         "borrower_legal_name",
@@ -383,7 +390,7 @@ def process_events(terms: pd.DataFrame, payments: pd.DataFrame, cfg: LoanEngineC
                         events.append(_event("FURTHER_ADVANCE", loan_id, pdate, bucket_amount, state, "payments"))
 
                 if warning:
-                    events.append(_event("STATUS_CHANGE", loan_id, pdate, 0.0, state, warning))
+                    events.append(_event("PAYMENT_WARNING", loan_id, pdate, 0.0, state, warning))
 
             shortfall = max(state["unpaid_interest_balance"], 0.0)
             if shortfall > 0:
@@ -407,6 +414,61 @@ def process_events(terms: pd.DataFrame, payments: pd.DataFrame, cfg: LoanEngineC
 
             state["current_ltv"] = (state["principal_balance"] / valuation) if valuation > 0 else None
             prev_schedule_date = schedule_date
+
+        # -- Stub period: accrue interest and process payments from the last
+        #    scheduled coupon date up to reporting_date (handles mid-quarter reporting).
+        if reporting_date > prev_schedule_date:
+            stub_interest, _ = accrue_interest(state["principal_balance"], annual_rate, prev_schedule_date, reporting_date)
+            stub_prior_unpaid = state["unpaid_interest_balance"]
+            stub_penalty, _ = accrue_penalty(stub_prior_unpaid, penalty_rate, prev_schedule_date, reporting_date)
+
+            if stub_interest > 0:
+                state["accrued_interest_in_period"] += stub_interest
+                state["cumulative_accrued_interest"] += stub_interest
+                state["unpaid_interest_balance"] += stub_interest
+                events.append(_event("INTEREST_ACCRUAL", loan_id, reporting_date, stub_interest, state, "engine", prev_schedule_date, reporting_date))
+
+            if stub_penalty > 0:
+                state["penalty_balance"] += stub_penalty
+                events.append(_event("PENALTY_ACCRUAL", loan_id, reporting_date, stub_penalty, state, "engine", prev_schedule_date, reporting_date))
+
+            stub_payments = loan_payments[loan_payments["payment_date"] > prev_schedule_date]
+            for _, pmt in stub_payments.iterrows():
+                ptype = str(pmt["payment_type"]).upper()
+                pdate = pmt["payment_date"]
+                amount = float(pmt["payment_amount"])
+                in_lockout = pdate < lockout_end and ptype in {"PRINCIPAL", "MIXED"}
+                actions, warning = match_payment(ptype, amount, state, in_lockout)
+
+                for bucket, bucket_amount in actions:
+                    if bucket == "interest":
+                        applied = min(bucket_amount, max(state["unpaid_interest_balance"], 0.0))
+                        if applied > 0:
+                            state["unpaid_interest_balance"] -= applied
+                            state["interest_collections_in_period"] += applied
+                            events.append(_event("INTEREST_RECEIPT", loan_id, pdate, applied, state, "payments"))
+                    elif bucket == "penalty":
+                        applied = min(bucket_amount, max(state["penalty_balance"], 0.0))
+                        if applied > 0:
+                            state["penalty_balance"] -= applied
+                            events.append(_event("PENALTY_RECEIPT", loan_id, pdate, applied, state, "payments"))
+                    elif bucket == "principal":
+                        applied = min(bucket_amount, max(state["principal_balance"], 0.0))
+                        if applied > 0:
+                            state["principal_balance"] -= applied
+                            state["redemptions_received_in_period"] += applied
+                            ev_type = "MATURITY_REDEMPTION" if pdate >= maturity else "PREPAYMENT"
+                            events.append(_event(ev_type, loan_id, pdate, applied, state, "payments"))
+                    elif bucket == "further_advance":
+                        state["principal_balance"] += bucket_amount
+                        state["further_advance_amount"] += bucket_amount
+                        state["further_advance_date"] = pdate.strftime(DATE_FMT)
+                        events.append(_event("FURTHER_ADVANCE", loan_id, pdate, bucket_amount, state, "payments"))
+
+                if warning:
+                    events.append(_event("PAYMENT_WARNING", loan_id, pdate, 0.0, state, warning))
+
+            state["current_ltv"] = (state["principal_balance"] / valuation) if valuation > 0 else None
 
         final_status = update_status(
             principal_balance=state["principal_balance"],
@@ -556,9 +618,6 @@ def main() -> None:
     args = ap.parse_args()
 
     cfg = load_engine_config(args.config, args.reporting_date)
-    if not cfg.loan_engine_enabled:
-        raise RuntimeError("loan_ledger_engine invoked while loan_engine_enabled is false")
-
     terms = load_terms(args.input)
     payments_path = args.payments or cfg.payments_file
     if not payments_path:
