@@ -46,8 +46,74 @@ class TestLoanLedgerEngineV1(unittest.TestCase):
         self.assertFalse(ledger.empty)
         self.assertEqual(int(snap.loc[0, "current_principal_balance"]), 1000)
         self.assertGreaterEqual(float(snap.loc[0, "arrears_balance"]), 0.0)
-        self.assertIn("STATUS_CHANGE", set(ledger["event_type"]))
+        # Lockout breach must emit PAYMENT_WARNING (not STATUS_CHANGE).
+        self.assertIn("PAYMENT_WARNING", set(ledger["event_type"]))
         self.assertTrue((ledger["source"].astype(str).str.contains("LOCKOUT_BREACH")).any())
+
+
+    def test_missed_interest_triggers_status_change(self):
+        """A loan with no interest payment should transition to IN_ARREARS via STATUS_CHANGE."""
+        terms = pd.DataFrame([
+            {
+                "loan_identifier": "L2",
+                "origination_date": "2025-01-01",
+                "maturity_date": "2027-01-01",
+                "original_principal_balance": 1000,
+                "current_principal_balance": 1000,
+                "current_interest_rate": 0.12,
+                "scheduled_interest_payment_frequency": "QUARTERLY",
+                "current_valuation_amount": 2000,
+                "current_valuation_date": "2025-01-01",
+                "account_status": "PERFORMING",
+            }
+        ])
+        # No payments at all — interest will accrue and go unpaid.
+        payments = pd.DataFrame(columns=["loan_identifier", "payment_date", "payment_amount", "payment_type"])
+
+        cfg = LoanEngineConfig(
+            loan_engine_enabled=True,
+            reporting_date=pd.Timestamp("2025-06-30"),
+            ledger_db=str(Path(tempfile.gettempdir()) / "loan_engine_test_status.db"),
+        )
+
+        ledger, snap = process_events(terms, payments, cfg)
+
+        self.assertIn("STATUS_CHANGE", set(ledger["event_type"]))
+        # After at least one missed quarterly coupon the loan should leave PERFORMING.
+        self.assertNotEqual(snap.loc[0, "account_status"], "PERFORMING")
+        self.assertGreater(float(snap.loc[0, "arrears_balance"]), 0.0)
+
+    def test_payment_deduplication_removes_duplicate_rows(self):
+        """Duplicate payment rows must be removed before processing."""
+        terms = pd.DataFrame([
+            {
+                "loan_identifier": "L3",
+                "origination_date": "2025-01-01",
+                "maturity_date": "2027-01-01",
+                "original_principal_balance": 1000,
+                "current_principal_balance": 1000,
+                "current_interest_rate": 0.12,
+                "scheduled_interest_payment_frequency": "QUARTERLY",
+                "current_valuation_amount": 2000,
+                "current_valuation_date": "2025-01-01",
+                "account_status": "PERFORMING",
+            }
+        ])
+        # Same payment row duplicated — should be applied only once.
+        payment_row = {"loan_identifier": "L3", "payment_date": "2025-04-01", "payment_amount": 35, "payment_type": "INTEREST"}
+        payments = pd.DataFrame([payment_row, payment_row])
+
+        cfg = LoanEngineConfig(
+            loan_engine_enabled=True,
+            reporting_date=pd.Timestamp("2025-06-30"),
+            ledger_db=str(Path(tempfile.gettempdir()) / "loan_engine_test_dedup.db"),
+        )
+
+        ledger, snap = process_events(terms, payments, cfg)
+
+        # Only one INTEREST_RECEIPT event should exist (not two).
+        receipts = ledger[ledger["event_type"] == "INTEREST_RECEIPT"]
+        self.assertEqual(len(receipts), 1)
 
 
 if __name__ == "__main__":

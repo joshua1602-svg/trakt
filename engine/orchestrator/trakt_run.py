@@ -332,12 +332,17 @@ def run_common_gates(py: str, args, input_path: Path, out_dir: Path, val_dir: Pa
                 f"[Loan Engine] Enabled but script missing: {loan_script}. "
                 "Disable loan_engine_enabled or provide loan_ledger_engine.py."
             )
-        _run([
+        loan_cmd = [
             py, _script("loan_ledger_engine"),
             "--input", str(canonical_full),
             "--output", str(canonical_snapshot),
             "--config", args.master_config,
-        ])
+        ]
+        if getattr(args, "loan_payments", None):
+            loan_cmd.extend(["--payments", args.loan_payments])
+        if getattr(args, "reporting_date", None):
+            loan_cmd.extend(["--reporting-date", args.reporting_date])
+        _run(loan_cmd)
         if not canonical_snapshot.exists():
             raise RuntimeError(f"[Loan Engine] Failed: did not produce {canonical_snapshot}")
         source_for_transform = canonical_snapshot
@@ -736,6 +741,10 @@ examples:
                      help="Enable optional loan_ledger_engine stage between Gate 1 and transform.")
     ap.add_argument("--no-loan-engine-enabled", dest="loan_engine_enabled", action="store_false",
                      help="Disable optional loan_ledger_engine stage.")
+    ap.add_argument("--loan-payments", dest="loan_payments", default=None,
+                     help="Payments CSV for the loan ledger engine.")
+    ap.add_argument("--reporting-date", dest="reporting_date", default=None,
+                     help="Reporting date for the loan ledger engine (YYYY-MM-DD). Required for deterministic reruns.")
     ap.add_argument("--mi-enabled", dest="mi_enabled", action="store_true",
                      help="Enable MI output path.")
     ap.add_argument("--no-mi-enabled", dest="mi_enabled", action="store_false",
