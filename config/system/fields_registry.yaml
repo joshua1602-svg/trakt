@@ -5563,3 +5563,17 @@ fields:
     portfolio_type: common
     layer: performance
     core_canonical: false
+  broker_fee_amount:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  cumulative_pik_balance:
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: performance
+    core_canonical: false

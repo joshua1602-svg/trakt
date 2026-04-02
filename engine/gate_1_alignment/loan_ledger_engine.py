@@ -54,6 +54,7 @@ class LoanEngineConfig:
     prepayment_lockout_period_quarters: int = 2
     legal_maturity_months: int = 24
     penalty_interest_rate: float = 0.15
+    pik_enabled: bool = False
     reporting_date: Optional[pd.Timestamp] = None
     ledger_db: str = "out/loan_ledger.db"
     payments_file: Optional[str] = None
@@ -95,6 +96,7 @@ def load_engine_config(config_path: Optional[str], reporting_date_override: Opti
         prepayment_lockout_period_quarters=int(_pick("prepayment_lockout_period_quarters", 2)),
         legal_maturity_months=int(_pick("legal_maturity_months", 24)),
         penalty_interest_rate=float(_pick("penalty_interest_rate", 0.15)),
+        pik_enabled=bool(_pick("pik_enabled", False)),
         reporting_date=reporting_date,
         ledger_db=str(_pick("ledger_db", "out/loan_ledger.db")),
         payments_file=_pick("payments_file", None),
@@ -302,6 +304,7 @@ def process_events(terms: pd.DataFrame, payments: pd.DataFrame, cfg: LoanEngineC
         "penalty_interest_rate",
         "collateral_geography",
         "guarantee_type",
+        "broker_fee_amount",
     ]
 
     for _, row in terms.iterrows():
@@ -332,6 +335,7 @@ def process_events(terms: pd.DataFrame, payments: pd.DataFrame, cfg: LoanEngineC
             "cumulative_accrued_interest": 0.0,
             "unpaid_interest_balance": 0.0,
             "penalty_balance": 0.0,
+            "pik_balance": 0.0,
             "interest_collections_in_period": 0.0,
             "redemptions_received_in_period": 0.0,
             "further_advance_amount": 0.0,
@@ -407,8 +411,17 @@ def process_events(terms: pd.DataFrame, payments: pd.DataFrame, cfg: LoanEngineC
 
             shortfall = max(state["unpaid_interest_balance"], 0.0)
             if shortfall > 0:
-                consecutive_missed += 1
-                events.append(_event("INTEREST_SHORTFALL", loan_id, schedule_date, shortfall, state, "engine"))
+                if cfg.pik_enabled:
+                    # Unpaid coupon capitalises: increases principal, clears the unpaid balance.
+                    state["principal_balance"] += shortfall
+                    state["unpaid_interest_balance"] -= shortfall
+                    state["pik_balance"] += shortfall
+                    state["current_ltv"] = (state["principal_balance"] / valuation) if valuation > 0 else None
+                    events.append(_event("PIK_CAPITALISATION", loan_id, schedule_date, shortfall, state, "engine", prev_schedule_date, schedule_date))
+                    consecutive_missed = 0
+                else:
+                    consecutive_missed += 1
+                    events.append(_event("INTEREST_SHORTFALL", loan_id, schedule_date, shortfall, state, "engine"))
             else:
                 consecutive_missed = 0
 
@@ -483,10 +496,13 @@ def process_events(terms: pd.DataFrame, payments: pd.DataFrame, cfg: LoanEngineC
 
             state["current_ltv"] = (state["principal_balance"] / valuation) if valuation > 0 else None
 
+        # For PIK loans the stub-period balance is mid-period accrual not yet due;
+        # pass 0 so it doesn't incorrectly drive WATCH_LIST / IN_ARREARS.
+        _status_unpaid = 0.0 if cfg.pik_enabled else state["unpaid_interest_balance"]
         final_status = update_status(
             principal_balance=state["principal_balance"],
             original_principal=original_principal,
-            unpaid_interest_balance=state["unpaid_interest_balance"],
+            unpaid_interest_balance=_status_unpaid,
             scheduled_coupon=last_coupon,
             consecutive_missed=consecutive_missed,
             maturity_date=maturity,
@@ -511,6 +527,7 @@ def process_events(terms: pd.DataFrame, payments: pd.DataFrame, cfg: LoanEngineC
             "cumulative_accrued_interest": round(state["cumulative_accrued_interest"], 6),
             "interest_collections_in_period": round(state["interest_collections_in_period"], 6),
             "arrears_balance": round(state["unpaid_interest_balance"], 6),
+            "cumulative_pik_balance": round(state["pik_balance"], 6),
             "redemptions_received_in_period": round(state["redemptions_received_in_period"], 6),
             "further_advance_amount": round(state["further_advance_amount"], 6),
             "further_advance_date": state["further_advance_date"],
@@ -595,6 +612,7 @@ def write_canonical_snapshot(snapshot_df: pd.DataFrame, output_path: Path) -> Pa
         "cumulative_accrued_interest",
         "interest_collections_in_period",
         "arrears_balance",
+        "cumulative_pik_balance",
         "redemptions_received_in_period",
         "further_advance_amount",
         "further_advance_date",
@@ -608,6 +626,7 @@ def write_canonical_snapshot(snapshot_df: pd.DataFrame, output_path: Path) -> Pa
         "penalty_interest_balance",
         "collateral_geography",
         "guarantee_type",
+        "broker_fee_amount",
     ]
     cols = [c for c in ordered_cols if c in snapshot_df.columns]
     snapshot_df[cols].to_csv(output_path, index=False)

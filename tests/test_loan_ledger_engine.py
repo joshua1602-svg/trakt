@@ -116,5 +116,50 @@ class TestLoanLedgerEngineV1(unittest.TestCase):
         self.assertEqual(len(receipts), 1)
 
 
+    def test_pik_capitalises_unpaid_coupon_and_stays_performing(self):
+        """With pik_enabled, an unpaid coupon capitalises into principal and loan stays PERFORMING."""
+        terms = pd.DataFrame([
+            {
+                "loan_identifier": "L4",
+                "origination_date": "2025-01-01",
+                "maturity_date": "2027-01-01",
+                "original_principal_balance": 1000,
+                "current_principal_balance": 1000,
+                "current_interest_rate": 0.12,
+                "scheduled_interest_payment_frequency": "QUARTERLY",
+                "current_valuation_amount": 2000,
+                "current_valuation_date": "2025-01-01",
+                "account_status": "PERFORMING",
+            }
+        ])
+        # No cash interest payments — coupon should PIK at each quarter.
+        payments = pd.DataFrame(columns=["loan_identifier", "payment_date", "payment_amount", "payment_type"])
+
+        cfg = LoanEngineConfig(
+            loan_engine_enabled=True,
+            pik_enabled=True,
+            reporting_date=pd.Timestamp("2025-06-30"),
+            ledger_db=str(Path(tempfile.gettempdir()) / "loan_engine_test_pik.db"),
+        )
+
+        ledger, snap = process_events(terms, payments, cfg)
+
+        # A PIK_CAPITALISATION event must have been emitted.
+        self.assertIn("PIK_CAPITALISATION", set(ledger["event_type"]))
+
+        # No INTEREST_SHORTFALL events — PIK replaces shortfall.
+        self.assertNotIn("INTEREST_SHORTFALL", set(ledger["event_type"]))
+
+        # Principal must have grown above original (coupon was capitalised).
+        self.assertGreater(float(snap.loc[0, "current_principal_balance"]), 1000.0)
+
+        # Cumulative PIK balance must be positive.
+        self.assertGreater(float(snap.loc[0, "cumulative_pik_balance"]), 0.0)
+
+        # Loan must remain PERFORMING / CURR — not in arrears.
+        self.assertEqual(snap.loc[0, "account_status"], "CURR")
+        self.assertEqual(snap.loc[0, "internal_account_status"], "PERFORMING")
+
+
 if __name__ == "__main__":
     unittest.main()
