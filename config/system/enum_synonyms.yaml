@@ -8,6 +8,48 @@ purpose:
   learned:
     home improv: RENV
     refurb project: RENV
+
+# ESMA Securitisation Account Status
+# Registry key: account_status
+# Annex 2: RREL69 / Annex 3: CREL136
+# Structure: ESMA_CODE: [list of accepted synonyms from source data]
+account_status:
+  CURR:
+    - CURRENT
+    - PERFORMING
+    - ACTIVE
+    - GOOD_STANDING
+    - WATCH_LIST
+    - PARTIALLY_REDEEMED
+  INAS:
+    - IN_ARREARS
+    - ARREARS
+    - DELINQUENT
+    - LATE
+  DEFT:
+    - DEFAULT
+    - IN_DEFAULT
+    - DEFAULTED
+    - NON_PERFORMING
+    - NPL
+    - MATURED_UNPAID
+  RESI:
+    - REDEEMED
+    - SETTLED
+    - CLOSED
+    - PAID_IN_FULL
+  PREP:
+    - PREPAID
+    - EARLY_REPAID
+    - EARLY_SETTLEMENT
+  WOFF:
+    - WRITTEN_OFF
+    - WRITE_OFF
+    - BAD_DEBT
+  OTHR:
+    - OTHER
+    - UNKNOWN
+    - NA
 property_type:
   manual:
     Semi-detached house: Residential (House, detached or semi-detached) (RHOS)

@@ -5556,3 +5556,10 @@ fields:
     regime_mapping: {}  # Source for IVSS17
     layer: performance
     core_canonical: false
+  internal_account_status:
+    allowed_values: null
+    category: analytics
+    format: string
+    portfolio_type: common
+    layer: performance
+    core_canonical: false

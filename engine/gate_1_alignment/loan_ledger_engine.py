@@ -31,6 +31,19 @@ import yaml
 DATE_FMT = "%Y-%m-%d"
 ALLOWED_PAYMENT_TYPES = {"INTEREST", "PRINCIPAL", "PENALTY", "MIXED"}
 
+# Maps the engine's internal status labels to ESMA securitisation codes.
+# Internal values are richer (WATCH_LIST, PARTIALLY_REDEEMED) and are preserved
+# separately in internal_account_status. account_status always holds the ESMA code.
+_INTERNAL_TO_ESMA: Dict[str, str] = {
+    "PERFORMING":        "CURR",
+    "WATCH_LIST":        "CURR",   # internally flagged but still current for ESMA
+    "PARTIALLY_REDEEMED":"CURR",   # still active; partial principal returned
+    "IN_ARREARS":        "INAS",
+    "DEFAULT":           "DEFT",
+    "MATURED_UNPAID":    "DEFT",   # past legal maturity with principal outstanding
+    "REDEEMED":          "RESI",
+}
+
 
 @dataclass
 class LoanEngineConfig:
@@ -501,7 +514,8 @@ def process_events(terms: pd.DataFrame, payments: pd.DataFrame, cfg: LoanEngineC
             "redemptions_received_in_period": round(state["redemptions_received_in_period"], 6),
             "further_advance_amount": round(state["further_advance_amount"], 6),
             "further_advance_date": state["further_advance_date"],
-            "account_status": state["account_status"],
+            "account_status": _INTERNAL_TO_ESMA.get(state["account_status"], "OTHR"),
+            "internal_account_status": state["account_status"],
             "data_cut_off_date": reporting_date.strftime(DATE_FMT),
             "penalty_interest_balance": round(state["penalty_balance"], 6),
             "penalty_interest_rate": round(penalty_rate, 8),
@@ -585,6 +599,7 @@ def write_canonical_snapshot(snapshot_df: pd.DataFrame, output_path: Path) -> Pa
         "further_advance_amount",
         "further_advance_date",
         "account_status",
+        "internal_account_status",
         "data_cut_off_date",
         "borrower_legal_name",
         "borrower_jurisdiction",
