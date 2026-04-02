@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, Tuple, List
 
 import pandas as pd
+import yaml
 
 _log = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ SCRIPTS = {
     "semantic_alignment":   ENGINE_ROOT / "gate_1_alignment"  / "semantic_alignment.py",
     "canonical_transform":  ENGINE_ROOT / "gate_2_transform"  / "canonical_transform.py",
     "lineage_tracker":      ENGINE_ROOT / "gate_2_transform"  / "lineage_tracker.py",
+    "loan_ledger_engine":   ENGINE_ROOT / "gate_1_alignment"  / "loan_ledger_engine.py",
     "validate_canonical":   ENGINE_ROOT / "gate_3_validation" / "validate_canonical.py",
     "validate_business_rules": ENGINE_ROOT / "gate_3_validation" / "validate_business_rules.py",
     "annex12_projector":    ENGINE_ROOT / "gate_4_projection" / "annex12_projector.py",
@@ -58,6 +60,51 @@ VALID_REGULATORY_REGIMES = [
     "ESMA_Annex2", "ESMA_Annex3", "ESMA_Annex4",
     "ESMA_Annex8", "ESMA_Annex9",
 ]
+
+
+def _load_yaml(path: Optional[str]) -> dict:
+    if not path:
+        return {}
+    p = Path(path)
+    if not p.exists():
+        return {}
+    try:
+        data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _derive_runtime_flags(args) -> Dict[str, bool]:
+    """
+    Build runtime pipeline flags from CLI + master config with backward compatibility.
+    """
+    cfg = _load_yaml(args.master_config)
+    pipeline_cfg = cfg.get("pipeline") if isinstance(cfg.get("pipeline"), dict) else {}
+
+    loan_engine_enabled = pipeline_cfg.get("loan_engine_enabled", False)
+    mi_enabled = pipeline_cfg.get("mi_enabled", True)
+    esma_enabled = pipeline_cfg.get("esma_enabled")
+
+    # Backward-compatible defaults by mode
+    if esma_enabled is None:
+        esma_enabled = args.mode in {"annex12", "regulatory"}
+
+    if args.loan_engine_enabled is not None:
+        loan_engine_enabled = bool(args.loan_engine_enabled)
+    if args.mi_enabled is not None:
+        mi_enabled = bool(args.mi_enabled)
+    if args.esma_enabled is not None:
+        esma_enabled = bool(args.esma_enabled)
+
+    flags = {
+        "loan_engine_enabled": bool(loan_engine_enabled),
+        "mi_enabled": bool(mi_enabled),
+        "esma_enabled": bool(esma_enabled),
+    }
+    if not flags["mi_enabled"] and not flags["esma_enabled"]:
+        raise ValueError("Invalid configuration: at least one output must be enabled (mi_enabled or esma_enabled).")
+    return flags
 
 
 def _script(name: str) -> str:
@@ -230,12 +277,13 @@ def _field_counts_from_violations(path: Optional[Path]) -> Dict[str, int]:
 # Gate runners
 # ---------------------------------------------------------------------------
 
-def run_common_gates(py: str, args, input_path: Path, out_dir: Path, val_dir: Path, stem: str) -> dict:
+def run_common_gates(py: str, args, input_path: Path, out_dir: Path, val_dir: Path, stem: str, flags: Dict[str, bool]) -> dict:
     """
     Run Gates 1-3 (common to all modes).
     Returns a context dict with intermediate results for the manifest.
     """
     canonical_full   = out_dir / f"{stem}_canonical_full.csv"
+    canonical_snapshot = out_dir / f"{stem}_canonical_snapshot.csv"
     canonical_typed  = out_dir / f"{stem}_canonical_typed.csv"
     header_json      = out_dir / f"{stem}_header_mapping_report.json"
     transform_json   = out_dir / f"{stem}_transform_report.json"
@@ -273,15 +321,39 @@ def run_common_gates(py: str, args, input_path: Path, out_dir: Path, val_dir: Pa
     else:
         print(f"[Gate 1] Semantic alignment.............. OK PASS | {hq_recs} HQ recommendations")
 
+    source_for_transform = canonical_full
+    stage_path = ["messy_to_canonical"]
+
+    # -- Optional: Loan ledger enrichment ----------------------------------
+    if flags["loan_engine_enabled"]:
+        loan_script = SCRIPTS["loan_ledger_engine"]
+        if not loan_script.exists():
+            raise RuntimeError(
+                f"[Loan Engine] Enabled but script missing: {loan_script}. "
+                "Disable loan_engine_enabled or provide loan_ledger_engine.py."
+            )
+        _run([
+            py, _script("loan_ledger_engine"),
+            "--input", str(canonical_full),
+            "--output", str(canonical_snapshot),
+            "--config", args.master_config,
+        ])
+        if not canonical_snapshot.exists():
+            raise RuntimeError(f"[Loan Engine] Failed: did not produce {canonical_snapshot}")
+        source_for_transform = canonical_snapshot
+        stage_path.append("loan_ledger_engine")
+        print("[Loan Engine] Loan ledger enrichment....... OK")
+
     # -- Transform (typing / derivations) ----------------------------------
     _run([
         py, _script("canonical_transform"),
-        str(canonical_full),
+        str(source_for_transform),
         "--registry", args.registry,
         "--portfolio-type", args.portfolio_type,
         "--config", args.master_config,
         "--output-dir", str(out_dir),
     ])
+    stage_path.append("canonical_transform_frozen")
 
     if not canonical_typed.exists():
         raise RuntimeError(f"[Transform] Failed: did not produce {canonical_typed}")
@@ -314,6 +386,7 @@ def run_common_gates(py: str, args, input_path: Path, out_dir: Path, val_dir: Pa
         f"{loan_count:,} loans | {canon_stats['warnings']} warnings ({fields_warn} fields) | "
         f"{canon_stats['errors']} errors ({fields_err} fields)"
     )
+    stage_path.append("validate_canonical_frozen")
 
     # -- Gate 2.5: Lineage -------------------------------------------------
     _run([
@@ -366,6 +439,7 @@ def run_common_gates(py: str, args, input_path: Path, out_dir: Path, val_dir: Pa
             print(f"[Gate 3] Business rules.................. Warn {rules_executed} rules | {biz_stats['rows']} failures")
         else:
             print(f"[Gate 3] Business rules.................. Warn {biz_stats['rows']} failures")
+    stage_path.append("validate_business_rules")
 
     # -- Gate 3b: Aggregate validation results -----------------------------
     field_summary_csv = val_dir / f"{stem}_field_summary.csv"
@@ -394,6 +468,8 @@ def run_common_gates(py: str, args, input_path: Path, out_dir: Path, val_dir: Pa
 
     return {
         "canonical_full": canonical_full,
+        "canonical_snapshot": canonical_snapshot if canonical_snapshot.exists() else None,
+        "source_for_transform": source_for_transform,
         "canonical_typed": canonical_typed,
         "header_json": header_json,
         "transform_json": transform_json,
@@ -409,6 +485,7 @@ def run_common_gates(py: str, args, input_path: Path, out_dir: Path, val_dir: Pa
         "rules_executed": rules_executed,
         "field_summary_csv": field_summary_csv,
         "dashboard_json": dashboard_json,
+        "stage_path": stage_path,
     }
 
 
@@ -524,7 +601,7 @@ def run_regulatory(py: str, args, ctx: dict, out_dir: Path) -> dict:
 # Manifest
 # ---------------------------------------------------------------------------
 
-def write_manifest(args, ctx: dict, gate45: Optional[dict], out_dir: Path, run_start: float) -> Path:
+def write_manifest(args, ctx: dict, gate45: Optional[dict], out_dir: Path, run_start: float, flags: Dict[str, bool]) -> Path:
     """Write the run_manifest.json summarising the pipeline execution."""
     manifest_path = out_dir / "run_manifest.json"
     transform = _safe_read_json(ctx["transform_json"]) or {}
@@ -589,6 +666,8 @@ def write_manifest(args, ctx: dict, gate45: Optional[dict], out_dir: Path, run_s
         "output_schema": args.output_schema,
         "loan_count": loan_count,
         "gates": gates,
+        "pipeline_flags": flags,
+        "pipeline_stage_path": ctx.get("stage_path", []),
         "outputs": [x for x in outputs if x],
         "execution_time_seconds": round(time.time() - run_start, 2),
         "generated_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -653,24 +732,38 @@ examples:
     # Shared
     ap.add_argument("--code-order-yaml", default=str(CONFIG_ROOT / "system" / "esma_code_order.yaml"))
     ap.add_argument("--currency", default="GBP")
+    ap.add_argument("--loan-engine-enabled", dest="loan_engine_enabled", action="store_true",
+                     help="Enable optional loan_ledger_engine stage between Gate 1 and transform.")
+    ap.add_argument("--no-loan-engine-enabled", dest="loan_engine_enabled", action="store_false",
+                     help="Disable optional loan_ledger_engine stage.")
+    ap.add_argument("--mi-enabled", dest="mi_enabled", action="store_true",
+                     help="Enable MI output path.")
+    ap.add_argument("--no-mi-enabled", dest="mi_enabled", action="store_false",
+                     help="Disable MI output path.")
+    ap.add_argument("--esma-enabled", dest="esma_enabled", action="store_true",
+                     help="Enable ESMA output path (regime projection + XML).")
+    ap.add_argument("--no-esma-enabled", dest="esma_enabled", action="store_false",
+                     help="Disable ESMA output path.")
+    ap.set_defaults(loan_engine_enabled=None, mi_enabled=None, esma_enabled=None)
 
     args = ap.parse_args()
+    flags = _derive_runtime_flags(args)
 
     # -- Validate mode-specific requirements -------------------------------
-    if args.mode == "annex12" and not args.config:
+    if args.mode == "annex12" and flags["esma_enabled"] and not args.config:
         ap.error("--config is required for annex12 mode")
-    if args.mode == "regulatory":
+    if flags["esma_enabled"] and args.mode != "annex12":
         if not args.regime:
-            ap.error("--regime is required for regulatory mode")
+            ap.error("--regime is required when ESMA output is enabled outside annex12 mode")
         if args.regime not in VALID_REGULATORY_REGIMES:
             ap.error(f"--regime must be one of: {', '.join(VALID_REGULATORY_REGIMES)}")
 
     # -- Schema policy per mode --------------------------------------------
     # MI & Annex 12: "active" = core:true + mapped headers (lean dataset)
     # Regulatory:    "full"   = all fields for the target annex (complete)
-    if args.mode == "regulatory":
+    if flags["esma_enabled"] and args.mode != "annex12":
         args.output_schema = "full"
-    elif args.mode in ("mi", "annex12"):
+    else:
         args.output_schema = "active"
 
     # -- Setup -------------------------------------------------------------
@@ -697,23 +790,31 @@ examples:
     print("")
 
     # -- Gates 1-3 (common) ------------------------------------------------
-    ctx = run_common_gates(py, args, input_path, out_dir, val_dir, stem)
+    ctx = run_common_gates(py, args, input_path, out_dir, val_dir, stem, flags)
 
     # -- Mode-specific gates -----------------------------------------------
     gate45 = None
 
-    if args.mode == "mi":
+    if flags["mi_enabled"]:
         print("")
         print("[MI] Dashboard-ready canonical produced.")
 
-    elif args.mode == "annex12":
-        gate45 = run_annex12(py, args, ctx, out_dir)
-
-    elif args.mode == "regulatory":
-        gate45 = run_regulatory(py, args, ctx, out_dir)
+    if flags["esma_enabled"]:
+        if args.mode == "annex12":
+            gate45 = run_annex12(py, args, ctx, out_dir)
+            ctx["stage_path"].extend(["annex12_projector", "xml_builder_investor"])
+        else:
+            # Default ESMA path for mi/regulatory mode is regime projection + xml.
+            if not args.regime:
+                raise ValueError("ESMA output enabled but --regime is not set. Provide a valid ESMA regime.")
+            gate45 = run_regulatory(py, args, ctx, out_dir)
+            ctx["stage_path"].extend(["regime_projector", "xml_builder"])
+    elif args.mode == "mi":
+        print("")
+        print("[ESMA] Disabled by configuration.")
 
     # -- Manifest ----------------------------------------------------------
-    manifest_path = write_manifest(args, ctx, gate45, out_dir, run_start)
+    manifest_path = write_manifest(args, ctx, gate45, out_dir, run_start, flags)
 
     # -- Summary -----------------------------------------------------------
     elapsed = round(time.time() - run_start, 2)

@@ -260,6 +260,34 @@ original_lender_legal_entity_identifier:
   - originator legal entity identifier
   - originatorLegalEntityIdentifier
   - originator_legal_entity_id
+borrower_legal_name:
+  aliases:
+  - borrower legal name
+  - borrower_legal_name
+borrower_jurisdiction:
+  aliases:
+  - borrower jurisdiction
+  - borrower_jurisdiction
+penalty_interest_balance:
+  aliases:
+  - penalty interest balance
+  - penalty_interest_balance
+first_interest_payment_date:
+  aliases:
+  - first interest payment date
+  - first_interest_payment_date
+penalty_interest_rate:
+  aliases:
+  - penalty interest rate
+  - penalty_interest_rate
+collateral_geography:
+  aliases:
+  - collateral geography
+  - collateral_geography
+guarantee_type:
+  aliases:
+  - guarantee type
+  - guarantee_type
 original_lender_name:
   aliases:
   - orig lender name
