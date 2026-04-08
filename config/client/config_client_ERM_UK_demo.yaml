@@ -1,0 +1,45 @@
+client:
+  client_id: ere_funding_uk
+  display_name: ERE Funding - Equity Release Mortgages
+  environment: production
+portfolio:
+  asset_class: equity_release
+  country: GB
+  base_currency: GBP
+  static_reporting_date: '2026-06-30'
+regime: ESMA_Annex2
+pipeline:
+  loan_engine_enabled: true
+  mi_enabled: true
+  esma_enabled: true
+loan_engine:
+  day_count_convention: ACT365
+  interest_payment_frequency: QUARTERLY
+  prepayment_lockout_period_quarters: 2
+  legal_maturity_months: 24
+  penalty_interest_rate: 0.15
+  reporting_date: '2025-11-30'
+  ledger_db: out/loan_ledger.db
+  payments_file: demo_payments.csv
+defaults:
+  originator_legal_entity_identifier: 213800ABCDE123456701N202501
+  originator_name: ERE Funding Limited
+  originator_establishment_country: GB
+transformations:
+  copy_if_missing:
+    current_principal_balance: current_outstanding_balance
+enrichment:
+  enable:
+    uk_nuts3: true
+  uk_nuts3:
+    nuts_csv_path: reference_data/uk_itl_master_lookup_v2.csv
+    postcode_columns:
+    - postcode
+    - property_postcode
+    target_field: geographic_region_classification
+    fill_only_if_blank: true
+mi:
+  branding:
+    app_title: Portfolio MI Dashboard
+    theme:
+      primary_color: '#0B1F3B'

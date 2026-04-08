@@ -289,6 +289,9 @@ def process_events(terms: pd.DataFrame, payments: pd.DataFrame, cfg: LoanEngineC
         "penalty_interest_rate",
         "collateral_geography",
         "guarantee_type",
+        "amortisation_type",
+        "interest_rate_type",
+        "exposure_currency_denomination",
     ]
 
     for _, row in terms.iterrows():
@@ -573,6 +576,9 @@ def write_canonical_snapshot(snapshot_df: pd.DataFrame, output_path: Path) -> Pa
         "original_principal_balance",
         "current_principal_balance",
         "current_interest_rate",
+        "interest_rate_type",
+        "amortisation_type",
+        "exposure_currency_denomination",
         "scheduled_interest_payment_frequency",
         "current_valuation_amount",
         "current_valuation_date",

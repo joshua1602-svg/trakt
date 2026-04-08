@@ -117,9 +117,11 @@ def to_iso_date(series: pd.Series, dayfirst: bool = True) -> pd.Series:
 
     is_str = s.notna() & ~is_serial
     if is_str.any():
-        dt_out.loc[is_str] = pd.to_datetime(
-            s[is_str], dayfirst=dayfirst, errors="coerce", utc=False
-        )
+        s_str = s[is_str].astype(str)
+        # Parse strict ISO dates first (prevents day-first ambiguity on YYYY-MM-DD).
+        dt_iso = pd.to_datetime(s_str, format="%Y-%m-%d", errors="coerce", utc=False)
+        dt_any = pd.to_datetime(s_str, dayfirst=dayfirst, errors="coerce", utc=False)
+        dt_out.loc[is_str] = dt_iso.fillna(dt_any)
 
     return dt_out.dt.strftime("%Y-%m-%d")
 
