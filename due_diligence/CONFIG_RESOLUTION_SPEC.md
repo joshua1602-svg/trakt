@@ -135,3 +135,21 @@ A Pass 1 scaffold should NOT:
 - Migrate remaining embedded constants to declarative configs.
 - Standardize regime/output config contracts further.
 
+
+---
+
+## Pass 1 helper utility
+
+A lightweight helper script is provided at:
+- `scripts/build_resolved_config.py`
+
+It can build a non-invasive artifact (default: `out/resolved_config.yaml`) from optional layer inputs and includes:
+- metadata/context
+- source paths
+- merged general/charts sections
+- field registry snapshot
+- provenance blocks
+- warnings blocks
+- resolved content SHA256
+
+This utility is scaffolding only and is not yet a mandatory runtime dependency.
