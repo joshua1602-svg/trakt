@@ -37,6 +37,12 @@ CCY_CODE_PATTERN = re.compile(r"^[A-Z]{3}$")
 # Registry loading / selection
 # -----------------------------
 
+def _resolve_default_regime(config: Dict[str, Any]) -> Optional[str]:
+    """Resolve client default regime with legacy compatibility."""
+    if not isinstance(config, dict):
+        return None
+    return config.get("default_regime") or config.get("regime")
+
 def load_registry(path: Path) -> Dict[str, Any]:
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if "fields" not in data or not isinstance(data["fields"], dict):
@@ -556,7 +562,7 @@ def main() -> None:
         )
 
     if args.scope == "regime" and not args.regime:
-        args.regime = config.get("regime")
+        args.regime = _resolve_default_regime(config)
 
     if args.scope == "regime" and not args.regime:
         raise ValueError("scope=regime requires a regime (CLI or config)")

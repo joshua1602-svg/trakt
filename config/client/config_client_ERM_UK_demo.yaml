@@ -7,6 +7,13 @@ portfolio:
   country: GB
   base_currency: GBP
   static_reporting_date: '2026-06-30'
+# default_regime = client default preference for regulatory output.
+default_regime: ESMA_Annex2
+# supported_regimes = client capability set.
+supported_regimes:
+- ESMA_Annex2
+- ESMA_Annex12
+# Legacy field retained for backward compatibility.
 regime: ESMA_Annex2
 pipeline:
   loan_engine_enabled: true
