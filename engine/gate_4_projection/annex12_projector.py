@@ -26,6 +26,7 @@ import yaml
 import pandas as pd
 import math
 import re  # Added for strict validation
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 PIPE_DELIM = "\x1f"
@@ -74,6 +75,67 @@ def normalize_keys(section: Dict[str, Any]) -> Dict[str, Any]:
         code = k.split('_')[0] 
         normalized[code] = v
     return normalized
+
+def _coerce_iso_date(raw: Any) -> Optional[str]:
+    if is_missing(raw):
+        return None
+    dt = pd.to_datetime(raw, errors="coerce")
+    if pd.isna(dt):
+        return None
+    return dt.normalize().strftime("%Y-%m-%d")
+
+def resolve_lei(annex_cfg: Dict[str, Any], master_cfg: Optional[Dict[str, Any]]) -> Optional[str]:
+    deal = normalize_keys((annex_cfg.get("deal", {}) or {}))
+    cfg_lei = deal.get("IVSS1")
+    if not is_missing(cfg_lei):
+        return str(cfg_lei).strip()
+
+    defaults = (master_cfg or {}).get("defaults", {}) or {}
+    for key in (
+        "originator_legal_entity_identifier",
+        "legal_entity_identifier",
+    ):
+        val = defaults.get(key)
+        if not is_missing(val):
+            return str(val).strip()
+    return None
+
+def resolve_reporting_date(annex_cfg: Dict[str, Any], canonical_df: pd.DataFrame, as_of_date: Optional[str]) -> Optional[str]:
+    if as_of_date:
+        parsed = _coerce_iso_date(as_of_date)
+        if parsed:
+            return parsed
+        raise ValueError(f"Invalid --as-of-date value: '{as_of_date}'")
+
+    period = normalize_keys((annex_cfg.get("period", {}) or {}))
+    cfg_date = period.get("IVSS2")
+    parsed_cfg_date = _coerce_iso_date(cfg_date)
+    if parsed_cfg_date:
+        return parsed_cfg_date
+
+    # Prefer canonical transform output first (deterministic transform logic writes data_cut_off_date).
+    for col in ("data_cut_off_date", "reporting_date", "as_of_date", "cut_off_date", "cutoff_date"):
+        if col not in canonical_df.columns:
+            continue
+        parsed = pd.to_datetime(canonical_df[col], errors="coerce").dt.normalize()
+        non_null = parsed.dropna().drop_duplicates()
+        if non_null.empty:
+            continue
+        if len(non_null) > 1:
+            sample = sorted(non_null.dt.strftime("%Y-%m-%d").tolist())[:5]
+            raise ValueError(
+                f"Unable to resolve single reporting date from canonical column '{col}'. "
+                f"Found multiple values (sample): {sample}"
+            )
+        return non_null.iloc[0].strftime("%Y-%m-%d")
+    return None
+
+def apply_identity_linkages(row_out: Dict[str, Any]) -> None:
+    if "IVSS1" in row_out:
+        if "IVSR1" in row_out:
+            row_out["IVSR1"] = row_out["IVSS1"]
+        if "IVSF1" in row_out:
+            row_out["IVSF1"] = row_out["IVSS1"]
 
 def validate_enum(code: str, value: str, enums: Dict[str, Dict[str, str]], constraints: Dict) -> None:
     if value.startswith("ND"):
@@ -239,38 +301,14 @@ def main():
     if "annex12" not in cfg_root:
         raise ValueError("Config missing top-level 'annex12' key")
     cfg = cfg_root["annex12"]
-    
+
+    master_root: Dict[str, Any] = {}
     if args.master_config:
-        try:
-            master_root = load_yaml(args.master_config)
-            # The LEI and Name are in the 'defaults' section of config_ERM_UK.yaml
-            master_defaults = master_root.get('defaults', {})
-            
-            lei = master_defaults.get('originator_legal_entity_identifier')
-            name = master_defaults.get('originator_name')
-
-            # Ensure the 'deal' dictionary exists
-            if 'deal' not in cfg:
-                cfg['deal'] = {}
-
-            # Inject LEI (IVSS1) if not already hardcoded in Annex 12 config
-            if lei and 'IVSS1' not in cfg['deal']:
-                cfg['deal']['IVSS1'] = lei
-
-            # Inject Entity Name (IVSS3/IVSS4)
-            if name and 'IVSS3' not in cfg['deal']:
-                cfg['deal']['IVSS3'] = name
-            if name and 'IVSS4' not in cfg['deal']:
-                cfg['deal']['IVSS4'] = name
-
-        except Exception as e:
-            print(f"WARNING: Failed to load master config: {e}")
-
-    # --- DYNAMIC DATE OVERRIDE ---
-    if args.as_of_date:
-        if 'period' not in cfg:
-            cfg['period'] = {}
-        cfg['period']['IVSS2_data_cut_off_date'] = args.as_of_date
+        master_cfg_path = Path(args.master_config)
+        if master_cfg_path.exists():
+            master_root = load_yaml(args.master_config) or {}
+        else:
+            print(f"WARNING: master config not found at '{args.master_config}'")
 
     constraints_yaml = load_yaml(args.constraints)
     constraints_fields = _constraints_fields(constraints_yaml)
@@ -281,6 +319,35 @@ def main():
 
     df = pd.read_csv(args.canonical)
     row_out: Dict[str, Any] = {}
+
+    if "deal" not in cfg:
+        cfg["deal"] = {}
+    if "period" not in cfg:
+        cfg["period"] = {}
+
+    resolved_lei = resolve_lei(cfg, master_root)
+    if not resolved_lei:
+        raise ValueError(
+            "Unable to resolve Annex 12 LEI (IVSS1). "
+            "Set annex12.deal.IVSS1 in --config or defaults.originator_legal_entity_identifier in --master-config."
+        )
+    cfg["deal"]["IVSS1"] = resolved_lei
+
+    master_defaults = (master_root or {}).get("defaults", {}) or {}
+    name = master_defaults.get("originator_name")
+    if name and "IVSS3" not in normalize_keys(cfg["deal"]):
+        cfg["deal"]["IVSS3"] = name
+    if name and "IVSS4" not in normalize_keys(cfg["deal"]):
+        cfg["deal"]["IVSS4"] = name
+
+    resolved_reporting_date = resolve_reporting_date(cfg, df, args.as_of_date)
+    if not resolved_reporting_date:
+        raise ValueError(
+            "Unable to resolve Annex 12 reporting date (IVSS2). "
+            "Provide annex12.period.IVSS2 in --config or ensure canonical includes one "
+            "of: data_cut_off_date/reporting_date/as_of_date/cut_off_date."
+        )
+    cfg["period"]["IVSS2"] = resolved_reporting_date
 
     enums = cfg.get("enums", {}) or {}
     defaults = cfg.get("defaults", {}) or {}
@@ -413,9 +480,7 @@ def main():
         row_out[code] = value
 
     # 5) Cross-field linkages
-    if "IVSS1" in row_out:
-        if "IVSR1" in row_out: row_out["IVSR1"] = row_out["IVSS1"]
-        if "IVSF1" in row_out: row_out["IVSF1"] = row_out["IVSS1"]
+    apply_identity_linkages(row_out)
 
     out_df = pd.DataFrame([row_out], columns=code_order)
     out_df.to_csv(args.output, index=False)
