@@ -62,6 +62,29 @@ VALID_REGULATORY_REGIMES = [
 ]
 
 
+def _resolve_client_regime_config(config: Optional[dict]) -> Tuple[Optional[str], List[str]]:
+    """Resolve client regime preferences from legacy and new config fields.
+
+    - default_regime = client default preference for regulatory output.
+    - supported_regimes = client capability set.
+    - legacy regime remains supported for backward compatibility.
+    """
+    if not isinstance(config, dict):
+        return None, []
+
+    default_regime = config.get("default_regime") or config.get("regime") or None
+    raw_supported = config.get("supported_regimes")
+
+    if isinstance(raw_supported, list):
+        supported_regimes = [str(r).strip() for r in raw_supported if str(r).strip()]
+    elif default_regime:
+        supported_regimes = [str(default_regime).strip()]
+    else:
+        supported_regimes = []
+
+    return (str(default_regime).strip() if default_regime else None), supported_regimes
+
+
 def _load_yaml(path: Optional[str]) -> dict:
     if not path:
         return {}
@@ -499,6 +522,18 @@ def run_annex12(py: str, args, ctx: dict, out_dir: Path) -> dict:
     annex_projected = out_dir / "annex12_projected.csv"
     annex_xml       = out_dir / "annex12_final.xml"
 
+    # Annex12 execution regime remains fixed in runtime (ESMA_Annex12) and does
+    # not depend on client default_regime. We only emit a light compatibility
+    # warning when supported_regimes is declared and does not include Annex12.
+    master_cfg = _load_yaml(getattr(args, "master_config", None))
+    _, supported_regimes = _resolve_client_regime_config(master_cfg)
+    if supported_regimes and "ESMA_Annex12" not in supported_regimes:
+        _log.warning(
+            "Annex12 mode is running with fixed execution regime ESMA_Annex12, "
+            "but ESMA_Annex12 is not listed in supported_regimes=%s",
+            supported_regimes,
+        )
+
     # -- Gate 4: Annex 12 projection ---------------------------------------
     _run([
         py, _script("annex12_projector"),
@@ -757,6 +792,14 @@ examples:
 
     args = ap.parse_args()
     flags = _derive_runtime_flags(args)
+
+    master_cfg = _load_yaml(args.master_config)
+    default_regime, _ = _resolve_client_regime_config(master_cfg)
+
+    # Backward-compatible regime resolution for helper/orchestrator usage:
+    # --regime (CLI) > default_regime > legacy regime
+    if not args.regime and default_regime:
+        args.regime = default_regime
 
     # -- Validate mode-specific requirements -------------------------------
     if args.mode == "annex12" and flags["esma_enabled"] and not args.config:

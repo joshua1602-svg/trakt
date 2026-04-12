@@ -21,6 +21,13 @@ OUT_DIR = Path("out_validation")
 OUT_DIR.mkdir(exist_ok=True)
 
 
+def _resolve_default_regime(config: dict) -> str | None:
+    """Resolve client default regime with legacy compatibility."""
+    if not isinstance(config, dict):
+        return None
+    return config.get("default_regime") or config.get("regime")
+
+
 def _backfill_ltv(df: pd.DataFrame,
                   bal_col: str,
                   val_col: str,
@@ -642,7 +649,7 @@ def main():
             config = yaml.safe_load(f) or {}
 
     if not args.regime:
-        args.regime = config.get("regime")
+        args.regime = _resolve_default_regime(config)
 
     if not args.regime:
         print("ERROR: Missing regime. Provide --regime or set 'regime' in the config YAML.", file=sys.stderr)
