@@ -1,0 +1,1339 @@
+account_status:
+  aliases:
+  - account status
+  - accountstatus
+  - loan status
+  - loanstatus
+  - status of loan
+  - Acct Stat
+accrual_of_interest_allowed:
+  aliases:
+  - accrual of int allowed
+  - accrual of interest allowed
+  - accrualOfInterestAllowed
+actual_default_interest:
+  aliases:
+  - actual default int
+  - actual_default_interest
+  - actualdefaultinterest
+agent_bank_of_syndication_legal_entity_identifier:
+  aliases:
+  - agent bank of syndication legal entity id
+  - agent bank of syndication legal entity identifier
+  - agentBankOfSyndicationLegalEntityIdentifier
+allocated_losses:
+  aliases:
+  - ALLOCATED LOSSES % - final
+  - ALLOCATED LOSSES ID
+  - ALLOCATED LOSSES NO(old)
+  - ALLOCATED LOSSES REF
+  - ALLOCATED LOSSES RT
+  - ALLOCATED LOSSES RT - final-
+  - ALLOCATEDLOSSESBAL
+  - ALLOCATEDLOSSESGBP
+  - allocated losses Amount
+  - allocated losses Bal
+  - allocated losses Bal-_copy
+  - allocated losses GBP
+  - allocated losses GBP(old)
+  - allocated losses GBP_copy
+  - allocated losses ID_copy
+  - allocated losses No
+  - allocated losses Ref_copy-
+  - allocated losses Rt-_copy
+  - allocated_losses
+  - allocated_losses_(old)___
+  - allocatedlosses
+  - allocatedlossesNo
+  - allocatedlossesNo_copy
+  - allocatedlossesRef
+  - allocatedlossesRt
+  - Losses recognised in the period
+  - Recognized Losses Period
+  - Charge Offs in Period
+  - Gross Losses Period
+amounts_added_to_escrows_in_current_period:
+  aliases:
+  - amounts added to escrows in current period
+  - amountsaddedtoescrowsincurrentperiod
+  - amts added to escrows in curr period
+amounts_held_in_escrow:
+  aliases:
+  - amountsHeldInEscrow
+  - amounts_held_in_escrow
+  - amts held in escrow
+arrears_balance:
+  aliases:
+  - arr_bal
+  - arrears amt
+  - arrearsBalance
+  - arrears_bal
+  - arrears_balance
+  - arrearsamt
+  - arrearsbal
+  - arrs bal
+  - arrs balance
+breakage_costs_due_from_swap_counterparty:
+  aliases:
+  - breakageCostsDueFromSwapCounterparty
+  - breakage_costs_due_from_swap_counterparty
+breakage_costs_due_to_underlying_exposure_swap_provider:
+  aliases:
+  - breakage_costs_due_to_underlying_exp_swap_provider
+  - breakage_costs_due_to_underlying_exposure_swap_provider
+  - breakagecostsduetounderlyingexposureswapprovider
+capital_expenditures_at_securitisation_date:
+  aliases:
+  - capital expenditures at securitisation date
+  - capitalexpendituresatsecuritisationdate
+collateral_currency:
+  aliases:
+  - coll_curr
+  - collateral ccy
+  - collateral_currency
+  - collateralcurrency
+  - collat ccy
+  - coll ccy
+  - Coll curr
+collateral_identifier:
+  aliases:
+  - collateral identifier
+collateral_securitisation_date:
+  aliases:
+  - collateralSecuritisationDate
+  - collateral_securitisation_date
+collateral_type:
+  aliases:
+  - collateral desc
+  - collateral description
+  - collateral type
+  - collateraldescription
+  - collateraltype
+  - colldescr
+  - collat type
+  - coll type
+  - Garantía
+collection_of_escrows:
+  aliases:
+  - collection of escrows
+  - collectionOfEscrows
+collection_of_other_reserves:
+  aliases:
+  - collectionOfOtherReserves
+  - collection_of_other_reserves
+commercial_area:
+  aliases:
+  - commercial area
+  - commercialarea
+committed_undrawn_facility_underlying_exposure_balance:
+  aliases:
+  - Committed Undrawn Facility Underlying Exposure Balance
+  - committed_undrawn_facility_underlying_exp_bal
+  - committedundrawnfacilityunderlyingexposurebalance
+  - reserve amount
+conditions_of_drawing_cash_reserve:
+  aliases:
+  - conditionsOfDrawingCashReserve
+  - conditions_of_drawing_cash_reserve
+consequence_for_breach_of_financial_covenant:
+  aliases:
+  - consequence for breach of financial covenant
+  - consequenceForBreachOfFinancialCovenant
+contractual_annual_rental_income:
+  aliases:
+  - Contractual Annual Rental Income
+  - contractualAnnualRentalIncome
+covenant_breach_trigger:
+  aliases:
+  - covenantBreachTrigger
+  - covenant_breach_trigger
+  - covenantbreach/trigger
+credit_impaired_obligor:
+  aliases:
+  - credit_impaired_obligor
+  - creditimpairedobligor
+cumulative_recoveries:
+  aliases:
+  - Cumulative Recoveries
+  - cum_rec
+  - cum_recoveries
+  - cumrec
+  - cumulativeRecoveries
+  - cumulative_recov
+  - Cum Recov
+  - Recoveries on shortfall cases (net of any further costs)
+cumulative_prepayments:
+  aliases:
+  - Cumulative Prepayments
+  - Lump Sum Overpayments Received in Period
+cure_payments_possible:
+  aliases:
+  - cure pmts possible?
+  - cure_payments_possible?
+  - curepaymentspossible
+exposure_currency_denomination:
+  aliases:
+  - CCY denomination
+  - ccy
+  - currency
+  - currencyDenomination
+  - currency_denom
+  - currency_denomination
+  - currencydenom
+  - facility_currency
+  - loan currency
+  - loancurr
+  - loancurrency
+  - exposure currency
+  - loan currency denomination
+currency_swap_maturity_date:
+  aliases:
+  - currency swap maturity date
+  - currencySwapMaturityDate
+currency_swap_notional:
+  aliases:
+  - currencySwapNotional
+  - currency_swap_notional
+currency_swap_provider:
+  aliases:
+  - Currency Swap Provider
+  - currencyswapprovider
+currency_swap_provider_legal_entity_identifier:
+  aliases:
+  - currency swap provider legal entity id
+  - currency_swap_provider_legal_entity_identifier
+  - currencyswapproviderlegalentityidentifier
+  - other swap provider legal entity id
+  - other swap provider legal entity identifier
+  - otherswapproviderlegalentityidentifier
+current_allocated_underlying_exposure_percentage:
+  aliases:
+  - current allocated underlying exposure percentage
+current_debt_service_coverage_ratio:
+  aliases:
+  - Current Debt Service Coverage Ratio
+  - curr debt service cov ratio
+  - currentdebtservicecoverageratio
+current_default_interest_rate:
+  aliases:
+  - curr default int rt
+  - currentDefaultInterestRate
+  - current_default_interest_rate
+current_index_rate:
+  aliases:
+  - curr_index_rt
+  - currentIndexRate
+  - current_index_rate
+current_interest_coverage_ratio:
+  aliases:
+  - curr_int_cov_ratio
+  - currentInterestCoverageRatio
+  - current_interest_coverage_ratio
+current_interest_rate:
+  aliases:
+  - curr_int_rt
+  - current interest rate
+  - currentInterestRate
+  - current_interest_rate_No
+  - fixed_int
+  - fixed_interest_rate
+  - int rt
+  - int_rate
+  - interest
+  - interest_rate
+  - Curr IR
+  - Interés Nominal
+current_interest_rate_index:
+  aliases:
+  - Current Interest Rate Index Tenor
+  - curr int rt index
+  - curr_int_rt_index_tenor
+  - current_interest_rate_index
+  - currentinterestrateindex
+  - currentinterestrateindextenor
+  - int_index
+  - interest_index
+  - interest rate index
+current_interest_rate_index_tenor:
+  aliases:
+  - current interest rate index tenor
+  - index_term
+  - int_index_term
+current_interest_rate_margin:
+  aliases:
+  - curr int rt margin
+  - current interest rate margin
+  - currentinterestratemargin
+  - int_margin
+  - interest_margin
+current_principal_balance:
+  aliases:
+  - Current Principal Balance
+  - Principal Balance
+  - cur_balance
+  - curbal
+  - curbalance
+  - curr prin bal
+  - currbal
+  - current_balance
+  - currentprincipalbalance
+  - prin_bal
+  - PrincipalBalance
+current_valuation_basis:
+  aliases:
+  - curr valuation basis
+  - current_valuation_basis
+  - currentvaluationbasis
+current_valuation_date:
+  aliases:
+  - curr valuation date
+  - latest valuation date
+  - Curr Val Method
+  - latest valuation dt
+  - last valuation date
+  - last valuation dt
+data_cut_off_date:
+  aliases:
+  - data cut off date
+  - data cut off dt
+  - dataCut-OffDate
+  - datacutoffdate
+  - portfolio_reporting_date
+  - month run
+  - cut off date
+  - cut-off date
+  - pool cut off date
+  - pool cut-off date
+  - pool cut off dt
+  - pool cut-off dt
+date_of_breach_cure:
+  aliases:
+  - date of breach cure
+date_of_lease_expiration:
+  aliases:
+  - date_of_lease_expiration
+  - date_of_lease_expiration - final
+  - date_of_lease_expiration(old)
+  - date_of_lease_expiration_ID
+  - dateofleaseexpiration
+date_of_repurchase:
+  aliases:
+  - Date Of Repurchase
+  - Dt Of Repurchase
+  - dateofrepurchase
+date_of_sale:
+  aliases:
+  - Date Of Sale
+  - dateofsale
+date_of_substitution:
+  aliases:
+  - DATE  OF  SUBSTITUTION  DATE
+  - DATE OF SUBSTITUTION DT
+  - DATE OF SUBSTITUTION DT_copy
+  - DATE OF SUBSTITUTION REF
+  - date of substitution GBP
+  - date of substitution Rt
+  - dateOfSubstitution
+  - date_of_substitution
+  - dateofsubstitutionRef
+  - dateofsubstitutionRt
+date_of_valuation_at_securitisation:
+  aliases:
+  - date of valuation at securitisation
+day_count_convention:
+  aliases:
+  - Day Count Convention
+  - day_count
+  - daycount
+  - daycountconvention
+debt_service_coverage_ratio_at_the_securitisation_date:
+  aliases:
+  - debt service coverage ratio at the securitisation date
+  - debtservicecoverage
+  - debtservicecoverageratio
+  - dscr
+debt_service_coverage_ratio_indicator_at_securitisation_date:
+  aliases:
+  - debt service cov ratio indicator at securitisation date
+  - debtServiceCoverageRatioIndicatorAtSecuritisationDate
+  - debt_service_cov_ratio_at_the_securitisation_date
+  - debt_service_coverage_ratio_at_the_securitisation_date
+  - debt_service_coverage_ratio_indicator_at_securitisation_date
+  - debtservicecoverageratioatthesecuritisationdate
+debt_service_coverage_ratio_method:
+  aliases:
+  - debt service coverage ratio method
+  - debt_service_cov_ratio_method
+  - debtservicecoverageratiomethod
+debt_type:
+  aliases:
+  - debtType
+  - debt_type
+  - facility_type
+default_amount:
+  aliases:
+  - amount_in_default
+  - defaultAmount
+  - default_amount
+  - default_amt
+  - defaulted_amount
+  - df amt
+  - dflt amt
+  - dft amnt
+default_date:
+  aliases:
+  - default dt
+  - defaultDate
+  - default_date
+  - default_date_%_copy
+  - df dt
+  - def dt
+defaulted_underlying_exposure_purchase_price:
+  aliases:
+  - Defaulted Underlying Exposure Purchase Price
+  - defaulted_underlying_exp_purchase_price
+  - defaultedunderlyingexposurepurchaseprice
+deferred_interest:
+  aliases:
+  - deferredInterest
+  - deferred_int
+  - deferred_interest
+deposit_amount:
+  aliases:
+  - Deposit Amount
+  - deposit amt
+  - depositamount
+description:
+  aliases:
+  - desc
+  - descr
+  - description
+do_non_payments_on_equal_ranking_underlying_exposures_constitute_default_of_property:
+  aliases:
+  - DO_NON_PAYMENTS_ON_EQUAL_RANKING_UNDERLYING_EXPOSURES_CONSTITUTE_DEFAULT_OF_PROPERTY_RT
+  - do non payments on equal ranking underlying exposures constitute default of property
+  - do_non_payments_on_equal_ranking_underlying_exposures_constitute_default_of_property_Amount-
+  - do_non_payments_on_equal_ranking_underlying_exposures_constitute_default_of_property_Date_copy
+  - do_non_payments_on_equal_ranking_underlying_exposures_constitute_default_of_property_No
+do_non_payments_on_prior_ranking_claims_constitute_a_default_of_the_underlying_exposure:
+  aliases:
+  - do non-pmts on equal ranking underlying exps constitute default of property?
+  - doNon-PaymentsOnEqualRankingUnderlyingExposuresConstituteDefaultOfProperty?
+  - doNon-PaymentsOnPriorRankingClaimsConstituteADefaultOfTheUnderlyingExposure?
+  - doNonPaymentsOnPriorRankingClaimsConstituteADefaultOfTheUnderlyingExposure
+  - do_non-payments_on_equal_ranking_underlying_exposures_constitute_default_of_property?
+  - do_non-pmts_on_prior_ranking_claims_constitute_a_default_of_the_underlying_exp?
+  - do_non_payments_on_prior_ranking_claims_constitute_a_default_of_the_underlying_exposure
+  - do_non_payments_on_prior_ranking_claims_constitute_a_default_of_the_underlying_exposure_Bal
+duration_of_extension_option:
+  aliases:
+  - DURATION  OF  EXTENSION  OPTION  GBP
+  - DURATION OF EXTENSION OPTION BAL-
+  - DURATION OF EXTENSION OPTION NO
+  - DURATION OF EXTENSION OPTION REF
+  - duration of extension option
+  - duration of extension option ID
+  - durationofextensionoption
+ebitda:
+  aliases:
+  - ebitda
+economic_occupancy_at_securitisation:
+  aliases:
+  - economicOccupancyAtSecuritisation
+  - economic_occupancy_at_securitisation
+enforcement_start_date:
+  aliases:
+  - Enforcement Start Date
+  - enforcementStartDate
+enterprise_value:
+  aliases:
+  - Enterprise Value
+  - enterpriseValue
+  - ev
+escrow_account_currency:
+  aliases:
+  - ESCROW_ACCOUNT_CURRENCY_DT
+  - escrow account currency GBP
+  - escrowAccountCurrency
+  - escrow_account_currency
+  - escrow_account_currency_Amount
+escrow_account_release_conditions:
+  aliases:
+  - escrow account release conditions
+  - escrowAccountReleaseConditions
+escrow_payments_currency:
+  aliases:
+  - escrow_payments_currency
+  - escrow_pmts_currency
+  - escrowpaymentscurrency
+escrow_trigger_event_occurred:
+  aliases:
+  - escrow trigger event occurred
+  - escrowTriggerEventOccurred
+exchange_rate_for_swap:
+  aliases:
+  - exchange_rate_for_swap
+  - exchange_rt_for_swap
+  - exchangerateforswap
+expected_timing_of_recoveries:
+  aliases:
+  - expected timing of recoveries
+  - expectedtimingofrecoveries
+financial_information_non_submission_penalties:
+  aliases:
+  - Financial Information Non-Submission Penalties
+  - financialinformationnon-submissionpenalties
+  - financialinformationnonsubmissionpenalties
+free_cashflow:
+  aliases:
+  - Free Cashflow
+  - fcf
+  - freecashflow
+full_or_partial_termination_event_of_swap_for_current_period:
+  aliases:
+  - Full Or Partial Termination Event Of Swap For Current Period
+  - full or partial termination event of swap for curr period
+  - fullorpartialterminationeventofswapforcurrentperiod
+grace_days_allowed:
+  aliases:
+  - grace_days_allowed
+  - gracedaysallowed
+ground_rent_payable:
+  aliases:
+  - ground rent payable
+  - groundRentPayable
+guarantor_country:
+  aliases:
+  - guarantor country
+  - guarantorcountry
+guarantor_esa_subsector:
+  aliases:
+  - guarantor esa subsector
+  - guarantoresasubsector
+index_determination_date:
+  aliases:
+  - index_determination_date
+  - indexdeterminationdate
+interest_coverage_ratio_at_the_securitisation_date:
+  aliases:
+  - int cov ratio at the securitisation date
+  - int rt at the securitisation date
+  - intcov_ratio
+  - intcoverage
+  - interest rate at the securitisation date
+  - interestCoverageRatioAtTheSecuritisationDate
+  - interest_cov_ratio
+  - interest_coverage_ratio_at_the_securitisation_date
+  - interestrateatthesecuritisationdate
+interest_coverage_ratio_method:
+  aliases:
+  - int_cov_ratio_method
+  - interest coverage ratio method
+  - interestCoverageRatioMethod
+interest_in_arrears:
+  aliases:
+  - Interest In Arrears
+  - int_in_arrears
+  - interestinarrears
+interest_rate_at_the_securitisation_date:
+  aliases:
+  - interest rate at the securitisation date
+interest_rate_cap:
+  aliases:
+  - int rate cap
+  - int_rt_cap
+  - intcap
+  - interest cap
+  - interestRateCap
+  - interest_rate_cap
+  - interestcap
+interest_rate_floor:
+  aliases:
+  - int_floor
+  - int_rt_floor
+  - interest floor
+  - interest rate floor
+  - interestfloor
+  - interestratefloor
+interest_rate_reset_interval:
+  aliases:
+  - int_rt_reset_interval
+  - interest_rate_reset_interval
+  - interestrateresetinterval
+interest_rate_swap_maturity_date:
+  aliases:
+  - Interest Rate Swap Maturity Date
+  - int rt swap maturity date
+  - interestrateswapmaturitydate
+interest_rate_swap_notional:
+  aliases:
+  - int rt swap notional
+  - interestRateSwapNotional
+  - interest_rate_swap_notional
+interest_rate_swap_provider:
+  aliases:
+  - Interest Rate Swap Provider
+  - int_rt_swap_provider
+  - interestRateSwapProvider
+interest_rate_swap_provider_legal_entity_identifier:
+  aliases:
+  - int_rt_swap_provider_legal_entity_id
+  - interest rate swap provider legal entity identifier
+  - interestrateswapproviderlegalentityidentifier
+interest_rate_type:
+  aliases:
+  - int rt type
+  - interest rate type
+  - interestratetype
+  - IR Type
+latest_utilisation_date:
+  aliases:
+  - latestUtilisationDate
+  - latest_util_date
+  - latest_utilisation_date
+leveraged_transaction:
+  aliases:
+  - leveraged_transaction
+  - leveragedtransaction
+liquidation_expense:
+  aliases:
+  - Liquidation Expense
+  - liquidationexpense
+liquidation_prepayment_code:
+  aliases:
+  - liquidation prepayment code
+liquidation_prepayment_date:
+  aliases:
+  - Liquidation / Prepayment Date
+  - liquidation / prepayment code
+  - liquidation/PrepaymentCode
+  - liquidation/prepaymentdate
+  - liquidation_/_prepmt_code
+  - liquidation_/_prepmt_date
+  - liquidationprepaymentdate
+litigation:
+  aliases:
+  - litigation
+managed_by_clo:
+  aliases:
+  - Managed by CLO
+  - managedbyclo
+manufacturer:
+  aliases:
+  - -manufacturerRt
+  - -manufacturer_Rt
+  - MANUFACTURER  NO-
+  - MANUFACTURER  REF
+  - MANUFACTURER (OLD)-
+  - MANUFACTURER FLAG(old)
+  - Manufacturer
+  - manufacturer ID
+  - manufacturer No(old)
+  - manufacturer(old) - final
+  - manufacturerID
+  - manufacturerNo
+market_value:
+  aliases:
+  - Market Value
+  - marketValue
+maturity_date:
+  aliases:
+  - end_date
+  - enddate
+  - enddt
+  - final maturity date
+  - finalmaturitydate
+  - legal_final_maturity
+  - legal_final_maturity_date
+  - mat dt
+  - maturity_date
+  - maturitydate
+  - Mat Date
+  - final mat dt
+  - final mat date
+maturity_date_at_securitisation_date:
+  aliases:
+  - maturity_date_at_securitisation_date
+  - maturitydateatsecuritisationdate
+model:
+  aliases:
+  - Model
+modification:
+  aliases:
+  - Modification
+most_recent_debt_service_coverage_ratio_indicator:
+  aliases:
+  - Most Recent Debt Service Coverage Ratio Indicator
+  - most recent debt service cov ratio indicator
+  - mostRecentDebtServiceCoverageRatioIndicator
+most_recent_primary_servicer_return_date:
+  aliases:
+  - mostRecentPrimaryServicerReturnDate
+  - most_recent_primary_servicer_return_date
+most_recent_special_servicer_transfer_date:
+  aliases:
+  - most_recent_special_servicer_transfer_date
+  - mostrecentspecialservicertransferdate
+name_of_valuer_at_securitisation:
+  aliases:
+  - name of valuer at securitisation
+  - nameofvalueratsecuritisation
+nature_of_extension_option:
+  aliases:
+  - nature of extension option
+  - natureofextensionoption
+negative_amortisation:
+  aliases:
+  - negative_amortisation
+  - negativeamortisation
+net_periodic_payment_made_by_swap_provider:
+  aliases:
+  - net periodic payment made by swap provider
+  - net periodic pmt made by swap provider
+  - netperiodicpaymentmadebyswapprovider
+net_proceeds_received_on_liquidation:
+  aliases:
+  - Net Proceeds Received On Liquidation
+  - netProceedsReceivedOnLiquidation
+net_square_metres:
+  aliases:
+  - Net Square Metres
+  - netSquareMetres
+new_collateral_identifier:
+  aliases:
+  - new collateral identifier
+new_obligor_identifier:
+  aliases:
+  - new_obligor_id
+  - new_obligor_identifier
+  - newobligoridentifier
+new_or_used:
+  aliases:
+  - new or used
+  - neworused
+new_underlying_exposure_identifier:
+  aliases:
+  - new underlying exposure identifier
+next_payment_adjustment_date:
+  aliases:
+  - first payment adjustment date
+  - first_pmt_adjustment_date
+  - firstpaymentadjustmentdate
+  - next pmt adjustment date
+  - nextPaymentAdjustmentDate
+  - next_payment_adjustment_date
+next_payment_date:
+  aliases:
+  - next payment date
+  - next_pmt_date
+  - nextpaymentdate
+next_swap_reset_date:
+  aliases:
+  - next swap reset date
+  - nextswapresetdate
+noteholder_consent:
+  aliases:
+  - noteholder consent
+  - noteholderconsent
+noteholder_meeting_scheduled:
+  aliases:
+  - NOTEHOLDER MEETING SCHEDULED (OLD)
+  - NOTEHOLDER MEETING SCHEDULED BAL
+  - NOTEHOLDER MEETING SCHEDULED FLAG
+  - NOTEHOLDER MEETING SCHEDULED ID-
+  - NOTEHOLDER MEETING SCHEDULED NO
+  - NOTEHOLDER MEETING SCHEDULED RT
+  - noteholder  meeting  scheduled  GBP
+  - noteholder meeting scheduled Amount
+  - noteholder meeting scheduled Date
+  - noteholder meeting scheduled Dt
+  - noteholder meeting scheduled ID(old)
+  - noteholder meeting scheduled_copy
+  - noteholder-meeting-scheduled-Ref
+  - noteholderMeetingScheduled
+  - noteholder_meeting_scheduled
+  - noteholdermeetingscheduledDt
+  - noteholdermeetingscheduledGBP-
+  - noteholdermeetingscheduledNo
+  - noteholdermeetingscheduledRef
+  - noteholdermeetingscheduledRt
+number_of_days_in_arrears:
+  aliases:
+  - DPD
+  - DPD days
+  - No. Days In Arrs
+  - Number Of Days In Arrears
+  - days in arrears
+  - days past due
+  - dpddays
+  - no days past due
+  - no of days in arrears
+  - numberofdaysinarrears
+number_of_leased_objects:
+  aliases:
+  - Number Of Leased Objects
+  - no_of_leased_objects
+  - numberofleasedobjects
+total_credit_limit:
+  aliases:
+  - Total Credit Limit
+  - totalcreditlimit
+  - Total Loan Facility
+number_of_properties_at_data_cut_off_date:
+  aliases:
+  - NUMBER_OF_PROPERTIES_AT_DATA_CUT_OFF_DATE_AMOUNT
+  - NUMBER_OF_PROPERTIES_AT_DATA_CUT_OFF_DATE_FLAG
+  - Number Of Properties At Data Cut-Off Date
+  - _NUMBER_OF_PROPERTIES_AT_DATA_CUT_OFF_DATE_DT
+  - no of properties at data cut off date
+  - numberOfPropertiesAtDataCut-OffDate
+  - numberofpropertiesatdatacutoffdate
+number_of_properties_at_securitisation_date:
+  aliases:
+  - no of properties at securitisation date
+  - numberOfPropertiesAtSecuritisationDate
+  - number_of_properties_at_securitisation_date
+number_of_units:
+  aliases:
+  - no of units
+  - numberOfUnits
+  - number_of_units
+obligor_must_pay_breakage_on_swap:
+  aliases:
+  - obligorMustPayBreakageOnSwap
+  - obligor_must_pay_breakage_on_swap
+obligor_reporting_breach:
+  aliases:
+  - obligor reporting breach
+  - obligorReportingBreach
+occupancy_as_of_date:
+  aliases:
+  - occupancyAsOfDate
+  - occupancy_as_of_date
+operating_expenses_at_securitisation_date:
+  aliases:
+  - operatingExpensesAtSecuritisationDate
+  - operating_expenses_at_securitisation_date
+option_to_buy_price:
+  aliases:
+  - Option To Buy Price
+  - optiontobuyprice
+original_collateral_identifier:
+  aliases:
+  - Collateral Identifier
+  - New Collateral Identifier
+  - collateral id
+  - collateralidentifier
+  - new_collateral_id
+  - newcollateralidentifier
+  - orig collateral id
+  - original_collateral_identifier
+  - originalcollateralidentifier
+  - orig collat id
+  - original collat id
+original_interest_rate:
+  aliases:
+  - OrigRate
+  - orig int rt
+  - original interest rate
+  - originalInterestRate
+original_obligor_identifier:
+  aliases:
+  - orig_obligor_id
+  - original obligor identifier
+  - originalObligorIdentifier
+original_principal_balance_at_securitisation_date:
+  aliases:
+  - orig_prin_bal_at_securitisation_date
+  - original principal balance at securitisation date
+  - originalprincipalbalanceatsecuritisationdate
+original_underlying_exposure_identifier:
+  aliases:
+  - Original Underlying Exposure Identifier
+  - Underlying Exposure Identifier
+  - new_underlying_exp_id
+  - new_underlying_exposure_identifier
+  - newunderlyingexposureidentifier
+  - orig underlying exp id
+  - originalUnderlyingExposureIdentifier
+  - underlying_exp_id
+  - underlyingexposureidentifier
+  - underlying exposure id
+  - underlying_exposure_id
+  - underlying exposure identifier
+  - undrlg exposure id
+  - UE ID
+  - loan policy number
+originator_establishment_country:
+  aliases:
+  - -originator establishment country ID-
+  - ORIGINATOR ESTABLISHMENT COUNTRY (OLD)_copy
+  - ORIGINATOR ESTABLISHMENT COUNTRY DATE
+  - ORIGINATOR ESTABLISHMENT COUNTRY DT
+  - ORIGINATOR ESTABLISHMENT COUNTRY GBP
+  - ORIGINATOR ESTABLISHMENT COUNTRY ID_copy
+  - ORIGINATOR ESTABLISHMENT COUNTRY NO
+  - ORIGINATOR ESTABLISHMENT COUNTRY REF
+  - ORIGINATOR ESTABLISHMENT COUNTRY RT-
+  - ORIGINATOR ESTABLISHMENT COUNTRY £_copy
+  - ORIGINATOR_ESTABLISHMENT_COUNTRY_AMOUNT
+  - Originator Establishment Ctry
+  - originator establishment country
+  - originator establishment country Bal
+  - originator establishment country Dt _copy
+  - originator establishment country Rt _copy
+  - originatorEstablishmentCountry
+  - originator_establishment_country    - final
+  - originator_establishment_country_(old)-
+  - Est Country
+originator_legal_entity_identifier:
+  aliases:
+  - Original Lender Legal Entity Identifier
+  - Originator Legal Entity Id
+  - orig_lender_legal_entity_id
+  - originalLenderLegalEntityIdentifier
+  - originator legal entity identifier
+  - originatorLegalEntityIdentifier
+  - LEI
+originator_name:
+  aliases:
+  - Originator Name
+  - originatorName
+  - Originator
+  - originator ID
+other_swap_provider:
+  aliases:
+  - Other Swap Provider
+  - otherSwapProvider
+other_swap_provider_legal_entity_identifier:
+  aliases:
+  - other swap provider legal entity identifier
+participation_of_sspe:
+  aliases:
+  - Participation Of SSPE
+  - participationOfSspe
+payment_date:
+  aliases:
+  - Next Payment Date
+  - next_pmt_date
+  - nextpaymentdate
+  - payment date
+  - paymentdate
+  - pmt_date
+payment_due:
+  aliases:
+  - Payment Due
+  - paymentDue
+  - pmt due
+payment_in_kind:
+  aliases:
+  - paymentInKind
+  - payment_in_kind
+  - pmt in kind
+physical_occupancy_at_securitisation:
+  aliases:
+  - physical occupancy at securitisation
+  - physicalOccupancyAtSecuritisation
+pool_addition_date:
+  aliases:
+  - Pool Addition Dt
+  - poolAdditionDate
+  - pool_addition_date
+  - Pool Add Dt
+prepayment_fee:
+  aliases:
+  - prepayment_fee
+  - prepaymentfee
+  - prepmt fee
+prepayment_interest_excess_shortfall:
+  aliases:
+  - prepayment interest excess shortfall
+  - prepaymentInterestExcessShortfall
+  - prepaymentinterestexcess/shortfall
+  - prepmt int excess shortfall
+principal_grace_period_end_date:
+  aliases:
+  - Principal Grace Period End Date
+  - prin_grace_period_end_date
+  - principalgraceperiodenddate
+  - Grace Period
+principal_payment_allocation_to_senior_loan:
+  aliases:
+  - Principal Payment Allocation To Senior Loan
+  - prin_pmt_allocation_to_senior_loan
+  - principalPaymentAllocationToSeniorLoan
+product_type:
+  aliases:
+  - Product Type
+  - producttype
+properties_collateralised_to_the_underlying_exposure:
+  aliases:
+  - properties collateralised to the underlying exposure
+  - properties_collateralised_to_the_underlying_exp
+  - propertiescollateralisedtotheunderlyingexposure
+property_address:
+  aliases:
+  - property_address
+  - propertyaddress
+property_form_of_title:
+  aliases:
+  - property_form_of_title
+  - propertyformoftitle
+property_leasehold_expiry:
+  aliases:
+  - property_leasehold_expiry
+  - propertyleaseholdexpiry
+property_name:
+  aliases:
+  - property_name
+  - propertyname
+property_portfolio_valuation_currency_at_securitisation_date:
+  aliases:
+  - PROPERTY_PORTFOLIO_VALUATION_CURRENCY_AT_SECURITISATION_DATE_AMOUNT - final
+  - PROPERTY_PORTFOLIO_VALUATION_CURRENCY_AT_SECURITISATION_DATE_BAL
+  - property portfolio valuation currency at securitisation date
+  - property_portfolio_valuation_currency_at_securitisation_date_(old)
+property_portfolio_value_at_securitisation_date:
+  aliases:
+  - Property Portfolio Value At Securitisation Date
+  - ppty value
+  - prop val
+  - prop value
+  - property value
+  - property_portfolio_valuation_currency_at_securitisation_date
+  - propertyportfoliovaluationcurrencyatsecuritisationdate
+  - propertyportfoliovalueatsecuritisationdate
+property_post_code:
+  aliases:
+  - propertyPostCode
+  - property_post_code
+  - property_postcode
+  - postcode
+  - post code
+  - post code.1
+property_status:
+  aliases:
+  - Property Status
+  - propertystatus
+property_type:
+  aliases:
+  - prop type
+  - property type
+  - propertyType
+  - Prop Type
+  - Type
+purchase_price:
+  aliases:
+  - Purchase Price
+  - purchaseprice
+purpose:
+  aliases:
+  - Purpose
+  - facilitypurpose
+  - loan_purpose
+  - loanpurpose
+  - Finalidad
+put_date:
+  aliases:
+  - putDate
+  - put_date
+put_strike:
+  aliases:
+  - put strike
+  - putstrike
+recovery_source:
+  aliases:
+  - recovery source
+  - recoverysource
+redemption_date:
+  aliases:
+  - Redemption Dt
+  - redemptionDate
+  - redemption_date
+  - Redemp Dt
+  - full redemption date
+
+rent_currency:
+  aliases:
+  - rent ccy
+  - rentCurrency
+  - rent_currency
+rent_payable:
+  aliases:
+  - rent payable
+  - rentPayable
+reserve_balance_currency:
+  aliases:
+  - reserve bal currency
+  - reserve balance ccy
+  - reserveBalanceCurrency
+  - reserve_balance_currency
+residential_area:
+  aliases:
+  - Residential Area
+  - residentialarea
+restrictions_on_sale_of_subordinated_loan:
+  aliases:
+  - Restrictions On Sale Of Subordinated Loan?
+  - restrictionsonsaleofsubordinatedloan?
+rounding_increment:
+  aliases:
+  - rounding increment
+  - roundingincrement
+sale_price:
+  aliases:
+  - sale_price
+  - saleprice
+scheduled_interest_payment_frequency:
+  aliases:
+  - payment frequency
+  - paymentfreq
+  - pmt freq
+  - scheduled int pmt frequency
+  - scheduled interest payment frequency
+  - scheduledinterestpaymentfrequency
+  - IP Freq
+  - Cupón trimestral
+scheduled_principal_payment_frequency:
+  aliases:
+  - scheduled principal payment frequency
+  - scheduledPrincipalPaymentFrequency
+  - scheduled_prin_pmt_frequency
+securitised_receivables:
+  aliases:
+  - securitised_receivables
+  - securitisedreceivables
+securitised_residual_value:
+  aliases:
+  - securitisedResidualValue
+  - securitised_residual_value
+security_type:
+  aliases:
+  - sectype
+  - securityType
+  - security_type
+seniority:
+  aliases:
+  - seniority
+servicer_legal_entity_identifier:
+  aliases:
+  - Servicer Legal Entity Identifier
+  - originator legal entity identifier
+  - originatorLegalEntityIdentifier
+  - originator_legal_entity_id
+  - servicer_legal_entity_id
+  - servicerlegalentityidentifier
+servicer_name:
+  aliases:
+  - --SERVICER NAME ID--
+  - SERVICER NAME DT
+  - SERVICER NAME GBP-
+  - servicer  name  %_copy
+  - servicer name
+  - servicer name Amount
+  - servicer name Bal
+  - servicer name Date
+  - servicer name No
+  - servicer name Ref
+  - servicer name Rt
+  - servicername
+servicer_watchlist_code:
+  aliases:
+  - servicer watchlist code
+  - servicerwatchlistcode
+servicer_watchlist_date:
+  aliases:
+  - servicer watchlist date
+  - servicerWatchlistDate
+servicing_standard:
+  aliases:
+  - servicingStandard
+  - servicing_standard
+shortfall_in_payment_of_breakage_costs_on_swap:
+  aliases:
+  - Shortfall In Payment Of Breakage Costs On Swap
+  - shortfallInPaymentOfBreakageCostsOnSwap
+  - shortfall_in_pmt_of_breakage_costs_on_swap
+special_servicing_status:
+  aliases:
+  - special_servicing_status
+  - specialservicingstatus
+sponsor:
+  aliases:
+  - SPONSOR DT
+  - SPONSOR GBP
+  - SPONSOR ID
+  - SPONSOR-RT
+  - Sponsor
+  - sponsor No-
+  - sponsor Ref-
+  - sponsorDate
+  - sponsorRt
+status_of_properties:
+  aliases:
+  - Status Of Properties
+  - statusofproperties
+structure:
+  aliases:
+  - Structure
+subordinated_loan_holder_affiliated_to_obligor:
+  aliases:
+  - subordinatedLoanHolderAffiliatedToObligor
+  - subordinated_loan_holder_affiliated_to_obligor?
+subordinated_loan_holder_control_of_workout_process:
+  aliases:
+  - subordinated loan holder control of workout process
+  - subordinatedloanholdercontrolofworkoutprocess
+syndicated:
+  aliases:
+  - -SYNDICATEDNO-
+  - -syndicatedRt
+  - SYNDICATED   - final
+  - SYNDICATED AMOUNT
+  - SYNDICATED DT    - final
+  - SYNDICATED REF
+  - SYNDICATED REF_copy
+  - SYNDICATED RT
+  - SYNDICATEDNO_copy
+  - SYNDICATED_GBP
+  - syndicated
+  - syndicated  ID
+  - syndicated %(old)-
+  - syndicated Bal
+  - syndicated Date
+  - syndicated Date   _copy
+  - syndicated Dt
+  - syndicated GBP - final
+  - syndicated GBP_copy
+  - syndicated ID_copy
+  - syndicated No
+  - syndicated £_copy
+  - syndicated%_copy_copy
+  - syndicatedAmount
+  - syndicatedBal
+  - syndicatedBal_copy
+  - syndicatedDt
+  - syndicatedDt - final-
+  - syndicatedGBP
+  - syndicatedID--
+  - syndicatedRef-
+  - syndicatedRt-final
+  - syndicatedRt_copy
+target_escrow_amounts_reserves:
+  aliases:
+  - TARGET_ESCROW_AMOUNTS_RESERVES_GBP-
+  - target escrow amounts / reserves
+  - target escrow amts reserves
+  - targetEscrowAmounts/Reserves
+  - targetescrowamountsreserves
+tenant_identifier:
+  aliases:
+  - tenant identifier
+  - tenant_id
+  - tenantidentifier
+tenant_name:
+  aliases:
+  - Tenant Name
+  - tenantname
+total_debt:
+  aliases:
+  - Total Debt
+  - debt total
+  - totaldebt
+total_other_amounts_outstanding:
+  aliases:
+  - Total Other Amounts Outstanding
+  - total other amts outstanding
+  - totalOtherAmountsOutstanding
+total_reserve_balance:
+  aliases:
+  - total reserve balance
+  - totalReserveBalance
+  - total_reserve_bal
+total_scheduled_principal_interest_due:
+  aliases:
+  - total scheduled prin & int paid
+  - totalScheduledPrincipal&InterestDue
+  - totalScheduledPrincipalInterestDue
+  - total_scheduled_prin_&_int_due
+  - total_scheduled_principal_&_interest_paid
+  - total_scheduled_principal_interest_due
+  - totalscheduledprincipal&interestpaid
+total_scheduled_principal_interest_paid:
+  aliases:
+  - total scheduled principal interest paid
+total_shortfalls_in_principal_interest_outstanding:
+  aliases:
+  - total shortfalls in prin int outstanding
+  - total shortfalls in principal interest outstanding
+  - totalShortfallsInPrincipal&InterestOutstanding
+  - totalShortfallsInPrincipalInterestOutstanding
+trigger_for_escrow_to_be_held:
+  aliases:
+  - trigger_for_escrow_to_be_held
+  - triggerforescrowtobeheld
+underlying_exposure_identifier:
+  aliases:
+  - underlying exposure identifier
+unique_identifier:
+  aliases:
+  - unique id
+  - unique_identifier
+  - uniqueidentifier
+  - loan id
+unscheduled_principal_collections:
+  aliases:
+  - unscheduled principal collections
+  - unscheduled_prin_collections
+  - unscheduledprincipalcollections
+  - 
+vacant_possession_value_at_securitisation_date:
+  aliases:
+  - VACANT_POSSESSION_VALUE_AT_SECURITISATION_DATE_(OLD)
+  - Vacant Possession Value At Securitisation Date
+  - vacantPossessionValueAtSecuritisationDate
+valuation_at_securitisation:
+  aliases:
+  - Valuation At Securitisation
+  - valuationAtSecuritisation
+valuation_date_at_securitisation_date:
+  aliases:
+  - Date Of Valuation At Securitisation
+  - dateOfValuationAtSecuritisation
+  - valuation date at securitisation date
+  - valuationDateAtSecuritisationDate
+waterfall_a_b_pre_enforcement_scheduled_interest_payments:
+  aliases:
+  - waterfall a b pre enforcement scheduled int pmts
+  - waterfallABPreEnforcementScheduledInterestPayments
+  - waterfall_a_b_pre_enforcement_scheduled_interest_payments
+  - waterfalla-bpreenforcementscheduledinterestpayments
+waterfall_a_b_pre_enforcement_scheduled_principal_payments:
+  aliases:
+  - waterfall_a-b_pre_enforcement_scheduled_prin_pmts
+  - waterfall_a-b_pre_enforcement_scheduled_principal_payments
+  - waterfalla-bpreenforcementscheduledprincipalpayments
+  - waterfallabpreenforcementscheduledprincipalpayments
+waterfall_type:
+  aliases:
+  - waterfallType
+  - waterfall_type
+weighted_average_lease_terms:
+  aliases:
+  - weighted average lease terms
+  - weightedAverageLeaseTerms
+workout_strategy_code:
+  aliases:
+  - workoutStrategyCode
+  - workout_strategy_code
+  - workout_strtgy_code
+yield_maintenance_end_date:
+  aliases:
+  - yield_maintenance_end_date
+  - yieldmaintenanceenddate
+recoveries_on_shortfall_cases:
+  aliases:
+    - Recoveries on shortfall cases (net of any further costs)
+    - Shortfall Recoveries Net
+    - Recoveries on Shortfalls
+    - Net Recoveries Shortfall

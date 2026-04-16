@@ -1,0 +1,305 @@
+<html><head><meta charset='utf-8'><title>Synthetic ERM Demo Overview</title>
+<style>
+body{font-family:Arial,Helvetica,sans-serif;margin:18px;color:#1b1f23}h1{margin:0 0 8px 0}h2{margin-top:20px}
+table{border-collapse:collapse;font-size:12px;margin:8px 0 14px 0}th,td{border:1px solid #cfd6df;padding:4px 6px;vertical-align:top}
+.kpis{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:8px;margin:10px 0 14px}
+.kpi{border:1px solid #d2dae5;border-radius:6px;padding:8px;background:#f9fbfe}.kpi .v{font-weight:bold;font-size:16px}
+.small{color:#5f6b7a;font-size:12px}
+</style></head><body>
+<h1>Synthetic Equity Release Demo (Send-ready)</h1>
+<div class='small'>Style reference used: <code>demo_static_6_loans.csv</code>. Scope: synthetic_demo only.</div>
+<h2>1) Raw lender input snippet</h2>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Underlying Exposure Identifier</th>
+      <th>Origination Dt</th>
+      <th>Current Principal Balance GBP</th>
+      <th>Current Interest Rate</th>
+      <th>Borrower Age (Youngest)</th>
+      <th>Region</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>DEMO-0001</td>
+      <td>2025-06-07</td>
+      <td>177,334.06</td>
+      <td>7.108</td>
+      <td>77</td>
+      <td>West Midlands</td>
+    </tr>
+    <tr>
+      <td>DEMO-0002</td>
+      <td>2024-02-26</td>
+      <td>171,008.53</td>
+      <td>8.719</td>
+      <td>74</td>
+      <td>East Midlands</td>
+    </tr>
+    <tr>
+      <td>DEMO-0003</td>
+      <td>2025-04-26</td>
+      <td>79,698.36</td>
+      <td>8.014</td>
+      <td>74</td>
+      <td>Wales</td>
+    </tr>
+    <tr>
+      <td>DEMO-0004</td>
+      <td>2025-11-15</td>
+      <td>196,804.85</td>
+      <td>8.213</td>
+      <td>69</td>
+      <td>Yorkshire and The Humber</td>
+    </tr>
+    <tr>
+      <td>DEMO-0005</td>
+      <td>2025-01-15</td>
+      <td>259,110.87</td>
+      <td>6.867</td>
+      <td>78</td>
+      <td>South West</td>
+    </tr>
+    <tr>
+      <td>DEMO-0006</td>
+      <td>2025-07-22</td>
+      <td>175,963.41</td>
+      <td>6.441</td>
+      <td>78</td>
+      <td>Wales</td>
+    </tr>
+  </tbody>
+</table>
+<h2>2) Canonical standardisation (before/after)</h2>
+<h4>Canonical full</h4>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>underlying_exposure_identifier</th>
+      <th>origination_date</th>
+      <th>current_principal_balance</th>
+      <th>current_interest_rate</th>
+      <th>youngest_borrower_age</th>
+      <th>account_status</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>DEMO-0001</td>
+      <td>2025-06-07</td>
+      <td>177,334.06</td>
+      <td>7.108</td>
+      <td>77</td>
+      <td>Active</td>
+    </tr>
+    <tr>
+      <td>DEMO-0002</td>
+      <td>2024-02-26</td>
+      <td>171,008.53</td>
+      <td>8.719</td>
+      <td>74</td>
+      <td>Active</td>
+    </tr>
+    <tr>
+      <td>DEMO-0003</td>
+      <td>2025-04-26</td>
+      <td>79,698.36</td>
+      <td>8.014</td>
+      <td>74</td>
+      <td>Active</td>
+    </tr>
+    <tr>
+      <td>DEMO-0004</td>
+      <td>2025-11-15</td>
+      <td>196,804.85</td>
+      <td>8.213</td>
+      <td>69</td>
+      <td>Active</td>
+    </tr>
+    <tr>
+      <td>DEMO-0005</td>
+      <td>2025-01-15</td>
+      <td>259,110.87</td>
+      <td>6.867</td>
+      <td>78</td>
+      <td>Active</td>
+    </tr>
+    <tr>
+      <td>DEMO-0006</td>
+      <td>2025-07-22</td>
+      <td>175,963.41</td>
+      <td>6.441</td>
+      <td>78</td>
+      <td>Active</td>
+    </tr>
+  </tbody>
+</table>
+<h4>Canonical typed</h4>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>underlying_exposure_identifier</th>
+      <th>origination_date</th>
+      <th>current_principal_balance</th>
+      <th>current_interest_rate</th>
+      <th>youngest_borrower_age</th>
+      <th>account_status</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>DEMO-0001</td>
+      <td>2025-06-07</td>
+      <td>177334.06</td>
+      <td>7.108</td>
+      <td>77</td>
+      <td>Active</td>
+    </tr>
+    <tr>
+      <td>DEMO-0002</td>
+      <td>2024-02-26</td>
+      <td>171008.53</td>
+      <td>8.719</td>
+      <td>74</td>
+      <td>Active</td>
+    </tr>
+    <tr>
+      <td>DEMO-0003</td>
+      <td>2025-04-26</td>
+      <td>79698.36</td>
+      <td>8.014</td>
+      <td>74</td>
+      <td>Active</td>
+    </tr>
+    <tr>
+      <td>DEMO-0004</td>
+      <td>2025-11-15</td>
+      <td>196804.85</td>
+      <td>8.213</td>
+      <td>69</td>
+      <td>Active</td>
+    </tr>
+    <tr>
+      <td>DEMO-0005</td>
+      <td>2025-01-15</td>
+      <td>259110.87</td>
+      <td>6.867</td>
+      <td>78</td>
+      <td>Active</td>
+    </tr>
+    <tr>
+      <td>DEMO-0006</td>
+      <td>2025-07-22</td>
+      <td>175963.41</td>
+      <td>6.441</td>
+      <td>78</td>
+      <td>Active</td>
+    </tr>
+  </tbody>
+</table>
+<h2>3) Validation / governance summary</h2>
+<p>Controls surfaced limited, explainable exceptions.</p>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>field_name</th>
+      <th>issue_type</th>
+      <th>error_count</th>
+      <th>severity</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>PORTFOLIO</td>
+      <td>DAT003</td>
+      <td>1</td>
+      <td>error</td>
+    </tr>
+  </tbody>
+</table>
+<h2>4) MI view (HTML only, no binary dependency)</h2>
+<div class='kpis'>
+  <div class='kpi'><div class='small'>Loan count</div><div class='v'>36</div></div>
+  <div class='kpi'><div class='small'>Portfolio balance</div><div class='v'>£5,382,463</div></div>
+  <div class='kpi'><div class='small'>WA current LTV</div><div class='v'>41.63%</div></div>
+  <div class='kpi'><div class='small'>WA interest rate</div><div class='v'>7.57%</div></div>
+  <div class='kpi'><div class='small'>WA borrower age</div><div class='v'>74.8</div></div>
+</div>
+<h4>Top regions</h4><table><tr><th>Bucket</th><th>Count</th><th>Share</th></tr><tr><td>East Midlands</td><td>5</td><td><div style='background:#e6eef8;width:220px'><div style='background:#2f5d9f;height:10px;width:100.0%'></div></div></td></tr><tr><td>Yorkshire and The Humber</td><td>5</td><td><div style='background:#e6eef8;width:220px'><div style='background:#2f5d9f;height:10px;width:100.0%'></div></div></td></tr><tr><td>East of England</td><td>5</td><td><div style='background:#e6eef8;width:220px'><div style='background:#2f5d9f;height:10px;width:100.0%'></div></div></td></tr><tr><td>South East</td><td>5</td><td><div style='background:#e6eef8;width:220px'><div style='background:#2f5d9f;height:10px;width:100.0%'></div></div></td></tr><tr><td>London</td><td>4</td><td><div style='background:#e6eef8;width:220px'><div style='background:#2f5d9f;height:10px;width:80.0%'></div></div></td></tr><tr><td>North West</td><td>3</td><td><div style='background:#e6eef8;width:220px'><div style='background:#2f5d9f;height:10px;width:60.0%'></div></div></td></tr></table>
+<h4>Property type mix</h4><table><tr><th>Bucket</th><th>Count</th><th>Share</th></tr><tr><td>manual</td><td>36</td><td><div style='background:#e6eef8;width:220px'><div style='background:#2f5d9f;height:10px;width:100.0%'></div></div></td></tr></table>
+<h2>5) ESMA Annex 2 projection snippet</h2>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>RREL1</th>
+      <th>RREL2</th>
+      <th>RREL3</th>
+      <th>RREL4</th>
+      <th>RREL5</th>
+      <th>RREC2</th>
+      <th>RREL6</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>SYNTH2026POOL01</td>
+      <td>DEMO-0001</td>
+      <td>DEMO-0001-N</td>
+      <td>OBO-0001</td>
+      <td>OBL-0001</td>
+      <td>DEMO-0001</td>
+      <td>2026-01-31</td>
+    </tr>
+    <tr>
+      <td>SYNTH2026POOL01</td>
+      <td>DEMO-0002</td>
+      <td>DEMO-0002-N</td>
+      <td>OBO-0002</td>
+      <td>OBL-0002</td>
+      <td>DEMO-0002</td>
+      <td>2026-01-31</td>
+    </tr>
+    <tr>
+      <td>SYNTH2026POOL01</td>
+      <td>DEMO-0003</td>
+      <td>DEMO-0003-N</td>
+      <td>OBO-0003</td>
+      <td>OBL-0003</td>
+      <td>DEMO-0003</td>
+      <td>2026-01-31</td>
+    </tr>
+    <tr>
+      <td>SYNTH2026POOL01</td>
+      <td>DEMO-0004</td>
+      <td>DEMO-0004-N</td>
+      <td>OBO-0004</td>
+      <td>OBL-0004</td>
+      <td>DEMO-0004</td>
+      <td>2026-01-31</td>
+    </tr>
+    <tr>
+      <td>SYNTH2026POOL01</td>
+      <td>DEMO-0005</td>
+      <td>DEMO-0005-N</td>
+      <td>OBO-0005</td>
+      <td>OBL-0005</td>
+      <td>DEMO-0005</td>
+      <td>2026-01-31</td>
+    </tr>
+    <tr>
+      <td>SYNTH2026POOL01</td>
+      <td>DEMO-0006</td>
+      <td>DEMO-0006-N</td>
+      <td>OBO-0006</td>
+      <td>OBL-0006</td>
+      <td>DEMO-0006</td>
+      <td>2026-01-31</td>
+    </tr>
+  </tbody>
+</table>
+<h2>6) XML delivery status</h2>
+<p>XML build was attempted and failed on workbook mandatory-field constraint: latest blocker RREL15 blank after projection.</p>
+<h2>7) Architecture summary</h2>
+<p><b>one messy lender tape → one canonical truth set → multiple controlled outputs</b></p>
+</body></html>
