@@ -1,0 +1,525 @@
+{
+  "input": "SYNTHETIC_ERE_Portfolio_012026_canonical_full.csv",
+  "output": "SYNTHETIC_ERE_Portfolio_012026_canonical_typed.csv",
+  "fields": {
+    "account_status": {
+      "format": "list",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "allocated_losses": {
+      "format": "decimal",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "amortisation_type": {
+      "format": "list",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "arrears_balance": {
+      "format": "decimal",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "collateral_currency": {
+      "format": "currency_code",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "collateral_type": {
+      "format": "list",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "credit_impaired_obligor": {
+      "format": "y/n",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "cumulative_recoveries": {
+      "format": "decimal",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "current_interest_rate": {
+      "format": "decimal",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "current_interest_rate_index": {
+      "format": "list",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "current_interest_rate_index_tenor": {
+      "format": "list",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "current_interest_rate_margin": {
+      "format": "decimal",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "current_loan_to_value": {
+      "format": "decimal",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "current_principal_balance": {
+      "format": "decimal",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "current_valuation_amount": {
+      "format": "decimal",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "current_valuation_date": {
+      "format": "date",
+      "nulls_before": 1,
+      "nulls_after": 1,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "current_valuation_method": {
+      "format": "list",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "data_cut_off_date": {
+      "format": "date",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "date_of_repurchase": {
+      "format": "date",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "default_amount": {
+      "format": "decimal",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "default_date": {
+      "format": "date",
+      "nulls_before": 36,
+      "nulls_after": 36,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "deposit_amount": {
+      "format": "decimal",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "employment_status": {
+      "format": "list",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "exposure_currency_denomination": {
+      "format": "currency_code",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "geographic_region_classification": {
+      "format": "list",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "geographic_region_obligor": {
+      "format": "list",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "interest_rate_cap": {
+      "format": "decimal",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "interest_rate_floor": {
+      "format": "decimal",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "interest_rate_reset_interval": {
+      "format": "integer",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "interest_rate_type": {
+      "format": "list",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "litigation": {
+      "format": "y/n",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "loan_identifier": {
+      "format": "none",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "maturity_date": {
+      "format": "date",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "new_collateral_identifier": {
+      "format": "string",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "new_obligor_identifier": {
+      "format": "string",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "new_underlying_exposure_identifier": {
+      "format": "string",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "number_of_days_in_arrears": {
+      "format": "integer",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "occupancy_type": {
+      "format": "list",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "original_collateral_identifier": {
+      "format": "string",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "original_loan_to_value": {
+      "format": "decimal",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "original_obligor_identifier": {
+      "format": "string",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "original_principal_balance": {
+      "format": "decimal",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "original_underlying_exposure_identifier": {
+      "format": "string",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "origination_channel": {
+      "format": "list",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "origination_date": {
+      "format": "date",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "originator_legal_entity_identifier": {
+      "format": "string",
+      "nulls_before": 36,
+      "nulls_after": 36,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "originator_name": {
+      "format": "string",
+      "nulls_before": 36,
+      "nulls_after": 36,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "payment_due": {
+      "format": "decimal",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "pool_addition_date": {
+      "format": "date",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "prepayment_fee": {
+      "format": "decimal",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "principal_grace_period_end_date": {
+      "format": "date",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "property_post_code": {
+      "format": "string",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "property_type": {
+      "format": "list",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "purchase_price": {
+      "format": "decimal",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "purpose": {
+      "format": "list",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "redemption_date": {
+      "format": "date",
+      "nulls_before": 34,
+      "nulls_after": 34,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "resident": {
+      "format": "y/n",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "scheduled_interest_payment_frequency": {
+      "format": "list",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "scheduled_principal_payment_frequency": {
+      "format": "list",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "total_credit_limit": {
+      "format": "decimal",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "underlying_exposure_identifier": {
+      "format": "string",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "unique_identifier": {
+      "format": "string",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "youngest_borrower_age": {
+      "format": "integer",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    }
+  },
+  "rows": 36,
+  "derived": {
+    "current_loan_to_value": {
+      "rule_id": "DERIVE_CURRENT_LOAN_TO_VALUE_FORCED",
+      "filled_rows": 36,
+      "logic": "Forced calc: (bal/val)*100 to fix scaling"
+    },
+    "data_cut_off_date": {
+      "rule_id": "CONFIG_OVERRIDE_DATE",
+      "filled_rows": 36,
+      "logic": "Static value from config: 2025-11-30"
+    }
+  },
+  "skipped": {},
+  "applied_defaults": {}
+}

@@ -1,0 +1,250 @@
+{
+  "regime": "ESMA_Annex2",
+  "portfolio_type": "equity_release",
+  "canonical_rows": 36,
+  "canonical_fields": 68,
+  "regime_fields": 104,
+  "mandatory_fields": 47,
+  "optional_fields": 57,
+  "missing_fields": [
+    "sale_price",
+    "balloon_amount",
+    "cumulative_prepayments",
+    "customer_type",
+    "date_last_in_arrears",
+    "date_of_restructuring",
+    "date_of_sale",
+    "debt_to_income_ratio",
+    "energy_performance_certificate_provider_name",
+    "energy_performance_certificate_value",
+    "geographic_region_collateral",
+    "guarantor_type",
+    "insurance_or_investment_provider",
+    "interest_revision_date_1",
+    "interest_revision_date_2",
+    "interest_revision_date_3",
+    "lien",
+    "number_of_payments_before_securitisation",
+    "original_lender_establishment_country",
+    "original_lender_legal_entity_identifier",
+    "original_lender_name",
+    "original_term",
+    "original_valuation_amount",
+    "original_valuation_date",
+    "original_valuation_method",
+    "pari_passu_underlying_exposures",
+    "percentage_of_prepayments_allowed_per_year",
+    "prepayment_date",
+    "prepayment_fee_end_date",
+    "prepayment_lock_out_end_date",
+    "primary_income",
+    "primary_income_currency",
+    "primary_income_type",
+    "primary_income_verification",
+    "prior_principal_balances",
+    "reason_for_default_or_foreclosure",
+    "recourse",
+    "revised_interest_rate_index",
+    "revised_interest_rate_index_tenor",
+    "revision_margin_1",
+    "revision_margin_2",
+    "revision_margin_3",
+    "special_scheme"
+  ],
+  "enum_mapping": {
+    "transformed_fields": {},
+    "unmapped_values": {
+      "collateral_type": [
+        "manual"
+      ],
+      "interest_rate_type": [
+        "manual"
+      ],
+      "amortisation_type": [
+        "Interest roll-up"
+      ],
+      "employment_status": [
+        "manual"
+      ],
+      "purpose": [
+        "manual"
+      ]
+    },
+    "enum_review_candidates": {
+      "collateral_type": [
+        {
+          "field_name": "collateral_type",
+          "raw_value": "manual",
+          "suggested_value": null,
+          "confidence": 0.0,
+          "reasoning": "No deterministic mapping",
+          "alternative_value": null,
+          "allowed_values": [
+            "AGRICULTURAL",
+            "APARTMENT",
+            "BUNGALOW",
+            "COMMERCIAL_RESIDENTIAL",
+            "DETACHED",
+            "DEVELOPMENT",
+            "FLAT",
+            "HOUSE",
+            "INDUSTRIAL",
+            "LAND",
+            "MAISONETTE",
+            "MIXED_USE",
+            "OFFICE",
+            "OTHER",
+            "RETAIL",
+            "SEMI_DETACHED",
+            "UNKNOWN",
+            "WAREHOUSE"
+          ],
+          "count": 36,
+          "deterministic_method": "unmapped",
+          "deterministic_confidence": 0.0,
+          "status": "pending",
+          "confirmed_value": null,
+          "reviewer_note": "",
+          "namespace": "global",
+          "regime": "ESMA_Annex2",
+          "sent_to_llm": false
+        }
+      ],
+      "interest_rate_type": [
+        {
+          "field_name": "interest_rate_type",
+          "raw_value": "manual",
+          "suggested_value": null,
+          "confidence": 0.0,
+          "reasoning": "No deterministic mapping",
+          "alternative_value": null,
+          "allowed_values": [
+            "BASE_RATE",
+            "DISCOUNTED",
+            "EURIBOR",
+            "FIX",
+            "FIXED",
+            "FLOATING",
+            "INTRODUCTORY",
+            "LIBOR",
+            "MIXED",
+            "OTHER",
+            "TEASER",
+            "UNKNOWN",
+            "VAR",
+            "VARIABLE"
+          ],
+          "count": 36,
+          "deterministic_method": "unmapped",
+          "deterministic_confidence": 0.0,
+          "status": "pending",
+          "confirmed_value": null,
+          "reviewer_note": "",
+          "namespace": "global",
+          "regime": "ESMA_Annex2",
+          "sent_to_llm": false
+        }
+      ],
+      "employment_status": [
+        {
+          "field_name": "employment_status",
+          "raw_value": "manual",
+          "suggested_value": null,
+          "confidence": 0.0,
+          "reasoning": "No deterministic mapping",
+          "alternative_value": null,
+          "allowed_values": [
+            "BETWEEN_JOBS",
+            "CONTRACTOR",
+            "EMP",
+            "EMPLOYED",
+            "FREELANCER",
+            "FULL_TIME",
+            "HOMEMAKER",
+            "N_A",
+            "OTHER",
+            "PART_TIME",
+            "PENSIONER",
+            "RET",
+            "RETIRED",
+            "SELF",
+            "SELF_EMPLOYED",
+            "STUDENT",
+            "UNEMP",
+            "UNEMPLOYED",
+            "UNKNOWN"
+          ],
+          "count": 36,
+          "deterministic_method": "unmapped",
+          "deterministic_confidence": 0.0,
+          "status": "pending",
+          "confirmed_value": null,
+          "reviewer_note": "",
+          "namespace": "global",
+          "regime": "ESMA_Annex2",
+          "sent_to_llm": false
+        }
+      ],
+      "purpose": [
+        {
+          "field_name": "purpose",
+          "raw_value": "manual",
+          "suggested_value": null,
+          "confidence": 0.0,
+          "reasoning": "No deterministic mapping",
+          "alternative_value": null,
+          "allowed_values": [
+            "ACQUISITION",
+            "ACQUISITION_FOR_INVESTMENT",
+            "ACQUISITION_FOR_LIQUIDATION",
+            "CONSTRUCTION",
+            "DEVELOPMENT",
+            "INVESTMENT",
+            "NEW_BUILD",
+            "OTHER",
+            "REDEVELOPMENT",
+            "REFINANCE",
+            "REFINANCING",
+            "UNKNOWN"
+          ],
+          "count": 36,
+          "deterministic_method": "unmapped",
+          "deterministic_confidence": 0.0,
+          "status": "pending",
+          "confirmed_value": null,
+          "reviewer_note": "",
+          "namespace": "global",
+          "regime": "ESMA_Annex2",
+          "sent_to_llm": false
+        }
+      ]
+    }
+  },
+  "nd_defaults": {
+    "nd_defaults_applied": {}
+  },
+  "uk_geography_override": {
+    "applied": false,
+    "rows_overridden": 0,
+    "fields": []
+  },
+  "annex2_post_projection": {
+    "header_constants_applied": {
+      "RREL1": "SYNTH2026POOL01",
+      "RREL6": "2026-01-31"
+    },
+    "rrec2_backfilled_rows": 0,
+    "header_constant_checks": {
+      "RREL1": {
+        "distinct_non_blank": 1
+      },
+      "RREL6": {
+        "distinct_non_blank": 1
+      }
+    },
+    "rrel3_backfilled_from_rrel2_rows": 0,
+    "rrel5_backfilled_from_rrel4_rows": 0
+  },
+  "output_fields": 104,
+  "output_rows": 36
+}

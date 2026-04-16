@@ -1,0 +1,63 @@
+raw_header,canonical_field,mapping_method,confidence
+Underlying Exposure Identifier,underlying_exposure_identifier,normalized,1.0
+Loan Identifier,loan_identifier,normalized,1.0
+Unique Loan Identifier,unique_identifier,normalized,1.0
+Original Underlying Exposure Identifier,original_underlying_exposure_identifier,normalized,1.0
+Original Obligor Identifier,original_obligor_identifier,normalized,1.0
+New Underlying Exposure Identifier,new_underlying_exposure_identifier,normalized,1.0
+New Obligor Identifier,new_obligor_identifier,normalized,1.0
+Origination Dt,origination_date,normalized,1.0
+Maturity DATE,maturity_date,normalized,1.0
+Original Principal Balance,original_principal_balance,normalized,1.0
+Current Principal Balance GBP,current_principal_balance,token_set,0.8571
+Current Interest Rate,current_interest_rate,normalized,1.0
+Original Loan To Value,original_loan_to_value,normalized,1.0
+Current Loan To Value,current_loan_to_value,normalized,1.0
+Current Valuation Amount,current_valuation_amount,normalized,1.0
+Current Valuation Date,current_valuation_date,normalized,1.0
+Current Valuation Method,current_valuation_method,normalized,1.0
+Post Code,property_post_code,alias,1.0
+Region ,geographic_region_classification,alias,1.0
+Property Type ,property_type,normalized,1.0
+tenure,,unmapped,0.0
+Borrower Age (Youngest),youngest_borrower_age,normalized,1.0
+Account Status,account_status,normalized,1.0
+Redemption Date,redemption_date,normalized,1.0
+Data Cut-Off Date,data_cut_off_date,normalized,1.0
+Interest Rate Type,interest_rate_type,normalized,1.0
+Occupancy Type,occupancy_type,normalized,1.0
+Amortisation Type,amortisation_type,normalized,1.0
+Origination Channel,origination_channel,normalized,1.0
+Purpose,purpose,exact,1.0
+Total Credit Limit,total_credit_limit,normalized,1.0
+Number of Days in Arrears,number_of_days_in_arrears,normalized,1.0
+Exposure Currency Denomination,exposure_currency_denomination,normalized,1.0
+Pool Addition Date,pool_addition_date,normalized,1.0
+Date of Repurchase,date_of_repurchase,normalized,1.0
+Purchase Price,purchase_price,normalized,1.0
+Arrears Balance,arrears_balance,normalized,1.0
+Default Amount,default_amount,normalized,1.0
+Default Date,default_date,normalized,1.0
+Allocated Losses,allocated_losses,normalized,1.0
+Cumulative Recoveries,cumulative_recoveries,normalized,1.0
+Litigation,litigation,exact,1.0
+Deposit Amount,deposit_amount,normalized,1.0
+Collateral Currency,collateral_currency,normalized,1.0
+Collateral Type,collateral_type,normalized,1.0
+Original Collateral Identifier,original_collateral_identifier,normalized,1.0
+New Collateral Identifier,new_collateral_identifier,normalized,1.0
+Scheduled Principal Payment Frequency,scheduled_principal_payment_frequency,normalized,1.0
+Scheduled Interest Payment Frequency,scheduled_interest_payment_frequency,normalized,1.0
+Payment Due,payment_due,normalized,1.0
+Current Interest Rate Index,current_interest_rate_index,normalized,1.0
+Current Interest Rate Index Tenor,current_interest_rate_index_tenor,normalized,1.0
+Current Interest Rate Margin,current_interest_rate_margin,normalized,1.0
+Interest Rate Reset Interval,interest_rate_reset_interval,normalized,1.0
+Interest Rate Cap,interest_rate_cap,normalized,1.0
+Interest Rate Floor,interest_rate_floor,normalized,1.0
+Prepayment Fee,prepayment_fee,normalized,1.0
+Principal Grace Period End Date,principal_grace_period_end_date,normalized,1.0
+Credit Impaired Obligor,credit_impaired_obligor,normalized,1.0
+Resident,resident,exact,1.0
+Geographic Region Obligor,geographic_region_obligor,normalized,1.0
+Employment Status,employment_status,normalized,1.0
