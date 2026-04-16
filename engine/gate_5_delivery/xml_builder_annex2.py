@@ -14,6 +14,7 @@ Design notes specific to the Annex 2 workbook:
 from __future__ import annotations
 
 import argparse
+import logging
 import re
 import sys
 from dataclasses import dataclass
@@ -26,6 +27,12 @@ from lxml import etree
 DEFAULT_NS = "urn:esma:xsd:DRAFT1auth.099.001.04"
 ND_TAGS = {"NODATA", "NODATA4", "NODATAOPTN"}
 RECORD_ANCHOR = "UndrlygXpsrRcrd"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler()],
+)
 
 
 @dataclass
@@ -493,6 +500,13 @@ def main() -> None:
     ap.add_argument("--performance-mode", choices=["PRF", "NPRF"], default="PRF", help="Select performing/non-performing mapping branch")
     ap.add_argument("--currency", default="GBP", help="Currency code for Annex2 Amt leaves (Ccy attribute)")
     args = ap.parse_args()
+    input_name = Path(args.input).name.lower()
+    if "projected" in input_name and "delivery_ready" not in input_name:
+        logging.warning(
+            "Input appears to be projected CSV without Gate 4b normalization: %s. "
+            "Recommended input is *_delivery_ready.csv.",
+            args.input,
+        )
 
     if not Path(args.input).exists():
         raise FileNotFoundError(args.input)
