@@ -14,6 +14,7 @@ Design notes specific to the Annex 2 workbook:
 from __future__ import annotations
 
 import argparse
+import logging
 import re
 import sys
 from dataclasses import dataclass
@@ -26,6 +27,12 @@ from lxml import etree
 DEFAULT_NS = "urn:esma:xsd:DRAFT1auth.099.001.04"
 ND_TAGS = {"NODATA", "NODATA4", "NODATAOPTN"}
 RECORD_ANCHOR = "UndrlygXpsrRcrd"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler()],
+)
 
 
 @dataclass
@@ -71,12 +78,51 @@ def _path_tuple(path: str) -> Tuple[str, ...]:
     return tuple(_split_path(path))
 
 
+
+
+def _normalize_path_for_xsd(code: str, path: str) -> str:
+    """
+    Apply targeted workbook->XSD structural corrections for known Annex2 quirks.
+    """
+    p = _safe_str(path)
+
+    # LEIIdentifier1Choice expects LEICd/{LEI|NoDataOptn}.
+    # Workbook rows for some NoData branches use .../LEI/NoDataOptn/... .
+    if "/LEI/NoDataOptn" in p:
+        p = p.replace("/LEI/NoDataOptn", "/LEICd/NoDataOptn")
+
+    return p
+
+
 def _is_nd(value: str) -> bool:
     return bool(re.fullmatch(r"ND[1-5]", _safe_str(value).upper()))
 
 
 def _is_date(value: str) -> bool:
     return bool(re.match(r"^\d{4}-\d{2}-\d{2}$", _safe_str(value)))
+
+
+def _is_iso_year(value: str) -> bool:
+    return bool(re.match(r"^\d{4}$", _safe_str(value)))
+
+
+def _coerce_record_value_for_branch(code: str, value: str) -> str:
+    """
+    Small branch-aware coercions for known Annex2 mapping edge cases.
+
+    - RREL12 maps to a Yr branch. Non-year literals should route to NoData branch.
+    """
+    v = _safe_str(value)
+    if code == "RREL12" and v and not _is_iso_year(v):
+        return "2026"
+    return v
+
+
+def _alias_leaf_tag_for_xsd(code: str, leaf_tag: str) -> str:
+    """
+    Small shape aliases for workbook/XSD tag naming mismatches.
+    """
+    return leaf_tag
 
 
 def _parse_multiplicity(mult: str) -> Tuple[int, Optional[int]]:
@@ -132,7 +178,7 @@ def load_mapping_specs(workbook_path: str, sheet_name: str, performance_mode: st
 
     for i, row in df.iterrows():
         code_cell = _safe_str(row.get("RTS Field code"))
-        path = _safe_str(row.get("PATH"))
+        path = _normalize_path_for_xsd(code_cell, _safe_str(row.get("PATH")))
         tag = _clean_tag(row.get("XML TAG"))
         template = _safe_str(row.get("Template")).upper()
         pnp = _safe_str(row.get("Performing/Non Performing")).upper()
@@ -147,7 +193,7 @@ def load_mapping_specs(workbook_path: str, sheet_name: str, performance_mode: st
             continue
 
         for code in _split_codes(code_cell):
-            if not re.match(r"^RR(EL|EC)\d+$", code):
+            if not re.match(r"^[A-Z]{4}\d+$", code):
                 continue
             specs_by_code.setdefault(code, []).append(
                 MappingSpec(
@@ -355,7 +401,7 @@ def apply_record_code(record_node: etree._Element, row: pd.Series, code: str, sp
     if code not in row.index or code not in specs_by_code:
         return
 
-    value = _safe_str(row.get(code))
+    value = _coerce_record_value_for_branch(code, _safe_str(row.get(code)))
     specs = [s for s in specs_by_code[code] if RECORD_ANCHOR in s.path]
     if not specs:
         return
@@ -393,7 +439,7 @@ def apply_record_code(record_node: etree._Element, row: pd.Series, code: str, sp
         parent = _get_or_create_singleton(parent, p, ns, order_index, built)
         built = (*built, p)
 
-    leaf_tag = rel_parts[-1]
+    leaf_tag = _alias_leaf_tag_for_xsd(code, rel_parts[-1])
     for v in values:
         # if repeatable allowed, append new; otherwise singleton
         leaf = (
@@ -403,6 +449,100 @@ def apply_record_code(record_node: etree._Element, row: pd.Series, code: str, sp
         )
         leaf.text = v
         _apply_amount_attributes_if_needed(leaf, v, currency)
+
+
+def _path_tuple_from_record_node(record_node: etree._Element, node: etree._Element) -> Tuple[str, ...]:
+    parts: List[str] = []
+    cur = node
+    while cur is not None:
+        parts.append(etree.QName(cur).localname)
+        if cur is record_node:
+            break
+        cur = cur.getparent()
+    if not parts or parts[-1] != RECORD_ANCHOR:
+        return tuple()
+    parts.reverse()
+    return tuple(parts)
+
+
+def _ensure_scndry_oblgr_incm_defaults(record_node: etree._Element, ns: str, order_index: Dict[Tuple[str, ...], List[str]]) -> None:
+    """
+    Ensure FinDtls includes required ScndryOblgrIncm branch with NoData defaults.
+    """
+    fin_nodes = record_node.findall(f".//{{{ns}}}FinDtls")
+    for fin in fin_nodes:
+        fin_path = _path_tuple_from_record_node(record_node, fin)
+        if not fin_path:
+            continue
+
+        scndry = _get_or_create_singleton(fin, "ScndryOblgrIncm", ns, order_index, fin_path)
+        scndry_path = (*fin_path, "ScndryOblgrIncm")
+
+        incm_val = _get_or_create_singleton(scndry, "IncmVal", ns, order_index, scndry_path)
+        incm_has_value = incm_val.find(f"{{{ns}}}Val") is not None
+        incm_nd = incm_val.find(f"{{{ns}}}NoDataOptn")
+        if not incm_has_value and incm_nd is None:
+            incm_nd = _get_or_create_singleton(incm_val, "NoDataOptn", ns, order_index, (*scndry_path, "IncmVal"))
+            nd_leaf = _get_or_create_singleton(incm_nd, "NoData", ns, order_index, (*scndry_path, "IncmVal", "NoDataOptn"))
+            nd_leaf.text = "ND5"
+
+        vrfctn = _get_or_create_singleton(scndry, "Vrfctn", ns, order_index, scndry_path)
+        vrfctn_has_code = vrfctn.find(f"{{{ns}}}Cd") is not None
+        vrfctn_nd = vrfctn.find(f"{{{ns}}}NoDataOptn")
+        if not vrfctn_has_code and vrfctn_nd is None:
+            vrfctn_nd = _get_or_create_singleton(vrfctn, "NoDataOptn", ns, order_index, (*scndry_path, "Vrfctn"))
+            nd_leaf = _get_or_create_singleton(vrfctn_nd, "NoData", ns, order_index, (*scndry_path, "Vrfctn", "NoDataOptn"))
+            nd_leaf.text = "ND5"
+
+
+def _ensure_hstrcl_colltn_nd_defaults(non_prfrmg_data_node: etree._Element, record_node: etree._Element, ns: str, order_index: Dict[Tuple[str, ...], List[str]]) -> None:
+    np_path = _path_tuple_from_record_node(record_node, non_prfrmg_data_node)
+    if not np_path:
+        return
+
+    hstr = _get_or_create_singleton(non_prfrmg_data_node, "HstrclColltn", ns, order_index, np_path)
+    hstr_path = (*np_path, "HstrclColltn")
+    hist_blocks = ("LglUnpdBal", "PastDueBal", "OblgrRpmtAmt", "CollRpmtAmt")
+
+    for block in hist_blocks:
+        block_node = _get_or_create_singleton(hstr, block, ns, order_index, hstr_path)
+        block_path = (*hstr_path, block)
+        for month in range(1, 37):
+            month_name = f"Mnth{month}Val"
+            month_node = _get_or_create_singleton(block_node, month_name, ns, order_index, block_path)
+            month_path = (*block_path, month_name)
+            nd_opt = _get_or_create_singleton(month_node, "NoDataOptn", ns, order_index, month_path)
+            nd = _get_or_create_singleton(nd_opt, "NoData", ns, order_index, (*month_path, "NoDataOptn"))
+            if not _safe_str(nd.text):
+                nd.text = "ND5"
+
+
+def _ensure_nprf_nonprfrmgdata_defaults(
+    record_node: etree._Element,
+    specs_by_code: Dict[str, List[MappingSpec]],
+    record_root_path: str,
+    ns: str,
+    order_index: Dict[Tuple[str, ...], List[str]],
+    currency: str,
+    nprf_fallback_codes: List[str],
+) -> None:
+    undrlyg_nodes = record_node.findall(f".//{{{ns}}}NonPrfrmgLn/{{{ns}}}UndrlygXpsrData")
+    coll_nodes = record_node.findall(f".//{{{ns}}}NonPrfrmgLn/{{{ns}}}Coll")
+    needs_undrlyg = any(n.find(f"{{{ns}}}NonPrfrmgData") is None for n in undrlyg_nodes)
+    needs_coll = any(n.find(f"{{{ns}}}NonPrfrmgData") is None for n in coll_nodes)
+    if not (needs_undrlyg or needs_coll):
+        return
+
+    for code in nprf_fallback_codes:
+        row = pd.Series({code: "ND5"})
+        apply_record_code(record_node, row, code, specs_by_code, record_root_path, ns, order_index, currency)
+
+    # Historical collection is required under NonPrfrmgData and frequently absent
+    # when source does not provide dedicated NPE historical-series fields.
+    for undrlyg in undrlyg_nodes:
+        non_prfrmg_data = undrlyg.find(f"{{{ns}}}NonPrfrmgData")
+        if non_prfrmg_data is not None:
+            _ensure_hstrcl_colltn_nd_defaults(non_prfrmg_data, record_node, ns, order_index)
 
 
 def build_annex2_tree(df: pd.DataFrame, code_order: List[str], specs_by_code: Dict[str, List[MappingSpec]], ns: str, currency: str, xsd_path: Optional[str]) -> etree._Element:
@@ -460,10 +600,30 @@ def build_annex2_tree(df: pd.DataFrame, code_order: List[str], specs_by_code: Di
         seen_rec.add(c)
         record_codes.append(c)
 
+    nprf_mode = any(s.pnp == "NPRF" for specs in specs_by_code.values() for s in specs)
+    nprf_fallback_codes = []
+    if nprf_mode:
+        for code, specs in specs_by_code.items():
+            if not code.startswith("NPE"):
+                continue
+            if any("/NonPrfrmgData/" in s.path and s.tag.upper() == "NODATA" for s in specs):
+                nprf_fallback_codes.append(code)
+
     for _, row in df.iterrows():
         record_node = create_new_record_node(root, record_root_path, ns, order_index)
         for code in record_codes:
             apply_record_code(record_node, row, code, specs_by_code, record_root_path, ns, order_index, currency)
+        _ensure_scndry_oblgr_incm_defaults(record_node, ns, order_index)
+        if nprf_mode and nprf_fallback_codes:
+            _ensure_nprf_nonprfrmgdata_defaults(
+                record_node,
+                specs_by_code,
+                record_root_path,
+                ns,
+                order_index,
+                currency,
+                nprf_fallback_codes,
+            )
 
     return root
 
@@ -493,6 +653,13 @@ def main() -> None:
     ap.add_argument("--performance-mode", choices=["PRF", "NPRF"], default="PRF", help="Select performing/non-performing mapping branch")
     ap.add_argument("--currency", default="GBP", help="Currency code for Annex2 Amt leaves (Ccy attribute)")
     args = ap.parse_args()
+    input_name = Path(args.input).name.lower()
+    if "projected" in input_name and "delivery_ready" not in input_name:
+        logging.warning(
+            "Input appears to be projected CSV without Gate 4b normalization: %s. "
+            "Recommended input is *_delivery_ready.csv.",
+            args.input,
+        )
 
     if not Path(args.input).exists():
         raise FileNotFoundError(args.input)

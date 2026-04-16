@@ -1,0 +1,863 @@
+regime: ESMA_Annex2
+version: 2
+
+reconciliation_scope:
+  description: >
+    Semantic-alignment pass. Hard-fail enforcement is intentionally limited to
+    reconciled Annex 2 codes that are confirmed in workbook/XSD and present in
+    current Gate 4 output.
+  deferred_fields:
+    - RREC22
+    - RREC24
+    - RREC25
+    - RREC26
+    - RREC27
+    - RREC30
+    - RREC31
+    - RREC32
+    - RREC33
+    - RREC34
+    - RREC36
+    - RREC39
+
+default_policy:
+  apply_defaults_only_if_explicit: true
+  unknown_values: reject
+
+field_rules:
+  RREL1:
+    esma_code: RREL1
+    workbook_semantic: ScrtstnIdr
+    projected_source_field: unique_identifier
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND1, ND2, ND3]
+    validators:
+      regex: "^[A-Z0-9]{18}[0-9]{2}N\\d{4}\\d{2}$"
+
+  RREL2:
+    esma_code: RREL2
+    workbook_semantic: OrgnlUndrlygXpsrIdr
+    projected_source_field: original_underlying_exposure_identifier
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    validators:
+      regex: "^[A-Za-z0-9._\\-/]{1,64}$"
+
+  RREL6:
+    esma_code: RREL6
+    workbook_semantic: CutOffDt
+    projected_source_field: data_cut_off_date
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    validators:
+      regex: "^\\d{4}-\\d{2}-\\d{2}$"
+
+  RREC9:
+    esma_code: RREC9
+    workbook_semantic: PrprtyTp/Cd
+    projected_source_field: property_type
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    transform:
+      enum_map:
+        R1: RHOS
+        R2: RFLT
+        C1: PCMM
+        C2: BIZZ
+        OTHR: OTHR
+
+  RREL69:
+    esma_code: RREL69
+    workbook_semantic: AcctSts
+    projected_source_field: account_status
+    mandatory: false
+    enforce_presence: false
+    nd_allowed: [ND5]
+    transform:
+      enum_map:
+        Active: PERF
+        active: PERF
+        Redeemed: RDMD
+        redeemed: RDMD
+        PERF: PERF
+        RDMD: RDMD
+        OTHR: OTHR
+
+  RREL42:
+    esma_code: RREL42
+    workbook_semantic: EmplmntSts/Cd
+    projected_source_field: employment_status
+    mandatory: false
+    enforce_presence: false
+    nd_allowed: [ND5]
+    transform:
+      enum_map:
+        manual: OTHR
+        MANUAL: OTHR
+        OTHR: OTHR
+
+  RREL13:
+    esma_code: RREL13
+    workbook_semantic: Prps/Cd
+    projected_source_field: purpose
+    mandatory: false
+    enforce_presence: false
+    nd_allowed: [ND5]
+    transform:
+      enum_map:
+        manual: OTHR
+        MANUAL: OTHR
+        OTHR: OTHR
+
+  RREL27:
+    esma_code: RREL27
+    workbook_semantic: IntrstRateType/Cd
+    projected_source_field: interest_rate_type
+    mandatory: false
+    enforce_presence: false
+    nd_allowed: [ND5]
+    transform:
+      enum_map:
+        manual: OTHR
+        MANUAL: OTHR
+        OTHR: OTHR
+
+  RREL37:
+    esma_code: RREL37
+    workbook_semantic: SchdlPrncplPmntFrqnc/Cd
+    projected_source_field: scheduled_principal_payment_frequency
+    mandatory: false
+    enforce_presence: false
+    nd_allowed: [ND5]
+    transform:
+      enum_map:
+        Monthly: MNTH
+        monthly: MNTH
+        Quarterly: QUTR
+        quarterly: QUTR
+        MNTH: MNTH
+        QUTR: QUTR
+
+  RREL38:
+    esma_code: RREL38
+    workbook_semantic: SchdlIntrstPmntFrqnc/Cd
+    projected_source_field: scheduled_interest_payment_frequency
+    mandatory: false
+    enforce_presence: false
+    nd_allowed: [ND5]
+    transform:
+      enum_map:
+        Monthly: MNTH
+        monthly: MNTH
+        Quarterly: QUTR
+        quarterly: QUTR
+        MNTH: MNTH
+        QUTR: QUTR
+
+  RREL44:
+    esma_code: RREL44
+    workbook_semantic: IntrstRateIndx/Cd
+    projected_source_field: current_interest_rate_index
+    mandatory: false
+    enforce_presence: false
+    nd_allowed: [ND5]
+    transform:
+      enum_map:
+        SONIA: EONS
+        sonia: EONS
+        EONS: EONS
+        OTHR: OTHR
+
+  RREL45:
+    esma_code: RREL45
+    workbook_semantic: IntrstRateIndxTenor/Cd
+    projected_source_field: current_interest_rate_index_tenor
+    mandatory: false
+    enforce_presence: false
+    nd_allowed: [ND5]
+    transform:
+      enum_map:
+        1M: MNTH
+        3M: QUTR
+        6M: SEMI
+        12M: YEAR
+        MNTH: MNTH
+        QUTR: QUTR
+        SEMI: SEMI
+        YEAR: YEAR
+        OTHR: OTHR
+
+  RREL35:
+    esma_code: RREL35
+    workbook_semantic: AmrtstnType/Cd
+    projected_source_field: amortisation_type
+    mandatory: false
+    enforce_presence: false
+    nd_allowed: [ND5]
+    transform:
+      enum_map:
+        Interest roll-up: OTHR
+        interest roll-up: OTHR
+        OTHR: OTHR
+
+  RREC14:
+    esma_code: RREC14
+    workbook_semantic: CrntVlwtnMthd/Cd
+    projected_source_field: current_valuation_method
+    mandatory: false
+    enforce_presence: false
+    nd_allowed: [ND5]
+    transform:
+      enum_map:
+        Full survey: FOEI
+        full survey: FOEI
+        FOEI: FOEI
+        OTHR: OTHR
+
+  RREL10:
+    esma_code: RREL10
+    workbook_semantic: Dflt/Fct
+    projected_source_field: default
+    mandatory: false
+    enforce_presence: false
+    nd_allowed: [ND5]
+    transform:
+      boolean: xsd_lowercase_true_false
+
+  RREL14:
+    esma_code: RREL14
+    workbook_semantic: Ltgtn/Fct
+    projected_source_field: litigation
+    mandatory: false
+    enforce_presence: false
+    nd_allowed: [ND5]
+    transform:
+      boolean: xsd_lowercase_true_false
+
+  RREL75:
+    esma_code: RREL75
+    workbook_semantic: CrdtImprdOblgr/Fct
+    projected_source_field: credit_impaired_obligor
+    mandatory: false
+    enforce_presence: false
+    nd_allowed: [ND5]
+    transform:
+      boolean: xsd_lowercase_true_false
+
+  RREL26:
+    esma_code: RREL26
+    workbook_semantic: DstrbtnChnnl/Cd
+    projected_source_field: distribution_channel
+    mandatory: false
+    enforce_presence: false
+    nd_allowed: [ND5]
+    transform:
+      enum_map:
+        Direct: DRCT
+        direct: DRCT
+        IFA: BROK
+        Broker: BROK
+        broker: BROK
+        DRCT: DRCT
+        BROK: BROK
+        OTHR: OTHR
+
+  RREC7:
+    esma_code: RREC7
+    workbook_semantic: Occupancy/Cd
+    projected_source_field: occupancy
+    mandatory: false
+    enforce_presence: false
+    nd_allowed: [ND5]
+    transform:
+      enum_map:
+        Owner Occupied: POWN
+        owner occupied: POWN
+        POWN: POWN
+        OTHR: OTHR
+
+  RREL11:
+    esma_code: RREL11
+    workbook_semantic: GeogrgphclRgnOblgr/Cd
+    projected_source_field: geographic_region_obligor
+    mandatory: false
+    enforce_presence: false
+    nd_allowed: [ND5]
+    transform:
+      geography_map:
+        East Midlands: GBZZZ
+        East of England: GBZZZ
+        London: GBZZZ
+        North West: GBZZZ
+        Scotland: GBZZZ
+        South East: GBZZZ
+        South West: GBZZZ
+        Wales: GBZZZ
+        West Midlands: GBZZZ
+        Yorkshire and The Humber: GBZZZ
+        GBZZZ: GBZZZ
+
+  RREL12:
+    esma_code: RREL12
+    workbook_semantic: GeogrgphclRgnOblgrYr/Cd
+    projected_source_field: geographic_region_obligor_year
+    mandatory: false
+    enforce_presence: false
+    nd_allowed: [ND5]
+    transform:
+      geography_map:
+        East Midlands: "2026"
+        East of England: "2026"
+        London: "2026"
+        North West: "2026"
+        Scotland: "2026"
+        South East: "2026"
+        South West: "2026"
+        Wales: "2026"
+        West Midlands: "2026"
+        Yorkshire and The Humber: "2026"
+
+  RREL83:
+    esma_code: RREL83
+    workbook_semantic: OrgntrId/LEICd
+    projected_source_field: originator_legal_entity_identifier
+    mandatory: false
+    enforce_presence: false
+    nd_allowed: [ND5]
+    transform:
+      enum_map:
+        213800ABCDE123456701N202501: 213800ABCDE123456701
+        213800ABCDE123456701: 213800ABCDE123456701
+
+  RREC12:
+    esma_code: RREC12
+    workbook_semantic: LnToVal/Rate (current valuation)
+    projected_source_field: current_loan_to_value
+    mandatory: false
+    enforce_presence: false
+    nd_allowed: [ND5]
+    precision:
+      total_digits: 8
+      fraction_digits: 4
+
+  RREC16:
+    esma_code: RREC16
+    workbook_semantic: LnToVal/Rate (at origination)
+    projected_source_field: original_loan_to_value
+    mandatory: false
+    enforce_presence: false
+    nd_allowed: [ND5]
+    precision:
+      total_digits: 8
+      fraction_digits: 4
+
+  RREL16:
+    esma_code: RREL16
+    workbook_semantic: PmryOblgrIncm/IncmVal
+    projected_source_field: primary_income
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND1, ND2, ND3, ND4]
+    default_allowed: true
+    default_value: ND1
+
+  RREL17:
+    esma_code: RREL17
+    workbook_semantic: ScndryOblgrIncm/IncmVal
+    projected_source_field: secondary_income
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND1, ND2, ND3, ND4]
+    default_allowed: true
+    default_value: ND1
+
+  RREL19:
+    esma_code: RREL19
+    workbook_semantic: PmryOblgrIncm/Vrfctn
+    projected_source_field: primary_income_verification
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND1, ND2, ND3, ND4]
+    default_allowed: true
+    default_value: ND1
+    validators:
+      regex: "^[A-Z0-9_]{1,12}$"
+
+  RREL22:
+    esma_code: RREL22
+    workbook_semantic: SpclSchme/Val
+    projected_source_field: special_scheme
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND1, ND2, ND3, ND4]
+    default_allowed: true
+    default_value: ND1
+    transform:
+      boolean: xsd_lowercase_true_false
+
+  RREL25:
+    esma_code: RREL25
+    workbook_semantic: OrgnlTerm/Nb
+    projected_source_field: original_term
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND1, ND2, ND3, ND4]
+    derive:
+      type: months_between_dates
+      start_field: RREL23
+      end_field: RREL24
+    default_allowed: true
+    default_value: ND1
+    validators:
+      regex: "^\\d{1,4}$"
+
+  RREL31:
+    esma_code: RREL31
+    workbook_semantic: PrrPrncplBal/Val/Amt
+    projected_source_field: prior_principal_balances
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND1, ND2, ND3, ND4]
+    derive:
+      type: first_non_blank_from_fields
+      fields: [prior_principal_balances]
+    default_allowed: true
+    default_value: ND1
+    precision:
+      total_digits: 18
+      fraction_digits: 2
+
+  RREL32:
+    esma_code: RREL32
+    workbook_semantic: PrpssUndrlygXpsr/Val/Amt
+    projected_source_field: pari_passu_underlying_exposures
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND1, ND2, ND3, ND4]
+    derive:
+      type: first_non_blank_from_fields
+      fields: [pari_passu_underlying_exposures]
+    default_allowed: true
+    default_value: ND1
+    precision:
+      total_digits: 18
+      fraction_digits: 2
+
+  RREL41:
+    esma_code: RREL41
+    workbook_semantic: BllnAmt/Val/Amt
+    projected_source_field: balloon_amount
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND1, ND2, ND3, ND4]
+    default_allowed: true
+    default_value: ND1
+    precision:
+      total_digits: 18
+      fraction_digits: 2
+
+  RREL50:
+    esma_code: RREL50
+    workbook_semantic: FrstRvsnData/Mrgn/Rate
+    projected_source_field: revision_margin_1
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND1, ND2, ND3, ND4]
+    default_allowed: true
+    default_value: ND1
+    precision:
+      total_digits: 8
+      fraction_digits: 4
+
+  RREL51:
+    esma_code: RREL51
+    workbook_semantic: FrstRvsnData/IntrstRvsnDt/Dt
+    projected_source_field: interest_revision_date_1
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND1, ND2, ND3, ND4]
+    default_allowed: true
+    default_value: ND1
+    validators:
+      regex: "^\\d{4}-\\d{2}-\\d{2}$"
+
+  RREL52:
+    esma_code: RREL52
+    workbook_semantic: ScndRvsnData/Mrgn/Rate
+    projected_source_field: revision_margin_2
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND1, ND2, ND3, ND4]
+    default_allowed: true
+    default_value: ND1
+    precision:
+      total_digits: 8
+      fraction_digits: 4
+
+  RREL53:
+    esma_code: RREL53
+    workbook_semantic: ScndRvsnData/IntrstRvsnDt/Dt
+    projected_source_field: interest_revision_date_2
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND1, ND2, ND3, ND4]
+    default_allowed: true
+    default_value: ND1
+    validators:
+      regex: "^\\d{4}-\\d{2}-\\d{2}$"
+
+  RREL40:
+    esma_code: RREL40
+    workbook_semantic: DebtToIncm/Rate
+    projected_source_field: debt_to_income_ratio
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    default_allowed: true
+    default_value: ND5
+    precision:
+      total_digits: 8
+      fraction_digits: 4
+
+  RREL54:
+    esma_code: RREL54
+    workbook_semantic: ThrdRvsnData/Mrgn/Rate
+    projected_source_field: revision_margin_3
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    default_allowed: true
+    default_value: ND5
+    precision:
+      total_digits: 8
+      fraction_digits: 4
+
+  RREL55:
+    esma_code: RREL55
+    workbook_semantic: ThrdRvsnData/IntrstRvsnDt/Dt
+    projected_source_field: interest_revision_date_3
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    default_allowed: true
+    default_value: ND5
+    validators:
+      regex: "^\\d{4}-\\d{2}-\\d{2}$"
+
+  RREL56:
+    esma_code: RREL56
+    workbook_semantic: ThrdRvsnData/IntrstRateIndx/Val
+    projected_source_field: revised_interest_rate_index
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    default_allowed: true
+    default_value: ND5
+    validators:
+      regex: "^[A-Za-z0-9._\\-/]{1,32}$"
+
+  RREL57:
+    esma_code: RREL57
+    workbook_semantic: ThrdRvsnData/IntrstRateIndxTenor/Val
+    projected_source_field: revised_interest_rate_index_tenor
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    default_allowed: true
+    default_value: ND5
+    validators:
+      regex: "^[A-Za-z0-9._\\-/]{1,32}$"
+
+  RREL58:
+    esma_code: RREL58
+    workbook_semantic: NbPmntsBfrScrtstn/Nb
+    projected_source_field: number_of_payments_before_securitisation
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND1, ND2, ND3]
+    default_allowed: true
+    default_value: ND1
+    validators:
+      regex: "^\\d{1,4}$"
+
+  RREL59:
+    esma_code: RREL59
+    workbook_semantic: PctgPrpymntsAllwdPerYr/Rate
+    projected_source_field: percentage_of_prepayments_allowed_per_year
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    default_allowed: true
+    default_value: ND5
+    precision:
+      total_digits: 8
+      fraction_digits: 4
+
+  RREL60:
+    esma_code: RREL60
+    workbook_semantic: PrpymtLckOutEndDt/Dt
+    projected_source_field: prepayment_lock_out_end_date
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    default_allowed: true
+    default_value: ND5
+    validators:
+      regex: "^\\d{4}-\\d{2}-\\d{2}$"
+
+  RREL9:
+    esma_code: RREL9
+    workbook_semantic: RdmptnDt/Dt
+    projected_source_field: redemption_date
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    default_allowed: true
+    default_value: ND5
+    validators:
+      regex: "^\\d{4}-\\d{2}-\\d{2}$"
+
+  RREC6:
+    esma_code: RREC6
+    workbook_semantic: GeogrgphclRgnColltrl/Cd
+    projected_source_field: geographic_region_collateral
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    default_allowed: true
+    default_value: ND5
+
+  RREC8:
+    esma_code: RREC8
+    workbook_semantic: Lien/Nb
+    projected_source_field: lien
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    default_allowed: true
+    default_value: "1"
+    validators:
+      regex: "^\\d{1,4}$"
+
+  RREC10:
+    esma_code: RREC10
+    workbook_semantic: EnrgyPrfrmncCrtfctVal/Val
+    projected_source_field: energy_performance_certificate_value
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    default_allowed: true
+    default_value: ND5
+
+  RREC11:
+    esma_code: RREC11
+    workbook_semantic: EnrgyPrfrmncCrtfctPrvdrNm/Nm
+    projected_source_field: energy_performance_certificate_provider_name
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    default_allowed: true
+    default_value: ND5
+
+  RREC15:
+    esma_code: RREC15
+    workbook_semantic: CrntVlwtnDt/Dt
+    projected_source_field: current_valuation_date
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    default_allowed: true
+    default_value: ND5
+    validators:
+      regex: "^\\d{4}-\\d{2}-\\d{2}$"
+
+  RREC17:
+    esma_code: RREC17
+    workbook_semantic: OrgnlVlwtnAmt/Val/Amt
+    projected_source_field: original_valuation_amount
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND1, ND2, ND3]
+    default_allowed: true
+    default_value: ND1
+    precision:
+      total_digits: 18
+      fraction_digits: 2
+
+  RREC18:
+    esma_code: RREC18
+    workbook_semantic: OrgnlVlwtnMthd/Val
+    projected_source_field: original_valuation_method
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND1, ND2, ND3]
+    default_allowed: true
+    default_value: ND1
+
+  RREC19:
+    esma_code: RREC19
+    workbook_semantic: OrgnlVlwtnDt/Dt
+    projected_source_field: original_valuation_date
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND1, ND2, ND3]
+    default_allowed: true
+    default_value: ND1
+    validators:
+      regex: "^\\d{4}-\\d{2}-\\d{2}$"
+
+  RREC20:
+    esma_code: RREC20
+    workbook_semantic: DtOfSale/Dt
+    projected_source_field: date_of_sale
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    default_allowed: true
+    default_value: ND5
+    validators:
+      regex: "^\\d{4}-\\d{2}-\\d{2}$"
+
+  RREL62:
+    esma_code: RREL62
+    workbook_semantic: PrpymtFeeEndDt/Dt
+    projected_source_field: prepayment_fee_end_date
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    default_allowed: true
+    default_value: ND5
+
+  RREL63:
+    esma_code: RREL63
+    workbook_semantic: PrpymtDt/Dt
+    projected_source_field: prepayment_date
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    default_allowed: true
+    default_value: ND5
+
+  RREL64:
+    esma_code: RREL64
+    workbook_semantic: PrpymtAmt/Val/Amt
+    projected_source_field: prepayment_amount
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    default_allowed: true
+    default_value: ND5
+
+  RREL65:
+    esma_code: RREL65
+    workbook_semantic: RepurchDt/Dt
+    projected_source_field: date_of_repurchase
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    default_allowed: true
+    default_value: ND5
+
+  RREL66:
+    esma_code: RREL66
+    workbook_semantic: RepurchAmt/Val/Amt
+    projected_source_field: repurchase_amount
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    default_allowed: true
+    default_value: ND5
+
+  RREL70:
+    esma_code: RREL70
+    workbook_semantic: IntOnlyPrd/Val
+    projected_source_field: interest_only_period
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    default_allowed: true
+    default_value: ND5
+
+  RREL72:
+    esma_code: RREL72
+    workbook_semantic: BallnPymt/Val
+    projected_source_field: balloon_payment
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    default_allowed: true
+    default_value: ND5
+
+  RREL76:
+    esma_code: RREL76
+    workbook_semantic: FrbrncRcncpt/Fct
+    projected_source_field: forbearance_reconcept
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    default_allowed: true
+    default_value: ND5
+
+  RREL78:
+    esma_code: RREL78
+    workbook_semantic: Dflt/Fct
+    projected_source_field: default_flag
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    default_allowed: true
+    default_value: ND5
+
+  RREL79:
+    esma_code: RREL79
+    workbook_semantic: DfltDt/Dt
+    projected_source_field: date_in_default
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    default_allowed: true
+    default_value: ND5
+
+  RREL80:
+    esma_code: RREL80
+    workbook_semantic: DfltAmt/Val/Amt
+    projected_source_field: default_amount
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    default_allowed: true
+    default_value: ND5
+
+  RREL81:
+    esma_code: RREL81
+    workbook_semantic: DfltRslt/Fct
+    projected_source_field: default_result_flag
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    default_allowed: true
+    default_value: ND5
+
+  RREC21:
+    esma_code: RREC21
+    workbook_semantic: FrstVlwtnPrvdrNm/Nm
+    projected_source_field: first_valuation_provider_name
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND5]
+    default_allowed: true
+    default_value: ND5
+
+  RREC23:
+    esma_code: RREC23
+    workbook_semantic: VlwtnDtOfSale/Dt
+    projected_source_field: valuation_date_of_sale
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: [ND1, ND2, ND3]
+    default_allowed: true
+    default_value: ND1
