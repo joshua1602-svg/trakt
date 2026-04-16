@@ -32,6 +32,7 @@ Usage:
 import argparse
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 
@@ -485,9 +486,79 @@ def _blank_mask(series: pd.Series) -> pd.Series:
     return series.isna() | (series.astype(str).str.strip() == "")
 
 
+SCRTSTN_PATTERN = re.compile(r"^[A-Z0-9]{18}[0-9]{2}N[0-9]{4}[0-9]{2}$")
+LEI_PATTERN = re.compile(r"^[A-Z0-9]{18}[0-9]{2}$")
+
+
+def _extract_lei_candidate(raw: Any) -> Optional[str]:
+    val = str(raw or "").strip().upper()
+    if not val:
+        return None
+    if SCRTSTN_PATTERN.fullmatch(val):
+        return val[:20]
+    if LEI_PATTERN.fullmatch(val):
+        return val
+    return None
+
+
+def _year_from_date_like(raw: Any) -> Optional[str]:
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    m = re.match(r"^(\d{4})", text)
+    if m:
+        return m.group(1)
+    return None
+
+
+def _derive_scrtstn_id(df: pd.DataFrame, config: Dict[str, Any]) -> Optional[str]:
+    overrides_cfg = (config.get("regime_overrides") or {}).get("ESMA_Annex2") or {}
+    defaults_cfg = (config.get("defaults") or {})
+    portfolio_cfg = (config.get("portfolio") or {})
+    loan_engine_cfg = (config.get("loan_engine") or {})
+
+    lei_candidates = [
+        overrides_cfg.get("reporting_entity_lei"),
+        defaults_cfg.get("reporting_entity_legal_entity_identifier"),
+        defaults_cfg.get("originator_legal_entity_identifier"),
+    ]
+    lei = None
+    for c in lei_candidates:
+        lei = _extract_lei_candidate(c)
+        if lei:
+            break
+    if not lei:
+        return None
+
+    year_candidates = []
+    if "RREL6" in df.columns:
+        non_blank_cutoff = [v for v in df["RREL6"].astype(str).tolist() if str(v).strip()]
+        if non_blank_cutoff:
+            year_candidates.append(non_blank_cutoff[0])
+    year_candidates.extend(
+        [
+            overrides_cfg.get("reporting_date"),
+            portfolio_cfg.get("static_reporting_date"),
+            loan_engine_cfg.get("reporting_date"),
+            defaults_cfg.get("pool_addition_date"),
+        ]
+    )
+    year = None
+    for y in year_candidates:
+        year = _year_from_date_like(y)
+        if year:
+            break
+    if not year:
+        return None
+
+    seq = int(overrides_cfg.get("securitisation_sequence", 1))
+    return f"{lei}N{year}{seq:02d}"
+
+
 def apply_annex2_post_projection_guards(
     df: pd.DataFrame,
     config: Dict[str, Any],
+    enum_mapping: Dict[str, Any],
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """
     Annex 2-specific shaping/guards on ESMA-coded output.
@@ -512,10 +583,31 @@ def apply_annex2_post_projection_guards(
     if legacy_sec_id and "RREL1" not in header_constants:
         header_constants["RREL1"] = legacy_sec_id
 
+    generated_rrel1 = _derive_scrtstn_id(df, config)
+    existing_rrel1 = str(header_constants.get("RREL1", "")).strip().upper()
+    if generated_rrel1 and not SCRTSTN_PATTERN.fullmatch(existing_rrel1):
+        header_constants["RREL1"] = generated_rrel1
+        report["header_constants_applied"]["RREL1_generated"] = generated_rrel1
+
     for code, const_val in header_constants.items():
         if code in df.columns and str(const_val).strip() != "":
             df[code] = str(const_val).strip()
             report["header_constants_applied"][code] = str(const_val).strip()
+
+    # RREC9 remediation: if enum resolver emitted placeholder "manual", backfill
+    # from existing collateral_type enum mapping using configured default.
+    annex2_enum_cfg = (enum_mapping.get("ESMA_Annex2") or {})
+    collateral_map = {str(k).upper(): str(v) for k, v in (annex2_enum_cfg.get("collateral_type") or {}).items()}
+    collateral_default = str((config.get("defaults") or {}).get("collateral_type", "")).strip().upper()
+    mapped_rrec9 = collateral_map.get(collateral_default)
+    if mapped_rrec9 and "RREC9" in df.columns:
+        rrec9 = df["RREC9"].astype(str).str.strip().str.upper()
+        fill_mask = rrec9.isin({"", "MANUAL"})
+        n_fill = int(fill_mask.sum())
+        if n_fill > 0:
+            df.loc[fill_mask, "RREC9"] = mapped_rrec9
+        report["rrec9_backfilled_from_collateral_default_rows"] = n_fill
+        report["rrec9_backfill_value"] = mapped_rrec9
 
     # Deterministic backfill for RREC2 (mandatory in Annex2): use RREL3 if blank.
     if "RREL3" in df.columns and "RREL2" in df.columns:
@@ -685,7 +777,7 @@ def project_to_regime(
 
     # Step 7: Annex2-specific post-projection guards (ESMA-coded dataframe)
     if regime == "ESMA_Annex2":
-        regime_df, annex2_report = apply_annex2_post_projection_guards(regime_df, config)
+        regime_df, annex2_report = apply_annex2_post_projection_guards(regime_df, config, enum_mapping)
         report["annex2_post_projection"] = annex2_report
     
     report["output_fields"] = len(regime_df.columns)

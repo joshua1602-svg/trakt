@@ -50,6 +50,7 @@ SCRIPTS = {
     "validate_business_rules": ENGINE_ROOT / "gate_3_validation" / "validate_business_rules.py",
     "annex12_projector":    ENGINE_ROOT / "gate_4_projection" / "annex12_projector.py",
     "regime_projector":     ENGINE_ROOT / "gate_4_projection" / "regime_projector.py",
+    "annex2_delivery_normalizer": ENGINE_ROOT / "gate_4b_delivery" / "annex2_delivery_normalizer.py",
     "xml_builder_investor": ENGINE_ROOT / "gate_5_delivery"   / "xml_builder_investor.py",
     "xml_builder":          ENGINE_ROOT / "gate_5_delivery"   / "xml_builder.py",
     "xml_builder_annex2":   ENGINE_ROOT / "gate_5_delivery"   / "xml_builder_annex2.py",
@@ -579,6 +580,9 @@ def run_regulatory(py: str, args, ctx: dict, out_dir: Path) -> dict:
     regime = args.regime
     regime_short = regime.replace("ESMA_", "").lower()  # e.g. "annex2"
     projected = out_dir / f"{regime_short}_projected.csv"
+    delivery_ready = out_dir / f"{regime_short}_delivery_ready.csv"
+    delivery_report = out_dir / f"{regime_short}_delivery_report.json"
+    delivery_issues = out_dir / f"{regime_short}_delivery_issues.csv"
     xml_out   = out_dir / f"{regime_short}_final.xml"
 
     # -- Gate 4: Regime projection -----------------------------------------
@@ -604,11 +608,39 @@ def run_regulatory(py: str, args, ctx: dict, out_dir: Path) -> dict:
 
     print(f"[Gate 4] Regime projection............... OK {regime}")
 
+    # -- Gate 4b: Delivery normalization + preflight ----------------------
+    if regime == "ESMA_Annex2":
+        _run([
+            py, _script("annex2_delivery_normalizer"),
+            "--input", str(projected),
+            "--rules", args.annex2_delivery_rules,
+            "--output-dir", str(out_dir),
+        ])
+
+        if not delivery_ready.exists():
+            candidates = list(out_dir.glob("*_delivery_ready.csv"))
+            if candidates:
+                delivery_ready = max(candidates, key=lambda p: p.stat().st_mtime)
+            else:
+                raise RuntimeError("[Gate 4b] Failed: no delivery-ready CSV produced for ESMA_Annex2")
+        if not delivery_report.exists():
+            candidates = list(out_dir.glob("*_delivery_report.json"))
+            if candidates:
+                delivery_report = max(candidates, key=lambda p: p.stat().st_mtime)
+        if not delivery_issues.exists():
+            candidates = list(out_dir.glob("*_delivery_issues.csv"))
+            if candidates:
+                delivery_issues = max(candidates, key=lambda p: p.stat().st_mtime)
+
+        print("[Gate 4b] Delivery normalization.......... OK ESMA_Annex2")
+    else:
+        delivery_ready = projected
+
     # -- Gate 5: XML generation --------------------------------------------
     if regime == "ESMA_Annex2":
         _run([
             py, _script("xml_builder_annex2"),
-            "--input", str(projected),
+            "--input", str(delivery_ready),
             "--output", str(xml_out),
             "--mapping-workbook", args.annex2_mapping_workbook,
             "--sheet", args.annex2_mapping_sheet,
@@ -633,6 +665,9 @@ def run_regulatory(py: str, args, ctx: dict, out_dir: Path) -> dict:
     return {
         "regime": regime,
         "projected": projected,
+        "delivery_ready": delivery_ready if regime == "ESMA_Annex2" else None,
+        "delivery_report": delivery_report if regime == "ESMA_Annex2" and delivery_report.exists() else None,
+        "delivery_issues": delivery_issues if regime == "ESMA_Annex2" and delivery_issues.exists() else None,
         "xml": xml_out,
     }
 
@@ -679,6 +714,13 @@ def write_manifest(args, ctx: dict, gate45: Optional[dict], out_dir: Path, run_s
             "regime": gate45["regime"],
             "artifact": str(gate45["projected"]),
         }
+        if gate45.get("delivery_ready"):
+            gates["delivery_normalization"] = {
+                "status": "pass",
+                "artifact": str(gate45["delivery_ready"]),
+                "report": str(gate45["delivery_report"]) if gate45.get("delivery_report") else None,
+                "issues": str(gate45["delivery_issues"]) if gate45.get("delivery_issues") else None,
+            }
         if gate45.get("xml"):
             gates["xsd_validation"] = {
                 "status": "pass",
@@ -694,6 +736,12 @@ def write_manifest(args, ctx: dict, gate45: Optional[dict], out_dir: Path, run_s
     ]
     if gate45:
         outputs.append(str(gate45["projected"]))
+        if gate45.get("delivery_ready"):
+            outputs.append(str(gate45["delivery_ready"]))
+        if gate45.get("delivery_report"):
+            outputs.append(str(gate45["delivery_report"]))
+        if gate45.get("delivery_issues"):
+            outputs.append(str(gate45["delivery_issues"]))
         if gate45.get("xml"):
             outputs.append(str(gate45["xml"]))
 
@@ -768,6 +816,7 @@ examples:
     ap.add_argument("--annex2-mapping-sheet", default="DRAFT1auth.099.001.04")
     ap.add_argument("--annex2-xsd", default=str(CONFIG_ROOT / "system" / "DRAFT1auth.099.001.04_1.3.0.xsd"))
     ap.add_argument("--annex2-performance-mode", choices=["PRF", "NPRF"], default="PRF")
+    ap.add_argument("--annex2-delivery-rules", default=str(CONFIG_ROOT / "regime" / "annex2_delivery_rules.yaml"))
 
     # Shared
     ap.add_argument("--code-order-yaml", default=str(CONFIG_ROOT / "system" / "esma_code_order.yaml"))
@@ -860,7 +909,10 @@ examples:
             if not args.regime:
                 raise ValueError("ESMA output enabled but --regime is not set. Provide a valid ESMA regime.")
             gate45 = run_regulatory(py, args, ctx, out_dir)
-            ctx["stage_path"].extend(["regime_projector", "xml_builder"])
+            if args.regime == "ESMA_Annex2":
+                ctx["stage_path"].extend(["regime_projector", "annex2_delivery_normalizer", "xml_builder"])
+            else:
+                ctx["stage_path"].extend(["regime_projector", "xml_builder"])
     elif args.mode == "mi":
         print("")
         print("[ESMA] Disabled by configuration.")
@@ -890,6 +942,12 @@ examples:
         print(f"  -> {ctx['value_lineage']}")
     if gate45:
         print(f"  -> {gate45['projected']}")
+        if gate45.get("delivery_ready"):
+            print(f"  -> {gate45['delivery_ready']}")
+        if gate45.get("delivery_report"):
+            print(f"  -> {gate45['delivery_report']}")
+        if gate45.get("delivery_issues"):
+            print(f"  -> {gate45['delivery_issues']}")
         if gate45.get("xml"):
             print(f"  -> {gate45['xml']}")
     print(f"  -> {manifest_path}")

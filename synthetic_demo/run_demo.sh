@@ -18,6 +18,7 @@ ENUM_MAP="$ROOT_DIR/config/system/enum_mapping.yaml"
 ORDER_YAML="$ROOT_DIR/config/system/esma_code_order.yaml"
 WORKBOOK="$ROOT_DIR/DRAFT1auth.099.001.04_non-ABCP Underlying Exposure Report_Version_1.3.1.xlsx"
 XSD="$ROOT_DIR/config/system/DRAFT1auth.099.001.04_1.3.0.xsd"
+DELIVERY_RULES="$ROOT_DIR/config/regime/annex2_delivery_rules.yaml"
 
 python engine/gate_1_alignment/semantic_alignment.py \
   --input "$INPUT" \
@@ -68,16 +69,34 @@ python engine/gate_4_projection/regime_projector.py \
   --output-dir "$OUT_DIR"
 
 set +e
-python engine/gate_5_delivery/xml_builder_annex2.py \
+python engine/gate_4b_delivery/annex2_delivery_normalizer.py \
   --input "$OUT_DIR/SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_projected.csv" \
-  --output "$OUT_DIR/SYNTHETIC_012026_annex2.xml" \
-  --mapping-workbook "$WORKBOOK" \
-  --sheet DRAFT1auth.099.001.04 \
-  --code-order-yaml "$ORDER_YAML" \
-  --xsd "$XSD"
-XML_RC=$?
+  --rules "$DELIVERY_RULES" \
+  --output-dir "$OUT_DIR"
+DELIVERY_RC=$?
 set -e
-if [[ $XML_RC -ne 0 ]]; then
+if [[ $DELIVERY_RC -ne 0 ]]; then
+  echo "[WARN] Gate 4b delivery preflight failed (exit $DELIVERY_RC). XML build will be skipped."
+fi
+
+set +e
+XML_RC=99
+if [[ $DELIVERY_RC -eq 0 ]]; then
+  python engine/gate_5_delivery/xml_builder_annex2.py \
+    --input "$OUT_DIR/SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_delivery_ready.csv" \
+    --output "$OUT_DIR/SYNTHETIC_012026_annex2.xml" \
+    --mapping-workbook "$WORKBOOK" \
+    --sheet DRAFT1auth.099.001.04 \
+    --code-order-yaml "$ORDER_YAML" \
+    --xsd "$XSD"
+  XML_RC=$?
+else
+  XML_RC=98
+fi
+set -e
+if [[ $XML_RC -eq 98 ]]; then
+  echo "[WARN] Gate 5 XML build skipped because Gate 4b preflight failed."
+elif [[ $XML_RC -ne 0 ]]; then
   echo "[WARN] Gate 5 XML build failed (exit $XML_RC). See command output above for details."
 fi
 
@@ -88,8 +107,14 @@ raw=pd.read_csv('synthetic_demo/input/SYNTHETIC_ERE_Portfolio_012026.csv')
 full=pd.read_csv('synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_canonical_full.csv')
 typed=pd.read_csv('synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_canonical_typed.csv')
 proj=pd.read_csv('synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_projected.csv')
+delivery=pd.read_csv('synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_delivery_ready.csv')
 field_summary=pd.read_csv('synthetic_demo/output/validation/SYNTHETIC_ERE_Portfolio_012026_field_summary.csv')
 xml_exists=Path('synthetic_demo/output/SYNTHETIC_012026_annex2.xml').exists()
+delivery_report_path=Path('synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_delivery_report.json')
+delivery_pass=False
+if delivery_report_path.exists():
+    import json
+    delivery_pass = (json.loads(delivery_report_path.read_text()).get('preflight',{}).get('status') == 'PASS')
 
 bal=typed['current_principal_balance'].fillna(0).sum()
 loans=len(typed)
@@ -139,9 +164,11 @@ table{{border-collapse:collapse;font-size:12px;margin:8px 0 14px 0}}th,td{{borde
 {bar_table(prop,'Property type mix')}
 <h2>5) ESMA Annex 2 projection snippet</h2>
 {proj.head(6)[['RREL1','RREL2','RREL3','RREL4','RREL5','RREC2','RREL6']].to_html(index=False)}
-<h2>6) XML delivery status</h2>
-<p>{'XML was generated.' if xml_exists else 'XML build was attempted and failed on workbook mandatory-field constraint: latest blocker RREL15 blank after projection.'}</p>
-<h2>7) Architecture summary</h2>
+<h2>6) ESMA Annex 2 delivery-ready snippet (Gate 4b)</h2>
+{delivery.head(6)[['RREL1','RREL2','RREL3','RREL4','RREL5','RREC2','RREL6']].to_html(index=False)}
+<h2>7) XML delivery status</h2>
+<p>{'XML was generated.' if xml_exists else ('XML build skipped because Gate 4b preflight failed.' if not delivery_pass else 'XML build attempted but failed during structure/XSD validation.')}</p>
+<h2>8) Architecture summary</h2>
 <p><b>one messy lender tape → one canonical truth set → multiple controlled outputs</b></p>
 </body></html>"""
 Path('synthetic_demo/demo_pack/demo_overview.html').write_text(html)

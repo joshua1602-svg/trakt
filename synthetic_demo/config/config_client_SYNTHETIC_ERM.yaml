@@ -72,5 +72,5 @@ mi:
 regime_overrides:
   ESMA_Annex2:
     header_constants:
-      RREL1: SYNTH2026POOL01
+      RREL1: 213800ABCDE123456701N202601
       RREL6: '2026-01-31'
