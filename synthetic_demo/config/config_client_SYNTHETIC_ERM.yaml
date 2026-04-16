@@ -1,0 +1,76 @@
+client:
+  client_id: synthetic_demo
+  display_name: Synthetic Demo Lender
+  environment: dev
+portfolio:
+  asset_class: equity_release
+  country: GB
+  base_currency: GBP
+  static_reporting_date: '2025-11-30'
+default_regime: ESMA_Annex2
+supported_regimes:
+- ESMA_Annex2
+- ESMA_Annex12
+regime: ESMA_Annex2
+pipeline:
+  loan_engine_enabled: false
+  mi_enabled: true
+  esma_enabled: true
+loan_engine:
+  day_count_convention: ACT365
+  interest_payment_frequency: QUARTERLY
+  prepayment_lockout_period_quarters: 2
+  legal_maturity_months: 24
+  penalty_interest_rate: 0.15
+  reporting_date: '2025-11-30'
+  ledger_db: out/loan_ledger.db
+  payments_file: input/payments.csv
+defaults:
+  originator_legal_entity_identifier: 213800ABCDE123456701N202501
+  originator_name: ERE Funding Limited
+  originator_establishment_country: GB
+  exposure_currency_denomination: GBP
+  collateral_currency: GBP
+  collateral_type: HOUSE
+  pool_addition_date: '2025-01-31'
+  date_of_repurchase: '2025-01-31'
+  purchase_price: 250000
+  principal_grace_period_end_date: '2025-12-31'
+  scheduled_principal_payment_frequency: Quarterly
+  scheduled_interest_payment_frequency: Monthly
+  payment_due: 0
+  current_interest_rate_index: SONIA
+  current_interest_rate_index_tenor: 1M
+  current_interest_rate_margin: 0
+  interest_rate_reset_interval: 12
+  interest_rate_cap: 15
+  interest_rate_floor: 0
+  prepayment_fee: 0
+  arrears_balance: 0
+  litigation: N
+  deposit_amount: 0
+  credit_impaired_obligor: N
+  customer_type: CNEO
+transformations:
+  copy_if_missing:
+    current_principal_balance: current_outstanding_balance
+enrichment:
+  enable:
+    uk_nuts3: true
+  uk_nuts3:
+    nuts_csv_path: uk_itl_master_lookup_v2.csv
+    postcode_columns:
+    - postcode
+    - property_postcode
+    target_field: geographic_region_classification
+    fill_only_if_blank: true
+mi:
+  branding:
+    app_title: Portfolio MI Dashboard
+    theme:
+      primary_color: '#0B1F3B'
+regime_overrides:
+  ESMA_Annex2:
+    header_constants:
+      RREL1: SYNTH2026POOL01
+      RREL6: '2026-01-31'

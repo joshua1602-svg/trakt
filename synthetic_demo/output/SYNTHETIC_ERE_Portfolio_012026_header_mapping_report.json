@@ -1,0 +1,457 @@
+{
+  "aliases_dir": "/workspace/trakt/synthetic_demo/aliases",
+  "generated_at_utc": "2026-04-16T13:52:09.594517+00:00",
+  "hq_recommendations": [],
+  "hq_recommendations_count": 0,
+  "input_file": "/workspace/trakt/synthetic_demo/input/SYNTHETIC_ERE_Portfolio_012026.csv",
+  "mappings": [
+    {
+      "canonical_field": "underlying_exposure_identifier",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Underlying Exposure Identifier"
+    },
+    {
+      "canonical_field": "loan_identifier",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Loan Identifier"
+    },
+    {
+      "canonical_field": "unique_identifier",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Unique Loan Identifier"
+    },
+    {
+      "canonical_field": "original_underlying_exposure_identifier",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Original Underlying Exposure Identifier"
+    },
+    {
+      "canonical_field": "original_obligor_identifier",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Original Obligor Identifier"
+    },
+    {
+      "canonical_field": "new_underlying_exposure_identifier",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "New Underlying Exposure Identifier"
+    },
+    {
+      "canonical_field": "new_obligor_identifier",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "New Obligor Identifier"
+    },
+    {
+      "canonical_field": "origination_date",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Origination Dt"
+    },
+    {
+      "canonical_field": "maturity_date",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Maturity DATE"
+    },
+    {
+      "canonical_field": "original_principal_balance",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Original Principal Balance"
+    },
+    {
+      "canonical_field": "current_principal_balance",
+      "confidence": 0.8571,
+      "mapping_method": "token_set",
+      "raw_header": "Current Principal Balance GBP"
+    },
+    {
+      "canonical_field": "current_interest_rate",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Current Interest Rate"
+    },
+    {
+      "canonical_field": "original_loan_to_value",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Original Loan To Value"
+    },
+    {
+      "canonical_field": "current_loan_to_value",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Current Loan To Value"
+    },
+    {
+      "canonical_field": "current_valuation_amount",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Current Valuation Amount"
+    },
+    {
+      "canonical_field": "current_valuation_date",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Current Valuation Date"
+    },
+    {
+      "canonical_field": "current_valuation_method",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Current Valuation Method"
+    },
+    {
+      "canonical_field": "property_post_code",
+      "confidence": 1.0,
+      "mapping_method": "alias",
+      "raw_header": "Post Code"
+    },
+    {
+      "canonical_field": "geographic_region_classification",
+      "confidence": 1.0,
+      "mapping_method": "alias",
+      "raw_header": "Region "
+    },
+    {
+      "canonical_field": "property_type",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Property Type "
+    },
+    {
+      "canonical_field": "",
+      "confidence": 0.0,
+      "mapping_method": "unmapped",
+      "raw_header": "tenure"
+    },
+    {
+      "canonical_field": "youngest_borrower_age",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Borrower Age (Youngest)"
+    },
+    {
+      "canonical_field": "account_status",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Account Status"
+    },
+    {
+      "canonical_field": "redemption_date",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Redemption Date"
+    },
+    {
+      "canonical_field": "data_cut_off_date",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Data Cut-Off Date"
+    },
+    {
+      "canonical_field": "interest_rate_type",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Interest Rate Type"
+    },
+    {
+      "canonical_field": "occupancy_type",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Occupancy Type"
+    },
+    {
+      "canonical_field": "amortisation_type",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Amortisation Type"
+    },
+    {
+      "canonical_field": "origination_channel",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Origination Channel"
+    },
+    {
+      "canonical_field": "purpose",
+      "confidence": 1.0,
+      "mapping_method": "exact",
+      "raw_header": "Purpose"
+    },
+    {
+      "canonical_field": "total_credit_limit",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Total Credit Limit"
+    },
+    {
+      "canonical_field": "number_of_days_in_arrears",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Number of Days in Arrears"
+    },
+    {
+      "canonical_field": "exposure_currency_denomination",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Exposure Currency Denomination"
+    },
+    {
+      "canonical_field": "pool_addition_date",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Pool Addition Date"
+    },
+    {
+      "canonical_field": "date_of_repurchase",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Date of Repurchase"
+    },
+    {
+      "canonical_field": "purchase_price",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Purchase Price"
+    },
+    {
+      "canonical_field": "arrears_balance",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Arrears Balance"
+    },
+    {
+      "canonical_field": "default_amount",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Default Amount"
+    },
+    {
+      "canonical_field": "default_date",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Default Date"
+    },
+    {
+      "canonical_field": "allocated_losses",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Allocated Losses"
+    },
+    {
+      "canonical_field": "cumulative_recoveries",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Cumulative Recoveries"
+    },
+    {
+      "canonical_field": "litigation",
+      "confidence": 1.0,
+      "mapping_method": "exact",
+      "raw_header": "Litigation"
+    },
+    {
+      "canonical_field": "deposit_amount",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Deposit Amount"
+    },
+    {
+      "canonical_field": "collateral_currency",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Collateral Currency"
+    },
+    {
+      "canonical_field": "collateral_type",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Collateral Type"
+    },
+    {
+      "canonical_field": "original_collateral_identifier",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Original Collateral Identifier"
+    },
+    {
+      "canonical_field": "new_collateral_identifier",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "New Collateral Identifier"
+    },
+    {
+      "canonical_field": "scheduled_principal_payment_frequency",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Scheduled Principal Payment Frequency"
+    },
+    {
+      "canonical_field": "scheduled_interest_payment_frequency",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Scheduled Interest Payment Frequency"
+    },
+    {
+      "canonical_field": "payment_due",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Payment Due"
+    },
+    {
+      "canonical_field": "current_interest_rate_index",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Current Interest Rate Index"
+    },
+    {
+      "canonical_field": "current_interest_rate_index_tenor",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Current Interest Rate Index Tenor"
+    },
+    {
+      "canonical_field": "current_interest_rate_margin",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Current Interest Rate Margin"
+    },
+    {
+      "canonical_field": "interest_rate_reset_interval",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Interest Rate Reset Interval"
+    },
+    {
+      "canonical_field": "interest_rate_cap",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Interest Rate Cap"
+    },
+    {
+      "canonical_field": "interest_rate_floor",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Interest Rate Floor"
+    },
+    {
+      "canonical_field": "prepayment_fee",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Prepayment Fee"
+    },
+    {
+      "canonical_field": "principal_grace_period_end_date",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Principal Grace Period End Date"
+    },
+    {
+      "canonical_field": "credit_impaired_obligor",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Credit Impaired Obligor"
+    },
+    {
+      "canonical_field": "resident",
+      "confidence": 1.0,
+      "mapping_method": "exact",
+      "raw_header": "Resident"
+    },
+    {
+      "canonical_field": "geographic_region_obligor",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Geographic Region Obligor"
+    },
+    {
+      "canonical_field": "employment_status",
+      "confidence": 1.0,
+      "mapping_method": "normalized",
+      "raw_header": "Employment Status"
+    }
+  ],
+  "output_schema": "active",
+  "portfolio_type": "equity_release",
+  "raw_to_canonical": {
+    "Account Status": "account_status",
+    "Allocated Losses": "allocated_losses",
+    "Amortisation Type": "amortisation_type",
+    "Arrears Balance": "arrears_balance",
+    "Borrower Age (Youngest)": "youngest_borrower_age",
+    "Collateral Currency": "collateral_currency",
+    "Collateral Type": "collateral_type",
+    "Credit Impaired Obligor": "credit_impaired_obligor",
+    "Cumulative Recoveries": "cumulative_recoveries",
+    "Current Interest Rate": "current_interest_rate",
+    "Current Interest Rate Index": "current_interest_rate_index",
+    "Current Interest Rate Index Tenor": "current_interest_rate_index_tenor",
+    "Current Interest Rate Margin": "current_interest_rate_margin",
+    "Current Loan To Value": "current_loan_to_value",
+    "Current Principal Balance GBP": "current_principal_balance",
+    "Current Valuation Amount": "current_valuation_amount",
+    "Current Valuation Date": "current_valuation_date",
+    "Current Valuation Method": "current_valuation_method",
+    "Data Cut-Off Date": "data_cut_off_date",
+    "Date of Repurchase": "date_of_repurchase",
+    "Default Amount": "default_amount",
+    "Default Date": "default_date",
+    "Deposit Amount": "deposit_amount",
+    "Employment Status": "employment_status",
+    "Exposure Currency Denomination": "exposure_currency_denomination",
+    "Geographic Region Obligor": "geographic_region_obligor",
+    "Interest Rate Cap": "interest_rate_cap",
+    "Interest Rate Floor": "interest_rate_floor",
+    "Interest Rate Reset Interval": "interest_rate_reset_interval",
+    "Interest Rate Type": "interest_rate_type",
+    "Litigation": "litigation",
+    "Loan Identifier": "loan_identifier",
+    "Maturity DATE": "maturity_date",
+    "New Collateral Identifier": "new_collateral_identifier",
+    "New Obligor Identifier": "new_obligor_identifier",
+    "New Underlying Exposure Identifier": "new_underlying_exposure_identifier",
+    "Number of Days in Arrears": "number_of_days_in_arrears",
+    "Occupancy Type": "occupancy_type",
+    "Original Collateral Identifier": "original_collateral_identifier",
+    "Original Loan To Value": "original_loan_to_value",
+    "Original Obligor Identifier": "original_obligor_identifier",
+    "Original Principal Balance": "original_principal_balance",
+    "Original Underlying Exposure Identifier": "original_underlying_exposure_identifier",
+    "Origination Channel": "origination_channel",
+    "Origination Dt": "origination_date",
+    "Payment Due": "payment_due",
+    "Pool Addition Date": "pool_addition_date",
+    "Post Code": "property_post_code",
+    "Prepayment Fee": "prepayment_fee",
+    "Principal Grace Period End Date": "principal_grace_period_end_date",
+    "Property Type ": "property_type",
+    "Purchase Price": "purchase_price",
+    "Purpose": "purpose",
+    "Redemption Date": "redemption_date",
+    "Region ": "geographic_region_classification",
+    "Resident": "resident",
+    "Scheduled Interest Payment Frequency": "scheduled_interest_payment_frequency",
+    "Scheduled Principal Payment Frequency": "scheduled_principal_payment_frequency",
+    "Total Credit Limit": "total_credit_limit",
+    "Underlying Exposure Identifier": "underlying_exposure_identifier",
+    "Unique Loan Identifier": "unique_identifier"
+  },
+  "regimes": [],
+  "registry_path": "/workspace/trakt/config/system/fields_registry.yaml",
+  "thresholds": {
+    "FUZZ_NORM_THRESHOLD": 92,
+    "FUZZ_TOKEN_SET_THRESHOLD": 88,
+    "JACCARD_THRESHOLD": 0.85,
+    "LOW_CONFIDENCE_THRESHOLD": 0.95
+  },
+  "unmapped_headers": [
+    "tenure"
+  ]
+}

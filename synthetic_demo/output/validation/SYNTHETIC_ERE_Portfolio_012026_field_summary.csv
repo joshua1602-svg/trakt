@@ -1,0 +1,2 @@
+canonical_field,field_name,issue_type,affected_rows,error_count,error_rate,severity,classification,materiality,suggested_actions,sample_violations
+PORTFOLIO,PORTFOLIO,DAT003,0,1,0.0,error,date_logic_violation,BLOCKING,"FIX_UPSTREAM, MANUAL_OVERRIDE, ESCALATE","[{""row_index"": -1, ""message"": ""Exception: '>=' not supported between instances of 'float' and 'str'""}]"
