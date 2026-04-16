@@ -50,6 +50,7 @@ defaults:
   litigation: N
   deposit_amount: 0
   credit_impaired_obligor: N
+  customer_type: CNEO
 transformations:
   copy_if_missing:
     current_principal_balance: current_outstanding_balance
