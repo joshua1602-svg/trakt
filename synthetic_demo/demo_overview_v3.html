@@ -45,6 +45,7 @@ tr:nth-child(even) td{background:#f8fafd}
 .callout{border-radius:6px;padding:10px 14px;font-size:12px;margin-top:8px;line-height:1.6}
 .callout.warn{background:#fff8e1;border-left:4px solid #f59e0b;color:#7c5700}
 .callout.pass{background:#edf7ee;border-left:4px solid #1f8f4a;color:#1f4f2f}
+.callout.info{background:#edf3ff;border-left:4px solid #4569b2;color:#1f3f78}
 .arch-note{font-size:13px;font-weight:600;color:#1b3872;margin-top:10px;padding:10px 14px;background:#e8eef7;border-radius:6px}
 .mini-kv{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #edf2fb;font-size:12px}
 .mini-kv:last-child{border-bottom:0}
@@ -63,16 +64,16 @@ code{font-family:monospace;background:#eef1f8;padding:1px 4px;border-radius:3px;
 
   <div class='card'>
     <h2>1. Pipeline Gate-by-Gate Execution</h2>
-    <table><thead><tr><th>Gate</th><th>Output</th><th>Detail</th><th>Status</th></tr></thead><tbody><tr><td>Gate 1 — Semantic Alignment</td><td>62 headers mapped</td><td>1 unmapped</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 2 — Canonical Transform</td><td>36 rows typed</td><td>Deterministic typing + derivations</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 3 — Validation</td><td>72 findings</td><td>2 enum fields flagged pre-remediation</td><td><span class='badge' style='background:#fff3cd;color:#856404'>WARN</span></td></tr><tr><td>Gate 3b — Remediation</td><td>108 canonical values standardized</td><td>Internal normalization + regime enum mapping</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 4 — ESMA Projection</td><td>36 rows projected</td><td>Annex 2 regime mapping</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 4b — Delivery Preflight</td><td>0 blocking delivery errors</td><td>No blocking delivery issues</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 5 — XML Builder</td><td>SYNTHETIC_012026_annex2.xml (626.6 KB)</td><td>36 UndrlygXpsrRcrd elements; XSD validation passed</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr></tbody></table>
+    <table><thead><tr><th>Gate</th><th>Output</th><th>Detail</th><th>Status</th></tr></thead><tbody><tr><td>Gate 1 — Semantic Alignment</td><td>62 headers mapped</td><td>1 unmapped</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 2 — Canonical Transform</td><td>36 rows typed</td><td>Deterministic typing + derivations</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 3 — Validation</td><td>72 findings</td><td>2 enum fields flagged pre-remediation</td><td><span class='badge' style='background:#fff3cd;color:#856404'>WARN</span></td></tr><tr><td>Gate 3b — Remediation</td><td>108 canonical values standardized</td><td>Internal normalization + regime enum mapping</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 4 — ESMA Projection</td><td>36 rows projected</td><td>Annex 2 regime mapping</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 4b — Delivery Preflight</td><td>0 blocking delivery errors</td><td>No blocking delivery issues</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 5 — XML Builder</td><td>SYNTHETIC_012026_annex2.xml (626.6 KB)</td><td>36 UndrlygXpsrRcrd elements; XSD validation passed</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr></tbody></table><div class='callout info'><strong>Why Gate 1 is still PASS with unmapped headers:</strong> The unmapped source field (<code>tenure</code>) is non-blocking for this demo run and is outside the required canonical/delivery processing path currently shown.</div>
   </div>
   <div class='card'>
     <h2>2. Raw → Canonical Transformation</h2>
     
     <div class='split-grid'>
       <div class='panel'><table class='table-fixed'><caption>Raw lender tape (first 6 rows)</caption><thead><tr><th>Underlying Exposure Identifier</th><th>Origination Dt</th><th>Current Principal Balance GBP</th><th>Current Interest Rate</th><th>Borrower Age (Youngest)</th><th>Region </th><th>Property Type </th></tr></thead><tbody><tr><td>DEMO-0001</td><td>07/06/2025</td><td> £177334.06 </td><td>7.108</td><td>77</td><td>West Midlands</td><td>Detached House</td></tr><tr><td>DEMO-0002</td><td>26/02/2024</td><td>171,008.53</td><td>8.719</td><td>74</td><td>East Midlands</td><td>detached</td></tr><tr><td>DEMO-0003</td><td>26/04/2025</td><td>79,698.36</td><td>8.014</td><td>74</td><td>Wales</td><td>Semi Detached</td></tr><tr><td>DEMO-0004</td><td>15/11/2025</td><td>196,804.85</td><td>8.213</td><td>69</td><td>Yorkshire and The Humber</td><td>semi-detached house</td></tr><tr><td>DEMO-0005</td><td>15/01/2025</td><td>259,110.87</td><td>6.867</td><td>78</td><td>South West</td><td>Flat / Apartment</td></tr><tr><td>DEMO-0006</td><td>22/07/2025</td><td>175,963.41</td><td>6.441 %</td><td>78</td><td>Wales</td><td>flat</td></tr></tbody></table></div>
-      <div class='panel'><table class='table-fixed'><caption>Canonical typed (first 6 rows)</caption><thead><tr><th>underlying_exposure_identifier</th><th>origination_date</th><th>current_principal_balance</th><th>current_interest_rate</th><th>youngest_borrower_age</th><th>geographic_region_classification</th><th>property_type</th><th>purpose</th></tr></thead><tbody><tr><td>DEMO-0001</td><td>2025-06-07</td><td>177334.06</td><td>7.108</td><td>77</td><td>West Midlands</td><td>RHOS</td><td>RENV</td></tr><tr><td>DEMO-0002</td><td>2024-02-26</td><td>171008.53</td><td>8.719</td><td>74</td><td>East Midlands</td><td>RHOS</td><td>RMRT</td></tr><tr><td>DEMO-0003</td><td>2025-04-26</td><td>79698.36</td><td>8.014</td><td>74</td><td>Wales</td><td>RHOS</td><td>EQRE</td></tr><tr><td>DEMO-0004</td><td>2025-11-15</td><td>196804.85</td><td>8.213</td><td>69</td><td>Yorkshire and The Humber</td><td>RHOS</td><td>RMRT</td></tr><tr><td>DEMO-0005</td><td>2025-01-15</td><td>259110.87</td><td>6.867</td><td>78</td><td>South West</td><td>RFLT</td><td>PURC</td></tr><tr><td>DEMO-0006</td><td>2025-07-22</td><td>175963.41</td><td>6.441</td><td>78</td><td>Wales</td><td>RFLT</td><td>RENV</td></tr></tbody></table></div>
+      <div class='panel'><table class='table-fixed'><caption>Canonical typed (first 6 rows)</caption><thead><tr><th>underlying_exposure_identifier</th><th>origination_date</th><th>current_principal_balance</th><th>current_interest_rate</th><th>youngest_borrower_age</th><th>geographic_region_classification</th><th>property_type</th></tr></thead><tbody><tr><td>DEMO-0001</td><td>2025-06-07</td><td>177334.06</td><td>7.108</td><td>77</td><td>West Midlands</td><td>RHOS</td></tr><tr><td>DEMO-0002</td><td>2024-02-26</td><td>171008.53</td><td>8.719</td><td>74</td><td>East Midlands</td><td>RHOS</td></tr><tr><td>DEMO-0003</td><td>2025-04-26</td><td>79698.36</td><td>8.014</td><td>74</td><td>Wales</td><td>RHOS</td></tr><tr><td>DEMO-0004</td><td>2025-11-15</td><td>196804.85</td><td>8.213</td><td>69</td><td>Yorkshire and The Humber</td><td>RHOS</td></tr><tr><td>DEMO-0005</td><td>2025-01-15</td><td>259110.87</td><td>6.867</td><td>78</td><td>South West</td><td>RFLT</td></tr><tr><td>DEMO-0006</td><td>2025-07-22</td><td>175963.41</td><td>6.441</td><td>78</td><td>Wales</td><td>RFLT</td></tr></tbody></table></div>
     </div>
-    <div class='meta-strip'>Canonical output is deterministic typing and normalization only. ESMA code mapping is downstream in Gate 4. Controlled enum codes are retained in canonical output for audit consistency.</div>
+    <div class='meta-strip'>Canonical output is deterministic typing and normalization only. ESMA code mapping is downstream in Gate 4. MI charts may render business-friendly labels derived from stable canonical values for readability.</div>
     
   </div>
   <div class='card'>
@@ -88,10 +89,10 @@ code{font-family:monospace;background:#eef1f8;padding:1px 4px;border-radius:3px;
       <span class='gate-chip'>Regime enum mapping</span> →
       <span class='gate-chip'>Gate 4b preflight PASS</span>
     </div>
-    <table><caption>Canonical standardization actions (internal, non-ESMA)</caption><thead><tr><th>Canonical field</th><th>Rows reviewed</th><th>Rows normalized</th><th>Unmapped examples</th></tr></thead><tbody><tr><td>customer_type</td><td>36</td><td>0</td><td>—</td></tr><tr><td>interest_rate_type</td><td>36</td><td>36</td><td>—</td></tr><tr><td>property_type</td><td>36</td><td>36</td><td>—</td></tr><tr><td>purpose</td><td>36</td><td>36</td><td>—</td></tr></tbody></table><table><caption>Regime mapping actions (ESMA-specific)</caption><thead><tr><th>Projected field</th><th>Rows transformed</th><th>Status</th></tr></thead><tbody><tr><td>collateral_type</td><td>36</td><td><span class='badge' style='background:#d4edda;color:#155724'>APPLIED</span></td></tr></tbody></table>
+    <table><caption>Canonical standardization actions (internal, non-ESMA)</caption><thead><tr><th>Canonical field</th><th>Rows reviewed</th><th>Rows normalized</th><th>Unmapped examples</th></tr></thead><tbody><tr><td>customer_type</td><td>36</td><td>0</td><td>—</td></tr><tr><td>interest_rate_type</td><td>36</td><td>36</td><td>—</td></tr><tr><td>property_type</td><td>36</td><td>36</td><td>—</td></tr><tr><td>purpose</td><td>36</td><td>36</td><td>—</td></tr></tbody></table><table><caption>Regime mapping actions (ESMA-specific)</caption><thead><tr><th>Projected field</th><th>Rows transformed</th><th>Status</th></tr></thead><tbody><tr><td>collateral_type</td><td>36</td><td><span class='badge' style='background:#d4edda;color:#155724'>APPLIED</span></td></tr></tbody></table><table><caption>Open remediation items carried as known residuals</caption><thead><tr><th>Field not remediated</th><th>Outstanding values</th><th>Status</th></tr></thead><tbody><tr><td>amortisation_type</td><td>Interest roll-up</td><td><span class='badge' style='background:#fff3cd;color:#856404'>PENDING</span></td></tr><tr><td>employment_status</td><td>manual</td><td><span class='badge' style='background:#fff3cd;color:#856404'>PENDING</span></td></tr></tbody></table>
   </div>
   <div class='card'>
-    <h2>5. Portfolio MI</h2>
+    <h2>5. Portfolio MI (simplified / truncated)</h2>
     <div class='kpi-grid'><div class='kpi-card'>
       <div class='kpi-label'>Loan count</div>
       <div class='kpi-value'>36</div>
@@ -223,7 +224,16 @@ code{font-family:monospace;background:#eef1f8;padding:1px 4px;border-radius:3px;
               &lt;ns0:Ind&gt;true&lt;/ns0:Ind&gt;
             &lt;/ns0:Resdt&gt;
             &lt;ns0:TrtrlUnit&gt;
-              &lt;ns0:Clssfctn&gt;</pre></details>
+              &lt;ns0:Clssfctn&gt;
+                &lt;ns0:Cd&gt;GBZZZ&lt;/ns0:Cd&gt;
+              &lt;/ns0:Clssfctn&gt;
+              &lt;ns0:ClssfctnYr&gt;
+                &lt;ns0:Yr&gt;2026&lt;/ns0:Yr&gt;
+              &lt;/ns0:ClssfctnYr&gt;
+            &lt;/ns0:TrtrlUnit&gt;
+            &lt;ns0:CstmrTp&gt;
+              &lt;ns0:Cd&gt;CNEO&lt;/ns0:Cd&gt;
+            &lt;/ns0:CstmrTp&gt;</pre></details>
   </div>
   <div class='card'>
     <h2>7. Architecture Ownership Model</h2>

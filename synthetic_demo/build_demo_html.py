@@ -84,7 +84,11 @@ if XML_PATH.exists():
     if records:
         record_xml = ET.tostring(records[0], encoding="unicode")
         pretty = minidom.parseString(record_xml).toprettyxml(indent="  ")
-        xml_snippet = "\n".join([line for line in pretty.splitlines() if line.strip()][0:26])
+        lines = [line for line in pretty.splitlines() if line.strip()]
+        clipped = lines[:40]
+        while clipped and not clipped[-1].strip().startswith("</"):
+            clipped.pop()
+        xml_snippet = "\n".join(clipped)
 
 # ── Portfolio metrics ─────────────────────────────────────────────────────────
 total_bal = pd.to_numeric(typed.get("current_principal_balance"), errors="coerce").fillna(0).sum()
@@ -203,7 +207,14 @@ def section_1():
         ["Gate 4b — Delivery Preflight", f"{blocking_errors} blocking delivery errors", gate4b_detail, badge(preflight_status, gate4b_kind)],
         ["Gate 5 — XML Builder", f"{XML_PATH.name} ({xml_size_kb:.1f} KB)", gate5_detail, gate5_status],
     ]
-    return table(["Gate", "Output", "Detail", "Status"], rows)
+    unmapped_list = unmapped.get("raw_header", pd.Series([], dtype="object")).dropna().astype(str).tolist()
+    unmapped_label = ", ".join(unmapped_list) if unmapped_list else "one source header"
+    note = (
+        f"<div class='callout info'><strong>Why Gate 1 is still PASS with unmapped headers:</strong> "
+        f"The unmapped source field (<code>{esc(unmapped_label)}</code>) is non-blocking for this demo run and "
+        "is outside the required canonical/delivery processing path currently shown.</div>"
+    )
+    return table(["Gate", "Output", "Detail", "Status"], rows) + note
 
 
 def section_2():
@@ -213,7 +224,7 @@ def section_2():
     ]
     typed_cols = [
         "underlying_exposure_identifier", "origination_date", "current_principal_balance", "current_interest_rate",
-        "youngest_borrower_age", "geographic_region_classification", "property_type", "purpose",
+        "youngest_borrower_age", "geographic_region_classification", "property_type",
     ]
     avail_raw = [c for c in raw_cols if c in raw.columns]
     avail_typed = [c for c in typed_cols if c in typed.columns]
@@ -236,7 +247,7 @@ def section_2():
       <div class='panel'>{raw_html}</div>
       <div class='panel'>{typed_html}</div>
     </div>
-    <div class='meta-strip'>Canonical output is deterministic typing and normalization only. ESMA code mapping is downstream in Gate 4. Controlled enum codes are retained in canonical output for audit consistency.</div>
+    <div class='meta-strip'>Canonical output is deterministic typing and normalization only. ESMA code mapping is downstream in Gate 4. MI charts may render business-friendly labels derived from stable canonical values for readability.</div>
     """
 
 
@@ -291,6 +302,11 @@ def section_4():
         ])
 
     enum_fix_rows = [[esc(k), esc(str(v.get("rows_transformed", 0))), badge("APPLIED", "pass")] for k, v in enum_transform.items()]
+    unresolved_map = (projection_rpt.get("enum_mapping", {}) or {}).get("unmapped_values", {}) or {}
+    unresolved_rows = []
+    for field, values in unresolved_map.items():
+        vals = ", ".join(str(v) for v in values[:3]) if isinstance(values, list) and values else "—"
+        unresolved_rows.append([esc(field), esc(vals), badge("PENDING", "warn")])
 
     summary = f"""
     <div class='flow-strip'>
@@ -309,6 +325,10 @@ def section_4():
         ["Projected field", "Rows transformed", "Status"],
         enum_fix_rows,
         "Regime mapping actions (ESMA-specific)",
+    ) + table(
+        ["Field not remediated", "Outstanding values", "Status"],
+        unresolved_rows or [["—", "—", badge("NONE", "pass")]],
+        "Open remediation items carried as known residuals",
     )
 
 
@@ -413,6 +433,7 @@ tr:nth-child(even) td{background:#f8fafd}
 .callout{border-radius:6px;padding:10px 14px;font-size:12px;margin-top:8px;line-height:1.6}
 .callout.warn{background:#fff8e1;border-left:4px solid #f59e0b;color:#7c5700}
 .callout.pass{background:#edf7ee;border-left:4px solid #1f8f4a;color:#1f4f2f}
+.callout.info{background:#edf3ff;border-left:4px solid #4569b2;color:#1f3f78}
 .arch-note{font-size:13px;font-weight:600;color:#1b3872;margin-top:10px;padding:10px 14px;background:#e8eef7;border-radius:6px}
 .mini-kv{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #edf2fb;font-size:12px}
 .mini-kv:last-child{border-bottom:0}
@@ -426,7 +447,7 @@ SECTIONS = [
     ("2. Raw → Canonical Transformation", section_2()),
     ("3. Validation & Governance (Pre-Remediation)", section_3()),
     ("4. Remediation / Standardisation Resolution", section_4()),
-    ("5. Portfolio MI", section_5()),
+    ("5. Portfolio MI (simplified / truncated)", section_5()),
     ("6. ESMA Annex 2 XML Snapshot", section_6()),
     ("7. Architecture Ownership Model", section_7()),
 ]
