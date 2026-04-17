@@ -64,6 +64,11 @@ field_rules:
     nd_allowed: [ND5]
     transform:
       enum_map:
+        RHOS: RHOS
+        RFLT: RFLT
+        RBGL: RBGL
+        PCMM: PCMM
+        BIZZ: BIZZ
         R1: RHOS
         R2: RFLT
         C1: PCMM
@@ -89,15 +94,25 @@ field_rules:
 
   RREL42:
     esma_code: RREL42
-    workbook_semantic: EmplmntSts/Cd
-    projected_source_field: employment_status
+    workbook_semantic: IntrstRateType/Cd
+    projected_source_field: interest_rate_type
     mandatory: false
     enforce_presence: false
     nd_allowed: [ND5]
     transform:
       enum_map:
-        manual: OTHR
-        MANUAL: OTHR
+        FXRL: FXRL
+        FLIF: FLIF
+        DISC: DISC
+        FLCF: FLCF
+        FXPR: FXPR
+        FINX: FINX
+        CAPP: CAPP
+        FLFL: FLFL
+        FLCA: FLCA
+        MODE: MODE
+        OBLS: OBLS
+        SWIC: SWIC
         OTHR: OTHR
 
   RREL13:
@@ -115,15 +130,25 @@ field_rules:
 
   RREL27:
     esma_code: RREL27
-    workbook_semantic: IntrstRateType/Cd
-    projected_source_field: interest_rate_type
+    workbook_semantic: Prps/Cd
+    projected_source_field: purpose
     mandatory: false
     enforce_presence: false
     nd_allowed: [ND5]
     transform:
       enum_map:
-        manual: OTHR
-        MANUAL: OTHR
+        PURC: PURC
+        IMRT: IMRT
+        RMRT: RMRT
+        CNST: CNST
+        RENV: RENV
+        EQRE: EQRE
+        DCON: DCON
+        BSFN: BSFN
+        CMRT: CMRT
+        GSPL: GSPL
+        RMEQ: RMEQ
+        RGBY: RGBY
         OTHR: OTHR
 
   RREL37:
