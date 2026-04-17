@@ -26,6 +26,7 @@ OUT_HTML_V2 = ROOT / "demo_overview_v2.html"
 OUT_HTML_V3 = ROOT / "demo_overview_v3.html"
 
 NS = {"e": "urn:esma:xsd:DRAFT1auth.099.001.04"}
+ANNEX2_NAMESPACE = "urn:esma:xsd:DRAFT1auth.099.001.04"
 
 PRESENTATION_ENUM_LABELS = {
     "property_type": {
@@ -191,12 +192,15 @@ def section_1():
     gate4b_kind = "pass" if preflight_status == "PASS" else "fail"
     gate4b_detail = "No blocking delivery issues" if preflight_status == "PASS" else "Blocking delivery issues require remediation"
 
-    gate5_status = badge("PASS", "pass") if preflight_status == "PASS" and xml_built else badge("SKIPPED", "grey")
-    gate5_detail = (
-        f"{xml_records} UndrlygXpsrRcrd elements; XSD validation passed"
-        if preflight_status == "PASS" and xml_built
-        else "XML build skipped until delivery preflight passes"
-    )
+    if preflight_status == "PASS" and xml_built:
+        gate5_status = badge("PASS", "pass")
+        gate5_detail = f"{xml_records} UndrlygXpsrRcrd elements; XSD validation passed"
+    elif preflight_status == "PASS" and not xml_built:
+        gate5_status = badge("WARN", "warn")
+        gate5_detail = "Delivery preflight passed, but XML artifact is not present in this demo pack"
+    else:
+        gate5_status = badge("SKIPPED", "grey")
+        gate5_detail = "XML build skipped because delivery preflight did not pass"
 
     rows = [
         ["Gate 1 — Semantic Alignment", f"{mapped_count} headers mapped", f"{unmapped_count} unmapped", badge("PASS", "pass")],
@@ -360,7 +364,11 @@ def section_5():
 
 def section_6():
     if not xml_sample_rows:
-        return "<p>XML not found.</p>"
+        return (
+            f"<p class='meta'>Expected Annex 2 namespace: <code>{ANNEX2_NAMESPACE}</code></p>"
+            "<div class='callout info'><strong>XML artifact unavailable in current pack:</strong> "
+            "delivery preflight outputs are present, but the final XML file is not bundled in this artifact set.</div>"
+        )
 
     headers = list(xml_sample_rows[0].keys())
     rows = [[esc(str(r[h])) for h in headers] for r in xml_sample_rows]
@@ -370,7 +378,11 @@ def section_6():
         f"File: <code>{XML_PATH.name}</code> ({xml_size_kb:.1f}&nbsp;KB)"
     )
     snippet_html = f"<details class='xml-details'><summary>Sample raw XML (first exposure record)</summary><pre>{esc(xml_snippet)}</pre></details>" if xml_snippet else ""
-    return f"<p class='meta'>{meta}</p>" + table(headers, rows, "Executive XML snapshot (first 6 exposures)") + snippet_html
+    gbzzz_note = (
+        "<div class='meta-strip'>Territorial code note: this demo uses <code>GBZZZ</code> as an intentional UK-wide "
+        "classification default for the demonstrated delivery path, rather than a granular NUTS3-equivalent code.</div>"
+    )
+    return f"<p class='meta'>{meta}</p>" + table(headers, rows, "Executive XML snapshot (first 6 exposures)") + gbzzz_note + snippet_html
 
 
 def section_7():
