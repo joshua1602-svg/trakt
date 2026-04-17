@@ -86,19 +86,35 @@ ESMA_Annex2:
   # FIX, FLTV, TEAS, OTHR
   # ============================================================
   interest_rate_type:
-    FIXED: "FIX"
-    FIX: "FIX"
+    FXRL: "FXRL"
+    FLIF: "FLIF"
+    DISC: "DISC"
+    FLCF: "FLCF"
+    FXPR: "FXPR"
+    FINX: "FINX"
+    CAPP: "CAPP"
+    FLFL: "FLFL"
+    FLCA: "FLCA"
+    MODE: "MODE"
+    OBLS: "OBLS"
+    SWIC: "SWIC"
+    OTHR: "OTHR"
 
-    VARIABLE: "FLTV"
-    FLOATING: "FLTV"
-    VAR: "FLTV"
-    LIBOR: "FLTV"
-    EURIBOR: "FLTV"
-    BASE_RATE: "FLTV"
+    FIXED: "FXRL"
+    FIXED RATE: "FXRL"
+    FIX: "FXRL"
 
-    TEASER: "TEAS"
-    INTRODUCTORY: "TEAS"
-    DISCOUNTED: "TEAS"
+    VARIABLE: "FLIF"
+    VARIABLE RATE: "FLIF"
+    FLOATING: "FLIF"
+    VAR: "FLIF"
+    LIBOR: "FLIF"
+    EURIBOR: "FLIF"
+    BASE_RATE: "FLIF"
+
+    TEASER: "DISC"
+    INTRODUCTORY: "DISC"
+    DISCOUNTED: "DISC"
 
     MIXED: "OTHR"
     UNKNOWN: "OTHR"
@@ -133,6 +149,41 @@ ESMA_Annex2:
     MANUAL: "OTHR"
     OTHER: "OTHR"
     UNKNOWN: "OTHR"
+
+
+  # ============================================================
+  # PROPERTY TYPE (RREC9)
+  # RHOS, RFLT, RBGL, PCMM, BIZZ, OTHR
+  # ============================================================
+  property_type:
+    DETACHED HOUSE: "RHOS"
+    DETACHED: "RHOS"
+    HOUSE: "RHOS"
+    SEMI DETACHED: "RHOS"
+    SEMI-DETACHED HOUSE: "RHOS"
+    RESIDENTIAL HOUSE: "RHOS"
+
+    FLAT: "RFLT"
+    APARTMENT: "RFLT"
+    FLAT / APARTMENT: "RFLT"
+    RESIDENTIAL FLAT: "RFLT"
+
+    BUNGALOW: "RBGL"
+
+    COMMERCIAL: "PCMM"
+    MIXED_USE: "PCMM"
+    OFFICE: "BIZZ"
+    RETAIL: "BIZZ"
+    INDUSTRIAL: "BIZZ"
+
+    RHOS: "RHOS"
+    RFLT: "RFLT"
+    RBGL: "RBGL"
+    PCMM: "PCMM"
+    BIZZ: "BIZZ"
+    OTHER: "OTHR"
+    UNKNOWN: "OTHR"
+    OTHR: "OTHR"
 
 
   # ============================================================
@@ -192,21 +243,41 @@ ESMA_Annex2:
   # PURPOSE (CREL30) — ESMA CREL list
   # ============================================================
   purpose:
-    ACQUISITION: "ACQI"
-    ACQUISITION_FOR_INVESTMENT: "ACQI"
-    INVESTMENT: "ACQI"
+    PURC: "PURC"
+    IMRT: "IMRT"
+    RMRT: "RMRT"
+    CNST: "CNST"
+    RENV: "RENV"
+    EQRE: "EQRE"
+    DCON: "DCON"
+    BSFN: "BSFN"
+    CMRT: "CMRT"
+    GSPL: "GSPL"
+    RMEQ: "RMEQ"
+    RGBY: "RGBY"
+    OTHR: "OTHR"
 
-    ACQUISITION_FOR_LIQUIDATION: "ACQL"
+    ACQUISITION: "PURC"
+    PURCHASE MAIN RESIDENCE: "PURC"
+    ACQUISITION_FOR_INVESTMENT: "IMRT"
+    INVESTMENT: "IMRT"
 
-    REFINANCE: "RFIN"
-    REFINANCING: "RFIN"
+    ACQUISITION_FOR_LIQUIDATION: "OTHR"
+
+    REFINANCE: "RMRT"
+    REFINANCING: "RMRT"
+    REFI: "RMRT"
 
     CONSTRUCTION: "CNST"
     NEW_BUILD: "CNST"
 
-    REDEVELOPMENT: "RDVL"
-    DEVELOPMENT: "RDVL"
+    REDEVELOPMENT: "RENV"
+    DEVELOPMENT: "RENV"
 
+    HOME IMPROVEMENT: "RENV"
+    HOME IMPROVEMENTS: "RENV"
+    EQUITY RELEASE: "EQRE"
+    DEBT CONSOLIDATION: "DCON"
     OTHER: "OTHR"
     UNKNOWN: "OTHR"
 
