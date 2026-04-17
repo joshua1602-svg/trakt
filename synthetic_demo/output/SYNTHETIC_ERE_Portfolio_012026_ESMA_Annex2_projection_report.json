@@ -55,18 +55,6 @@
       "collateral_type": {
         "rows_transformed": 36,
         "mapping_applied": true
-      },
-      "interest_rate_type": {
-        "rows_transformed": 36,
-        "mapping_applied": true
-      },
-      "property_type": {
-        "rows_transformed": 36,
-        "mapping_applied": true
-      },
-      "purpose": {
-        "rows_transformed": 36,
-        "mapping_applied": true
       }
     },
     "unmapped_values": {

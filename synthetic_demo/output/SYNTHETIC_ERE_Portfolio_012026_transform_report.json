@@ -537,5 +537,29 @@
     }
   },
   "skipped": {},
+  "canonical_enum_normalization": {
+    "fields": {
+      "property_type": {
+        "rows_considered": 36,
+        "rows_changed": 36,
+        "unmapped_examples": []
+      },
+      "purpose": {
+        "rows_considered": 36,
+        "rows_changed": 36,
+        "unmapped_examples": []
+      },
+      "interest_rate_type": {
+        "rows_considered": 36,
+        "rows_changed": 36,
+        "unmapped_examples": []
+      },
+      "customer_type": {
+        "rows_considered": 36,
+        "rows_changed": 0,
+        "unmapped_examples": []
+      }
+    }
+  },
   "applied_defaults": {}
 }
