@@ -1,1 +1,145 @@
 rule_id,severity,field,row,message
+ENUM_INVALID,warn,interest_rate_type,0,Value 'Fixed' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,1,Value 'variable' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,2,Value 'FIXED' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,3,Value 'Variable rate' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,4,Value 'Fixed' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,5,Value 'variable' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,6,Value 'FIXED' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,7,Value 'Variable rate' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,8,Value 'Fixed' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,9,Value 'variable' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,10,Value 'FIXED' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,11,Value 'Variable rate' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,12,Value 'Fixed' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,13,Value 'variable' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,14,Value 'FIXED' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,15,Value 'Variable rate' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,16,Value 'Fixed' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,17,Value 'variable' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,18,Value 'FIXED' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,19,Value 'Variable rate' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,20,Value 'Fixed' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,21,Value 'variable' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,22,Value 'FIXED' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,23,Value 'Variable rate' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,24,Value 'Fixed' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,25,Value 'variable' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,26,Value 'FIXED' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,27,Value 'Variable rate' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,28,Value 'Fixed' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,29,Value 'variable' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,30,Value 'FIXED' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,31,Value 'Variable rate' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,32,Value 'Fixed' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,33,Value 'variable' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,34,Value 'FIXED' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,interest_rate_type,35,Value 'Variable rate' is not in allowed enum set 'interest_rate_type'.
+ENUM_INVALID,warn,property_type,0,Value 'Detached House' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,1,Value 'detached' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,2,Value 'Semi Detached' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,3,Value 'semi-detached house' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,4,Value 'Flat / Apartment' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,5,Value 'flat' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,6,Value 'Bungalow' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,7,Value 'HOUSE' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,8,Value 'Detached House' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,9,Value 'detached' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,10,Value 'Semi Detached' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,11,Value 'semi-detached house' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,12,Value 'Flat / Apartment' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,13,Value 'flat' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,14,Value 'Bungalow' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,15,Value 'HOUSE' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,16,Value 'Detached House' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,17,Value 'detached' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,18,Value 'Semi Detached' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,19,Value 'semi-detached house' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,20,Value 'Flat / Apartment' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,21,Value 'flat' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,22,Value 'Bungalow' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,23,Value 'HOUSE' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,24,Value 'Detached House' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,25,Value 'detached' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,26,Value 'Semi Detached' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,27,Value 'semi-detached house' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,28,Value 'Flat / Apartment' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,29,Value 'flat' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,30,Value 'Bungalow' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,31,Value 'HOUSE' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,32,Value 'Detached House' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,33,Value 'detached' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,34,Value 'Semi Detached' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,property_type,35,Value 'semi-detached house' is not in allowed enum set 'property_type'.
+ENUM_INVALID,warn,purpose,0,Value 'Home improvements' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,1,Value 'Refinance' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,2,Value 'Equity release' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,3,Value 'Debt Consolidation' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,4,Value 'Purchase Main Residence' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,5,Value 'Home improvements' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,6,Value 'Refinance' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,7,Value 'Equity release' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,8,Value 'Debt Consolidation' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,9,Value 'Purchase Main Residence' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,10,Value 'Home improvements' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,11,Value 'Refinance' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,12,Value 'Equity release' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,13,Value 'Debt Consolidation' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,14,Value 'Purchase Main Residence' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,15,Value 'Home improvements' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,16,Value 'Refinance' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,17,Value 'Equity release' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,18,Value 'Debt Consolidation' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,19,Value 'Purchase Main Residence' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,20,Value 'Home improvements' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,21,Value 'Refinance' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,22,Value 'Equity release' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,23,Value 'Debt Consolidation' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,24,Value 'Purchase Main Residence' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,25,Value 'Home improvements' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,26,Value 'Refinance' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,27,Value 'Equity release' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,28,Value 'Debt Consolidation' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,29,Value 'Purchase Main Residence' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,30,Value 'Home improvements' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,31,Value 'Refinance' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,32,Value 'Equity release' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,33,Value 'Debt Consolidation' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,34,Value 'Purchase Main Residence' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,purpose,35,Value 'Home improvements' is not in allowed enum set 'purpose'.
+ENUM_INVALID,warn,customer_type,0,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,1,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,2,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,3,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,4,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,5,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,6,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,7,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,8,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,9,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,10,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,11,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,12,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,13,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,14,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,15,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,16,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,17,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,18,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,19,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,20,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,21,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,22,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,23,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,24,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,25,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,26,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,27,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,28,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,29,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,30,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,31,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,32,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,33,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,34,Value 'CNEO' is not in allowed enum set 'customer_type'.
+ENUM_INVALID,warn,customer_type,35,Value 'CNEO' is not in allowed enum set 'customer_type'.
