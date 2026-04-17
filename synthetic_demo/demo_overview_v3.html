@@ -64,7 +64,7 @@ code{font-family:monospace;background:#eef1f8;padding:1px 4px;border-radius:3px;
 
   <div class='card'>
     <h2>1. Pipeline Gate-by-Gate Execution</h2>
-    <table><thead><tr><th>Gate</th><th>Output</th><th>Detail</th><th>Status</th></tr></thead><tbody><tr><td>Gate 1 — Semantic Alignment</td><td>62 headers mapped</td><td>1 unmapped</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 2 — Canonical Transform</td><td>36 rows typed</td><td>Deterministic typing + derivations</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 3 — Validation</td><td>72 findings</td><td>2 enum fields flagged pre-remediation</td><td><span class='badge' style='background:#fff3cd;color:#856404'>WARN</span></td></tr><tr><td>Gate 3b — Remediation</td><td>108 canonical values standardized</td><td>Internal normalization + regime enum mapping</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 4 — ESMA Projection</td><td>36 rows projected</td><td>Annex 2 regime mapping</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 4b — Delivery Preflight</td><td>0 blocking delivery errors</td><td>No blocking delivery issues</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 5 — XML Builder</td><td>SYNTHETIC_012026_annex2.xml (0.0 KB)</td><td>Delivery preflight passed, but XML artifact is not present in this demo pack</td><td><span class='badge' style='background:#fff3cd;color:#856404'>WARN</span></td></tr></tbody></table><div class='callout info'><strong>Why Gate 1 is still PASS with unmapped headers:</strong> The unmapped source field (<code>tenure</code>) is non-blocking for this demo run and is outside the required canonical/delivery processing path currently shown.</div>
+    <table><thead><tr><th>Gate</th><th>Output</th><th>Detail</th><th>Status</th></tr></thead><tbody><tr><td>Gate 1 — Semantic Alignment</td><td>62 headers mapped</td><td>1 unmapped</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 2 — Canonical Transform</td><td>36 rows typed</td><td>Deterministic typing + derivations</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 3 — Validation</td><td>72 findings</td><td>2 enum fields flagged pre-remediation</td><td><span class='badge' style='background:#fff3cd;color:#856404'>WARN</span></td></tr><tr><td>Gate 3b — Remediation</td><td>108 canonical values standardized</td><td>Internal normalization + regime enum mapping</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 4 — ESMA Projection</td><td>36 rows projected</td><td>Annex 2 regime mapping</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 4b — Delivery Preflight</td><td>0 blocking delivery errors</td><td>No blocking delivery issues</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 5 — XML Builder</td><td>SYNTHETIC_012026_annex2.xml (626.6 KB)</td><td>36 UndrlygXpsrRcrd elements; XSD validation passed</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr></tbody></table><div class='callout info'><strong>Why Gate 1 is still PASS with unmapped headers:</strong> The unmapped source field (<code>tenure</code>) is non-blocking for this demo run and is outside the required canonical/delivery processing path currently shown.</div>
   </div>
   <div class='card'>
     <h2>2. Raw → Canonical Transformation</h2>
@@ -194,12 +194,46 @@ code{font-family:monospace;background:#eef1f8;padding:1px 4px;border-radius:3px;
       <div class='mini-kv'><span>Pre-remediation enum fields</span><strong>2</strong></div>
       <div class='mini-kv'><span>Delivery blocking issues</span><strong>0</strong></div>
       <div class='mini-kv'><span>Business rule runtime exceptions</span><strong>0</strong></div>
-      <div class='mini-kv'><span>XML/XSD status</span><strong>NOT READY</strong></div>
+      <div class='mini-kv'><span>XML/XSD status</span><strong>PASS</strong></div>
     </div></div>
   </div>
   <div class='card'>
     <h2>6. ESMA Annex 2 XML Snapshot</h2>
-    <p class='meta'>Expected Annex 2 namespace: <code>urn:esma:xsd:DRAFT1auth.099.001.04</code></p><div class='callout info'><strong>XML artifact unavailable in current pack:</strong> delivery preflight outputs are present, but the final XML file is not bundled in this artifact set.</div>
+    <p class='meta'>Namespace: <code>urn:esma:xsd:DRAFT1auth.099.001.04</code> &nbsp;·&nbsp; Records: <strong>36</strong> &nbsp;·&nbsp; File: <code>SYNTHETIC_012026_annex2.xml</code> (626.6&nbsp;KB)</p><table><caption>Executive XML snapshot (first 6 exposures)</caption><thead><tr><th>Loan ID</th><th>Orig Date</th><th>Cur Balance</th><th>Rate %</th><th>Prop Value</th><th>LTV %</th><th>Region Cd</th></tr></thead><tbody><tr><td>DEMO-0001</td><td>2025-06-07</td><td>177334.06</td><td>7.108</td><td>468000</td><td>37.8919</td><td>GBZZZ</td></tr><tr><td>DEMO-0002</td><td>2024-02-26</td><td>171008.53</td><td>8.719</td><td>359000</td><td>47.6347</td><td>GBZZZ</td></tr><tr><td>DEMO-0003</td><td>2025-04-26</td><td>79698.36</td><td>8.014</td><td>234000</td><td>34.0591</td><td>GBZZZ</td></tr><tr><td>DEMO-0004</td><td>2025-11-15</td><td>196804.85</td><td>8.213</td><td>392000</td><td>50.2053</td><td>GBZZZ</td></tr><tr><td>DEMO-0005</td><td>2025-01-15</td><td>259110.87</td><td>6.867</td><td>499000</td><td>51.9260</td><td>GBZZZ</td></tr><tr><td>DEMO-0006</td><td>2025-07-22</td><td>175963.41</td><td>6.441</td><td>323000</td><td>54.4778</td><td>GBZZZ</td></tr></tbody></table><div class='meta-strip'>Territorial code note: this demo uses <code>GBZZZ</code> as an intentional UK-wide classification default for the demonstrated delivery path, rather than a granular NUTS3-equivalent code.</div><details class='xml-details'><summary>Sample raw XML (first exposure record)</summary><pre>&lt;?xml version="1.0" ?&gt;
+&lt;ns0:UndrlygXpsrRcrd xmlns:ns0="urn:esma:xsd:DRAFT1auth.099.001.04"&gt;
+  &lt;ns0:UndrlygXpsrId&gt;
+    &lt;ns0:NewUndrlygXpsrIdr&gt;DEMO-0001-N&lt;/ns0:NewUndrlygXpsrIdr&gt;
+    &lt;ns0:OrgnlUndrlygXpsrIdr&gt;DEMO-0001&lt;/ns0:OrgnlUndrlygXpsrIdr&gt;
+    &lt;ns0:NewOblgrIdr&gt;OBL-0001&lt;/ns0:NewOblgrIdr&gt;
+    &lt;ns0:OrgnlOblgrIdr&gt;OBO-0001&lt;/ns0:OrgnlOblgrIdr&gt;
+  &lt;/ns0:UndrlygXpsrId&gt;
+  &lt;ns0:UndrlygXpsrData&gt;
+    &lt;ns0:ResdtlRealEsttLn&gt;
+      &lt;ns0:PrfrmgLn&gt;
+        &lt;ns0:UndrlygXpsrCmonData&gt;
+          &lt;ns0:ActvtyDtDtls&gt;
+            &lt;ns0:PoolAddtnDt&gt;
+              &lt;ns0:Dt&gt;2025-01-31&lt;/ns0:Dt&gt;
+            &lt;/ns0:PoolAddtnDt&gt;
+            &lt;ns0:RpDt&gt;
+              &lt;ns0:Dt&gt;2025-01-31&lt;/ns0:Dt&gt;
+            &lt;/ns0:RpDt&gt;
+          &lt;/ns0:ActvtyDtDtls&gt;
+          &lt;ns0:OblgrDtls&gt;
+            &lt;ns0:Resdt&gt;
+              &lt;ns0:Ind&gt;true&lt;/ns0:Ind&gt;
+            &lt;/ns0:Resdt&gt;
+            &lt;ns0:TrtrlUnit&gt;
+              &lt;ns0:Clssfctn&gt;
+                &lt;ns0:Cd&gt;GBZZZ&lt;/ns0:Cd&gt;
+              &lt;/ns0:Clssfctn&gt;
+              &lt;ns0:ClssfctnYr&gt;
+                &lt;ns0:Yr&gt;2026&lt;/ns0:Yr&gt;
+              &lt;/ns0:ClssfctnYr&gt;
+            &lt;/ns0:TrtrlUnit&gt;
+            &lt;ns0:CstmrTp&gt;
+              &lt;ns0:Cd&gt;CNEO&lt;/ns0:Cd&gt;
+            &lt;/ns0:CstmrTp&gt;</pre></details>
   </div>
   <div class='card'>
     <h2>7. Architecture Ownership Model</h2>

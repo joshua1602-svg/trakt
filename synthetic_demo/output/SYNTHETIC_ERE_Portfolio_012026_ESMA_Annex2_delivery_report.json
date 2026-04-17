@@ -1,10 +1,10 @@
 {
-  "input": "/workspace/trakt/synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_projected.csv",
-  "rules": "/workspace/trakt/config/regime/annex2_delivery_rules.yaml",
+  "input": "synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_projected.csv",
+  "rules": "config/regime/annex2_delivery_rules.yaml",
   "outputs": {
-    "delivery_ready": "/workspace/trakt/synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_delivery_ready.csv",
-    "report": "/workspace/trakt/synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_delivery_report.json",
-    "issues": "/workspace/trakt/synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_delivery_issues.csv"
+    "delivery_ready": "synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_delivery_ready.csv",
+    "report": "synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_delivery_report.json",
+    "issues": "synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_delivery_issues.csv"
   },
   "rows_in": 36,
   "rows_out": 36,
