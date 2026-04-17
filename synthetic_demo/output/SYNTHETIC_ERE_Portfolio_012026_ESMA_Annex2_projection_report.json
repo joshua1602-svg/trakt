@@ -51,14 +51,21 @@
     "special_scheme"
   ],
   "enum_mapping": {
-    "transformed_fields": {},
+    "transformed_fields": {
+      "collateral_type": {
+        "rows_transformed": 36,
+        "mapping_applied": true
+      },
+      "interest_rate_type": {
+        "rows_transformed": 36,
+        "mapping_applied": true
+      },
+      "purpose": {
+        "rows_transformed": 7,
+        "mapping_applied": true
+      }
+    },
     "unmapped_values": {
-      "collateral_type": [
-        "manual"
-      ],
-      "interest_rate_type": [
-        "manual"
-      ],
       "amortisation_type": [
         "Interest roll-up"
       ],
@@ -66,84 +73,13 @@
         "manual"
       ],
       "purpose": [
-        "manual"
+        "Home improvements",
+        "Equity release",
+        "Debt Consolidation",
+        "Purchase Main Residence"
       ]
     },
     "enum_review_candidates": {
-      "collateral_type": [
-        {
-          "field_name": "collateral_type",
-          "raw_value": "manual",
-          "suggested_value": null,
-          "confidence": 0.0,
-          "reasoning": "No deterministic mapping",
-          "alternative_value": null,
-          "allowed_values": [
-            "AGRICULTURAL",
-            "APARTMENT",
-            "BUNGALOW",
-            "COMMERCIAL_RESIDENTIAL",
-            "DETACHED",
-            "DEVELOPMENT",
-            "FLAT",
-            "HOUSE",
-            "INDUSTRIAL",
-            "LAND",
-            "MAISONETTE",
-            "MIXED_USE",
-            "OFFICE",
-            "OTHER",
-            "RETAIL",
-            "SEMI_DETACHED",
-            "UNKNOWN",
-            "WAREHOUSE"
-          ],
-          "count": 36,
-          "deterministic_method": "unmapped",
-          "deterministic_confidence": 0.0,
-          "status": "pending",
-          "confirmed_value": null,
-          "reviewer_note": "",
-          "namespace": "global",
-          "regime": "ESMA_Annex2",
-          "sent_to_llm": false
-        }
-      ],
-      "interest_rate_type": [
-        {
-          "field_name": "interest_rate_type",
-          "raw_value": "manual",
-          "suggested_value": null,
-          "confidence": 0.0,
-          "reasoning": "No deterministic mapping",
-          "alternative_value": null,
-          "allowed_values": [
-            "BASE_RATE",
-            "DISCOUNTED",
-            "EURIBOR",
-            "FIX",
-            "FIXED",
-            "FLOATING",
-            "INTRODUCTORY",
-            "LIBOR",
-            "MIXED",
-            "OTHER",
-            "TEASER",
-            "UNKNOWN",
-            "VAR",
-            "VARIABLE"
-          ],
-          "count": 36,
-          "deterministic_method": "unmapped",
-          "deterministic_confidence": 0.0,
-          "status": "pending",
-          "confirmed_value": null,
-          "reviewer_note": "",
-          "namespace": "global",
-          "regime": "ESMA_Annex2",
-          "sent_to_llm": false
-        }
-      ],
       "employment_status": [
         {
           "field_name": "employment_status",
@@ -187,7 +123,7 @@
       "purpose": [
         {
           "field_name": "purpose",
-          "raw_value": "manual",
+          "raw_value": "Home improvements",
           "suggested_value": null,
           "confidence": 0.0,
           "reasoning": "No deterministic mapping",
@@ -206,7 +142,69 @@
             "REFINANCING",
             "UNKNOWN"
           ],
-          "count": 36,
+          "count": 8,
+          "deterministic_method": "unmapped",
+          "deterministic_confidence": 0.0,
+          "status": "pending",
+          "confirmed_value": null,
+          "reviewer_note": "",
+          "namespace": "global",
+          "regime": "ESMA_Annex2",
+          "sent_to_llm": false
+        },
+        {
+          "field_name": "purpose",
+          "raw_value": "Debt Consolidation",
+          "suggested_value": null,
+          "confidence": 0.0,
+          "reasoning": "No deterministic mapping",
+          "alternative_value": null,
+          "allowed_values": [
+            "ACQUISITION",
+            "ACQUISITION_FOR_INVESTMENT",
+            "ACQUISITION_FOR_LIQUIDATION",
+            "CONSTRUCTION",
+            "DEVELOPMENT",
+            "INVESTMENT",
+            "NEW_BUILD",
+            "OTHER",
+            "REDEVELOPMENT",
+            "REFINANCE",
+            "REFINANCING",
+            "UNKNOWN"
+          ],
+          "count": 7,
+          "deterministic_method": "unmapped",
+          "deterministic_confidence": 0.0,
+          "status": "pending",
+          "confirmed_value": null,
+          "reviewer_note": "",
+          "namespace": "global",
+          "regime": "ESMA_Annex2",
+          "sent_to_llm": false
+        },
+        {
+          "field_name": "purpose",
+          "raw_value": "Purchase Main Residence",
+          "suggested_value": null,
+          "confidence": 0.0,
+          "reasoning": "No deterministic mapping",
+          "alternative_value": null,
+          "allowed_values": [
+            "ACQUISITION",
+            "ACQUISITION_FOR_INVESTMENT",
+            "ACQUISITION_FOR_LIQUIDATION",
+            "CONSTRUCTION",
+            "DEVELOPMENT",
+            "INVESTMENT",
+            "NEW_BUILD",
+            "OTHER",
+            "REDEVELOPMENT",
+            "REFINANCE",
+            "REFINANCING",
+            "UNKNOWN"
+          ],
+          "count": 7,
           "deterministic_method": "unmapped",
           "deterministic_confidence": 0.0,
           "status": "pending",
@@ -229,7 +227,7 @@
   },
   "annex2_post_projection": {
     "header_constants_applied": {
-      "RREL1": "SYNTH2026POOL01",
+      "RREL1": "213800ABCDE123456701N202601",
       "RREL6": "2026-01-31"
     },
     "rrec2_backfilled_rows": 0,
@@ -241,6 +239,8 @@
         "distinct_non_blank": 1
       }
     },
+    "rrec9_backfilled_from_collateral_default_rows": 0,
+    "rrec9_backfill_value": "R1",
     "rrel3_backfilled_from_rrel2_rows": 0,
     "rrel5_backfilled_from_rrel4_rows": 0
   },
