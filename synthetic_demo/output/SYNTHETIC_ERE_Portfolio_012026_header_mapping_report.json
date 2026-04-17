@@ -1,9 +1,9 @@
 {
-  "aliases_dir": "/home/user/trakt/synthetic_demo/aliases",
-  "generated_at_utc": "2026-04-17T00:05:45.516241+00:00",
+  "aliases_dir": "/workspace/trakt/synthetic_demo/aliases",
+  "generated_at_utc": "2026-04-17T11:30:06.284547+00:00",
   "hq_recommendations": [],
   "hq_recommendations_count": 0,
-  "input_file": "/home/user/trakt/synthetic_demo/input/SYNTHETIC_ERE_Portfolio_012026.csv",
+  "input_file": "/workspace/trakt/synthetic_demo/input/SYNTHETIC_ERE_Portfolio_012026.csv",
   "mappings": [
     {
       "canonical_field": "underlying_exposure_identifier",
@@ -444,7 +444,7 @@
     "Unique Loan Identifier": "unique_identifier"
   },
   "regimes": [],
-  "registry_path": "/home/user/trakt/config/system/fields_registry.yaml",
+  "registry_path": "/workspace/trakt/config/system/fields_registry.yaml",
   "thresholds": {
     "FUZZ_NORM_THRESHOLD": 92,
     "FUZZ_TOKEN_SET_THRESHOLD": 88,
