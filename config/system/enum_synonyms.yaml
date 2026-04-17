@@ -1,44 +1,62 @@
 purpose:
   manual:
     Home improvement: RENV
+    Home improvements: RENV
     Purchase of main residence: PURC
     Refinance: RMRT
     Refi: RMRT
     Equity Release: EQRE
+    RENV: RENV
+    PURC: PURC
+    RMRT: RMRT
+    EQRE: EQRE
   learned:
     home improv: RENV
     refurb project: RENV
+
 property_type:
   manual:
-    Semi-detached house: Residential (House, detached or semi-detached) (RHOS)
-    Detached house: Residential (House, detached or semi-detached) (RHOS)
-    Flat: Residential (Flat or Apartment) (RFLT)
-    House: Residential (House, detached or semi-detached) (RHOS)
-    Flat: Residential (Flat or Apartment) (RFLT)
-    Bungalow: Residential (Bungalow) (RBGL)
+    Semi-detached house: RHOS
+    Detached house: RHOS
+    House: RHOS
+    Flat: RFLT
+    Bungalow: RBGL
+    RHOS: RHOS
+    RFLT: RFLT
+    RBGL: RBGL
+
 customer_type:
   manual:
     Joint: CNEO
     Individual: CNEO
+    CNEO: CNEO
+
 employment_status:
   manual:
     Retired: PNNR
     Employed: EMUK
-    Self employed: SFEM 
+    Self employed: SFEM
+
 amortisation_type:
   manual:
     Interest roll-up: OTHR
+
 current_valuation_method:
   manual:
     Full survey: FIEI
     automated valuation: AUVM
+
 collateral_type:
   manual:
     residential property: RBLD
+
 interest_rate_type:
   manual:
     Fixed: FXRL
     Variable: FLIF
+    FXRL: FXRL
+    FLIF: FLIF
+
 original_valuation_method:
   manual:
     Full survey: FIEI

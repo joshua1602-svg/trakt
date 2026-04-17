@@ -20,6 +20,38 @@ import numpy as np
 OUT_DIR = Path("out_validation")
 OUT_DIR.mkdir(exist_ok=True)
 
+DATE_RULE_COLUMNS = {
+    "origination_date",
+    "reporting_date",
+    "maturity_date",
+    "default_date",
+    "current_valuation_date",
+    "securitisation_date",
+    "repossession_date",
+}
+
+NUMERIC_RULE_COLUMNS = {
+    "current_principal_balance",
+    "arrears_balance",
+    "current_loan_to_value",
+    "current_valuation_amount",
+    "collateral_value",
+    "number_of_days_in_principal_arrears",
+    "days_past_due",
+    "allocated_losses",
+    "default_amount",
+    "cumulative_recoveries",
+    "current_interest_rate",
+    "annual_turnover_of_obligor",
+    "number_of_employees",
+    "rent_payable",
+    "recovery_amount",
+    "residual_value",
+    "original_asset_value",
+    "borrower_1_age",
+    "allocated_percentage",
+}
+
 
 def _resolve_default_regime(config: dict) -> str | None:
     """Resolve client default regime with legacy compatibility."""
@@ -76,6 +108,28 @@ def _dat101_test(df: pd.DataFrame) -> pd.Series:
 
     ok = (~is_active) | mat.isna() | rep.isna() | (mat >= rep)
     return ok.fillna(True).astype(bool)
+
+
+def _coerce_types_for_rules(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Coerce known rule columns to stable dtypes before rule evaluation.
+    Prevents Python type exceptions when mixed string/float values appear in CSV input.
+    """
+    out = df.copy()
+
+    for col in DATE_RULE_COLUMNS:
+        if col in out.columns:
+            out[col] = pd.to_datetime(out[col], errors="coerce")
+
+    for col in NUMERIC_RULE_COLUMNS:
+        if col in out.columns:
+            out[col] = pd.to_numeric(out[col], errors="coerce")
+
+    for col in ("account_status", "interest_rate_type", "reference_rate_index"):
+        if col in out.columns:
+            out[col] = out[col].astype("string").str.strip()
+
+    return out
 
 
 # ==================================================================
@@ -684,7 +738,8 @@ def main():
             df['currency'] = df['loan_denomination_currency']
 
 
-    violations_df = run_rules(df, regime)
+    typed_df = _coerce_types_for_rules(df)
+    violations_df = run_rules(typed_df, regime)
 
     # Build output path
     # e.g. myfile_ESMA_Annex2_typed.csv -> myfile_ESMA_Annex2_business_rules_violations.csv
@@ -705,6 +760,7 @@ def main():
         print("Top failing rules:")
         print(violations_df["rule_id"].value_counts().head(10))
     else:
+        violations_df.to_csv(out_path, index=False)
         print("✓ All business rules passed!")
 
 if __name__ == "__main__":

@@ -1,12 +1,12 @@
 {
   "summary": {
-    "total_fields_affected": 5,
-    "blocking_count": 5,
+    "total_fields_affected": 2,
+    "blocking_count": 2,
     "review_count": 0,
     "info_count": 0
   },
   "metadata": {
-    "generated_at": "2026-04-17T00:05:51.458755",
+    "generated_at": "2026-04-17T12:07:47.600047",
     "policy_version": "1.0"
   }
 }

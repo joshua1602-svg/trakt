@@ -173,7 +173,17 @@ def load_enum_library(config_dir: Path = None) -> dict:
     for lib in libs:
         for enum_name, mapping in (lib or {}).items():
             merged.setdefault(enum_name, {})
-            if isinstance(mapping, dict):
+            if not isinstance(mapping, dict):
+                continue
+            # Support both flat schema and layered schema:
+            # enum_name: { canonical: [synonyms] }
+            # enum_name: { manual: {...}, learned: {...} }
+            layered = [mapping.get("manual"), mapping.get("learned")]
+            if any(isinstance(x, dict) for x in layered):
+                for block in layered:
+                    if isinstance(block, dict):
+                        merged[enum_name].update(block)
+            else:
                 merged[enum_name].update(mapping)
     return merged
 
@@ -192,13 +202,20 @@ def validate_enums(df: pd.DataFrame, fields_meta: dict, enum_lib: dict, allow_nd
             continue
 
         allowed = set()
+        allowed_ci = set()
         for canon, syns in enum_map.items():
-            allowed.add(str(canon).strip())
+            canon_s = str(canon).strip()
+            allowed.add(canon_s)
+            allowed_ci.add(canon_s.lower())
             if isinstance(syns, list):
                 for s in syns:
-                    allowed.add(str(s).strip())
+                    syn_s = str(s).strip()
+                    allowed.add(syn_s)
+                    allowed_ci.add(syn_s.lower())
             elif isinstance(syns, str):
-                allowed.add(str(syns).strip())
+                syn_s = str(syns).strip()
+                allowed.add(syn_s)
+                allowed_ci.add(syn_s.lower())
 
         s = df[col]
         for idx, val in s.items():
@@ -209,7 +226,7 @@ def validate_enums(df: pd.DataFrame, fields_meta: dict, enum_lib: dict, allow_nd
             v = str(val).strip()
             if v == "":
                 continue
-            if v not in allowed:
+            if v not in allowed and v.lower() not in allowed_ci:
                 add_violation(
                     vs, "ENUM_INVALID", "warn", col, int(idx),
                     f"Value '{v}' is not in allowed enum set '{enum_name}'."
