@@ -394,14 +394,6 @@
       "parse_failures": 0,
       "sample_failures": []
     },
-    "postcode": {
-      "format": "string",
-      "nulls_before": 0,
-      "nulls_after": 0,
-      "nd_stripped": 0,
-      "parse_failures": 0,
-      "sample_failures": []
-    },
     "prepayment_fee": {
       "format": "decimal",
       "nulls_before": 0,
@@ -412,6 +404,14 @@
     },
     "principal_grace_period_end_date": {
       "format": "date",
+      "nulls_before": 0,
+      "nulls_after": 0,
+      "nd_stripped": 0,
+      "parse_failures": 0,
+      "sample_failures": []
+    },
+    "property_post_code": {
+      "format": "string",
       "nulls_before": 0,
       "nulls_after": 0,
       "nd_stripped": 0,

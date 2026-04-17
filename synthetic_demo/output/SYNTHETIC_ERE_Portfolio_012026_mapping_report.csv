@@ -16,7 +16,7 @@ Current Loan To Value,current_loan_to_value,normalized,1.0
 Current Valuation Amount,current_valuation_amount,normalized,1.0
 Current Valuation Date,current_valuation_date,normalized,1.0
 Current Valuation Method,current_valuation_method,normalized,1.0
-Post Code,postcode,alias,1.0
+Post Code,property_post_code,alias,1.0
 Region ,geographic_region_classification,alias,1.0
 Property Type ,property_type,normalized,1.0
 tenure,,unmapped,0.0
