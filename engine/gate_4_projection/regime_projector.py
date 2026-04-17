@@ -249,6 +249,7 @@ def apply_enum_mappings(
     regime: str,
     namespace: str = "global",
     allow_unreviewed: bool = False,
+    strict_fields: Optional[set[str]] = None,
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """
     Convert canonical enum values to regime-specific codes using enum_mapping.yaml.
@@ -267,6 +268,8 @@ def apply_enum_mappings(
         logging.warning(f"No enum mappings found for regime '{regime}' in enum_mapping.yaml")
         return df, report
     
+    strict_fields = strict_fields or set()
+
     for col in df.columns:
         # Check if field has allowed_values (enum) in registry
         field_meta = registry.get("fields", {}).get(col, {})
@@ -317,6 +320,10 @@ def apply_enum_mappings(
             logging.warning(
                 f"Field '{col}': {len(unmapped_values)} unmapped values: {unmapped_values[:5]}"
             )
+            if col in strict_fields:
+                raise ValueError(
+                    f"Field '{col}' has unmapped enum values in strict Annex2 mode: {unmapped_values[:10]}"
+                )
         
         # Update dataframe
         df[col] = mapped.where(mapped.notna(), original)  # Keep original if no mapping
@@ -754,6 +761,7 @@ def project_to_regime(
     regime_df = regime_df[[f for f, _ in fields_list if f in regime_df.columns]]
     
     # Step 4: Apply enum mappings
+    strict_enum_fields = {"property_type", "purpose", "interest_rate_type"} if regime == "ESMA_Annex2" else set()
     regime_df, enum_report = apply_enum_mappings(
         regime_df,
         registry,
@@ -761,6 +769,7 @@ def project_to_regime(
         regime,
         namespace=namespace,
         allow_unreviewed=allow_unreviewed,
+        strict_fields=strict_enum_fields,
     )
     report["enum_mapping"] = enum_report
     
