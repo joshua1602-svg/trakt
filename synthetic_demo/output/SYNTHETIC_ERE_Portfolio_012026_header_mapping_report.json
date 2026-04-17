@@ -1,6 +1,6 @@
 {
   "aliases_dir": "/workspace/trakt/synthetic_demo/aliases",
-  "generated_at_utc": "2026-04-17T10:03:49.114945+00:00",
+  "generated_at_utc": "2026-04-17T10:37:02.218498+00:00",
   "hq_recommendations": [],
   "hq_recommendations_count": 0,
   "input_file": "/workspace/trakt/synthetic_demo/input/SYNTHETIC_ERE_Portfolio_012026.csv",
@@ -108,7 +108,7 @@
       "raw_header": "Current Valuation Method"
     },
     {
-      "canonical_field": "postcode",
+      "canonical_field": "property_post_code",
       "confidence": 1.0,
       "mapping_method": "alias",
       "raw_header": "Post Code"
@@ -428,7 +428,7 @@
     "Origination Dt": "origination_date",
     "Payment Due": "payment_due",
     "Pool Addition Date": "pool_addition_date",
-    "Post Code": "postcode",
+    "Post Code": "property_post_code",
     "Prepayment Fee": "prepayment_fee",
     "Principal Grace Period End Date": "principal_grace_period_end_date",
     "Property Type ": "property_type",

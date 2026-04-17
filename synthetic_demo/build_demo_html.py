@@ -23,7 +23,8 @@ UNMAPPED      = ROOT / "output/SYNTHETIC_ERE_Portfolio_012026_unmapped_headers.c
 FIELD_SUMMARY = ROOT / "output/validation/SYNTHETIC_ERE_Portfolio_012026_field_summary.csv"
 BIZ_VIOLATIONS = ROOT / "output/validation/SYNTHETIC_ERE_Portfolio_012026_business_rules_violations.csv"
 XML_PATH      = ROOT / "output/SYNTHETIC_012026_annex2.xml"
-OUT_HTML      = ROOT / "demo_overview_v2.html"
+OUT_HTML_V2   = ROOT / "demo_overview_v2.html"
+OUT_HTML_V3   = ROOT / "demo_overview_v3.html"
 
 NS = {"e": "urn:esma:xsd:DRAFT1auth.099.001.04"}
 
@@ -403,5 +404,7 @@ html = f"""<!DOCTYPE html>
 </body>
 </html>"""
 
-OUT_HTML.write_text(html, encoding="utf-8")
-print(f"Written {OUT_HTML}  ({OUT_HTML.stat().st_size / 1024:.1f} KB)")
+OUT_HTML_V2.write_text(html, encoding="utf-8")
+OUT_HTML_V3.write_text(html, encoding="utf-8")
+print(f"Written {OUT_HTML_V2}  ({OUT_HTML_V2.stat().st_size / 1024:.1f} KB)")
+print(f"Written {OUT_HTML_V3}  ({OUT_HTML_V3.stat().st_size / 1024:.1f} KB)")
