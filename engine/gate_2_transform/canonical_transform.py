@@ -31,6 +31,54 @@ import yaml
 
 
 ND_PATTERN = re.compile(r"^ND\d+$", re.IGNORECASE)
+MULTISPACE = re.compile(r"\s+")
+
+DEFAULT_CANONICAL_ENUM_NORMALIZATION: Dict[str, Dict[str, str]] = {
+    "property_type": {
+        "detached house": "RHOS",
+        "detached": "RHOS",
+        "house": "RHOS",
+        "semi detached": "RHOS",
+        "semi-detached": "RHOS",
+        "semi detached house": "RHOS",
+        "semi-detached house": "RHOS",
+        "flat": "RFLT",
+        "flat / apartment": "RFLT",
+        "apartment": "RFLT",
+        "bungalow": "RBGL",
+        "rhos": "RHOS",
+        "rflt": "RFLT",
+        "rbgl": "RBGL",
+    },
+    "purpose": {
+        "home improvements": "RENV",
+        "home improvement": "RENV",
+        "refinance": "RMRT",
+        "refi": "RMRT",
+        "debt consolidation": "RMRT",
+        "purchase main residence": "PURC",
+        "purchase of main residence": "PURC",
+        "equity release": "EQRE",
+        "renv": "RENV",
+        "rmrt": "RMRT",
+        "purc": "PURC",
+        "eqre": "EQRE",
+    },
+    "interest_rate_type": {
+        "fixed": "FXRL",
+        "fixed rate": "FXRL",
+        "fxrl": "FXRL",
+        "variable": "FLIF",
+        "variable rate": "FLIF",
+        "floating": "FLIF",
+        "flif": "FLIF",
+    },
+    "customer_type": {
+        "individual": "CNEO",
+        "joint": "CNEO",
+        "cneo": "CNEO",
+    },
+}
 
 
 def load_registry(path: Path) -> dict:
@@ -100,6 +148,81 @@ def _strip_nd(series: pd.Series) -> pd.Series:
     if series.dtype == object:
         return series.where(~series.astype(str).str.match(ND_PATTERN), other=pd.NA)
     return series
+
+
+def _normalise_key(value: Any) -> str:
+    s = str(value or "").strip().lower()
+    return MULTISPACE.sub(" ", s)
+
+
+def resolve_canonical_enum_normalization(config: dict) -> Dict[str, Dict[str, str]]:
+    """
+    Resolve canonical enum normalization map.
+
+    Priority:
+    1) transformations.canonical_enum_normalization in client config
+    2) defaults defined in DEFAULT_CANONICAL_ENUM_NORMALIZATION
+    """
+    cfg_map = (
+        (config.get("transformations") or {}).get("canonical_enum_normalization")
+        if isinstance(config, dict) else None
+    ) or {}
+
+    merged: Dict[str, Dict[str, str]] = {}
+    for field, mapping in DEFAULT_CANONICAL_ENUM_NORMALIZATION.items():
+        merged[field] = {_normalise_key(k): str(v).strip() for k, v in mapping.items()}
+
+    for field, mapping in (cfg_map or {}).items():
+        if not isinstance(mapping, dict):
+            continue
+        f = str(field).strip()
+        merged.setdefault(f, {})
+        for raw_val, target in mapping.items():
+            merged[f][_normalise_key(raw_val)] = str(target).strip()
+
+    return merged
+
+
+def apply_canonical_enum_normalization(
+    df: pd.DataFrame,
+    normalization_map: Dict[str, Dict[str, str]],
+) -> Dict[str, Any]:
+    """
+    Deterministically normalize canonical enum strings for internal consistency.
+    This is NOT ESMA code mapping.
+    """
+    report: Dict[str, Any] = {"canonical_enum_normalization": {"fields": {}}}
+    if not normalization_map:
+        return report
+
+    for field, mapping in normalization_map.items():
+        if field not in df.columns or not isinstance(mapping, dict) or not mapping:
+            continue
+
+        s = df[field].astype("string")
+        non_blank = s.notna() & (s.str.strip() != "")
+        changed = 0
+        unmapped_samples = []
+
+        for idx in df.index[non_blank]:
+            raw = s.at[idx]
+            key = _normalise_key(raw)
+            if key in mapping:
+                target = mapping[key]
+                if str(raw).strip() != target:
+                    df.at[idx, field] = target
+                    changed += 1
+            else:
+                if len(unmapped_samples) < 5:
+                    unmapped_samples.append(str(raw).strip())
+
+        report["canonical_enum_normalization"]["fields"][field] = {
+            "rows_considered": int(non_blank.sum()),
+            "rows_changed": int(changed),
+            "unmapped_examples": sorted(list(dict.fromkeys(unmapped_samples))),
+        }
+
+    return report
 
 
 def to_iso_date(series: pd.Series, dayfirst: bool = True) -> pd.Series:
@@ -555,7 +678,13 @@ def main() -> None:
         deriv_report = derive_fields(df, args.portfolio_type, in_path.name, DAYFIRST, 
                                    INFER_YEAR, DERIVE_MONTH, DEFAULT_YEAR, config)
 
-    # 5. Defaults
+    # 5. Canonical enum normalization (internal standardization; not regime mapping)
+    enum_norm_report = apply_canonical_enum_normalization(
+        df,
+        resolve_canonical_enum_normalization(config),
+    )
+
+    # 6. Defaults
     defaults_report = apply_config_defaults(df, config)
 
     # Output
@@ -571,6 +700,7 @@ def main() -> None:
         **type_report, 
         **nuts_report, 
         **deriv_report, 
+        **enum_norm_report,
         **defaults_report
     }
     

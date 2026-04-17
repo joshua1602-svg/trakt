@@ -1,2 +1,1 @@
 rule_id,severity,description,message,row_index
-DAT003,error,"Rule execution failed: If default_date is populated, it must be ≥ origination_date.",Exception: '>=' not supported between instances of 'float' and 'str',-1
