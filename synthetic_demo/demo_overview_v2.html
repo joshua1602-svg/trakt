@@ -54,7 +54,7 @@ code{font-family:monospace;background:#eef1f8;padding:1px 4px;border-radius:3px;
 
   <div class='card'>
     <h2>1. Pipeline Gate-by-Gate Execution</h2>
-    <table><thead><tr><th>Gate</th><th>Output</th><th>Detail</th><th>Status</th></tr></thead><tbody><tr><td>Gate 1 — Semantic Alignment</td><td>62 headers mapped</td><td>1 unmapped (tenure)</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 2 — Canonical Transform</td><td>36 rows → canonical_typed.csv</td><td>origination_date NaN: 0; current_principal_balance NaN: 0</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 3 — Validation</td><td>145 schema violations; 1 business rule error</td><td>ENUM_INVALID: customer_type, interest_rate_type, property_type, purpose</td><td><span class='badge' style='background:#fff3cd;color:#856404'>WARN</span></td></tr><tr><td>Gate 4 — ESMA Projection</td><td>36 rows projected to RREL/RREC codes</td><td>ESMA_Annex2 regime</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 4b — Delivery Preflight</td><td>108 blocking enum issues</td><td>108 enum code-mapping errors (property_type, interest_rate_type, purpose)</td><td><span class='badge' style='background:#f8d7da;color:#721c24'>FAIL</span></td></tr><tr><td>Gate 5 — XML Builder</td><td>SYNTHETIC_012026_annex2.xml  (627.2 KB)</td><td>36 UndrlygXpsrRcrd elements; XSD validation failed (enum values)</td><td><span class='badge' style='background:#fff3cd;color:#856404'>PARTIAL</span></td></tr></tbody></table>
+    <table><thead><tr><th>Gate</th><th>Output</th><th>Detail</th><th>Status</th></tr></thead><tbody><tr><td>Gate 1 — Semantic Alignment</td><td>62 headers mapped</td><td>1 unmapped (tenure)</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 2 — Canonical Transform</td><td>36 rows → canonical_typed.csv</td><td>origination_date NaN: 0; current_principal_balance NaN: 0</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 3 — Validation</td><td>145 schema violations; 1 business rule error</td><td>ENUM_INVALID: customer_type, interest_rate_type, property_type, purpose</td><td><span class='badge' style='background:#fff3cd;color:#856404'>WARN</span></td></tr><tr><td>Gate 4 — ESMA Projection</td><td>36 rows projected to RREL/RREC codes</td><td>ESMA_Annex2 regime</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 4b — Delivery Preflight</td><td>0 blocking enum issues</td><td>No blocking enum/code mapping errors</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 5 — XML Builder</td><td>SYNTHETIC_012026_annex2.xml  (626.6 KB)</td><td>36 UndrlygXpsrRcrd elements; XSD validation passed</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr></tbody></table>
   </div>
   <div class='card'>
     <h2>2. Raw → Canonical Transformation</h2>
@@ -98,12 +98,12 @@ code{font-family:monospace;background:#eef1f8;padding:1px 4px;border-radius:3px;
           <div class='bar-val'>5</div>
         </div>
         <div class='bar-row'>
-          <div class='bar-label'>South East</div>
+          <div class='bar-label'>East of England</div>
           <div class='bar-track'><div class='bar-fill' style='width:100.0%'></div></div>
           <div class='bar-val'>5</div>
         </div>
         <div class='bar-row'>
-          <div class='bar-label'>East of England</div>
+          <div class='bar-label'>South East</div>
           <div class='bar-track'><div class='bar-fill' style='width:100.0%'></div></div>
           <div class='bar-val'>5</div>
         </div>
@@ -113,12 +113,12 @@ code{font-family:monospace;background:#eef1f8;padding:1px 4px;border-radius:3px;
           <div class='bar-val'>4</div>
         </div>
         <div class='bar-row'>
-          <div class='bar-label'>Wales</div>
+          <div class='bar-label'>North West</div>
           <div class='bar-track'><div class='bar-fill' style='width:60.0%'></div></div>
           <div class='bar-val'>3</div>
         </div>
         <div class='bar-row'>
-          <div class='bar-label'>North West</div>
+          <div class='bar-label'>Wales</div>
           <div class='bar-track'><div class='bar-fill' style='width:60.0%'></div></div>
           <div class='bar-val'>3</div>
         </div>
@@ -173,7 +173,7 @@ code{font-family:monospace;background:#eef1f8;padding:1px 4px;border-radius:3px;
           <div class='bar-val'>8</div>
         </div>
         <div class='bar-row'>
-          <div class='bar-label'>Refinance </div>
+          <div class='bar-label'>Refinance</div>
           <div class='bar-track'><div class='bar-fill' style='width:87.5%'></div></div>
           <div class='bar-val'>7</div>
         </div>
@@ -195,19 +195,15 @@ code{font-family:monospace;background:#eef1f8;padding:1px 4px;border-radius:3px;
   </div>
   <div class='card'>
     <h2>5. ESMA Annex 2 XML Snapshot</h2>
-    <p class='meta'>Namespace: <code>urn:esma:xsd:DRAFT1auth.099.001.04</code> &nbsp;·&nbsp; Records: <strong>36</strong> &nbsp;·&nbsp; File: <code>SYNTHETIC_012026_annex2.xml</code> (627.2&nbsp;KB)</p><table><caption>First 6 UndrlygXpsrRcrd elements</caption><thead><tr><th>Loan ID</th><th>Orig Date</th><th>Cur Balance</th><th>Rate %</th><th>Prop Value</th><th>LTV %</th><th>Region Cd</th></tr></thead><tbody><tr><td>DEMO-0001</td><td>2025-06-07</td><td>177334.06</td><td>7.108</td><td>468000</td><td>37.8919</td><td>GBZZZ</td></tr><tr><td>DEMO-0002</td><td>2024-02-26</td><td>171008.53</td><td>8.719</td><td>359000</td><td>47.6347</td><td>GBZZZ</td></tr><tr><td>DEMO-0003</td><td>2025-04-26</td><td>79698.36</td><td>8.014</td><td>234000</td><td>34.0591</td><td>GBZZZ</td></tr><tr><td>DEMO-0004</td><td>2025-11-15</td><td>196804.85</td><td>8.213</td><td>392000</td><td>50.2053</td><td>GBZZZ</td></tr><tr><td>DEMO-0005</td><td>2025-01-15</td><td>259110.87</td><td>6.867</td><td>499000</td><td>51.9260</td><td>GBZZZ</td></tr><tr><td>DEMO-0006</td><td>2025-07-22</td><td>175963.41</td><td>6.441</td><td>323000</td><td>54.4778</td><td>GBZZZ</td></tr></tbody></table>
+    <p class='meta'>Namespace: <code>urn:esma:xsd:DRAFT1auth.099.001.04</code> &nbsp;·&nbsp; Records: <strong>36</strong> &nbsp;·&nbsp; File: <code>SYNTHETIC_012026_annex2.xml</code> (626.6&nbsp;KB)</p><table><caption>First 6 UndrlygXpsrRcrd elements</caption><thead><tr><th>Loan ID</th><th>Orig Date</th><th>Cur Balance</th><th>Rate %</th><th>Prop Value</th><th>LTV %</th><th>Region Cd</th></tr></thead><tbody><tr><td>DEMO-0001</td><td>2025-06-07</td><td>177334.06</td><td>7.108</td><td>468000</td><td>37.8919</td><td>GBZZZ</td></tr><tr><td>DEMO-0002</td><td>2024-02-26</td><td>171008.53</td><td>8.719</td><td>359000</td><td>47.6347</td><td>GBZZZ</td></tr><tr><td>DEMO-0003</td><td>2025-04-26</td><td>79698.36</td><td>8.014</td><td>234000</td><td>34.0591</td><td>GBZZZ</td></tr><tr><td>DEMO-0004</td><td>2025-11-15</td><td>196804.85</td><td>8.213</td><td>392000</td><td>50.2053</td><td>GBZZZ</td></tr><tr><td>DEMO-0005</td><td>2025-01-15</td><td>259110.87</td><td>6.867</td><td>499000</td><td>51.9260</td><td>GBZZZ</td></tr><tr><td>DEMO-0006</td><td>2025-07-22</td><td>175963.41</td><td>6.441</td><td>323000</td><td>54.4778</td><td>GBZZZ</td></tr></tbody></table>
   </div>
   <div class='card'>
     <h2>6. Delivery Gate 4b Status</h2>
-    <table><caption>Gate 4b delivery preflight</caption><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody><tr><td>Rows in</td><td>36</td></tr><tr><td>Rows out</td><td>36</td></tr><tr><td>Total issues</td><td>108</td></tr><tr><td>Blocking errors</td><td>108</td></tr><tr><td>Issue category</td><td>enum / code mapping</td></tr><tr><td>Preflight status</td><td><span class='badge' style='background:#f8d7da;color:#721c24'>FAIL</span></td></tr></tbody></table>
-    <div class='callout warn'>
-      <strong>Root cause:</strong> ESMA enum codes for <code>property_type</code>,
-      <code>interest_rate_type</code>, and <code>purpose</code> were not normalised
-      before projection. The delivery normaliser requires ESMA-standard codes
-      (e.g. <code>RHOS</code> for residential house, <code>FXPR</code> for fixed rate).
-      The enum_mapping.yaml was not updated for this portfolio, causing 108 blocking
-      enum errors. XML was still generated by Gate 5 with the raw values.
-    </div>
+    <table><caption>Gate 4b delivery preflight</caption><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody><tr><td>Rows in</td><td>36</td></tr><tr><td>Rows out</td><td>36</td></tr><tr><td>Total issues</td><td>0</td></tr><tr><td>Blocking errors</td><td>0</td></tr><tr><td>Issue category</td><td>—</td></tr><tr><td>Preflight status</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr></tbody></table>
+        <div class='callout' style='background:#edf7ee;border-left:4px solid #1f8f4a;color:#1f4f2f'>
+          <strong>Status:</strong> Delivery preflight passed. Annex 2 enum/code normalization
+          was resolved before XML delivery build.
+        </div>
   </div>
   <div class='card'>
     <h2>7. Architecture Summary</h2>
