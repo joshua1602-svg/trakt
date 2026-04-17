@@ -55,14 +55,6 @@
       "collateral_type": {
         "rows_transformed": 36,
         "mapping_applied": true
-      },
-      "interest_rate_type": {
-        "rows_transformed": 36,
-        "mapping_applied": true
-      },
-      "purpose": {
-        "rows_transformed": 7,
-        "mapping_applied": true
       }
     },
     "unmapped_values": {
@@ -71,12 +63,6 @@
       ],
       "employment_status": [
         "manual"
-      ],
-      "purpose": [
-        "Home improvements",
-        "Equity release",
-        "Debt Consolidation",
-        "Purchase Main Residence"
       ]
     },
     "enum_review_candidates": {
@@ -110,101 +96,6 @@
             "UNKNOWN"
           ],
           "count": 36,
-          "deterministic_method": "unmapped",
-          "deterministic_confidence": 0.0,
-          "status": "pending",
-          "confirmed_value": null,
-          "reviewer_note": "",
-          "namespace": "global",
-          "regime": "ESMA_Annex2",
-          "sent_to_llm": false
-        }
-      ],
-      "purpose": [
-        {
-          "field_name": "purpose",
-          "raw_value": "Home improvements",
-          "suggested_value": null,
-          "confidence": 0.0,
-          "reasoning": "No deterministic mapping",
-          "alternative_value": null,
-          "allowed_values": [
-            "ACQUISITION",
-            "ACQUISITION_FOR_INVESTMENT",
-            "ACQUISITION_FOR_LIQUIDATION",
-            "CONSTRUCTION",
-            "DEVELOPMENT",
-            "INVESTMENT",
-            "NEW_BUILD",
-            "OTHER",
-            "REDEVELOPMENT",
-            "REFINANCE",
-            "REFINANCING",
-            "UNKNOWN"
-          ],
-          "count": 8,
-          "deterministic_method": "unmapped",
-          "deterministic_confidence": 0.0,
-          "status": "pending",
-          "confirmed_value": null,
-          "reviewer_note": "",
-          "namespace": "global",
-          "regime": "ESMA_Annex2",
-          "sent_to_llm": false
-        },
-        {
-          "field_name": "purpose",
-          "raw_value": "Debt Consolidation",
-          "suggested_value": null,
-          "confidence": 0.0,
-          "reasoning": "No deterministic mapping",
-          "alternative_value": null,
-          "allowed_values": [
-            "ACQUISITION",
-            "ACQUISITION_FOR_INVESTMENT",
-            "ACQUISITION_FOR_LIQUIDATION",
-            "CONSTRUCTION",
-            "DEVELOPMENT",
-            "INVESTMENT",
-            "NEW_BUILD",
-            "OTHER",
-            "REDEVELOPMENT",
-            "REFINANCE",
-            "REFINANCING",
-            "UNKNOWN"
-          ],
-          "count": 7,
-          "deterministic_method": "unmapped",
-          "deterministic_confidence": 0.0,
-          "status": "pending",
-          "confirmed_value": null,
-          "reviewer_note": "",
-          "namespace": "global",
-          "regime": "ESMA_Annex2",
-          "sent_to_llm": false
-        },
-        {
-          "field_name": "purpose",
-          "raw_value": "Purchase Main Residence",
-          "suggested_value": null,
-          "confidence": 0.0,
-          "reasoning": "No deterministic mapping",
-          "alternative_value": null,
-          "allowed_values": [
-            "ACQUISITION",
-            "ACQUISITION_FOR_INVESTMENT",
-            "ACQUISITION_FOR_LIQUIDATION",
-            "CONSTRUCTION",
-            "DEVELOPMENT",
-            "INVESTMENT",
-            "NEW_BUILD",
-            "OTHER",
-            "REDEVELOPMENT",
-            "REFINANCE",
-            "REFINANCING",
-            "UNKNOWN"
-          ],
-          "count": 7,
           "deterministic_method": "unmapped",
           "deterministic_confidence": 0.0,
           "status": "pending",

@@ -1,23 +1,19 @@
 {
-  "input": "/home/user/trakt/synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_projected.csv",
-  "rules": "/home/user/trakt/config/regime/annex2_delivery_rules.yaml",
+  "input": "/workspace/trakt/synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_projected.csv",
+  "rules": "/workspace/trakt/config/regime/annex2_delivery_rules.yaml",
   "outputs": {
-    "delivery_ready": "/home/user/trakt/synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_delivery_ready.csv",
-    "report": "/home/user/trakt/synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_delivery_report.json",
-    "issues": "/home/user/trakt/synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_delivery_issues.csv"
+    "delivery_ready": "/workspace/trakt/synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_delivery_ready.csv",
+    "report": "/workspace/trakt/synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_delivery_report.json",
+    "issues": "/workspace/trakt/synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_delivery_issues.csv"
   },
   "rows_in": 36,
   "rows_out": 36,
-  "issues_total": 108,
-  "errors_total": 108,
-  "issue_breakdown": {
-    "enum": 108
-  },
-  "issue_category_breakdown": {
-    "enum / code mapping": 108
-  },
+  "issues_total": 0,
+  "errors_total": 0,
+  "issue_breakdown": {},
+  "issue_category_breakdown": {},
   "preflight": {
-    "status": "FAIL",
-    "blocking_errors": 108
+    "status": "PASS",
+    "blocking_errors": 0
   }
 }
