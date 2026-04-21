@@ -1,6 +1,6 @@
 """Utilities for normalizing weekly pipeline snapshot files.
 
-Design notes for first-pass implementation:
+Design notes:
 - Treat source files as snapshot truth (not event logs).
 - Preserve raw stage values and map into a canonical stage taxonomy.
 - Build a synthetic immutable opportunity key for cross-week tracking.
@@ -16,6 +16,8 @@ import hashlib
 from typing import Optional
 
 import pandas as pd
+
+from analytics.portfolio_semantics import normalize_region_labels, region_codes_from_labels, safe_ltv_percent
 
 
 CANONICAL_STAGE_ORDER = ["KFI", "APPLICATION", "OFFER", "COMPLETED", "WITHDRAWN", "OTHER"]
@@ -62,14 +64,19 @@ def _map_stage(raw_status: pd.Series) -> pd.Series:
     return mapped
 
 
-def _choose_snapshot_date(df: pd.DataFrame, configured_snapshot_date: Optional[str]) -> pd.Timestamp:
+def _choose_snapshot_date(df: pd.DataFrame, configured_snapshot_date: Optional[str]) -> pd.Series:
     if configured_snapshot_date:
         ts = pd.to_datetime(configured_snapshot_date, errors="coerce")
         if pd.notna(ts):
-            return pd.Timestamp(ts).normalize()
+            return pd.Series(pd.Timestamp(ts).normalize(), index=df.index, dtype="datetime64[ns]")
 
-    # Snapshot inference is explicit and conservative: choose latest known
-    # milestone date in the file when available; otherwise today's date.
+    if "snapshot_date" in df.columns:
+        parsed = pd.to_datetime(df["snapshot_date"], errors="coerce")
+        if parsed.notna().any():
+            fallback = parsed.dropna().max().normalize()
+            parsed = parsed.fillna(fallback)
+            return parsed.dt.normalize()
+
     date_candidates = [
         "kfi_submitted_date",
         "application_submitted_date",
@@ -81,21 +88,13 @@ def _choose_snapshot_date(df: pd.DataFrame, configured_snapshot_date: Optional[s
     if available:
         max_date = pd.to_datetime(df[available].stack(), errors="coerce").max()
         if pd.notna(max_date):
-            return pd.Timestamp(max_date).normalize()
+            return pd.Series(pd.Timestamp(max_date).normalize(), index=df.index, dtype="datetime64[ns]")
 
-    return pd.Timestamp(date.today())
+    return pd.Series(pd.Timestamp(date.today()), index=df.index, dtype="datetime64[ns]")
 
 
 def _synthetic_opportunity_key(df: pd.DataFrame) -> pd.Series:
-    """Build deterministic key for pipeline opportunity rows.
-
-    Preference order in composite seed:
-      - KFI Number
-      - Account Number
-      - Broker + Product + Loan Amount + Application Submitted Date
-
-    This is intentionally deterministic and transparent for first-pass use.
-    """
+    """Build deterministic key for pipeline opportunity rows."""
 
     kfi = _clean_text(df.get("kfi_number", pd.Series("", index=df.index)))
     acc = _clean_text(df.get("account_number", pd.Series("", index=df.index)))
@@ -109,19 +108,42 @@ def _synthetic_opportunity_key(df: pd.DataFrame) -> pd.Series:
     )
 
     seeds = (
-        "KFI=" + kfi +
-        "|ACC=" + acc +
-        "|BROKER=" + broker +
-        "|PROD=" + product +
-        "|AMT=" + amt.round(2).astype(str) +
-        "|APP_DT=" + app_dt
+        "KFI=" + kfi
+        + "|ACC=" + acc
+        + "|BROKER=" + broker
+        + "|PROD=" + product
+        + "|AMT=" + amt.round(2).astype(str)
+        + "|APP_DT=" + app_dt
     )
 
     return seeds.apply(lambda x: hashlib.sha1(x.encode("utf-8")).hexdigest())
 
 
+def _derive_stage_date(out: pd.DataFrame) -> pd.Series:
+    stage = out["stage"].astype("string")
+    stage_date = pd.Series(pd.NaT, index=out.index, dtype="datetime64[ns]")
+
+    stage_date.loc[stage.eq("KFI")] = out.get("kfi_submitted_date")
+    stage_date.loc[stage.eq("APPLICATION")] = out.get("application_submitted_date")
+    stage_date.loc[stage.eq("OFFER")] = out.get("offer_date")
+    stage_date.loc[stage.eq("COMPLETED")] = out.get("date_funds_released")
+
+    with_fallback = stage_date.isna()
+    if with_fallback.any():
+        fallback_cols = [
+            c
+            for c in ["date_funds_released", "offer_date", "application_submitted_date", "kfi_submitted_date"]
+            if c in out.columns
+        ]
+        if fallback_cols:
+            stage_date.loc[with_fallback] = out.loc[with_fallback, fallback_cols].bfill(axis=1).iloc[:, 0]
+
+    return pd.to_datetime(stage_date, errors="coerce")
+
+
+
 def normalize_pipeline_snapshot(raw_df: pd.DataFrame, config: Optional[PipelinePrepConfig] = None) -> pd.DataFrame:
-    """Normalize weekly pipeline snapshot into a lightweight canonical representation."""
+    """Normalize weekly pipeline snapshot into canonical representation."""
     config = config or PipelinePrepConfig()
 
     if raw_df is None or raw_df.empty:
@@ -129,8 +151,8 @@ def normalize_pipeline_snapshot(raw_df: pd.DataFrame, config: Optional[PipelineP
 
     out = raw_df.copy()
 
-    # Normalize source headers into snake_case used by downstream helpers.
     rename_map = {
+        "Snapshot Date": "snapshot_date",
         "Company": "company",
         "Pool": "pool",
         "Account Number": "account_number",
@@ -165,6 +187,7 @@ def normalize_pipeline_snapshot(raw_df: pd.DataFrame, config: Optional[PipelineP
     out = out.rename(columns={k: v for k, v in rename_map.items() if k in out.columns})
 
     for c in [
+        "snapshot_date",
         "kfi_submitted_date",
         "application_submitted_date",
         "offer_date",
@@ -187,31 +210,45 @@ def normalize_pipeline_snapshot(raw_df: pd.DataFrame, config: Optional[PipelineP
         if c in out.columns:
             out[c] = pd.to_numeric(out[c], errors="coerce")
 
-    if "status_raw" not in out.columns:
-        out["status_raw"] = ""
-    if "dpr_status_raw" not in out.columns:
-        out["dpr_status_raw"] = ""
+    for c in ["status_raw", "dpr_status_raw", "broker", "product", "account_number", "property_region"]:
+        if c not in out.columns:
+            out[c] = ""
+        out[c] = _clean_text(out[c])
 
-    out["pipeline_stage"] = _map_stage(out["status_raw"])
-    out["is_funded_stage"] = out["pipeline_stage"].eq("COMPLETED")
-    out["is_terminal_stage"] = out["pipeline_stage"].isin(["COMPLETED", "WITHDRAWN"])
+    out["stage"] = _map_stage(out["status_raw"])
+    out["pipeline_stage"] = out["stage"]  # backward-compatible alias for existing tab code
+    out["is_funded_stage"] = out["stage"].eq("COMPLETED")
+    out["is_terminal_stage"] = out["stage"].isin(["COMPLETED", "WITHDRAWN"])
     out["is_live_stage"] = ~out["is_terminal_stage"]
 
-    # Preserve withdrawn distinctly; classify rejection only when reasons exist.
     rej_a = _clean_text(out.get("rejection_reason_a", pd.Series("", index=out.index)))
     rej_b = _clean_text(out.get("rejection_reason_b", pd.Series("", index=out.index)))
     has_rejection_detail = (rej_a != "") | (rej_b != "")
     out["termination_reason_class"] = pd.Series("", index=out.index, dtype="string")
-    out.loc[out["pipeline_stage"].eq("WITHDRAWN"), "termination_reason_class"] = "WITHDRAWN"
+    out.loc[out["stage"].eq("WITHDRAWN"), "termination_reason_class"] = "WITHDRAWN"
     out.loc[has_rejection_detail & out["is_terminal_stage"], "termination_reason_class"] = "REJECTED"
 
     out["snapshot_date"] = _choose_snapshot_date(out, config.snapshot_date)
     out["pipeline_opportunity_id"] = _synthetic_opportunity_key(out)
 
-    # Keep external references and linkage fields explicit.
-    for c in ["kfi_number", "account_number"]:
-        if c not in out.columns:
-            out[c] = ""
-        out[c] = _clean_text(out[c])
+    out["stage_date"] = _derive_stage_date(out)
+    out["days_in_stage"] = (
+        (pd.to_datetime(out["snapshot_date"], errors="coerce") - pd.to_datetime(out["stage_date"], errors="coerce"))
+        .dt.days
+        .clip(lower=0)
+    )
+
+    if "loan_amount" not in out.columns:
+        out["loan_amount"] = pd.NA
+    if "estimated_value" not in out.columns:
+        out["estimated_value"] = pd.NA
+
+    out["current_ltv"] = safe_ltv_percent(out["loan_amount"], out["estimated_value"])
+
+    out["property_region"] = normalize_region_labels(out["property_region"])
+    out["property_region_code"] = region_codes_from_labels(out["property_region"])
+
+    if "product_rate" not in out.columns:
+        out["product_rate"] = pd.NA
 
     return out
