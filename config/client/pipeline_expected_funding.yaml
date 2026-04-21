@@ -1,0 +1,22 @@
+model_version: pipeline_expected_v1
+stage_probabilities:
+  KFI: 0.20
+  APPLICATION: 0.45
+  OFFER: 0.75
+  COMPLETED: 1.00
+stage_days_to_fund:
+  KFI: 90
+  APPLICATION: 60
+  OFFER: 30
+  COMPLETED: 0
+broker_adjustments: {}
+product_adjustments: {}
+probability_floor: 0.0
+probability_cap: 1.0
+include_stages: [KFI, APPLICATION, OFFER]
+exclude_stages: [WITHDRAWN, COMPLETED]
+exclude_reconciled_rows: true
+high_confidence_threshold: 0.70
+forward_risk:
+  funded_region_column: geographic_region
+  funded_exposure_column: total_balance
