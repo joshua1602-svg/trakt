@@ -245,6 +245,31 @@ def load_all_portfolio_snapshots(container: str | None = None) -> pd.DataFrame:
     return result
 
 
+def upload_file_to_blob(
+    local_path: str,
+    blob_name: str,
+    container: str | None = None,
+) -> str:
+    """Upload a local file to blob storage and return the destination blob name."""
+    cc = _get_container_client(container)
+    with open(local_path, "rb") as f:
+        cc.get_blob_client(blob_name).upload_blob(f, overwrite=True)
+    logger.info("Uploaded blob: %s", blob_name)
+    return blob_name
+
+
+def upload_bytes_to_blob(
+    data: bytes,
+    blob_name: str,
+    container: str | None = None,
+) -> str:
+    """Upload raw bytes to blob storage and return the destination blob name."""
+    cc = _get_container_client(container)
+    cc.get_blob_client(blob_name).upload_blob(data, overwrite=True)
+    logger.info("Uploaded blob: %s", blob_name)
+    return blob_name
+
+
 def is_azure_configured() -> bool:
     """Return True if Azure blob credentials are available in the environment."""
     return bool(

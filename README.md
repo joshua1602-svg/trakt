@@ -140,7 +140,7 @@ TRAKT_REGIME              → target regime e.g. ESMA_Annex2 (regulatory mode)
 - **Stratifications** -- portfolio breakdowns by LTV, region, ticket size, interest rate, borrower age, and origination vintage.
 - **Scenario Analysis** -- cashflow projections under configurable HPI, prepayment, mortality, and interest rate assumptions (requires `scenario_engine` module).
 - **Static Pools** -- cohort-based performance tracking with prepayment and risk segmentation.
-- **Pipeline** *(optional module)* -- weekly pipeline snapshot normalization and completed-vs-funded reconciliation (loaded from a separate pipeline CSV path).
+- **Pipeline** *(optional module)* -- weekly pipeline snapshot normalization, completed-vs-funded reconciliation bridge, expected funding (assumption-driven), and forward region concentration views (loaded from a separate pipeline CSV path).
 
 Optional modules (`risk_monitor.py`, `risk_limits_config.py`) add concentration-limit monitoring when present.
 
@@ -206,6 +206,8 @@ Key agent configuration (`config/system/config_agent.yaml`):
 | `annex12_projected.csv` | Full Annex 12 record set |
 | `annex12_final.xml` | ESMA-compliant investor XML report |
 | `out/run_manifest.json` | Pipeline run manifest with gate results |
+| `out_pipeline/forward_exposure_latest.csv` | Latest funded + expected forward exposure artifact (`exposure_type` = `FUNDED` / `EXPECTED`) |
+| `out_pipeline/forward_exposure_latest.json` | Optional forward exposure persistence manifest (run metadata + blob path) |
 | `out/field_lineage.json` | Field-level data lineage |
 
 ## Project structure
