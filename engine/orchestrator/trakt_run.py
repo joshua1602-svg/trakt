@@ -672,6 +672,64 @@ def run_regulatory(py: str, args, ctx: dict, out_dir: Path) -> dict:
     }
 
 
+
+def _resolve_pipeline_persistence_config(master_cfg: dict, args) -> dict:
+    pp = master_cfg.get("pipeline_persistence") if isinstance(master_cfg.get("pipeline_persistence"), dict) else {}
+    cfg = {
+        "enabled": bool(pp.get("enabled", False)),
+        "local_output_dir": str(pp.get("local_output_dir", "out_pipeline")),
+        "blob_subfolder": str(pp.get("blob_subfolder", "pipeline/latest")),
+        "write_manifest": bool(pp.get("write_manifest", True)),
+        "upload_to_blob": bool(pp.get("upload_to_blob", True)),
+        "require_blob_upload": bool(pp.get("require_blob_upload", False)),
+        "blob_container": pp.get("blob_container"),
+        "pipeline_input_path": pp.get("pipeline_input_path"),
+        "expected_funding_config_path": str(pp.get("expected_funding_config_path", "config/client/pipeline_expected_funding.yaml")),
+    }
+
+    if getattr(args, "pipeline_input", None):
+        cfg["pipeline_input_path"] = args.pipeline_input
+
+    local_out = Path(args.pipeline_output_dir)
+    if not local_out.is_absolute():
+        local_out = Path(args.out_dir).parent / local_out
+    cfg["local_output_dir"] = str(local_out)
+
+    ef_cfg = Path(cfg["expected_funding_config_path"])
+    if not ef_cfg.is_absolute():
+        cfg["expected_funding_config_path"] = str(PROJECT_ROOT / ef_cfg)
+
+    return cfg
+
+
+def maybe_persist_forward_exposure(args, master_cfg: dict, ctx: dict) -> Optional[dict]:
+    cfg_dict = _resolve_pipeline_persistence_config(master_cfg, args)
+    if not cfg_dict.get("enabled", False):
+        return None
+
+    if str(args.mode).lower() != "mi":
+        return None
+
+    if str(ctx.get("canonical_typed", "")) == "":
+        return None
+
+    if str(PROJECT_ROOT) not in sys.path:
+        sys.path.insert(0, str(PROJECT_ROOT))
+
+    from analytics.pipeline_persistence import PipelinePersistenceConfig, persist_forward_exposure_latest
+
+    funded_df = pd.read_csv(ctx["canonical_typed"], low_memory=False)
+    persistence_cfg = PipelinePersistenceConfig(**cfg_dict)
+
+    return persist_forward_exposure_latest(
+        funded_df=funded_df,
+        funded_source_path=str(ctx["canonical_typed"]),
+        cfg=persistence_cfg,
+        run_timestamp_utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    )
+
+
+
 # ---------------------------------------------------------------------------
 # Manifest
 # ---------------------------------------------------------------------------
@@ -798,6 +856,9 @@ examples:
     ap.add_argument("--master-config", default=str(CONFIG_ROOT / "client" / "config_client_ERM_UK.yaml"))
     ap.add_argument("--out-dir", default="out")
     ap.add_argument("--validation-out-dir", default="out_validation")
+    ap.add_argument("--pipeline-output-dir", default="out_pipeline")
+    ap.add_argument("--pipeline-input", default=None,
+                     help="Optional pipeline snapshot CSV used for expected rows in forward exposure persistence")
 
     # Annex 12 mode
     ap.add_argument("--config", default=None,
@@ -920,6 +981,8 @@ examples:
     # -- Manifest ----------------------------------------------------------
     manifest_path = write_manifest(args, ctx, gate45, out_dir, run_start, flags)
 
+    forward_persist = maybe_persist_forward_exposure(args, master_cfg, ctx)
+
     # -- Summary -----------------------------------------------------------
     elapsed = round(time.time() - run_start, 2)
     print("")
@@ -951,6 +1014,10 @@ examples:
         if gate45.get("xml"):
             print(f"  -> {gate45['xml']}")
     print(f"  -> {manifest_path}")
+    if forward_persist:
+        print(f"  -> {forward_persist.get('csv_path')}")
+        if forward_persist.get('manifest_path'):
+            print(f"  -> {forward_persist.get('manifest_path')}")
     print("")
     print(f"Completed in {elapsed}s")
 

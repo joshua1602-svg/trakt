@@ -206,6 +206,8 @@ Key agent configuration (`config/system/config_agent.yaml`):
 | `annex12_projected.csv` | Full Annex 12 record set |
 | `annex12_final.xml` | ESMA-compliant investor XML report |
 | `out/run_manifest.json` | Pipeline run manifest with gate results |
+| `out_pipeline/forward_exposure_latest.csv` | Latest funded + expected forward exposure artifact (`exposure_type` = `FUNDED` / `EXPECTED`) |
+| `out_pipeline/forward_exposure_latest.json` | Optional forward exposure persistence manifest (run metadata + blob path) |
 | `out/field_lineage.json` | Field-level data lineage |
 
 ## Project structure
