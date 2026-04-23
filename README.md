@@ -134,6 +134,10 @@ TRAKT_REGIME              → target regime e.g. ESMA_Annex2 (regulatory mode)
 FUNCTIONS_WORKER_RUNTIME  → python
 ```
 
+Flex Consumption note:
+- For this Function App plan, runtime is configured via `functionAppConfig.runtime`.
+- Do **not** set `FUNCTIONS_WORKER_RUNTIME`, `SCM_DO_BUILD_DURING_DEPLOYMENT`, or `ENABLE_ORYX_BUILD` as app settings for Flex Consumption deployments.
+
 Pipeline snapshot ingestion settings (optional; defaults shown):
 ```
 TRAKT_PIPELINE_INBOUND_PREFIX        → pipeline/
