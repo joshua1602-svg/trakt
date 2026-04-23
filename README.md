@@ -131,6 +131,7 @@ Required app settings:
 DATA_STORAGE_CONNECTION   → Azure Storage connection string
 TRAKT_ANNEX12_CONFIG      → path to annex12 config YAML (annex12 mode)
 TRAKT_REGIME              → target regime e.g. ESMA_Annex2 (regulatory mode)
+FUNCTIONS_WORKER_RUNTIME  → python
 ```
 
 Pipeline snapshot ingestion settings (optional; defaults shown):

@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import logging
 import io
+import json
 import os
 import subprocess
 import sys
@@ -38,8 +39,6 @@ import azure.functions as func
 from azure.storage.blob import BlobServiceClient
 import pandas as pd
 
-from analytics.blob_storage import register_latest_pipeline_snapshot
-
 app = func.FunctionApp()
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -48,6 +47,10 @@ PIPELINE_INBOUND_PREFIX = os.environ.get("TRAKT_PIPELINE_INBOUND_PREFIX", "pipel
 PIPELINE_SNAPSHOT_OUTBOUND_PREFIX = os.environ.get(
     "TRAKT_PIPELINE_SNAPSHOT_PREFIX",
     "mi/pipeline_snapshots/",
+)
+PIPELINE_LATEST_POINTER_BLOB = os.environ.get(
+    "TRAKT_PIPELINE_SNAPSHOT_POINTER_BLOB",
+    f"{PIPELINE_SNAPSHOT_OUTBOUND_PREFIX.rstrip('/')}/latest_pipeline_snapshot.json",
 )
 
 
@@ -120,6 +123,40 @@ def _copy_blob_between_containers(
     dst_client.upload_blob(src_client.download_blob().readall(), overwrite=True)
 
 
+def _register_latest_pipeline_snapshot(
+    *,
+    blob_name: str,
+    source_blob: str,
+    source_etag: str,
+    last_modified: str,
+    container: str = "outbound",
+) -> bool:
+    """Update latest snapshot pointer blob with idempotency on blob+etag."""
+    conn_str = os.environ["DATA_STORAGE_CONNECTION"]
+    client = BlobServiceClient.from_connection_string(conn_str)
+    pointer_client = client.get_blob_client(container, PIPELINE_LATEST_POINTER_BLOB)
+
+    existing: dict[str, str] = {}
+    try:
+        existing = json.loads(pointer_client.download_blob().readall().decode("utf-8"))
+    except Exception:
+        existing = {}
+
+    if existing.get("blob_name") == blob_name and existing.get("source_etag") == source_etag:
+        logging.info("Pipeline snapshot pointer unchanged for blob=%s etag=%s", blob_name, source_etag)
+        return False
+
+    payload = {
+        "blob_name": blob_name,
+        "source_blob": source_blob,
+        "source_etag": source_etag,
+        "last_modified": last_modified,
+    }
+    pointer_client.upload_blob(json.dumps(payload, indent=2).encode("utf-8"), overwrite=True)
+    logging.info("Pipeline snapshot pointer updated: %s -> %s", PIPELINE_LATEST_POINTER_BLOB, blob_name)
+    return True
+
+
 def _validate_pipeline_snapshot_csv(container: str, blob_path: str) -> tuple[str, str]:
     conn_str = os.environ["DATA_STORAGE_CONNECTION"]
     client = BlobServiceClient.from_connection_string(conn_str)
@@ -157,9 +194,8 @@ def _ingest_pipeline_snapshot(container: str, blob_path: str) -> None:
         dst_container="outbound",
         dst_blob_name=dst_blob,
     )
-    updated = register_latest_pipeline_snapshot(
+    updated = _register_latest_pipeline_snapshot(
         blob_name=dst_blob,
-        container="outbound",
         source_blob=f"{container}/{blob_path}",
         source_etag=etag,
         last_modified=last_modified,
