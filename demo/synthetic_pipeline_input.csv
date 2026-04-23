@@ -1,0 +1,13 @@
+Snapshot Date,Account Number,KFI Submitted Date,Application Submitted Date,Offer Date,Date Funds Released,Property Region,Product,Product Rate,Loan Amount,Estimated Value,Broker,Status
+2026-04-20,DEMO-000101,2026-01-05,2026-01-20,2026-02-10,2026-02-25,South East,Lifetime Flex,6.1,120000,240000,Broker Alpha,Completed
+2026-04-20,DEMO-000201,2026-01-10,2026-01-28,2026-02-15,2026-03-02,South West,Lifetime Flex,6.0,98000,210000,Broker Beta,Completed
+2026-04-20,DEMO-000301,2026-02-01,2026-02-20,2026-03-15,,North East,Drawdown Plus,6.4,86000,180000,Broker Gamma,Offer
+2026-04-20,PIPE-900001,2026-02-12,2026-03-03,,,London,Lifetime Flex,6.3,150000,300000,Broker Alpha,Application
+2026-04-20,PIPE-900002,2026-03-01,,,,North West,Drawdown Plus,6.5,110000,220000,Broker Delta,KFI
+2026-04-20,PIPE-900003,2026-02-18,2026-03-01,2026-03-28,,East Midlands,Capital Select,6.2,94000,205000,Broker Beta,Offer
+2026-04-20,PIPE-900004,2026-01-15,2026-02-02,2026-02-25,,Wales,Capital Select,6.1,76000,170000,Broker Echo,Withdrawn
+2026-04-20,DEMO-000401,2026-01-22,2026-02-12,2026-03-08,2026-03-26,Scotland,Lifetime Flex,6.0,132000,255000,Broker Alpha,Completed
+2026-04-20,PIPE-900005,2026-03-05,2026-03-18,,,South East,Drawdown Plus,6.6,89000,190000,Broker Delta,Application
+2026-04-20,PIPE-900006,2026-03-08,2026-03-22,2026-04-10,,East Anglia,Capital Select,6.4,101000,215000,Broker Gamma,Offer
+2026-04-20,PIPE-900007,2026-03-12,,,,West Midlands,Lifetime Flex,6.7,97000,198000,Broker Foxtrot,KFI
+2026-04-20,PIPE-900008,2026-02-25,2026-03-10,2026-04-01,,Northern Ireland,Drawdown Plus,6.5,83000,175000,Broker Echo,Offer

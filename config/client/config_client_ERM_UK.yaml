@@ -26,6 +26,18 @@ pipeline:
   mi_enabled: true
   esma_enabled: true
 
+
+pipeline_persistence:
+  enabled: true
+  local_output_dir: out_pipeline
+  blob_subfolder: pipeline/latest
+  write_manifest: true
+  upload_to_blob: true
+  require_blob_upload: false
+  blob_container: outbound
+  pipeline_input_path: null
+  expected_funding_config_path: config/client/pipeline_expected_funding.yaml
+
 loan_engine:
   day_count_convention: ACT365
   interest_payment_frequency: QUARTERLY
