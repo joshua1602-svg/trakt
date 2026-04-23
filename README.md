@@ -155,14 +155,23 @@ Weekly pipeline snapshot flow:
 
 ## Analytics dashboard
 
-`streamlit_app_erm.py` provides an interactive dashboard with three core tabs and optional extensions:
+`streamlit_app_erm.py` provides an interactive dashboard with core tabs and optional extensions:
 
 - **Stratifications** -- portfolio breakdowns by LTV, region, ticket size, interest rate, borrower age, and origination vintage.
 - **Scenario Analysis** -- cashflow projections under configurable HPI, prepayment, mortality, and interest rate assumptions (requires `scenario_engine` module).
 - **Static Pools** -- cohort-based performance tracking with prepayment and risk segmentation.
-- **Pipeline** *(optional module)* -- weekly pipeline snapshot normalization, completed-vs-funded reconciliation bridge, expected funding (assumption-driven), and forward region concentration views (loaded from Azure blob snapshots; no required local pipeline CSV path in managed/cloud mode).
+- **Pipeline** *(optional module)* -- pipeline snapshot MI only: snapshot status/metadata, stage funnel, completed-vs-funded reconciliation control, and pipeline composition stratifications.
+- **Forward Exposure** *(optional module)* -- assumption-driven planning layer combining funded current exposure with expected pipeline funding (expected funding outputs + forward concentration).
 
 Optional modules (`risk_monitor.py`, `risk_limits_config.py`) add concentration-limit monitoring when present.
+
+Expected-funding config resolution:
+- Default config is `config/client/pipeline_expected_funding.yaml`.
+- Runtime resolves config path robustly from:
+  1) absolute path, then
+  2) current working directory relative path, then
+  3) repository/module-relative path.
+- This avoids container working-directory drift in Azure deployments.
 
 
 ### Synthetic pipeline MI demo
