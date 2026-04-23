@@ -141,6 +141,7 @@ def trakt_blob_trigger(event: func.EventGridEvent):
 
     out_dir = Path(tmp_dir) / "out"
     val_dir = Path(tmp_dir) / "out_validation"
+    pipeline_out_dir = Path(tmp_dir) / "out_pipeline"
 
     # -- Build command ----------------------------------------------------
     cmd = [
@@ -149,6 +150,7 @@ def trakt_blob_trigger(event: func.EventGridEvent):
         "--input", str(input_path),
         "--out-dir", str(out_dir),
         "--validation-out-dir", str(val_dir),
+        "--pipeline-output-dir", str(pipeline_out_dir),
     ]
 
     # Annex12 requires --config (pass via blob metadata or env var)
@@ -191,6 +193,8 @@ def trakt_blob_trigger(event: func.EventGridEvent):
     stem = input_path.stem
     uploaded = _upload_outputs(out_dir, "outbound", f"{mode}/{stem}/out")
     uploaded += _upload_outputs(val_dir, "outbound", f"{mode}/{stem}/out_validation")
+    if pipeline_out_dir.exists():
+        uploaded += _upload_outputs(pipeline_out_dir, "outbound", f"{mode}/{stem}/out_pipeline")
 
     logging.info(
         f"Pipeline complete: {len(uploaded)} artifacts uploaded to "

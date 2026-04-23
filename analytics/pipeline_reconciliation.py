@@ -1,7 +1,7 @@
-"""Reconciliation helpers between pipeline-completed rows and funded stock rows.
+"""Reconciliation helpers between pipeline rows and funded stock rows.
 
-First-pass principles:
-- Pipeline COMPLETED is not funded truth; funded tape remains truth source.
+Principles:
+- Pipeline stage is not funded truth; funded tape remains truth source.
 - Reconciliation is deterministic and transparent, not fuzzy.
 - Matching priority:
   1) pipeline.account_number == funded.loan_policy_number
@@ -18,11 +18,11 @@ import pandas as pd
 
 @dataclass(frozen=True)
 class ReconciliationSummary:
-    completed_pipeline_rows: int
+    pipeline_rows: int
     matched_pipeline_rows: int
     unmatched_pipeline_rows: int
     funded_rows: int
-    funded_rows_not_seen_in_pipeline_completed: int
+    funded_rows_not_seen_in_pipeline: int
 
 
 def _clean_text(series: pd.Series) -> pd.Series:
@@ -37,60 +37,50 @@ def _clean_text(series: pd.Series) -> pd.Series:
 def _derive_funded_link_columns(funded_df: pd.DataFrame) -> pd.DataFrame:
     out = funded_df.copy()
 
-    # Prefer explicit loan policy number when present.
     if "loan_policy_number" in out.columns:
         out["funded_loan_policy_number"] = _clean_text(out["loan_policy_number"])
     else:
         out["funded_loan_policy_number"] = pd.Series("", index=out.index, dtype="string")
 
-    # loan_identifier is core canonical in existing funded flow.
     if "loan_identifier" in out.columns:
         out["funded_loan_identifier"] = _clean_text(out["loan_identifier"])
     else:
         out["funded_loan_identifier"] = pd.Series("", index=out.index, dtype="string")
 
-    out["funded_account_from_loan_id"] = (
-        out["funded_loan_identifier"].where(out["funded_loan_identifier"] != "", other="") + "01"
-    )
+    out["funded_account_from_loan_id"] = out["funded_loan_identifier"] + "01"
 
     return out
 
 
-def reconcile_completed_pipeline_to_funded(
-    pipeline_df: pd.DataFrame,
-    funded_df: pd.DataFrame,
-) -> pd.DataFrame:
-    """Return row-level reconciliation results for pipeline COMPLETED rows."""
-
+def reconcile_pipeline_to_funded(pipeline_df: pd.DataFrame, funded_df: pd.DataFrame) -> pd.DataFrame:
+    """Return row-level reconciliation results for normalized pipeline rows."""
     if pipeline_df is None or pipeline_df.empty:
         return pd.DataFrame()
 
-    completed = pipeline_df[pipeline_df.get("pipeline_stage", "").astype(str).str.upper() == "COMPLETED"].copy()
-    if completed.empty:
-        return pd.DataFrame()
-
-    if "account_number" not in completed.columns:
-        completed["account_number"] = ""
-    completed["account_number"] = _clean_text(completed["account_number"])
+    out = pipeline_df.copy()
+    if "account_number" not in out.columns:
+        out["account_number"] = ""
+    out["account_number"] = _clean_text(out["account_number"])
 
     funded = _derive_funded_link_columns(funded_df if funded_df is not None else pd.DataFrame())
 
-    # Rule 1: account number = funded loan policy number
-    by_policy = completed.merge(
+    by_policy = out.merge(
         funded[["funded_loan_policy_number", "funded_loan_identifier"]],
         left_on="account_number",
         right_on="funded_loan_policy_number",
         how="left",
         indicator=False,
     )
-    by_policy["match_rule"] = by_policy["funded_loan_policy_number"].apply(
-        lambda v: "ACCOUNT=LOAN_POLICY_NUMBER" if isinstance(v, str) and v.strip() else ""
-    )
 
-    # Rule 2 fallback: account number = loan_identifier + '01'
-    needs_fallback = by_policy["match_rule"].eq("")
+    has_policy_match = by_policy["funded_loan_policy_number"].fillna("").astype("string").ne("")
+    by_policy["reconciliation_match_rule"] = ""
+    by_policy.loc[has_policy_match, "reconciliation_match_rule"] = "ACCOUNT=LOAN_POLICY_NUMBER"
+
+    needs_fallback = by_policy["reconciliation_match_rule"].eq("")
     if needs_fallback.any():
-        fallback = by_policy.loc[needs_fallback].drop(columns=["funded_loan_policy_number", "funded_loan_identifier", "match_rule"])
+        fallback = by_policy.loc[needs_fallback].drop(
+            columns=["funded_loan_policy_number", "funded_loan_identifier", "reconciliation_match_rule"]
+        )
         fallback = fallback.merge(
             funded[["funded_account_from_loan_id", "funded_loan_identifier"]],
             left_on="account_number",
@@ -98,57 +88,90 @@ def reconcile_completed_pipeline_to_funded(
             how="left",
             indicator=False,
         )
-        fallback["match_rule"] = fallback["funded_account_from_loan_id"].apply(
-            lambda v: "ACCOUNT=LOAN_ID_PLUS_01" if isinstance(v, str) and v.strip() else ""
-        )
+        has_fallback_match = fallback["funded_account_from_loan_id"].fillna("").astype("string").ne("")
+        fallback["reconciliation_match_rule"] = ""
+        fallback.loc[has_fallback_match, "reconciliation_match_rule"] = "ACCOUNT=LOAN_ID_PLUS_01"
 
         by_policy.loc[needs_fallback, "funded_loan_identifier"] = fallback["funded_loan_identifier"].values
-        by_policy.loc[needs_fallback, "match_rule"] = fallback["match_rule"].values
+        by_policy.loc[needs_fallback, "reconciliation_match_rule"] = fallback["reconciliation_match_rule"].values
 
-    by_policy["match_status"] = by_policy["match_rule"].apply(lambda v: "MATCHED" if v else "UNMATCHED")
+    by_policy = by_policy.merge(
+        funded[["funded_loan_identifier", "funded_loan_policy_number"]].drop_duplicates(),
+        on="funded_loan_identifier",
+        how="left",
+        suffixes=("", "_linked"),
+    )
+
+    by_policy["matched_funded_identifier"] = _clean_text(by_policy["funded_loan_identifier"])
+    by_policy["matched_funded_policy_number"] = _clean_text(
+        by_policy["funded_loan_policy_number_linked"].fillna(by_policy["funded_loan_policy_number"])
+    )
+
+    by_policy["is_reconciled_to_funded"] = by_policy["reconciliation_match_rule"].ne("")
+    by_policy["reconciliation_match_status"] = by_policy["is_reconciled_to_funded"].map(
+        {True: "MATCHED", False: "UNMATCHED"}
+    )
+
+    # Backward-compatible aliases consumed by first-pass tab renderer.
+    by_policy["match_status"] = by_policy["reconciliation_match_status"]
+    by_policy["match_rule"] = by_policy["reconciliation_match_rule"]
+    by_policy["funded_loan_identifier"] = by_policy["matched_funded_identifier"]
 
     keep_cols = [
-        c for c in [
+        c
+        for c in [
             "pipeline_opportunity_id",
             "snapshot_date",
+            "stage",
             "pipeline_stage",
             "status_raw",
-            "dpr_status_raw",
-            "kfi_number",
             "account_number",
             "loan_amount",
             "broker",
+            "product",
             "property_region",
+            "property_region_code",
+            "is_reconciled_to_funded",
+            "reconciliation_match_status",
+            "reconciliation_match_rule",
+            "matched_funded_identifier",
+            "matched_funded_policy_number",
             "match_status",
             "match_rule",
             "funded_loan_identifier",
-        ] if c in by_policy.columns
+        ]
+        if c in by_policy.columns
     ]
-
     return by_policy[keep_cols].copy()
 
 
+def reconcile_completed_pipeline_to_funded(pipeline_df: pd.DataFrame, funded_df: pd.DataFrame) -> pd.DataFrame:
+    """Backward-compatible wrapper for completed-only reconciliation."""
+    if pipeline_df is None or pipeline_df.empty:
+        return pd.DataFrame()
+
+    stage_col = "stage" if "stage" in pipeline_df.columns else "pipeline_stage"
+    completed = pipeline_df[pipeline_df.get(stage_col, "").astype(str).str.upper() == "COMPLETED"].copy()
+    return reconcile_pipeline_to_funded(completed, funded_df)
+
+
 def summarize_reconciliation(recon_df: pd.DataFrame, funded_df: Optional[pd.DataFrame] = None) -> ReconciliationSummary:
-    completed_pipeline_rows = int(len(recon_df)) if recon_df is not None else 0
-    matched = int((recon_df["match_status"] == "MATCHED").sum()) if completed_pipeline_rows else 0
-    unmatched = completed_pipeline_rows - matched
+    pipeline_rows = int(len(recon_df)) if recon_df is not None else 0
+    matched = int(recon_df.get("is_reconciled_to_funded", pd.Series(dtype=bool)).sum()) if pipeline_rows else 0
+    unmatched = pipeline_rows - matched
 
     funded_rows = int(len(funded_df)) if funded_df is not None else 0
     funded_rows_not_seen = 0
 
-    if funded_df is not None and not funded_df.empty and recon_df is not None and not recon_df.empty:
-        funded_ids = set(
-            _clean_text(funded_df.get("loan_identifier", pd.Series([], dtype="string"))).dropna().tolist()
-        )
-        matched_ids = set(
-            _clean_text(recon_df.get("funded_loan_identifier", pd.Series([], dtype="string"))).dropna().tolist()
-        )
-        funded_rows_not_seen = int(len(funded_ids - matched_ids))
+    if funded_df is not None and not funded_df.empty:
+        funded_ids = set(_clean_text(funded_df.get("loan_identifier", pd.Series([], dtype="string"))).tolist())
+        matched_ids = set(_clean_text(recon_df.get("matched_funded_identifier", pd.Series([], dtype="string"))).tolist())
+        funded_rows_not_seen = int(len({x for x in funded_ids if x} - {x for x in matched_ids if x}))
 
     return ReconciliationSummary(
-        completed_pipeline_rows=completed_pipeline_rows,
+        pipeline_rows=pipeline_rows,
         matched_pipeline_rows=matched,
         unmatched_pipeline_rows=unmatched,
         funded_rows=funded_rows,
-        funded_rows_not_seen_in_pipeline_completed=funded_rows_not_seen,
+        funded_rows_not_seen_in_pipeline=funded_rows_not_seen,
     )

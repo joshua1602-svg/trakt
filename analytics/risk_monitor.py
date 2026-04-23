@@ -9,23 +9,7 @@ from typing import Dict, List, Tuple, Optional
 import pandas as pd
 import numpy as np
 from config.client.risk_limits_config import ALL_LIMITS, LIMIT_CATEGORIES, LimitCheck
-
-REGION_NAME_TO_CODE = {
-    "LONDON": "UKI",
-    "SOUTH EAST": "UKJ",
-    "EAST ANGLIA": "UKH",
-    "EAST OF ENGLAND": "UKH",
-    "SOUTH WEST": "UKK",
-    "WEST MIDLANDS": "UKG",
-    "EAST MIDLANDS": "UKF",
-    "NORTH WEST": "UKD",
-    "YORKSHIRE AND HUMBERSIDE": "UKE",
-    "YORKSHIRE & HUMBERSIDE": "UKE",
-    "NORTH EAST": "UKC",
-    "WALES": "UKL",
-    "SCOTLAND": "UKM",
-    "NORTHERN IRELAND": "UKN",
-}
+from analytics.portfolio_semantics import region_codes_from_labels
 
 class RiskMonitor:
     """Calculate portfolio metrics and check against risk limits"""
@@ -46,11 +30,7 @@ class RiskMonitor:
             )
 
         self.balance_col = "current_principal_balance"
-        self.total_balance = float(df[self.balance_col].sum())
-
-        self.total_balance = (
-            float(df[self.balance_col].sum()) if self.balance_col is not None else 0.0
-        )
+        self.total_balance = float(df[self.balance_col].sum()) if self.balance_col is not None else 0.0
 
     # ------------------------------------------------------------------
     # Core helpers
@@ -88,16 +68,7 @@ class RiskMonitor:
         if col not in self.df.columns:
             return np.nan
 
-        s = (
-            self.df[col]
-            .astype(str)
-            .str.upper()
-            .str.strip()
-        )
-
-    # Map region names → ONS codes
-        mapped_codes = s.map(REGION_NAME_TO_CODE)
-
+        mapped_codes = region_codes_from_labels(self.df[col])
         mask = mapped_codes.isin([c.upper().strip() for c in region_codes])
         return self._percent_of_balance(mask)
 

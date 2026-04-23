@@ -67,3 +67,5 @@ logs/
 *.7z
 *.rar
 *.tar.gz
+# Demo fixtures
+!demo/*.csv
