@@ -10,11 +10,22 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 import yaml
+from datetime import timezone
+import logging
 
 from pipeline_expected_funding import build_expected_funding_dataset, load_expected_funding_config
 from pipeline_forward_risk import aggregate_forward_region_exposure, ForwardRiskSchemaConfig
 from pipeline_prep import normalize_pipeline_snapshot, PipelinePrepConfig
 from pipeline_reconciliation import reconcile_completed_pipeline_to_funded, summarize_reconciliation
+from pipeline_snapshot_selector import resolve_pipeline_snapshot_selection
+from blob_storage import (
+    download_pipeline_snapshot_to_tempfile,
+    get_latest_pipeline_snapshot,
+    is_azure_configured,
+    list_pipeline_snapshots,
+)
+
+logger = logging.getLogger(__name__)
 
 
 def _load_pipeline_csv(path: str) -> pd.DataFrame:
@@ -44,12 +55,42 @@ def render_pipeline_tab(funded_df: pd.DataFrame) -> None:
     )
 
     with st.expander("Pipeline data source", expanded=True):
-        pipeline_path = st.text_input(
-            "Path to weekly pipeline CSV",
-            value=st.session_state.get("pipeline_file_path", ""),
-            key="pipeline_file_path",
-            help="Local path to the weekly pipeline snapshot CSV.",
-        )
+        pipeline_path = ""
+        selected_snapshot = None
+        snapshot_modified = None
+        snapshots = []
+
+        if not is_azure_configured():
+            st.error("Azure Blob Storage is not configured. Configure DATA_STORAGE_CONNECTION or AZURE_STORAGE_ACCOUNT.")
+        else:
+            try:
+                latest_snapshot = get_latest_pipeline_snapshot()
+                snapshots = list_pipeline_snapshots()
+                snapshot_names = [s.blob_name for s in snapshots]
+                default_idx = resolve_pipeline_snapshot_selection(
+                    snapshot_names=snapshot_names,
+                    latest_blob_name=latest_snapshot.blob_name if latest_snapshot else None,
+                    prior_selection=st.session_state.get("pipeline_snapshot_blob"),
+                )
+                if snapshot_names:
+                    selected_snapshot = st.selectbox(
+                        "Weekly pipeline snapshot blob",
+                        options=snapshot_names,
+                        index=default_idx,
+                        key="pipeline_snapshot_blob",
+                        help="Snapshots are sourced from Azure Blob Storage.",
+                    )
+                    selected_obj = next((s for s in snapshots if s.blob_name == selected_snapshot), None)
+                    snapshot_modified = selected_obj.last_modified if selected_obj else None
+                    pipeline_path = download_pipeline_snapshot_to_tempfile(selected_snapshot)
+                else:
+                    st.info(
+                        "No pipeline snapshot blobs found. Upload a CSV to inbound/pipeline/ so it can be ingested to outbound snapshots."
+                    )
+            except Exception as e:
+                st.error(f"Could not load pipeline snapshots from Azure Blob Storage: {e}")
+                logger.exception("Failed to resolve pipeline snapshots")
+
         config_path = st.text_input(
             "Path to expected-funding config YAML (optional)",
             value=st.session_state.get("pipeline_expected_funding_config_path", "config/client/pipeline_expected_funding.yaml"),
@@ -57,8 +98,22 @@ def render_pipeline_tab(funded_df: pd.DataFrame) -> None:
             help="Model assumptions for expected funding / forward exposure.",
         )
 
+    st.markdown("#### Pipeline snapshot status")
+    s1, s2, s3 = st.columns(3)
+    s1.metric("Selected Snapshot Blob", selected_snapshot or "None")
+    s2.metric(
+        "Last Modified (UTC)",
+        snapshot_modified.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        if snapshot_modified
+        else "n/a",
+    )
+    s3.metric(
+        "Reconciliation dataset available",
+        "Yes" if funded_df is not None and not funded_df.empty else "No",
+    )
+
     if not pipeline_path:
-        st.info("Add a pipeline CSV path to enable flow and reconciliation analytics.")
+        st.info("Pipeline flow and reconciliation analytics will appear once a pipeline snapshot blob is available.")
         return
 
     try:

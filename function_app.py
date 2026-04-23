@@ -26,19 +26,29 @@ For regulatory mode, set app setting:
 from __future__ import annotations
 
 import logging
+import io
 import os
 import subprocess
 import sys
 import tempfile
+from datetime import timezone
 from pathlib import Path
 
 import azure.functions as func
 from azure.storage.blob import BlobServiceClient
+import pandas as pd
+
+from analytics.blob_storage import register_latest_pipeline_snapshot
 
 app = func.FunctionApp()
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 ORCHESTRATOR = PROJECT_ROOT / "engine" / "orchestrator" / "trakt_run.py"
+PIPELINE_INBOUND_PREFIX = os.environ.get("TRAKT_PIPELINE_INBOUND_PREFIX", "pipeline/")
+PIPELINE_SNAPSHOT_OUTBOUND_PREFIX = os.environ.get(
+    "TRAKT_PIPELINE_SNAPSHOT_PREFIX",
+    "mi/pipeline_snapshots/",
+)
 
 
 def _parse_mode_from_path(blob_path: str) -> str:
@@ -97,6 +107,69 @@ def _upload_outputs(out_dir: Path, container: str, prefix: str) -> list[str]:
     return uploaded
 
 
+def _copy_blob_between_containers(
+    src_container: str,
+    src_blob_name: str,
+    dst_container: str,
+    dst_blob_name: str,
+) -> None:
+    conn_str = os.environ["DATA_STORAGE_CONNECTION"]
+    client = BlobServiceClient.from_connection_string(conn_str)
+    src_client = client.get_blob_client(src_container, src_blob_name)
+    dst_client = client.get_blob_client(dst_container, dst_blob_name)
+    dst_client.upload_blob(src_client.download_blob().readall(), overwrite=True)
+
+
+def _validate_pipeline_snapshot_csv(container: str, blob_path: str) -> tuple[str, str]:
+    conn_str = os.environ["DATA_STORAGE_CONNECTION"]
+    client = BlobServiceClient.from_connection_string(conn_str)
+    blob_client = client.get_blob_client(container, blob_path)
+    props = blob_client.get_blob_properties()
+    etag = (props.etag or "").replace('"', "")
+    last_modified = (
+        props.last_modified.astimezone(timezone.utc).isoformat()
+        if props.last_modified
+        else ""
+    )
+
+    payload = blob_client.download_blob().readall()
+    if not payload:
+        raise ValueError(f"Pipeline snapshot is empty: {container}/{blob_path}")
+
+    # Basic readability validation: parse header + first rows.
+    pd.read_csv(io.BytesIO(payload), nrows=5, low_memory=False)
+    return etag, last_modified
+
+
+def _ingest_pipeline_snapshot(container: str, blob_path: str) -> None:
+    if not blob_path.lower().endswith(".csv"):
+        logging.info("Skipping pipeline snapshot non-CSV: %s/%s", container, blob_path)
+        return
+
+    etag, last_modified = _validate_pipeline_snapshot_csv(container, blob_path)
+    stem = Path(blob_path).stem
+    safe_etag = etag[:12] if etag else "noetag"
+    dst_blob = f"{PIPELINE_SNAPSHOT_OUTBOUND_PREFIX.rstrip('/')}/{stem}_{safe_etag}.csv"
+
+    _copy_blob_between_containers(
+        src_container=container,
+        src_blob_name=blob_path,
+        dst_container="outbound",
+        dst_blob_name=dst_blob,
+    )
+    updated = register_latest_pipeline_snapshot(
+        blob_name=dst_blob,
+        container="outbound",
+        source_blob=f"{container}/{blob_path}",
+        source_etag=etag,
+        last_modified=last_modified,
+    )
+    if updated:
+        logging.info("Registered new pipeline snapshot: outbound/%s", dst_blob)
+    else:
+        logging.info("Duplicate pipeline snapshot event ignored for etag=%s blob=%s", etag, blob_path)
+
+
 @app.event_grid_trigger(arg_name="event")
 def trakt_blob_trigger(event: func.EventGridEvent):
     data = event.get_json()
@@ -121,6 +194,11 @@ def trakt_blob_trigger(event: func.EventGridEvent):
     # Skip non-CSV files
     if not filename.lower().endswith(".csv"):
         logging.info(f"Skipping non-CSV blob: {blob_path}")
+        return
+
+    if blob_path.lower().startswith(PIPELINE_INBOUND_PREFIX.lower()):
+        logging.info("Pipeline snapshot ingest event detected: %s/%s", container, blob_path)
+        _ingest_pipeline_snapshot(container, blob_path)
         return
 
     logging.info(
