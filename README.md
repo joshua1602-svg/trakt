@@ -144,6 +144,27 @@ TRAKT_REGIME              → target regime e.g. ESMA_Annex2 (regulatory mode)
 
 Optional modules (`risk_monitor.py`, `risk_limits_config.py`) add concentration-limit monitoring when present.
 
+
+### Synthetic pipeline MI demo
+
+Run an end-to-end synthetic validation (funded + pipeline + reconciliation + expected funding + forward exposure persistence):
+
+```bash
+python scripts/run_pipeline_mi_demo.py
+```
+
+Inputs used by default:
+- funded: `synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_canonical_typed.csv`
+- pipeline: `demo/synthetic_pipeline_input.csv`
+- expected funding config: `config/client/pipeline_expected_funding.yaml`
+
+Outputs written by default:
+- `out_pipeline_demo/forward_exposure_latest.csv`
+- `out_pipeline_demo/forward_exposure_latest.json`
+- `out_pipeline_demo/latest_forward_exposure_path.txt`
+
+Add `--upload-to-blob` to attempt upload via existing Azure blob configuration.
+
 ## LLM agent (Tier 7 field mapper)
 
 When raw loan tape headers cannot be resolved by the deterministic tiers (Tiers 1-6 in `semantic_alignment.py`), `agent_orchestrator.py` invokes `llm_mapper_agent.py` to call Claude Sonnet for a suggestion. **Human confirmation is mandatory before any mapping is applied.** Confirmed mappings are written to `aliases_llm_confirmed.yaml` so future runs resolve at Tier 3 (alias lookup) with no LLM involvement.

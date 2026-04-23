@@ -716,16 +716,60 @@ def maybe_persist_forward_exposure(args, master_cfg: dict, ctx: dict) -> Optiona
     if str(PROJECT_ROOT) not in sys.path:
         sys.path.insert(0, str(PROJECT_ROOT))
 
-    from analytics.pipeline_persistence import PipelinePersistenceConfig, persist_forward_exposure_latest
+    from analytics.pipeline_expected_funding import build_expected_funding_dataset, load_expected_funding_config
+    from analytics.pipeline_persistence import (
+        PipelinePersistenceConfig,
+        build_forward_exposure_from_frames,
+        persist_forward_exposure_latest_from_frames,
+    )
+    from analytics.pipeline_prep import PipelinePrepConfig, normalize_pipeline_snapshot
+    from analytics.pipeline_reconciliation import reconcile_completed_pipeline_to_funded
 
     funded_df = pd.read_csv(ctx["canonical_typed"], low_memory=False)
     persistence_cfg = PipelinePersistenceConfig(**cfg_dict)
 
-    return persist_forward_exposure_latest(
+    run_ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    pipeline_source_path = None
+    pipeline_rows_loaded = 0
+    reconciliation_rows = 0
+    expected_df = pd.DataFrame()
+    expected_model_version = None
+
+    pipeline_path_cfg = cfg_dict.get("pipeline_input_path")
+    if pipeline_path_cfg:
+        pipeline_path = Path(pipeline_path_cfg)
+        if pipeline_path.exists():
+            pipeline_source_path = str(pipeline_path)
+            raw_pipeline = pd.read_csv(pipeline_path, low_memory=False)
+            pipeline_rows_loaded = int(len(raw_pipeline))
+
+            pipeline_df = normalize_pipeline_snapshot(raw_pipeline, PipelinePrepConfig())
+            recon_df = reconcile_completed_pipeline_to_funded(pipeline_df, funded_df)
+            reconciliation_rows = int(len(recon_df))
+
+            expected_cfg_raw = _load_yaml(cfg_dict.get("expected_funding_config_path"))
+            expected_cfg = load_expected_funding_config(expected_cfg_raw)
+            expected_model_version = expected_cfg.model_version
+            expected_df = build_expected_funding_dataset(pipeline_df, recon_df, expected_cfg)
+
+    forward_df, snapshot_date = build_forward_exposure_from_frames(
         funded_df=funded_df,
-        funded_source_path=str(ctx["canonical_typed"]),
+        expected_df=expected_df,
+        run_timestamp_utc=run_ts,
+    )
+
+    return persist_forward_exposure_latest_from_frames(
+        forward_exposure_df=forward_df,
         cfg=persistence_cfg,
-        run_timestamp_utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        run_timestamp_utc=run_ts,
+        snapshot_date=snapshot_date,
+        funded_source_path=str(ctx["canonical_typed"]),
+        pipeline_source_path=pipeline_source_path,
+        expected_funding_config_path=cfg_dict.get("expected_funding_config_path"),
+        expected_funding_model_version=expected_model_version,
+        pipeline_rows_loaded=pipeline_rows_loaded,
+        reconciliation_rows=reconciliation_rows,
+        expected_row_count=int(len(expected_df)),
     )
 
 
