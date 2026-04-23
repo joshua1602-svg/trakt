@@ -1,0 +1,379 @@
+
+<html><head><title>MI Preview</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 24px; }
+h1,h2 { color: #1f2d5a; }
+.card { display:inline-block; padding:12px 16px; margin:6px; border:1px solid #ddd; border-radius:8px; min-width:190px; }
+table { border-collapse: collapse; width: 100%; margin: 10px 0 22px 0; }
+th, td { border:1px solid #ddd; padding:8px; text-align:left; }
+th { background:#f2f4f9; }
+.small { color:#666; font-size:12px; }
+</style></head><body>
+<h1>Origination / Pipeline MI Preview (Synthetic)</h1>
+<p class='small'>Generated from synthetic funded + pipeline inputs. This is a lightweight reviewer artifact, not the Streamlit app screenshot.</p>
+
+<h2>Current MI sections</h2>
+<ul>
+<li>Stratifications (funded)</li>
+<li>Scenario Analysis (funded)</li>
+<li>Static Pools (funded)</li>
+<li>Pipeline: overview, reconciliation, expected funding, forward region concentration</li>
+</ul>
+
+<h2>Key KPIs</h2>
+<div class='card'><b>Funded rows</b><br>36</div>
+<div class='card'><b>Pipeline rows</b><br>12</div>
+<div class='card'><b>Reconciliation rows</b><br>3</div>
+<div class='card'><b>Expected rows</b><br>8</div>
+<div class='card'><b>Forward region rows</b><br>12</div>
+<div class='card'><b>Persisted CSV</b><br>out_pipeline_demo/forward_exposure_latest.csv</div>
+
+<h2>Pipeline overview (stage counts)</h2>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>stage</th>
+      <th>count</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>APPLICATION</td>
+      <td>2</td>
+    </tr>
+    <tr>
+      <td>COMPLETED</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <td>KFI</td>
+      <td>2</td>
+    </tr>
+    <tr>
+      <td>OFFER</td>
+      <td>4</td>
+    </tr>
+    <tr>
+      <td>WITHDRAWN</td>
+      <td>1</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Completed vs funded reconciliation</h2>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>reconciliation_match_status</th>
+      <th>count</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>MATCHED</td>
+      <td>3</td>
+    </tr>
+  </tbody>
+</table>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>pipeline_opportunity_id</th>
+      <th>snapshot_date</th>
+      <th>stage</th>
+      <th>pipeline_stage</th>
+      <th>status_raw</th>
+      <th>account_number</th>
+      <th>loan_amount</th>
+      <th>broker</th>
+      <th>product</th>
+      <th>property_region</th>
+      <th>property_region_code</th>
+      <th>is_reconciled_to_funded</th>
+      <th>reconciliation_match_status</th>
+      <th>reconciliation_match_rule</th>
+      <th>matched_funded_identifier</th>
+      <th>matched_funded_policy_number</th>
+      <th>match_status</th>
+      <th>match_rule</th>
+      <th>funded_loan_identifier</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>b5de760dce2bf458286582dda90db1abb4209298</td>
+      <td>2026-04-20</td>
+      <td>COMPLETED</td>
+      <td>COMPLETED</td>
+      <td>Completed</td>
+      <td>DEMO-000101</td>
+      <td>120000</td>
+      <td>Broker Alpha</td>
+      <td>Lifetime Flex</td>
+      <td>South East</td>
+      <td>UKJ</td>
+      <td>True</td>
+      <td>MATCHED</td>
+      <td>ACCOUNT=LOAN_ID_PLUS_01</td>
+      <td>DEMO-0001</td>
+      <td></td>
+      <td>MATCHED</td>
+      <td>ACCOUNT=LOAN_ID_PLUS_01</td>
+      <td>DEMO-0001</td>
+    </tr>
+    <tr>
+      <td>20f2261ef24d35247ad4eca25ccfa2a9c1884a35</td>
+      <td>2026-04-20</td>
+      <td>COMPLETED</td>
+      <td>COMPLETED</td>
+      <td>Completed</td>
+      <td>DEMO-000201</td>
+      <td>98000</td>
+      <td>Broker Beta</td>
+      <td>Lifetime Flex</td>
+      <td>South West</td>
+      <td>UKK</td>
+      <td>True</td>
+      <td>MATCHED</td>
+      <td>ACCOUNT=LOAN_ID_PLUS_01</td>
+      <td>DEMO-0002</td>
+      <td></td>
+      <td>MATCHED</td>
+      <td>ACCOUNT=LOAN_ID_PLUS_01</td>
+      <td>DEMO-0002</td>
+    </tr>
+    <tr>
+      <td>fccba0f965cc8c320f3829ac4af47ca544d01a65</td>
+      <td>2026-04-20</td>
+      <td>COMPLETED</td>
+      <td>COMPLETED</td>
+      <td>Completed</td>
+      <td>DEMO-000401</td>
+      <td>132000</td>
+      <td>Broker Alpha</td>
+      <td>Lifetime Flex</td>
+      <td>Scotland</td>
+      <td>UKM</td>
+      <td>True</td>
+      <td>MATCHED</td>
+      <td>ACCOUNT=LOAN_ID_PLUS_01</td>
+      <td>DEMO-0004</td>
+      <td></td>
+      <td>MATCHED</td>
+      <td>ACCOUNT=LOAN_ID_PLUS_01</td>
+      <td>DEMO-0004</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Expected funding</h2>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>stage</th>
+      <th>expected_funded_amount</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>APPLICATION</td>
+      <td>107550.0</td>
+    </tr>
+    <tr>
+      <td>KFI</td>
+      <td>41400.0</td>
+    </tr>
+    <tr>
+      <td>OFFER</td>
+      <td>273000.0</td>
+    </tr>
+  </tbody>
+</table>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>pipeline_opportunity_id</th>
+      <th>stage</th>
+      <th>expected_funded_amount</th>
+      <th>expected_funded_date</th>
+      <th>model_version</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>ce4d91d58107bf4459d0146869655d221d69ab62</td>
+      <td>OFFER</td>
+      <td>64500.0</td>
+      <td>2026-05-20</td>
+      <td>pipeline_expected_v1</td>
+    </tr>
+    <tr>
+      <td>2cfaec2a74ea8fe68423ec9008f8acedb21fde41</td>
+      <td>APPLICATION</td>
+      <td>67500.0</td>
+      <td>2026-06-19</td>
+      <td>pipeline_expected_v1</td>
+    </tr>
+    <tr>
+      <td>197f66ab7d9f77ac9d4d0c214ee64379117bdcd6</td>
+      <td>KFI</td>
+      <td>22000.0</td>
+      <td>2026-07-19</td>
+      <td>pipeline_expected_v1</td>
+    </tr>
+    <tr>
+      <td>d7c7d590063b4e83dfb06136de0c9f47a373c2c5</td>
+      <td>OFFER</td>
+      <td>70500.0</td>
+      <td>2026-05-20</td>
+      <td>pipeline_expected_v1</td>
+    </tr>
+    <tr>
+      <td>3399ab2de42853960dbd65ef0437a82af56dbf0b</td>
+      <td>APPLICATION</td>
+      <td>40050.0</td>
+      <td>2026-06-19</td>
+      <td>pipeline_expected_v1</td>
+    </tr>
+    <tr>
+      <td>872029f48ce31f5f28f99422a5d020a206a5df5d</td>
+      <td>OFFER</td>
+      <td>75750.0</td>
+      <td>2026-05-20</td>
+      <td>pipeline_expected_v1</td>
+    </tr>
+    <tr>
+      <td>c0b79fd805c7809815c0a2f04f0b9166b63cd59b</td>
+      <td>KFI</td>
+      <td>19400.0</td>
+      <td>2026-07-19</td>
+      <td>pipeline_expected_v1</td>
+    </tr>
+    <tr>
+      <td>e7fa945a252d26365c4ed607d73c3be3267330a3</td>
+      <td>OFFER</td>
+      <td>62250.0</td>
+      <td>2026-05-20</td>
+      <td>pipeline_expected_v1</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Forward region concentration</h2>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>property_region</th>
+      <th>funded_current_exposure</th>
+      <th>expected_pipeline_exposure</th>
+      <th>combined_forward_exposure</th>
+      <th>combined_exposure_pct</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>East Midlands</td>
+      <td>830811.74</td>
+      <td>70500.0</td>
+      <td>901311.74</td>
+      <td>0.155280</td>
+    </tr>
+    <tr>
+      <td>East Anglia</td>
+      <td>760586.78</td>
+      <td>75750.0</td>
+      <td>836336.78</td>
+      <td>0.144086</td>
+    </tr>
+    <tr>
+      <td>London</td>
+      <td>714991.12</td>
+      <td>67500.0</td>
+      <td>782491.12</td>
+      <td>0.134810</td>
+    </tr>
+    <tr>
+      <td>Yorkshire and The Humber</td>
+      <td>751500.54</td>
+      <td>0.0</td>
+      <td>751500.54</td>
+      <td>0.129471</td>
+    </tr>
+    <tr>
+      <td>South East</td>
+      <td>627416.92</td>
+      <td>40050.0</td>
+      <td>667466.92</td>
+      <td>0.114993</td>
+    </tr>
+    <tr>
+      <td>South West</td>
+      <td>457546.55</td>
+      <td>0.0</td>
+      <td>457546.55</td>
+      <td>0.078827</td>
+    </tr>
+    <tr>
+      <td>Scotland</td>
+      <td>388146.06</td>
+      <td>0.0</td>
+      <td>388146.06</td>
+      <td>0.066871</td>
+    </tr>
+    <tr>
+      <td>Wales</td>
+      <td>373619.52</td>
+      <td>0.0</td>
+      <td>373619.52</td>
+      <td>0.064368</td>
+    </tr>
+    <tr>
+      <td>North West</td>
+      <td>250073.57</td>
+      <td>22000.0</td>
+      <td>272073.57</td>
+      <td>0.046874</td>
+    </tr>
+    <tr>
+      <td>West Midlands</td>
+      <td>227770.12</td>
+      <td>19400.0</td>
+      <td>247170.12</td>
+      <td>0.042583</td>
+    </tr>
+    <tr>
+      <td>North East</td>
+      <td>0.00</td>
+      <td>64500.0</td>
+      <td>64500.00</td>
+      <td>0.011112</td>
+    </tr>
+    <tr>
+      <td>Northern Ireland</td>
+      <td>0.00</td>
+      <td>62250.0</td>
+      <td>62250.00</td>
+      <td>0.010725</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Sidecar persistence summary</h2>
+<pre>run_timestamp_utc                                              2026-04-23T09:04:17Z
+snapshot_date                                                            2026-04-20
+run_mode                                                       FUNDED_PLUS_PIPELINE
+pipeline_input_found                                                           True
+expected_rows_included                                                         True
+pipeline_rows_loaded                                                             12
+reconciliation_rows                                                               3
+expected_row_count                                                                8
+source_funded_file_path           synthetic_demo/output/SYNTHETIC_ERE_Portfolio_...
+source_pipeline_file_path                         demo/synthetic_pipeline_input.csv
+expected_funding_model_version                                 pipeline_expected_v1
+expected_funding_config_path           config/client/pipeline_expected_funding.yaml
+total_row_count                                                                  44
+funded_row_count                                                                 36
+output_csv_path                   /workspace/trakt/out_pipeline_demo/forward_exp...
+blob_destination_path                   pipeline/latest/forward_exposure_latest.csv</pre>
+
+</body></html>
