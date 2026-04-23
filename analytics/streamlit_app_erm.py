@@ -156,7 +156,7 @@ except ImportError:
 
 # Pipeline tab (optional, modular)
 try:
-    from tab_pipeline import render_pipeline_tab
+    from tab_pipeline import render_forward_exposure_tab, render_pipeline_tab
     PIPELINE_TAB_AVAILABLE = True
 except ImportError:
     PIPELINE_TAB_AVAILABLE = False
@@ -1033,6 +1033,7 @@ with st.expander("Export & Report", expanded=False):
 tab_names = []
 if PIPELINE_TAB_AVAILABLE:
     tab_names.append("Pipeline")
+    tab_names.append("Forward Exposure")
 tab_names.extend([
     "Stratifications",
     "Scenario Analysis",
@@ -1046,6 +1047,8 @@ _i = 0
 if PIPELINE_TAB_AVAILABLE:
     tab_pipeline = tabs[_i]
     _i += 1
+    tab_forward_exposure = tabs[_i]
+    _i += 1
 tab1 = tabs[_i]; _i += 1
 tab2 = tabs[_i]; _i += 1
 tab3 = tabs[_i]; _i += 1
@@ -1058,6 +1061,8 @@ if RISK_MONITORING_AVAILABLE:
 if PIPELINE_TAB_AVAILABLE:
     with tab_pipeline:
         render_pipeline_tab(df)
+    with tab_forward_exposure:
+        render_forward_exposure_tab(df)
 
 
 # ============================
