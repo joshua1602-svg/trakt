@@ -133,6 +133,25 @@ TRAKT_ANNEX12_CONFIG      → path to annex12 config YAML (annex12 mode)
 TRAKT_REGIME              → target regime e.g. ESMA_Annex2 (regulatory mode)
 ```
 
+Flex Consumption note:
+- For this Function App plan, runtime is configured via `functionAppConfig.runtime`.
+- Do **not** set `FUNCTIONS_WORKER_RUNTIME`, `SCM_DO_BUILD_DURING_DEPLOYMENT`, or `ENABLE_ORYX_BUILD` as app settings for Flex Consumption deployments.
+
+Pipeline snapshot ingestion settings (optional; defaults shown):
+```
+TRAKT_PIPELINE_INBOUND_PREFIX        → pipeline/
+TRAKT_PIPELINE_SNAPSHOT_PREFIX       → mi/pipeline_snapshots/
+TRAKT_PIPELINE_SNAPSHOT_POINTER_BLOB → mi/pipeline_snapshots/latest_pipeline_snapshot.json
+```
+
+Weekly pipeline snapshot flow:
+1. Upload weekly pipeline CSVs into `inbound/pipeline/`.
+2. Event Grid trigger validates readability + extension, then copies snapshot to:
+   `outbound/mi/pipeline_snapshots/<filename>_<etag12>.csv`.
+3. Trigger updates the latest pointer blob:
+   `outbound/mi/pipeline_snapshots/latest_pipeline_snapshot.json`.
+4. Streamlit Pipeline tab auto-detects/selects these blobs (newest first) and no longer requires a local pipeline CSV path input.
+
 ## Analytics dashboard
 
 `streamlit_app_erm.py` provides an interactive dashboard with three core tabs and optional extensions:
@@ -140,7 +159,7 @@ TRAKT_REGIME              → target regime e.g. ESMA_Annex2 (regulatory mode)
 - **Stratifications** -- portfolio breakdowns by LTV, region, ticket size, interest rate, borrower age, and origination vintage.
 - **Scenario Analysis** -- cashflow projections under configurable HPI, prepayment, mortality, and interest rate assumptions (requires `scenario_engine` module).
 - **Static Pools** -- cohort-based performance tracking with prepayment and risk segmentation.
-- **Pipeline** *(optional module)* -- weekly pipeline snapshot normalization, completed-vs-funded reconciliation bridge, expected funding (assumption-driven), and forward region concentration views (loaded from a separate pipeline CSV path).
+- **Pipeline** *(optional module)* -- weekly pipeline snapshot normalization, completed-vs-funded reconciliation bridge, expected funding (assumption-driven), and forward region concentration views (loaded from Azure blob snapshots; no required local pipeline CSV path in managed/cloud mode).
 
 Optional modules (`risk_monitor.py`, `risk_limits_config.py`) add concentration-limit monitoring when present.
 

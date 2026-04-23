@@ -30,6 +30,12 @@ jobs:
       - name: Show package size
         run: ls -lh deploy.zip
 
+      - name: Sanity check package contents
+        run: |
+          unzip -l deploy.zip | sed -n '1,120p'
+          unzip -l deploy.zip | grep -E 'function_app.py|host.json|requirements.txt'
+          python -m py_compile function_app.py
+
       - name: Login to Azure
         uses: azure/login@v2
         with:

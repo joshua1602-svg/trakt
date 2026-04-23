@@ -16,8 +16,10 @@ from __future__ import annotations
 import io
 import logging
 import os
+import tempfile
 from datetime import datetime, timezone
-from functools import lru_cache
+import json
+from dataclasses import dataclass
 
 # Sentinel used as a sort-key fallback when a blob's last_modified is None.
 # Must be a datetime (not 0 / int) to stay in the same type-space and avoid
@@ -33,6 +35,11 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _OUTBOUND_CONTAINER = os.environ.get("TRAKT_OUTBOUND_CONTAINER", "outbound")
+_PIPELINE_SNAPSHOTS_PREFIX = os.environ.get("TRAKT_PIPELINE_SNAPSHOT_PREFIX", "mi/pipeline_snapshots/")
+_PIPELINE_LATEST_POINTER = os.environ.get(
+    "TRAKT_PIPELINE_SNAPSHOT_POINTER_BLOB",
+    f"{_PIPELINE_SNAPSHOTS_PREFIX.rstrip('/')}/latest_pipeline_snapshot.json",
+)
 
 
 def _get_blob_service_client():
@@ -66,6 +73,14 @@ def _get_container_client(container: str | None = None):
 # ---------------------------------------------------------------------------
 # Public helpers
 # ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class PipelineSnapshot:
+    blob_name: str
+    last_modified: datetime | None
+    size: int | None = None
+    etag: str | None = None
 
 def list_canonical_csvs(
     container: str | None = None,
@@ -152,6 +167,97 @@ def download_blob_bytes(blob_name: str, container: str | None = None) -> bytes:
     cc = _get_container_client(container)
     blob_client = cc.get_blob_client(blob_name)
     return blob_client.download_blob().readall()
+
+
+def list_pipeline_snapshots(
+    container: str | None = None,
+    prefix: str | None = None,
+) -> list[PipelineSnapshot]:
+    """List pipeline snapshot CSV blobs, newest first."""
+    cc = _get_container_client(container)
+    start_prefix = prefix if prefix is not None else _PIPELINE_SNAPSHOTS_PREFIX
+    blobs = [
+        b for b in cc.list_blobs(name_starts_with=start_prefix)
+        if b.name.lower().endswith(".csv")
+    ]
+    blobs.sort(key=lambda b: (b.last_modified or _EPOCH, b.name), reverse=True)
+    return [
+        PipelineSnapshot(
+            blob_name=b.name,
+            last_modified=b.last_modified,
+            size=getattr(b, "size", None),
+            etag=getattr(b, "etag", None),
+        )
+        for b in blobs
+    ]
+
+
+def get_latest_pipeline_snapshot(
+    container: str | None = None,
+    prefix: str | None = None,
+) -> PipelineSnapshot | None:
+    """Return the latest pipeline snapshot or None when no snapshots exist."""
+    snapshots = list_pipeline_snapshots(container=container, prefix=prefix)
+    return snapshots[0] if snapshots else None
+
+
+def download_pipeline_snapshot_to_tempfile(
+    blob_name: str,
+    container: str | None = None,
+) -> str:
+    """Download a pipeline snapshot blob into a local tempfile path and return it."""
+    data = download_blob_bytes(blob_name=blob_name, container=container)
+    tmp = tempfile.NamedTemporaryFile(prefix="pipeline_snapshot_", suffix=".csv", delete=False)
+    with tmp:
+        tmp.write(data)
+    return tmp.name
+
+
+def register_latest_pipeline_snapshot(
+    blob_name: str,
+    container: str | None = None,
+    *,
+    source_blob: str | None = None,
+    source_etag: str | None = None,
+    last_modified: str | None = None,
+    pointer_blob_name: str | None = None,
+) -> bool:
+    """Write/update pointer metadata for latest pipeline snapshot.
+
+    Returns True when pointer changed, False when existing pointer already
+    references the same blob + source etag (idempotent duplicate event).
+    """
+    cc = _get_container_client(container)
+    pointer_blob = pointer_blob_name or _PIPELINE_LATEST_POINTER
+    pointer_client = cc.get_blob_client(pointer_blob)
+
+    existing: dict[str, str] = {}
+    try:
+        existing_raw = pointer_client.download_blob().readall()
+        existing = json.loads(existing_raw.decode("utf-8"))
+    except Exception:
+        existing = {}
+
+    if (
+        existing.get("blob_name") == blob_name
+        and existing.get("source_etag") == (source_etag or "")
+    ):
+        logger.info("Pipeline snapshot pointer unchanged for blob=%s etag=%s", blob_name, source_etag)
+        return False
+
+    payload = {
+        "blob_name": blob_name,
+        "source_blob": source_blob or "",
+        "source_etag": source_etag or "",
+        "registered_at_utc": datetime.now(timezone.utc).isoformat(),
+        "last_modified": last_modified or "",
+    }
+    pointer_client.upload_blob(
+        json.dumps(payload, indent=2).encode("utf-8"),
+        overwrite=True,
+    )
+    logger.info("Pipeline snapshot pointer updated: %s -> %s", pointer_blob, blob_name)
+    return True
 
 
 # ---------------------------------------------------------------------------
