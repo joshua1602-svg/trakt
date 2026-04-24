@@ -14,7 +14,7 @@ from analytics.portfolio_semantics import region_codes_from_labels
 class RiskMonitor:
     """Calculate portfolio metrics and check against risk limits"""
 
-    def __init__(self, df: pd.DataFrame, limits_config: Dict = None):
+    def __init__(self, df: pd.DataFrame, limits_config: Dict = None, unknown_on_missing_required: bool = False):
         """
         Args:
             df: Portfolio dataframe (canonical format)
@@ -22,6 +22,7 @@ class RiskMonitor:
         """
         self.df = df
         self.limits = limits_config or ALL_LIMITS
+        self.unknown_on_missing_required = unknown_on_missing_required
 
         # Decide which balance column to use everywhere
         if "current_principal_balance" not in df.columns:
@@ -31,6 +32,19 @@ class RiskMonitor:
 
         self.balance_col = "current_principal_balance"
         self.total_balance = float(df[self.balance_col].sum()) if self.balance_col is not None else 0.0
+
+    def _required_field_missing(self, col: str) -> bool:
+        if not self.unknown_on_missing_required:
+            return False
+        if col not in self.df.columns:
+            return True
+        series = self.df[col]
+        if series.isna().any():
+            return True
+        if series.dtype == object:
+            if series.astype("string").str.strip().eq("").any():
+                return True
+        return False
 
     # ------------------------------------------------------------------
     # Core helpers
@@ -65,7 +79,7 @@ class RiskMonitor:
 
     def calc_region_pct(self, region_codes: List[str]) -> float:
         col = "geographic_region_classification"
-        if col not in self.df.columns:
+        if col not in self.df.columns or self._required_field_missing(col):
             return np.nan
 
         mapped_codes = region_codes_from_labels(self.df[col])
@@ -135,7 +149,7 @@ class RiskMonitor:
         Schedule 8: <£150k cap as % of portfolio.
         """
         col = "original_valuation_amount"
-        if col not in self.df.columns:
+        if col not in self.df.columns or self._required_field_missing(col):
             return np.nan
         vals = pd.to_numeric(self.df[col], errors="coerce")
         mask = vals < threshold
@@ -147,7 +161,7 @@ class RiskMonitor:
         Schedule 8: >£1m cap as % of portfolio.
         """
         col = "original_valuation_amount"
-        if col not in self.df.columns:
+        if col not in self.df.columns or self._required_field_missing(col):
             return np.nan
         vals = pd.to_numeric(self.df[col], errors="coerce")
         mask = vals > threshold
@@ -160,7 +174,7 @@ class RiskMonitor:
     def calc_max_single_borrower_balance_pct(self) -> float:
         """Max % of portfolio balance to any single borrower."""
         borrower_col = self._get_borrower_col()
-        if borrower_col is None or self.total_balance == 0:
+        if borrower_col is None or self.total_balance == 0 or self._required_field_missing(borrower_col):
             return np.nan
 
         by_borrower = self.df.groupby(borrower_col)[self.balance_col].sum()
@@ -172,7 +186,7 @@ class RiskMonitor:
     def calc_max_loans_per_borrower(self) -> float:
         """Maximum number of loans to any single borrower."""
         borrower_col = self._get_borrower_col()
-        if borrower_col is None:
+        if borrower_col is None or self._required_field_missing(borrower_col):
             return np.nan
 
         counts = self.df.groupby(borrower_col).size()
@@ -184,7 +198,7 @@ class RiskMonitor:
         Schedule 8: constrain share of balance to borrowers with >2 loans.
         """
         borrower_col = self._get_borrower_col()
-        if borrower_col is None or self.total_balance == 0:
+        if borrower_col is None or self.total_balance == 0 or self._required_field_missing(borrower_col):
             return np.nan
 
         counts = self.df.groupby(borrower_col).size()
@@ -205,7 +219,7 @@ class RiskMonitor:
         Uses 'youngest_borrower_age' as proxy (if available).
         """
         col = "youngest_borrower_age"
-        if col not in self.df.columns:
+        if col not in self.df.columns or self._required_field_missing(col):
             return np.nan
         ages = pd.to_numeric(self.df[col], errors="coerce")
         mask = ages > 85
@@ -227,6 +241,8 @@ class RiskMonitor:
                 break
 
         if rate_type_col is None:
+            return np.nan
+        if self._required_field_missing(rate_type_col):
             return np.nan
 
         series = self.df[rate_type_col].astype(str).str.upper()
