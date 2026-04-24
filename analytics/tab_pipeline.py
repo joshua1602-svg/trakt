@@ -251,7 +251,13 @@ def _render_weekly_trend_charts(history_df: pd.DataFrame) -> None:
 
 
 def _render_ltv_age_bubble(df: pd.DataFrame, exposure_col: str, color_col: str | None, title: str, key_prefix: str) -> None:
-    bubble_df = df.dropna(subset=["youngest_borrower_age", "current_loan_to_value", exposure_col]).copy()
+    required_cols = ["youngest_borrower_age", "current_loan_to_value", exposure_col]
+    missing = [c for c in required_cols if c not in df.columns]
+    if missing:
+        st.info("Insufficient data for bubble chart.")
+        return
+
+    bubble_df = df.dropna(subset=required_cols).copy()
     bubble_df = bubble_df[pd.to_numeric(bubble_df[exposure_col], errors="coerce").fillna(0) > 0]
     if bubble_df.empty:
         st.info("Insufficient data for bubble chart.")
@@ -890,6 +896,7 @@ def render_forward_exposure_tab(funded_df: pd.DataFrame) -> None:
             "property_region": "geographic_region",
             "broker": "broker_channel",
             "product": "erm_product_type",
+            "current_ltv": "current_loan_to_value",
         }
     ).copy()
     if "youngest_borrower_age" not in forward_visual_df.columns and "borrower_age" in forward_visual_df.columns:
