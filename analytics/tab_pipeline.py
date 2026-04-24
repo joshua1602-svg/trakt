@@ -46,12 +46,14 @@ try:
         DEFAULT_EXPECTED_CONFIG_RELATIVE,
         add_pipeline_stratification_buckets,
         load_expected_funding_config_yaml,
+        prepare_weekly_trend_dataset,
     )
 except ImportError:
     from analytics.pipeline_tab_helpers import (
         DEFAULT_EXPECTED_CONFIG_RELATIVE,
         add_pipeline_stratification_buckets,
         load_expected_funding_config_yaml,
+        prepare_weekly_trend_dataset,
     )
 
 FLOW_STAGES = ["KFI", "APPLICATION", "OFFER", "COMPLETED"]
@@ -61,6 +63,7 @@ STAGE_LABELS = {
     "OFFER": "Offers",
     "COMPLETED": "Completions",
 }
+STAGE_COLORS = [PRIMARY_COLOR, SECONDARY_COLOR, "#7EBAB5", "#6B6B6B"]
 
 
 def _kpi_tile(label: str, value: str, subtitle: str = "") -> str:
@@ -204,32 +207,43 @@ def _render_weekly_trend_charts(history_df: pd.DataFrame) -> None:
         st.info("Trend charts will populate as additional weekly snapshots become available.")
         return
 
-    trend = history_df.copy()
-    trend["stage_label"] = trend["stage"].map(STAGE_LABELS)
-    trend["week"] = pd.to_datetime(trend["snapshot_date"], errors="coerce").dt.strftime("%d %b %Y")
+    trend = prepare_weekly_trend_dataset(history_df)
+    stage_options = [STAGE_LABELS[s] for s in FLOW_STAGES if STAGE_LABELS[s] in set(trend["stage_label"].astype(str))]
+    selected_stage_labels = st.multiselect(
+        "Filter stages",
+        options=stage_options,
+        default=stage_options,
+        key="weekly_stage_filter",
+    )
+    trend = trend[trend["stage_label"].isin(selected_stage_labels)].copy()
+    if trend.empty:
+        st.info("No weekly data available for the selected stages.")
+        return
 
     col1, col2 = st.columns(2)
     with col1:
-        fig_cnt = px.line(
+        fig_cnt = px.bar(
             trend,
             x="week",
             y="count",
             color="stage_label",
-            markers=True,
-            color_discrete_sequence=[PRIMARY_COLOR, SECONDARY_COLOR, "#7EBAB5", "#6B6B6B"],
+            barmode="stack",
+            category_orders={"week": list(trend["week"].cat.categories), "stage_label": stage_options},
+            color_discrete_sequence=STAGE_COLORS,
         )
         fig_cnt.update_yaxes(title_text="Applications")
         fig_cnt.update_xaxes(title_text="Week")
         st.plotly_chart(apply_chart_theme(fig_cnt, "Weekly Volumes by Stage"), use_container_width=True)
 
     with col2:
-        fig_amt = px.line(
+        fig_amt = px.bar(
             trend,
             x="week",
             y="amount",
             color="stage_label",
-            markers=True,
-            color_discrete_sequence=[PRIMARY_COLOR, SECONDARY_COLOR, "#7EBAB5", "#6B6B6B"],
+            barmode="stack",
+            category_orders={"week": list(trend["week"].cat.categories), "stage_label": stage_options},
+            color_discrete_sequence=STAGE_COLORS,
         )
         fig_amt.update_yaxes(title_text="Amount (£)")
         fig_amt.update_xaxes(title_text="Week")
@@ -564,6 +578,9 @@ def render_forward_exposure_tab(funded_df: pd.DataFrame) -> None:
     st.markdown("### Run Rate & Milestones")
     history_df = _build_weekly_snapshot_history(snapshot_state["selected_snapshot"], max_weeks=16)
     completion_hist = history_df[history_df["stage"].eq("COMPLETED")].sort_values("snapshot_date") if not history_df.empty else pd.DataFrame()
+    time_to_100mm = "Unavailable"
+    if total_funded >= 100_000_000:
+        time_to_100mm = "Reached"
 
     if completion_hist.empty:
         st.info("Run-rate analytics will appear once weekly completions history is available.")
@@ -573,6 +590,8 @@ def render_forward_exposure_tab(funded_df: pd.DataFrame) -> None:
         annualised = avg_weekly * 52
         combined_forward = total_funded + float(expected_df["expected_funded_amount"].sum()) if not expected_df.empty else total_funded
         runway_weeks = (1_000_000_000 - total_funded) / avg_weekly if avg_weekly > 0 and total_funded < 1_000_000_000 else None
+        if total_funded < 100_000_000 and avg_weekly > 0:
+            time_to_100mm = f"{((100_000_000 - total_funded) / avg_weekly):,.1f} weeks"
 
         rr1, rr2, rr3, rr4 = st.columns(4)
         rr1.markdown(_kpi_tile("5W Avg Completions", format_currency(avg_weekly), "Recent weekly average"), unsafe_allow_html=True)
@@ -587,6 +606,7 @@ def render_forward_exposure_tab(funded_df: pd.DataFrame) -> None:
         fig_run.update_yaxes(title_text="Amount (£)")
         fig_run.update_xaxes(title_text="Week")
         st.plotly_chart(apply_chart_theme(fig_run, "Completions Run-Rate Trend"), use_container_width=True)
+    st.markdown(_kpi_tile("Time to £100MM", time_to_100mm, "Mandatory milestone KPI"), unsafe_allow_html=True)
 
     st.markdown("### Forward Exposure")
     expected_amount = float(expected_df["expected_funded_amount"].sum()) if not expected_df.empty else 0.0
@@ -673,6 +693,79 @@ def render_forward_exposure_tab(funded_df: pd.DataFrame) -> None:
                 fig_bar = px.bar(bar_df, x="Broker", y=["Funded", "Expected"], barmode="stack", color_discrete_sequence=[PRIMARY_COLOR, SECONDARY_COLOR])
                 fig_bar.update_layout(legend_title_text="")
                 st.plotly_chart(apply_chart_theme(fig_bar, "Funded vs Forward by Broker"), use_container_width=True)
+
+    st.markdown("### Forward Distribution Diagnostics")
+    fwd_balance_col = _pick_first_col(funded_df, ["total_balance", "current_outstanding_balance", "current_principal_balance"])
+    funded_ltv_col = _pick_first_col(funded_df, ["current_loan_to_value", "current_ltv"])
+    funded_age_col = _pick_first_col(funded_df, ["youngest_borrower_age", "borrower_age"])
+
+    funded_diag = pd.DataFrame(
+        {
+            "segment": "Funded",
+            "exposure": pd.to_numeric(funded_df.get(fwd_balance_col, pd.Series(dtype=float)), errors="coerce"),
+            "ltv": pd.to_numeric(funded_df.get(funded_ltv_col, pd.Series(dtype=float)), errors="coerce"),
+            "age": pd.to_numeric(funded_df.get(funded_age_col, pd.Series(dtype=float)), errors="coerce"),
+            "region": funded_df.get("geographic_region_classification", pd.Series(["Unknown"] * len(funded_df))),
+            "stage": "FUNDED",
+        }
+    )
+    forward_diag = pd.DataFrame(
+        {
+            "segment": "Forward",
+            "exposure": pd.to_numeric(expected_df.get("expected_funded_amount", pd.Series(dtype=float)), errors="coerce"),
+            "ltv": pd.to_numeric(expected_df.get("current_ltv", pd.Series(dtype=float)), errors="coerce"),
+            "age": pd.to_numeric(expected_df.get("youngest_borrower_age", pd.Series(dtype=float)), errors="coerce"),
+            "region": expected_df.get("property_region", pd.Series(["Unknown"] * len(expected_df))),
+            "stage": expected_df.get("stage", pd.Series(["UNKNOWN"] * len(expected_df))).astype("string").fillna("UNKNOWN"),
+        }
+    )
+    diag = pd.concat([funded_diag, forward_diag], ignore_index=True, sort=False)
+    diag["exposure"] = pd.to_numeric(diag["exposure"], errors="coerce").fillna(0)
+    diag["region"] = diag["region"].astype("string").fillna("Unknown")
+    diag["stage"] = diag["stage"].astype("string").fillna("UNKNOWN")
+
+    d1, d2 = st.columns(2)
+    with d1:
+        bubble = diag.dropna(subset=["ltv", "age"]).copy()
+        bubble = bubble[bubble["exposure"] > 0]
+        if bubble.empty:
+            st.info("Forward bubble chart unavailable: LTV/age fields are incomplete.")
+        else:
+            fig_bubble = px.scatter(
+                bubble,
+                x="age",
+                y="ltv",
+                size="exposure",
+                color="segment",
+                hover_data=["region", "stage"],
+                color_discrete_sequence=[PRIMARY_COLOR, SECONDARY_COLOR],
+            )
+            fig_bubble.update_xaxes(title_text="Borrower age")
+            fig_bubble.update_yaxes(title_text="LTV (%)")
+            st.plotly_chart(apply_chart_theme(fig_bubble, "Forward Bubble: LTV vs Age"), use_container_width=True)
+
+    with d2:
+        matrix = (
+            diag.groupby(["region", "stage"], observed=True)["exposure"]
+            .sum(min_count=1)
+            .fillna(0)
+            .reset_index()
+        )
+        matrix = matrix[matrix["exposure"] > 0]
+        if matrix.empty:
+            st.info("Forward matrix chart unavailable: region/stage exposure is missing.")
+        else:
+            fig_matrix = px.density_heatmap(
+                matrix,
+                x="stage",
+                y="region",
+                z="exposure",
+                histfunc="sum",
+                color_continuous_scale="Blues",
+            )
+            fig_matrix.update_xaxes(title_text="Stage")
+            fig_matrix.update_yaxes(title_text="Region")
+            st.plotly_chart(apply_chart_theme(fig_matrix, "Forward Matrix: Region × Stage"), use_container_width=True)
 
     st.markdown("### Model & Calibration Status")
     model_mode = "Empirical" if config_ok else "Hybrid Defaults"
