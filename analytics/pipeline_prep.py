@@ -183,6 +183,8 @@ def normalize_pipeline_snapshot(raw_df: pd.DataFrame, config: Optional[PipelineP
         "KFI Used For App": "kfi_used_for_app",
         "Contracted Payment Period": "contracted_payment_period",
         "Interest Payment Percentage": "interest_payment_percentage",
+        "Borrower Age": "borrower_age",
+        "Youngest Borrower Age": "youngest_borrower_age",
     }
     out = out.rename(columns={k: v for k, v in rename_map.items() if k in out.columns})
 
@@ -206,9 +208,14 @@ def normalize_pipeline_snapshot(raw_df: pd.DataFrame, config: Optional[PipelineP
         "fees_added",
         "property_value",
         "interest_payment_percentage",
+        "borrower_age",
+        "youngest_borrower_age",
     ]:
         if c in out.columns:
             out[c] = pd.to_numeric(out[c], errors="coerce")
+
+    if "youngest_borrower_age" not in out.columns and "borrower_age" in out.columns:
+        out["youngest_borrower_age"] = out["borrower_age"]
 
     for c in ["status_raw", "dpr_status_raw", "broker", "product", "account_number", "property_region"]:
         if c not in out.columns:

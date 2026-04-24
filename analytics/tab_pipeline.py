@@ -46,12 +46,14 @@ try:
         DEFAULT_EXPECTED_CONFIG_RELATIVE,
         add_pipeline_stratification_buckets,
         load_expected_funding_config_yaml,
+        prepare_weekly_trend_dataset,
     )
 except ImportError:
     from analytics.pipeline_tab_helpers import (
         DEFAULT_EXPECTED_CONFIG_RELATIVE,
         add_pipeline_stratification_buckets,
         load_expected_funding_config_yaml,
+        prepare_weekly_trend_dataset,
     )
 
 FLOW_STAGES = ["KFI", "APPLICATION", "OFFER", "COMPLETED"]
@@ -61,6 +63,7 @@ STAGE_LABELS = {
     "OFFER": "Offers",
     "COMPLETED": "Completions",
 }
+STAGE_COLORS = [PRIMARY_COLOR, SECONDARY_COLOR, "#7EBAB5", "#6B6B6B"]
 
 
 def _kpi_tile(label: str, value: str, subtitle: str = "") -> str:
@@ -204,36 +207,143 @@ def _render_weekly_trend_charts(history_df: pd.DataFrame) -> None:
         st.info("Trend charts will populate as additional weekly snapshots become available.")
         return
 
-    trend = history_df.copy()
-    trend["stage_label"] = trend["stage"].map(STAGE_LABELS)
-    trend["week"] = pd.to_datetime(trend["snapshot_date"], errors="coerce").dt.strftime("%d %b %Y")
+    trend = prepare_weekly_trend_dataset(history_df)
+    stage_options = [STAGE_LABELS[s] for s in FLOW_STAGES if STAGE_LABELS[s] in set(trend["stage_label"].astype(str))]
+    selected_stage_labels = st.multiselect(
+        "Filter stages",
+        options=stage_options,
+        default=stage_options,
+        key="weekly_stage_filter",
+    )
+    trend = trend[trend["stage_label"].isin(selected_stage_labels)].copy()
+    if trend.empty:
+        st.info("No weekly data available for the selected stages.")
+        return
 
     col1, col2 = st.columns(2)
     with col1:
-        fig_cnt = px.line(
+        fig_cnt = px.bar(
             trend,
             x="week",
             y="count",
             color="stage_label",
-            markers=True,
-            color_discrete_sequence=[PRIMARY_COLOR, SECONDARY_COLOR, "#7EBAB5", "#6B6B6B"],
+            barmode="stack",
+            category_orders={"week": list(trend["week"].cat.categories), "stage_label": stage_options},
+            color_discrete_sequence=STAGE_COLORS,
         )
         fig_cnt.update_yaxes(title_text="Applications")
         fig_cnt.update_xaxes(title_text="Week")
         st.plotly_chart(apply_chart_theme(fig_cnt, "Weekly Volumes by Stage"), use_container_width=True)
 
     with col2:
-        fig_amt = px.line(
+        fig_amt = px.bar(
             trend,
             x="week",
             y="amount",
             color="stage_label",
-            markers=True,
-            color_discrete_sequence=[PRIMARY_COLOR, SECONDARY_COLOR, "#7EBAB5", "#6B6B6B"],
+            barmode="stack",
+            category_orders={"week": list(trend["week"].cat.categories), "stage_label": stage_options},
+            color_discrete_sequence=STAGE_COLORS,
         )
         fig_amt.update_yaxes(title_text="Amount (£)")
         fig_amt.update_xaxes(title_text="Week")
         st.plotly_chart(apply_chart_theme(fig_amt, "Weekly Amounts by Stage"), use_container_width=True)
+
+
+def _render_ltv_age_bubble(df: pd.DataFrame, exposure_col: str, color_col: str | None, title: str, key_prefix: str) -> None:
+    bubble_df = df.dropna(subset=["youngest_borrower_age", "current_loan_to_value", exposure_col]).copy()
+    bubble_df = bubble_df[pd.to_numeric(bubble_df[exposure_col], errors="coerce").fillna(0) > 0]
+    if bubble_df.empty:
+        st.info("Insufficient data for bubble chart.")
+        return
+
+    if len(bubble_df) > 2000:
+        bubble_df = bubble_df.sample(2000, random_state=42)
+        st.caption("Showing 2,000 random loans for performance")
+
+    bubble_df["current_loan_to_value_pct"] = pd.to_numeric(bubble_df["current_loan_to_value"], errors="coerce")
+    fig = px.scatter(
+        bubble_df,
+        x="youngest_borrower_age",
+        y="current_loan_to_value_pct",
+        size=exposure_col,
+        color=color_col if color_col in bubble_df.columns else None,
+        hover_data={
+            "youngest_borrower_age": ":.0f",
+            "current_loan_to_value_pct": ":.1f",
+            exposure_col: ":,.0f",
+        },
+        color_discrete_sequence=[PRIMARY_COLOR, SECONDARY_COLOR, "#7EBAB5", "#6B6B6B"],
+    )
+    fig = apply_chart_theme(fig, title)
+    fig.update_layout(legend_title_text="")
+    fig.update_traces(marker=dict(opacity=0.7, line=dict(width=0.5, color="white")))
+    fig.update_xaxes(title_text="Youngest Borrower Age (years)")
+    fig.update_yaxes(title_text="Current LTV (%)")
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def _render_portfolio_concentration_matrix(df: pd.DataFrame, exposure_col: str, key_prefix: str) -> None:
+    st.markdown("### Portfolio Concentration Matrix")
+    st.caption("Deep dive into the intersection of any two risk dimensions.")
+    if key_prefix == "pipeline":
+        st.caption("Pipeline exposure, not funded exposure.")
+
+    col_x, col_y, col_m = st.columns(3)
+    dim_map = {
+        "Region": "geographic_region",
+        "Product Type": "erm_product_type",
+        "LTV Bucket": "ltv_bucket",
+        "Age Bucket": "age_bucket",
+        "Ticket Size": "ticket_bucket",
+        "Vintage": "origination_year",
+        "Broker Channel": "broker_channel",
+    }
+    avail = [k for k, v in dim_map.items() if v in df.columns]
+    if not avail:
+        st.info("No concentration dimensions are available.")
+        return
+
+    with col_x:
+        row_label = st.selectbox("Rows (Y-Axis)", avail, index=0, key=f"{key_prefix}_rows")
+    with col_y:
+        c_idx = 2 if len(avail) > 2 else 0
+        col_label = st.selectbox("Columns (X-Axis)", avail, index=c_idx, key=f"{key_prefix}_cols")
+    with col_m:
+        metric_choice = st.radio("Metric", options=["Balance", "Count"], horizontal=True, key=f"{key_prefix}_metric")
+
+    row_col = dim_map[row_label]
+    col_col = dim_map[col_label]
+    if metric_choice == "Balance":
+        mat = df.groupby([row_col, col_col], observed=True)[exposure_col].sum().unstack(fill_value=0)
+        txt = mat.applymap(lambda x: f"£{x/1_000_000:.1f}M" if x > 0 else "")
+        hovertemplate = "%{y}, %{x}<br><b>£%{z:,.0f}</b><extra></extra>"
+    else:
+        mat = df.groupby([row_col, col_col], observed=True).size().unstack(fill_value=0)
+        txt = mat.applymap(lambda x: f"{int(x):,}" if x > 0 else "")
+        hovertemplate = "%{y}, %{x}<br><b>%{z:,} Loans</b><extra></extra>"
+
+    fig_mx = go.Figure(data=go.Heatmap(
+        z=mat.values,
+        x=[str(c).replace("_", " ").title() for c in mat.columns],
+        y=[str(i).replace("_", " ").title() for i in mat.index],
+        text=txt.values,
+        texttemplate="%{text}",
+        textfont={"size": 11},
+        colorscale=[[0, "#F0F2F6"], [1, PRIMARY_COLOR]],
+        showscale=True,
+        hovertemplate=hovertemplate,
+        xgap=2,
+        ygap=2,
+    ))
+    fig_mx.update_layout(
+        title=dict(text=f"<b>{metric_choice}</b>: {row_label} vs {col_label}"),
+        margin=dict(l=40, r=40, t=60, b=40),
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        height=500,
+    )
+    st.plotly_chart(fig_mx, use_container_width=True)
 
 
 def _treemap_pair(
@@ -438,49 +548,66 @@ def render_pipeline_tab(funded_df: pd.DataFrame) -> None:
     _render_weekly_flow_summary(history_df)
     _render_weekly_trend_charts(history_df)
 
-    st.markdown("### Pipeline Snapshot")
+    st.markdown("### Pipeline Stage MI")
+    st.caption("Outstanding stock metrics are point-in-time; weekly flow metrics are based on current vs prior snapshot.")
     live_series = pipeline_df.get("is_live_stage", pd.Series(dtype=bool))
     live_df = pipeline_df[live_series] if len(live_series) == len(pipeline_df) else pipeline_df.copy()
+    current_week = history_df["snapshot_date"].max() if not history_df.empty else pd.NaT
+    prev_week = history_df[history_df["snapshot_date"] < current_week]["snapshot_date"].max() if not history_df.empty else pd.NaT
 
-    active_count = int(len(live_df))
-    active_amount = float(pd.to_numeric(live_df.get("loan_amount", 0), errors="coerce").fillna(0).sum())
-    completed_count = int((pipeline_df.get("stage", pd.Series(dtype="string")) == "COMPLETED").sum())
+    def _stage_tile(stage: str, label: str, flow: bool = False):
+        if flow:
+            curr = history_df[(history_df["stage"] == stage) & (history_df["snapshot_date"] == current_week)] if pd.notna(current_week) else pd.DataFrame()
+            prev = history_df[(history_df["stage"] == stage) & (history_df["snapshot_date"] == prev_week)] if pd.notna(prev_week) else pd.DataFrame()
+            amount = float(curr["amount"].sum()) if not curr.empty else 0.0
+            count = int(curr["count"].sum()) if not curr.empty else 0
+            prev_amt = float(prev["amount"].sum()) if not prev.empty else 0.0
+            basis_label = "New this week"
+        else:
+            subset = live_df[live_df.get("stage", pd.Series(dtype="string")).eq(stage)]
+            amount = float(pd.to_numeric(subset.get("loan_amount", 0), errors="coerce").fillna(0).sum())
+            count = int(len(subset))
+            prev = history_df[(history_df["stage"] == stage) & (history_df["snapshot_date"] == prev_week)] if pd.notna(prev_week) else pd.DataFrame()
+            prev_amt = float(prev["amount"].sum()) if not prev.empty else 0.0
+            basis_label = "Outstanding"
+        delta_txt = f"Δ vs prior week: {format_currency(amount - prev_amt)}" if pd.notna(prev_week) else "Δ vs prior week: N/A"
+        return _kpi_tile(label, format_currency(amount), f"{basis_label} | {count:,} loans | {delta_txt}")
 
-    large_threshold = 250_000
-    large_mask = pd.to_numeric(live_df.get("loan_amount", 0), errors="coerce").fillna(0) >= large_threshold
-    large_count = int(large_mask.sum())
-    large_amount = float(pd.to_numeric(live_df.loc[large_mask, "loan_amount"], errors="coerce").fillna(0).sum()) if "loan_amount" in live_df.columns else 0.0
+    st.markdown("#### Outstanding Stock")
+    o1, o2, o3 = st.columns(3)
+    o1.markdown(_stage_tile("KFI", "Outstanding KFIs"), unsafe_allow_html=True)
+    o2.markdown(_stage_tile("APPLICATION", "Outstanding Applications"), unsafe_allow_html=True)
+    o3.markdown(_stage_tile("OFFER", "Outstanding Offers"), unsafe_allow_html=True)
 
-    k1, k2, k3, k4 = st.columns(4)
-    k1.markdown(_kpi_tile("Total Active Pipeline", f"{active_count:,}", "Live opportunities"), unsafe_allow_html=True)
-    k2.markdown(_kpi_tile("Active Pipeline Amount", format_currency(active_amount), "Indicative value"), unsafe_allow_html=True)
-    k3.markdown(_kpi_tile("Completions (Snapshot)", f"{completed_count:,}", "Completed this snapshot"), unsafe_allow_html=True)
-    k4.markdown(_kpi_tile("Large Loans ≥ £250k", f"{large_count:,}", f"{format_currency(large_amount)} exposure"), unsafe_allow_html=True)
+    st.markdown("#### Weekly Flow")
+    f1, f2, f3, f4 = st.columns(4)
+    f1.markdown(_stage_tile("KFI", "Weekly new KFIs", flow=True), unsafe_allow_html=True)
+    f2.markdown(_stage_tile("APPLICATION", "Weekly new Applications", flow=True), unsafe_allow_html=True)
+    f3.markdown(_stage_tile("OFFER", "Weekly new Offers", flow=True), unsafe_allow_html=True)
+    f4.markdown(_stage_tile("COMPLETED", "Weekly completions", flow=True), unsafe_allow_html=True)
 
     if "stage" in pipeline_df.columns:
-        col_a, col_b = st.columns(2)
-        with col_a:
-            stage_counts = pipeline_df.groupby("stage", observed=True).size().reset_index(name="Applications")
-            fig_cnt = px.bar(stage_counts, x="stage", y="Applications")
-            fig_cnt.update_traces(marker_color=PRIMARY_COLOR, texttemplate="%{y:,}", textposition="outside")
-            fig_cnt.update_xaxes(title_text="Stage")
-            st.plotly_chart(apply_chart_theme(fig_cnt, "Applications by Stage"), use_container_width=True)
-
-        with col_b:
-            stage_amount = (
-                pipeline_df.groupby("stage", observed=True)["loan_amount"]
-                .sum(min_count=1)
-                .fillna(0)
-                .reset_index(name="Amount")
-            ) if "loan_amount" in pipeline_df.columns else pd.DataFrame()
-            if stage_amount.empty:
-                st.info("Loan amount data is not available for stage balance reporting.")
-            else:
-                fig_amt = px.bar(stage_amount, x="stage", y="Amount")
-                fig_amt.update_traces(marker_color=PRIMARY_COLOR, texttemplate="£%{y:,.0f}", textposition="outside")
-                fig_amt.update_xaxes(title_text="Stage")
-                fig_amt.update_yaxes(title_text="Indicative amount (£)")
-                st.plotly_chart(apply_chart_theme(fig_amt, "Indicative Stage Balances"), use_container_width=True)
+        funnel_counts = (
+            pipeline_df[pipeline_df["stage"].isin(FLOW_STAGES)]
+            .groupby("stage", observed=True)
+            .size()
+            .reindex(FLOW_STAGES, fill_value=0)
+            .reset_index(name="count")
+        )
+        fig_funnel = go.Figure(go.Funnel(y=funnel_counts["stage"], x=funnel_counts["count"], textinfo="value+percent previous"))
+        st.plotly_chart(apply_chart_theme(fig_funnel, "Pipeline Conversion Funnel (Aggregate Snapshot)"), use_container_width=True)
+        kfi = float(funnel_counts.loc[funnel_counts["stage"] == "KFI", "count"].sum())
+        app = float(funnel_counts.loc[funnel_counts["stage"] == "APPLICATION", "count"].sum())
+        offer = float(funnel_counts.loc[funnel_counts["stage"] == "OFFER", "count"].sum())
+        comp = float(funnel_counts.loc[funnel_counts["stage"] == "COMPLETED", "count"].sum())
+        kfi_app = (app / kfi * 100) if kfi > 0 else 0.0
+        app_offer = (offer / app * 100) if app > 0 else 0.0
+        offer_comp = (comp / offer * 100) if offer > 0 else 0.0
+        st.caption(
+            f"KFI→Application: {kfi_app:.1f}% | Application→Offer: {app_offer:.1f}% | "
+            f"Offer→Completion: {offer_comp:.1f}%"
+        )
+        st.caption("Based on snapshot stage counts — not loan-level transitions.")
 
     st.markdown("### Pipeline Composition")
     strat_df = add_pipeline_stratification_buckets(live_df)
@@ -504,6 +631,11 @@ def render_pipeline_tab(funded_df: pd.DataFrame) -> None:
     _bar_strat_pair(strat_df, "ltv_bucket", "loan_amount", "LTV Distribution", "Pipeline Amount by LTV", "Applications by LTV")
     _bar_strat_pair(strat_df, "ticket_bucket", "loan_amount", "Ticket Size Distribution", "Pipeline Amount by Ticket Size", "Applications by Ticket Size")
     _bar_strat_pair(strat_df, "age_bucket", "loan_amount", "Borrower Age Distribution", "Pipeline Amount by Borrower Age", "Applications by Borrower Age")
+    _render_portfolio_concentration_matrix(
+        strat_df.rename(columns={"property_region": "geographic_region", "broker": "broker_channel", "product": "erm_product_type"}),
+        exposure_col="loan_amount",
+        key_prefix="pipeline",
+    )
 
     st.markdown("### Reconciliation & Control")
     st.caption("Control check: completed pipeline applications reconciled against funded portfolio records.")
@@ -541,6 +673,77 @@ def render_forward_exposure_tab(funded_df: pd.DataFrame) -> None:
     ef_config = load_expected_funding_config(ef_config_raw)
     expected_df = build_expected_funding_dataset(pipeline_df, recon_df, ef_config)
 
+    st.markdown("### Forward Forecast KPI Strip")
+    if expected_df.empty:
+        st.info("Forecast KPIs are unavailable because no expected forward records were generated.")
+    else:
+        w = pd.to_numeric(expected_df["expected_funded_amount"], errors="coerce").fillna(0)
+        forecast_balance = float(w.sum())
+        wa_ltv_fwd = float(weighted_average(pd.to_numeric(expected_df.get("current_ltv"), errors="coerce"), w)) if w.sum() > 0 else 0.0
+        wa_rate_subtitle = "Balance-weighted using expected forward balance"
+        if "product_rate" in expected_df.columns and w.sum() > 0:
+            wa_rate_fwd = float(weighted_average(pd.to_numeric(expected_df.get("product_rate"), errors="coerce"), w))
+        else:
+            rate_series = pd.to_numeric(expected_df.get("product_rate"), errors="coerce")
+            wa_rate_fwd = float(rate_series.mean()) if rate_series.notna().any() else 0.0
+            wa_rate_subtitle = "Simple average fallback (forward balance unavailable)"
+        wa_age_fwd = float(weighted_average(pd.to_numeric(expected_df.get("youngest_borrower_age"), errors="coerce"), w)) if ("youngest_borrower_age" in expected_df.columns and w.sum() > 0) else 0.0
+        avg_loan_size = float(forecast_balance / max(len(expected_df), 1))
+        top_region = (
+            expected_df.groupby("property_region", observed=True)["expected_funded_amount"].sum().sort_values(ascending=False).head(1)
+            if "property_region" in expected_df.columns else pd.Series(dtype=float)
+        )
+        top_broker = (
+            expected_df.groupby("broker", observed=True)["expected_funded_amount"].sum().sort_values(ascending=False).head(1)
+            if "broker" in expected_df.columns else pd.Series(dtype=float)
+        )
+        monthly_run_rate = 0.0
+        if "expected_funded_date" in expected_df.columns:
+            run = expected_df.copy()
+            run["exp_month"] = pd.to_datetime(run["expected_funded_date"], errors="coerce").dt.to_period("M")
+            monthly_series = run.groupby("exp_month", observed=True)["expected_funded_amount"].sum()
+            monthly_run_rate = float(monthly_series.mean()) if not monthly_series.empty else 0.0
+        annualised_run_rate = monthly_run_rate * 12
+        weekly_run_rate = monthly_run_rate / 4.345 if monthly_run_rate > 0 else 0.0
+        if forecast_balance >= 100_000_000:
+            weeks_to_100mm = 0.0
+        elif weekly_run_rate > 0:
+            weeks_to_100mm = (100_000_000 - forecast_balance) / weekly_run_rate
+        else:
+            weeks_to_100mm = None
+
+        tiles = st.columns(5)
+        tiles[0].markdown(_kpi_tile("Forecast balance", format_currency(forecast_balance), "Forward expected exposure"), unsafe_allow_html=True)
+        tiles[1].markdown(_kpi_tile("WA LTV", f"{wa_ltv_fwd:.1f}%", "Forecast weighted"), unsafe_allow_html=True)
+        tiles[2].markdown(_kpi_tile("WA interest rate", f"{wa_rate_fwd:.2%}", wa_rate_subtitle), unsafe_allow_html=True)
+        tiles[3].markdown(_kpi_tile("WA borrower age", f"{wa_age_fwd:.0f}", "Forecast weighted"), unsafe_allow_html=True)
+        tiles[4].markdown(_kpi_tile("Average loan size", format_currency(avg_loan_size), "Forecast weighted"), unsafe_allow_html=True)
+        tiles2 = st.columns(5)
+        if not top_region.empty and forecast_balance > 0:
+            region_amt = float(top_region.iloc[0])
+            region_name = str(top_region.index[0])
+            region_pct = region_amt / forecast_balance * 100
+            region_value = f"{region_pct:.1f}%"
+            region_sub = f"{region_name} · {format_currency(region_amt)} (forward only)"
+        else:
+            region_value = "N/A"
+            region_sub = "Forward-only concentration unavailable"
+        if not top_broker.empty and forecast_balance > 0:
+            broker_amt = float(top_broker.iloc[0])
+            broker_name = str(top_broker.index[0])
+            broker_pct = broker_amt / forecast_balance * 100
+            broker_value = f"{broker_pct:.1f}%"
+            broker_sub = f"{broker_name} · {format_currency(broker_amt)} (forward only)"
+        else:
+            broker_value = "N/A"
+            broker_sub = "Forward-only concentration unavailable"
+        tiles2[0].markdown(_kpi_tile("Largest geographic region exposure", region_value, region_sub), unsafe_allow_html=True)
+        tiles2[1].markdown(_kpi_tile("Largest broker exposure", broker_value, broker_sub), unsafe_allow_html=True)
+        tiles2[2].markdown(_kpi_tile("Annualised run-rate", format_currency(annualised_run_rate), "Forecast completions pace"), unsafe_allow_html=True)
+        tiles2[3].markdown(_kpi_tile("Monthly run-rate completions", format_currency(monthly_run_rate), "Forecast completions pace"), unsafe_allow_html=True)
+        weeks_text = f"{weeks_to_100mm:,.1f} weeks" if weeks_to_100mm is not None else "N/A"
+        tiles2[4].markdown(_kpi_tile("Weeks to £100MM completions", weeks_text, "Based on forward monthly completion run-rate"), unsafe_allow_html=True)
+
     # Top summary: funded book truth
     st.markdown("### Funded Book Summary")
     balance_col = _pick_first_col(funded_df, ["total_balance", "current_outstanding_balance", "current_principal_balance"])
@@ -564,6 +767,9 @@ def render_forward_exposure_tab(funded_df: pd.DataFrame) -> None:
     st.markdown("### Run Rate & Milestones")
     history_df = _build_weekly_snapshot_history(snapshot_state["selected_snapshot"], max_weeks=16)
     completion_hist = history_df[history_df["stage"].eq("COMPLETED")].sort_values("snapshot_date") if not history_df.empty else pd.DataFrame()
+    time_to_100mm = "Unavailable"
+    if total_funded >= 100_000_000:
+        time_to_100mm = "Reached"
 
     if completion_hist.empty:
         st.info("Run-rate analytics will appear once weekly completions history is available.")
@@ -573,6 +779,8 @@ def render_forward_exposure_tab(funded_df: pd.DataFrame) -> None:
         annualised = avg_weekly * 52
         combined_forward = total_funded + float(expected_df["expected_funded_amount"].sum()) if not expected_df.empty else total_funded
         runway_weeks = (1_000_000_000 - total_funded) / avg_weekly if avg_weekly > 0 and total_funded < 1_000_000_000 else None
+        if total_funded < 100_000_000 and avg_weekly > 0:
+            time_to_100mm = f"{((100_000_000 - total_funded) / avg_weekly):,.1f} weeks"
 
         rr1, rr2, rr3, rr4 = st.columns(4)
         rr1.markdown(_kpi_tile("5W Avg Completions", format_currency(avg_weekly), "Recent weekly average"), unsafe_allow_html=True)
@@ -587,6 +795,7 @@ def render_forward_exposure_tab(funded_df: pd.DataFrame) -> None:
         fig_run.update_yaxes(title_text="Amount (£)")
         fig_run.update_xaxes(title_text="Week")
         st.plotly_chart(apply_chart_theme(fig_run, "Completions Run-Rate Trend"), use_container_width=True)
+    st.markdown(_kpi_tile("Time to £100MM", time_to_100mm, "Mandatory milestone KPI"), unsafe_allow_html=True)
 
     st.markdown("### Forward Exposure")
     expected_amount = float(expected_df["expected_funded_amount"].sum()) if not expected_df.empty else 0.0
@@ -673,6 +882,27 @@ def render_forward_exposure_tab(funded_df: pd.DataFrame) -> None:
                 fig_bar = px.bar(bar_df, x="Broker", y=["Funded", "Expected"], barmode="stack", color_discrete_sequence=[PRIMARY_COLOR, SECONDARY_COLOR])
                 fig_bar.update_layout(legend_title_text="")
                 st.plotly_chart(apply_chart_theme(fig_bar, "Funded vs Forward by Broker"), use_container_width=True)
+
+    st.markdown("### Relationship Analysis")
+    forward_visual_df = expected_df.rename(
+        columns={
+            "expected_funded_amount": "total_balance",
+            "property_region": "geographic_region",
+            "broker": "broker_channel",
+            "product": "erm_product_type",
+        }
+    ).copy()
+    if "youngest_borrower_age" not in forward_visual_df.columns and "borrower_age" in forward_visual_df.columns:
+        forward_visual_df["youngest_borrower_age"] = forward_visual_df["borrower_age"]
+    forward_visual_df = add_pipeline_stratification_buckets(forward_visual_df)
+    _render_ltv_age_bubble(
+        forward_visual_df,
+        exposure_col="total_balance",
+        color_col="erm_product_type",
+        title="LTV vs Youngest Borrower Age",
+        key_prefix="forward",
+    )
+    _render_portfolio_concentration_matrix(forward_visual_df, exposure_col="total_balance", key_prefix="forward")
 
     st.markdown("### Model & Calibration Status")
     model_mode = "Empirical" if config_ok else "Hybrid Defaults"
