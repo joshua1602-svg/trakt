@@ -157,9 +157,23 @@ except ImportError:
 # Pipeline tab (optional, modular)
 try:
     from tab_pipeline import render_forward_exposure_tab, render_pipeline_tab
+    from blob_storage import get_latest_pipeline_snapshot, download_pipeline_snapshot_to_tempfile
+    from pipeline_prep import PipelinePrepConfig, normalize_pipeline_snapshot
+    from pipeline_reconciliation import reconcile_completed_pipeline_to_funded
+    from pipeline_expected_funding import build_expected_funding_dataset, load_expected_funding_config
+    from pipeline_tab_helpers import DEFAULT_EXPECTED_CONFIG_RELATIVE, load_expected_funding_config_yaml
     PIPELINE_TAB_AVAILABLE = True
 except ImportError:
-    PIPELINE_TAB_AVAILABLE = False
+    try:
+        from analytics.tab_pipeline import render_forward_exposure_tab, render_pipeline_tab
+        from analytics.blob_storage import get_latest_pipeline_snapshot, download_pipeline_snapshot_to_tempfile
+        from analytics.pipeline_prep import PipelinePrepConfig, normalize_pipeline_snapshot
+        from analytics.pipeline_reconciliation import reconcile_completed_pipeline_to_funded
+        from analytics.pipeline_expected_funding import build_expected_funding_dataset, load_expected_funding_config
+        from analytics.pipeline_tab_helpers import DEFAULT_EXPECTED_CONFIG_RELATIVE, load_expected_funding_config_yaml
+        PIPELINE_TAB_AVAILABLE = True
+    except ImportError:
+        PIPELINE_TAB_AVAILABLE = False
 
 # ============================
 # Refactor split imports (data + charts layers)
@@ -1033,9 +1047,12 @@ with st.expander("Export & Report", expanded=False):
 tab_names = []
 if PIPELINE_TAB_AVAILABLE:
     tab_names.append("Pipeline")
+tab_names.extend([
+    "Funded Exposures",
+])
+if PIPELINE_TAB_AVAILABLE:
     tab_names.append("Forward Exposure")
 tab_names.extend([
-    "Stratifications",
     "Scenario Analysis",
     "Static Pools",
 ])
@@ -1047,9 +1064,10 @@ _i = 0
 if PIPELINE_TAB_AVAILABLE:
     tab_pipeline = tabs[_i]
     _i += 1
+tab1 = tabs[_i]; _i += 1
+if PIPELINE_TAB_AVAILABLE:
     tab_forward_exposure = tabs[_i]
     _i += 1
-tab1 = tabs[_i]; _i += 1
 tab2 = tabs[_i]; _i += 1
 tab3 = tabs[_i]; _i += 1
 if RISK_MONITORING_AVAILABLE:
@@ -2723,13 +2741,58 @@ with tab3:
 # TAB 4: RISK MONITORING
 # ============================
 
+def _build_forward_expected_for_risk(funded_df: pd.DataFrame) -> pd.DataFrame:
+    if not PIPELINE_TAB_AVAILABLE:
+        return pd.DataFrame()
+    try:
+        snap = get_latest_pipeline_snapshot()
+        if snap is None:
+            return pd.DataFrame()
+        path = download_pipeline_snapshot_to_tempfile(snap.blob_name)
+        pipeline_df = normalize_pipeline_snapshot(pd.read_csv(path, low_memory=False), PipelinePrepConfig())
+        if pipeline_df.empty:
+            return pd.DataFrame()
+        recon_df = reconcile_completed_pipeline_to_funded(pipeline_df, funded_df)
+        raw_cfg, _ = load_expected_funding_config_yaml(DEFAULT_EXPECTED_CONFIG_RELATIVE)
+        ef_cfg = load_expected_funding_config(raw_cfg)
+        return build_expected_funding_dataset(pipeline_df, recon_df, ef_cfg)
+    except Exception:
+        return pd.DataFrame()
+
+
+def _build_risk_lens_df(funded_df: pd.DataFrame, lens: str) -> tuple[pd.DataFrame, bool]:
+    if lens == "Funded":
+        return funded_df.copy(), False
+
+    expected_df = _build_forward_expected_for_risk(funded_df)
+    forward_df = pd.DataFrame({
+        "current_principal_balance": pd.to_numeric(expected_df.get("expected_funded_amount", pd.Series(dtype=float)), errors="coerce"),
+        "geographic_region_classification": expected_df.get("property_region", pd.Series(dtype="string")),
+        "interest_rate_type": pd.Series([pd.NA] * len(expected_df)),
+        "youngest_borrower_age": pd.to_numeric(expected_df.get("youngest_borrower_age", pd.Series(dtype=float)), errors="coerce"),
+        "borrower_id": expected_df.get("borrower_id", pd.Series(dtype="string")),
+        "original_valuation_amount": pd.to_numeric(expected_df.get("estimated_value", pd.Series(dtype=float)), errors="coerce"),
+    })
+
+    funded_monitor_df = funded_df.copy()
+    if "total_balance" in funded_monitor_df.columns and "current_principal_balance" not in funded_monitor_df.columns:
+        funded_monitor_df["current_principal_balance"] = pd.to_numeric(funded_monitor_df["total_balance"], errors="coerce")
+    combined = pd.concat([funded_monitor_df, forward_df], ignore_index=True, sort=False)
+    return combined, True
+
+
 if RISK_MONITORING_AVAILABLE:
     with tab4:
         st.markdown("### Risk Limit Monitoring")
         st.markdown("<br>", unsafe_allow_html=True)
+
+        lens = st.radio("Lens", ["Funded", "Forward"], horizontal=True)
+        risk_df, strict_missing = _build_risk_lens_df(df, lens)
+        if risk_df.empty:
+            st.warning(f"{lens} lens data is unavailable.")
         
         # Initialize risk monitor
-        monitor = RiskMonitor(df)
+        monitor = RiskMonitor(risk_df, unknown_on_missing_required=strict_missing)
         results = monitor.check_all_limits()
         summary = monitor.get_summary_stats(results)
         
