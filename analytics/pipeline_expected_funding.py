@@ -133,6 +133,7 @@ def build_expected_funding_dataset(
         "property_region_code",
         "youngest_borrower_age",
         "borrower_age",
+        "product_rate",
         "pipeline_amount",
         "estimated_value",
         "current_ltv",
