@@ -1,0 +1,59 @@
+# config/system/onboarding_agent.yaml
+# Configuration for Onboarding Agent v1
+
+# Confidence thresholds for field mapping
+confidence_threshold_auto: 0.92    # >= this → auto-accepted, no review
+confidence_threshold_review: 0.75  # < this → flagged for review / sent to LLM
+
+llm:
+  provider: anthropic
+
+  # Cheap model for question wording, narrative summary, and mapping suggestions
+  # Default: Haiku — low cost, fast, sufficient for structured suggestions
+  questionnaire_model: claude-haiku-4-5-20251001
+  mapping_model: claude-haiku-4-5-20251001
+
+  # Stronger model — only used if allow_frontier_escalation: true AND
+  # confidence is still insufficient after cheap model pass
+  escalation_model: claude-sonnet-4-6
+
+  # IMPORTANT: Off by default. Enable only where explicitly approved.
+  # Frontier escalation significantly increases cost and latency.
+  allow_frontier_escalation: false
+
+# Data protection — never relaxed
+never_send_full_tape: true
+max_sample_values_per_field: 5
+max_fields_sent_to_llm: 20
+
+# Question categories for config bootstrap
+question_categories:
+  - client_config
+  - asset_config
+  - regime_config
+  - schema_definition
+
+# Required config fields by regime
+required_config_by_regime:
+  ESMA_Annex2:
+    - defaults.originator_legal_entity_identifier
+    - portfolio.asset_class
+    - portfolio.base_currency
+    - default_regime
+  ESMA_Annex12:
+    - defaults.originator_legal_entity_identifier
+    - portfolio.asset_class
+    - portfolio.base_currency
+    - default_regime
+
+# Required config fields by asset class
+required_config_by_asset_class:
+  equity_release:
+    - portfolio.country
+    - portfolio.base_currency
+  rre:
+    - portfolio.country
+    - portfolio.base_currency
+  sme:
+    - portfolio.country
+    - portfolio.base_currency
