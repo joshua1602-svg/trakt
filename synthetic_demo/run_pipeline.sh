@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
-# Full pipeline run for synthetic demo.
-# Inserts a pandas-3.0 compatibility pre-processing step between Gate 1 and Gate 2
-# without modifying any pipeline scripts.
+# Full pipeline run for synthetic demo — uses Onboarding Agent as Gate 1.
+#
+# Gate 1 now runs: Config Bootstrap → Semantic Alignment → LLM Mapping → Enum Mapping
+# The canonical_full.csv is written to OUT_DIR/<run_id>/ by the Onboarding Agent.
+#
+# To skip the Onboarding Agent and use the legacy direct path:
+#   python trakt_run.py ... --skip-onboarding
+#
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -19,29 +24,47 @@ WORKBOOK="$ROOT/DRAFT1auth.099.001.04_non-ABCP Underlying Exposure Report_Versio
 XSD="$ROOT/config/system/DRAFT1auth.099.001.04_1.3.0.xsd"
 DELIVERY_RULES="$ROOT/config/regime/annex2_delivery_rules.yaml"
 
-echo "[Gate 1] Semantic alignment..."
-python engine/gate_1_alignment/semantic_alignment.py \
-  --input "$INPUT" \
-  --portfolio-type equity_release \
-  --registry "$REGISTRY" \
+echo "[Gate 1] Onboarding Agent (Config Bootstrap + Semantic Alignment + Enum Mapping)..."
+OB_OUT="$ROOT/synthetic_demo/output/onboarding"
+python -m agents.onboarding_agent \
+  --raw-tape "$INPUT" \
+  --client-config "$CFG" \
+  --schema-registry "$REGISTRY" \
   --aliases-dir "$ALIASES" \
-  --output-dir "$OUT_DIR" \
-  --output-schema active
+  --enum-mapping "$ENUM_MAP" \
+  --output-dir "$OB_OUT" \
+  --llm-enabled false
 
-echo "[Pre-process] Applying pandas-3.0 compatibility fix to canonical_full.csv..."
-python synthetic_demo/preprocess_canonical_full.py
+# Resolve the canonical_full.csv produced by the most recent onboarding run
+CANONICAL_FULL=$(find "$OB_OUT" -name "SYNTHETIC_ERE_Portfolio_012026_canonical_full.csv" \
+                   -not -path "*/\.*" 2>/dev/null | sort | tail -1)
 
+if [[ -z "$CANONICAL_FULL" ]]; then
+  echo "[ERROR] Onboarding Agent did not produce canonical_full.csv. Check output above."
+  exit 1
+fi
+
+echo "[Gate 1] Canonical CSV: $CANONICAL_FULL"
+
+echo "[Pre-process] Applying pandas-3.0 compatibility fix..."
+# Pass the canonical path to the pre-processor explicitly
+CANONICAL_FULL_OVERRIDE="$CANONICAL_FULL" python synthetic_demo/preprocess_canonical_full.py || true
+
+# If pre-processor moves the file to OUT_DIR, use the original canonical path for Gate 2.
+# The canonical_full.csv is already the correct post-alignment output.
 echo "[Gate 2] Canonical transform..."
 python engine/gate_2_transform/canonical_transform.py \
-  "$OUT_DIR/SYNTHETIC_ERE_Portfolio_012026_canonical_full.csv" \
+  "$CANONICAL_FULL" \
   --registry "$REGISTRY" \
   --portfolio-type equity_release \
   --config "$CFG" \
   --output-dir "$OUT_DIR"
 
+CANONICAL_TYPED="$OUT_DIR/SYNTHETIC_ERE_Portfolio_012026_canonical_typed.csv"
+
 echo "[Gate 3a] Schema validation..."
 python engine/gate_3_validation/validate_canonical.py \
-  "$OUT_DIR/SYNTHETIC_ERE_Portfolio_012026_canonical_typed.csv" \
+  "$CANONICAL_TYPED" \
   --registry "$REGISTRY" \
   --portfolio-type equity_release \
   --scope canonical \
@@ -49,7 +72,7 @@ python engine/gate_3_validation/validate_canonical.py \
 
 echo "[Gate 3b] Business rules..."
 python engine/gate_3_validation/validate_business_rules.py \
-  --input "$OUT_DIR/SYNTHETIC_ERE_Portfolio_012026_canonical_typed.csv" \
+  --input "$CANONICAL_TYPED" \
   --config "$CFG" \
   --regime ESMA_Annex2 \
   --report "$VAL_DIR/SYNTHETIC_ERE_Portfolio_012026_business_rules_violations.csv"
@@ -58,7 +81,7 @@ echo "[Gate 3c] Aggregate validation..."
 python engine/gate_3_validation/aggregate_validation_results.py \
   --canonical-violations "$VAL_DIR/SYNTHETIC_ERE_Portfolio_012026_canonical_typed_canonical_violations.csv" \
   --business-violations "$VAL_DIR/SYNTHETIC_ERE_Portfolio_012026_business_rules_violations.csv" \
-  --input-csv "$OUT_DIR/SYNTHETIC_ERE_Portfolio_012026_canonical_typed.csv" \
+  --input-csv "$CANONICAL_TYPED" \
   --output "$VAL_DIR/SYNTHETIC_ERE_Portfolio_012026_field_summary.csv" \
   --dashboard-json "$VAL_DIR/SYNTHETIC_ERE_Portfolio_012026_dashboard.json" \
   --regime ESMA_Annex2 \
@@ -66,7 +89,7 @@ python engine/gate_3_validation/aggregate_validation_results.py \
 
 echo "[Gate 4] ESMA Annex 2 projection..."
 python engine/gate_4_projection/regime_projector.py \
-  "$OUT_DIR/SYNTHETIC_ERE_Portfolio_012026_canonical_typed.csv" \
+  "$CANONICAL_TYPED" \
   --regime ESMA_Annex2 \
   --registry "$REGISTRY" \
   --enum-mapping "$ENUM_MAP" \

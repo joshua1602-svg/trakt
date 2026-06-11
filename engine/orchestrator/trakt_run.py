@@ -70,6 +70,15 @@ import yaml
 
 _log = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Ensure repo root is on sys.path so `from agents.X import Y` works when this
+# file is run via  python engine/orchestrator/trakt_run.py  or  python trakt_run.py
+# ---------------------------------------------------------------------------
+_ORCHESTRATOR_DIR = Path(__file__).resolve().parent   # engine/orchestrator/
+_PROJECT_ROOT_TRK = _ORCHESTRATOR_DIR.parent.parent   # trakt/
+if str(_PROJECT_ROOT_TRK) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT_TRK))
+
 
 # ---------------------------------------------------------------------------
 # Path resolution — derive project layout from this file's location
@@ -339,6 +348,101 @@ def _field_counts_from_violations(path: Optional[Path]) -> Dict[str, int]:
 # Gate runners
 # ---------------------------------------------------------------------------
 
+def _run_gate1_via_onboarding_agent(
+    args,
+    input_path: Path,
+    out_dir: Path,
+    stem: str,
+    run_id: str,
+) -> Tuple[Any, Path, Path]:
+    """
+    Run Gate 1 through the Onboarding Agent (Config Bootstrap + Semantic
+    Alignment + LLM Mapping + Enum Mapping).
+
+    Returns (OnboardingResult, canonical_full_path, header_json_path).
+
+    Exits the process gracefully for review_required (exit 0) or blocked
+    (exit 2).  Raises RuntimeError for failed status.
+    """
+    try:
+        from agents.onboarding_agent import run_onboarding_agent
+    except ImportError as exc:
+        raise RuntimeError(
+            f"[Gate 1] Cannot import Onboarding Agent: {exc}. "
+            "Run from the repo root or use --skip-onboarding."
+        ) from exc
+
+    aliases_dir = getattr(args, "aliases_dir", None) or str(CONFIG_ROOT / "system")
+    enum_mapping = getattr(args, "enum_mapping", None) or str(CONFIG_ROOT / "system" / "enum_mapping.yaml")
+    client_config = getattr(args, "master_config", None)
+
+    # Regulatory mode needs full schema output from semantic_alignment
+    output_schema = "full" if getattr(args, "output_schema", "active") == "full" else "active"
+
+    result = run_onboarding_agent(
+        raw_tape_path=str(input_path),
+        run_id=run_id,
+        client_config_path=client_config,
+        schema_registry_path=args.registry,
+        aliases_dir=aliases_dir,
+        enum_mapping_path=enum_mapping,
+        output_dir=str(out_dir),
+        llm_enabled=not getattr(args, "skip_llm", False),
+        output_schema=output_schema,
+    )
+
+    run_dir = out_dir / run_id
+
+    if result.status == "review_required":
+        print("\n" + "=" * 65)
+        print("[Gate 1] REVIEW REQUIRED — pipeline paused for human approval.")
+        print(f"  Fields mapped:  {result.mapped_fields_count}/{result.total_input_fields}")
+        print(f"  Enum success:   {result.enum_success_rate:.0%}")
+        print(f"  Review items:   {result.review_fields_count} field(s), "
+              f"{result.enum_review_count} enum value(s)")
+        print(f"  Result file:    {result.onboarding_result_path}")
+        print()
+        print("  Review output files are in:")
+        print(f"    {run_dir}")
+        print()
+        print("  Run the Review Workbench to approve and continue:")
+        print(f"    python -m cli.onboarding_review_cli --run-dir {run_dir}")
+        print("=" * 65)
+        sys.exit(0)
+
+    if result.status == "blocked":
+        print("\n" + "=" * 65)
+        print("[Gate 1] BLOCKED — mandatory information is missing.")
+        for q in (result.blocker_questions or [])[:10]:
+            print(f"  ✗  {q.get('question_text', q.get('question', ''))}")
+        print()
+        print(f"  Result file: {result.onboarding_result_path}")
+        print()
+        print("  Answer blocker questions via:")
+        print(f"    python -m cli.onboarding_review_cli --run-dir {run_dir}")
+        print("=" * 65)
+        sys.exit(2)
+
+    if result.status == "failed":
+        err = result.errors[0] if result.errors else "unknown error"
+        raise RuntimeError(f"[Gate 1] Onboarding Agent failed: {err}")
+
+    # status == "ready_for_validation"
+    canonical_full = Path(result.canonical_draft_path)
+    if not canonical_full.exists():
+        raise RuntimeError(
+            f"[Gate 1] Canonical CSV not produced at {canonical_full}. "
+            "Check onboarding agent logs."
+        )
+
+    # Header JSON for lineage tracker — lives in the onboarding run subdir
+    header_json = run_dir / f"{stem}_header_mapping_report.json"
+    if not header_json.exists():
+        header_json = out_dir / f"{stem}_header_mapping_report.json"
+
+    return result, canonical_full, header_json
+
+
 def run_common_gates(py: str, args, input_path: Path, out_dir: Path, val_dir: Path, stem: str, flags: Dict[str, bool]) -> dict:
     """
     Run Gates 1-3 (common to all modes).
@@ -352,36 +456,59 @@ def run_common_gates(py: str, args, input_path: Path, out_dir: Path, val_dir: Pa
     field_lineage    = out_dir / "field_lineage.json"
     value_lineage    = out_dir / "value_lineage.json"
 
-    # -- Gate 1: Semantic alignment ----------------------------------------
-    gate1_cmd = [
-        py, _script("semantic_alignment"),
-        "--input", str(input_path),
-        "--portfolio-type", args.portfolio_type,
-        "--output-schema", args.output_schema,
-        "--registry", args.registry,
-        "--output-dir", str(out_dir),
-        "--aliases-dir", str(CONFIG_ROOT / "system"),
-    ]
-    # For regulatory mode, filter "full" schema to the target annex fields
-    if args.mode == "regulatory" and args.regime:
-        gate1_cmd.extend(["--regimes", args.regime])
-
-    _run(gate1_cmd)
-
-    if not canonical_full.exists():
-        raise RuntimeError(f"[Gate 1] Failed: did not produce {canonical_full}")
-
-    fields_mapped = None
-    header = _safe_read_json(header_json)
-    if header and isinstance(header.get("raw_to_canonical"), dict):
-        fields_mapped = len(header["raw_to_canonical"])
-
-    hq_recs = _count_hq_recommendations(header, min_conf=0.88)
-
-    if fields_mapped is not None:
-        print(f"[Gate 1] Semantic alignment.............. OK {fields_mapped} fields mapped | {hq_recs} HQ recommendations")
+    # -- Gate 1: Onboarding Agent (Config Bootstrap + Semantic Alignment +
+    #            LLM Mapping + Enum Mapping) or legacy direct alignment
+    # -----------------------------------------------------------------------
+    onboarding_result = None
+    if not getattr(args, "skip_onboarding", False):
+        run_id_str = f"run_{time.strftime('%Y%m%d_%H%M%S')}"
+        onboarding_result, canonical_full, header_json = _run_gate1_via_onboarding_agent(
+            args=args,
+            input_path=input_path,
+            out_dir=out_dir,
+            stem=stem,
+            run_id=run_id_str,
+        )
+        fields_mapped = onboarding_result.mapped_fields_count
+        hq_recs = sum(
+            1 for m in onboarding_result.mapping_review_items if m.confidence >= 0.88
+        )
+        print(
+            f"[Gate 1] Onboarding Agent................ OK "
+            f"{fields_mapped}/{onboarding_result.total_input_fields} fields | "
+            f"enum {onboarding_result.enum_success_rate:.0%} | "
+            f"{hq_recs} HQ recs"
+        )
     else:
-        print(f"[Gate 1] Semantic alignment.............. OK PASS | {hq_recs} HQ recommendations")
+        # Legacy path: direct semantic_alignment.py subprocess (no config
+        # bootstrap, no LLM mapping, no enum review)
+        gate1_cmd = [
+            py, _script("semantic_alignment"),
+            "--input", str(input_path),
+            "--portfolio-type", args.portfolio_type,
+            "--output-schema", args.output_schema,
+            "--registry", args.registry,
+            "--output-dir", str(out_dir),
+            "--aliases-dir", str(CONFIG_ROOT / "system"),
+        ]
+        if args.mode == "regulatory" and args.regime:
+            gate1_cmd.extend(["--regimes", args.regime])
+
+        _run(gate1_cmd)
+
+        if not canonical_full.exists():
+            raise RuntimeError(f"[Gate 1] Failed: did not produce {canonical_full}")
+
+        header = _safe_read_json(header_json)
+        fields_mapped = None
+        if header and isinstance(header.get("raw_to_canonical"), dict):
+            fields_mapped = len(header["raw_to_canonical"])
+        hq_recs = _count_hq_recommendations(header, min_conf=0.88)
+
+        if fields_mapped is not None:
+            print(f"[Gate 1] Semantic alignment.............. OK {fields_mapped} fields mapped | {hq_recs} HQ recommendations")
+        else:
+            print(f"[Gate 1] Semantic alignment.............. OK PASS | {hq_recs} HQ recommendations")
 
     source_for_transform = canonical_full
     stage_path = ["messy_to_canonical"]
@@ -553,6 +680,7 @@ def run_common_gates(py: str, args, input_path: Path, out_dir: Path, val_dir: Pa
         "field_summary_csv": field_summary_csv,
         "dashboard_json": dashboard_json,
         "stage_path": stage_path,
+        "onboarding_result": onboarding_result,  # None when --skip-onboarding
     }
 
 
@@ -885,6 +1013,7 @@ def write_manifest(args, ctx: dict, gate45: Optional[dict], out_dir: Path, run_s
         if gate45.get("xml"):
             outputs.append(str(gate45["xml"]))
 
+    ob = ctx.get("onboarding_result")
     manifest: Dict[str, Any] = {
         "run_id": time.strftime("run_%Y%m%d_%H%M%S"),
         "mode": args.mode,
@@ -899,6 +1028,14 @@ def write_manifest(args, ctx: dict, gate45: Optional[dict], out_dir: Path, run_s
         "outputs": [x for x in outputs if x],
         "execution_time_seconds": round(time.time() - run_start, 2),
         "generated_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "onboarding": {
+            "run_id": ob.run_id,
+            "status": ob.status,
+            "fields_mapped": ob.mapped_fields_count,
+            "total_fields": ob.total_input_fields,
+            "enum_success_rate": round(ob.enum_success_rate, 4),
+            "result_path": ob.onboarding_result_path,
+        } if ob else None,
     }
 
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
@@ -964,6 +1101,14 @@ examples:
     # Shared
     ap.add_argument("--code-order-yaml", default=str(CONFIG_ROOT / "system" / "esma_code_order.yaml"))
     ap.add_argument("--currency", default="GBP")
+    # Onboarding Agent (Gate 1)
+    ap.add_argument("--skip-onboarding", action="store_true", default=False,
+                     help="Skip Onboarding Agent; use legacy semantic_alignment.py directly (backward compat).")
+    ap.add_argument("--aliases-dir", default=str(CONFIG_ROOT / "system"),
+                     help="Directory containing aliases_*.yaml for field mapping (default: config/system).")
+    ap.add_argument("--skip-llm", action="store_true", default=False,
+                     help="Disable LLM-assisted mapping in the Onboarding Agent.")
+
     ap.add_argument("--loan-engine-enabled", dest="loan_engine_enabled", action="store_true",
                      help="Enable optional loan_ledger_engine stage between Gate 1 and transform.")
     ap.add_argument("--no-loan-engine-enabled", dest="loan_engine_enabled", action="store_false",

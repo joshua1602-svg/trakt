@@ -21,6 +21,14 @@ Usage:
 
 from __future__ import annotations
 
+# Ensure repo root is importable for both direct-script and python -m invocation
+import sys as _sys
+from pathlib import Path as _Path
+_here = _Path(__file__).resolve().parent
+_repo = _here.parent
+if str(_repo) not in _sys.path:
+    _sys.path.insert(0, str(_repo))
+
 import csv
 import io
 import json

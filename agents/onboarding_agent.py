@@ -40,6 +40,18 @@ CLI:
 
 from __future__ import annotations
 
+# ---------------------------------------------------------------------------
+# Ensure repo root is on sys.path so this module is importable both via
+#   python -m agents.onboarding_agent   (repo root added by Python -m)
+#   python agents/onboarding_agent.py   (only agents/ added by default)
+# ---------------------------------------------------------------------------
+import sys as _sys
+from pathlib import Path as _Path
+_here = _Path(__file__).resolve().parent
+_repo = _here.parent
+if str(_repo) not in _sys.path:
+    _sys.path.insert(0, str(_repo))
+
 import argparse
 import json
 import logging
@@ -150,6 +162,8 @@ def _run_semantic_alignment(
     registry_path: Path,
     aliases_dir: Path,
     output_dir: Path,
+    output_schema: str = "active",
+    regime: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Invoke semantic_alignment.py as a subprocess (matches existing pipeline pattern).
@@ -165,8 +179,10 @@ def _run_semantic_alignment(
         "--registry", str(registry_path.resolve()),
         "--aliases-dir", str(aliases_dir.resolve()),
         "--output-dir", str(output_dir.resolve()),
-        "--output-schema", "active",
+        "--output-schema", output_schema,
     ]
+    if regime:
+        cmd.extend(["--regimes", regime])
     logger.info("[SemanticAlignment] Running: %s", " ".join(cmd))
     result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
                             cwd=str(_PROJECT_ROOT))
@@ -729,6 +745,7 @@ def run_onboarding_agent(
     confidence_threshold_auto: float = 0.92,
     confidence_threshold_review: float = 0.75,
     allow_frontier_escalation: bool = False,
+    output_schema: str = "active",
 ) -> OnboardingResult:
     """
     Run the full Onboarding Agent pipeline and return an OnboardingResult.
@@ -829,6 +846,8 @@ def run_onboarding_agent(
             registry_path=registry_path,
             aliases_dir=aliases_path,
             output_dir=run_output_dir,
+            output_schema=output_schema,
+            regime=regime if output_schema == "full" else None,
         )
     except Exception as exc:
         logger.error("[Step 2] Semantic alignment failed: %s", exc)
@@ -948,6 +967,13 @@ def run_onboarding_agent(
     result.blocker_questions = all_blockers
     result.user_questions = non_blockers
 
+    # Write canonical config_questions.json for workbench
+    config_questions_data = json.dumps(
+        {"blocker_questions": all_blockers, "user_questions": non_blockers},
+        indent=2, default=str,
+    )
+    (run_output_dir / "config_questions.json").write_text(config_questions_data, encoding="utf-8")
+
     # -----------------------------------------------------------------------
     # STEP 9: Status determination
     # -----------------------------------------------------------------------
@@ -967,21 +993,19 @@ def run_onboarding_agent(
     # -----------------------------------------------------------------------
     # STEP 11: Write enum review JSON
     # -----------------------------------------------------------------------
+    enum_data = json.dumps([i.to_dict() for i in enum_items], indent=2)
     enum_report_path = run_output_dir / f"{run_id}_enum_review.json"
-    enum_report_path.write_text(
-        json.dumps([i.to_dict() for i in enum_items], indent=2),
-        encoding="utf-8",
-    )
+    enum_report_path.write_text(enum_data, encoding="utf-8")
+    (run_output_dir / "enum_review.json").write_text(enum_data, encoding="utf-8")
     result.enum_report_path = str(enum_report_path)
 
     # -----------------------------------------------------------------------
     # STEP 12: Write mapping review JSON
     # -----------------------------------------------------------------------
+    mapping_data = json.dumps([i.to_dict() for i in mapping_items], indent=2)
     mapping_review_path = run_output_dir / f"{run_id}_mapping_review.json"
-    mapping_review_path.write_text(
-        json.dumps([i.to_dict() for i in mapping_items], indent=2),
-        encoding="utf-8",
-    )
+    mapping_review_path.write_text(mapping_data, encoding="utf-8")
+    (run_output_dir / "mapping_review.json").write_text(mapping_data, encoding="utf-8")
 
     logger.info(
         "=== Onboarding Agent complete: %s | proceed=%s | "
@@ -1071,6 +1095,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default=0.75,
         help="Confidence below which fields are sent to LLM / flagged for review",
     )
+    p.add_argument(
+        "--output-schema",
+        choices=["active", "full"],
+        default="active",
+        help="active = core mapped fields; full = all regime fields (use for regulatory)",
+    )
     return p
 
 
@@ -1116,6 +1146,7 @@ if __name__ == "__main__":
         cheap_llm_model=args.cheap_llm_model,
         confidence_threshold_auto=args.confidence_threshold_auto,
         confidence_threshold_review=args.confidence_threshold_review,
+        output_schema=args.output_schema,
     )
 
     _print_summary(res)
