@@ -2,7 +2,7 @@
 """
 build_mi_semantics_registry.py
 
-Generate the curated MI semantic field registry from the canonical field
+Generate the *curated* MI semantic field registry from the canonical field
 registry.
 
 This is an ADDITIVE tool.  It only READS the canonical registry
@@ -10,18 +10,24 @@ This is an ADDITIVE tool.  It only READS the canonical registry
 
     mi_agent/mi_semantics_field_registry.yaml
 
-The generated file does NOT duplicate the canonical registry.  For every
-selected field it stores a thin "semantic" record that REFERENCES the
-canonical field by name and adds analytics metadata (role, format, allowed
-aggregations, chart roles, weighting / bucketing hints).
+DESIGN (v0.2 — curated, MI-first)
+---------------------------------
+v0.1 selected ~235 fields via a broad rule (core_canonical OR
+layer in {performance,product} OR category == analytics).  That re-projected
+half of the regulatory registry and produced 24 unclassifiable fields and many
+duplicate concepts (see mi_agent/reports/mi_semantics_review.md).
 
-Selection rules (OR — any one is sufficient):
-    1. core_canonical == true
-    2. layer in {performance, product}
-    3. category == analytics
+v0.2 replaces that with an EXPLICIT CURATED ALLOWLIST (see ``CURATION`` below):
+a small (~40-80) MI vocabulary chosen for portfolio management reporting.  Each
+curated field carries MI business metadata (business_name, business_description,
+synonyms) and an ``mi_tier`` (core | extended).  Identifiers, LEIs, industry /
+tax codes, rating-agency equivalents, waterfall / swap fields, balance-period
+buckets and duplicate borrower-2 / guarantor fields are deliberately excluded.
 
-The generated metadata is heuristic and is intended as a *starting point* for
-human review before production use.
+The generated file does NOT duplicate the canonical registry: every entry
+REFERENCES a canonical field by name and adds analytics + business metadata.
+Format / role / aggregation / chart-role inference is heuristic; per-field
+``overrides`` in CURATION pin the cases the heuristic gets wrong.
 
 Usage:
     python -m mi_agent.build_mi_semantics_registry
@@ -48,24 +54,401 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE = REPO_ROOT / "config" / "system" / "fields_registry.yaml"
 DEFAULT_OUTPUT = Path(__file__).resolve().parent / "mi_semantics_field_registry.yaml"
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 # Acronyms that should be upper-cased in display names.
 _ACRONYMS = {
-    "ltv": "LTV",
-    "lei": "LEI",
-    "id": "ID",
-    "lgd": "LGD",
-    "pd": "PD",
-    "isin": "ISIN",
-    "nuts": "NUTS",
-    "abcp": "ABCP",
-    "esma": "ESMA",
-    "boe": "BoE",
-    "erm": "ERM",
-    "iban": "IBAN",
-    "yn": "Y/N",
+    "ltv": "LTV", "lei": "LEI", "id": "ID", "lgd": "LGD", "pd": "PD",
+    "isin": "ISIN", "nuts": "NUTS", "abcp": "ABCP", "esma": "ESMA",
+    "boe": "BoE", "erm": "ERM", "iban": "IBAN", "yn": "Y/N",
+    "dscr": "DSCR", "dti": "DTI", "noi": "NOI", "dob": "DOB",
 }
+
+# --------------------------------------------------------------------------- #
+# CURATED MI VOCABULARY
+# --------------------------------------------------------------------------- #
+# Each entry maps a CANONICAL field name to MI metadata:
+#   tier                  : "core" | "extended"
+#   business_name         : short label an analyst recognises
+#   business_description  : one-line plain-English meaning
+#   synonyms              : NL phrases that resolve to this field
+#   overrides (optional)  : pins inference results (role/format/aggregations/
+#                           default_aggregation/allowed_chart_roles/
+#                           default_chart_role/bucket_field/weight_field/
+#                           chartable)
+#
+# Fields not present in the canonical registry are skipped with a warning, so
+# this list stays robust across registry versions.
+
+_DAYS_AGG = {
+    "allowed_aggregations": ["avg", "median", "distribution"],
+    "default_aggregation": "avg",
+}
+_RATIO_AGG = {
+    "allowed_aggregations": ["avg", "median", "distribution"],
+    "default_aggregation": "avg",
+}
+
+CURATION: Dict[str, dict] = {
+    # ---------------- CORE — portfolio balances / amounts ----------------
+    "current_outstanding_balance": {
+        "tier": "core", "business_name": "Balance",
+        "business_description": "Current outstanding loan balance (exposure).",
+        "synonyms": ["balance", "outstanding balance", "current balance",
+                     "loan balance", "exposure", "current outstanding"],
+        "overrides": {"bucket_field": "ticket_bucket"},
+    },
+    "current_principal_balance": {
+        "tier": "core", "business_name": "Principal Balance",
+        "business_description": "Current outstanding principal balance.",
+        "synonyms": ["principal balance", "current principal",
+                     "outstanding principal"],
+        "overrides": {"bucket_field": "ticket_bucket"},
+    },
+    "original_principal_balance": {
+        "tier": "core", "business_name": "Original Balance",
+        "business_description": "Principal balance at origination.",
+        "synonyms": ["original balance", "original principal",
+                     "balance at origination", "advance amount"],
+        "overrides": {"bucket_field": "ticket_bucket"},
+    },
+    "arrears_balance": {
+        "tier": "core", "business_name": "Arrears Balance",
+        "business_description": "Total amount in arrears.",
+        "synonyms": ["arrears", "arrears balance", "amount in arrears",
+                     "total arrears"],
+    },
+    "interest_arrears_amount": {
+        "tier": "core", "business_name": "Interest Arrears",
+        "business_description": "Interest amount in arrears.",
+        "synonyms": ["interest arrears", "interest in arrears amount"],
+    },
+    "principal_arrears_amount": {
+        "tier": "core", "business_name": "Principal Arrears",
+        "business_description": "Principal amount in arrears.",
+        "synonyms": ["principal arrears", "principal in arrears amount"],
+    },
+    "allocated_losses": {
+        "tier": "core", "business_name": "Losses",
+        "business_description": "Losses allocated to the loan.",
+        "synonyms": ["losses", "allocated losses", "loss amount",
+                     "credit losses"],
+    },
+    "recoveries_in_period": {
+        "tier": "core", "business_name": "Recoveries",
+        "business_description": "Recoveries received in the period.",
+        "synonyms": ["recoveries", "recovery amount", "recoveries in period"],
+    },
+    "redemptions_received_in_period": {
+        "tier": "core", "business_name": "Redemptions",
+        "business_description": "Redemption proceeds received in the period.",
+        "synonyms": ["redemptions", "redemption amount", "repayments received",
+                     "redemptions received"],
+    },
+    "default_amount": {
+        "tier": "core", "business_name": "Default Amount",
+        "business_description": "Balance at the point of default.",
+        "synonyms": ["default amount", "defaulted balance", "default balance"],
+    },
+    "current_valuation_amount": {
+        "tier": "core", "business_name": "Valuation",
+        "business_description": "Most recent property/collateral valuation.",
+        "synonyms": ["valuation", "current valuation", "property value",
+                     "collateral value", "valuation amount"],
+    },
+    "indexed_value": {
+        "tier": "core", "business_name": "Indexed Valuation",
+        "business_description": "Valuation indexed to the current period.",
+        "synonyms": ["indexed value", "indexed valuation",
+                     "indexed property value"],
+        "overrides": {"format": "currency"},
+    },
+    # ---------------- CORE — rates / ratios ----------------
+    "current_interest_rate": {
+        "tier": "core", "business_name": "Interest Rate",
+        "business_description": "Current interest rate on the loan.",
+        "synonyms": ["interest rate", "rate", "coupon", "current rate"],
+    },
+    "current_loan_to_value": {
+        "tier": "core", "business_name": "Current LTV",
+        "business_description": "Current loan-to-value ratio.",
+        "synonyms": ["ltv", "current ltv", "loan to value", "cltv"],
+    },
+    "indexed_loan_to_value": {
+        "tier": "core", "business_name": "Indexed LTV",
+        "business_description": "Loan-to-value using the indexed valuation.",
+        "synonyms": ["indexed ltv", "iltv", "indexed loan to value"],
+    },
+    "original_loan_to_value": {
+        "tier": "core", "business_name": "Original LTV",
+        "business_description": "Loan-to-value at origination.",
+        "synonyms": ["original ltv", "oltv", "ltv at origination"],
+        "overrides": {"bucket_field": "original_ltv_bucket"},
+    },
+    # ---------------- CORE — counts / ages ----------------
+    "number_of_days_in_arrears": {
+        "tier": "core", "business_name": "Days in Arrears",
+        "business_description": "Number of days the loan has been in arrears.",
+        "synonyms": ["days in arrears", "arrears days", "dpd",
+                     "days past due", "delinquency days"],
+        "overrides": {"role": "metric", "format": "integer",
+                      "bucket_field": "arrears_bucket", **_DAYS_AGG},
+    },
+    "youngest_borrower_age": {
+        "tier": "core", "business_name": "Borrower Age",
+        "business_description": "Age of the youngest borrower on the loan.",
+        "synonyms": ["age", "borrower age", "youngest borrower age",
+                     "applicant age"],
+        "overrides": {"bucket_field": "age_bucket"},
+    },
+    # ---------------- CORE — portfolio dimensions ----------------
+    "origination_date": {
+        "tier": "core", "business_name": "Origination Date",
+        "business_description": "Date the loan was originated.",
+        "synonyms": ["origination date", "vintage", "origination",
+                     "completion date", "drawdown date"],
+    },
+    "maturity_date": {
+        "tier": "core", "business_name": "Maturity Date",
+        "business_description": "Scheduled maturity date of the loan.",
+        "synonyms": ["maturity date", "maturity", "end date"],
+        "overrides": {"chartable": True, "bucket_field": "maturity_year"},
+    },
+    "originator_name": {
+        "tier": "core", "business_name": "Originator",
+        "business_description": "Name of the loan originator.",
+        "synonyms": ["originator", "originator name", "lender"],
+    },
+    "broker_channel": {
+        "tier": "core", "business_name": "Broker",
+        "business_description": "Broker / origination channel.",
+        "synonyms": ["broker", "broker channel", "channel",
+                     "intermediary", "distribution channel"],
+    },
+    "geographic_region_obligor": {
+        "tier": "core", "business_name": "Region",
+        "business_description": "Geographic region of the obligor.",
+        "synonyms": ["region", "geography", "obligor region",
+                     "borrower region", "area"],
+    },
+    "interest_rate_type": {
+        "tier": "core", "business_name": "Rate Type",
+        "business_description": "Interest rate type (fixed / floating, etc.).",
+        "synonyms": ["rate type", "interest rate type", "fixed or floating",
+                     "product rate type"],
+    },
+    "erm_product_type": {
+        "tier": "core", "business_name": "Product Type",
+        "business_description": "Product type.",
+        "synonyms": ["product", "product type", "loan type"],
+    },
+    "erm_sub_product_type": {
+        "tier": "core", "business_name": "Sub Product Type",
+        "business_description": "Sub-product type / product variant.",
+        "synonyms": ["sub product", "sub product type", "product variant"],
+    },
+    "account_status": {
+        "tier": "core", "business_name": "Account Status",
+        "business_description": "Current account/loan status.",
+        "synonyms": ["status", "account status", "loan status"],
+    },
+    "valuation_type": {
+        "tier": "core", "business_name": "Valuation Type",
+        "business_description": "Type/basis of the property valuation.",
+        "synonyms": ["valuation type", "valuation basis"],
+    },
+    "tenure": {
+        "tier": "core", "business_name": "Tenure",
+        "business_description": "Property tenure (freehold / leasehold, etc.).",
+        "synonyms": ["tenure", "freehold leasehold"],
+    },
+    "occupancy_type": {
+        "tier": "core", "business_name": "Occupancy Type",
+        "business_description": "Property occupancy type.",
+        "synonyms": ["occupancy", "occupancy type", "owner occupied"],
+    },
+    # ---------------- CORE — borrower dimensions ----------------
+    "borrower_jurisdiction": {
+        "tier": "core", "business_name": "Borrower Jurisdiction",
+        "business_description": "Legal jurisdiction of the borrower.",
+        "synonyms": ["jurisdiction", "borrower jurisdiction", "country"],
+    },
+    "borrower_1_gender": {
+        "tier": "core", "business_name": "Borrower Gender",
+        "business_description": "Gender of the primary borrower.",
+        "synonyms": ["gender", "borrower gender", "sex"],
+    },
+    # ---------------- CORE — flags ----------------
+    "interest_in_arrears": {
+        "tier": "core", "business_name": "In Arrears",
+        "business_description": "Whether the loan is in arrears.",
+        "synonyms": ["in arrears", "arrears flag", "delinquent",
+                     "is in arrears"],
+    },
+    "loan_redemption_flag": {
+        "tier": "core", "business_name": "Redeemed",
+        "business_description": "Whether the loan has redeemed.",
+        "synonyms": ["redeemed", "redemption flag", "closed", "repaid"],
+    },
+    "further_advance_flag": {
+        "tier": "core", "business_name": "Further Advance",
+        "business_description": "Whether a further advance has been taken.",
+        "synonyms": ["further advance", "further advance flag", "additional borrowing"],
+    },
+    "protected_equity_flag": {
+        "tier": "core", "business_name": "Protected Equity",
+        "business_description": "Whether the loan carries protected equity.",
+        "synonyms": ["protected equity", "protected equity flag",
+                     "equity protection"],
+    },
+    "negative_equity_guarantee": {
+        "tier": "core", "business_name": "Negative Equity Guarantee",
+        "business_description": "Whether a no-negative-equity guarantee applies.",
+        "synonyms": ["negative equity guarantee", "nneg", "no negative equity"],
+    },
+
+    # ================= EXTENDED =================
+    "original_valuation_amount": {
+        "tier": "extended", "business_name": "Original Valuation",
+        "business_description": "Property valuation at origination.",
+        "synonyms": ["original valuation", "valuation at origination"],
+    },
+    "current_interest_rate_margin": {
+        "tier": "extended", "business_name": "Interest Margin",
+        "business_description": "Current interest rate margin / spread.",
+        "synonyms": ["margin", "interest margin", "spread", "rate margin"],
+    },
+    "current_debt_service_coverage_ratio": {
+        "tier": "extended", "business_name": "DSCR",
+        "business_description": "Current debt service coverage ratio.",
+        "synonyms": ["dscr", "debt service coverage", "coverage ratio"],
+        "overrides": {"format": "decimal", **_RATIO_AGG},
+    },
+    "debt_to_income_ratio": {
+        "tier": "extended", "business_name": "DTI",
+        "business_description": "Debt-to-income ratio.",
+        "synonyms": ["dti", "debt to income", "income multiple"],
+        "overrides": {"format": "decimal", **_RATIO_AGG},
+    },
+    "number_of_days_in_interest_arrears": {
+        "tier": "extended", "business_name": "Days in Interest Arrears",
+        "business_description": "Number of days in interest arrears.",
+        "synonyms": ["days in interest arrears", "interest arrears days"],
+        "overrides": {"role": "metric", "format": "integer", **_DAYS_AGG},
+    },
+    "number_of_days_in_principal_arrears": {
+        "tier": "extended", "business_name": "Days in Principal Arrears",
+        "business_description": "Number of days in principal arrears.",
+        "synonyms": ["days in principal arrears", "principal arrears days"],
+        "overrides": {"role": "metric", "format": "integer", **_DAYS_AGG},
+    },
+    "cumulative_prepayments": {
+        "tier": "extended", "business_name": "Cumulative Prepayments",
+        "business_description": "Cumulative unscheduled prepayments to date.",
+        "synonyms": ["prepayments", "cumulative prepayments", "overpayments"],
+        "overrides": {"format": "currency"},
+    },
+    "contractual_annual_rental_income": {
+        "tier": "extended", "business_name": "Rental Income",
+        "business_description": "Contractual annual rental income.",
+        "synonyms": ["rental income", "rent", "annual rent"],
+    },
+    "net_operating_income_at_securitisation": {
+        "tier": "extended", "business_name": "Net Operating Income",
+        "business_description": "Net operating income at securitisation.",
+        "synonyms": ["noi", "net operating income", "operating income"],
+    },
+    "equity": {
+        "tier": "extended", "business_name": "Equity",
+        "business_description": "Borrower equity in the property.",
+        "synonyms": ["equity", "borrower equity"],
+        "overrides": {"format": "currency"},
+    },
+    "original_term": {
+        "tier": "extended", "business_name": "Original Term",
+        "business_description": "Original loan term.",
+        "synonyms": ["term", "original term", "loan term"],
+        "overrides": {"bucket_field": "term_bucket"},
+    },
+    "number_of_bedrooms": {
+        "tier": "extended", "business_name": "Bedrooms",
+        "business_description": "Number of bedrooms in the property.",
+        "synonyms": ["bedrooms", "number of bedrooms"],
+        "overrides": {"role": "dimension",
+                      "allowed_aggregations": ["count", "balance_sum"],
+                      "default_aggregation": "count",
+                      "allowed_chart_roles": ["x", "group", "filter", "color"],
+                      "default_chart_role": "group", "chartable": True},
+    },
+    "lien": {
+        "tier": "extended", "business_name": "Lien Position",
+        "business_description": "Lien / charge ranking on the collateral.",
+        "synonyms": ["lien", "lien position", "charge", "ranking"],
+        "overrides": {"role": "dimension",
+                      "allowed_aggregations": ["count", "balance_sum"],
+                      "default_aggregation": "count",
+                      "allowed_chart_roles": ["x", "group", "filter", "color"],
+                      "default_chart_role": "group", "chartable": True},
+    },
+    "postcode": {
+        "tier": "extended", "business_name": "Postcode",
+        "business_description": "Property postcode.",
+        "synonyms": ["postcode", "post code", "zip", "zip code"],
+        "overrides": {"role": "dimension"},
+    },
+    "employment_status": {
+        "tier": "extended", "business_name": "Employment Status",
+        "business_description": "Borrower employment status.",
+        "synonyms": ["employment status", "employment", "employed"],
+    },
+    "origination_channel": {
+        "tier": "extended", "business_name": "Origination Channel",
+        "business_description": "Channel through which the loan was originated.",
+        "synonyms": ["origination channel", "sales channel"],
+    },
+    "geographic_region_collateral": {
+        "tier": "extended", "business_name": "Collateral Region",
+        "business_description": "Geographic region of the collateral.",
+        "synonyms": ["collateral region", "property region", "asset region"],
+    },
+    "default_date": {
+        "tier": "extended", "business_name": "Default Date",
+        "business_description": "Date the loan defaulted.",
+        "synonyms": ["default date", "date of default"],
+        "overrides": {"chartable": True},
+    },
+    "current_valuation_date": {
+        "tier": "extended", "business_name": "Valuation Date",
+        "business_description": "Date of the most recent valuation.",
+        "synonyms": ["valuation date", "date of valuation"],
+    },
+    "date_last_in_arrears": {
+        "tier": "extended", "business_name": "Date Last in Arrears",
+        "business_description": "Date the loan was last in arrears.",
+        "synonyms": ["date last in arrears", "last arrears date"],
+    },
+    "date_of_restructuring": {
+        "tier": "extended", "business_name": "Restructuring Date",
+        "business_description": "Date the loan was restructured.",
+        "synonyms": ["restructuring date", "restructure date", "modification date"],
+    },
+    "early_repayment_charge": {
+        "tier": "extended", "business_name": "Early Repayment Charge",
+        "business_description": "Whether an early repayment charge applies.",
+        "synonyms": ["erc", "early repayment charge", "prepayment penalty"],
+    },
+    "originator_affiliate": {
+        "tier": "extended", "business_name": "Originator Affiliate",
+        "business_description": "Whether the originator is an affiliate.",
+        "synonyms": ["originator affiliate", "affiliate"],
+    },
+    "number_of_properties_at_data_cut_off_date": {
+        "tier": "extended", "business_name": "Number of Properties",
+        "business_description": "Number of properties securing the loan.",
+        "synonyms": ["number of properties", "properties", "property count"],
+    },
+}
+
 
 # --------------------------------------------------------------------------- #
 # Defensive accessors (the canonical registry casing/nesting may vary)
@@ -90,7 +473,6 @@ def load_canonical_registry(path: Path) -> Dict[str, dict]:
     data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
     fields = _get(data, "fields", default=None)
     if not isinstance(fields, dict):
-        # Some registries may place fields at the top level.
         fields = {
             k: v
             for k, v in data.items()
@@ -102,36 +484,24 @@ def load_canonical_registry(path: Path) -> Dict[str, dict]:
 
 
 # --------------------------------------------------------------------------- #
-# Selection
+# Traceability: which canonical attributes a curated field satisfies
 # --------------------------------------------------------------------------- #
 
 _PERF_PRODUCT_LAYERS = {"performance", "product"}
 
 
 def selection_criteria(meta: dict) -> List[str]:
-    """Return the list of OR-criteria that caused this field to be selected."""
+    """Canonical attributes that justify MI relevance (for traceability only)."""
     crit: List[str] = []
     if _get(meta, "core_canonical") is True:
         crit.append("core_canonical")
     layer = str(_get(meta, "layer", default="") or "").lower()
     if layer in _PERF_PRODUCT_LAYERS:
         crit.append(f"layer:{layer}")
-    category = str(_get(meta, "category", default="") or "").lower()
-    if category == "analytics":
-        crit.append("category:analytics")
+    if not crit:
+        # curated even though it is not in the broad rule set
+        crit.append("curated")
     return crit
-
-
-def select_fields(fields: Dict[str, dict]) -> Dict[str, List[str]]:
-    """Return {field_name: source_criteria} for every selected field."""
-    selected: Dict[str, List[str]] = {}
-    for name, meta in fields.items():
-        if not isinstance(meta, dict):
-            continue
-        crit = selection_criteria(meta)
-        if crit:
-            selected[name] = crit
-    return selected
 
 
 # --------------------------------------------------------------------------- #
@@ -160,17 +530,13 @@ def infer_format(name: str, reg_format: Optional[str], allowed_values) -> str:
     nf = str(reg_format).strip().lower() if reg_format else ""
     av = str(allowed_values).strip().lower() if allowed_values else ""
 
-    # 1. Date
     if nf == "date" or "date" in name.lower():
         return "date"
-    # 2. Boolean / flags
     if nf in ("y/n", "boolean", "bool") or av in ("yes_no", "y/n"):
         return "boolean"
-    # 3. Categorical (registry already says so) -> string
     if nf in ("list", "string", "currency_code", "enum", "category"):
         return "string"
 
-    # Numeric-ish (decimal / integer / unknown).  Use name tokens.
     if _contains(name, ("ltv", "loan_to_value", "percentage", "pct", "margin", "spread")) or \
             "rate" in _tokens(name):
         return "percent"
@@ -208,11 +574,9 @@ def infer_role(name: str, fmt: str, reg_format: Optional[str]) -> str:
         return "flag"
     if fmt in ("currency", "percent", "integer", "decimal"):
         return "metric"
-    # fmt == "string"
     nf = str(reg_format).strip().lower() if reg_format else ""
     if nf in ("list", "string", "currency_code", "enum", "category"):
         return "dimension"
-    # No registry format and nothing else matched -> not safely inferable.
     return "unknown"
 
 
@@ -221,7 +585,6 @@ def _is_count_metric(name: str) -> bool:
 
 
 def infer_aggregations(role: str, fmt: str, name: str) -> Tuple[List[str], str]:
-    """Return (allowed_aggregations, default_aggregation)."""
     if role == "identifier":
         return ["count_distinct"], "count_distinct"
     if role == "date":
@@ -238,16 +601,12 @@ def infer_aggregations(role: str, fmt: str, name: str) -> Tuple[List[str], str]:
         if fmt == "integer":
             if _is_count_metric(name):
                 return ["sum", "count"], "sum"
-            # ages / terms / counts of periods
             return ["avg", "median", "distribution"], "avg"
-        # decimal (generic numeric)
         return ["sum", "avg", "median"], "avg"
-    # unknown
     return [], ""
 
 
 def infer_chart_roles(role: str) -> Tuple[List[str], Optional[str]]:
-    """Return (allowed_chart_roles, default_chart_role)."""
     if role == "identifier":
         return ["filter"], None
     if role == "date":
@@ -265,14 +624,11 @@ def infer_chartable(role: str, name: str) -> bool:
     if role in ("metric", "dimension", "flag"):
         return True
     if role == "date":
-        # Useful for trend / cohort only for origination / vintage style dates.
         return "origination" in name.lower()
-    # identifier / unknown
     return False
 
 
 def pick_weight_field(selected_names: set) -> Optional[str]:
-    """First available balance field, in preference order."""
     for candidate in ("total_balance", "current_outstanding_balance",
                        "current_principal_balance", "original_principal_balance"):
         if candidate in selected_names:
@@ -303,8 +659,13 @@ def infer_bucket_field(name: str, role: str, fmt: str) -> Optional[str]:
 # Build
 # --------------------------------------------------------------------------- #
 
+_OVERRIDABLE = {
+    "role", "format", "chartable", "allowed_aggregations", "default_aggregation",
+    "allowed_chart_roles", "default_chart_role", "weight_field", "bucket_field",
+}
 
-def build_entry(name: str, meta: dict, source_criteria: List[str],
+
+def build_entry(name: str, meta: dict, curated: dict,
                 weight_target: Optional[str]) -> dict:
     reg_format = _get(meta, "format")
     allowed_values = _get(meta, "allowed_values")
@@ -317,15 +678,15 @@ def build_entry(name: str, meta: dict, source_criteria: List[str],
     weight_field = infer_weight_field(role, fmt, weight_target)
     bucket_field = infer_bucket_field(name, role, fmt)
 
-    notes = ""
-    if role == "unknown":
-        notes = "requires manual analytics classification"
-
-    return {
+    entry = {
         "canonical_field": name,
+        "mi_tier": curated.get("tier", "extended"),
+        "business_name": curated.get("business_name") or display_name(name),
         "display_name": display_name(name),
+        "business_description": curated.get("business_description", ""),
         "description": "",
-        "source_criteria": source_criteria,
+        "synonyms": list(curated.get("synonyms", []) or []),
+        "source_criteria": selection_criteria(meta),
         "role": role,
         "format": fmt,
         "chartable": chartable,
@@ -335,31 +696,73 @@ def build_entry(name: str, meta: dict, source_criteria: List[str],
         "default_chart_role": default_chart_role,
         "weight_field": weight_field,
         "bucket_field": bucket_field,
-        "notes": notes,
+        "notes": "",
     }
+
+    # Apply per-field overrides (curation pins what the heuristic gets wrong).
+    overrides = curated.get("overrides", {}) or {}
+    for key, value in overrides.items():
+        if key in _OVERRIDABLE:
+            entry[key] = value
+
+    # If the role was overridden, re-derive any unspecified role-dependent
+    # defaults so the entry stays internally consistent.
+    if "role" in overrides:
+        r = entry["role"]
+        if "allowed_aggregations" not in overrides or "default_aggregation" not in overrides:
+            a, d = infer_aggregations(r, entry["format"], name)
+            entry.setdefault("allowed_aggregations", a)
+            if "default_aggregation" not in overrides:
+                entry["default_aggregation"] = d
+        if "allowed_chart_roles" not in overrides:
+            cr, dcr = infer_chart_roles(r)
+            entry["allowed_chart_roles"] = cr
+            if "default_chart_role" not in overrides:
+                entry["default_chart_role"] = dcr
+
+    if entry["role"] == "unknown" and not entry["notes"]:
+        entry["notes"] = "requires manual analytics classification"
+
+    return entry
 
 
 def build_registry(source: Path) -> dict:
     fields = load_canonical_registry(source)
-    selected = select_fields(fields)
-    selected_names = set(selected.keys())
+
+    present = [name for name in CURATION if name in fields]
+    missing = [name for name in CURATION if name not in fields]
+    for name in missing:
+        print(f"WARNING: curated field not found in canonical registry, "
+              f"skipping: {name}", file=sys.stderr)
+
+    selected_names = set(present)
     weight_target = pick_weight_field(selected_names)
 
     out_fields: Dict[str, dict] = {}
-    for name in sorted(selected):
+    for name in sorted(present):
         out_fields[name] = build_entry(
-            name, fields[name], selected[name], weight_target
+            name, fields[name], CURATION[name], weight_target
         )
+
+    tier_counts: Dict[str, int] = {}
+    for entry in out_fields.values():
+        tier_counts[entry["mi_tier"]] = tier_counts.get(entry["mi_tier"], 0) + 1
 
     metadata = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "source_registry": str(source),
+        "selection_approach": "curated MI-first allowlist (see CURATION in build script)",
         "selection_rules": [
-            "core_canonical true",
-            "layer performance/product",
-            "category analytics",
+            "explicit curated allowlist of MI-relevant canonical fields",
+            "excludes identifiers, LEIs, industry/tax codes, rating-agency "
+            "fields, waterfall/swap fields, balance-period buckets and "
+            "duplicate borrower-2/guarantor fields",
         ],
+        "mi_tiers": ["core", "extended"],
         "field_count": len(out_fields),
+        "core_field_count": tier_counts.get("core", 0),
+        "extended_field_count": tier_counts.get("extended", 0),
+        "missing_curated_fields": missing,
         "version": VERSION,
         "default_weight_field": weight_target,
     }
@@ -373,9 +776,9 @@ def write_registry(registry: dict, output: Path) -> None:
     header = (
         "# AUTO-GENERATED by mi_agent/build_mi_semantics_registry.py\n"
         "# Curated MI semantic layer over the canonical field registry.\n"
-        "# Heuristic metadata — REVIEW BY A HUMAN BEFORE PRODUCTION USE.\n"
-        "# Do NOT edit by hand without also updating the build script, or your\n"
-        "# changes will be overwritten on the next regeneration.\n"
+        "# Heuristic metadata + human curation — REVIEW BEFORE PRODUCTION USE.\n"
+        "# Do NOT edit by hand without also updating the build script (CURATION),\n"
+        "# or your changes will be overwritten on the next regeneration.\n"
     )
     with output.open("w", encoding="utf-8") as fh:
         fh.write(header)
@@ -388,7 +791,7 @@ def write_registry(registry: dict, output: Path) -> None:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="Build the MI semantic field registry.")
+    parser = argparse.ArgumentParser(description="Build the curated MI semantic field registry.")
     parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE,
                         help="Path to canonical fields_registry.yaml")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT,
@@ -403,11 +806,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     write_registry(registry, args.output)
 
     fields = registry["fields"]
+    meta = registry["metadata"]
     role_counts: Dict[str, int] = {}
     for entry in fields.values():
         role_counts[entry["role"]] = role_counts.get(entry["role"], 0) + 1
 
     print(f"Wrote {len(fields)} fields -> {args.output}")
+    print(f"  core={meta['core_field_count']}  extended={meta['extended_field_count']}")
     print("Roles inferred:")
     for role, count in sorted(role_counts.items()):
         print(f"  {role:11s} {count}")

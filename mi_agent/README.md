@@ -39,33 +39,45 @@ mi_agent/
 
 ## How `mi_semantics_field_registry.yaml` is generated
 
-`build_mi_semantics_registry.py` reads the canonical registry and selects a
-field if **any** of these hold (OR, not AND):
+`build_mi_semantics_registry.py` reads the canonical registry and projects a
+**curated allowlist** (the `CURATION` dict in that script) of MI-relevant
+canonical fields — currently **~61 fields** (≈37 `core`, ≈24 `extended`). This
+deliberately replaces the v0.1 broad rule
+(`core_canonical OR layer in {performance,product} OR category == analytics`),
+which produced ~235 fields, 24 unclassifiable, and many duplicate concepts
+(see `reports/mi_semantics_review.md`).
 
-- `core_canonical: true`, **or**
-- `layer` in `{performance, product}`, **or**
-- `category: analytics`.
+Excluded by design: identifiers, LEIs, industry/tax codes, rating-agency
+equivalents, waterfall/swap fields, balance-period buckets, and duplicate
+borrower-2/guarantor fields.
 
-Each selected field records *why* it was chosen in `source_criteria`
-(e.g. `["core_canonical"]`, `["layer:performance"]`, `["category:analytics"]`).
+Each curated field carries **MI business metadata**:
 
-For every field the build heuristically infers:
+- `mi_tier` — `core` (standard portfolio MI) or `extended` (less frequent)
+- `business_name` — short analyst-facing label (e.g. `Balance`, `Current LTV`)
+- `business_description` — one-line plain-English meaning
+- `synonyms` — NL phrases for future natural-language resolution
+
+…plus heuristically inferred (and, where needed, curation-`overrides`-pinned)
+analytics metadata:
 
 - **role**: `metric | dimension | date | identifier | flag | unknown`
 - **format**: `currency | percent | integer | decimal | date | string | boolean`
 - **chartable**, **allowed_aggregations** / **default_aggregation**
 - **allowed_chart_roles** / **default_chart_role**
 - **weight_field** (balance field used for weighted averages of rates/LTVs)
-- **bucket_field** (suggested bucketing dimension, e.g. `age_bucket`, `ltv_bucket`,
-  `ticket_bucket`, `vintage_year`)
+- **bucket_field** (e.g. `age_bucket`, `ltv_bucket`, `ticket_bucket`,
+  `vintage_year`, `arrears_bucket`)
+- **source_criteria** — canonical attributes (`core_canonical`,
+  `layer:performance`, …) that justify relevance, or `curated`.
 
-Fields that cannot be classified safely are marked `role: unknown` with a note
-that they *require manual analytics classification*.
+A curated field missing from the canonical registry is skipped with a warning
+(and recorded under `metadata.missing_curated_fields`), so generation is robust
+across registry versions. Top-level `metadata` also carries the generation
+timestamp, source path, tier counts, field count, version and default weight
+field.
 
-The output also carries top-level `metadata` (generation timestamp, source
-registry path, selection rules, field count, version, default weight field).
-
-> The generated metadata is heuristic and **requires human review before
+> The metadata is heuristic + hand-curated and **requires human review before
 > production use**.
 
 ## How `MIQuerySpec` works
@@ -135,9 +147,27 @@ pytest mi_agent/tests -q
 - **No Streamlit chat UI yet.**
 - **No MI pipeline integration** — not wired into `trakt_run.py` or any gate.
 - **LLM parser is a skeleton** — the live Claude path is optional and mockable;
-  the deterministic parser handles only a handful of example phrasings.
+  the deterministic parser handles only a handful of example phrasings and does
+  not yet consult `synonyms` for field resolution (a v2 item).
 - **No scenario support yet.**
-- **Semantics are heuristic** and must be reviewed by a human before production
-  use (especially `role: unknown` fields).
+- **Semantics are heuristic + curated** and must be reviewed by a human before
+  production use.
 - The LLM is only ever shown the data-free semantic catalogue; it never sees raw
   dataset values, and generated content is parsed as data only — never executed.
+
+### MI Agent v2 recommendations
+
+- **Synonym-driven resolution.** Use each field's `business_name` + `synonyms`
+  to resolve NL terms deterministically (and to ground the LLM), instead of the
+  current first-keyword-match in `find_field`. This fixes cases like "balance"
+  resolving to `arrears_balance` rather than `current_outstanding_balance`.
+- **Derived buckets.** Materialise the `bucket_field` hints (`age_bucket`,
+  `ltv_bucket`, `ticket_bucket`, `vintage_year`, `arrears_bucket`) as real
+  groupable dimensions so heatmaps/treemaps can group by banded measures.
+- **Curation governance.** Track `CURATION` in review with sign-off; add a unit
+  test asserting zero `role: unknown` and that every entry has a `business_name`
+  and ≥1 synonym.
+- **Concept de-duplication map.** Keep an explicit "preferred field per concept"
+  table (one balance, one current LTV, one valuation) for NL disambiguation.
+- **Tier-aware prompting.** Default the LLM/NL surface to `core` fields and only
+  expose `extended` on request, to keep prompts small and answers focused.
