@@ -160,15 +160,16 @@ def _run_semantic_alignment(
 
     cmd = [
         sys.executable, str(_SEMANTIC_ALIGNMENT),
-        "--input", str(tape_path),
+        "--input", str(tape_path.resolve()),
         "--portfolio-type", portfolio_type,
-        "--registry", str(registry_path),
-        "--aliases-dir", str(aliases_dir),
-        "--output-dir", str(output_dir),
+        "--registry", str(registry_path.resolve()),
+        "--aliases-dir", str(aliases_dir.resolve()),
+        "--output-dir", str(output_dir.resolve()),
         "--output-schema", "active",
     ]
     logger.info("[SemanticAlignment] Running: %s", " ".join(cmd))
-    result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
+    result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                            cwd=str(_PROJECT_ROOT))
     if result.returncode != 0:
         logger.error("semantic_alignment.py stderr:\n%s", result.stderr)
         raise RuntimeError(
@@ -930,13 +931,13 @@ def run_onboarding_agent(
         logger.info("[Step 7] No canonical CSV yet — skipping enum mapping.")
 
     result.enum_review_items = enum_items
-    result.enum_fields_total = len({i.field_name for i in enum_items})
-    result.enum_review_count = len(enum_items)
-    # Count as mapped: total possible minus review items
-    result.enum_mapped_count = max(0, result.enum_fields_total - result.enum_review_count)
+    result.enum_fields_total = len(enum_items)          # flagged values (exact/synonym already resolved)
+    # Items with a suggestion have a resolution candidate; truly unsolved have suggested_value=None
+    _has_suggestion = sum(1 for e in enum_items if e.suggested_value)
+    result.enum_mapped_count = _has_suggestion
+    result.enum_review_count = len(enum_items) - _has_suggestion  # unsolvable
     result.enum_success_rate = (
-        result.enum_mapped_count / result.enum_fields_total
-        if result.enum_fields_total > 0 else 1.0
+        _has_suggestion / len(enum_items) if enum_items else 1.0
     )
 
     # -----------------------------------------------------------------------
