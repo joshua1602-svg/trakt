@@ -13,6 +13,44 @@ Usage:
   python trakt_run.py --mode regulatory --input tape.csv --regime ESMA_Annex2
 
 Windows-safe: uses sys.executable, forces UTF-8 encoding in child processes.
+
+# ---------------------------------------------------------------------------
+# TODO: Onboarding Agent adapter hook (Phase 1 → Phase 2 migration)
+#
+# When the Onboarding Agent is wired into this orchestrator, Gate 1 should be
+# replaced with a call to run_onboarding_agent() rather than invoking
+# semantic_alignment.py directly as a subprocess.
+#
+# Target integration pattern:
+#
+#   from agents.onboarding_agent import run_onboarding_agent
+#   from agents.onboarding_schemas import OnboardingResult
+#
+#   def _run_gate_1_via_agent(args, run_id: str, output_dir: Path) -> OnboardingResult:
+#       result = run_onboarding_agent(
+#           raw_tape_path=args.input,
+#           run_id=run_id,
+#           client_config_path=args.config,
+#           schema_registry_path=args.registry,
+#           output_dir=str(output_dir),
+#           llm_enabled=not args.skip_llm,
+#       )
+#       if not result.proceed_to_validation:
+#           raise RuntimeError(
+#               f"Onboarding Agent blocked pipeline: {result.status}. "
+#               f"See {result.onboarding_result_path} for details."
+#           )
+#       return result
+#
+# The downstream Validation Agent should read:
+#   result.canonical_draft_path   → canonical_full.csv input for Gate 2
+#   result.approved_config_path   → merged run config
+#   result.proceed_to_validation  → gate signal
+#   result.onboarding_result_path → full audit record
+#
+# Existing Gate 1 behaviour is preserved unchanged in v1 to avoid breaking
+# current pipeline users.  Swap the call site once v1 is validated.
+# ---------------------------------------------------------------------------
 """
 
 from __future__ import annotations
