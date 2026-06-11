@@ -213,6 +213,12 @@ class OnboardingResult:
     # ---- Gate signal ----
     proceed_to_validation: bool = False
 
+    # ---- Re-run metadata (used by workbench to re-invoke the agent) ----
+    raw_tape_path: str = ""
+    schema_registry_path: str = ""
+    aliases_dir: str = ""
+    enum_mapping_path: str = ""
+
     # ---- Narrative ----
     narrative_summary: str = ""
 

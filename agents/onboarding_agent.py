@@ -757,7 +757,27 @@ def run_onboarding_agent(
     enum_path = Path(enum_mapping_path) if enum_mapping_path else _DEFAULT_ENUM_MAPPING
 
     result = OnboardingResult(run_id=run_id)
+    result.raw_tape_path = str(tape_path.resolve())
+    result.schema_registry_path = str(registry_path)
+    result.aliases_dir = str(aliases_path)
+    result.enum_mapping_path = str(enum_path)
     errors: List[str] = []
+
+    # Write run_info.json so the workbench can re-run without extra args
+    run_info = {
+        "run_id": run_id,
+        "raw_tape_path": str(tape_path.resolve()),
+        "client_config_path": client_config_path or "",
+        "schema_registry_path": str(registry_path),
+        "aliases_dir": str(aliases_path),
+        "enum_mapping_path": str(enum_path),
+        "output_dir": str(Path(output_dir)),
+        "llm_enabled": llm_enabled,
+        "started_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+    (run_output_dir / "run_info.json").write_text(
+        json.dumps(run_info, indent=2), encoding="utf-8"
+    )
 
     # -----------------------------------------------------------------------
     # STEP 1: Config Bootstrap
