@@ -1,0 +1,35 @@
+"""MI Agent v1 foundation.
+
+An isolated, additive package that provides the building blocks for a
+Management Information (MI) querying agent.  It does NOT touch the existing
+ESMA / onboarding / validation / reporting pipeline.
+
+Public surface:
+  - MIQuerySpec               : v1 query specification (mi_query_spec)
+  - validate_mi_query         : validator (mi_query_validator)
+  - load_mi_semantics         : load the curated MI semantic registry
+  - parse_user_question       : NL -> MIQuerySpec (deterministic + optional LLM)
+
+The curated semantic registry (mi_semantics_field_registry.yaml) is GENERATED
+from the canonical field registry by build_mi_semantics_registry.py and is a
+*reference* layer over canonical fields, not a copy of them.
+"""
+
+from __future__ import annotations
+
+__version__ = "0.1.0"
+
+from .mi_query_spec import MIQuerySpec  # noqa: F401
+from .mi_query_validator import (  # noqa: F401
+    ValidationResult,
+    load_mi_semantics,
+    validate_mi_query,
+)
+
+__all__ = [
+    "MIQuerySpec",
+    "ValidationResult",
+    "load_mi_semantics",
+    "validate_mi_query",
+    "__version__",
+]
