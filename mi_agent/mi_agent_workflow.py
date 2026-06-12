@@ -114,7 +114,10 @@ def run_mi_agent_query(
     llm_enabled: bool = False,
     model: Optional[str] = None,
     parser_mode: str = "deterministic",
-    max_repair_attempts: int = 2,
+    max_repair_attempts: int = 1,
+    catalog_mode: str = "core",
+    zero_cost_first: bool = True,
+    provider: str = "anthropic",
     llm_callable=None,
 ) -> Dict[str, Any]:
     """Run one MI question end to end.
@@ -173,6 +176,8 @@ def run_mi_agent_query(
             question, semantics, available_columns=available_columns,
             llm_enabled=effective_llm, model=model,
             max_attempts=max_repair_attempts, llm_callable=llm_callable,
+            provider=provider, catalog_mode=catalog_mode,
+            zero_cost_first=zero_cost_first,
         )
     except Exception as exc:
         result["error"] = f"Parser error: {exc}"
@@ -181,6 +186,9 @@ def run_mi_agent_query(
         return result
 
     result["parser_mode"] = parse_meta.get("parser_mode", "deterministic")
+    # granular detail (deterministic_zero_cost / llm / llm_repaired / validation_failed)
+    result["parser_mode_detail"] = parse_meta.get("parser_mode_detail",
+                                                  result["parser_mode"])
     result["spec_obj"] = spec
     result["spec"] = spec.to_dict()
     result["parse_metadata"] = parse_meta
@@ -194,7 +202,13 @@ def run_mi_agent_query(
         result["interpreted"]["Validation"] = "Failed"
         result["error"] = "The proposed query failed validation."
         result["warnings"] = _dedupe(warnings)
-        result["metadata"] = {"parse_metadata": parse_meta}
+        result["metadata"] = {
+            "parse_metadata": parse_meta,
+            "parser_mode_detail": parse_meta.get("parser_mode_detail"),
+            "repair_attempts": parse_meta.get("repair_attempts"),
+            "repair_skipped_reason": parse_meta.get("repair_skipped_reason"),
+            "llm": parse_meta.get("llm"),
+        }
         return result
     result["interpreted"]["Validation"] = "Passed"
 
@@ -232,6 +246,10 @@ def run_mi_agent_query(
     result["warnings"] = _dedupe(warnings)
     result["metadata"] = {
         "parse_metadata": parse_meta,
+        "parser_mode_detail": parse_meta.get("parser_mode_detail"),
+        "repair_attempts": parse_meta.get("repair_attempts"),
+        "repair_skipped_reason": parse_meta.get("repair_skipped_reason"),
+        "llm": parse_meta.get("llm"),
         "executor_metadata": qres.metadata,
         "result_type": qres.result_type,
         "row_count": qres.row_count,

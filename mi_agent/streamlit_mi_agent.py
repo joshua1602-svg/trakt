@@ -131,6 +131,36 @@ def _render_validation(result: dict) -> None:
                        f"status: {parse_meta.get('status')}")
 
 
+def _render_run_details(result: dict) -> None:
+    """Parser mode + LLM call/cost observability (kept in an expander)."""
+    pm = result.get("parse_metadata") or {}
+    detail = result.get("parser_mode_detail") or pm.get("parser_mode_detail") \
+        or result.get("parser_mode")
+    llm = pm.get("llm") or {}
+    cost_status = llm.get("cost_estimate_status")
+    cost = llm.get("estimated_total_cost", 0.0)
+    cost_str = (f"${cost:.4f}" if cost_status == "estimated"
+                else ("$0.0000" if (llm.get("calls", 0) == 0) else "unknown"))
+    with st.expander("Run details (parser & cost)"):
+        st.markdown(f"- **Parser mode:** {detail}")
+        st.markdown(f"- **Model:** {pm.get('model') or '—'}")
+        st.markdown(f"- **LLM calls:** {llm.get('calls', 0)}")
+        st.markdown(f"- **Repair attempts:** {pm.get('repair_attempts', 0)}")
+        if pm.get("repair_skipped_reason"):
+            st.markdown(f"- **Repair skipped:** {pm.get('repair_skipped_reason')}")
+        st.markdown(f"- **Estimated cost:** {cost_str}")
+        if llm.get("calls"):
+            st.markdown(
+                f"- **Tokens:** in={llm.get('input_tokens', 0)}, "
+                f"out={llm.get('output_tokens', 0)}, "
+                f"total={llm.get('total_tokens', 0)} · "
+                f"cache_supported={llm.get('prompt_cache_supported')}"
+            )
+        conf = pm.get("parser_confidence")
+        if conf:
+            st.markdown(f"- **Parser confidence:** {conf}")
+
+
 def _render_outputs(result: dict) -> None:
     # Chart
     chart = result.get("chart_result")
@@ -164,6 +194,9 @@ def _render_outputs(result: dict) -> None:
                 st.markdown(f"- {w}")
         else:
             st.caption("No warnings.")
+
+    # Run details (parser mode + LLM cost/token observability)
+    _render_run_details(result)
 
     # Interpreted spec (raw)
     with st.expander("Interpreted query (MIQuerySpec JSON)"):
@@ -258,6 +291,8 @@ def main() -> None:
             question, ss.df, semantics_path,
             llm_enabled=use_llm, model=cfg.model, parser_mode=parser_mode,
             max_repair_attempts=cfg.max_repair_attempts,
+            catalog_mode=cfg.catalog_mode, zero_cost_first=cfg.zero_cost_first,
+            provider=cfg.provider,
         )
     except Exception as exc:  # noqa: BLE001 - never crash the app
         st.error(f"Unexpected error while running the query: {exc}")
@@ -275,6 +310,7 @@ def main() -> None:
             st.error(result["error"])
             if result.get("interpreted"):
                 _render_interpreted(result)
+        _render_run_details(result)
         return
 
     _render_outputs(result)
