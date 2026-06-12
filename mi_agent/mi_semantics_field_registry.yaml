@@ -4,21 +4,24 @@
 # Do NOT edit by hand without also updating the build script (CURATION),
 # or your changes will be overwritten on the next regeneration.
 metadata:
-  generated_at: '2026-06-12T10:21:37.607774+00:00'
+  generated_at: '2026-06-12T11:20:57.322961+00:00'
   source_registry: /home/user/trakt/config/system/fields_registry.yaml
   selection_approach: curated MI-first allowlist (see CURATION in build script)
   selection_rules:
   - explicit curated allowlist of MI-relevant canonical fields
   - excludes identifiers, LEIs, industry/tax codes, rating-agency fields, waterfall/swap fields, balance-period
     buckets and duplicate borrower-2/guarantor fields
+  - derived bucket dimensions (age_bucket, ltv_bucket, ticket_bucket, vintage_year, …) added as first-class
+    semantic fields
   mi_tiers:
   - core
   - extended
-  field_count: 61
-  core_field_count: 37
+  field_count: 69
+  core_field_count: 45
   extended_field_count: 24
+  derived_field_count: 8
   missing_curated_fields: []
-  version: 0.2.1
+  version: 0.2.2
   default_weight_field: current_outstanding_balance
   cleanup_notes:
   - numeric axis roles enabled
@@ -26,6 +29,7 @@ metadata:
   - monetary performance fields normalised
   - YAML aliases disabled
   - core-tier preference added to parser
+  - derived bucket semantic fields added
 fields:
   account_status:
     canonical_field: account_status
@@ -56,6 +60,39 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+  age_bucket:
+    canonical_field: age_bucket
+    mi_tier: core
+    business_name: Age Bucket
+    display_name: Age Bucket
+    business_description: Borrower age band (derived from youngest_borrower_age).
+    description: ''
+    synonyms:
+    - age band
+    - age bucket
+    - age range
+    - borrower age band
+    - borrower age bucket
+    source_criteria:
+    - derived_bucket
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    derived: true
+    derived_from: youngest_borrower_age
   allocated_losses:
     canonical_field: allocated_losses
     mi_tier: core
@@ -122,6 +159,40 @@ fields:
     weight_field: null
     bucket_field: ticket_bucket
     notes: ''
+  arrears_bucket:
+    canonical_field: arrears_bucket
+    mi_tier: core
+    business_name: Arrears Bucket
+    display_name: Arrears Bucket
+    business_description: Days-in-arrears band (derived from number_of_days_in_arrears).
+    description: ''
+    synonyms:
+    - arrears band
+    - arrears bucket
+    - dpd band
+    - days past due band
+    - delinquency bucket
+    - days in arrears band
+    source_criteria:
+    - derived_bucket
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    derived: true
+    derived_from: number_of_days_in_arrears
   borrower_1_gender:
     canonical_field: borrower_1_gender
     mi_tier: core
@@ -1117,6 +1188,39 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+  ltv_bucket:
+    canonical_field: ltv_bucket
+    mi_tier: core
+    business_name: LTV Bucket
+    display_name: LTV Bucket
+    business_description: LTV band (derived from current_loan_to_value).
+    description: ''
+    synonyms:
+    - ltv band
+    - ltv bucket
+    - ltv range
+    - loan to value band
+    - loan to value bucket
+    source_criteria:
+    - derived_bucket
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    derived: true
+    derived_from: current_loan_to_value
   maturity_date:
     canonical_field: maturity_date
     mi_tier: core
@@ -1144,6 +1248,38 @@ fields:
     weight_field: null
     bucket_field: maturity_year
     notes: ''
+  maturity_year:
+    canonical_field: maturity_year
+    mi_tier: core
+    business_name: Maturity Year
+    display_name: Maturity Year
+    business_description: Maturity year cohort (derived from maturity_date).
+    description: ''
+    synonyms:
+    - maturity year
+    - maturity cohort
+    - year of maturity
+    source_criteria:
+    - derived_bucket
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    - cohort
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    derived: true
+    derived_from: maturity_date
   negative_equity_guarantee:
     canonical_field: negative_equity_guarantee
     mi_tier: core
@@ -1417,6 +1553,39 @@ fields:
     weight_field: current_outstanding_balance
     bucket_field: original_ltv_bucket
     notes: ''
+  original_ltv_bucket:
+    canonical_field: original_ltv_bucket
+    mi_tier: core
+    business_name: Original LTV Bucket
+    display_name: Original LTV Bucket
+    business_description: Original LTV band (derived from original_loan_to_value).
+    description: ''
+    synonyms:
+    - original ltv band
+    - original ltv bucket
+    - oltv band
+    - oltv bucket
+    - ltv at origination band
+    source_criteria:
+    - derived_bucket
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    derived: true
+    derived_from: original_loan_to_value
   original_principal_balance:
     canonical_field: original_principal_balance
     mi_tier: core
@@ -1807,6 +1976,74 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+  term_bucket:
+    canonical_field: term_bucket
+    mi_tier: core
+    business_name: Term Bucket
+    display_name: Term Bucket
+    business_description: Loan term band (derived from original_term).
+    description: ''
+    synonyms:
+    - term band
+    - term bucket
+    - loan term band
+    - loan term bucket
+    source_criteria:
+    - derived_bucket
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    derived: true
+    derived_from: original_term
+  ticket_bucket:
+    canonical_field: ticket_bucket
+    mi_tier: core
+    business_name: Ticket Size
+    display_name: Ticket Bucket
+    business_description: 'Loan balance band (derived from the preferred balance field: current_outstanding_balance,
+      falling back to current_principal_balance).'
+    description: ''
+    synonyms:
+    - ticket size
+    - ticket bucket
+    - balance band
+    - balance bucket
+    - exposure band
+    - loan size
+    - ticket
+    source_criteria:
+    - derived_bucket
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    derived: true
+    derived_from: current_outstanding_balance
   valuation_type:
     canonical_field: valuation_type
     mi_tier: core
@@ -1835,6 +2072,40 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+  vintage_year:
+    canonical_field: vintage_year
+    mi_tier: core
+    business_name: Vintage
+    display_name: Vintage Year
+    business_description: Origination year cohort (derived from origination_date).
+    description: ''
+    synonyms:
+    - vintage
+    - vintage year
+    - origination year
+    - cohort year
+    - year of origination
+    source_criteria:
+    - derived_bucket
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    - cohort
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    derived: true
+    derived_from: origination_date
   youngest_borrower_age:
     canonical_field: youngest_borrower_age
     mi_tier: core

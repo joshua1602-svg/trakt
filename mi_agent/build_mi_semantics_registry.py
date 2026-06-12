@@ -42,7 +42,7 @@ import argparse
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
@@ -54,7 +54,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE = REPO_ROOT / "config" / "system" / "fields_registry.yaml"
 DEFAULT_OUTPUT = Path(__file__).resolve().parent / "mi_semantics_field_registry.yaml"
 
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 
 CLEANUP_NOTES = [
     "numeric axis roles enabled",
@@ -62,6 +62,7 @@ CLEANUP_NOTES = [
     "monetary performance fields normalised",
     "YAML aliases disabled",
     "core-tier preference added to parser",
+    "derived bucket semantic fields added",
 ]
 
 
@@ -104,6 +105,23 @@ _DAYS_AGG = {
 _RATIO_AGG = {
     "allowed_aggregations": ["avg", "median", "distribution"],
     "default_aggregation": "avg",
+}
+
+# Shared overrides for *derived* bucket dimensions (age_bucket, ltv_bucket,
+# ticket_bucket, vintage_year, …). These columns are not part of the canonical
+# regulatory registry — they are derived at the analytics layer
+# (analytics/mi_prep.py::add_buckets) — so we pin every analytics attribute
+# explicitly rather than relying on the canonical-name heuristic.
+_BUCKET_OVERRIDES: Dict[str, Any] = {
+    "role": "dimension",
+    "format": "string",
+    "chartable": True,
+    "allowed_aggregations": ["count", "balance_sum"],
+    "default_aggregation": "count",
+    "allowed_chart_roles": ["x", "group", "filter", "color"],
+    "default_chart_role": "x",
+    "bucket_field": None,
+    "weight_field": None,
 }
 
 CURATION: Dict[str, dict] = {
@@ -464,6 +482,89 @@ CURATION: Dict[str, dict] = {
         "business_description": "Number of properties securing the loan.",
         "synonyms": ["number of properties", "properties", "property count"],
     },
+
+    # ================= DERIVED BUCKETS =================
+    # These columns do NOT exist in the canonical regulatory registry.  They are
+    # produced at the analytics layer (analytics/mi_prep.py::add_buckets) and
+    # registered here as first-class semantic dimensions so MI specs can group /
+    # heatmap / treemap by them directly (e.g. "LTV by age_bucket and region").
+    # The executor uses them as ordinary dimension columns: if the named bucket
+    # column is present in the dataframe it is used; otherwise the validator
+    # rejects the spec with a clear error.
+    "age_bucket": {
+        "tier": "core", "derived": True, "derived_from": "youngest_borrower_age",
+        "business_name": "Age Bucket",
+        "business_description": "Borrower age band (derived from youngest_borrower_age).",
+        "synonyms": ["age band", "age bucket", "age range", "borrower age band",
+                     "borrower age bucket"],
+        "overrides": dict(_BUCKET_OVERRIDES),
+    },
+    "ltv_bucket": {
+        "tier": "core", "derived": True, "derived_from": "current_loan_to_value",
+        "business_name": "LTV Bucket",
+        "business_description": "LTV band (derived from current_loan_to_value).",
+        "synonyms": ["ltv band", "ltv bucket", "ltv range",
+                     "loan to value band", "loan to value bucket"],
+        "overrides": dict(_BUCKET_OVERRIDES),
+    },
+    "original_ltv_bucket": {
+        "tier": "core", "derived": True, "derived_from": "original_loan_to_value",
+        "business_name": "Original LTV Bucket",
+        "business_description": "Original LTV band (derived from original_loan_to_value).",
+        "synonyms": ["original ltv band", "original ltv bucket", "oltv band",
+                     "oltv bucket", "ltv at origination band"],
+        "overrides": dict(_BUCKET_OVERRIDES),
+    },
+    "ticket_bucket": {
+        "tier": "core", "derived": True,
+        "derived_from": "current_outstanding_balance",
+        "business_name": "Ticket Size",
+        "business_description": "Loan balance band (derived from the preferred "
+                                "balance field: current_outstanding_balance, "
+                                "falling back to current_principal_balance).",
+        "synonyms": ["ticket size", "ticket bucket", "balance band",
+                     "balance bucket", "exposure band", "loan size", "ticket"],
+        "overrides": dict(_BUCKET_OVERRIDES),
+    },
+    "arrears_bucket": {
+        "tier": "core", "derived": True, "derived_from": "number_of_days_in_arrears",
+        "business_name": "Arrears Bucket",
+        "business_description": "Days-in-arrears band (derived from "
+                                "number_of_days_in_arrears).",
+        "synonyms": ["arrears band", "arrears bucket", "dpd band",
+                     "days past due band", "delinquency bucket",
+                     "days in arrears band"],
+        "overrides": dict(_BUCKET_OVERRIDES),
+    },
+    "term_bucket": {
+        "tier": "core", "derived": True, "derived_from": "original_term",
+        "business_name": "Term Bucket",
+        "business_description": "Loan term band (derived from original_term).",
+        "synonyms": ["term band", "term bucket", "loan term band",
+                     "loan term bucket"],
+        "overrides": dict(_BUCKET_OVERRIDES),
+    },
+    "vintage_year": {
+        "tier": "core", "derived": True, "derived_from": "origination_date",
+        "business_name": "Vintage",
+        "business_description": "Origination year cohort (derived from origination_date).",
+        "synonyms": ["vintage", "vintage year", "origination year",
+                     "cohort year", "year of origination"],
+        "overrides": dict(
+            _BUCKET_OVERRIDES,
+            allowed_chart_roles=["x", "group", "filter", "color", "cohort"],
+        ),
+    },
+    "maturity_year": {
+        "tier": "core", "derived": True, "derived_from": "maturity_date",
+        "business_name": "Maturity Year",
+        "business_description": "Maturity year cohort (derived from maturity_date).",
+        "synonyms": ["maturity year", "maturity cohort", "year of maturity"],
+        "overrides": dict(
+            _BUCKET_OVERRIDES,
+            allowed_chart_roles=["x", "group", "filter", "color", "cohort"],
+        ),
+    },
 }
 
 
@@ -744,7 +845,9 @@ def build_entry(name: str, meta: dict, curated: dict,
         "business_description": curated.get("business_description", ""),
         "description": "",
         "synonyms": list(curated.get("synonyms", []) or []),
-        "source_criteria": list(selection_criteria(meta)),
+        "source_criteria": (["derived_bucket"]
+                            if curated.get("derived")
+                            else list(selection_criteria(meta))),
         "role": role,
         "format": fmt,
         "chartable": overrides.get("chartable", inf_chartable),
@@ -757,6 +860,11 @@ def build_entry(name: str, meta: dict, curated: dict,
         "notes": "",
     }
 
+    if curated.get("derived"):
+        entry["derived"] = True
+        if curated.get("derived_from"):
+            entry["derived_from"] = curated["derived_from"]
+
     if entry["role"] == "unknown" and not entry["notes"]:
         entry["notes"] = "requires manual analytics classification"
 
@@ -766,8 +874,11 @@ def build_entry(name: str, meta: dict, curated: dict,
 def build_registry(source: Path) -> dict:
     fields = load_canonical_registry(source)
 
-    present = [name for name in CURATION if name in fields]
-    missing = [name for name in CURATION if name not in fields]
+    derived = [name for name, c in CURATION.items() if c.get("derived")]
+    canonical_curated = [name for name, c in CURATION.items()
+                         if not c.get("derived")]
+    present = [name for name in canonical_curated if name in fields]
+    missing = [name for name in canonical_curated if name not in fields]
     for name in missing:
         print(f"WARNING: curated field not found in canonical registry, "
               f"skipping: {name}", file=sys.stderr)
@@ -776,10 +887,11 @@ def build_registry(source: Path) -> dict:
     weight_target = pick_weight_field(selected_names)
 
     out_fields: Dict[str, dict] = {}
-    for name in sorted(present):
-        out_fields[name] = build_entry(
-            name, fields[name], CURATION[name], weight_target
-        )
+    for name in sorted(set(present) | set(derived)):
+        # Derived bucket fields are not in the canonical registry; pass an
+        # empty meta so build_entry uses overrides + defaults only.
+        meta = fields.get(name, {})
+        out_fields[name] = build_entry(name, meta, CURATION[name], weight_target)
 
     tier_counts: Dict[str, int] = {}
     for entry in out_fields.values():
@@ -794,11 +906,14 @@ def build_registry(source: Path) -> dict:
             "excludes identifiers, LEIs, industry/tax codes, rating-agency "
             "fields, waterfall/swap fields, balance-period buckets and "
             "duplicate borrower-2/guarantor fields",
+            "derived bucket dimensions (age_bucket, ltv_bucket, ticket_bucket, "
+            "vintage_year, …) added as first-class semantic fields",
         ],
         "mi_tiers": ["core", "extended"],
         "field_count": len(out_fields),
         "core_field_count": tier_counts.get("core", 0),
         "extended_field_count": tier_counts.get("extended", 0),
+        "derived_field_count": len(derived),
         "missing_curated_fields": missing,
         "version": VERSION,
         "default_weight_field": weight_target,

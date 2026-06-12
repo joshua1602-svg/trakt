@@ -176,7 +176,8 @@ def test_deterministic_parser_resolves_age_to_core(semantics):
 
 def test_metadata_version_and_cleanup_notes(semantics):
     meta = semantics["metadata"]
-    assert meta["version"] == "0.2.1"
+    # 0.2.1 introduced these cleanups; 0.2.2 added derived bucket fields on top.
+    assert meta["version"] in ("0.2.1", "0.2.2")
     notes = meta.get("cleanup_notes") or []
     assert any("weighted_avg" in n for n in notes)
     assert any("numeric axis" in n for n in notes)
