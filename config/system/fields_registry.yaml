@@ -1883,9 +1883,11 @@ fields:
     layer: product
     core_canonical: false
   geographic_region_classification:
-    allowed_values: geographic_region_nuts3
+    meaning: Year of the NUTS classification used for the geographic region fields
+      (e.g. 2021). This is the classification YEAR, NOT a geographic region code.
+    allowed_values: null
     category: regulatory
-    format: list
+    format: year
     portfolio_type: common
     regime_mapping:
       ESMA_Annex2:
@@ -1906,6 +1908,7 @@ fields:
     layer: core
     core_canonical: false
   geographic_region_collateral:
+    meaning: NUTS3 geographic region code for the collateral / property location.
     allowed_values: geographic_region_nuts3
     category: regulatory
     format: list
@@ -1936,6 +1939,7 @@ fields:
     layer: collateral
     core_canonical: false
   geographic_region_obligor:
+    meaning: NUTS3 geographic region code for the obligor / borrower.
     allowed_values: geographic_region_nuts3
     category: regulatory
     format: list
