@@ -13,6 +13,9 @@ Public surface:
   - MIQueryResult             : executor result object
   - create_mi_chart           : render an MIQueryResult as a Plotly figure
   - MIChartResult             : chart factory result object
+  - run_mi_agent_query        : question -> spec -> validate -> execute -> chart
+  - parse_with_repair         : NL -> validated spec, with LLM repair loop
+  - get_llm_config            : env-driven LLM configuration (cost control)
 
 The curated semantic registry (mi_semantics_field_registry.yaml) is GENERATED
 from the canonical field registry by build_mi_semantics_registry.py and is a
@@ -39,6 +42,9 @@ from .mi_chart_factory import (  # noqa: F401
     MIChartResult,
     create_mi_chart,
 )
+from .llm_query_parser import parse_user_question, parse_with_repair  # noqa: F401
+from .mi_agent_config import LLMConfig, get_llm_config  # noqa: F401
+from .mi_agent_workflow import run_mi_agent_query  # noqa: F401
 
 __all__ = [
     "MIQuerySpec",
@@ -51,5 +57,10 @@ __all__ = [
     "create_mi_chart",
     "MIChartResult",
     "MIChartError",
+    "parse_user_question",
+    "parse_with_repair",
+    "get_llm_config",
+    "LLMConfig",
+    "run_mi_agent_query",
     "__version__",
 ]

@@ -315,6 +315,114 @@ Run the tests:
 pytest mi_agent/tests -q
 ```
 
+## Streamlit MI Agent v1
+
+`mi_agent/streamlit_mi_agent.py` is a clean, executive-ready workbench that ties
+the whole stack together: ask a natural-language MI question → it is translated
+into a governed `MIQuerySpec` → validated → executed → charted, with the result
+table, interpreted query, warnings and exports all on one page.
+
+The non-UI orchestration lives in `mi_agent/mi_agent_workflow.py`
+(`run_mi_agent_query`) so it is unit-tested without a browser. The page itself
+is presentation only.
+
+### How it uses the LLM safely
+
+The LLM (when enabled) is shown **only the data-free semantic catalogue** (field
+keys, business names, synonyms, role, format, allowed aggregations/chart roles,
+bucket info, chartability) and must return **strict `MIQuerySpec` JSON only**.
+It never executes pandas, generates SQL/Plotly, sees raw data, mutates data, or
+bypasses the validator. The deterministic stack remains the control layer:
+
+```
+question → parser (deterministic | LLM) → validator → [repair loop] → executor → chart factory → UI
+```
+
+**Repair loop** (`parse_with_repair`): the LLM proposes a spec; the validator
+checks it; if invalid, the validation errors (not data) are sent back asking for
+corrected JSON, retried up to `MI_AGENT_MAX_REPAIR_ATTEMPTS`. If still invalid,
+the UI shows the validation errors and a suggested action — it never executes an
+invalid spec.
+
+### Deterministic fallback
+
+If `ENABLE_LLM_MI_AGENT` is not `true`, or the provider/key is missing, the app
+uses the deterministic pattern parser (no API key needed) and shows a visible
+status. The app never hard-fails for a missing LLM key.
+
+### Environment variables (cost control)
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `ENABLE_LLM_MI_AGENT` | `false` | turn the LLM path on |
+| `MI_AGENT_LLM_PROVIDER` | `anthropic` | `anthropic` \| `mock` \| `none` |
+| `MI_AGENT_LLM_MODEL` | `claude-haiku-4-5-20251001` | cheap/fast default; override freely |
+| `MI_AGENT_MAX_REPAIR_ATTEMPTS` | `2` | LLM self-correction retries |
+| `ANTHROPIC_API_KEY` | — | required for `provider=anthropic` |
+
+The default model is the repo's existing cheap tier (used by the onboarding
+agent). To use the model named in the brief instead:
+`export MI_AGENT_LLM_MODEL=claude-3-5-haiku-latest`.
+
+### How to run
+
+```bash
+# deterministic mode (no API key needed)
+streamlit run mi_agent/streamlit_mi_agent.py
+
+# LLM mode
+export ENABLE_LLM_MI_AGENT=true
+export MI_AGENT_LLM_PROVIDER=anthropic
+export MI_AGENT_LLM_MODEL=claude-3-5-haiku-latest
+export ANTHROPIC_API_KEY=...
+streamlit run mi_agent/streamlit_mi_agent.py
+```
+
+In the sidebar: upload a canonical CSV, load a local path, or load the
+auto-detected synthetic demo CSV; pick the parser mode; click an example
+question or type your own.
+
+### Example questions
+
+- Show balance by region
+- Show weighted average LTV by product type
+- Show LTV by age bucket and region as a heatmap
+- Show balance by region and broker as a treemap
+- Show LTV by borrower age sized by balance
+- Show top 10 brokers by balance
+- Show redemptions over time
+
+### How to test
+
+```bash
+pytest mi_agent/tests -q                                  # whole MI agent suite
+pytest mi_agent/tests/test_streamlit_mi_agent.py -q       # workflow + repair + config
+```
+
+### Limitations
+
+- No authentication, no Azure, no multi-user persistence, no pipeline wiring.
+- Run history is in-session only (not persisted to disk).
+- Deterministic parser handles a fixed set of phrasings; the LLM path is the
+  primary product path for free-form questions.
+- Summary intents have no chart (table-only); the page says so clearly.
+
+### Final MI Agent v1 test plan
+
+1. Start in deterministic mode: `streamlit run mi_agent/streamlit_mi_agent.py`.
+2. Sidebar → **Load synthetic demo CSV**.
+3. Run, in turn: *Show balance by region*; *Show weighted average LTV by product
+   type*; *Show LTV by age bucket and region as a heatmap*; *Show balance by
+   region and broker as a treemap*; *Show LTV by borrower age sized by balance*.
+4. Confirm for each: interpreted spec shown, validation passed, chart rendered,
+   table rendered, warnings visible, and CSV/HTML/Spec/Metadata exports download.
+5. Restart with LLM mode enabled (env vars above + a real key).
+6. Run: *Where are we most concentrated?*; *Are newer vintages riskier?*; *Show
+   me the interaction between borrower age, LTV and exposure*.
+7. Confirm: the LLM returns an MIQuerySpec only, the validator passes (or the
+   repair loop runs), no raw data is sent to the LLM, and chart/table render.
+8. Run `pytest mi_agent/tests -q`.
+
 ## Known limitations / next steps
 
 - **No Streamlit MI chat UI yet.**

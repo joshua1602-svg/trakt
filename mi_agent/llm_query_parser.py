@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from .mi_query_spec import MIQuerySpec
-from .mi_query_validator import load_mi_semantics
+from .mi_query_validator import load_mi_semantics, validate_mi_query
 
 # Cheap default model for NL->spec parsing.  Overridable via the `model` arg.
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
@@ -110,7 +110,19 @@ def find_field(
     return preferred_kw or fallback_kw or preferred_any or fallback_any
 
 
+# Preferred balance/exposure fields (mirrors the executor's balance hierarchy).
+_PREFERRED_BALANCE = ("current_outstanding_balance", "current_principal_balance",
+                      "original_principal_balance")
+
+
 def _balance_metric(semantics) -> Optional[str]:
+    # Prefer the canonical balance hierarchy so "balance" resolves to the
+    # primary exposure field rather than an alphabetically-earlier keyword hit
+    # such as ``arrears_balance``.
+    fields = _fields(semantics)
+    for key in _PREFERRED_BALANCE:
+        if key in fields:
+            return key
     return find_field(semantics, role="metric", fmt="currency",
                       keywords=("balance", "outstanding", "principal"))
 
@@ -365,3 +377,148 @@ def parse_user_question(
     else:
         raw = _call_llm(prompt, model or DEFAULT_MODEL)
     return parse_llm_response_to_spec(raw)
+
+
+# --------------------------------------------------------------------------- #
+# Validate-and-repair loop
+# --------------------------------------------------------------------------- #
+
+
+def _repair_prompt(base_prompt: Dict[str, str], previous_json: str,
+                   errors: List[str]) -> Dict[str, str]:
+    """Append the previous (invalid) JSON + validation errors to the prompt so
+    the model can correct itself.  Still data-free."""
+    error_lines = "\n".join(f"- {e}" for e in errors) or "- (unparseable JSON)"
+    user = (
+        base_prompt["user"]
+        + "\n\nYour previous answer was:\n"
+        + previous_json
+        + "\n\nThat answer FAILED validation with these errors:\n"
+        + error_lines
+        + "\n\nReturn corrected STRICT JSON only (no prose, no markdown). "
+        "Use only catalogue field keys and respect allowed aggregations / "
+        "chart roles."
+    )
+    return {"system": base_prompt["system"], "user": user}
+
+
+def parse_with_repair(
+    user_question: str,
+    semantics,
+    available_columns=None,
+    *,
+    llm_enabled: bool = False,
+    model: Optional[str] = None,
+    max_attempts: int = 2,
+    llm_callable=None,
+) -> Tuple[MIQuerySpec, dict]:
+    """Parse a question into a validated MIQuerySpec, repairing invalid LLM output.
+
+    Returns ``(spec, metadata)`` where metadata always includes:
+        parser_mode        "deterministic" | "llm"
+        ok                 bool (spec passed validation)
+        validation_errors  list[str]
+        repair_attempts    int   (LLM corrections requested; 0 for deterministic)
+        attempts           list[dict] per-attempt detail (LLM only)
+        status             human-readable
+    On total failure the *last* proposed spec is still returned so the UI can
+    show the validation errors.
+    """
+    if isinstance(semantics, (str, Path)):
+        semantics = load_mi_semantics(semantics)
+    cols = set(available_columns) if available_columns is not None else None
+
+    use_llm = bool(llm_enabled) or (llm_callable is not None)
+
+    # ---- deterministic path ------------------------------------------------
+    if not use_llm:
+        spec = _deterministic_spec(user_question, semantics)
+        vr = validate_mi_query(spec, semantics, available_columns=cols)
+        meta = {
+            "parser_mode": "deterministic",
+            "ok": vr.ok,
+            "validation_errors": list(vr.errors),
+            "validation_warnings": list(vr.warnings),
+            "repair_attempts": 0,
+            "attempts": [],
+            "model": None,
+            "status": ("parsed deterministically" if vr.ok
+                       else "deterministic parse failed validation"),
+        }
+        return spec, meta
+
+    # ---- LLM path (with repair loop) --------------------------------------
+    base_prompt = build_prompt(user_question, semantics)
+    prompt = base_prompt
+    attempts: List[dict] = []
+    last_spec: Optional[MIQuerySpec] = None
+    last_errors: List[str] = []
+    original_error_count: Optional[int] = None
+
+    total_tries = max(1, int(max_attempts) + 1)  # initial try + repairs
+    for i in range(total_tries):
+        raw = (llm_callable(prompt) if llm_callable is not None
+               else _call_llm(prompt, model or DEFAULT_MODEL))
+        raw_text = raw if isinstance(raw, str) else json.dumps(raw)
+        try:
+            spec = parse_llm_response_to_spec(raw)
+            parse_error = None
+        except Exception as exc:  # malformed JSON / wrong shape
+            spec = None
+            parse_error = str(exc)
+
+        if spec is None:
+            errors = [f"could not parse model output as JSON: {parse_error}"]
+            vr_ok = False
+        else:
+            last_spec = spec
+            vr = validate_mi_query(spec, semantics, available_columns=cols)
+            errors = list(vr.errors)
+            vr_ok = vr.ok
+
+        if original_error_count is None:
+            original_error_count = len(errors)
+        last_errors = errors
+        attempts.append({
+            "attempt": i,
+            "ok": vr_ok,
+            "error_count": len(errors),
+            "errors": errors,
+        })
+
+        if vr_ok and spec is not None:
+            meta = {
+                "parser_mode": "llm",
+                "ok": True,
+                "validation_errors": [],
+                "repair_attempts": i,
+                "original_error_count": original_error_count,
+                "attempts": attempts,
+                "model": model or DEFAULT_MODEL,
+                "status": ("parsed by LLM" if i == 0
+                           else f"parsed by LLM after {i} repair attempt(s)"),
+            }
+            return spec, meta
+
+        # prepare a repair prompt for the next iteration
+        prompt = _repair_prompt(base_prompt, raw_text, errors)
+
+    # exhausted attempts -> failure (return last spec so UI can show errors)
+    if last_spec is None:
+        last_spec = MIQuerySpec(
+            intent="summary", chart_type="none", aggregation="count",
+            title=user_question.strip(),
+            explanation="LLM did not return a usable MIQuerySpec.",
+            output_format="text",
+        )
+    meta = {
+        "parser_mode": "llm",
+        "ok": False,
+        "validation_errors": last_errors,
+        "repair_attempts": max(0, len(attempts) - 1),
+        "original_error_count": original_error_count,
+        "attempts": attempts,
+        "model": model or DEFAULT_MODEL,
+        "status": "LLM output failed validation after repair attempts",
+    }
+    return last_spec, meta
