@@ -108,6 +108,7 @@ def test_validation_failure_surfaces_errors(df, semantics):
     res = run_mi_agent_query(
         "weighted ltv by region", df, semantics,
         llm_enabled=True, parser_mode="llm", max_repair_attempts=0,
+        zero_cost_first=False,  # force the LLM path so the bad spec is used
         llm_callable=lambda prompt: bad,
     )
     assert res["ok"] is False
@@ -165,11 +166,15 @@ def test_llm_prompt_accepts_no_dataframe_and_leaks_no_raw_data(df, semantics):
 
     from mi_agent.llm_query_parser import build_prompt
 
-    # build_prompt must not require/accept a dataframe.
+    # build_prompt accepts only the question, semantics, optional COLUMN NAMES
+    # and a catalogue mode — never a dataframe / data values.
     params = list(inspect.signature(build_prompt).parameters)
-    assert params == ["user_question", "mi_semantics"], params
+    assert params == ["user_question", "mi_semantics",
+                      "available_columns", "catalog_mode"], params
+    assert not any(p in ("data", "df", "dataframe", "rows") for p in params)
 
-    # Capture the exact prompt sent during a full LLM workflow run.
+    # Capture the exact prompt sent during a full LLM workflow run (force the
+    # LLM path with zero_cost_first=False so the mock is actually called).
     captured = {}
 
     def mock(prompt):
@@ -184,16 +189,19 @@ def test_llm_prompt_accepts_no_dataframe_and_leaks_no_raw_data(df, semantics):
     spiked.loc[spiked.index[0], "current_outstanding_balance"] = 987654321
 
     run_mi_agent_query("balance by region", spiked, semantics,
-                       llm_enabled=True, parser_mode="llm", llm_callable=mock)
+                       llm_enabled=True, parser_mode="llm",
+                       zero_cost_first=False, llm_callable=mock)
 
     text = captured["prompt"]["system"] + "\n" + captured["prompt"]["user"]
     # No raw dataset values of any kind.
     assert "SENTINEL_LOAN_X" not in text
     assert "987654321" not in text
     assert "L0001" not in text  # loan identifiers
-    # But the data-free catalogue IS present.
+    # But the data-free catalogue IS present, and only COLUMN NAMES are sent.
     assert "current_loan_to_value" in text
     assert "balance by region" in text.lower()
+    assert "Available dataset columns" in text
+    assert "current_outstanding_balance" in text  # column name (not a value)
 
 
 # --------------------------------------------------------------------------- #
@@ -220,7 +228,8 @@ def test_repair_loop_fixes_invalid_then_valid(df, semantics):
     spec, meta = parse_with_repair(
         "weighted ltv by region", semantics,
         available_columns=set(df.columns),
-        llm_enabled=True, max_attempts=2, llm_callable=mock_llm,
+        llm_enabled=True, max_attempts=2, zero_cost_first=False,
+        llm_callable=mock_llm,
     )
     assert meta["ok"] is True
     assert meta["parser_mode"] == "llm"
@@ -238,7 +247,8 @@ def test_repair_loop_exhausts_and_reports(df, semantics):
     spec, meta = parse_with_repair(
         "weighted ltv by region", semantics,
         available_columns=set(df.columns),
-        llm_enabled=True, max_attempts=1, llm_callable=lambda p: bad,
+        llm_enabled=True, max_attempts=1, zero_cost_first=False,
+        llm_callable=lambda p: bad,
     )
     assert meta["ok"] is False
     assert meta["validation_errors"]

@@ -33,15 +33,21 @@ from typing import List, Mapping, Optional
 # (agents/onboarding_agent.py). Overridable via MI_AGENT_LLM_MODEL.
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 DEFAULT_PROVIDER = "anthropic"
-DEFAULT_MAX_REPAIR_ATTEMPTS = 2
+# Cost-conscious default: one repair attempt (override with MI_AGENT_MAX_REPAIR_ATTEMPTS).
+DEFAULT_MAX_REPAIR_ATTEMPTS = 1
+DEFAULT_CATALOG_MODE = "core"      # core | full
+DEFAULT_ZERO_COST_FIRST = True
 
 ENV_ENABLE = "ENABLE_LLM_MI_AGENT"
 ENV_PROVIDER = "MI_AGENT_LLM_PROVIDER"
 ENV_MODEL = "MI_AGENT_LLM_MODEL"
 ENV_MAX_REPAIR = "MI_AGENT_MAX_REPAIR_ATTEMPTS"
+ENV_CATALOG_MODE = "MI_AGENT_LLM_CATALOG_MODE"
+ENV_ZERO_COST_FIRST = "MI_AGENT_ZERO_COST_FIRST"
 ENV_API_KEY = "ANTHROPIC_API_KEY"
 
 _TRUTHY = {"1", "true", "yes", "on"}
+_FALSY = {"0", "false", "no", "off"}
 
 
 @dataclass
@@ -53,6 +59,8 @@ class LLMConfig:
     api_key_present: bool
     available: bool                     # LLM can actually be used now
     status: str                         # human-readable summary for the UI
+    catalog_mode: str = DEFAULT_CATALOG_MODE        # core | full (cost control)
+    zero_cost_first: bool = DEFAULT_ZERO_COST_FIRST  # try deterministic first
     warnings: List[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -64,6 +72,8 @@ class LLMConfig:
             "api_key_present": self.api_key_present,
             "available": self.available,
             "status": self.status,
+            "catalog_mode": self.catalog_mode,
+            "zero_cost_first": self.zero_cost_first,
             "warnings": list(self.warnings),
         }
 
@@ -93,6 +103,12 @@ def get_llm_config(env: Optional[Mapping[str, str]] = None) -> LLMConfig:
         max_repair = DEFAULT_MAX_REPAIR_ATTEMPTS
     max_repair = max(0, max_repair)
     api_key_present = bool(str(env.get(ENV_API_KEY, "")).strip())
+
+    catalog_mode = str(env.get(ENV_CATALOG_MODE, DEFAULT_CATALOG_MODE)).strip().lower()
+    if catalog_mode not in ("core", "full"):
+        catalog_mode = DEFAULT_CATALOG_MODE
+    zc = str(env.get(ENV_ZERO_COST_FIRST, "")).strip().lower()
+    zero_cost_first = DEFAULT_ZERO_COST_FIRST if zc == "" else (zc in _TRUTHY)
 
     warnings: List[str] = []
     available = False
@@ -130,5 +146,6 @@ def get_llm_config(env: Optional[Mapping[str, str]] = None) -> LLMConfig:
     return LLMConfig(
         enabled=enabled, provider=provider, model=model,
         max_repair_attempts=max_repair, api_key_present=api_key_present,
-        available=available, status=status, warnings=warnings,
+        available=available, status=status, catalog_mode=catalog_mode,
+        zero_cost_first=zero_cost_first, warnings=warnings,
     )
