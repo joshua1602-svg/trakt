@@ -9,6 +9,8 @@ Public surface:
   - validate_mi_query         : validator (mi_query_validator)
   - load_mi_semantics         : load the curated MI semantic registry
   - parse_user_question       : NL -> MIQuerySpec (deterministic + optional LLM)
+  - execute_mi_query          : run a validated spec against canonical data
+  - MIQueryResult             : executor result object
 
 The curated semantic registry (mi_semantics_field_registry.yaml) is GENERATED
 from the canonical field registry by build_mi_semantics_registry.py and is a
@@ -25,11 +27,19 @@ from .mi_query_validator import (  # noqa: F401
     load_mi_semantics,
     validate_mi_query,
 )
+from .mi_query_executor import (  # noqa: F401
+    MIQueryExecutionError,
+    MIQueryResult,
+    execute_mi_query,
+)
 
 __all__ = [
     "MIQuerySpec",
     "ValidationResult",
     "load_mi_semantics",
     "validate_mi_query",
+    "execute_mi_query",
+    "MIQueryResult",
+    "MIQueryExecutionError",
     "__version__",
 ]
