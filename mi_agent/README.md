@@ -212,6 +212,74 @@ python -m mi_agent.mi_query_executor \
  "aggregation":"loan_level"}
 ```
 
+## How the chart factory works
+
+`mi_chart_factory.create_mi_chart(result, semantics, ...)` turns an
+`MIQueryResult` into an enterprise-ready Plotly figure. It is deterministic:
+**no LLM, no Streamlit/Azure, no arbitrary Plotly, no re-execution, no mutation
+of `result.data`.**
+
+```python
+from mi_agent import execute_mi_query, create_mi_chart, MIQuerySpec
+spec = MIQuerySpec(intent="chart", chart_type="bar",
+                   metric="current_outstanding_balance",
+                   dimension="geographic_region_obligor",
+                   aggregation="sum", top_n=5)
+result = execute_mi_query(spec, "canonical_typed.csv", SEMANTICS)
+chart = create_mi_chart(result, SEMANTICS)
+chart.write_html("balance_by_region.html")
+```
+
+`MIChartResult` fields: `fig` (a `plotly.graph_objects.Figure`), `chart_type`,
+`title`, `subtitle`, `warnings`, `metadata`; methods `to_html(path=None,
+include_plotlyjs="cdn")`, `write_html(path)`, `to_json()`, and `write_image(path)`
+(raises a clear error if the optional `kaleido` package is absent).
+
+### Visual defaults (from repo inspection)
+
+The dashboard styling in `analytics/charts_plotly.py` / `streamlit_app_erm.py`
+(`apply_chart_theme`) defines: `PRIMARY_COLOR #232D55` (navy), `SECONDARY_COLOR
+#919DD1` (muted blue), `ACCENT_COLOR #BFBFBF` (grey), `TEXT_DARK #2D2D2D`, font
+**Calibri**, white plot/paper background, `#F0F0F0` gridlines, left-aligned
+title (size 18, weight 600), horizontal legend, `hovermode="closest"`, and
+`mi_prep.format_currency` (£1.2M / £25K).
+
+The chart factory keeps an **isolated copy** of this look-and-feel (it does not
+import `analytics/`, which would couple the MI agent to the pipeline via
+`mi_prep`). It adds Financial-Services-grade extras: a restrained categorical
+palette derived from the brand navy/blue/slate, a muted light→navy sequential
+scale for heatmaps, positive/negative/neutral accents, explicit margins, subtle
+gridlines, and consistent hover-label styling. A `theme` dict can override any
+default; `template="none"` ensures no raw Plotly default styling leaks in.
+
+### Supported chart types
+
+`bar` (horizontal automatically when > 6 categories), `line` (monthly period or
+a reused `vintage_year`/`maturity_year` column), `scatter` and `bubble`
+(loan-level, opacity < 1, capped bubble sizing, **no identifiers in hover**),
+`heatmap` (long-form pivoted internally, numeric bucket ordering), and `treemap`
+(hierarchy sized by metric). `chart_type: "none"` (table-only) and
+`intent: "summary"` raise a clear error — summary KPI cards are out of scope for
+v1.
+
+### Formatting rules
+
+- **Currency:** `£1.2m` / `£450k` / `£25,000` (k from 100k, m from 1m); the
+  numeric axis uses a `£` prefix with SI tick formatting.
+- **Percent:** respects the executor's `percent_scale_detected` — `fraction`
+  shows `0.36 → 36.0%`, `whole_number_percent` shows `37.9 → 37.9%`; ambiguous
+  scale is surfaced in the subtitle. Data is never rescaled in place.
+- **Count:** thousands separators in hover, compact (`1.2m`/`450k`) on axes.
+- **Ratios** (DSCR/DTI): two decimals with an `x` suffix.
+- **Dates:** months as `Jan-26`, years as `2026`.
+
+### Export options
+
+- **HTML** — `to_html()` / `write_html(path)` (Plotly.js via CDN by default).
+- **JSON** — `to_json()` (chart metadata + the full Plotly figure spec).
+- **Image** (PNG, etc.) — `write_image(path)` *if the optional `kaleido`
+  package is installed*, otherwise a clear optional-dependency error.
+
 ## How to run
 
 Build the semantic registry:
@@ -249,8 +317,15 @@ pytest mi_agent/tests -q
 
 ## Known limitations / next steps
 
-- **No chart rendering yet** — a spec/result describes a chart; it does not draw one.
 - **No Streamlit MI chat UI yet.**
+- **No direct PPTX export yet** — charts export to HTML / JSON / image (image via
+  optional `kaleido`); PPTX embedding is a later task.
+- **No chart-level user customisation yet** beyond the `theme` dict override —
+  no per-series styling, annotations, or interactivity configuration.
+- **No arbitrary Plotly** — only the chart types `MIQuerySpec` supports.
+- **No summary KPI cards** — `intent="summary"` raises a clear error in chart v1.
+- **No full design-system / theme YAML yet** — the theme lives as a dict in
+  `mi_chart_factory.py`.
 - **No full bucketing engine yet** — bucket columns are reused if already present,
   otherwise the raw field is used (with a warning).
 - **No complex filter expressions yet** — `filters` supports equality (scalar) and

@@ -11,6 +11,8 @@ Public surface:
   - parse_user_question       : NL -> MIQuerySpec (deterministic + optional LLM)
   - execute_mi_query          : run a validated spec against canonical data
   - MIQueryResult             : executor result object
+  - create_mi_chart           : render an MIQueryResult as a Plotly figure
+  - MIChartResult             : chart factory result object
 
 The curated semantic registry (mi_semantics_field_registry.yaml) is GENERATED
 from the canonical field registry by build_mi_semantics_registry.py and is a
@@ -32,6 +34,11 @@ from .mi_query_executor import (  # noqa: F401
     MIQueryResult,
     execute_mi_query,
 )
+from .mi_chart_factory import (  # noqa: F401
+    MIChartError,
+    MIChartResult,
+    create_mi_chart,
+)
 
 __all__ = [
     "MIQuerySpec",
@@ -41,5 +48,8 @@ __all__ = [
     "execute_mi_query",
     "MIQueryResult",
     "MIQueryExecutionError",
+    "create_mi_chart",
+    "MIChartResult",
+    "MIChartError",
     "__version__",
 ]
