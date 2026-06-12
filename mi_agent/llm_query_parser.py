@@ -173,6 +173,14 @@ EXPLICIT_DIMENSION_TERMS = {
     "sub product type": "erm_sub_product_type",
     "products": "erm_product_type",
     "product": "erm_product_type",
+    # Region family. Generic region terms below are resolved data-aware via
+    # _preferred_region() (readable collateral_geography first, then NUTS code
+    # fields) — NEVER geographic_region_classification (a year). Specific
+    # obligor/collateral terms keep their exact field.
+    "obligor region": "geographic_region_obligor",
+    "borrower region": "geographic_region_obligor",
+    "collateral region": "geographic_region_collateral",
+    "property region": "collateral_geography",
     "geographic region": "geographic_region_obligor",
     "geography": "geographic_region_obligor",
     "geographic": "geographic_region_obligor",
@@ -199,6 +207,36 @@ EXPLICIT_DIMENSION_TERMS = {
     "jurisdiction": "borrower_jurisdiction",
 }
 
+# Generic region terms resolved by data-aware preference (see _preferred_region).
+_REGION_GENERIC_TERMS = {"region", "regions", "geography", "geographic",
+                         "geographic region"}
+# Preference for the MI "Region" dimension: readable display field first, then
+# NUTS3 code fields. geographic_region_classification (a YEAR) is never a region.
+_REGION_PREFERENCE = ("collateral_geography", "geographic_region_collateral",
+                      "geographic_region_obligor")
+
+
+def _preferred_region(semantics: dict, available_columns=None) -> Optional[str]:
+    """Pick the MI 'Region' field: readable collateral_geography first, then a
+    NUTS3 code field. When available_columns is given, prefer a field whose
+    canonical column is actually present in the dataset."""
+    fields = _fields(semantics)
+    cols = set(available_columns) if available_columns is not None else None
+    if cols is not None:
+        # Data-aware: only a region field whose column is actually present.
+        # If none is present, return None so validation fails clearly rather
+        # than substituting an absent field.
+        for key in _REGION_PREFERENCE:
+            entry = fields.get(key)
+            if entry and entry.get("canonical_field", key) in cols:
+                return key
+        return None
+    # No column context: fall back to registry presence (parse-time default).
+    for key in _REGION_PREFERENCE:
+        if key in fields:
+            return key
+    return None
+
 # Metric NL terms -> resolver. Order matters (longer/more-specific first).
 _METRIC_TERMS = (
     ("weighted average ltv", "ltv"),
@@ -221,13 +259,17 @@ _METRIC_TERMS = (
 )
 
 
-def _explicit_dimensions(q: str, semantics: dict,
-                         grouping: bool = False) -> Tuple[List[str], List[str], str]:
+def _explicit_dimensions(q: str, semantics: dict, grouping: bool = False,
+                         available_columns=None
+                         ) -> Tuple[List[str], List[str], str]:
     """Find explicitly-requested dimensions in order of appearance.
 
     Returns (dimension_keys, matched_terms, remaining_text). Only terms whose
     target key exists in the registry are honoured; matched spans are removed
     from ``remaining_text`` so metric detection does not re-trip on them.
+
+    Generic region terms ("region", "geography", ...) resolve data-aware via
+    _preferred_region (readable display field first, then NUTS code fields).
 
     ``grouping=True`` enables a small set of context-only bucketing terms (a
     bare "age" axis -> age_bucket) used by heatmap/treemap.
@@ -244,8 +286,11 @@ def _explicit_dimensions(q: str, semantics: dict,
     remaining = q
     found: List[Tuple[int, str, str]] = []  # (position, key, term)
     for term in sorted(terms_map, key=len, reverse=True):
-        key = terms_map[term]
-        if key not in fields:
+        if term in _REGION_GENERIC_TERMS:
+            key = _preferred_region(semantics, available_columns)
+        else:
+            key = terms_map[term]
+        if not key or key not in fields:
             continue
         pat = r"\b" + re.escape(term) + r"\b"
         m = re.search(pat, remaining)
@@ -320,7 +365,8 @@ def _det_meta(confidence: str, explicit: bool, terms: List[str],
 # --------------------------------------------------------------------------- #
 
 
-def _deterministic_parse(question: str, semantics: dict) -> Tuple[MIQuerySpec, dict]:
+def _deterministic_parse(question: str, semantics: dict,
+                         available_columns=None) -> Tuple[MIQuerySpec, dict]:
     """Parse a question into (MIQuerySpec, deterministic-parser metadata).
 
     Honours explicitly-requested dimensions EXACTLY and never substitutes an
@@ -331,12 +377,12 @@ def _deterministic_parse(question: str, semantics: dict) -> Tuple[MIQuerySpec, d
     title = question.strip()
     top_n = _detect_top_n(q)
 
-    dim_keys, dim_terms, remaining = _explicit_dimensions(q, semantics)
+    dim_keys, dim_terms, remaining = _explicit_dimensions(q, semantics, available_columns=available_columns)
     explicit = bool(dim_keys)
 
     # ---- heatmap (two dimensions + metric) --------------------------------
     if "heatmap" in q:
-        g_keys, g_terms, g_remaining = _explicit_dimensions(q, semantics, grouping=True)
+        g_keys, g_terms, g_remaining = _explicit_dimensions(q, semantics, grouping=True, available_columns=available_columns)
         metric, agg, _ = _detect_metric(g_remaining, semantics)
         if metric is None:
             metric = _balance_metric(semantics)
@@ -353,7 +399,7 @@ def _deterministic_parse(question: str, semantics: dict) -> Tuple[MIQuerySpec, d
 
     # ---- treemap (hierarchy + metric) -------------------------------------
     if "treemap" in q:
-        g_keys, g_terms, g_remaining = _explicit_dimensions(q, semantics, grouping=True)
+        g_keys, g_terms, g_remaining = _explicit_dimensions(q, semantics, grouping=True, available_columns=available_columns)
         metric, agg, _ = _detect_metric(g_remaining, semantics)
         if metric is None:
             metric, agg = _balance_metric(semantics), "sum"
@@ -415,12 +461,18 @@ def _deterministic_parse(question: str, semantics: dict) -> Tuple[MIQuerySpec, d
     # Determine the dimension WITHOUT substitution.
     dimension = dim_keys[0] if dim_keys else None
     if dimension is None and len(by_parts) >= 2:
-        # Try a strict keyword match against the post-"by" text only (no
-        # arbitrary fallback). If nothing matches, leave dimension None and let
-        # validation report the problem.
-        right_tokens = tuple(t for t in by_parts[-1].split() if len(t) > 2)
-        if right_tokens:
-            dimension = _dimension(semantics, keywords=right_tokens)
+        right = by_parts[-1]
+        if any(t in _REGION_GENERIC_TERMS for t in right.split()):
+            # Generic region request: resolve data-aware (display field first,
+            # then NUTS code fields). When no region column is available this is
+            # None -> no substitution, validation then fails clearly.
+            dimension = _preferred_region(semantics, available_columns)
+        else:
+            # Strict keyword match against the post-"by" text only (no arbitrary
+            # fallback). If nothing matches, leave dimension None.
+            right_tokens = tuple(t for t in right.split() if len(t) > 2)
+            if right_tokens:
+                dimension = _dimension(semantics, keywords=right_tokens)
 
     if metric is None and dimension is not None:
         # "<dimension> by <metric>" or count-by-dimension
@@ -430,8 +482,8 @@ def _deterministic_parse(question: str, semantics: dict) -> Tuple[MIQuerySpec, d
     generic = False
     if dimension is None and not explicit and any(
             w in q for w in ("concentrat", "most ", "where are", "split", "breakdown")):
-        for cand in ("geographic_region_obligor", "broker_channel",
-                     "erm_product_type", "account_status"):
+        for cand in (_preferred_region(semantics, available_columns) or "geographic_region_obligor",
+                     "broker_channel", "erm_product_type", "account_status"):
             if cand in _fields(semantics):
                 dimension = cand
                 generic = True
@@ -459,9 +511,11 @@ def _deterministic_parse(question: str, semantics: dict) -> Tuple[MIQuerySpec, d
         _det_meta(conf, explicit, dim_terms))
 
 
-def _deterministic_spec(question: str, semantics: dict) -> MIQuerySpec:
+def _deterministic_spec(question: str, semantics: dict,
+                        available_columns=None) -> MIQuerySpec:
     """Backward-compatible wrapper returning just the spec."""
-    spec, _ = _deterministic_parse(question, semantics)
+    spec, _ = _deterministic_parse(question, semantics,
+                                   available_columns=available_columns)
     return spec
 
 
@@ -821,7 +875,8 @@ def parse_with_repair(
             llm_meta["prompt_cache_used"] = True
 
     # ---- deterministic parse (always computed; free) ----------------------
-    det_spec, det_meta = _deterministic_parse(user_question, semantics)
+    det_spec, det_meta = _deterministic_parse(user_question, semantics,
+                                              available_columns=cols)
     det_vr = validate_mi_query(det_spec, semantics, available_columns=cols)
 
     def _det_result(parser_detail: str, repair_skipped_reason=None) -> Tuple[MIQuerySpec, dict]:

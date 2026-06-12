@@ -43,8 +43,13 @@ enrichment:
     postcode_columns:
     - postcode
     - property_postcode
-    target_field: geographic_region_classification
+    - property_post_code
+    # NUTS3 codes derived from postcode are COLLATERAL (property) geography,
+    # not a classification year. (Previously mis-targeted classification.)
+    target_field: geographic_region_collateral
+    classification_year: 2021
     fill_only_if_blank: true
+nuts_classification_year: 2021
 mi:
   branding:
     app_title: Portfolio MI Dashboard

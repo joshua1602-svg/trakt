@@ -237,12 +237,15 @@ def test_percent_hover_respects_executor_scale(df, semantics):
 
 
 def test_title_uses_business_names(df, semantics):
+    d = df.copy()
+    d["collateral_geography"] = "West Midlands"  # readable region display field
     result = execute_mi_query(
         MIQuerySpec(intent="chart", chart_type="bar",
                     metric="current_loan_to_value",
-                    dimension="geographic_region_obligor",
-                    aggregation="weighted_avg"), df, semantics)
+                    dimension="collateral_geography",
+                    aggregation="weighted_avg"), d, semantics)
     title, subtitle = generate_chart_title(result, semantics)
+    # collateral_geography's business_name is "Region"
     assert title == "Weighted Average Current LTV by Region"
 
 

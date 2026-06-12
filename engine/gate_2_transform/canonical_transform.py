@@ -391,8 +391,124 @@ def derive_reporting_date(df, filename, dayfirst, infer_year, derive_month, defa
 
     return report
 
+
+# NUTS / ITL region code shape: e.g. UKI32, UKJ14 (NUTS) or TLG31, TLM50 (UK ITL).
+# Uppercase letters/digits, no spaces, 3-6 chars. Readable labels ("West
+# Midlands", "Scotland") have spaces and/or are title/lower case and so do NOT
+# match, which is exactly how we tell a code from a label.
+_NUTS_CODE_RE = re.compile(r"^[A-Z]{2}[A-Z0-9]{1,4}$")
+_GEO_NODATA = "ND1"
+_DEFAULT_NUTS_YEAR = "2021"
+_DEFAULT_NUTS_CSV = "uk_itl_master_lookup_v2.csv"
+
+
+def _is_nuts_code(value: Any) -> bool:
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return False
+    s = str(value).strip()
+    if not s or s.upper().startswith("ND"):
+        return False
+    return bool(_NUTS_CODE_RE.match(s.upper())) and s.upper() == s.replace(" ", "")
+
+
+def _blank_mask(series: pd.Series) -> pd.Series:
+    s = series.astype("string")
+    return s.isna() | (s.str.strip() == "") | (s.str.strip() == "<NA>")
+
+
+def normalize_geography(df: pd.DataFrame, pt: str, config: dict) -> dict:
+    """Route geography to the correct fields:
+
+    * readable region labels  -> collateral_geography (analytics display)
+    * NUTS3 codes (from postcode lookup, or already-coded inputs)
+        -> geographic_region_collateral, and geographic_region_obligor
+           (ERM documented assumption: obligor residence == secured property)
+    * classification YEAR (config-driven, default 2021) -> geographic_region_classification
+    * regulatory NUTS fields left with no derivable code -> ND1 (never a label)
+
+    Never writes a readable label or a region code into the classification year,
+    and never fabricates a NUTS code from a label (only postcode lookup derives codes).
+    """
+    report: dict = {"rule_id": "NORMALIZE_GEOGRAPHY_V2", "actions": {}}
+    geo_cfg = (config or {}).get("nuts_lookup", {}) or {}
+    enr_cfg = ((config or {}).get("enrichment", {}) or {}).get("uk_nuts3", {}) or {}
+
+    obligor_c, collat_c = "geographic_region_obligor", "geographic_region_collateral"
+    class_c, disp_c = "geographic_region_classification", "collateral_geography"
+    for c in (obligor_c, collat_c, class_c, disp_c):
+        if c not in df.columns:
+            df[c] = pd.NA
+
+    # 1. Relocate readable labels out of regulatory NUTS fields into the display field.
+    relocated = 0
+    for reg_col in (collat_c, obligor_c):
+        vals = df[reg_col].astype("string")
+        is_label = vals.notna() & (vals.str.strip() != "") & ~vals.map(_is_nuts_code)
+        if is_label.any():
+            need_disp = is_label & _blank_mask(df[disp_c])
+            df.loc[need_disp, disp_c] = df.loc[need_disp, reg_col]
+            df.loc[is_label, reg_col] = pd.NA
+            relocated += int(is_label.sum())
+    if relocated:
+        report["actions"]["labels_relocated_to_collateral_geography"] = relocated
+
+    # 2. Derive NUTS3 codes from postcode(s) into collateral (property-based).
+    postcode_cols = (geo_cfg.get("postcode_columns") or enr_cfg.get("postcode_columns")
+                     or ["postcode", "property_postcode", "property_post_code"])
+    if isinstance(postcode_cols, str):
+        postcode_cols = [c.strip() for c in postcode_cols.split(",") if c.strip()]
+    csv_name = geo_cfg.get("source_file") or enr_cfg.get("nuts_csv_path") or _DEFAULT_NUTS_CSV
+    region_map = {}
+    for cand in (Path(csv_name), Path("reference_data") / csv_name):
+        if cand.exists():
+            try:
+                region_map = load_region_mapping(cand)
+            except Exception:
+                region_map = {}
+            break
+    src_col = next((c for c in postcode_cols if c in df.columns), None)
+    derived = 0
+    if region_map and src_col:
+        keys = df[src_col].apply(lambda x: _extract_geo_key(x, strategy="uk_outcode"))
+        codes = keys.map(region_map)
+        fill = codes.notna() & (codes.astype("string").str.strip() != "") & _blank_mask(df[collat_c])
+        if fill.any():
+            df.loc[fill, collat_c] = codes[fill]
+            derived += int(fill.sum())
+    if derived:
+        report["actions"]["collateral_codes_derived_from_postcode"] = derived
+
+    # 3. ERM assumption: obligor region == collateral (secured property) region.
+    is_erm = pt in {"equity_release", "erm", "rre"}
+    if is_erm:
+        copy = _blank_mask(df[obligor_c]) & ~_blank_mask(df[collat_c]) & df[collat_c].map(_is_nuts_code)
+        if copy.any():
+            df.loc[copy, obligor_c] = df.loc[copy, collat_c]
+            report["actions"]["obligor_copied_from_collateral_erm"] = int(copy.sum())
+
+    # 4. Regulatory NUTS fields still blank -> no-data ND1 (never a label).
+    for reg_col in (obligor_c, collat_c):
+        nd = _blank_mask(df[reg_col])
+        if nd.any():
+            df.loc[nd, reg_col] = _GEO_NODATA
+            report["actions"][f"{reg_col}_set_nodata"] = int(nd.sum())
+
+    # 5. Classification = NUTS classification YEAR (config-driven), never a label/code.
+    year = str(geo_cfg.get("classification_year")
+               or enr_cfg.get("classification_year")
+               or (config or {}).get("nuts_classification_year")
+               or _DEFAULT_NUTS_YEAR).strip()
+    df[class_c] = year if year else _GEO_NODATA
+    if "geographic_region_classification_source" not in df.columns:
+        df["geographic_region_classification_source"] = pd.NA
+    df["geographic_region_classification_source"] = "configured_nuts_classification_year"
+    report["actions"]["classification_year"] = year
+
+    return report
+
+
 # --- UPDATED: Accepts Config Object ---
-def derive_fields(df: pd.DataFrame, portfolio_type: str, filename: str, 
+def derive_fields(df: pd.DataFrame, portfolio_type: str, filename: str,
                  dayfirst: bool, infer_year: bool, derive_month: bool, 
                  default_year: Optional[int], config: dict) -> Dict[str, Any]:
     
@@ -448,43 +564,17 @@ def derive_fields(df: pd.DataFrame, portfolio_type: str, filename: str,
                     "logic": "Forced calc: (bal/val)*100 to fix scaling"
                 }
 
-    # 3. Geographic Classification
-    if "geographic_region_classification" in df.columns:
-        if "geographic_region_classification_source" not in df.columns:
-            df["geographic_region_classification_source"] = pd.NA
-
-        # Mark provided
-        tgt = df["geographic_region_classification"]
-        missing = tgt.isna() | (tgt.astype(str).str.strip() == "")
-        df.loc[~missing & df["geographic_region_classification_source"].isna(), "geographic_region_classification_source"] = "provided"
-
-        secured_pts = {"equity_release", "erm", "rre", "cre", "commercial_real_estate", "residential_mortgage"}
-        if pt in secured_pts:
-            precedence = [("collateral", "geographic_region_collateral"), ("obligor", "geographic_region_obligor")]
-        else:
-            precedence = [("obligor", "geographic_region_obligor"), ("collateral", "geographic_region_collateral")]
-
-        filled_total = 0
-        
-        for src_label, src_col in precedence:
-            if src_col not in df.columns: continue
-            src = df[src_col]
-            can_fill = (
-                (df["geographic_region_classification"].isna() | (df["geographic_region_classification"].astype(str).str.strip() == ""))
-                & src.notna() & (src.astype(str).str.strip() != "")
-            )
-            if can_fill.any():
-                df.loc[can_fill, "geographic_region_classification"] = src[can_fill]
-                df.loc[can_fill, "geographic_region_classification_source"] = src_label
-                n = int(can_fill.sum())
-                filled_total += n
-
-        if filled_total > 0:
-            deriv_report.setdefault("derived", {})["geographic_region_classification"] = {
-                "rule_id": "DERIVE_GEO_CLASSIFICATION_V1", 
-                "filled_rows": filled_total, 
-                "logic": f"Precedence: {precedence}"
-            }
+    # 3. Geography normalisation (regulatory NUTS fields vs classification year)
+    #    Correct semantics (ESMA Annex 2):
+    #      RREL11 geographic_region_obligor     = NUTS3 region code (obligor)
+    #      RREC6  geographic_region_collateral  = NUTS3 region code (collateral)
+    #      RREL12 geographic_region_classification = NUTS classification YEAR
+    #    Readable region labels ("West Midlands") belong in the analytics-only
+    #    field collateral_geography, NEVER in the regulatory NUTS fields and
+    #    NEVER in the classification year.
+    geo_report = normalize_geography(df, pt, config)
+    if geo_report:
+        deriv_report.setdefault("derived", {})["geography"] = geo_report
     
     # 4. REPORTING DATE (Config-Driven Priority)
     # PRIORITY 1: Config Override (The 5% Case)

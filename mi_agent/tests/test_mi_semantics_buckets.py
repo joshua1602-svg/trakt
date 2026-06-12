@@ -107,9 +107,10 @@ def test_registry_field_count_and_tiers(semantics):
     m = semantics["metadata"]
     assert m["derived_field_count"] == len(DERIVED_BUCKETS)
     assert m["field_count"] == m["core_field_count"] + m["extended_field_count"]
-    # Sanity: 61 (v0.2.1 curated set) + 8 derived buckets == 69
-    assert m["field_count"] == 69
-    assert m["core_field_count"] == 45
+    # Sanity: 61 (v0.2.1 curated set) + 8 derived buckets + collateral_geography
+    # (readable region display field added for MI Region) == 70.
+    assert m["field_count"] == 70
+    assert m["core_field_count"] == 46
     assert "derived bucket semantic fields added" in (m.get("cleanup_notes") or [])
 
 
