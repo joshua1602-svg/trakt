@@ -59,19 +59,19 @@ code{font-family:monospace;background:#eef1f8;padding:1px 4px;border-radius:3px;
 <div class="page">
   <div class="hero">
     <h1>Synthetic Equity Release Portfolio — ESMA Annex 2 Demo</h1>
-    <div class="sub">Reporting period: January 2026 &nbsp;·&nbsp; Portfolio: SYNTHETIC_Portfolio_012026 &nbsp;·&nbsp; Regime: ESMA Annex 2 (DRAFT1auth.099.001.04)</div>
+    <div class="sub">Reporting period: January 2026 &nbsp;·&nbsp; Portfolio: SYNTHETIC_ERE_Portfolio_012026 &nbsp;·&nbsp; Regime: ESMA Annex 2 (DRAFT1auth.099.001.04)</div>
   </div>
 
   <div class='card'>
     <h2>1. Pipeline Gate-by-Gate Execution</h2>
-    <table><thead><tr><th>Gate</th><th>Output</th><th>Detail</th><th>Status</th></tr></thead><tbody><tr><td>Gate 1 — Semantic Alignment</td><td>62 headers mapped</td><td>1 unmapped</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 2 — Canonical Transform</td><td>36 rows typed</td><td>Deterministic typing + derivations</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 3 — Validation</td><td>72 findings</td><td>2 enum fields flagged pre-remediation</td><td><span class='badge' style='background:#fff3cd;color:#856404'>WARN</span></td></tr><tr><td>Gate 3b — Remediation</td><td>108 canonical values standardized</td><td>Internal normalization + regime enum mapping</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 4 — ESMA Projection</td><td>36 rows projected</td><td>Annex 2 regime mapping</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 4b — Delivery Preflight</td><td>0 blocking delivery errors</td><td>No blocking delivery issues</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 5 — XML Builder</td><td>SYNTHETIC_012026_annex2.xml (626.6 KB)</td><td>36 UndrlygXpsrRcrd elements; XSD validation passed</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr></tbody></table><div class='callout info'><strong>Why Gate 1 is still PASS with unmapped headers:</strong> The unmapped source field (<code>tenure</code>) is non-blocking for this demo run and is outside the required canonical/delivery processing path currently shown.</div>
+    <table><thead><tr><th>Gate</th><th>Output</th><th>Detail</th><th>Status</th></tr></thead><tbody><tr><td>Gate 1 — Semantic Alignment</td><td>62 headers mapped</td><td>1 unmapped</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 2 — Canonical Transform</td><td>36 rows typed</td><td>Deterministic typing + derivations</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 3 — Validation</td><td>72 findings</td><td>2 enum fields flagged pre-remediation</td><td><span class='badge' style='background:#fff3cd;color:#856404'>WARN</span></td></tr><tr><td>Gate 3b — Remediation</td><td>108 canonical values standardized</td><td>Internal normalization + regime enum mapping</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 4 — ESMA Projection</td><td>36 rows projected</td><td>Annex 2 regime mapping</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 4b — Delivery Preflight</td><td>0 blocking delivery errors</td><td>No blocking delivery issues</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr><tr><td>Gate 5 — XML Builder</td><td>SYNTHETIC_012026_annex2.xml (623.5 KB)</td><td>36 UndrlygXpsrRcrd elements; XSD validation passed</td><td><span class='badge' style='background:#d4edda;color:#155724'>PASS</span></td></tr></tbody></table><div class='callout info'><strong>Why Gate 1 is still PASS with unmapped headers:</strong> The unmapped source field (<code>tenure</code>) is non-blocking for this demo run and is outside the required canonical/delivery processing path currently shown.</div>
   </div>
   <div class='card'>
     <h2>2. Raw → Canonical Transformation</h2>
     
     <div class='split-grid'>
       <div class='panel'><table class='table-fixed'><caption>Raw lender tape (first 6 rows)</caption><thead><tr><th>Underlying Exposure Identifier</th><th>Origination Dt</th><th>Current Principal Balance GBP</th><th>Current Interest Rate</th><th>Borrower Age (Youngest)</th><th>Region </th><th>Property Type </th></tr></thead><tbody><tr><td>DEMO-0001</td><td>07/06/2025</td><td> £177334.06 </td><td>7.108</td><td>77</td><td>West Midlands</td><td>Detached House</td></tr><tr><td>DEMO-0002</td><td>26/02/2024</td><td>171,008.53</td><td>8.719</td><td>74</td><td>East Midlands</td><td>detached</td></tr><tr><td>DEMO-0003</td><td>26/04/2025</td><td>79,698.36</td><td>8.014</td><td>74</td><td>Wales</td><td>Semi Detached</td></tr><tr><td>DEMO-0004</td><td>15/11/2025</td><td>196,804.85</td><td>8.213</td><td>69</td><td>Yorkshire and The Humber</td><td>semi-detached house</td></tr><tr><td>DEMO-0005</td><td>15/01/2025</td><td>259,110.87</td><td>6.867</td><td>78</td><td>South West</td><td>Flat / Apartment</td></tr><tr><td>DEMO-0006</td><td>22/07/2025</td><td>175,963.41</td><td>6.441 %</td><td>78</td><td>Wales</td><td>flat</td></tr></tbody></table></div>
-      <div class='panel'><table class='table-fixed'><caption>Canonical typed (first 6 rows)</caption><thead><tr><th>underlying_exposure_identifier</th><th>origination_date</th><th>current_principal_balance</th><th>current_interest_rate</th><th>youngest_borrower_age</th><th>geographic_region_classification</th><th>property_type</th></tr></thead><tbody><tr><td>DEMO-0001</td><td>2025-06-07</td><td>177334.06</td><td>7.108</td><td>77</td><td>West Midlands</td><td>RHOS</td></tr><tr><td>DEMO-0002</td><td>2024-02-26</td><td>171008.53</td><td>8.719</td><td>74</td><td>East Midlands</td><td>RHOS</td></tr><tr><td>DEMO-0003</td><td>2025-04-26</td><td>79698.36</td><td>8.014</td><td>74</td><td>Wales</td><td>RHOS</td></tr><tr><td>DEMO-0004</td><td>2025-11-15</td><td>196804.85</td><td>8.213</td><td>69</td><td>Yorkshire and The Humber</td><td>RHOS</td></tr><tr><td>DEMO-0005</td><td>2025-01-15</td><td>259110.87</td><td>6.867</td><td>78</td><td>South West</td><td>RFLT</td></tr><tr><td>DEMO-0006</td><td>2025-07-22</td><td>175963.41</td><td>6.441</td><td>78</td><td>Wales</td><td>RFLT</td></tr></tbody></table></div>
+      <div class='panel'><table class='table-fixed'><caption>Canonical typed (first 6 rows)</caption><thead><tr><th>underlying_exposure_identifier</th><th>origination_date</th><th>current_principal_balance</th><th>current_interest_rate</th><th>youngest_borrower_age</th><th>geographic_region_classification</th><th>property_type</th></tr></thead><tbody><tr><td>DEMO-0001</td><td>2025-06-07</td><td>177334.06</td><td>7.108</td><td>77</td><td>2021</td><td>RHOS</td></tr><tr><td>DEMO-0002</td><td>2024-02-26</td><td>171008.53</td><td>8.719</td><td>74</td><td>2021</td><td>RHOS</td></tr><tr><td>DEMO-0003</td><td>2025-04-26</td><td>79698.36</td><td>8.014</td><td>74</td><td>2021</td><td>RHOS</td></tr><tr><td>DEMO-0004</td><td>2025-11-15</td><td>196804.85</td><td>8.213</td><td>69</td><td>2021</td><td>RHOS</td></tr><tr><td>DEMO-0005</td><td>2025-01-15</td><td>259110.87</td><td>6.867</td><td>78</td><td>2021</td><td>RFLT</td></tr><tr><td>DEMO-0006</td><td>2025-07-22</td><td>175963.41</td><td>6.441</td><td>78</td><td>2021</td><td>RFLT</td></tr></tbody></table></div>
     </div>
     <div class='meta-strip'>Canonical output is deterministic typing and normalization only. ESMA code mapping is downstream in Gate 4. MI charts may render business-friendly labels derived from stable canonical values for readability.</div>
     
@@ -115,44 +115,9 @@ code{font-family:monospace;background:#eef1f8;padding:1px 4px;border-radius:3px;
       
     </div></div><div class='chart-grid-2x2'><div class='panel'><h4 class='chart-title'>Geographic distribution</h4><div class='bar-chart'>
         <div class='bar-row'>
-          <div class='bar-label'>East Midlands</div>
+          <div class='bar-label'>2021</div>
           <div class='bar-track'><div class='bar-fill' style='width:100.0%'></div></div>
-          <div class='bar-val'>5</div>
-        </div>
-        <div class='bar-row'>
-          <div class='bar-label'>Yorkshire and The Humber</div>
-          <div class='bar-track'><div class='bar-fill' style='width:100.0%'></div></div>
-          <div class='bar-val'>5</div>
-        </div>
-        <div class='bar-row'>
-          <div class='bar-label'>East of England</div>
-          <div class='bar-track'><div class='bar-fill' style='width:100.0%'></div></div>
-          <div class='bar-val'>5</div>
-        </div>
-        <div class='bar-row'>
-          <div class='bar-label'>South East</div>
-          <div class='bar-track'><div class='bar-fill' style='width:100.0%'></div></div>
-          <div class='bar-val'>5</div>
-        </div>
-        <div class='bar-row'>
-          <div class='bar-label'>London</div>
-          <div class='bar-track'><div class='bar-fill' style='width:80.0%'></div></div>
-          <div class='bar-val'>4</div>
-        </div>
-        <div class='bar-row'>
-          <div class='bar-label'>North West</div>
-          <div class='bar-track'><div class='bar-fill' style='width:60.0%'></div></div>
-          <div class='bar-val'>3</div>
-        </div>
-        <div class='bar-row'>
-          <div class='bar-label'>Wales</div>
-          <div class='bar-track'><div class='bar-fill' style='width:60.0%'></div></div>
-          <div class='bar-val'>3</div>
-        </div>
-        <div class='bar-row'>
-          <div class='bar-label'>West Midlands</div>
-          <div class='bar-track'><div class='bar-fill' style='width:40.0%'></div></div>
-          <div class='bar-val'>2</div>
+          <div class='bar-val'>36</div>
         </div></div></div><div class='panel'><h4 class='chart-title'>Property type mix (normalized canonical)</h4><div class='bar-chart'>
         <div class='bar-row'>
           <div class='bar-label'>Residential house (detached/semi)</div>
@@ -199,7 +164,7 @@ code{font-family:monospace;background:#eef1f8;padding:1px 4px;border-radius:3px;
   </div>
   <div class='card'>
     <h2>6. ESMA Annex 2 XML Snapshot</h2>
-    <p class='meta'>Namespace: <code>urn:esma:xsd:DRAFT1auth.099.001.04</code> &nbsp;·&nbsp; Records: <strong>36</strong> &nbsp;·&nbsp; File: <code>SYNTHETIC_012026_annex2.xml</code> (626.6&nbsp;KB)</p><table><caption>Executive XML snapshot (first 6 exposures)</caption><thead><tr><th>Loan ID</th><th>Orig Date</th><th>Cur Balance</th><th>Rate %</th><th>Prop Value</th><th>LTV %</th><th>Region Cd</th></tr></thead><tbody><tr><td>DEMO-0001</td><td>2025-06-07</td><td>177334.06</td><td>7.108</td><td>468000</td><td>37.8919</td><td>GBZZZ</td></tr><tr><td>DEMO-0002</td><td>2024-02-26</td><td>171008.53</td><td>8.719</td><td>359000</td><td>47.6347</td><td>GBZZZ</td></tr><tr><td>DEMO-0003</td><td>2025-04-26</td><td>79698.36</td><td>8.014</td><td>234000</td><td>34.0591</td><td>GBZZZ</td></tr><tr><td>DEMO-0004</td><td>2025-11-15</td><td>196804.85</td><td>8.213</td><td>392000</td><td>50.2053</td><td>GBZZZ</td></tr><tr><td>DEMO-0005</td><td>2025-01-15</td><td>259110.87</td><td>6.867</td><td>499000</td><td>51.9260</td><td>GBZZZ</td></tr><tr><td>DEMO-0006</td><td>2025-07-22</td><td>175963.41</td><td>6.441</td><td>323000</td><td>54.4778</td><td>GBZZZ</td></tr></tbody></table><div class='meta-strip'>Territorial code note: this demo uses <code>GBZZZ</code> as an intentional UK-wide classification default for the demonstrated delivery path, rather than a granular NUTS3-equivalent code.</div><details class='xml-details'><summary>Sample raw XML (first exposure record)</summary><pre>&lt;?xml version="1.0" ?&gt;
+    <p class='meta'>Namespace: <code>urn:esma:xsd:DRAFT1auth.099.001.04</code> &nbsp;·&nbsp; Records: <strong>36</strong> &nbsp;·&nbsp; File: <code>SYNTHETIC_012026_annex2.xml</code> (623.5&nbsp;KB)</p><table><caption>Executive XML snapshot (first 6 exposures)</caption><thead><tr><th>Loan ID</th><th>Orig Date</th><th>Cur Balance</th><th>Rate %</th><th>Prop Value</th><th>LTV %</th><th>Region Cd</th></tr></thead><tbody><tr><td>DEMO-0001</td><td>2025-06-07</td><td>177334.06</td><td>7.108</td><td>468000</td><td>37.8919</td><td>TLG31</td></tr><tr><td>DEMO-0002</td><td>2024-02-26</td><td>171008.53</td><td>8.719</td><td>359000</td><td>47.6347</td><td>TLF14</td></tr><tr><td>DEMO-0003</td><td>2025-04-26</td><td>79698.36</td><td>8.014</td><td>234000</td><td>34.0591</td><td>TLL52</td></tr><tr><td>DEMO-0004</td><td>2025-11-15</td><td>196804.85</td><td>8.213</td><td>392000</td><td>50.2053</td><td>TLE42</td></tr><tr><td>DEMO-0005</td><td>2025-01-15</td><td>259110.87</td><td>6.867</td><td>499000</td><td>51.9260</td><td>TLK51</td></tr><tr><td>DEMO-0006</td><td>2025-07-22</td><td>175963.41</td><td>6.441</td><td>323000</td><td>54.4778</td><td>TLL52</td></tr></tbody></table><div class='meta-strip'>Territorial code note: this demo uses <code>GBZZZ</code> as an intentional UK-wide classification default for the demonstrated delivery path, rather than a granular NUTS3-equivalent code.</div><details class='xml-details'><summary>Sample raw XML (first exposure record)</summary><pre>&lt;?xml version="1.0" ?&gt;
 &lt;ns0:UndrlygXpsrRcrd xmlns:ns0="urn:esma:xsd:DRAFT1auth.099.001.04"&gt;
   &lt;ns0:UndrlygXpsrId&gt;
     &lt;ns0:NewUndrlygXpsrIdr&gt;DEMO-0001-N&lt;/ns0:NewUndrlygXpsrIdr&gt;
@@ -225,10 +190,10 @@ code{font-family:monospace;background:#eef1f8;padding:1px 4px;border-radius:3px;
             &lt;/ns0:Resdt&gt;
             &lt;ns0:TrtrlUnit&gt;
               &lt;ns0:Clssfctn&gt;
-                &lt;ns0:Cd&gt;GBZZZ&lt;/ns0:Cd&gt;
+                &lt;ns0:Cd&gt;TLG31&lt;/ns0:Cd&gt;
               &lt;/ns0:Clssfctn&gt;
               &lt;ns0:ClssfctnYr&gt;
-                &lt;ns0:Yr&gt;2026&lt;/ns0:Yr&gt;
+                &lt;ns0:Yr&gt;2021&lt;/ns0:Yr&gt;
               &lt;/ns0:ClssfctnYr&gt;
             &lt;/ns0:TrtrlUnit&gt;
             &lt;ns0:CstmrTp&gt;
