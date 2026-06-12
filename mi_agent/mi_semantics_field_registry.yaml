@@ -4,7 +4,7 @@
 # Do NOT edit by hand without also updating the build script (CURATION),
 # or your changes will be overwritten on the next regeneration.
 metadata:
-  generated_at: '2026-06-11T14:56:34.919304+00:00'
+  generated_at: '2026-06-12T10:21:37.607774+00:00'
   source_registry: /home/user/trakt/config/system/fields_registry.yaml
   selection_approach: curated MI-first allowlist (see CURATION in build script)
   selection_rules:
@@ -18,8 +18,14 @@ metadata:
   core_field_count: 37
   extended_field_count: 24
   missing_curated_fields: []
-  version: 0.2.0
+  version: 0.2.1
   default_weight_field: current_outstanding_balance
+  cleanup_notes:
+  - numeric axis roles enabled
+  - weighted_avg defaults for rate/LTV fields
+  - monetary performance fields normalised
+  - YAML aliases disabled
+  - core-tier preference added to parser
 fields:
   account_status:
     canonical_field: account_status
@@ -75,6 +81,9 @@ fields:
     allowed_chart_roles:
     - y
     - size
+    - x
+    - bucket
+    - filter
     - color
     default_chart_role: y
     weight_field: null
@@ -105,6 +114,9 @@ fields:
     allowed_chart_roles:
     - y
     - size
+    - x
+    - bucket
+    - filter
     - color
     default_chart_role: y
     weight_field: null
@@ -223,6 +235,9 @@ fields:
     allowed_chart_roles:
     - y
     - size
+    - x
+    - bucket
+    - filter
     - color
     default_chart_role: y
     weight_field: null
@@ -248,10 +263,13 @@ fields:
     - sum
     - avg
     - median
-    default_aggregation: avg
+    default_aggregation: sum
     allowed_chart_roles:
     - y
     - size
+    - x
+    - bucket
+    - filter
     - color
     default_chart_role: y
     weight_field: null
@@ -273,16 +291,18 @@ fields:
     role: metric
     format: decimal
     chartable: true
-    allowed_aggregations: &id001
+    allowed_aggregations:
     - avg
     - median
     - distribution
     default_aggregation: avg
     allowed_chart_roles:
+    - x
     - y
-    - size
+    - bucket
+    - filter
     - color
-    default_chart_role: y
+    default_chart_role: x
     weight_field: null
     bucket_field: null
     notes: ''
@@ -307,10 +327,12 @@ fields:
     - avg
     - weighted_avg
     - distribution
-    default_aggregation: avg
+    default_aggregation: weighted_avg
     allowed_chart_roles:
     - y
-    - size
+    - x
+    - bucket
+    - filter
     - color
     default_chart_role: y
     weight_field: current_outstanding_balance
@@ -337,10 +359,12 @@ fields:
     - avg
     - weighted_avg
     - distribution
-    default_aggregation: avg
+    default_aggregation: weighted_avg
     allowed_chart_roles:
     - y
-    - size
+    - x
+    - bucket
+    - filter
     - color
     default_chart_role: y
     weight_field: current_outstanding_balance
@@ -367,10 +391,12 @@ fields:
     - avg
     - weighted_avg
     - distribution
-    default_aggregation: avg
+    default_aggregation: weighted_avg
     allowed_chart_roles:
     - y
-    - size
+    - x
+    - bucket
+    - filter
     - color
     default_chart_role: y
     weight_field: current_outstanding_balance
@@ -403,6 +429,9 @@ fields:
     allowed_chart_roles:
     - y
     - size
+    - x
+    - bucket
+    - filter
     - color
     default_chart_role: y
     weight_field: null
@@ -432,6 +461,9 @@ fields:
     allowed_chart_roles:
     - y
     - size
+    - x
+    - bucket
+    - filter
     - color
     default_chart_role: y
     weight_field: null
@@ -463,6 +495,9 @@ fields:
     allowed_chart_roles:
     - y
     - size
+    - x
+    - bucket
+    - filter
     - color
     default_chart_role: y
     weight_field: null
@@ -563,13 +598,18 @@ fields:
     role: metric
     format: decimal
     chartable: true
-    allowed_aggregations: *id001
+    allowed_aggregations:
+    - avg
+    - median
+    - distribution
     default_aggregation: avg
     allowed_chart_roles:
+    - x
     - y
-    - size
+    - bucket
+    - filter
     - color
-    default_chart_role: y
+    default_chart_role: x
     weight_field: null
     bucket_field: null
     notes: ''
@@ -597,6 +637,9 @@ fields:
     allowed_chart_roles:
     - y
     - size
+    - x
+    - bucket
+    - filter
     - color
     default_chart_role: y
     weight_field: null
@@ -704,10 +747,13 @@ fields:
     - sum
     - avg
     - median
-    default_aggregation: avg
+    default_aggregation: sum
     allowed_chart_roles:
     - y
     - size
+    - x
+    - bucket
+    - filter
     - color
     default_chart_role: y
     weight_field: null
@@ -879,10 +925,12 @@ fields:
     - avg
     - weighted_avg
     - distribution
-    default_aggregation: avg
+    default_aggregation: weighted_avg
     allowed_chart_roles:
     - y
-    - size
+    - x
+    - bucket
+    - filter
     - color
     default_chart_role: y
     weight_field: current_outstanding_balance
@@ -912,6 +960,9 @@ fields:
     allowed_chart_roles:
     - y
     - size
+    - x
+    - bucket
+    - filter
     - color
     default_chart_role: y
     weight_field: null
@@ -940,6 +991,9 @@ fields:
     allowed_chart_roles:
     - y
     - size
+    - x
+    - bucket
+    - filter
     - color
     default_chart_role: y
     weight_field: null
@@ -1142,6 +1196,9 @@ fields:
     allowed_chart_roles:
     - y
     - size
+    - x
+    - bucket
+    - filter
     - color
     default_chart_role: y
     weight_field: null
@@ -1193,16 +1250,18 @@ fields:
     role: metric
     format: integer
     chartable: true
-    allowed_aggregations: &id002
+    allowed_aggregations:
     - avg
     - median
     - distribution
     default_aggregation: avg
     allowed_chart_roles:
+    - x
     - y
-    - size
+    - bucket
+    - filter
     - color
-    default_chart_role: y
+    default_chart_role: x
     weight_field: null
     bucket_field: arrears_bucket
     notes: ''
@@ -1221,13 +1280,18 @@ fields:
     role: metric
     format: integer
     chartable: true
-    allowed_aggregations: *id002
+    allowed_aggregations:
+    - avg
+    - median
+    - distribution
     default_aggregation: avg
     allowed_chart_roles:
+    - x
     - y
-    - size
+    - bucket
+    - filter
     - color
-    default_chart_role: y
+    default_chart_role: x
     weight_field: null
     bucket_field: null
     notes: ''
@@ -1246,13 +1310,18 @@ fields:
     role: metric
     format: integer
     chartable: true
-    allowed_aggregations: *id002
+    allowed_aggregations:
+    - avg
+    - median
+    - distribution
     default_aggregation: avg
     allowed_chart_roles:
+    - x
     - y
-    - size
+    - bucket
+    - filter
     - color
-    default_chart_role: y
+    default_chart_role: x
     weight_field: null
     bucket_field: null
     notes: ''
@@ -1269,16 +1338,21 @@ fields:
     - property count
     source_criteria:
     - curated
-    role: date
-    format: date
-    chartable: false
+    role: metric
+    format: integer
+    chartable: true
     allowed_aggregations:
-    - count
-    default_aggregation: count
+    - sum
+    - avg
+    - median
+    - distribution
+    default_aggregation: sum
     allowed_chart_roles:
     - x
+    - y
+    - bucket
     - filter
-    - cohort
+    - color
     default_chart_role: x
     weight_field: null
     bucket_field: null
@@ -1332,10 +1406,12 @@ fields:
     - avg
     - weighted_avg
     - distribution
-    default_aggregation: avg
+    default_aggregation: weighted_avg
     allowed_chart_roles:
     - y
-    - size
+    - x
+    - bucket
+    - filter
     - color
     default_chart_role: y
     weight_field: current_outstanding_balance
@@ -1366,6 +1442,9 @@ fields:
     allowed_chart_roles:
     - y
     - size
+    - x
+    - bucket
+    - filter
     - color
     default_chart_role: y
     weight_field: null
@@ -1393,10 +1472,12 @@ fields:
     - distribution
     default_aggregation: avg
     allowed_chart_roles:
+    - x
     - y
-    - size
+    - bucket
+    - filter
     - color
-    default_chart_role: y
+    default_chart_role: x
     weight_field: null
     bucket_field: term_bucket
     notes: ''
@@ -1423,6 +1504,9 @@ fields:
     allowed_chart_roles:
     - y
     - size
+    - x
+    - bucket
+    - filter
     - color
     default_chart_role: y
     weight_field: null
@@ -1594,6 +1678,9 @@ fields:
     allowed_chart_roles:
     - y
     - size
+    - x
+    - bucket
+    - filter
     - color
     default_chart_role: y
     weight_field: null
@@ -1641,16 +1728,19 @@ fields:
     source_criteria:
     - layer:performance
     role: metric
-    format: decimal
+    format: currency
     chartable: true
     allowed_aggregations:
     - sum
     - avg
     - median
-    default_aggregation: avg
+    default_aggregation: sum
     allowed_chart_roles:
     - y
     - size
+    - x
+    - bucket
+    - filter
     - color
     default_chart_role: y
     weight_field: null
@@ -1671,16 +1761,19 @@ fields:
     source_criteria:
     - layer:performance
     role: metric
-    format: decimal
+    format: currency
     chartable: true
     allowed_aggregations:
     - sum
     - avg
     - median
-    default_aggregation: avg
+    default_aggregation: sum
     allowed_chart_roles:
     - y
     - size
+    - x
+    - bucket
+    - filter
     - color
     default_chart_role: y
     weight_field: null
@@ -1765,10 +1858,12 @@ fields:
     - distribution
     default_aggregation: avg
     allowed_chart_roles:
+    - x
     - y
-    - size
+    - bucket
+    - filter
     - color
-    default_chart_role: y
+    default_chart_role: x
     weight_field: null
     bucket_field: age_bucket
     notes: ''

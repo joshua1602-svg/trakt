@@ -54,7 +54,24 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE = REPO_ROOT / "config" / "system" / "fields_registry.yaml"
 DEFAULT_OUTPUT = Path(__file__).resolve().parent / "mi_semantics_field_registry.yaml"
 
-VERSION = "0.2.0"
+VERSION = "0.2.1"
+
+CLEANUP_NOTES = [
+    "numeric axis roles enabled",
+    "weighted_avg defaults for rate/LTV fields",
+    "monetary performance fields normalised",
+    "YAML aliases disabled",
+    "core-tier preference added to parser",
+]
+
+
+class _NoAliasDumper(yaml.SafeDumper):
+    """yaml.safe_dump emits anchors when the same list/dict object is referenced
+    twice (e.g. shared ``["curated"]`` source_criteria). For human / downstream
+    readability we disable anchors entirely."""
+
+    def ignore_aliases(self, data):  # pragma: no cover - trivial
+        return True
 
 # Acronyms that should be upper-cased in display names.
 _ACRONYMS = {
@@ -529,8 +546,15 @@ def infer_format(name: str, reg_format: Optional[str], allowed_values) -> str:
     """Map to one of: currency|percent|integer|decimal|date|string|boolean."""
     nf = str(reg_format).strip().lower() if reg_format else ""
     av = str(allowed_values).strip().lower() if allowed_values else ""
+    low = name.lower()
+    toks = _tokens(name)
 
-    if nf == "date" or "date" in name.lower():
+    # 1. Count-like fields take precedence over name-based date detection
+    #    (e.g. ``number_of_properties_at_data_cut_off_date`` is a COUNT, not a date).
+    if low.startswith("number_of_") or "count" in toks:
+        return "integer"
+    # 2. Date
+    if nf == "date" or "date" in low:
         return "date"
     if nf in ("y/n", "boolean", "bool") or av in ("yes_no", "y/n"):
         return "boolean"
@@ -538,13 +562,16 @@ def infer_format(name: str, reg_format: Optional[str], allowed_values) -> str:
         return "string"
 
     if _contains(name, ("ltv", "loan_to_value", "percentage", "pct", "margin", "spread")) or \
-            "rate" in _tokens(name):
+            "rate" in toks:
         return "percent"
+    # Currency keywords use stems so plurals/variants are caught
+    # (``recover`` -> recovery/recoveries, ``redemption`` -> redemptions,
+    #  ``prepay`` -> prepayments, ``advance`` -> advances).
     if _contains(name, ("balance", "amount", "valuation", "value", "income",
-                         "loss", "recovery", "arrears", "price", "proceeds")):
+                         "loss", "recover", "arrears", "price", "proceeds",
+                         "redemption", "prepay", "advance")):
         return "currency"
-    if _contains(name, ("count", "number_of", "term_months", "months")) or \
-            "age" in _tokens(name):
+    if _contains(name, ("term_months", "months")) or "age" in toks:
         return "integer"
     if nf == "integer":
         return "integer"
@@ -584,7 +611,8 @@ def _is_count_metric(name: str) -> bool:
     return _contains(name, ("count", "number_of")) and "age" not in _tokens(name)
 
 
-def infer_aggregations(role: str, fmt: str, name: str) -> Tuple[List[str], str]:
+def infer_aggregations(role: str, fmt: str, name: str,
+                       has_weight: bool = False) -> Tuple[List[str], str]:
     if role == "identifier":
         return ["count_distinct"], "count_distinct"
     if role == "date":
@@ -597,16 +625,27 @@ def infer_aggregations(role: str, fmt: str, name: str) -> Tuple[List[str], str]:
         if fmt == "currency":
             return ["sum", "avg", "median"], "sum"
         if fmt == "percent":
-            return ["avg", "weighted_avg", "distribution"], "avg"
+            # Rate/LTV/percentage fields prefer weighted_avg over a simple
+            # arithmetic average for portfolio MI (when a balance weight exists).
+            default = "weighted_avg" if has_weight else "avg"
+            return ["avg", "weighted_avg", "distribution"], default
         if fmt == "integer":
             if _is_count_metric(name):
-                return ["sum", "count"], "sum"
+                # ``number_of_*`` style counts: useful as sum/avg/median/distribution.
+                return ["sum", "avg", "median", "distribution"], "sum"
+            # Ages / days / terms: not sensible to sum across loans.
             return ["avg", "median", "distribution"], "avg"
         return ["sum", "avg", "median"], "avg"
     return [], ""
 
 
-def infer_chart_roles(role: str) -> Tuple[List[str], Optional[str]]:
+# Numeric metrics that read naturally on the x axis of a chart (age, days,
+# terms, ratios). Currency / percent default to y but can also be x'd.
+_AXIS_NUMERIC_FORMATS = {"integer", "decimal"}
+
+
+def infer_chart_roles(role: str, fmt: Optional[str] = None
+                      ) -> Tuple[List[str], Optional[str]]:
     if role == "identifier":
         return ["filter"], None
     if role == "date":
@@ -616,6 +655,17 @@ def infer_chart_roles(role: str) -> Tuple[List[str], Optional[str]]:
     if role == "dimension":
         return ["x", "group", "filter", "color"], "x"
     if role == "metric":
+        if fmt in _AXIS_NUMERIC_FORMATS:
+            # Axis-like numeric metric: ages, days_in_arrears, terms, DSCR, DTI.
+            return ["x", "y", "bucket", "filter", "color"], "x"
+        if fmt == "percent":
+            # Rates / LTV / percentages: usually y, but legitimately bucketable
+            # on x (e.g. histogram of LTV).
+            return ["y", "x", "bucket", "filter", "color"], "y"
+        if fmt == "currency":
+            # Balances / amounts: y for bar/line, size for bubble, bucketable
+            # for ticket-size analysis, filterable for thresholds.
+            return ["y", "size", "x", "bucket", "filter", "color"], "y"
         return ["y", "size", "color"], "y"
     return [], None
 
@@ -659,24 +709,32 @@ def infer_bucket_field(name: str, role: str, fmt: str) -> Optional[str]:
 # Build
 # --------------------------------------------------------------------------- #
 
-_OVERRIDABLE = {
-    "role", "format", "chartable", "allowed_aggregations", "default_aggregation",
-    "allowed_chart_roles", "default_chart_role", "weight_field", "bucket_field",
-}
-
 
 def build_entry(name: str, meta: dict, curated: dict,
                 weight_target: Optional[str]) -> dict:
     reg_format = _get(meta, "format")
     allowed_values = _get(meta, "allowed_values")
+    overrides = curated.get("overrides", {}) or {}
 
-    fmt = infer_format(name, reg_format, allowed_values)
-    role = infer_role(name, fmt, reg_format)
-    aggs, default_agg = infer_aggregations(role, fmt, name)
-    chart_roles, default_chart_role = infer_chart_roles(role)
-    chartable = infer_chartable(role, name)
-    weight_field = infer_weight_field(role, fmt, weight_target)
-    bucket_field = infer_bucket_field(name, role, fmt)
+    # 1. Inferred role / format, with overrides applied immediately so all
+    #    downstream derivations see the final values.
+    fmt = overrides.get("format") or infer_format(name, reg_format, allowed_values)
+    role = overrides.get("role") or infer_role(name, fmt, reg_format)
+
+    # 2. Weight field: override > heuristic.  Computed before aggregations so
+    #    weighted_avg defaults only apply when a weight is actually present.
+    if "weight_field" in overrides:
+        weight_field = overrides["weight_field"]
+    else:
+        weight_field = infer_weight_field(role, fmt, weight_target)
+
+    # 3. Derived defaults (each can be pinned by an override).
+    inf_aggs, inf_default_agg = infer_aggregations(
+        role, fmt, name, has_weight=bool(weight_field)
+    )
+    inf_chart_roles, inf_default_chart_role = infer_chart_roles(role, fmt=fmt)
+    inf_chartable = infer_chartable(role, name)
+    inf_bucket_field = infer_bucket_field(name, role, fmt)
 
     entry = {
         "canonical_field": name,
@@ -686,39 +744,18 @@ def build_entry(name: str, meta: dict, curated: dict,
         "business_description": curated.get("business_description", ""),
         "description": "",
         "synonyms": list(curated.get("synonyms", []) or []),
-        "source_criteria": selection_criteria(meta),
+        "source_criteria": list(selection_criteria(meta)),
         "role": role,
         "format": fmt,
-        "chartable": chartable,
-        "allowed_aggregations": aggs,
-        "default_aggregation": default_agg,
-        "allowed_chart_roles": chart_roles,
-        "default_chart_role": default_chart_role,
+        "chartable": overrides.get("chartable", inf_chartable),
+        "allowed_aggregations": list(overrides.get("allowed_aggregations", inf_aggs)),
+        "default_aggregation": overrides.get("default_aggregation", inf_default_agg),
+        "allowed_chart_roles": list(overrides.get("allowed_chart_roles", inf_chart_roles)),
+        "default_chart_role": overrides.get("default_chart_role", inf_default_chart_role),
         "weight_field": weight_field,
-        "bucket_field": bucket_field,
+        "bucket_field": overrides.get("bucket_field", inf_bucket_field),
         "notes": "",
     }
-
-    # Apply per-field overrides (curation pins what the heuristic gets wrong).
-    overrides = curated.get("overrides", {}) or {}
-    for key, value in overrides.items():
-        if key in _OVERRIDABLE:
-            entry[key] = value
-
-    # If the role was overridden, re-derive any unspecified role-dependent
-    # defaults so the entry stays internally consistent.
-    if "role" in overrides:
-        r = entry["role"]
-        if "allowed_aggregations" not in overrides or "default_aggregation" not in overrides:
-            a, d = infer_aggregations(r, entry["format"], name)
-            entry.setdefault("allowed_aggregations", a)
-            if "default_aggregation" not in overrides:
-                entry["default_aggregation"] = d
-        if "allowed_chart_roles" not in overrides:
-            cr, dcr = infer_chart_roles(r)
-            entry["allowed_chart_roles"] = cr
-            if "default_chart_role" not in overrides:
-                entry["default_chart_role"] = dcr
 
     if entry["role"] == "unknown" and not entry["notes"]:
         entry["notes"] = "requires manual analytics classification"
@@ -765,6 +802,7 @@ def build_registry(source: Path) -> dict:
         "missing_curated_fields": missing,
         "version": VERSION,
         "default_weight_field": weight_target,
+        "cleanup_notes": list(CLEANUP_NOTES),
     }
 
     return {"metadata": metadata, "fields": out_fields}
@@ -782,7 +820,9 @@ def write_registry(registry: dict, output: Path) -> None:
     )
     with output.open("w", encoding="utf-8") as fh:
         fh.write(header)
-        yaml.safe_dump(registry, fh, sort_keys=False, allow_unicode=True, width=100)
+        yaml.dump(registry, fh, Dumper=_NoAliasDumper,
+                  sort_keys=False, allow_unicode=True, width=100,
+                  default_flow_style=False)
 
 
 # --------------------------------------------------------------------------- #

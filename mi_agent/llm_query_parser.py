@@ -47,11 +47,19 @@ def find_field(
     fmt: Optional[str] = None,
     keywords: Iterable[str] = (),
     exclude: Iterable[str] = (),
+    prefer_tier: str = "core",
 ) -> Optional[str]:
     """Return the best-matching semantic field key, or None.
 
-    Phase 1 requires a keyword hit (on key or display name); phase 2 relaxes to
-    any field matching the requested role/format.
+    Resolution preference (highest first):
+      1. Keyword hit on a field at the preferred tier (default ``core``).
+      2. Keyword hit on any field.
+      3. Any field at the preferred tier matching role/format.
+      4. Any field matching role/format.
+
+    This means that when several fields could match the same user phrase the
+    parser leans towards ``mi_tier: core``, falling back to ``extended`` only
+    when nothing in core fits.
     """
     items = _fields(semantics)
     exclude = set(exclude)
@@ -66,17 +74,40 @@ def find_field(
             return False
         return True
 
-    if keywords:
-        for key, entry in items.items():
-            if not ok(key, entry):
-                continue
-            hay = f"{key} {entry.get('display_name', '')}".lower()
-            if any(kw in hay for kw in keywords):
-                return key
+    def is_preferred(entry: dict) -> bool:
+        return entry.get("mi_tier") == prefer_tier
+
+    def keyword_hit(key: str, entry: dict) -> bool:
+        if not keywords:
+            return False
+        hay = " ".join([
+            key,
+            str(entry.get("display_name", "")),
+            str(entry.get("business_name", "")),
+        ]).lower()
+        return any(kw in hay for kw in keywords)
+
+    preferred_kw: Optional[str] = None
+    fallback_kw: Optional[str] = None
+    preferred_any: Optional[str] = None
+    fallback_any: Optional[str] = None
+
     for key, entry in items.items():
-        if ok(key, entry):
-            return key
-    return None
+        if not ok(key, entry):
+            continue
+        if keyword_hit(key, entry):
+            if is_preferred(entry):
+                if preferred_kw is None:
+                    preferred_kw = key
+            elif fallback_kw is None:
+                fallback_kw = key
+        if is_preferred(entry):
+            if preferred_any is None:
+                preferred_any = key
+        elif fallback_any is None:
+            fallback_any = key
+
+    return preferred_kw or fallback_kw or preferred_any or fallback_any
 
 
 def _balance_metric(semantics) -> Optional[str]:
@@ -209,8 +240,11 @@ def _catalogue(semantics: dict) -> List[Dict[str, Any]]:
     for key, entry in _fields(semantics).items():
         out.append({
             "field": key,
+            "mi_tier": entry.get("mi_tier"),
+            "business_name": entry.get("business_name", ""),
             "display_name": entry.get("display_name", ""),
-            "description": entry.get("description", ""),
+            "business_description": entry.get("business_description", ""),
+            "synonyms": entry.get("synonyms", []),
             "role": entry.get("role"),
             "format": entry.get("format"),
             "chartable": entry.get("chartable"),
@@ -229,15 +263,17 @@ def build_prompt(user_question: str, mi_semantics: dict) -> Dict[str, str]:
         "RULES:\n"
         "1. Use ONLY field keys from the provided catalogue for metric, "
         "dimension, x, y, size, color, dimensions, hierarchy and filter keys.\n"
-        "2. chart_type must be one of: bar, line, scatter, bubble, heatmap, "
+        "2. Prefer mi_tier: core fields unless the user specifically asks for "
+        "a more specialised field.\n"
+        "3. chart_type must be one of: bar, line, scatter, bubble, heatmap, "
         "treemap, none.\n"
-        "3. intent must be one of: chart, table, summary.\n"
-        "4. aggregation must be one of: sum, avg, weighted_avg, count, "
+        "4. intent must be one of: chart, table, summary.\n"
+        "5. aggregation must be one of: sum, avg, weighted_avg, count, "
         "count_distinct, median, distribution, loan_level, balance_sum, and "
         "must be allowed for the chosen metric.\n"
-        "5. Respect each field's allowed_chart_roles.\n"
-        "6. Output STRICT JSON ONLY — no prose, no markdown fences.\n"
-        "7. Always include a short 'explanation' string.\n"
+        "6. Respect each field's allowed_chart_roles.\n"
+        "7. Output STRICT JSON ONLY — no prose, no markdown fences.\n"
+        "8. Always include a short 'explanation' string.\n"
     )
     user = (
         "Semantic field catalogue (JSON):\n"
