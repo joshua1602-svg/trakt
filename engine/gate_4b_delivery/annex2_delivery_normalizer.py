@@ -290,6 +290,13 @@ def _normalize_field(
                 lower_map = {str(k).lower(): str(v) for k, v in mapping.items()}
                 direct = lower_map.get(current.lower())
             if direct is None:
+                # enum_map is a strict controlled vocabulary. geography_map is a
+                # best-effort LEGACY label->code/year translation: a value that
+                # is not a known legacy label is already a valid geography value
+                # (e.g. a NUTS3 code "TLG31" or classification year "2021") and
+                # passes through unchanged. Shape is enforced downstream (XSD).
+                if table_name == "geography_map":
+                    continue
                 return Issue(
                     "error",
                     "enum",

@@ -81,3 +81,14 @@ regime_overrides:
     header_constants:
       RREL1: 213800ABCDE123456701N202601
       RREL6: '2026-01-31'
+    # ESMA Annex 2 geography policy: UK exposures/collateral are DELIVERED as
+    # GBZZZ (RREL11/RREC6). Granular ITL3 is retained in canonical fields
+    # (geographic_region_*_itl3) for FCA/UK reporting + MI drilldown; only the
+    # projected ESMA output is collapsed to GBZZZ. RREL12 (classification year,
+    # e.g. 2021) is explicitly protected from this override.
+    uk_geography:
+      enabled: true
+      override_value: GBZZZ
+      target_fields:
+        - geographic_region_obligor
+        - geographic_region_collateral

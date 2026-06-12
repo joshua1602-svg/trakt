@@ -428,6 +428,31 @@ def rename_to_esma_codes(
     logging.info(f"Renamed {len(rename_map)} fields to ESMA codes")
     return df
 
+# Classification-YEAR fields (canonical + cross-annex ESMA codes). These hold
+# the NUTS classification year (e.g. 2021), NOT a geographic region code, and
+# must never be overwritten by the UK region-code (GBZZZ) override.
+_CLASSIFICATION_YEAR_FIELDS = {
+    "geographic_region_classification",
+    "RREL12", "CREL13", "CRPL11", "LESL11", "ESTL12",
+}
+
+_CLASSIFICATION_YEAR_RE = re.compile(r"^(19|20)\d{2}$")
+
+
+def is_classification_year(value: Any) -> bool:
+    """Semantic guard for RREL12 (NUTS classification year).
+
+    Valid: a 4-digit year (e.g. "2021") or an ESMA no-data code (NDx).
+    Invalid: region labels ("West Midlands") or NUTS/ITL codes ("TLG31").
+    """
+    s = str(value or "").strip()
+    if not s:
+        return False
+    if s.upper().startswith("ND"):
+        return True
+    return bool(_CLASSIFICATION_YEAR_RE.match(s))
+
+
 def apply_esma_uk_geography_override(
     df: pd.DataFrame,
     config: Dict[str, Any],
@@ -468,12 +493,21 @@ def apply_esma_uk_geography_override(
         return df, report
     # ------------------------------------------------------
 
-    # Canonical geography fields (pre-rename) that feed ESMA geography codes.
+    # Canonical geography fields (pre-rename) that feed ESMA geography CODE fields.
     target_fields = uk_geo_cfg.get("target_fields") or []
     target_fields = [f for f in target_fields if f in df.columns]
 
+    # SEMANTIC GUARD: the UK region-code override (-> GBZZZ) must only touch
+    # geographic region *code* fields. It must NEVER overwrite the NUTS
+    # classification YEAR (geographic_region_classification / RREL12 and the
+    # cross-annex equivalents) — that is a year, not a region code.
+    excluded = [f for f in target_fields if f in _CLASSIFICATION_YEAR_FIELDS]
+    if excluded:
+        target_fields = [f for f in target_fields if f not in _CLASSIFICATION_YEAR_FIELDS]
+        report["excluded_classification_year_fields"] = excluded
+
     if not target_fields:
-        report["skipped_reason"] = "No target_fields present in df"
+        report["skipped_reason"] = "No region-code target_fields present in df"
         return df, report
 
     override_value = str(uk_geo_cfg.get("override_value", "GBZZZ")).strip().upper()

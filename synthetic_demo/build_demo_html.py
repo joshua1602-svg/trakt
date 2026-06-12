@@ -98,7 +98,12 @@ wa_ltv = pd.to_numeric(typed.get("current_loan_to_value"), errors="coerce").fill
 wa_rate = pd.to_numeric(typed.get("current_interest_rate"), errors="coerce").fillna(0).mean()
 wa_age = pd.to_numeric(typed.get("youngest_borrower_age"), errors="coerce").fillna(0).mean()
 
-region_dist = typed.get("geographic_region_classification", pd.Series([], dtype="object")).fillna("Unknown").value_counts()
+# Readable region display uses collateral_geography (NOT the regulatory fields:
+# geographic_region_classification is a YEAR, and geographic_region_* hold codes).
+_region_series = typed.get("collateral_geography")
+if _region_series is None or _region_series.dropna().empty:
+    _region_series = typed.get("geographic_region_collateral", pd.Series([], dtype="object"))
+region_dist = _region_series.fillna("Unknown").value_counts()
 prop_dist = typed.get("property_type", pd.Series([], dtype="object")).fillna("Unknown").value_counts()
 purpose_dist = typed.get("purpose", pd.Series([], dtype="object")).fillna("Unknown").value_counts()
 
@@ -228,7 +233,7 @@ def section_2():
     ]
     typed_cols = [
         "underlying_exposure_identifier", "origination_date", "current_principal_balance", "current_interest_rate",
-        "youngest_borrower_age", "geographic_region_classification", "property_type",
+        "youngest_borrower_age", "collateral_geography", "property_type",
     ]
     avail_raw = [c for c in raw_cols if c in raw.columns]
     avail_typed = [c for c in typed_cols if c in typed.columns]

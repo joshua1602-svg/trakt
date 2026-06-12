@@ -21,6 +21,19 @@ supported_regimes:
 # Legacy field retained for backward compatibility.
 regime: ESMA_Annex2
 
+# ESMA Annex 2 geography policy: deliver GBZZZ for UK obligor/collateral
+# (RREL11/RREC6); granular ITL3 is retained in canonical geographic_region_*_itl3
+# fields for FCA/UK reporting + MI drilldown. RREL12 (classification year) is
+# protected from this override.
+regime_overrides:
+  ESMA_Annex2:
+    uk_geography:
+      enabled: true
+      override_value: GBZZZ
+      target_fields:
+        - geographic_region_obligor
+        - geographic_region_collateral
+
 pipeline:
   loan_engine_enabled: false
   mi_enabled: true

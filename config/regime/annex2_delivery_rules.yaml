@@ -325,6 +325,10 @@ field_rules:
         West Midlands: GBZZZ
         Yorkshire and The Humber: GBZZZ
         GBZZZ: GBZZZ
+    # RREL11 = geographic region CODE: GBZZZ (UK ESMA default), a NUTS/ITL code,
+    # or an ND code. Reject readable labels / a year.
+    validators:
+      regex: "^(GBZZZ|ND[0-9]|[A-Z]{2}[A-Z0-9]{1,4})$"
 
   RREL12:
     esma_code: RREL12
@@ -337,6 +341,10 @@ field_rules:
     mandatory: false
     enforce_presence: false
     nd_allowed: [ND1]
+    # Semantic guard: RREL12 is a classification YEAR. Reject region labels
+    # ("West Midlands"), NUTS/ITL codes ("TLG31") and region codes ("GBZZZ").
+    validators:
+      regex: "^(ND[0-9]|(19|20)[0-9]{2})$"
     transform:
       geography_map:
         East Midlands: "2026"
@@ -659,6 +667,10 @@ field_rules:
     nd_allowed: [ND1, ND2, ND3, ND4, ND5]
     default_allowed: true
     default_value: ND5
+    # RREC6 = collateral geographic region CODE: GBZZZ (UK ESMA default), a
+    # NUTS/ITL code, or an ND code. Reject readable labels / a year.
+    validators:
+      regex: "^(GBZZZ|ND[0-9]|[A-Z]{2}[A-Z0-9]{1,4})$"
 
   RREC8:
     esma_code: RREC8
