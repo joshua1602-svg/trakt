@@ -33,6 +33,18 @@ from .mi_query_validator import load_mi_semantics, validate_mi_query
 # Chart types the chart factory can render (others are table/summary only).
 _RENDERABLE = {"bar", "line", "scatter", "bubble", "heatmap", "treemap"}
 
+
+def _dedupe(items: List[str]) -> List[str]:
+    """De-duplicate a list of strings, preserving first-seen order."""
+    seen: set = set()
+    out: List[str] = []
+    for item in items:
+        if item not in seen:
+            seen.add(item)
+            out.append(item)
+    return out
+
+
 EXAMPLE_QUESTIONS = [
     "Show balance by region",
     "Show weighted average LTV by product type",
@@ -181,7 +193,7 @@ def run_mi_agent_query(
     if not vr.ok:
         result["interpreted"]["Validation"] = "Failed"
         result["error"] = "The proposed query failed validation."
-        result["warnings"] = warnings
+        result["warnings"] = _dedupe(warnings)
         result["metadata"] = {"parse_metadata": parse_meta}
         return result
     result["interpreted"]["Validation"] = "Passed"
@@ -193,7 +205,7 @@ def run_mi_agent_query(
         )
     except MIQueryExecutionError as exc:
         result["error"] = f"Execution failed: {exc}"
-        result["warnings"] = warnings
+        result["warnings"] = _dedupe(warnings)
         return result
     result["query_result"] = qres
     warnings.extend(qres.warnings)
@@ -214,7 +226,10 @@ def run_mi_agent_query(
     result["chart_result"] = chart_result
 
     result["ok"] = True
-    result["warnings"] = warnings
+    # The chart factory copies the executor's warnings onto its result, so the
+    # same warning can arrive via both qres and chart_result — de-duplicate
+    # while preserving order.
+    result["warnings"] = _dedupe(warnings)
     result["metadata"] = {
         "parse_metadata": parse_meta,
         "executor_metadata": qres.metadata,
