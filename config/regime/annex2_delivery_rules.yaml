@@ -329,6 +329,10 @@ field_rules:
   RREL12:
     esma_code: RREL12
     workbook_semantic: GeogrgphclRgnOblgrYr/Cd
+    # RREL12 = the YEAR of the NUTS classification (not a region code). Sourced
+    # from geographic_region_classification, which the canonical transform now
+    # populates with the configured NUTS classification year (e.g. 2021).
+    # Previously sourced from a non-existent field (geographic_region_obligor_year).
     projected_source_field: geographic_region_classification
     mandatory: false
     enforce_presence: false

@@ -260,11 +260,22 @@ CURATION: Dict[str, dict] = {
         "synonyms": ["broker", "broker channel", "channel",
                      "intermediary", "distribution channel"],
     },
-    "geographic_region_obligor": {
+    # Readable region label for MI display (analytics field). This is the
+    # preferred MI "Region" dimension because it holds human-readable labels
+    # (e.g. "West Midlands"); the regulatory NUTS-code fields below are the
+    # fallback. geographic_region_classification (a YEAR) is never a region.
+    "collateral_geography": {
         "tier": "core", "business_name": "Region",
-        "business_description": "Geographic region of the obligor.",
-        "synonyms": ["region", "geography", "obligor region",
-                     "borrower region", "area"],
+        "business_description": "Readable geographic region label for the "
+                                "collateral / property location (analytics display).",
+        "synonyms": ["region", "geography", "area", "property region",
+                     "location", "collateral geography"],
+    },
+    "geographic_region_obligor": {
+        "tier": "core", "business_name": "Obligor Region (NUTS3)",
+        "business_description": "NUTS3 geographic region code for the obligor / borrower.",
+        "synonyms": ["obligor region", "borrower region", "obligor nuts",
+                     "obligor geography"],
     },
     "interest_rate_type": {
         "tier": "core", "business_name": "Rate Type",
@@ -442,9 +453,9 @@ CURATION: Dict[str, dict] = {
         "synonyms": ["origination channel", "sales channel"],
     },
     "geographic_region_collateral": {
-        "tier": "extended", "business_name": "Collateral Region",
-        "business_description": "Geographic region of the collateral.",
-        "synonyms": ["collateral region", "property region", "asset region"],
+        "tier": "extended", "business_name": "Collateral Region (NUTS3)",
+        "business_description": "NUTS3 geographic region code for the collateral.",
+        "synonyms": ["collateral region", "asset region", "collateral nuts"],
     },
     "default_date": {
         "tier": "extended", "business_name": "Default Date",

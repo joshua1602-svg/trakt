@@ -47,17 +47,36 @@ def test_region_term_maps_to_obligor_not_classification():
     assert "geographic_region_classification" not in EXPLICIT_DIMENSION_TERMS.values()
 
 
-def test_balance_by_region_uses_obligor(semantics):
+_REGION_FIELDS = {"collateral_geography", "geographic_region_collateral",
+                  "geographic_region_obligor"}
+
+
+def test_balance_by_region_uses_a_true_region_field(semantics):
     spec, _ = _deterministic_parse("Show balance by region", semantics)
-    assert spec.dimension == "geographic_region_obligor"
+    # A true region field (readable display preferred), never the year field.
+    assert spec.dimension in _REGION_FIELDS
     assert spec.dimension != "geographic_region_classification"
 
 
-def test_balance_by_region_executes_against_obligor(df, semantics):
+def test_balance_by_region_prefers_readable_display_when_present(semantics):
+    d = pd.DataFrame([{
+        "current_outstanding_balance": 100,
+        "collateral_geography": "North",            # readable display field
+        "geographic_region_obligor": "TLG31",       # NUTS code
+    } for _ in range(5)])
+    res = run_mi_agent_query("Show balance by region", d, semantics)
+    assert res["ok"], res.get("error")
+    assert res["spec"]["dimension"] == "collateral_geography"
+    assert "collateral_geography" in res["query_result"].data.columns
+
+
+def test_balance_by_region_falls_back_to_nuts_when_no_display(df, semantics):
+    # df has obligor + collateral NUTS fields but no readable display field.
     res = run_mi_agent_query("Show balance by region", df, semantics)
     assert res["ok"], res.get("error")
-    assert res["spec"]["dimension"] == "geographic_region_obligor"
-    assert "geographic_region_obligor" in res["query_result"].data.columns
+    assert res["spec"]["dimension"] in {"geographic_region_collateral",
+                                        "geographic_region_obligor"}
+    assert res["spec"]["dimension"] != "geographic_region_classification"
 
 
 def test_classification_rejected_as_mi_dimension(semantics):
@@ -71,10 +90,10 @@ def test_classification_rejected_as_mi_dimension(semantics):
 
 
 def test_region_fails_clearly_when_no_true_region_field(semantics):
-    # If neither obligor nor collateral geography is present, the region query
-    # must fail validation cleanly (never fall back to a classification year).
+    # If no region field is present, the region query must fail validation
+    # cleanly (never fall back to a classification year).
     df_no_region = pd.DataFrame({"current_outstanding_balance": [1, 2, 3]})
     res = run_mi_agent_query("Show balance by region", df_no_region, semantics)
     assert res["ok"] is False
-    assert any("geographic_region_obligor" in e
-               for e in (res["validation"] or {}).get("errors", []))
+    # classification year is never used as the region dimension
+    assert (res["spec"] or {}).get("dimension") != "geographic_region_classification"

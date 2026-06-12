@@ -100,16 +100,28 @@ def test_product_type_maps_and_fails_when_missing(df_no_broker, semantics):
 
 def test_balance_by_region(semantics):
     spec, _ = _deterministic_parse("Show balance by region", semantics)
-    assert spec.dimension == "geographic_region_obligor"
+    # region resolves to a true region field (readable display preferred),
+    # never the classification year.
+    assert spec.dimension in {"collateral_geography",
+                              "geographic_region_collateral",
+                              "geographic_region_obligor"}
+    assert spec.dimension != "geographic_region_classification"
     assert spec.chart_type == "bar"
+
+
+_REGION_FIELDS = {"collateral_geography", "geographic_region_collateral",
+                  "geographic_region_obligor"}
 
 
 def test_heatmap_age_bucket_and_region_no_substitution(semantics):
     spec, _ = _deterministic_parse(
         "Show LTV by age bucket and region as a heatmap", semantics)
     assert spec.chart_type == "heatmap"
-    assert set(spec.dimensions) == {"age_bucket", "geographic_region_obligor"}
+    assert "age_bucket" in spec.dimensions
+    # region resolves to a true region field, never account_status / classification
+    assert any(d in _REGION_FIELDS for d in spec.dimensions)
     assert "account_status" not in spec.dimensions
+    assert "geographic_region_classification" not in spec.dimensions
 
 
 def test_redemptions_by_account_status(semantics):
@@ -119,8 +131,10 @@ def test_redemptions_by_account_status(semantics):
 
 def test_generic_concentration_picks_sensible_dimension(semantics):
     spec, meta = _deterministic_parse("Where are we most concentrated?", semantics)
-    # generic question -> sensible default (region), not a failure
-    assert spec.dimension == "geographic_region_obligor"
+    # generic question -> sensible default region field, not a failure and never
+    # the classification year.
+    assert spec.dimension in _REGION_FIELDS
+    assert spec.dimension != "geographic_region_classification"
     assert meta["explicit_dimension_requested"] is False
 
 

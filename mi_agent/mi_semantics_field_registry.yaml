@@ -4,7 +4,7 @@
 # Do NOT edit by hand without also updating the build script (CURATION),
 # or your changes will be overwritten on the next regeneration.
 metadata:
-  generated_at: '2026-06-12T16:37:35.411218+00:00'
+  generated_at: '2026-06-12T21:04:57.024796+00:00'
   source_registry: /home/user/trakt/config/system/fields_registry.yaml
   selection_approach: curated MI-first allowlist (see CURATION in build script)
   selection_rules:
@@ -16,8 +16,8 @@ metadata:
   mi_tiers:
   - core
   - extended
-  field_count: 69
-  core_field_count: 45
+  field_count: 70
+  core_field_count: 46
   extended_field_count: 24
   derived_field_count: 8
   missing_curated_fields: []
@@ -266,6 +266,39 @@ fields:
     - distribution channel
     source_criteria:
     - layer:product
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+  collateral_geography:
+    canonical_field: collateral_geography
+    mi_tier: core
+    business_name: Region
+    display_name: Collateral Geography
+    business_description: Readable geographic region label for the collateral / property location (analytics
+      display).
+    description: ''
+    synonyms:
+    - region
+    - geography
+    - area
+    - property region
+    - location
+    - collateral geography
+    source_criteria:
+    - curated
     role: dimension
     format: string
     chartable: true
@@ -919,14 +952,14 @@ fields:
   geographic_region_collateral:
     canonical_field: geographic_region_collateral
     mi_tier: extended
-    business_name: Collateral Region
+    business_name: Collateral Region (NUTS3)
     display_name: Geographic Region Collateral
-    business_description: Geographic region of the collateral.
+    business_description: NUTS3 geographic region code for the collateral.
     description: ''
     synonyms:
     - collateral region
-    - property region
     - asset region
+    - collateral nuts
     source_criteria:
     - curated
     role: dimension
@@ -948,16 +981,15 @@ fields:
   geographic_region_obligor:
     canonical_field: geographic_region_obligor
     mi_tier: core
-    business_name: Region
+    business_name: Obligor Region (NUTS3)
     display_name: Geographic Region Obligor
-    business_description: Geographic region of the obligor.
+    business_description: NUTS3 geographic region code for the obligor / borrower.
     description: ''
     synonyms:
-    - region
-    - geography
     - obligor region
     - borrower region
-    - area
+    - obligor nuts
+    - obligor geography
     source_criteria:
     - layer:product
     role: dimension

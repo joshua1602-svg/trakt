@@ -66,9 +66,14 @@ enrichment:
     uk_nuts3: true
   uk_nuts3:
     nuts_csv_path: "reference_data/uk_itl_master_lookup_v2.csv"
-    postcode_columns: [postcode, property_postcode]
-    target_field: geographic_region_classification
+    postcode_columns: [postcode, property_postcode, property_post_code]
+    # NUTS3 codes derived from postcode are COLLATERAL (property) geography,
+    # not a classification year. (Previously mis-targeted classification.)
+    target_field: geographic_region_collateral
+    classification_year: 2021
     fill_only_if_blank: true
+# NUTS classification YEAR used for the regulatory geographic region fields.
+nuts_classification_year: 2021
 
 # --- MI & DISPLAY ---
 mi:

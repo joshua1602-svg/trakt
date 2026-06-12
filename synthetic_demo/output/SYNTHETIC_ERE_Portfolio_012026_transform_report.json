@@ -195,7 +195,7 @@
       "sample_failures": []
     },
     "geographic_region_classification": {
-      "format": "list",
+      "format": "year",
       "nulls_before": 0,
       "nulls_after": 0,
       "nd_stripped": 0,
@@ -529,6 +529,15 @@
       "rule_id": "DERIVE_CURRENT_LOAN_TO_VALUE_FORCED",
       "filled_rows": 36,
       "logic": "Forced calc: (bal/val)*100 to fix scaling"
+    },
+    "geography": {
+      "rule_id": "NORMALIZE_GEOGRAPHY_V2",
+      "actions": {
+        "labels_relocated_to_collateral_geography": 36,
+        "collateral_codes_derived_from_postcode": 36,
+        "obligor_copied_from_collateral_erm": 36,
+        "classification_year": "2021"
+      }
     },
     "data_cut_off_date": {
       "rule_id": "CONFIG_OVERRIDE_DATE",
