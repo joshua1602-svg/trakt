@@ -311,7 +311,7 @@ field_rules:
     projected_source_field: geographic_region_obligor
     mandatory: false
     enforce_presence: false
-    nd_allowed: [ND5]
+    nd_allowed: [ND1]
     transform:
       geography_map:
         East Midlands: GBZZZ
@@ -336,7 +336,7 @@ field_rules:
     projected_source_field: geographic_region_classification
     mandatory: false
     enforce_presence: false
-    nd_allowed: [ND5]
+    nd_allowed: [ND1]
     transform:
       geography_map:
         East Midlands: "2026"
@@ -656,7 +656,7 @@ field_rules:
     projected_source_field: geographic_region_collateral
     mandatory: true
     enforce_presence: true
-    nd_allowed: [ND5]
+    nd_allowed: [ND1, ND2, ND3, ND4, ND5]
     default_allowed: true
     default_value: ND5
 
