@@ -271,6 +271,28 @@ CURATION: Dict[str, dict] = {
         "synonyms": ["region", "geography", "area", "property region",
                      "location", "collateral geography"],
     },
+    # Granular UK ITL3 codes (FCA/UK reporting + MI drilldown). Derived analytics
+    # fields preserved in canonical output; never used as the readable MI Region
+    # (that is collateral_geography) and never collapsed to the ESMA GBZZZ default.
+    "geographic_region_collateral_itl3": {
+        "tier": "extended", "derived": True,
+        "derived_from": "geographic_region_collateral",
+        "business_name": "Collateral ITL3",
+        "business_description": "Granular UK ITL3 code for the collateral / "
+                                "property location (FCA/UK + MI drilldown).",
+        "synonyms": ["collateral itl3", "collateral region code",
+                     "property itl3", "itl3"],
+        "overrides": dict(_BUCKET_OVERRIDES),
+    },
+    "geographic_region_obligor_itl3": {
+        "tier": "extended", "derived": True,
+        "derived_from": "geographic_region_obligor",
+        "business_name": "Obligor ITL3",
+        "business_description": "Granular UK ITL3 code for the obligor / borrower "
+                                "(FCA/UK + MI drilldown).",
+        "synonyms": ["obligor itl3", "obligor region code", "borrower itl3"],
+        "overrides": dict(_BUCKET_OVERRIDES),
+    },
     "geographic_region_obligor": {
         "tier": "core", "business_name": "Obligor Region (NUTS3)",
         "business_description": "NUTS3 geographic region code for the obligor / borrower.",

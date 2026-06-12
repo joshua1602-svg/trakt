@@ -536,6 +536,10 @@
         "labels_relocated_to_collateral_geography": 36,
         "collateral_codes_derived_from_postcode": 36,
         "obligor_copied_from_collateral_erm": 36,
+        "itl3_fields_populated": [
+          "geographic_region_obligor_itl3",
+          "geographic_region_collateral_itl3"
+        ],
         "classification_year": "2021"
       }
     },

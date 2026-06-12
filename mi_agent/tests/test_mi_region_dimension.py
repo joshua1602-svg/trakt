@@ -97,3 +97,23 @@ def test_region_fails_clearly_when_no_true_region_field(semantics):
     assert res["ok"] is False
     # classification year is never used as the region dimension
     assert (res["spec"] or {}).get("dimension") != "geographic_region_classification"
+
+
+def test_itl3_drilldown_fields_available_in_mi(semantics):
+    # Granular ITL3 codes are MI drilldown dimensions, distinct from the readable
+    # Region (collateral_geography) and never GBZZZ / classification year.
+    for key in ("geographic_region_collateral_itl3", "geographic_region_obligor_itl3"):
+        assert key in semantics["fields"], f"{key} missing from MI registry"
+        assert semantics["fields"][key]["role"] == "dimension"
+    # the readable Region is collateral_geography, not an ITL3 field
+    assert semantics["fields"]["collateral_geography"]["business_name"] == "Region"
+
+
+def test_mi_region_never_resolves_to_gbzzz_or_classification(semantics):
+    from mi_agent.llm_query_parser import EXPLICIT_DIMENSION_TERMS, _preferred_region
+    assert "geographic_region_classification" not in EXPLICIT_DIMENSION_TERMS.values()
+    # preferred region is a readable/region field, never the classification year
+    pref = _preferred_region(semantics, available_columns={
+        "collateral_geography", "geographic_region_obligor"})
+    assert pref == "collateral_geography"
+    assert pref != "geographic_region_classification"

@@ -4,7 +4,7 @@
 # Do NOT edit by hand without also updating the build script (CURATION),
 # or your changes will be overwritten on the next regeneration.
 metadata:
-  generated_at: '2026-06-12T21:04:57.024796+00:00'
+  generated_at: '2026-06-12T22:22:27.769979+00:00'
   source_registry: /home/user/trakt/config/system/fields_registry.yaml
   selection_approach: curated MI-first allowlist (see CURATION in build script)
   selection_rules:
@@ -16,10 +16,10 @@ metadata:
   mi_tiers:
   - core
   - extended
-  field_count: 70
+  field_count: 72
   core_field_count: 46
-  extended_field_count: 24
-  derived_field_count: 8
+  extended_field_count: 26
+  derived_field_count: 10
   missing_curated_fields: []
   version: 0.2.2
   default_weight_field: current_outstanding_balance
@@ -978,6 +978,38 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+  geographic_region_collateral_itl3:
+    canonical_field: geographic_region_collateral_itl3
+    mi_tier: extended
+    business_name: Collateral ITL3
+    display_name: Geographic Region Collateral Itl3
+    business_description: Granular UK ITL3 code for the collateral / property location (FCA/UK + MI drilldown).
+    description: ''
+    synonyms:
+    - collateral itl3
+    - collateral region code
+    - property itl3
+    - itl3
+    source_criteria:
+    - derived_bucket
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    derived: true
+    derived_from: geographic_region_collateral
   geographic_region_obligor:
     canonical_field: geographic_region_obligor
     mi_tier: core
@@ -1008,6 +1040,37 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+  geographic_region_obligor_itl3:
+    canonical_field: geographic_region_obligor_itl3
+    mi_tier: extended
+    business_name: Obligor ITL3
+    display_name: Geographic Region Obligor Itl3
+    business_description: Granular UK ITL3 code for the obligor / borrower (FCA/UK + MI drilldown).
+    description: ''
+    synonyms:
+    - obligor itl3
+    - obligor region code
+    - borrower itl3
+    source_criteria:
+    - derived_bucket
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    derived: true
+    derived_from: geographic_region_obligor
   indexed_loan_to_value:
     canonical_field: indexed_loan_to_value
     mi_tier: core

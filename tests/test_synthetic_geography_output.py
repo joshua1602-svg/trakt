@@ -19,8 +19,10 @@ import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SYNTH_CSV = (REPO_ROOT / "synthetic_demo" / "output"
-             / "SYNTHETIC_ERE_Portfolio_012026_canonical_typed.csv")
+_OUT = REPO_ROOT / "synthetic_demo" / "output"
+SYNTH_CSV = _OUT / "SYNTHETIC_ERE_Portfolio_012026_canonical_typed.csv"
+PROJECTED_CSV = _OUT / "SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_projected.csv"
+DELIVERY_CSV = _OUT / "SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_delivery_ready.csv"
 DELIVERY_RULES = REPO_ROOT / "config" / "regime" / "annex2_delivery_rules.yaml"
 
 _NUTS_RE = re.compile(r"^[A-Z]{2}[A-Z0-9]{1,4}$")
@@ -78,6 +80,63 @@ def test_classification_source_is_configured_year(synth):
     if "geographic_region_classification_source" in synth.columns:
         srcs = set(synth["geographic_region_classification_source"].dropna().astype(str))
         assert srcs == {"configured_nuts_classification_year"} or not srcs
+
+
+def test_granular_itl3_fields_present_and_coded(synth):
+    for col in ("geographic_region_obligor_itl3", "geographic_region_collateral_itl3"):
+        assert col in synth.columns, f"{col} missing — ITL3 must be retained in canonical"
+        vals = synth[col].dropna().astype(str)
+        assert all(_is_nuts_or_nd(v) for v in vals.unique()), (col, vals.unique()[:5])
+        # real ITL3 codes present (not all ND / GBZZZ)
+        assert any(_NUTS_RE.match(v) and v != "GBZZZ" for v in vals.unique())
+
+
+# --------------------------------------------------------------------------- #
+# ESMA Annex 2 projected / delivered output (UK GBZZZ policy)
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture(scope="module")
+def projected():
+    if not PROJECTED_CSV.exists():
+        pytest.skip("projected output not present (run the pipeline)")
+    return pd.read_csv(PROJECTED_CSV)
+
+
+@pytest.fixture(scope="module")
+def delivery():
+    if not DELIVERY_CSV.exists():
+        pytest.skip("delivery-ready output not present (run the pipeline)")
+    return pd.read_csv(DELIVERY_CSV)
+
+
+def _uniques(df, col):
+    return set(df[col].dropna().astype(str)) if col in df.columns else set()
+
+
+def test_esma_projection_uk_geography_is_gbzzz(projected):
+    # ESMA Annex 2 policy: UK obligor/collateral region delivered as GBZZZ.
+    assert _uniques(projected, "RREL11") <= {"GBZZZ"}
+    assert _uniques(projected, "RREC6") <= {"GBZZZ"}
+    assert _uniques(projected, "RREL11") == {"GBZZZ"}
+    assert _uniques(projected, "RREC6") == {"GBZZZ"}
+
+
+def test_esma_projection_rrel12_is_year(projected):
+    assert all(_is_year_or_nd(v) for v in _uniques(projected, "RREL12"))
+    assert "2021" in _uniques(projected, "RREL12")
+
+
+def test_esma_delivery_uk_geography_is_gbzzz(delivery):
+    assert _uniques(delivery, "RREL11") == {"GBZZZ"}
+    assert _uniques(delivery, "RREC6") == {"GBZZZ"}
+    assert all(_is_year_or_nd(v) for v in _uniques(delivery, "RREL12"))
+
+
+def test_itl3_not_destroyed_by_projection(synth, projected):
+    # ESMA projection collapses RREL11/RREC6 to GBZZZ, but canonical ITL3 is intact.
+    itl3 = synth["geographic_region_collateral_itl3"].dropna().astype(str)
+    assert any(_NUTS_RE.match(v) and v != "GBZZZ" for v in itl3.unique())
 
 
 # --------------------------------------------------------------------------- #

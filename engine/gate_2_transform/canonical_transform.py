@@ -493,6 +493,17 @@ def normalize_geography(df: pd.DataFrame, pt: str, config: dict) -> dict:
             df.loc[nd, reg_col] = _GEO_NODATA
             report["actions"][f"{reg_col}_set_nodata"] = int(nd.sum())
 
+    # 4b. Preserve GRANULAR ITL3 in explicit canonical fields. These always
+    #     retain the granular UK ITL3 code (for FCA/UK reporting + MI drilldown)
+    #     even when a regime projection (e.g. ESMA Annex 2) later delivers GBZZZ.
+    #     The regulatory geographic_region_* fields keep ITL3 too (backward
+    #     compatible); regime-specific GBZZZ is applied at projection on a copy.
+    obligor_itl3 = obligor_c + "_itl3"
+    collat_itl3 = collat_c + "_itl3"
+    df[obligor_itl3] = df[obligor_c]
+    df[collat_itl3] = df[collat_c]
+    report["actions"]["itl3_fields_populated"] = [obligor_itl3, collat_itl3]
+
     # 5. Classification = NUTS classification YEAR (config-driven), never a label/code.
     year = str(geo_cfg.get("classification_year")
                or enr_cfg.get("classification_year")

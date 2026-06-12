@@ -2,7 +2,7 @@
   "regime": "ESMA_Annex2",
   "portfolio_type": "equity_release",
   "canonical_rows": 36,
-  "canonical_fields": 71,
+  "canonical_fields": 73,
   "regime_fields": 104,
   "mandatory_fields": 47,
   "optional_fields": 57,
@@ -111,9 +111,17 @@
     "nd_defaults_applied": {}
   },
   "uk_geography_override": {
-    "applied": false,
-    "rows_overridden": 0,
-    "fields": []
+    "applied": true,
+    "rows_overridden": 36,
+    "fields": [
+      "geographic_region_obligor",
+      "geographic_region_collateral"
+    ],
+    "country_detection": {
+      "mode": "portfolio",
+      "portfolio_country": "GB"
+    },
+    "override_value": "GBZZZ"
   },
   "annex2_post_projection": {
     "header_constants_applied": {
