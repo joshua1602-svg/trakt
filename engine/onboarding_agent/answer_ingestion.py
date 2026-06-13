@@ -46,6 +46,7 @@ STATUS_READY = "ready_for_handoff"
 STATUS_BLOCKED = "still_blocking"
 STATUS_INVALID = "invalid_answer"
 STATUS_ANSWERED = "answered"
+STATUS_NEEDS_CONFIRMATION = "requires_confirmation"
 
 _VALID_GEOGRAPHY_ANSWERS = {"GBZZZ", "ITL3", "other"}
 _DATE_FORMATS = ["%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d", "%d-%m-%Y"]
@@ -175,7 +176,9 @@ def _overlap_columns_for(ctx: ProjectContext, canonical: str, primary_file: str)
     return "", "", "", 0.0
 
 
-def _build_approved_config(ctx: ProjectContext, answered: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+def _build_approved_config(
+    ctx: ProjectContext, answered: Dict[str, Dict[str, Any]], mode: str = "regulatory_mi"
+) -> Dict[str, Any]:
     cfg = ctx.config_by_field()
 
     def val(field, default=""):
@@ -198,25 +201,49 @@ def _build_approved_config(ctx: ProjectContext, answered: Dict[str, Dict[str, An
         elif q.get("category") == "config" and q.get("subject"):
             cfg.setdefault(q["subject"], {})["suggested_value"] = a
 
-    # classification_year is sourced from policy — NEVER from the reporting date.
-    classification_year = val("classification_year", "2021")
-
-    return {
+    # Core config is shared by all modes.
+    out: Dict[str, Any] = {
         "_warning": "Approved (review-first) onboarding config. Not a production config.",
+        "onboarding_mode": mode,
         "client_name": val("client_name", ctx.run_summary.get("client_name", "")),
         "asset_class": val("asset_class"),
         "portfolio_type": val("portfolio_type", val("asset_class")),
         "currency": val("currency"),
         "jurisdiction": val("jurisdiction"),
         "reporting_date": reporting_date,
-        "data_cut_off_date": val("data_cut_off_date", reporting_date),
-        "regime": val("regime"),
-        "classification_year": classification_year,
-        "geography_policy": {
+        # Cut-off follows the approved reporting date for consistency.
+        "data_cut_off_date": reporting_date,
+    }
+
+    # Regulatory block — only for regulatory_mi (avoid over-populating other modes).
+    if mode == "regulatory_mi":
+        out["regime"] = val("regime", "ESMA_Annex2")
+        # classification_year is sourced from policy — NEVER from the reporting date.
+        out["classification_year"] = val("classification_year", "2021")
+        out["geography_policy"] = {
             "ESMA_Annex2": {"uk_geography_mode": uk_geo_mode},
             "MI": {"region_display_field": "collateral_geography"},
-        },
-    }
+        }
+    elif mode == "mi_mna":
+        # MI/M&A: display geography only; regulatory fields stay optional.
+        out["geography_policy"] = {"MI": {"region_display_field": "collateral_geography"}}
+        if val("regime"):
+            out["regime"] = val("regime")
+
+    # Warehouse block — only for warehouse_securitisation, from extracted/approved terms.
+    if mode == "warehouse_securitisation":
+        out["warehouse"] = {
+            "facility_present": val("warehouse_facility_present", "unknown"),
+            "lender_name": val("warehouse_lender_name"),
+            "limit": val("warehouse_limit"),
+            "advance_rate": val("advance_rate"),
+            "margin": val("margin"),
+            "interest_index": val("interest_index"),
+        }
+        if val("target_pool_balance"):
+            out["securitisation"] = {"target_pool_balance": val("target_pool_balance")}
+
+    return out
 
 
 def _build_source_precedence(ctx: ProjectContext, answered: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
@@ -285,10 +312,19 @@ def _build_mapping_overrides(ctx: ProjectContext, answered: Dict[str, Dict[str, 
 # ---------------------------------------------------------------------------
 
 
-def ingest_answers(project_dir: str | Path, answers_path: str | Path) -> Dict[str, Any]:
-    """Validate answers and write the approved onboarding artefacts."""
+def ingest_answers(
+    project_dir: str | Path, answers_path: str | Path, confirm: bool = True
+) -> Dict[str, Any]:
+    """Validate answers and (only with confirmation) write approved artefacts.
+
+    ``confirm`` is the human-confirmation gate (PART 5). Approved artefacts
+    (10..14) are written ONLY when ``confirm`` is True AND validation passes
+    (no invalid answers, no unanswered blocking questions). The validation
+    report (15) is always written.
+    """
     project_dir = Path(project_dir)
     ctx = ProjectContext(project_dir)
+    mode = ctx.run_summary.get("onboarding_mode", "regulatory_mi")
 
     raw = _load_yaml(Path(answers_path)) or {}
     answers: Dict[str, Dict[str, Any]] = raw.get("answers", {}) if isinstance(raw, dict) else {}
@@ -348,22 +384,28 @@ def ingest_answers(project_dir: str | Path, answers_path: str | Path) -> Dict[st
         "approved_by": approved_by,
     }
 
-    approved_config = _build_approved_config(ctx, answered)
-    mapping_overrides = _build_mapping_overrides(ctx, answered)
-    precedence = _build_source_precedence(ctx, answered)
-    enum_decisions = _build_enum_decisions(ctx, answered)
+    # Confirmation gate (PART 5): approved artefacts are written only when the
+    # human confirms AND validation passes.
+    can_write = confirm and not invalid and not blocking_unanswered
+    if not can_write:
+        if not confirm and not invalid and not blocking_unanswered:
+            approval_status = STATUS_NEEDS_CONFIRMATION
 
-    artefacts = {
-        "10_approved_onboarding_project.yaml": approved_project,
-        "11_approved_config.yaml": approved_config,
-        "12_approved_mapping_overrides.yaml": mapping_overrides,
-        "13_source_precedence_rules.yaml": precedence,
-        "14_enum_review_decisions.yaml": enum_decisions,
-    }
     written: List[str] = []
-    for name, payload in artefacts.items():
-        (project_dir / name).write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
-        written.append(name)
+    if can_write:
+        artefacts = {
+            "10_approved_onboarding_project.yaml": approved_project,
+            "11_approved_config.yaml": _build_approved_config(ctx, answered, mode),
+            "12_approved_mapping_overrides.yaml": _build_mapping_overrides(ctx, answered),
+            "13_source_precedence_rules.yaml": _build_source_precedence(ctx, answered),
+            "14_enum_review_decisions.yaml": _build_enum_decisions(ctx, answered),
+        }
+        for name, payload in artefacts.items():
+            (project_dir / name).write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+            written.append(name)
+
+    # Reflect the (possibly updated) status back into the approved project file.
+    approved_project["approval_status"] = approval_status
 
     report = {
         "questions_total": len(questions),
@@ -373,6 +415,9 @@ def ingest_answers(project_dir: str | Path, answers_path: str | Path) -> Dict[st
         "invalid_detail": invalid,
         "unanswered": sorted(unanswered),
         "approval_status": approval_status,
+        "confirmed": bool(confirm),
+        "approved_artefacts_written": bool(can_write),
+        "onboarding_mode": mode,
         "artefacts_written": written + ["15_answer_ingestion_report.json"],
         "generated_at": generated_at,
     }
@@ -380,12 +425,14 @@ def ingest_answers(project_dir: str | Path, answers_path: str | Path) -> Dict[st
         json.dumps(report, indent=2), encoding="utf-8"
     )
 
-    # PART 7 — reflect the approval status back into the static review pack.
-    try:
-        from .review_pack_builder import refresh_review_pack_approval
+    # PART 7 — reflect the approval status back into the static review pack
+    # (only when approved artefacts were actually written).
+    if can_write:
+        try:
+            from .review_pack_builder import refresh_review_pack_approval
 
-        refresh_review_pack_approval(project_dir)
-    except Exception:
-        pass
+            refresh_review_pack_approval(project_dir)
+        except Exception:
+            pass
 
     return report

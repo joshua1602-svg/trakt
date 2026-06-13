@@ -69,3 +69,36 @@ geography_policy:
   classification_year: 2021          # NUTS/ITL classification year (RREL12)
   esma_uk_geography_mode: GBZZZ      # RREL11/RREC6 UK delivery mode for ESMA
   mi_region_display_field: collateral_geography  # readable region for MI/FCA
+
+# ---------------------------------------------------------------------------
+# Onboarding Agent v2 — document extraction minimisation policy (PART 6).
+# Read Word/PDF/markdown/text documents only to extract config-relevant facts.
+# NEVER persist full document text, pages, long clauses, signatures, addresses,
+# bank details or unrelated boilerplate. Client-specific extractions are scoped
+# to the project output directory only (PART 7).
+# ---------------------------------------------------------------------------
+document_extraction:
+  persist_full_text: false
+  persist_raw_chunks: false
+  client_scoped_only: true
+  allowed_retained_evidence_chars: 300
+  allowed_extraction_fields:
+    warehouse_agreement:
+      - warehouse_facility_present
+      - warehouse_lender_name
+      - warehouse_limit
+      - advance_rate
+      - margin
+      - interest_index
+      - maturity_date
+      - availability_period
+      - eligibility_criteria_summary
+      - concentration_limits_summary
+      - reporting_frequency
+    securitisation_document:
+      - securitisation_present
+      - target_pool_balance
+      - note_classes_summary
+      - reporting_regime
+      - investor_report_frequency
+      - cut_off_date_convention

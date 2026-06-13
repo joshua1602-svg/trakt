@@ -153,15 +153,82 @@ def _enum_questions(
     return questions
 
 
+# Warehouse facility core terms checked for completeness.
+_WAREHOUSE_CORE_TERMS = [
+    "warehouse_facility_present",
+    "advance_rate",
+    "margin",
+    "warehouse_limit",
+    "warehouse_lender_name",
+    "interest_index",
+]
+
+
+def _warehouse_gap_questions(
+    inventory: List[FileInventoryItem],
+    config_suggestions: List[ConfigSuggestion],
+    mode: str,
+    start_idx: int,
+) -> List[GapQuestion]:
+    """Flag missing / unresolved warehouse facility terms.
+
+    Only raised when a warehouse objective applies: a warehouse agreement is in
+    the data room, or the mode is warehouse_securitisation.
+    """
+    warehouse_present = any(i.classification == "warehouse_agreement" for i in inventory)
+    if not warehouse_present and mode != "warehouse_securitisation":
+        return []
+
+    by_field: Dict[str, ConfigSuggestion] = {}
+    for s in config_suggestions:
+        if s.field not in by_field or s.confidence > by_field[s.field].confidence:
+            by_field[s.field] = s
+
+    questions: List[GapQuestion] = []
+    idx = start_idx
+    for term in _WAREHOUSE_CORE_TERMS:
+        s = by_field.get(term)
+        missing = s is None or s.review_status == "missing" or s.suggested_value in ("", "unknown")
+        if not missing and s.review_status == "suggested" and s.confidence >= 0.7:
+            continue  # confidently extracted — no gap
+        idx += 1
+        base_severity = "blocking" if missing else "high"
+        questions.append(
+            GapQuestion(
+                question_id=f"Q{idx}",
+                category="warehouse",
+                severity=base_severity,
+                question=f"Confirm the warehouse facility term '{term}'.",
+                reason=(
+                    "Warehouse core term is missing from the data room."
+                    if missing
+                    else f"Extracted value '{s.suggested_value}' requires review."
+                ),
+                candidate_answers=[s.suggested_value] if s and s.suggested_value not in ("", "unknown") else [],
+                default_recommendation=s.suggested_value if s and not missing else "requires_review",
+                blocking_for=["warehouse_analytics", "securitisation_readiness"],
+                source_evidence=s.source_file if s else "warehouse agreement",
+                subject=term,
+            )
+        )
+    return questions
+
+
 def analyze_gaps(
     inventory: List[FileInventoryItem],
     profiles: List[ColumnProfile],
     overlap: List[OverlapFinding],
     config_suggestions: List[ConfigSuggestion],
     dataframes: Optional[Dict[str, pd.DataFrame]] = None,
+    mode_policy=None,
 ) -> List[GapQuestion]:
-    """Generate gap questions from the accumulated onboarding evidence."""
+    """Generate gap questions, then re-rank severity for the onboarding mode.
+
+    ``mode_policy`` is an optional :class:`mode_policy.ModePolicy`. When omitted
+    the legacy (regulatory) severities are returned unchanged.
+    """
     dataframes = dataframes or {}
+    mode = getattr(mode_policy, "name", "regulatory_mi")
     questions: List[GapQuestion] = []
     idx = 0
 
@@ -275,5 +342,13 @@ def analyze_gaps(
             subject="uk_geography_mode",
         )
     )
+
+    # --- Warehouse facility terms ---
+    questions.extend(_warehouse_gap_questions(inventory, config_suggestions, mode, len(questions)))
+
+    # --- Mode-aware severity re-ranking (PART 2) ---
+    if mode_policy is not None:
+        for q in questions:
+            q.severity = mode_policy.severity_for(q.category, q.severity)
 
     return questions

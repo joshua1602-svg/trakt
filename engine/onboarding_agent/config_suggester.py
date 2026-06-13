@@ -23,7 +23,13 @@ from collections import Counter
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from .onboarding_models import ColumnProfile, ConfigSuggestion, FileInventoryItem
+from .document_extractor import extract_documents
+from .onboarding_models import (
+    ColumnProfile,
+    ConfigSuggestion,
+    DocumentExtraction,
+    FileInventoryItem,
+)
 
 # Reuse the asset-class signal vocabulary from the v1 config bootstrap agent.
 try:
@@ -159,111 +165,18 @@ def _detect_reporting_dates(profiles: List[ColumnProfile]) -> List[str]:
     return sorted(dates)
 
 
-def _extract_warehouse_terms(text: str, ref: str) -> List[ConfigSuggestion]:
-    out: List[ConfigSuggestion] = []
-    low = text.lower()
-
-    out.append(
-        ConfigSuggestion(
-            field="warehouse_facility_present",
-            suggested_value="true",
-            confidence=0.95,
-            source_file=ref,
-            source_column_or_document_reference=ref,
-            evidence="Warehouse funding agreement present in data room.",
-            review_status="suggested",
-        )
-    )
-
-    # Lender name — line containing 'warehouse lender' or 'lender:'.
-    m = re.search(r"warehouse lender[:\s\*]*([A-Za-z0-9 ,&.'-]+)", text, re.IGNORECASE)
-    if m:
-        out.append(
-            ConfigSuggestion(
-                field="warehouse_lender_name",
-                suggested_value=m.group(1).strip().rstrip("|").strip(),
-                confidence=0.7,
-                source_file=ref,
-                source_column_or_document_reference=ref,
-                evidence="Parsed 'Warehouse Lender' from agreement text.",
-                review_status="requires_review",
-            )
-        )
-
-    # Advance rate.
-    m = re.search(r"advance rate[^\d]*(\d+(?:\.\d+)?)\s*%", low)
-    if m:
-        out.append(
-            ConfigSuggestion(
-                field="advance_rate",
-                suggested_value=f"{m.group(1)}%",
-                confidence=0.7,
-                source_file=ref,
-                source_column_or_document_reference=ref,
-                evidence="Parsed 'advance rate' from agreement text.",
-                review_status="requires_review",
-            )
-        )
-
-    # Margin.
-    m = re.search(r"margin[^\d]*(\d+(?:\.\d+)?)\s*%", low)
-    if m:
-        out.append(
-            ConfigSuggestion(
-                field="margin",
-                suggested_value=f"{m.group(1)}%",
-                confidence=0.6,
-                source_file=ref,
-                source_column_or_document_reference=ref,
-                evidence="Parsed 'margin' from agreement text.",
-                review_status="requires_review",
-            )
-        )
-
-    # Interest index.
-    idx = None
-    for cand in ("SONIA", "EURIBOR", "SOFR", "LIBOR", "BASE RATE"):
-        if cand.lower() in low:
-            idx = cand
-            break
-    if idx:
-        out.append(
-            ConfigSuggestion(
-                field="interest_index",
-                suggested_value=idx,
-                confidence=0.7,
-                source_file=ref,
-                source_column_or_document_reference=ref,
-                evidence=f"Interest index '{idx}' referenced in agreement.",
-                review_status="requires_review",
-            )
-        )
-
-    # Warehouse limit.
-    m = _MONEY_RE.search(text)
-    if m and ("limit" in low or "facility" in low):
-        out.append(
-            ConfigSuggestion(
-                field="warehouse_limit",
-                suggested_value=f"{m.group(1)} {m.group(2)}".strip(),
-                confidence=0.6,
-                source_file=ref,
-                source_column_or_document_reference=ref,
-                evidence="Parsed a money amount near 'limit'/'facility'.",
-                review_status="requires_review",
-            )
-        )
-
-    return out
-
-
 def suggest_config(
     client_name: str,
     input_dir: Path,
     inventory: List[FileInventoryItem],
     profiles: List[ColumnProfile],
+    document_extractions: Optional[List["DocumentExtraction"]] = None,
 ) -> List[ConfigSuggestion]:
-    """Produce candidate config suggestions from all available evidence."""
+    """Produce candidate config suggestions from all available evidence.
+
+    Warehouse / securitisation facts come from ``document_extractions`` (the
+    policy-bound document extractor); if not supplied they are computed here.
+    """
     suggestions: List[ConfigSuggestion] = []
 
     # client_name straight from the CLI.
@@ -384,26 +297,29 @@ def suggest_config(
         )
     )
 
-    # warehouse terms.
-    wh = _warehouse_files(inventory)
-    if wh:
-        for item in wh:
-            ref = item.file_name
-            if item.file_type in ("txt", "md"):
-                suggestions.extend(_extract_warehouse_terms(_read_text(Path(item.file_path)), ref))
-            else:
-                suggestions.append(
-                    ConfigSuggestion(
-                        field="warehouse_facility_present",
-                        suggested_value="true",
-                        confidence=0.6,
-                        source_file=ref,
-                        source_column_or_document_reference=ref,
-                        evidence="Warehouse agreement present but is a non-text document.",
-                        review_status="requires_review",
-                    )
-                )
-    else:
+    # Warehouse / securitisation config from document extractions (PART 6).
+    # Parsing now lives in document_extractor under the minimisation policy; we
+    # only fold the extracted, capped facts into config suggestions here.
+    if document_extractions is None:
+        document_extractions = extract_documents(inventory)
+
+    extracted_fields = set()
+    for ex in document_extractions:
+        extracted_fields.add(ex.field)
+        suggestions.append(
+            ConfigSuggestion(
+                field=ex.field,
+                suggested_value=ex.value,
+                confidence=ex.confidence,
+                source_file=ex.source_document,
+                source_column_or_document_reference=ex.source_reference,
+                evidence=ex.retained_evidence,
+                review_status=ex.status,
+            )
+        )
+
+    # If no warehouse agreement was present at all, record the gap explicitly.
+    if not _warehouse_files(inventory) and "warehouse_facility_present" not in extracted_fields:
         suggestions.append(
             ConfigSuggestion(
                 field="warehouse_facility_present",
@@ -415,36 +331,5 @@ def suggest_config(
                 review_status="missing",
             )
         )
-
-    # securitisation presence + target pool balance.
-    sec = _securitisation_files(inventory)
-    if sec:
-        suggestions.append(
-            ConfigSuggestion(
-                field="securitisation_present",
-                suggested_value="true",
-                confidence=0.7,
-                source_file=sec[0].file_name,
-                source_column_or_document_reference=sec[0].file_name,
-                evidence="Securitisation summary present in data room.",
-                review_status="suggested",
-            )
-        )
-        sec_text = "".join(
-            _read_text(Path(i.file_path)) for i in sec if i.file_type in ("txt", "md")
-        )
-        m = re.search(r"target pool balance[:\s\*]*([A-Z]{3}\s*[\d,]+)", sec_text, re.IGNORECASE)
-        if m:
-            suggestions.append(
-                ConfigSuggestion(
-                    field="target_pool_balance",
-                    suggested_value=m.group(1).strip(),
-                    confidence=0.6,
-                    source_file=sec[0].file_name,
-                    source_column_or_document_reference=sec[0].file_name,
-                    evidence="Parsed 'target pool balance' from securitisation summary.",
-                    review_status="requires_review",
-                )
-            )
 
     return suggestions

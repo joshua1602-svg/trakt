@@ -29,7 +29,9 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from engine.onboarding_agent.answer_ingestion import ingest_answers
+from engine.onboarding_agent.mode_policy import VALID_MODES
 from engine.onboarding_agent.onboarding_orchestrator import run_onboarding
+from engine.onboarding_agent.review_interpreter import interpret_answers_to_file
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -39,6 +41,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--input-dir", required=True, help="Folder of lender onboarding artefacts.")
     p.add_argument("--client-name", required=True, help="Client / lender name.")
     p.add_argument("--output-dir", required=True, help="Output folder for the onboarding pack.")
+    p.add_argument(
+        "--mode",
+        choices=list(VALID_MODES),
+        default="",
+        help="Onboarding mode (default: regulatory_mi). mi_mna | regulatory_mi | "
+        "warehouse_securitisation.",
+    )
     p.add_argument(
         "--registry",
         default="config/system/fields_registry.yaml",
@@ -61,6 +70,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional answers YAML — after generating the pack, ingest these "
         "answers and write the approved artefacts (10..15).",
     )
+    p.add_argument(
+        "--confirm",
+        action="store_true",
+        help="Required to actually write approved artefacts when ingesting answers.",
+    )
     return p
 
 
@@ -70,6 +84,20 @@ def build_ingest_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--project-dir", required=True, help="Existing onboarding output folder.")
     p.add_argument("--answers", required=True, help="Answers YAML file.")
+    p.add_argument(
+        "--confirm",
+        action="store_true",
+        help="Required to write approved artefacts (human confirmation gate).",
+    )
+    return p
+
+
+def build_interpret_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        description="Interpret a natural-language answer into a structured spec (dry-run)."
+    )
+    p.add_argument("--project-dir", required=True, help="Existing onboarding output folder.")
+    p.add_argument("--text", required=True, help="Natural-language answer to interpret.")
     return p
 
 
@@ -94,10 +122,21 @@ def main(argv=None) -> int:
 
     argv = list(_sys.argv[1:] if argv is None else argv)
 
+    # Subcommand: interpret-answers (dry-run NL -> structured spec; never writes approved artefacts)
+    if argv and argv[0] == "interpret-answers":
+        args = build_interpret_parser().parse_args(argv[1:])
+        out = interpret_answers_to_file(args.project_dir, args.text)
+        print("=" * 64)
+        print("Interpreted natural-language answer (dry-run, no approval written)")
+        print(f"Spec written to: {out}")
+        print("Run `ingest-answers --answers <spec> --confirm` to apply.")
+        print("=" * 64)
+        return 0
+
     # Subcommand: ingest-answers
     if argv and argv[0] == "ingest-answers":
         args = build_ingest_parser().parse_args(argv[1:])
-        report = ingest_answers(args.project_dir, args.answers)
+        report = ingest_answers(args.project_dir, args.answers, confirm=args.confirm)
         _print_ingestion_report(report)
         return 0
 
@@ -111,6 +150,7 @@ def main(argv=None) -> int:
         aliases_dir=args.aliases_dir,
         project_id=args.project_id,
         enable_handoff=not args.no_handoff,
+        mode=args.mode,
     )
 
     print("=" * 64)
@@ -125,9 +165,9 @@ def main(argv=None) -> int:
         print(f"  - {Path(a).name}")
     print("=" * 64)
 
-    # Optional inline answer ingestion.
+    # Optional inline answer ingestion (requires --confirm to write approved artefacts).
     if args.answers:
-        report = ingest_answers(args.output_dir, args.answers)
+        report = ingest_answers(args.output_dir, args.answers, confirm=args.confirm)
         _print_ingestion_report(report)
 
     return 0

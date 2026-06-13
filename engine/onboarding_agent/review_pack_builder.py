@@ -75,11 +75,46 @@ def build_review_pack(project: OnboardingProject, out_path: Path) -> Path:
     blocking_qs = [q for q in project.gap_questions if q.severity == "blocking"]
 
     status = project.review_status
-    status_badge = {
-        "blocked": '<span class="badge b-block">BLOCKED</span>',
-        "review_required": '<span class="badge b-warn">REVIEW REQUIRED</span>',
-        "draft": '<span class="badge b-info">DRAFT</span>',
-    }.get(status, status)
+    if status == "blocked":
+        status_badge = '<span class="badge b-block">BLOCKED</span>'
+    elif status in ("review_required", "requires_review"):
+        status_badge = '<span class="badge b-warn">REVIEW REQUIRED</span>'
+    elif status.startswith("ready_for"):
+        status_badge = f'<span class="badge b-ok">{_esc(status.upper())}</span>'
+    else:
+        status_badge = f'<span class="badge b-info">{_esc(status)}</span>'
+
+    # Mode policy (PART 3)
+    try:
+        from .mode_policy import load_mode_policy
+        policy = load_mode_policy(project.onboarding_mode)
+    except Exception:
+        policy = None
+    mode_name = project.onboarding_mode
+    objective = getattr(policy, "objective", "") if policy else ""
+    recommended_outputs = getattr(policy, "recommended_outputs", []) if policy else []
+    optional_outputs = getattr(policy, "optional_outputs", []) if policy else []
+
+    # Blocking / high questions specifically for this mode.
+    mode_blocking = [q for q in project.gap_questions if q.severity == "blocking"]
+    mode_high = [q for q in project.gap_questions if q.severity == "high"]
+    block_rows = [
+        [_esc(q.question_id), _sev_badge(q.severity), _esc(q.category), _esc(q.question)]
+        for q in (mode_blocking + mode_high)
+    ]
+    mode_readiness_html = f"""
+    <p class="meta">Mode: <span class="badge b-info">{_esc(mode_name)}</span>
+      &nbsp;·&nbsp; Readiness: {status_badge}</p>
+    <p class="meta">{_esc(objective)}</p>
+    <div class="split-grid">
+      <div><h4 class="chart-title">Outputs in scope</h4>
+        <ul>{''.join(f'<li>{_esc(o)}</li>' for o in recommended_outputs) or '<li>—</li>'}</ul></div>
+      <div><h4 class="chart-title">Outputs out of scope / optional</h4>
+        <ul>{''.join(f'<li>{_esc(o)}</li>' for o in optional_outputs) or '<li>—</li>'}</ul></div>
+    </div>
+    <h4 class="chart-title">Blocking / high questions for this mode</h4>
+    {_table(["ID", "Severity", "Category", "Question"], block_rows)}
+    """
 
     # 1. Executive summary KPIs
     kpis = [
@@ -194,7 +229,7 @@ def build_review_pack(project: OnboardingProject, out_path: Path) -> Path:
   <div class="hero">
     <h1>Onboarding Review Pack</h1>
     <div class="sub">Client: {_esc(project.client_name)} &nbsp;·&nbsp; Project: {_esc(project.project_id)}
-    &nbsp;·&nbsp; Status: {status_badge}</div>
+    &nbsp;·&nbsp; Mode: {_esc(mode_name)} &nbsp;·&nbsp; Status: {status_badge}</div>
   </div>
 
   <div class="card"><h2>1. Executive summary</h2>
@@ -202,6 +237,8 @@ def build_review_pack(project: OnboardingProject, out_path: Path) -> Path:
     <p class="meta">Input: {_esc(project.input_dir)} &nbsp;·&nbsp; Output: {_esc(project.output_dir)}</p>
     {readiness}
   </div>
+
+  <div class="card"><h2>1a. Onboarding mode &amp; mode-specific readiness</h2>{mode_readiness_html}</div>
 
   <div class="card"><h2>2. File inventory</h2>{inv_html}</div>
   <div class="card"><h2>3. Detected reporting periods</h2>{periods_html}</div>

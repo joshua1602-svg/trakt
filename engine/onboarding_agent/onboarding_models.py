@@ -138,6 +138,27 @@ class ConfigSuggestion:
 
 
 @dataclass
+class DocumentExtraction:
+    """One config-relevant fact extracted from an unstructured document.
+
+    Extraction minimisation (PART 6): we retain only the field, value, a short
+    capped evidence excerpt and a reference — never full document text, pages,
+    clauses, signatures, addresses or bank details.
+    """
+
+    field: str = ""
+    value: str = ""
+    source_document: str = ""
+    source_reference: str = ""
+    confidence: float = 0.0
+    retained_evidence: str = ""      # capped by policy (allowed_retained_evidence_chars)
+    status: str = "requires_review"  # suggested | requires_review | missing
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
 class GapQuestion:
     """A user-facing question raised by the gap analyzer (PART 8)."""
 
@@ -180,6 +201,9 @@ class OnboardingProject:
     input_dir: str = ""
     output_dir: str = ""
 
+    # Onboarding mode (PART 1): mi_mna | regulatory_mi | warehouse_securitisation
+    onboarding_mode: str = "regulatory_mi"
+
     # Inputs / discovered files
     source_files: List[str] = field(default_factory=list)
 
@@ -190,6 +214,7 @@ class OnboardingProject:
     overlap_analysis: List[OverlapFinding] = field(default_factory=list)
     mapping_candidates: List[MappingCandidate] = field(default_factory=list)
     config_suggestions: List[ConfigSuggestion] = field(default_factory=list)
+    document_extractions: List[DocumentExtraction] = field(default_factory=list)
     gap_questions: List[GapQuestion] = field(default_factory=list)
 
     # Run-level status
@@ -209,6 +234,7 @@ class OnboardingProject:
             "client_name": self.client_name,
             "input_dir": self.input_dir,
             "output_dir": self.output_dir,
+            "onboarding_mode": self.onboarding_mode,
             "review_status": self.review_status,
             "counts": {
                 "source_files": len(self.source_files),

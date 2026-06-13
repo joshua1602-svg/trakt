@@ -24,9 +24,30 @@ import pandas as pd
 import yaml
 
 from . import config_suggester, file_classifier, file_profiler, gap_analyzer, source_consolidator
+from .document_extractor import (
+    extract_documents,
+    load_document_policy,
+    write_document_extraction_summary,
+)
 from .mapping_proposer import propose_mappings
+from .mode_policy import ModePolicy, default_mode, load_mode_policy, severity_rank
 from .onboarding_models import OnboardingProject
 from .review_pack_builder import build_review_pack
+
+
+def compute_readiness(gap_questions, policy: ModePolicy) -> str:
+    """Mode-aware readiness status from the (already re-ranked) gap questions.
+
+    blocked            - any blocking question remains
+    requires_review    - no blockers but high/medium questions remain
+    ready_for_<mode>   - clean (policy.readiness_status_label)
+    """
+    max_rank = max((severity_rank(q.severity) for q in gap_questions), default=0)
+    if max_rank >= severity_rank("blocking"):
+        return "blocked"
+    if max_rank >= severity_rank("medium"):
+        return "requires_review"
+    return policy.readiness_status_label
 
 # Confidence at/above which a mapping counts as "high confidence" for handoff.
 HANDOFF_CONFIDENCE = 0.92
@@ -75,16 +96,21 @@ def run_onboarding(
     aliases_dir: str,
     project_id: str = "",
     enable_handoff: bool = True,
+    mode: str = "",
 ) -> OnboardingProject:
     in_dir = Path(input_dir)
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    mode = mode or default_mode()
+    policy = load_mode_policy(mode)
 
     project = OnboardingProject(
         project_id=project_id or client_name.lower().replace(" ", "_"),
         client_name=client_name,
         input_dir=str(in_dir),
         output_dir=str(out_dir),
+        onboarding_mode=policy.name,
         registry_path=str(registry_path),
         aliases_dir=str(aliases_dir),
     )
@@ -123,21 +149,27 @@ def run_onboarding(
         inventory, project.mapping_candidates, project.candidate_keys, dataframes
     )
 
-    # --- PART 7: config suggestions ---
+    # --- PART 6 (docs): extract config-relevant facts under minimisation policy ---
+    doc_policy = load_document_policy()
+    project.document_extractions = extract_documents(inventory, doc_policy)
+
+    # --- PART 7: config suggestions (fold in document extractions) ---
     project.config_suggestions = config_suggester.suggest_config(
-        client_name, in_dir, inventory, profiles
+        client_name, in_dir, inventory, profiles, project.document_extractions
     )
 
-    # --- PART 8: gap questions ---
+    # --- PART 8: gap questions (mode-aware severity) ---
     project.gap_questions = gap_analyzer.analyze_gaps(
-        inventory, profiles, project.overlap_analysis, project.config_suggestions, dataframes
+        inventory, profiles, project.overlap_analysis, project.config_suggestions,
+        dataframes, mode_policy=policy,
     )
 
-    # --- review status ---
-    blocking = [q for q in project.gap_questions if q.severity == "blocking"]
-    project.review_status = "blocked" if blocking else "review_required"
+    # --- mode-aware review status / readiness ---
+    project.review_status = compute_readiness(project.gap_questions, policy)
 
-    # --- write artefacts ---
+    # --- write artefacts (incl. 17 document extraction summary, client-scoped) ---
+    write_document_extraction_summary(project.document_extractions, out_dir, doc_policy)
+    project.generated_artifacts.append(str(out_dir / "17_document_extraction_summary.yaml"))
     _write_artifacts(project)
 
     # --- PART 9: review pack ---

@@ -1,0 +1,105 @@
+# config/system/onboarding_modes.yaml
+# ---------------------------------------------------------------------------
+# Onboarding Agent v2 — mode policy (PART 1).
+#
+# Three distinct onboarding modes, each with its own required fields, gap
+# severity profile, readiness label and outputs in/out of scope. The mode
+# changes how the SAME detected gaps are prioritised — it does not change the
+# deterministic detection itself.
+#
+# Severity model (used by gap_analyzer):
+#   * gap_category_severity   - the baseline severity for each gap category in
+#                               this mode (info|low|medium|high|blocking).
+#   * blocking_gap_categories - categories that may ESCALATE to 'blocking' when
+#                               the deterministic detector flags a critical
+#                               (missing / conflicting) gap. Categories not in
+#                               this list are capped at their baseline severity.
+# ---------------------------------------------------------------------------
+
+default_mode: regulatory_mi
+
+modes:
+
+  # =========================================================================
+  mi_mna:
+    objective: >-
+      Rapid portfolio diligence: stratifications, static pools, performance
+      analysis and buyer / funder review. Regulatory completeness is NOT a
+      blocker.
+    readiness_status_label: ready_for_mi_review
+    required_config_fields: [client_name, asset_class, currency, reporting_date]
+    high_priority_fields:
+      - current_principal_balance
+      - current_loan_to_value
+      - collateral_geography
+      - property_type
+      - current_interest_rate
+      - origination_date
+    field_groups_required: [balance, ltv, geography, property, rate, vintage]
+    file_types_expected: [current_loan_report, collateral_report, cashflow_report]
+    gap_category_severity:
+      date: blocking
+      source_of_truth: high
+      enum: medium
+      config: medium
+      geography: info
+      warehouse: medium
+    blocking_gap_categories: [date]
+    recommended_outputs: [mi_readiness, data_quality_report, source_precedence_rules]
+    optional_outputs: [esma_completeness, classification_year]
+
+  # =========================================================================
+  regulatory_mi:
+    objective: >-
+      Regulatory reporting plus MI. Mandatory regulatory fields, enums,
+      reporting date, regime and geography policy must be resolved before
+      handoff.
+    readiness_status_label: ready_for_regulatory_handoff
+    required_config_fields:
+      [client_name, asset_class, currency, reporting_date, regime, classification_year]
+    high_priority_fields:
+      - current_principal_balance
+      - geographic_region_classification
+      - collateral_geography
+    field_groups_required: [balance, geography, regime, enums]
+    file_types_expected: [current_loan_report, collateral_report, cashflow_report]
+    gap_category_severity:
+      date: blocking
+      source_of_truth: high
+      enum: high
+      config: blocking
+      geography: high
+      warehouse: low
+    blocking_gap_categories: [date, config, enum, geography]
+    recommended_outputs:
+      [approved_config, enum_review_decisions, geography_policy, delivery_readiness]
+    optional_outputs: [warehouse_terms]
+
+  # =========================================================================
+  warehouse_securitisation:
+    objective: >-
+      Warehouse monitoring, eligibility, securitisation readiness and funding
+      forecast. Warehouse facility terms and authoritative funded-balance /
+      pipeline sources must be resolved.
+    readiness_status_label: ready_for_warehouse_review
+    required_config_fields:
+      [client_name, asset_class, currency, reporting_date,
+       warehouse_facility_present, advance_rate, margin, warehouse_limit]
+    high_priority_fields:
+      - current_principal_balance
+      - expected_funding_amount
+      - target_pool_balance
+    field_groups_required: [balance, warehouse, pipeline, cashflow]
+    file_types_expected:
+      [warehouse_agreement, current_loan_report, cashflow_report, pipeline_report]
+    gap_category_severity:
+      date: blocking
+      source_of_truth: high
+      enum: medium
+      config: high
+      geography: info
+      warehouse: high
+    blocking_gap_categories: [date, warehouse, source_of_truth]
+    recommended_outputs:
+      [warehouse_terms, source_precedence_rules, funding_bridge]
+    optional_outputs: [esma_completeness, classification_year]
