@@ -34,6 +34,9 @@ class FileInventoryItem:
     column_count: Optional[int] = None
     sheet_name: str = ""
     detected_reporting_date: str = ""
+    # PART 5 — one file may carry several data domains (loan, borrower,
+    # collateral, cashflow, pipeline, warehouse_terms, securitisation_terms).
+    domains_detected: List[str] = field(default_factory=list)
     notes: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
@@ -193,6 +196,28 @@ class DocumentExtraction:
 
 
 @dataclass
+class DomainCoverage:
+    """Coverage assessment for one data domain (PART 6).
+
+    A domain is covered by *mapped / in-scope fields*, not by file count. A
+    single combined master tape can therefore cover the loan AND collateral
+    domains at once.
+    """
+
+    domain: str = ""
+    status: str = "missing"          # covered | partially_covered | missing | out_of_scope
+    source_files: List[str] = field(default_factory=list)
+    mapped_fields_count: int = 0
+    required_fields_count: int = 0
+    missing_required_fields: List[str] = field(default_factory=list)
+    blocking: bool = False
+    notes: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
 class GapQuestion:
     """A user-facing question raised by the gap analyzer (PART 8)."""
 
@@ -251,6 +276,15 @@ class OnboardingProject:
     config_suggestions: List[ConfigSuggestion] = field(default_factory=list)
     document_extractions: List[DocumentExtraction] = field(default_factory=list)
     gap_questions: List[GapQuestion] = field(default_factory=list)
+    domain_coverage: List[DomainCoverage] = field(default_factory=list)
+
+    # Azure-ready run metadata (PART 3) — populated when the run-folder contract
+    # is used; the review pack surfaces these.
+    client_id: str = ""
+    run_id: str = ""
+    storage_backend: str = "local"
+    input_uri: str = ""
+    output_uri: str = ""
 
     # Mode field-scope (PART 3-7)
     out_of_scope_fields: List[Dict[str, Any]] = field(default_factory=list)
@@ -279,6 +313,12 @@ class OnboardingProject:
             "output_dir": self.output_dir,
             "onboarding_mode": self.onboarding_mode,
             "review_status": self.review_status,
+            "client_id": self.client_id,
+            "run_id": self.run_id,
+            "storage_backend": self.storage_backend,
+            "input_uri": self.input_uri,
+            "output_uri": self.output_uri,
+            "domain_coverage": [d.to_dict() for d in self.domain_coverage],
             "field_scope_summary": self.field_scope_summary,
             "out_of_scope_fields_count": len(self.out_of_scope_fields),
             "llm_usage_summary": self.llm_usage_summary,

@@ -1,0 +1,9 @@
+collateral_id,loan_id,property_type,property_post_code,collateral_region,valuation_amount,current_ltv,reporting_date
+C0001,L0001,Detached house,SW1A 2AA,North West,295000.00,0.50,2026-01-31
+C0002,L0002,Flat,M1 4WX,South East,210000.00,0.46,2026-01-31
+C0003,L0003,Semi-detached,B1 1AA,West Midlands,410000.00,0.51,2026-01-31
+C0004,L0004,Terraced,LS1 2AB,Yorkshire,165000.00,0.46,2026-01-31
+C0005,L0005,Detached house,EH1 1AA,Scotland,,0.55,2026-01-31
+C0006,L0006,Bungalow,CF10 1AA,Wales,130000.00,0.40,2026-01-31
+C0007,L0007,Flat,NE1 1AA,North East,350000.00,0.54,2026-01-31
+C0008,L0008,Detached house,BS1 1AA,South West,220000.00,0.45,2026-01-31

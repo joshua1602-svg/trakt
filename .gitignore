@@ -73,3 +73,6 @@ logs/
 # Trakt Onboarding Agent v2 generated packs
 onboarding_output/
 !synthetic_onboarding_pack/*.csv
+# Onboarding Agent Phase 1 — domain-based synthetic packs (committed fixtures)
+!synthetic_onboarding_pack_domain_based/scenario_a_combined/*.csv
+!synthetic_onboarding_pack_domain_based/scenario_b_split/*.csv

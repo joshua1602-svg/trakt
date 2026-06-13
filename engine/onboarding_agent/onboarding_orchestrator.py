@@ -25,7 +25,14 @@ import yaml
 
 from engine.gate_1_alignment.semantic_alignment import load_field_registry
 
-from . import config_suggester, file_classifier, file_profiler, gap_analyzer, source_consolidator
+from . import (
+    config_suggester,
+    domain_coverage,
+    file_classifier,
+    file_profiler,
+    gap_analyzer,
+    source_consolidator,
+)
 from .document_extractor import (
     extract_documents,
     load_document_policy,
@@ -108,6 +115,11 @@ def run_onboarding(
     llm_max_calls: int | None = None,
     llm_max_items_per_call: int | None = None,
     llm_callable=None,
+    client_id: str = "",
+    run_id: str = "",
+    storage_backend: str = "local",
+    input_uri: str = "",
+    output_uri: str = "",
 ) -> OnboardingProject:
     in_dir = Path(input_dir)
     out_dir = Path(output_dir)
@@ -136,6 +148,11 @@ def run_onboarding(
         onboarding_mode=policy.name,
         registry_path=str(registry_path),
         aliases_dir=str(aliases_dir),
+        client_id=client_id,
+        run_id=run_id,
+        storage_backend=storage_backend or "local",
+        input_uri=input_uri,
+        output_uri=output_uri,
     )
 
     # --- PART 3: classify ---
@@ -235,6 +252,25 @@ def run_onboarding(
     project.llm_usage_summary = llm_usage
     # Excess uncertainty becomes user gap questions instead of token spend.
     project.gap_questions.extend(llm_gap_questions)
+
+    # --- PART 5/6: domain detection + coverage (domain-based, not file-based) ---
+    registry_fields = load_field_registry(Path(registry_path)).get("fields", {}) or {}
+    column_index: Dict[str, List[str]] = {}
+    for item in inventory:
+        df = dataframes.get(item.file_path)
+        if df is not None:
+            column_index[item.file_name] = [str(c) for c in df.columns]
+    domain_coverage.annotate_inventory_domains(
+        inventory, project.mapping_candidates, registry_fields, column_index
+    )
+    project.domain_coverage = domain_coverage.assess_domain_coverage(
+        inventory, project.mapping_candidates, field_scope, policy.name,
+        registry_fields, document_extractions=project.document_extractions,
+        column_index=column_index,
+    )
+    domain_coverage.write_domain_coverage_artifacts(project.domain_coverage, out_dir)
+    project.generated_artifacts.append(str(out_dir / "17_domain_coverage.csv"))
+    project.generated_artifacts.append(str(out_dir / "17_domain_coverage.json"))
 
     # --- mode-aware review status / readiness ---
     project.review_status = compute_readiness(project.gap_questions, policy)

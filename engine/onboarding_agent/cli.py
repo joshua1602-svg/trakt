@@ -40,7 +40,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--input-dir", required=True, help="Folder of lender onboarding artefacts.")
     p.add_argument("--client-name", required=True, help="Client / lender name.")
-    p.add_argument("--output-dir", required=True, help="Output folder for the onboarding pack.")
+    p.add_argument(
+        "--output-dir",
+        default="",
+        help="Output folder for the onboarding pack (defaults to --project-dir).",
+    )
+    # --- PART 3/4: Azure-ready run-folder contract ---
+    p.add_argument("--project-dir", default="", help="Run project dir (holds numbered artefacts).")
+    p.add_argument("--output-root", default="", help="Consolidated output root (default <project>/output).")
+    p.add_argument("--client-id", default="", help="Stable client id for the run folder / manifests.")
+    p.add_argument("--run-id", default="", help="Run id (e.g. run_001 or an ISO timestamp).")
+    p.add_argument(
+        "--storage-backend",
+        choices=["local", "azure_blob_compatible"],
+        default="local",
+        help="local (default) | azure_blob_compatible. The latter only adds "
+        "Azure-style URIs to manifests; it never uploads.",
+    )
+    p.add_argument("--input-uri", default="", help="Optional azure:// URI for the uploaded input pack.")
+    p.add_argument("--output-uri", default="", help="Optional azure:// URI for the output root.")
     p.add_argument(
         "--mode",
         choices=list(VALID_MODES) + ["mi_mna"],
@@ -122,6 +140,118 @@ def build_ingest_parser() -> argparse.ArgumentParser:
     return p
 
 
+def build_promote_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        description="Dry-run Azure-ready promotion: build central tapes, lineage, "
+        "gaps, domain coverage and handoff manifests. Never runs Gates 1–5."
+    )
+    p.add_argument("--project-dir", required=True, help="Existing onboarding output folder.")
+    p.add_argument("--output-root", default="", help="Consolidated output root (default <project>/output).")
+    p.add_argument("--client-id", default="", help="Client id (defaults to run summary / project name).")
+    p.add_argument("--run-id", default="", help="Run id (defaults to run summary).")
+    p.add_argument("--input-dir", default="", help="Override input dir (default from run summary).")
+    p.add_argument(
+        "--registry", default="config/system/fields_registry.yaml",
+        help="Canonical field registry YAML.",
+    )
+    p.add_argument("--mode", default="", help="Override onboarding mode (default from run summary).")
+    p.add_argument("--approved-only", action="store_true",
+                   help="Require approved artefacts (10–15) to be present.")
+    p.add_argument("--dry-run", action="store_true",
+                   help="Dry-run (default behaviour; no Azure upload, no Gates).")
+    p.add_argument(
+        "--storage-backend", choices=["local", "azure_blob_compatible"], default="local",
+        help="local | azure_blob_compatible (adds Azure URIs to manifests only).",
+    )
+    p.add_argument("--input-uri", default="", help="Optional azure:// URI for the input pack.")
+    p.add_argument("--output-uri", default="", help="Optional azure:// URI for the output root.")
+    p.add_argument("--enable-regulatory-reporting", action="store_true",
+                   help="Activate regulatory fields in scope (warehouse mode).")
+    return p
+
+
+def run_promote(args) -> int:
+    import json as _json
+
+    from engine.onboarding_agent import (
+        central_tape_builder,
+        domain_coverage as _dc,
+        promotion_planner,
+        storage_paths,
+    )
+
+    project_dir = Path(args.project_dir)
+    run_summary = {}
+    rs_path = project_dir / "09_onboarding_run_summary.json"
+    if rs_path.exists():
+        run_summary = _json.loads(rs_path.read_text(encoding="utf-8"))
+
+    mode = args.mode or run_summary.get("onboarding_mode", "regulatory_mi")
+    client_id = args.client_id or run_summary.get("client_id", "") or project_dir.name
+    run_id = args.run_id or run_summary.get("run_id", "") or "run"
+    client_name = run_summary.get("client_name", client_id)
+    input_dir = args.input_dir or run_summary.get("input_dir", "")
+
+    if args.approved_only:
+        missing = [n for n in ("10_approved_onboarding_project.yaml", "11_approved_config.yaml")
+                   if not (project_dir / n).exists()]
+        if missing:
+            print(f"[promote] --approved-only set but approved artefacts missing: {missing}")
+            print("[promote] Run `ingest-answers --confirm` first.")
+            return 2
+
+    run_paths = storage_paths.resolve_run_paths(
+        project_dir=str(project_dir),
+        input_dir=input_dir or None,
+        output_root=args.output_root or None,
+        client_id=client_id,
+        run_id=run_id,
+        storage_backend=args.storage_backend,
+        input_uri=args.input_uri,
+        output_uri=args.output_uri,
+    )
+
+    # Domain coverage — build if not already present.
+    coverage = _dc.load_coverage(project_dir / "17_domain_coverage.json")
+    if not coverage:
+        coverage = _dc.rebuild_coverage(
+            project_dir, args.registry, mode,
+            regulatory_reporting_enabled=args.enable_regulatory_reporting,
+        )
+        _dc.write_domain_coverage_artifacts(coverage, project_dir)
+
+    tape_result = central_tape_builder.build_central_tapes(
+        project_dir, run_paths, args.registry, mode=mode,
+        regulatory_reporting_enabled=args.enable_regulatory_reporting,
+    )
+    plan = promotion_planner.build_promotion_plan(
+        project_dir, run_paths, tape_result, coverage, mode,
+        args.enable_regulatory_reporting, client_name=client_name, project_id=client_id,
+    )
+
+    # Reflect the promotion results back into the static review pack.
+    try:
+        from engine.onboarding_agent.review_pack_builder import refresh_review_pack_promotion
+        refresh_review_pack_promotion(project_dir, Path(run_paths.output_root))
+    except Exception:
+        pass
+
+    print("=" * 64)
+    print("Onboarding promotion (DRY-RUN — no Gates, no Azure upload)")
+    print(f"Mode: {mode} · storage_backend: {run_paths.storage_backend}")
+    print(f"Central lender tape: {tape_result['central_lender_tape_created']} "
+          f"({tape_result['loan_count']} loans, {tape_result['mapped_field_count']} fields)")
+    print(f"Central pipeline tape: {tape_result['central_pipeline_tape_created']} "
+          f"({tape_result['pipeline_count']} applications)")
+    print(f"Conflicts: {tape_result['conflict_count']} · gaps: {tape_result['gap_count']}")
+    print(f"Readiness: {plan['readiness_status']}")
+    print("Manifests:")
+    for k in ("promotion_plan_path", "handoff_manifest_path", "readiness_path", "pipeline_trigger_path"):
+        print(f"  - {plan[k]}")
+    print("=" * 64)
+    return 0
+
+
 def build_interpret_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description="Interpret a natural-language answer into a structured spec (dry-run)."
@@ -170,7 +300,31 @@ def main(argv=None) -> int:
         _print_ingestion_report(report)
         return 0
 
+    # Subcommand: promote (Azure-ready dry-run handoff)
+    if argv and argv[0] == "promote":
+        args = build_promote_parser().parse_args(argv[1:])
+        return run_promote(args)
+
     args = build_parser().parse_args(argv)
+
+    # Resolve the Azure-ready run-folder contract (PART 3/4). The numbered
+    # review artefacts continue to live in the project/output dir.
+    from engine.onboarding_agent import storage_paths
+    output_dir = args.output_dir or args.project_dir
+    if not output_dir:
+        build_parser().error("one of --output-dir or --project-dir is required")
+    project_dir = args.project_dir or output_dir
+    run_paths = storage_paths.resolve_run_paths(
+        project_dir=project_dir,
+        input_dir=args.input_dir,
+        output_root=args.output_root or None,
+        client_id=args.client_id,
+        run_id=args.run_id,
+        storage_backend=args.storage_backend,
+        input_uri=args.input_uri,
+        output_uri=args.output_uri,
+    )
+    args.output_dir = output_dir
 
     # Backward-compatibility: warn on deprecated mode aliases.
     if args.mode:
@@ -193,6 +347,11 @@ def main(argv=None) -> int:
         llm_budget_profile=args.llm_budget_profile,
         llm_max_calls=args.llm_max_calls,
         llm_max_items_per_call=args.llm_max_items_per_call,
+        client_id=args.client_id,
+        run_id=args.run_id,
+        storage_backend=args.storage_backend,
+        input_uri=args.input_uri,
+        output_uri=args.output_uri,
     )
 
     print("=" * 64)
