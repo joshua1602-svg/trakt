@@ -76,6 +76,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Required to actually write approved artefacts when ingesting answers.",
     )
+    p.add_argument(
+        "--enable-regulatory-reporting",
+        action="store_true",
+        help="For warehouse_securitisation: activate regulatory fields in scope.",
+    )
     return p
 
 
@@ -159,6 +164,7 @@ def main(argv=None) -> int:
         project_id=args.project_id,
         enable_handoff=not args.no_handoff,
         mode=args.mode,
+        regulatory_reporting_enabled=args.enable_regulatory_reporting,
     )
 
     print("=" * 64)

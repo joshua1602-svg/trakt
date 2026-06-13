@@ -44,6 +44,30 @@ def _core(f):
     return _FIELDS.get(f, {}).get("core_canonical") is True
 
 
+class TestRegistryKey(unittest.TestCase):
+    """PART 1 — the real registry uses core_canonical (not canonical_core)."""
+
+    def test_core_canonical_key_present_and_counts(self):
+        core = [f for f, m in _FIELDS.items() if m.get("core_canonical") is True]
+        self.assertEqual(len(core), 14)
+        # The wrong key must not exist anywhere in the registry.
+        self.assertFalse(any("canonical_core" in m for m in _FIELDS.values()))
+
+    def test_category_counts(self):
+        reg = [f for f, m in _FIELDS.items() if m.get("category") == "regulatory"]
+        ana = [f for f, m in _FIELDS.items() if m.get("category") == "analytics"]
+        self.assertEqual(len(reg), 315)
+        self.assertEqual(len(ana), 156)
+
+    def test_regulatory_core_field_example(self):
+        # current_principal_balance is regulatory + core -> stays in MI-only scope.
+        self.assertEqual(_cat("current_principal_balance"), "regulatory")
+        self.assertTrue(_core("current_principal_balance"))
+        # employment_status is regulatory + non-core -> excluded in MI-only.
+        self.assertEqual(_cat("employment_status"), "regulatory")
+        self.assertFalse(_core("employment_status"))
+
+
 class TestResolver(unittest.TestCase):
     def test_mi_only_excludes_regulatory_noncore(self):
         s = _scope("mi_only")
@@ -55,10 +79,10 @@ class TestResolver(unittest.TestCase):
         # No analytics field is excluded.
         self.assertFalse(s.excluded_fields & s.analytics_fields)
 
-    def test_mi_only_includes_canonical_core_even_if_regulatory(self):
+    def test_mi_only_includes_core_canonical_even_if_regulatory(self):
         s = _scope("mi_only")
         self.assertIn("current_principal_balance", s.included_fields)  # core + regulatory
-        self.assertTrue(s.canonical_core_fields.issubset(s.included_fields))
+        self.assertTrue(s.core_canonical_fields.issubset(s.included_fields))
         # A regulatory core field is included despite being regulatory category.
         self.assertEqual(_cat("current_principal_balance"), "regulatory")
         self.assertTrue(_core("current_principal_balance"))
@@ -69,10 +93,10 @@ class TestResolver(unittest.TestCase):
         for f in analytics_examples:
             self.assertIn(f, s.included_fields)
 
-    def test_mi_only_blocking_is_canonical_core_only(self):
+    def test_mi_only_blocking_is_core_canonical_only(self):
         s = _scope("mi_only")
         self.assertTrue(s.blocking_fields)
-        self.assertTrue(s.blocking_fields.issubset(s.canonical_core_fields))
+        self.assertTrue(s.blocking_fields.issubset(s.core_canonical_fields))
 
     def test_mna_dd_full_universe(self):
         s = _scope("mna_dd")
@@ -83,7 +107,7 @@ class TestResolver(unittest.TestCase):
         s = _scope("mna_dd")
         # Blocking limited to structural viability essentials, not all core.
         self.assertTrue(s.blocking_fields.issubset({"loan_identifier", "current_principal_balance"}))
-        self.assertLess(len(s.blocking_fields), len(s.canonical_core_fields))
+        self.assertLess(len(s.blocking_fields), len(s.core_canonical_fields))
 
     def test_regulatory_mi_full_universe_and_regime(self):
         s = _scope("regulatory_mi")
@@ -149,6 +173,27 @@ class TestScopeApplied(unittest.TestCase):
         fields = {c.field for c in self.mna.config_suggestions}
         self.assertNotIn("regime", fields)  # only possible_regime, not required regime
         self.assertIn("possible_regime", fields)
+
+
+class TestRegulatoryReportingFlag(unittest.TestCase):
+    def test_warehouse_regulatory_flag_activates_regulatory(self):
+        tmp = Path(tempfile.mkdtemp(prefix="fs_reg_"))
+        proj = run_onboarding(
+            input_dir=str(PACK), client_name="WH", output_dir=str(tmp),
+            registry_path=str(REGISTRY_PATH), aliases_dir=str(ALIASES),
+            mode="warehouse_securitisation", regulatory_reporting_enabled=True,
+        )
+        # With the flag on, no regulatory field is diverted out of scope.
+        self.assertEqual(proj.out_of_scope_fields, [])
+
+    def test_warehouse_without_flag_excludes_regulatory(self):
+        tmp = Path(tempfile.mkdtemp(prefix="fs_noreg_"))
+        proj = run_onboarding(
+            input_dir=str(PACK), client_name="WH", output_dir=str(tmp),
+            registry_path=str(REGISTRY_PATH), aliases_dir=str(ALIASES),
+            mode="warehouse_securitisation",
+        )
+        self.assertTrue(proj.out_of_scope_fields)
 
 
 class TestAnswerIngestionScope(unittest.TestCase):

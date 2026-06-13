@@ -115,6 +115,43 @@ class TestModeSeverity(unittest.TestCase):
         self.assertFalse(load_mode_policy("mi_only").regime_config_required)
         self.assertFalse(load_mode_policy("mna_dd").regime_config_required)
 
+    # --- PART 3: out-of-scope regulatory enum suppression ---
+    def _emp_enum(self, project):
+        return [q for q in project.gap_questions
+                if q.category == "enum" and q.subject == "employment_status"]
+
+    def test_mi_only_suppresses_manual_enum_gap(self):
+        # employment_status is regulatory non-core -> out of scope in mi_only.
+        self.assertEqual(self._emp_enum(self.mi), [])
+
+    def test_mna_dd_shows_manual_enum_visible_nonblocking(self):
+        qs = self._emp_enum(self.mna)
+        self.assertTrue(qs)
+        self.assertNotEqual(qs[0].severity, "blocking")  # visible but non-blocking
+
+    def test_regulatory_shows_manual_enum_active(self):
+        qs = self._emp_enum(self.reg)
+        self.assertTrue(qs)
+        self.assertIn(qs[0].severity, ("high", "blocking"))
+
+    # --- PART 5: missing in-scope core-field gaps ---
+    def test_mi_only_emits_missing_core_field_gaps(self):
+        core_qs = [q for q in self.mi.gap_questions if q.category == "core_field"]
+        self.assertTrue(core_qs)
+        self.assertTrue(all(q.severity == "blocking" for q in core_qs))
+
+    def test_mna_dd_missing_core_nonblocking(self):
+        core_qs = [q for q in self.mna.gap_questions if q.category == "core_field"]
+        self.assertTrue(core_qs)
+        # mna_dd blocks only on structural viability; non-structural core is high.
+        self.assertTrue(all(q.severity != "blocking" for q in core_qs))
+
+    def test_mi_only_no_core_gap_for_regulatory_noncore(self):
+        # A regulatory non-core field (employment_status) must never appear as a
+        # missing-core-field gap.
+        subjects = {q.subject for q in self.mi.gap_questions if q.category == "core_field"}
+        self.assertNotIn("employment_status", subjects)
+
 
 class TestModeReviewPack(unittest.TestCase):
     def test_review_pack_shows_mode_and_field_scope(self):
@@ -123,7 +160,7 @@ class TestModeReviewPack(unittest.TestCase):
         self.assertIn("mi_only", html)
         self.assertIn("mode-specific readiness", html.lower())
         self.assertIn("Field scope for this onboarding mode", html)
-        self.assertIn("Regulatory fields are excluded", html)
+        self.assertIn("Regulatory non-core fields are excluded", html)
 
 
 if __name__ == "__main__":

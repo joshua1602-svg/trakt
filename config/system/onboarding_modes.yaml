@@ -5,11 +5,11 @@
 # Modes now drive FIELD SCOPE (inclusion / exclusion / blocking) using the
 # existing fields_registry.yaml metadata — no new taxonomy:
 #   * category       : regulatory | analytics
-#   * core_canonical : true | false   (spec calls this canonical_core)
+#   * core_canonical : true | false   (the registry's core-field flag)
 #
 # Field-scope keys per mode:
 #   regime_config_required   - is regime/classification/geography config required
-#   include_canonical_core   - always include core_canonical fields (overrides
+#   include_core_canonical   - always include core_canonical fields (overrides
 #                              category exclusion — a core balance/date stays in)
 #   include_categories       - registry categories to include
 #   exclude_categories       - registry categories to exclude (unless core)
@@ -38,12 +38,12 @@ modes:
       missing canonical-core fields.
     readiness_status_label: ready_for_mi_review
     regime_config_required: false
-    include_canonical_core: true
+    include_core_canonical: true
     include_categories: [analytics]
     exclude_categories: [regulatory]
     attempt_full_coverage: false
     blocking_rules:
-      canonical_core_missing: true
+      core_canonical_missing: true
       analytics_missing: false
       regulatory_missing: false
     required_config_fields: [client_name, asset_class, currency, reporting_date]
@@ -68,13 +68,13 @@ modes:
       structural viability (identifier, balance, reporting date, join key).
     readiness_status_label: ready_for_mi_review
     regime_config_required: false
-    include_canonical_core: true
+    include_core_canonical: true
     include_categories: [analytics, regulatory]
     exclude_categories: []
     attempt_full_coverage: true
     blocking_rules:
       structural_viability_only: true
-      canonical_core_missing: false
+      core_canonical_missing: false
       analytics_missing: false
       regulatory_missing: false
     structural_viability_fields: [loan_identifier, current_principal_balance]
@@ -101,12 +101,12 @@ modes:
       policy must be resolved.
     readiness_status_label: ready_for_regulatory_handoff
     regime_config_required: true
-    include_canonical_core: true
+    include_core_canonical: true
     include_categories: [analytics, regulatory]
     exclude_categories: []
     attempt_full_coverage: true
     blocking_rules:
-      canonical_core_missing: true
+      core_canonical_missing: true
       regulatory_mandatory_missing: true
       regulatory_enum_invalid: true
       analytics_missing: false
@@ -133,14 +133,14 @@ modes:
       fields only active if regulatory reporting is explicitly enabled.
     readiness_status_label: ready_for_warehouse_review
     regime_config_required: false
-    include_canonical_core: true
+    include_core_canonical: true
     include_categories: [analytics]
     exclude_categories: [regulatory]
     include_field_groups: [warehouse, pipeline, cashflow, funding]
     regulatory_fields_active_if: [regulatory_reporting_enabled]
     attempt_full_coverage: false
     blocking_rules:
-      canonical_core_missing: true
+      core_canonical_missing: true
       warehouse_core_missing: true
       source_of_truth_missing: true
       analytics_missing: false

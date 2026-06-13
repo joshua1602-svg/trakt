@@ -6,7 +6,7 @@ PART 3 — resolve the in/out-of-scope field universe for an onboarding mode,
 driven entirely by the EXISTING fields_registry.yaml metadata:
 
   * ``category``       : regulatory | analytics
-  * ``core_canonical`` : true | false   (the spec's "canonical_core")
+  * ``core_canonical`` : true | false   (the registry's core-field flag)
 
 No new taxonomy is introduced. The key precedence rule is that
 ``core_canonical`` fields are ALWAYS included even when their ``category`` is in
@@ -35,7 +35,7 @@ class FieldScopeResult:
     blocking_fields: Set[str] = field(default_factory=set)
     analytics_fields: Set[str] = field(default_factory=set)
     regulatory_fields: Set[str] = field(default_factory=set)
-    canonical_core_fields: Set[str] = field(default_factory=set)
+    core_canonical_fields: Set[str] = field(default_factory=set)
     out_of_scope_reason_by_field: Dict[str, str] = field(default_factory=dict)
 
     def is_excluded(self, field_name: str) -> bool:
@@ -53,7 +53,7 @@ class FieldScopeResult:
             "included_fields_count": len(self.included_fields),
             "excluded_fields_count": len(self.excluded_fields),
             "excluded_regulatory_fields_count": len(self.excluded_fields & self.regulatory_fields),
-            "canonical_core_fields_count": len(self.canonical_core_fields),
+            "core_canonical_fields_count": len(self.core_canonical_fields),
             "analytics_fields_count": len(self.analytics_fields),
             "regulatory_fields_count": len(self.regulatory_fields),
             "blocking_fields_count": len(self.blocking_fields),
@@ -86,7 +86,7 @@ def resolve_field_scope(
     universe = select_registry_fields(registry, portfolio_type)
     uni_set = set(universe)
 
-    canonical_core = {f for f in universe if (fields.get(f, {}) or {}).get("core_canonical") is True}
+    core_canonical = {f for f in universe if (fields.get(f, {}) or {}).get("core_canonical") is True}
     regulatory = {f for f in universe if (fields.get(f, {}) or {}).get("category") == "regulatory"}
     analytics = {f for f in universe if (fields.get(f, {}) or {}).get("category") == "analytics"}
 
@@ -97,8 +97,8 @@ def resolve_field_scope(
 
     # ---- Inclusion ----
     included: Set[str] = set()
-    if policy.include_canonical_core:
-        included |= canonical_core  # core always wins over category exclusion
+    if policy.include_core_canonical:
+        included |= core_canonical  # core always wins over category exclusion
     for cat in policy.include_categories:
         included |= {f for f in universe if (fields.get(f, {}) or {}).get("category") == cat}
     if regulatory_active:
@@ -121,9 +121,9 @@ def resolve_field_scope(
     blocking: Set[str] = set()
     if rules.get("structural_viability_only"):
         struct = set(policy.structural_viability_fields) & uni_set
-        blocking = struct or (canonical_core & {"loan_identifier", "current_principal_balance"})
-    elif rules.get("canonical_core_missing", True):
-        blocking = set(canonical_core)
+        blocking = struct or (core_canonical & {"loan_identifier", "current_principal_balance"})
+    elif rules.get("core_canonical_missing", True):
+        blocking = set(core_canonical)
     # Only ever block on included fields.
     blocking &= included
 
@@ -134,6 +134,6 @@ def resolve_field_scope(
         blocking_fields=blocking,
         analytics_fields=analytics,
         regulatory_fields=regulatory,
-        canonical_core_fields=canonical_core,
+        core_canonical_fields=core_canonical,
         out_of_scope_reason_by_field=reasons,
     )

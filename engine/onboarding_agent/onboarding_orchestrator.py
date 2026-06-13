@@ -98,6 +98,7 @@ def run_onboarding(
     project_id: str = "",
     enable_handoff: bool = True,
     mode: str = "",
+    regulatory_reporting_enabled: bool = False,
 ) -> OnboardingProject:
     in_dir = Path(input_dir)
     out_dir = Path(output_dir)
@@ -138,7 +139,9 @@ def run_onboarding(
     project.field_profiles = profiles
 
     # --- Field scope (registry category + core_canonical, driven by mode) ---
-    field_scope = resolve_field_scope(str(registry_path), policy)
+    field_scope = resolve_field_scope(
+        str(registry_path), policy, regulatory_reporting_enabled=regulatory_reporting_enabled
+    )
     project.field_scope_summary = field_scope.counts()
 
     # --- PART 5a: candidate keys ---
@@ -155,7 +158,7 @@ def run_onboarding(
         t = m.candidate_canonical_field
         if not t:
             continue
-        if t in field_scope.canonical_core_fields:
+        if t in field_scope.core_canonical_fields:
             by_cat["core"] += 1
         elif t in field_scope.regulatory_fields:
             by_cat["regulatory"] += 1
@@ -186,6 +189,8 @@ def run_onboarding(
     project.gap_questions = gap_analyzer.analyze_gaps(
         inventory, profiles, project.overlap_analysis, project.config_suggestions,
         dataframes, mode_policy=policy, field_scope=field_scope,
+        out_of_scope_fields=project.out_of_scope_fields,
+        mapping_candidates=project.mapping_candidates,
     )
 
     # --- mode-aware review status / readiness ---

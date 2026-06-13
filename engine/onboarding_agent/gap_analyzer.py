@@ -19,7 +19,7 @@ Question categories produced:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
@@ -76,7 +76,16 @@ def _enum_questions(
     inventory: List[FileInventoryItem],
     dataframes: Dict[str, pd.DataFrame],
     start_idx: int,
+    out_of_scope_columns: Optional[set] = None,
 ) -> List[GapQuestion]:
+    """Generate enum-quality gaps.
+
+    Columns diverted out of scope by the mode field scope
+    (``out_of_scope_columns`` = set of ``(file_name, column)``) are skipped: a
+    regulatory non-core field that is out of scope for MI-only must not be typed
+    as an active enum, validated, or produce an actionable enum gap.
+    """
+    out_of_scope_columns = out_of_scope_columns or set()
     questions: List[GapQuestion] = []
     idx = start_idx
     seen: set = set()
@@ -85,6 +94,8 @@ def _enum_questions(
         if df is None:
             continue
         for col in df.columns:
+            if (item.file_name, str(col)) in out_of_scope_columns:
+                continue  # field is out of scope for this mode — no enum validation
             col_norm = str(col).lower().replace(" ", "_")
             if col_norm not in _KNOWN_ENUM_FIELDS and not any(
                 h in col_norm for h in _ENUM_NAME_HINTS
@@ -214,6 +225,54 @@ def _warehouse_gap_questions(
     return questions
 
 
+# Actions a reviewer can take on a missing / unmapped core field.
+CORE_FIELD_ACTIONS = [
+    "select_source_column",
+    "provide_mapping_override",
+    "mark_unavailable",
+    "not_applicable",
+]
+
+
+def _missing_core_field_questions(field_scope, mapping_candidates, start_idx: int):
+    """Emit answerable gaps for in-scope core_canonical fields with no mapping.
+
+    Severity is ``blocking`` when the field is in the mode's blocking set, else
+    ``high`` (visible but non-blocking — e.g. non-structural core fields in
+    mna_dd). Out-of-scope / regulatory non-core fields never produce these.
+    """
+    if field_scope is None:
+        return []
+    covered = {
+        m.candidate_canonical_field for m in (mapping_candidates or [])
+        if m.candidate_canonical_field
+    }
+    in_scope_core = field_scope.included_fields & field_scope.core_canonical_fields
+    questions: List[GapQuestion] = []
+    idx = start_idx
+    for fname in sorted(in_scope_core - covered):
+        idx += 1
+        blocking = fname in field_scope.blocking_fields
+        questions.append(
+            GapQuestion(
+                question_id=f"Q{idx}",
+                category="core_field",
+                severity="blocking" if blocking else "high",
+                question=(
+                    f"The core canonical field {fname} is missing or unmapped. "
+                    f"Which source column should be used, or should it be marked unavailable?"
+                ),
+                reason=f"Core canonical field '{fname}' has no mapping candidate.",
+                candidate_answers=list(CORE_FIELD_ACTIONS),
+                default_recommendation="mark_unavailable",
+                blocking_for=["canonical_loan_reporting"] if blocking else [],
+                source_evidence="field scope (core_canonical=true, unmapped)",
+                subject=fname,
+            )
+        )
+    return questions
+
+
 def analyze_gaps(
     inventory: List[FileInventoryItem],
     profiles: List[ColumnProfile],
@@ -222,15 +281,22 @@ def analyze_gaps(
     dataframes: Optional[Dict[str, pd.DataFrame]] = None,
     mode_policy=None,
     field_scope=None,
+    out_of_scope_fields: Optional[List[Dict[str, Any]]] = None,
+    mapping_candidates: Optional[List[Any]] = None,
 ) -> List[GapQuestion]:
     """Generate gap questions, then re-rank severity for the onboarding mode.
 
     ``mode_policy`` is an optional :class:`mode_policy.ModePolicy`. When omitted
     the legacy (regulatory) severities are returned unchanged. ``field_scope``
     (a :class:`field_scope.FieldScopeResult`) drives out-of-scope summaries and
-    mode-scoped regulatory gap suppression.
+    mode-scoped regulatory gap suppression. ``out_of_scope_fields`` is the list of
+    diverted (file, column) records so their enums are not validated.
     """
     dataframes = dataframes or {}
+    out_of_scope_columns = {
+        (o.get("source_file"), o.get("source_column"))
+        for o in (out_of_scope_fields or [])
+    }
     mode = getattr(mode_policy, "name", "regulatory_mi")
     questions: List[GapQuestion] = []
     idx = 0
@@ -296,8 +362,8 @@ def analyze_gaps(
             )
         )
 
-    # --- Enum quality ---
-    questions.extend(_enum_questions(inventory, dataframes, idx))
+    # --- Enum quality (skip out-of-scope fields) ---
+    questions.extend(_enum_questions(inventory, dataframes, idx, out_of_scope_columns))
     idx = len(questions)  # keep numbering monotonic
 
     # --- Missing / unresolved mandatory config (mode-scoped) ---
@@ -355,6 +421,9 @@ def analyze_gaps(
 
     # --- Warehouse facility terms ---
     questions.extend(_warehouse_gap_questions(inventory, config_suggestions, mode, len(questions)))
+
+    # --- Missing in-scope core canonical fields (answerable) ---
+    questions.extend(_missing_core_field_questions(field_scope, mapping_candidates, len(questions)))
 
     # --- Out-of-scope summary (regulatory fields excluded by mode field scope) ---
     if field_scope is not None:

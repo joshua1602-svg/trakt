@@ -119,21 +119,26 @@ def build_review_pack(project: OnboardingProject, out_path: Path) -> Path:
     # Field scope (PART 7) — registry category + core_canonical driven.
     _SCOPE_EXPLANATIONS = {
         "mi_only": [
-            "Regulatory fields are excluded from mapping / type requirements.",
-            "Canonical core fields are blocking if missing.",
-            "Analytics fields are mapped where available but are non-blocking if absent.",
-            "Regime configuration (regime / classification_year / ESMA geography) is skipped.",
+            "Regulatory non-core fields are excluded from mapping, typing and "
+            "enum-validation requirements.",
+            "Fields marked core_canonical:true remain in scope even if their "
+            "category is regulatory.",
+            "Analytics fields are mapped where available but missing analytics "
+            "fields do not block onboarding.",
+            "Regime configuration, classification_year and ESMA/FCA delivery "
+            "readiness are skipped in MI-only mode.",
         ],
         "mna_dd": [
-            "Full field coverage attempted, including regulatory fields for visibility.",
-            "Regulatory fields are included for readiness assessment, not delivery.",
-            "Data gaps are non-blocking unless they impair structural diligence viability.",
+            "Full field coverage is attempted, including regulatory fields, for "
+            "diligence and data-quality visibility.",
+            "Regulatory gaps are visible but not blocking unless they impair "
+            "structural viability.",
             "Regime transformation is optional.",
         ],
         "regulatory_mi": [
-            "Full field coverage and regime configuration are required.",
-            "Mandatory regulatory gaps and invalid mandatory enums may block.",
-            "Canonical core gaps may block.",
+            "Full field coverage and regime configuration are in scope.",
+            "Mandatory regulatory gaps and invalid mandatory regulatory enums "
+            "may block handoff.",
         ],
         "warehouse_securitisation": [
             "Core + analytics + warehouse/funding/pipeline/cashflow fields are in scope.",
@@ -146,7 +151,7 @@ def build_review_pack(project: OnboardingProject, out_path: Path) -> Path:
     by_cat = fs.get("mapping_candidates_by_category", {}) or {}
     metric_rows = [
         ["included_fields_count", fs.get("included_fields_count", "—")],
-        ["canonical_core_fields_count", fs.get("canonical_core_fields_count", "—")],
+        ["core_canonical_fields_count", fs.get("core_canonical_fields_count", "—")],
         ["analytics_fields_count", fs.get("analytics_fields_count", "—")],
         ["regulatory_fields_count", fs.get("regulatory_fields_count", "—")],
         ["excluded_regulatory_fields_count", fs.get("excluded_regulatory_fields_count", "—")],

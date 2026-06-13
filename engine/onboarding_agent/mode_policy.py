@@ -50,7 +50,7 @@ class ModePolicy:
 
     # Field-scope controls (registry-driven).
     regime_config_required: bool = False
-    include_canonical_core: bool = True
+    include_core_canonical: bool = True
     include_categories: List[str] = field(default_factory=list)
     exclude_categories: List[str] = field(default_factory=list)
     include_field_groups: List[str] = field(default_factory=list)
@@ -135,7 +135,7 @@ def load_mode_policy(mode: str, policy_path: Path | None = None) -> ModePolicy:
         recommended_outputs=list(m.get("recommended_outputs", []) or []),
         optional_outputs=list(m.get("optional_outputs", []) or []),
         regime_config_required=bool(m.get("regime_config_required", False)),
-        include_canonical_core=bool(m.get("include_canonical_core", True)),
+        include_core_canonical=bool(m.get("include_core_canonical", True)),
         include_categories=list(m.get("include_categories", []) or []),
         exclude_categories=list(m.get("exclude_categories", []) or []),
         include_field_groups=list(m.get("include_field_groups", []) or []),
