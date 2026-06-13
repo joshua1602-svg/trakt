@@ -173,6 +173,59 @@ def build_review_pack(project: OnboardingProject, out_path: Path) -> Path:
     {_table(["File", "Column", "Candidate field", "Category", "Reason"], oos_rows)}
     """
 
+    # 1c. Mapping ambiguities resolved by policy (PART 2)
+    amb_rows = []
+    for a in project.mapping_ambiguities:
+        amb_rows.append([
+            _esc(a.source_file), _esc(a.source_column),
+            f"{_esc(a.selected_canonical_field)}<br><small>{_esc(a.selected_category)}"
+            f"{' · core' if a.selected_core_canonical else ''} · {_esc(round(a.selected_confidence, 3))}</small>",
+            f"{_esc(a.alternative_canonical_field)}<br><small>{_esc(a.alternative_category)} · "
+            f"{_esc(round(a.alternative_confidence, 3))}</small>",
+            _esc(round(a.confidence_delta, 3)),
+            '<span class="badge b-warn">review</span>',
+        ])
+    if mode_name == "mi_only":
+        amb_explainer = (
+            "Regulatory non-core candidates were not selected because this is "
+            "MI-only onboarding. Where a regulatory candidate is core_canonical it "
+            "may still be selected; otherwise the analytics interpretation is kept "
+            "and the regulatory candidate is diverted to out-of-scope."
+        )
+    else:
+        amb_explainer = (
+            "The system found multiple plausible meanings for these source columns. "
+            "Because this onboarding mode includes regulatory fields, it selected the "
+            "regulatory interpretation as the safer default, but marked it for review."
+        )
+    ambiguities_html = f"""
+    <p class="meta">{_esc(amb_explainer)}</p>
+    {_table(["File", "Column", "Selected", "Alternative", "Δ conf", "Status"], amb_rows)}
+    """
+
+    # 1d. LLM usage / cost (PART 5) — shown when enabled or skipped due to budget.
+    llm = project.llm_usage_summary or {}
+    llm_enabled = bool(llm.get("llm_enabled"))
+    llm_skipped_budget = int(llm.get("skipped_due_to_budget", 0) or 0)
+    show_llm = llm_enabled or llm_skipped_budget or llm.get("status")
+    llm_html = ""
+    if show_llm:
+        llm_rows = [
+            ["llm_enabled", llm.get("llm_enabled", False)],
+            ["status", llm.get("status", "ok")],
+            ["provider / model", f"{llm.get('provider')} / {llm.get('model')}"],
+            ["calls_completed", llm.get("calls_completed", 0)],
+            ["items_sent", llm.get("items_sent", 0)],
+            ["prompt_chars_estimated", llm.get("prompt_chars_estimated", 0)],
+            ["output_tokens", llm.get("output_tokens_estimated_or_reported", 0)],
+            ["skipped_due_to_zero_cost_first", llm.get("skipped_due_to_zero_cost_first", 0)],
+            ["skipped_due_to_budget", llm_skipped_budget],
+            ["converted_to_gap_questions", llm.get("unresolved_items_converted_to_gap_questions", 0)],
+            ["estimated_cost", llm.get("estimated_cost", 0)],
+        ]
+        llm_html = _table(["Metric", "Value"],
+                          [[_esc(a), _esc(b)] for a, b in llm_rows])
+
     # 1. Executive summary KPIs
     kpis = [
         ("Files", counts["classified_files"]),
@@ -297,6 +350,8 @@ def build_review_pack(project: OnboardingProject, out_path: Path) -> Path:
 
   <div class="card"><h2>1a. Onboarding mode &amp; mode-specific readiness</h2>{mode_readiness_html}</div>
   <div class="card"><h2>1b. Field scope for this onboarding mode</h2>{field_scope_html}</div>
+  <div class="card"><h2>1c. Mapping ambiguities resolved by policy</h2>{ambiguities_html}</div>
+  {f'<div class="card"><h2>1d. LLM mapping review usage &amp; cost</h2>{llm_html}</div>' if show_llm else ''}
 
   <div class="card"><h2>2. File inventory</h2>{inv_html}</div>
   <div class="card"><h2>3. Detected reporting periods</h2>{periods_html}</div>

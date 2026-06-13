@@ -81,6 +81,30 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="For warehouse_securitisation: activate regulatory fields in scope.",
     )
+    # --- Low-cost LLM mapping review (PART 8). Off / deterministic by default. ---
+    p.add_argument(
+        "--enable-llm-review",
+        action="store_true",
+        help="Opt in to the targeted, bounded LLM mapping reviewer (off by default).",
+    )
+    p.add_argument(
+        "--llm-max-calls",
+        type=int,
+        default=None,
+        help="Cap the number of LLM calls per onboarding run (default from config).",
+    )
+    p.add_argument(
+        "--llm-max-items-per-call",
+        type=int,
+        default=None,
+        help="Cap the number of items sent per LLM call (default from config).",
+    )
+    p.add_argument(
+        "--llm-budget-profile",
+        choices=["off", "low", "standard"],
+        default="",
+        help="LLM budget profile: off (default) | low | standard.",
+    )
     return p
 
 
@@ -165,6 +189,10 @@ def main(argv=None) -> int:
         enable_handoff=not args.no_handoff,
         mode=args.mode,
         regulatory_reporting_enabled=args.enable_regulatory_reporting,
+        enable_llm_review=args.enable_llm_review,
+        llm_budget_profile=args.llm_budget_profile,
+        llm_max_calls=args.llm_max_calls,
+        llm_max_items_per_call=args.llm_max_items_per_call,
     )
 
     print("=" * 64)

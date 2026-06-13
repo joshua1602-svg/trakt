@@ -5,6 +5,63 @@
 confidence_threshold_auto: 0.92    # >= this → auto-accepted, no review
 confidence_threshold_review: 0.75  # < this → flagged for review / sent to LLM
 
+# ---------------------------------------------------------------------------
+# Mapping ambiguity policy (regulatory-preference rule).
+# When a source column has multiple plausible canonical targets whose top
+# confidence scores are within `ambiguity_delta_threshold`, and one target is
+# regulatory while another is non-regulatory, the regulatory-preference rule
+# applies (see engine/onboarding_agent/ambiguity_rule.py). The rule is always
+# flagged for review and never reintroduces regulatory non-core fields into
+# mi_only.
+# ---------------------------------------------------------------------------
+mapping:
+  ambiguity_delta_threshold: 0.10           # top candidates within this delta => ambiguous
+  min_ambiguity_candidate_confidence: 0.60  # both competitors must score >= this
+
+# ---------------------------------------------------------------------------
+# Low-cost LLM policy for onboarding mapping interpretation (PART 3).
+# Off by default. The LLM is a TARGETED, BOUNDED fallback only — deterministic
+# matching, aliases, the field registry, file context, data profiling and value
+# matching are always tried first. The LLM never writes final mappings/config,
+# never sees full data files or full documents, and excess uncertainty is
+# converted to user gap questions instead of unbounded token spend.
+# ---------------------------------------------------------------------------
+llm_policy:
+  enabled: false                       # opt-in only (CLI/config)
+  provider: anthropic
+  model: claude-haiku-4-5-20251001     # cheap default
+  zero_cost_first: true                # never call LLM where deterministic is decisive
+  max_llm_calls_per_run: 10
+  max_items_per_call: 10
+  max_total_prompt_chars_per_run: 50000
+  max_total_output_tokens_per_run: 4000
+  catalogue_mode: compact
+  include_sample_values: redacted_only
+  max_sample_values_per_field: 3
+  repair_attempts: 1
+  skip_llm_if:
+    deterministic_confidence_above: 0.85
+    value_match_rate_above: 0.98
+    field_out_of_scope: true
+  uncertainty_budget:
+    if_unresolved_items_above: 25
+    then_do_not_expand_context: true
+    create_user_gap_questions_instead: true
+
+# Budget profiles selectable via --llm-budget-profile off|low|standard
+llm_budget_profiles:
+  off:
+    enabled: false
+  low:
+    enabled: true
+    max_llm_calls_per_run: 3
+    max_items_per_call: 5
+    prioritise_core_blocking_only: true
+  standard:
+    enabled: true
+    max_llm_calls_per_run: 10
+    max_items_per_call: 10
+
 llm:
   provider: anthropic
 

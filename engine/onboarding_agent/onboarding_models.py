@@ -116,6 +116,40 @@ class MappingCandidate:
     sample_values_redacted: List[str] = field(default_factory=list)
     requires_review: bool = True
     reason: str = ""
+    # Ambiguity evidence (PART 1/2): the rejected alternative candidate(s) and
+    # which (if any) ambiguity rule resolved the selection. Empty when the
+    # mapping was unambiguous.
+    alternative_candidates: List[Dict[str, Any]] = field(default_factory=list)
+    ambiguity_rule_applied: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class MappingAmbiguity:
+    """One source column resolved by the regulatory-preference ambiguity rule.
+
+    Preserves the full ambiguity evidence (selected vs rejected candidate, the
+    confidence delta, the rule applied and the mode) for the 05b artefact and
+    the review pack (PART 1/2).
+    """
+
+    source_file: str = ""
+    source_column: str = ""
+    selected_canonical_field: str = ""
+    selected_category: str = ""
+    selected_core_canonical: bool = False
+    selected_confidence: float = 0.0
+    alternative_canonical_field: str = ""
+    alternative_category: str = ""
+    alternative_core_canonical: bool = False
+    alternative_confidence: float = 0.0
+    confidence_delta: float = 0.0
+    ambiguity_rule_applied: str = ""
+    review_required: bool = True
+    reason: str = ""
+    mode: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -213,6 +247,7 @@ class OnboardingProject:
     candidate_keys: List[CandidateKey] = field(default_factory=list)
     overlap_analysis: List[OverlapFinding] = field(default_factory=list)
     mapping_candidates: List[MappingCandidate] = field(default_factory=list)
+    mapping_ambiguities: List[MappingAmbiguity] = field(default_factory=list)
     config_suggestions: List[ConfigSuggestion] = field(default_factory=list)
     document_extractions: List[DocumentExtraction] = field(default_factory=list)
     gap_questions: List[GapQuestion] = field(default_factory=list)
@@ -220,6 +255,10 @@ class OnboardingProject:
     # Mode field-scope (PART 3-7)
     out_of_scope_fields: List[Dict[str, Any]] = field(default_factory=list)
     field_scope_summary: Dict[str, Any] = field(default_factory=dict)
+
+    # Low-cost LLM mapping review (PART 4/5) — suggestion-only artefacts.
+    llm_mapping_suggestions: List[Dict[str, Any]] = field(default_factory=list)
+    llm_usage_summary: Dict[str, Any] = field(default_factory=dict)
 
     # Run-level status
     review_status: str = "draft"     # draft | review_required | blocked
@@ -242,6 +281,7 @@ class OnboardingProject:
             "review_status": self.review_status,
             "field_scope_summary": self.field_scope_summary,
             "out_of_scope_fields_count": len(self.out_of_scope_fields),
+            "llm_usage_summary": self.llm_usage_summary,
             "counts": {
                 "source_files": len(self.source_files),
                 "classified_files": len(self.file_inventory),
@@ -249,6 +289,7 @@ class OnboardingProject:
                 "candidate_keys": len(self.candidate_keys),
                 "overlap_findings": len(self.overlap_analysis),
                 "mapping_candidates": len(self.mapping_candidates),
+                "mapping_ambiguities": len(self.mapping_ambiguities),
                 "config_suggestions": len(self.config_suggestions),
                 "gap_questions": len(self.gap_questions),
                 "blocking_questions": sum(
