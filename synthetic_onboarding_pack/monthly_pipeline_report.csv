@@ -1,0 +1,7 @@
+application_id,broker_name,application_stage,offer_date,expected_completion_date,expected_funding_amount,requested_loan_amount,product_name
+A1001,Broker Alpha,Offer Issued,2026-01-10,2026-02-20,175000.00,175000.00,Lifetime Mortgage Lump Sum
+A1002,Broker Beta,Application,2026-01-12,2026-03-01,90000.00,90000.00,Lifetime Mortgage Drawdown
+A1003,Broker Alpha,Completion Pending,2026-01-05,2026-02-10,220000.00,225000.00,Lifetime Mortgage Lump Sum
+A1004,Broker Gamma,Offer Issued,2026-01-18,2026-02-28,68000.00,70000.00,Lifetime Mortgage Drawdown
+A1005,Broker Beta,Application,2026-01-22,2026-03-15,305000.00,310000.00,Lifetime Mortgage Lump Sum
+A1006,Broker Delta,Completion Pending,2026-01-08,2026-02-14,51000.00,52000.00,Lifetime Mortgage Drawdown
