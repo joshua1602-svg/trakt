@@ -69,3 +69,7 @@ logs/
 *.tar.gz
 # Demo fixtures
 !demo/*.csv
+
+# Trakt Onboarding Agent v2 generated packs
+onboarding_output/
+!synthetic_onboarding_pack/*.csv

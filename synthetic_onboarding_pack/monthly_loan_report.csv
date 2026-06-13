@@ -1,0 +1,9 @@
+loan_id,borrower_name,current_balance,original_principal_balance,origination_date,maturity_date,interest_rate,employment_status,collateral_region,reporting_date
+L0001,Borrower One,148250.55,150000.00,2021-03-14,2046-03-14,4.85,EMPLOYED,North West,2026-01-31
+L0002,Borrower Two,96120.10,100000.00,2020-07-02,2045-07-02,4.60,RETIRED,South East,2026-01-31
+L0003,Borrower Three,205400.00,210000.00,2022-01-20,2047-01-20,5.10,SELF_EMPLOYED,London,2026-01-31
+L0004,Borrower Four,73890.40,75000.00,2019-11-11,2044-11-11,4.25,manual,Scotland,2026-01-31
+L0005,Borrower Five,312000.00,320000.00,2023-05-30,2048-05-30,5.45,EMPLOYED,South West,2026-01-31
+L0006,Borrower Six,54000.00,55000.00,2018-02-08,2043-02-08,3.95,RETIRED,Wales,2026-01-31
+L0007,Borrower Seven,180750.25,185000.00,2021-09-19,2046-09-19,4.90,EMPLOYED,East Midlands,2026-01-31
+L0008,Borrower Eight,129300.00,130000.00,2022-12-01,2047-12-01,5.00,manual,North East,2026-01-31

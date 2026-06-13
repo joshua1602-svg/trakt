@@ -1,0 +1,9 @@
+collateral_id,loan_id,property_type,valuation_amount,property_post_code,current_ltv,collateral_region,valuation_date,reporting_date
+C0001,L0001,Detached house,295000.00,SW1A 2AA,0.50,North West,2025-12-15,2026-01-31
+C0002,L0002,Flat,210000.00,M1 4WX,0.46,South East,2025-12-15,2026-01-31
+C0003,L0003,Semi-detached house,380000.00,EC1A 1BB,0.54,London,2025-12-15,2026-01-31
+C0004,L0004,Bungalow,165000.00,EH1 1YZ,0.45,Scotland,2025-12-15,2026-01-31
+C0005,L0005,Detached house,560000.00,BS1 5TR,0.56,South West,2025-12-15,2026-01-31
+C0006,L0006,Flat,135000.00,CF10 1EP,0.40,Wales,2025-12-15,2026-01-31
+C0007,L0007,Semi-detached house,330000.00,LE1 6QS,0.55,East Midlands,2025-12-15,2026-01-31
+C0008,L0008,Detached house,260000.00,NE1 7RU,0.50,North East,2025-12-15,2026-01-31

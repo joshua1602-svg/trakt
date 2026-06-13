@@ -1,0 +1,8 @@
+source_field,description,report,example
+loan_id,Unique loan/account identifier,loan_report,L0001
+current_balance,Current outstanding principal balance,loan_report,148250.55
+principal_outstanding,Principal balance outstanding (cashflow view),cashflow_report,148250.55
+valuation_amount,Latest collateral valuation amount,collateral_report,295000.00
+property_post_code,Collateral property postcode,collateral_report,SW1A 2AA
+expected_completion_date,Expected completion/funding date,pipeline_report,2026-02-20
+employment_status,Borrower employment status,loan_report,EMPLOYED
