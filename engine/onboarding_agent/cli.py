@@ -43,10 +43,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--output-dir", required=True, help="Output folder for the onboarding pack.")
     p.add_argument(
         "--mode",
-        choices=list(VALID_MODES),
+        choices=list(VALID_MODES) + ["mi_mna"],
         default="",
-        help="Onboarding mode (default: regulatory_mi). mi_mna | regulatory_mi | "
-        "warehouse_securitisation.",
+        help="Onboarding mode (default: regulatory_mi). mi_only | mna_dd | "
+        "regulatory_mi | warehouse_securitisation. ('mi_mna' is a deprecated "
+        "alias for mna_dd.)",
     )
     p.add_argument(
         "--registry",
@@ -141,6 +142,13 @@ def main(argv=None) -> int:
         return 0
 
     args = build_parser().parse_args(argv)
+
+    # Backward-compatibility: warn on deprecated mode aliases.
+    if args.mode:
+        from engine.onboarding_agent.mode_policy import resolve_mode_alias
+        _canonical, _dep = resolve_mode_alias(args.mode)
+        if _dep:
+            print(f"[deprecation] {_dep}")
 
     project = run_onboarding(
         input_dir=args.input_dir,

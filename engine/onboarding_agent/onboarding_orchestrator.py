@@ -29,6 +29,7 @@ from .document_extractor import (
     load_document_policy,
     write_document_extraction_summary,
 )
+from .field_scope import resolve_field_scope
 from .mapping_proposer import propose_mappings
 from .mode_policy import ModePolicy, default_mode, load_mode_policy, severity_rank
 from .onboarding_models import OnboardingProject
@@ -136,13 +137,34 @@ def run_onboarding(
                 item.detected_reporting_date = rep_dates[-1]
     project.field_profiles = profiles
 
+    # --- Field scope (registry category + core_canonical, driven by mode) ---
+    field_scope = resolve_field_scope(str(registry_path), policy)
+    project.field_scope_summary = field_scope.counts()
+
     # --- PART 5a: candidate keys ---
     project.candidate_keys = source_consolidator.detect_candidate_keys(profiles)
 
-    # --- PART 6: mapping candidates ---
-    project.mapping_candidates = propose_mappings(
-        inventory, dataframes, Path(registry_path), Path(aliases_dir)
+    # --- PART 6: mapping candidates (mode field scope diverts out-of-scope targets) ---
+    project.mapping_candidates, project.out_of_scope_fields = propose_mappings(
+        inventory, dataframes, Path(registry_path), Path(aliases_dir), field_scope=field_scope
     )
+
+    # Mapping coverage by registry category (for the review pack).
+    by_cat = {"regulatory": 0, "analytics": 0, "core": 0, "other": 0}
+    for m in project.mapping_candidates:
+        t = m.candidate_canonical_field
+        if not t:
+            continue
+        if t in field_scope.canonical_core_fields:
+            by_cat["core"] += 1
+        elif t in field_scope.regulatory_fields:
+            by_cat["regulatory"] += 1
+        elif t in field_scope.analytics_fields:
+            by_cat["analytics"] += 1
+        else:
+            by_cat["other"] += 1
+    project.field_scope_summary["mapping_candidates_by_category"] = by_cat
+    project.field_scope_summary["out_of_scope_fields_count"] = len(project.out_of_scope_fields)
 
     # --- PART 5b: overlap analysis (uses mappings + keys) ---
     project.overlap_analysis = source_consolidator.analyze_overlap(
@@ -153,15 +175,17 @@ def run_onboarding(
     doc_policy = load_document_policy()
     project.document_extractions = extract_documents(inventory, doc_policy)
 
-    # --- PART 7: config suggestions (fold in document extractions) ---
+    # --- PART 7: config suggestions (mode-scoped regulatory config) ---
     project.config_suggestions = config_suggester.suggest_config(
-        client_name, in_dir, inventory, profiles, project.document_extractions
+        client_name, in_dir, inventory, profiles, project.document_extractions,
+        regulatory_config_in_scope=policy.regime_config_required,
+        regime_optional=(policy.name == "mna_dd"),
     )
 
-    # --- PART 8: gap questions (mode-aware severity) ---
+    # --- PART 8: gap questions (mode-aware severity + field scope) ---
     project.gap_questions = gap_analyzer.analyze_gaps(
         inventory, profiles, project.overlap_analysis, project.config_suggestions,
-        dataframes, mode_policy=policy,
+        dataframes, mode_policy=policy, field_scope=field_scope,
     )
 
     # --- mode-aware review status / readiness ---
@@ -230,6 +254,10 @@ def _write_artifacts(project: OnboardingProject) -> None:
     _write_csv(out / "05_mapping_candidates.csv", project.mapping_candidates, map_fields)
     _write_json(out / "05_mapping_candidates.json", project.mapping_candidates)
 
+    # 05a out-of-scope fields (excluded by mode field scope)
+    oos_fields = ["source_file", "source_column", "candidate_field", "category", "reason", "mode"]
+    _write_csv(out / "05a_out_of_scope_fields.csv", project.out_of_scope_fields, oos_fields)
+
     # 06 config suggestions
     cfg_fields = [
         "field", "suggested_value", "confidence", "source_file",
@@ -268,6 +296,7 @@ def _write_artifacts(project: OnboardingProject) -> None:
         "02_column_profiles.csv", "02_column_profiles.json",
         "03_candidate_keys.csv", "04_source_overlap_analysis.csv",
         "05_mapping_candidates.csv", "05_mapping_candidates.json",
+        "05a_out_of_scope_fields.csv",
         "06_config_suggestions.csv", "06_config_suggestions.yaml",
         "07_gap_questions.csv", "07_gap_questions.yaml",
     ]:

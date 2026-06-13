@@ -116,6 +116,58 @@ def build_review_pack(project: OnboardingProject, out_path: Path) -> Path:
     {_table(["ID", "Severity", "Category", "Question"], block_rows)}
     """
 
+    # Field scope (PART 7) — registry category + core_canonical driven.
+    _SCOPE_EXPLANATIONS = {
+        "mi_only": [
+            "Regulatory fields are excluded from mapping / type requirements.",
+            "Canonical core fields are blocking if missing.",
+            "Analytics fields are mapped where available but are non-blocking if absent.",
+            "Regime configuration (regime / classification_year / ESMA geography) is skipped.",
+        ],
+        "mna_dd": [
+            "Full field coverage attempted, including regulatory fields for visibility.",
+            "Regulatory fields are included for readiness assessment, not delivery.",
+            "Data gaps are non-blocking unless they impair structural diligence viability.",
+            "Regime transformation is optional.",
+        ],
+        "regulatory_mi": [
+            "Full field coverage and regime configuration are required.",
+            "Mandatory regulatory gaps and invalid mandatory enums may block.",
+            "Canonical core gaps may block.",
+        ],
+        "warehouse_securitisation": [
+            "Core + analytics + warehouse/funding/pipeline/cashflow fields are in scope.",
+            "Regulatory fields are excluded unless regulatory reporting is enabled.",
+            "Warehouse core terms and the authoritative balance source may block.",
+        ],
+    }
+    scope_points = _SCOPE_EXPLANATIONS.get(mode_name, [])
+    fs = project.field_scope_summary or {}
+    by_cat = fs.get("mapping_candidates_by_category", {}) or {}
+    metric_rows = [
+        ["included_fields_count", fs.get("included_fields_count", "—")],
+        ["canonical_core_fields_count", fs.get("canonical_core_fields_count", "—")],
+        ["analytics_fields_count", fs.get("analytics_fields_count", "—")],
+        ["regulatory_fields_count", fs.get("regulatory_fields_count", "—")],
+        ["excluded_regulatory_fields_count", fs.get("excluded_regulatory_fields_count", "—")],
+        ["blocking_fields_count", fs.get("blocking_fields_count", "—")],
+        ["out_of_scope_fields_count", fs.get("out_of_scope_fields_count", len(project.out_of_scope_fields))],
+        ["mapping_candidates_by_category",
+         ", ".join(f"{k}={v}" for k, v in by_cat.items()) or "—"],
+    ]
+    oos_rows = [
+        [_esc(o.get("source_file", "")), _esc(o.get("source_column", "")),
+         _esc(o.get("candidate_field", "")), _esc(o.get("category", "")), _esc(o.get("reason", ""))]
+        for o in project.out_of_scope_fields
+    ]
+    field_scope_html = f"""
+    <ul>{''.join(f'<li>{_esc(p)}</li>' for p in scope_points) or '<li>—</li>'}</ul>
+    <h4 class="chart-title">Field scope metrics</h4>
+    {_table(["Metric", "Value"], [[_esc(a), _esc(b)] for a, b in metric_rows])}
+    <h4 class="chart-title">Out-of-scope fields (excluded by mode)</h4>
+    {_table(["File", "Column", "Candidate field", "Category", "Reason"], oos_rows)}
+    """
+
     # 1. Executive summary KPIs
     kpis = [
         ("Files", counts["classified_files"]),
@@ -239,6 +291,7 @@ def build_review_pack(project: OnboardingProject, out_path: Path) -> Path:
   </div>
 
   <div class="card"><h2>1a. Onboarding mode &amp; mode-specific readiness</h2>{mode_readiness_html}</div>
+  <div class="card"><h2>1b. Field scope for this onboarding mode</h2>{field_scope_html}</div>
 
   <div class="card"><h2>2. File inventory</h2>{inv_html}</div>
   <div class="card"><h2>3. Detected reporting periods</h2>{periods_html}</div>

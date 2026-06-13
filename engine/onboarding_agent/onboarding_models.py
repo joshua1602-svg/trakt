@@ -217,6 +217,10 @@ class OnboardingProject:
     document_extractions: List[DocumentExtraction] = field(default_factory=list)
     gap_questions: List[GapQuestion] = field(default_factory=list)
 
+    # Mode field-scope (PART 3-7)
+    out_of_scope_fields: List[Dict[str, Any]] = field(default_factory=list)
+    field_scope_summary: Dict[str, Any] = field(default_factory=dict)
+
     # Run-level status
     review_status: str = "draft"     # draft | review_required | blocked
     generated_artifacts: List[str] = field(default_factory=list)
@@ -236,6 +240,8 @@ class OnboardingProject:
             "output_dir": self.output_dir,
             "onboarding_mode": self.onboarding_mode,
             "review_status": self.review_status,
+            "field_scope_summary": self.field_scope_summary,
+            "out_of_scope_fields_count": len(self.out_of_scope_fields),
             "counts": {
                 "source_files": len(self.source_files),
                 "classified_files": len(self.file_inventory),

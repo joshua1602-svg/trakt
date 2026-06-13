@@ -18,7 +18,7 @@ field).
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 
@@ -155,18 +155,40 @@ def propose_mappings(
     dataframes: Dict[str, pd.DataFrame],
     registry_path: Path,
     aliases_dir: Path,
-) -> List[MappingCandidate]:
-    """Propose canonical mappings for every column of every structured file."""
+    field_scope=None,
+) -> Tuple[List[MappingCandidate], List[Dict[str, str]]]:
+    """Propose canonical mappings for every structured column.
+
+    Returns ``(mapping_candidates, out_of_scope)``. When ``field_scope`` is
+    provided, any column whose proposed canonical target is excluded by the mode
+    (e.g. a regulatory-only field in mi_only) is diverted to ``out_of_scope``
+    instead of the mapping candidates, so the review pack can show it was
+    deliberately excluded rather than missed.
+    """
     proposer = MappingProposer(registry_path, aliases_dir)
     out: List[MappingCandidate] = []
+    out_of_scope: List[Dict[str, str]] = []
+    mode_name = getattr(field_scope, "mode_name", "") if field_scope else ""
     for item in inventory:
         df = dataframes.get(item.file_path)
         if df is None:
             continue
         for col in df.columns:
-            out.append(
-                proposer.propose_for_column(
-                    item.file_name, item.classification, str(col), df[col]
-                )
+            cand = proposer.propose_for_column(
+                item.file_name, item.classification, str(col), df[col]
             )
-    return out
+            target = cand.candidate_canonical_field
+            if field_scope is not None and target and field_scope.is_excluded(target):
+                out_of_scope.append({
+                    "source_file": item.file_name,
+                    "source_column": str(col),
+                    "candidate_field": target,
+                    "category": field_scope.category_of(target) or "regulatory",
+                    "reason": field_scope.out_of_scope_reason_by_field.get(
+                        target, "excluded by mode field scope"
+                    ),
+                    "mode": mode_name,
+                })
+                continue
+            out.append(cand)
+    return out, out_of_scope

@@ -171,11 +171,18 @@ def suggest_config(
     inventory: List[FileInventoryItem],
     profiles: List[ColumnProfile],
     document_extractions: Optional[List["DocumentExtraction"]] = None,
+    regulatory_config_in_scope: bool = True,
+    regime_optional: bool = False,
 ) -> List[ConfigSuggestion]:
     """Produce candidate config suggestions from all available evidence.
 
     Warehouse / securitisation facts come from ``document_extractions`` (the
     policy-bound document extractor); if not supplied they are computed here.
+
+    ``regulatory_config_in_scope`` (regime/classification_year/ESMA geography)
+    follows the onboarding mode: True for regulatory_mi; False for mi_only /
+    mna_dd / warehouse. ``regime_optional`` adds an informational ``possible_regime``
+    suggestion (mna_dd) without requiring regime config.
     """
     suggestions: List[ConfigSuggestion] = []
 
@@ -262,40 +269,53 @@ def suggest_config(
             )
         )
 
-    # classification_year is the YEAR/VERSION of the geographic (NUTS/ITL)
-    # classification used for geography fields (ESMA RREL12 /
-    # geographic_region_classification). It is NOT the reporting date and must
-    # NEVER be derived from year(reporting_date). It is sourced from geography /
-    # regime policy config (e.g. nuts_classification_year), or marked
-    # requires_review when no policy is available.
-    suggestions.append(_suggest_classification_year())
+    # Regulatory config (classification_year / regime / ESMA geography policy)
+    # is mode-scoped. mi_only skips it entirely; mna_dd offers regime as optional
+    # informational context; regulatory_mi requires it.
+    if regulatory_config_in_scope:
+        # classification_year is the YEAR/VERSION of the geographic (NUTS/ITL)
+        # classification (ESMA RREL12 / geographic_region_classification). It is
+        # NOT the reporting date and must NEVER be derived from year(reporting_date).
+        suggestions.append(_suggest_classification_year())
 
-    # regime — driven by asset class (equity release -> ESMA Annex 2).
-    regime = "ESMA_Annex2"
-    suggestions.append(
-        ConfigSuggestion(
-            field="regime",
-            suggested_value=regime,
-            confidence=0.7 if ac else 0.4,
-            source_file="<inferred>",
-            source_column_or_document_reference="asset class + securitisation summary",
-            evidence="Equity release pools disclose under ESMA Annex 2.",
-            review_status="suggested" if ac else "requires_review",
+        # regime — driven by asset class (equity release -> ESMA Annex 2).
+        suggestions.append(
+            ConfigSuggestion(
+                field="regime",
+                suggested_value="ESMA_Annex2",
+                confidence=0.7 if ac else 0.4,
+                source_file="<inferred>",
+                source_column_or_document_reference="asset class + securitisation summary",
+                evidence="Equity release pools disclose under ESMA Annex 2.",
+                review_status="suggested" if ac else "requires_review",
+            )
         )
-    )
 
-    # geography_policy — static reference to existing policy (do not change it).
-    suggestions.append(
-        ConfigSuggestion(
-            field="geography_policy",
-            suggested_value="ESMA=GBZZZ; MI/FCA=ITL3",
-            confidence=0.9,
-            source_file="<policy>",
-            source_column_or_document_reference="existing geography projection policy",
-            evidence="ESMA RREL11/RREC6 use GBZZZ; ITL3 retained for MI/FCA display.",
-            review_status="suggested",
+        # geography_policy — static reference to existing policy (do not change it).
+        suggestions.append(
+            ConfigSuggestion(
+                field="geography_policy",
+                suggested_value="ESMA=GBZZZ; MI/FCA=ITL3",
+                confidence=0.9,
+                source_file="<policy>",
+                source_column_or_document_reference="existing geography projection policy",
+                evidence="ESMA RREL11/RREC6 use GBZZZ; ITL3 retained for MI/FCA display.",
+                review_status="suggested",
+            )
         )
-    )
+    elif regime_optional:
+        # mna_dd: regime is informational only — useful for readiness, not required.
+        suggestions.append(
+            ConfigSuggestion(
+                field="possible_regime",
+                suggested_value="ESMA_Annex2" if ac else "",
+                confidence=0.5 if ac else 0.2,
+                source_file="<inferred>",
+                source_column_or_document_reference="asset class (diligence readiness only)",
+                evidence="Indicative regime for readiness assessment; not required for M&A/DD.",
+                review_status="suggested",
+            )
+        )
 
     # Warehouse / securitisation config from document extractions (PART 6).
     # Parsing now lives in document_extractor under the minimisation policy; we

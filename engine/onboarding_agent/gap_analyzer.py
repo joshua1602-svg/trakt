@@ -221,11 +221,14 @@ def analyze_gaps(
     config_suggestions: List[ConfigSuggestion],
     dataframes: Optional[Dict[str, pd.DataFrame]] = None,
     mode_policy=None,
+    field_scope=None,
 ) -> List[GapQuestion]:
     """Generate gap questions, then re-rank severity for the onboarding mode.
 
     ``mode_policy`` is an optional :class:`mode_policy.ModePolicy`. When omitted
-    the legacy (regulatory) severities are returned unchanged.
+    the legacy (regulatory) severities are returned unchanged. ``field_scope``
+    (a :class:`field_scope.FieldScopeResult`) drives out-of-scope summaries and
+    mode-scoped regulatory gap suppression.
     """
     dataframes = dataframes or {}
     mode = getattr(mode_policy, "name", "regulatory_mi")
@@ -297,13 +300,18 @@ def analyze_gaps(
     questions.extend(_enum_questions(inventory, dataframes, idx))
     idx = len(questions)  # keep numbering monotonic
 
-    # --- Missing / unresolved mandatory config ---
+    # --- Missing / unresolved mandatory config (mode-scoped) ---
+    mandatory_config = (
+        list(mode_policy.required_config_fields)
+        if mode_policy is not None and mode_policy.required_config_fields
+        else _MANDATORY_CONFIG
+    )
     by_field: Dict[str, ConfigSuggestion] = {}
     for s in config_suggestions:
         # Keep the highest-confidence suggestion per field.
         if s.field not in by_field or s.confidence > by_field[s.field].confidence:
             by_field[s.field] = s
-    for fld in _MANDATORY_CONFIG:
+    for fld in mandatory_config:
         s = by_field.get(fld)
         if s is None or s.review_status == "missing" or s.confidence < 0.5:
             idx += 1
@@ -326,29 +334,57 @@ def analyze_gaps(
                 )
             )
 
-    # --- ESMA UK geography policy confirmation ---
-    idx += 1
-    questions.append(
-        GapQuestion(
-            question_id=f"Q{idx}",
-            category="geography",
-            severity="medium",
-            question="Confirm ESMA Annex 2 UK geography policy: should RREL11/RREC6 use GBZZZ?",
-            reason="Current policy is GBZZZ for ESMA; ITL3 retained for MI/FCA display.",
-            candidate_answers=["GBZZZ", "ITL3", "other"],
-            default_recommendation="GBZZZ",
-            blocking_for=["ESMA_Annex2"],
-            source_evidence="geography projection policy",
-            subject="uk_geography_mode",
+    # --- ESMA UK geography policy confirmation (only when regime is in scope) ---
+    regime_in_scope = mode_policy is None or mode_policy.regime_config_required
+    if regime_in_scope:
+        idx += 1
+        questions.append(
+            GapQuestion(
+                question_id=f"Q{idx}",
+                category="geography",
+                severity="medium",
+                question="Confirm ESMA Annex 2 UK geography policy: should RREL11/RREC6 use GBZZZ?",
+                reason="Current policy is GBZZZ for ESMA; ITL3 retained for MI/FCA display.",
+                candidate_answers=["GBZZZ", "ITL3", "other"],
+                default_recommendation="GBZZZ",
+                blocking_for=["ESMA_Annex2"],
+                source_evidence="geography projection policy",
+                subject="uk_geography_mode",
+            )
         )
-    )
 
     # --- Warehouse facility terms ---
     questions.extend(_warehouse_gap_questions(inventory, config_suggestions, mode, len(questions)))
+
+    # --- Out-of-scope summary (regulatory fields excluded by mode field scope) ---
+    if field_scope is not None:
+        excluded_reg = field_scope.excluded_fields & field_scope.regulatory_fields
+        if excluded_reg and "regulatory" in getattr(mode_policy, "exclude_categories", []):
+            idx = len(questions) + 1
+            questions.append(
+                GapQuestion(
+                    question_id=f"Q{idx}",
+                    category="scope",
+                    severity="info",
+                    question=(
+                        f"{len(excluded_reg)} regulatory fields are out of scope for "
+                        f"mode '{mode}' and were excluded from mapping/type requirements."
+                    ),
+                    reason="Regulatory category fields are not required in this mode.",
+                    candidate_answers=[],
+                    default_recommendation="acknowledged",
+                    blocking_for=[],
+                    source_evidence="field scope (registry category=regulatory)",
+                    subject="out_of_scope_regulatory_fields",
+                    subject_value=str(len(excluded_reg)),
+                )
+            )
 
     # --- Mode-aware severity re-ranking (PART 2) ---
     if mode_policy is not None:
         for q in questions:
             q.severity = mode_policy.severity_for(q.category, q.severity)
 
+    # Drop questions whose mode severity marks them out of scope.
+    questions = [q for q in questions if q.severity != "out_of_scope"]
     return questions

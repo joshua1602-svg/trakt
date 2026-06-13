@@ -1,68 +1,117 @@
 # config/system/onboarding_modes.yaml
 # ---------------------------------------------------------------------------
-# Onboarding Agent v2 — mode policy (PART 1).
+# Onboarding Agent v2 — mode policy.
 #
-# Three distinct onboarding modes, each with its own required fields, gap
-# severity profile, readiness label and outputs in/out of scope. The mode
-# changes how the SAME detected gaps are prioritised — it does not change the
-# deterministic detection itself.
+# Modes now drive FIELD SCOPE (inclusion / exclusion / blocking) using the
+# existing fields_registry.yaml metadata — no new taxonomy:
+#   * category       : regulatory | analytics
+#   * core_canonical : true | false   (spec calls this canonical_core)
 #
-# Severity model (used by gap_analyzer):
-#   * gap_category_severity   - the baseline severity for each gap category in
-#                               this mode (info|low|medium|high|blocking).
-#   * blocking_gap_categories - categories that may ESCALATE to 'blocking' when
-#                               the deterministic detector flags a critical
-#                               (missing / conflicting) gap. Categories not in
-#                               this list are capped at their baseline severity.
+# Field-scope keys per mode:
+#   regime_config_required   - is regime/classification/geography config required
+#   include_canonical_core   - always include core_canonical fields (overrides
+#                              category exclusion — a core balance/date stays in)
+#   include_categories       - registry categories to include
+#   exclude_categories       - registry categories to exclude (unless core)
+#   include_field_groups     - extra name-pattern groups to pull in (warehouse…)
+#   attempt_full_coverage    - map the whole universe vs the scoped subset
+#   regulatory_fields_active_if - flags that re-activate regulatory fields
+#   blocking_rules           - which shortfalls may block
+#
+# Gap severity keys (unchanged, used by gap_analyzer):
+#   gap_category_severity / blocking_gap_categories
 # ---------------------------------------------------------------------------
 
 default_mode: regulatory_mi
 
+# Backward-compatible aliases (old name -> canonical mode).
+aliases:
+  mi_mna: mna_dd
+
 modes:
 
   # =========================================================================
-  mi_mna:
+  mi_only:
     objective: >-
-      Rapid portfolio diligence: stratifications, static pools, performance
-      analysis and buyer / funder review. Regulatory completeness is NOT a
-      blocker.
+      Operational / management-information onboarding only. Map and type core +
+      analytics fields; regulatory-only fields are out of scope. Block only on
+      missing canonical-core fields.
     readiness_status_label: ready_for_mi_review
+    regime_config_required: false
+    include_canonical_core: true
+    include_categories: [analytics]
+    exclude_categories: [regulatory]
+    attempt_full_coverage: false
+    blocking_rules:
+      canonical_core_missing: true
+      analytics_missing: false
+      regulatory_missing: false
     required_config_fields: [client_name, asset_class, currency, reporting_date]
-    high_priority_fields:
-      - current_principal_balance
-      - current_loan_to_value
-      - collateral_geography
-      - property_type
-      - current_interest_rate
-      - origination_date
-    field_groups_required: [balance, ltv, geography, property, rate, vintage]
-    file_types_expected: [current_loan_report, collateral_report, cashflow_report]
     gap_category_severity:
       date: blocking
       source_of_truth: high
       enum: medium
-      config: medium
       geography: info
+      config: info
       warehouse: medium
-    blocking_gap_categories: [date]
-    recommended_outputs: [mi_readiness, data_quality_report, source_precedence_rules]
-    optional_outputs: [esma_completeness, classification_year]
+      regulatory: out_of_scope
+    blocking_gap_categories: [date, source_of_truth]
+    recommended_outputs:
+      [central_lender_tape, mi_ready_dataset, mi_agent_readiness, data_quality_report]
+    optional_outputs: [regulatory_readiness_summary]
+
+  # =========================================================================
+  mna_dd:
+    objective: >-
+      M&A / portfolio diligence onboarding. Attempt full field coverage
+      including regulatory fields for readiness visibility. Block only on
+      structural viability (identifier, balance, reporting date, join key).
+    readiness_status_label: ready_for_mi_review
+    regime_config_required: false
+    include_canonical_core: true
+    include_categories: [analytics, regulatory]
+    exclude_categories: []
+    attempt_full_coverage: true
+    blocking_rules:
+      structural_viability_only: true
+      canonical_core_missing: false
+      analytics_missing: false
+      regulatory_missing: false
+    structural_viability_fields: [loan_identifier, current_principal_balance]
+    required_config_fields: [client_name, asset_class, currency, reporting_date]
+    gap_category_severity:
+      date: blocking
+      source_of_truth: high
+      enum: medium
+      geography: medium
+      config: info
+      warehouse: medium
+      regulatory: info
+    blocking_gap_categories: [date, source_of_truth]
+    recommended_outputs:
+      [full_mapping_coverage_report, diligence_data_quality_report,
+       central_lender_tape, mi_agent_readiness, regulatory_readiness_summary]
+    optional_outputs: [regime_projection]
 
   # =========================================================================
   regulatory_mi:
     objective: >-
-      Regulatory reporting plus MI. Mandatory regulatory fields, enums,
-      reporting date, regime and geography policy must be resolved before
-      handoff.
+      Regulatory reporting plus MI. Full field universe, regime config
+      required; mandatory regulatory fields, enums, reporting date and geography
+      policy must be resolved.
     readiness_status_label: ready_for_regulatory_handoff
+    regime_config_required: true
+    include_canonical_core: true
+    include_categories: [analytics, regulatory]
+    exclude_categories: []
+    attempt_full_coverage: true
+    blocking_rules:
+      canonical_core_missing: true
+      regulatory_mandatory_missing: true
+      regulatory_enum_invalid: true
+      analytics_missing: false
     required_config_fields:
       [client_name, asset_class, currency, reporting_date, regime, classification_year]
-    high_priority_fields:
-      - current_principal_balance
-      - geographic_region_classification
-      - collateral_geography
-    field_groups_required: [balance, geography, regime, enums]
-    file_types_expected: [current_loan_report, collateral_report, cashflow_report]
     gap_category_severity:
       date: blocking
       source_of_truth: high
@@ -70,36 +119,50 @@ modes:
       config: blocking
       geography: high
       warehouse: low
+      regulatory: high
     blocking_gap_categories: [date, config, enum, geography]
     recommended_outputs:
-      [approved_config, enum_review_decisions, geography_policy, delivery_readiness]
+      [approved_config, approved_mapping, delivery_readiness, esma_xml, mi_agent_readiness]
     optional_outputs: [warehouse_terms]
 
   # =========================================================================
   warehouse_securitisation:
     objective: >-
-      Warehouse monitoring, eligibility, securitisation readiness and funding
-      forecast. Warehouse facility terms and authoritative funded-balance /
-      pipeline sources must be resolved.
+      Warehouse monitoring / funding analytics / securitisation operating model.
+      Core + analytics + warehouse/funding/pipeline/cashflow fields; regulatory
+      fields only active if regulatory reporting is explicitly enabled.
     readiness_status_label: ready_for_warehouse_review
+    regime_config_required: false
+    include_canonical_core: true
+    include_categories: [analytics]
+    exclude_categories: [regulatory]
+    include_field_groups: [warehouse, pipeline, cashflow, funding]
+    regulatory_fields_active_if: [regulatory_reporting_enabled]
+    attempt_full_coverage: false
+    blocking_rules:
+      canonical_core_missing: true
+      warehouse_core_missing: true
+      source_of_truth_missing: true
+      analytics_missing: false
     required_config_fields:
       [client_name, asset_class, currency, reporting_date,
        warehouse_facility_present, advance_rate, margin, warehouse_limit]
-    high_priority_fields:
-      - current_principal_balance
-      - expected_funding_amount
-      - target_pool_balance
-    field_groups_required: [balance, warehouse, pipeline, cashflow]
-    file_types_expected:
-      [warehouse_agreement, current_loan_report, cashflow_report, pipeline_report]
     gap_category_severity:
       date: blocking
       source_of_truth: high
       enum: medium
-      config: high
       geography: info
+      config: high
       warehouse: high
+      regulatory: out_of_scope
     blocking_gap_categories: [date, warehouse, source_of_truth]
     recommended_outputs:
       [warehouse_terms, source_precedence_rules, funding_bridge]
     optional_outputs: [esma_completeness, classification_year]
+
+# Name-pattern groups used by include_field_groups (registry has no group key).
+field_group_patterns:
+  warehouse: [warehouse, facility, advance, drawdown, drawn, undrawn]
+  funding: [funding, funded, advance, committed]
+  pipeline: [pipeline, application, offer, completion, expected]
+  cashflow: [cashflow, payment, principal, interest, redemption, fee, recovery]

@@ -224,11 +224,13 @@ def _build_approved_config(
             "ESMA_Annex2": {"uk_geography_mode": uk_geo_mode},
             "MI": {"region_display_field": "collateral_geography"},
         }
-    elif mode == "mi_mna":
-        # MI/M&A: display geography only; regulatory fields stay optional.
+    elif mode in ("mi_only", "mna_dd", "mi_mna"):
+        # MI / M&A: display geography only; regulatory config is out of scope and
+        # is never required for approval. mna_dd surfaces an indicative regime.
         out["geography_policy"] = {"MI": {"region_display_field": "collateral_geography"}}
-        if val("regime"):
-            out["regime"] = val("regime")
+        possible = val("possible_regime") or (val("regime") if mode != "mi_only" else "")
+        if possible:
+            out["possible_regime"] = possible
 
     # Warehouse block — only for warehouse_securitisation, from extracted/approved terms.
     if mode == "warehouse_securitisation":

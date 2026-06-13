@@ -2,8 +2,8 @@
 """
 tests/test_onboarding_modes.py
 
-PART 9 tests 1-6 — onboarding mode support and mode-aware gap severity /
-readiness / review pack.
+Mode support + mode-aware gap severity / readiness / review pack, updated for the
+mi_only | mna_dd | regulatory_mi | warehouse_securitisation mode set.
 """
 
 from __future__ import annotations
@@ -18,7 +18,11 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from engine.onboarding_agent.cli import build_parser
-from engine.onboarding_agent.mode_policy import VALID_MODES, load_mode_policy
+from engine.onboarding_agent.mode_policy import (
+    VALID_MODES,
+    load_mode_policy,
+    resolve_mode_alias,
+)
 from engine.onboarding_agent.onboarding_orchestrator import run_onboarding
 
 PACK = _REPO_ROOT / "synthetic_onboarding_pack"
@@ -45,7 +49,7 @@ def _sev_by_category(project):
 class TestModeCLI(unittest.TestCase):
     def test_cli_accepts_all_modes(self):
         parser = build_parser()
-        for mode in ("mi_mna", "regulatory_mi", "warehouse_securitisation"):
+        for mode in ("mi_only", "mna_dd", "regulatory_mi", "warehouse_securitisation"):
             args = parser.parse_args(
                 ["--input-dir", "x", "--client-name", "c", "--output-dir", "o", "--mode", mode]
             )
@@ -53,66 +57,73 @@ class TestModeCLI(unittest.TestCase):
 
     def test_valid_modes_constant(self):
         self.assertEqual(
-            set(VALID_MODES), {"mi_mna", "regulatory_mi", "warehouse_securitisation"}
+            set(VALID_MODES),
+            {"mi_only", "mna_dd", "regulatory_mi", "warehouse_securitisation"},
         )
+
+    def test_mi_mna_alias_maps_to_mna_dd(self):
+        canonical, msg = resolve_mode_alias("mi_mna")
+        self.assertEqual(canonical, "mna_dd")
+        self.assertTrue(msg)  # deprecation message present
+        # And the CLI still accepts it.
+        args = build_parser().parse_args(
+            ["--input-dir", "x", "--client-name", "c", "--output-dir", "o", "--mode", "mi_mna"]
+        )
+        self.assertEqual(args.mode, "mi_mna")
 
 
 class TestModeSeverity(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.mi, _ = _run("mi_mna")
+        cls.mi, _ = _run("mi_only")
+        cls.mna, _ = _run("mna_dd")
         cls.reg, _ = _run("regulatory_mi")
         cls.wh, _ = _run("warehouse_securitisation")
 
     def test_same_pack_different_severities(self):
-        mi = _sev_by_category(self.mi)
         reg = _sev_by_category(self.reg)
         wh = _sev_by_category(self.wh)
-        # geography differs: regulatory escalates, MI/warehouse de-prioritise.
+        # Regulatory escalates geography to high; warehouse de-prioritises it.
         self.assertEqual(reg["geography"], "high")
-        self.assertEqual(mi["geography"], "info")
-        self.assertEqual(wh["geography"], "info")
+        self.assertNotIn("geography", _sev_by_category(self.mi))  # mi_only: no geography gap
+        self.assertEqual(wh["warehouse"], "high")
+        self.assertEqual(reg["warehouse"], "low")
 
-    def test_mi_mna_not_blocked_by_esma_only_gaps(self):
-        sev = _sev_by_category(self.mi)
-        # ESMA-only gaps (geography) must not be blocking/high in MI/M&A.
-        self.assertEqual(sev["geography"], "info")
-        # The only blocking gaps should be the (genuinely shared) reporting date,
-        # never an ESMA-only category.
+    def test_mi_only_no_esma_blocking(self):
+        # Geography/regime gaps are not generated for mi_only at all.
+        cats = {q.category for q in self.mi.gap_questions}
+        self.assertNotIn("geography", cats)
         blocking_cats = {q.category for q in self.mi.gap_questions if q.severity == "blocking"}
         self.assertNotIn("geography", blocking_cats)
         self.assertNotIn("config", blocking_cats)
-
-    def test_regulatory_blocks_on_regulatory_requirements(self):
-        sev = _sev_by_category(self.reg)
-        self.assertEqual(sev["enum"], "high")
-        self.assertEqual(sev["geography"], "high")
-        # config mandatory gaps may escalate to blocking in regulatory mode.
-        policy = load_mode_policy("regulatory_mi")
-        self.assertIn("config", policy.blocking_gap_categories)
-        self.assertIn("geography", policy.blocking_gap_categories)
 
     def test_warehouse_flags_warehouse_terms_high(self):
         wh_qs = [q for q in self.wh.gap_questions if q.category == "warehouse"]
         self.assertTrue(wh_qs)
         self.assertTrue(all(q.severity in ("high", "blocking") for q in wh_qs))
-        # In regulatory mode the same warehouse terms are low priority.
         reg_wh = [q for q in self.reg.gap_questions if q.category == "warehouse"]
         self.assertTrue(all(q.severity in ("low", "info") for q in reg_wh))
 
     def test_mode_recorded_on_project(self):
-        self.assertEqual(self.mi.onboarding_mode, "mi_mna")
+        self.assertEqual(self.mi.onboarding_mode, "mi_only")
+        self.assertEqual(self.mna.onboarding_mode, "mna_dd")
         self.assertEqual(self.reg.onboarding_mode, "regulatory_mi")
         self.assertEqual(self.wh.onboarding_mode, "warehouse_securitisation")
 
+    def test_regulatory_requires_regime_config(self):
+        self.assertTrue(load_mode_policy("regulatory_mi").regime_config_required)
+        self.assertFalse(load_mode_policy("mi_only").regime_config_required)
+        self.assertFalse(load_mode_policy("mna_dd").regime_config_required)
+
 
 class TestModeReviewPack(unittest.TestCase):
-    def test_review_pack_shows_mode_and_readiness(self):
-        project, out = _run("warehouse_securitisation")
+    def test_review_pack_shows_mode_and_field_scope(self):
+        project, out = _run("mi_only")
         html = (out / "08_onboarding_review_pack.html").read_text()
-        self.assertIn("warehouse_securitisation", html)
+        self.assertIn("mi_only", html)
         self.assertIn("mode-specific readiness", html.lower())
-        self.assertIn("Outputs in scope", html)
+        self.assertIn("Field scope for this onboarding mode", html)
+        self.assertIn("Regulatory fields are excluded", html)
 
 
 if __name__ == "__main__":

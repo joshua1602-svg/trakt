@@ -16,11 +16,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List, Tuple
 
 import yaml
 
-VALID_MODES = ("mi_mna", "regulatory_mi", "warehouse_securitisation")
+VALID_MODES = ("mi_only", "mna_dd", "regulatory_mi", "warehouse_securitisation")
+
+# Deprecated mode names mapped to canonical modes (backward compatibility).
+_FALLBACK_ALIASES = {"mi_mna": "mna_dd"}
 
 _POLICY_PATH = Path(__file__).resolve().parents[2] / "config" / "system" / "onboarding_modes.yaml"
 
@@ -44,6 +47,17 @@ class ModePolicy:
     blocking_gap_categories: List[str] = field(default_factory=list)
     recommended_outputs: List[str] = field(default_factory=list)
     optional_outputs: List[str] = field(default_factory=list)
+
+    # Field-scope controls (registry-driven).
+    regime_config_required: bool = False
+    include_canonical_core: bool = True
+    include_categories: List[str] = field(default_factory=list)
+    exclude_categories: List[str] = field(default_factory=list)
+    include_field_groups: List[str] = field(default_factory=list)
+    attempt_full_coverage: bool = True
+    regulatory_fields_active_if: List[str] = field(default_factory=list)
+    blocking_rules: Dict[str, Any] = field(default_factory=dict)
+    structural_viability_fields: List[str] = field(default_factory=list)
 
     # ------------------------------------------------------------------
     def severity_for(self, category: str, detected_severity: str) -> str:
@@ -78,10 +92,33 @@ def default_mode(policy_path: Path | None = None) -> str:
     return raw.get("default_mode", "regulatory_mi")
 
 
+def resolve_mode_alias(mode: str, policy_path: Path | None = None) -> Tuple[str, str]:
+    """Resolve a (possibly deprecated) mode name to a canonical mode.
+
+    Returns (canonical_mode, deprecation_message). The message is empty unless
+    an alias was applied.
+    """
+    if not mode:
+        return default_mode(policy_path), ""
+    raw = _load_raw(policy_path)
+    aliases = dict(_FALLBACK_ALIASES)
+    aliases.update(raw.get("aliases", {}) or {})
+    if mode in aliases:
+        target = aliases[mode]
+        return target, f"Onboarding mode '{mode}' is deprecated; using '{target}'."
+    return mode, ""
+
+
+def field_group_patterns(policy_path: Path | None = None) -> Dict[str, List[str]]:
+    raw = _load_raw(policy_path)
+    return dict(raw.get("field_group_patterns", {}) or {})
+
+
 def load_mode_policy(mode: str, policy_path: Path | None = None) -> ModePolicy:
     """Load the :class:`ModePolicy` for ``mode``; falls back to defaults safely."""
     raw = _load_raw(policy_path)
     modes = raw.get("modes", {}) or {}
+    mode, _ = resolve_mode_alias(mode, policy_path)
     if mode not in modes:
         mode = raw.get("default_mode", "regulatory_mi")
     m = modes.get(mode, {}) or {}
@@ -97,4 +134,13 @@ def load_mode_policy(mode: str, policy_path: Path | None = None) -> ModePolicy:
         blocking_gap_categories=list(m.get("blocking_gap_categories", []) or []),
         recommended_outputs=list(m.get("recommended_outputs", []) or []),
         optional_outputs=list(m.get("optional_outputs", []) or []),
+        regime_config_required=bool(m.get("regime_config_required", False)),
+        include_canonical_core=bool(m.get("include_canonical_core", True)),
+        include_categories=list(m.get("include_categories", []) or []),
+        exclude_categories=list(m.get("exclude_categories", []) or []),
+        include_field_groups=list(m.get("include_field_groups", []) or []),
+        attempt_full_coverage=bool(m.get("attempt_full_coverage", True)),
+        regulatory_fields_active_if=list(m.get("regulatory_fields_active_if", []) or []),
+        blocking_rules=dict(m.get("blocking_rules", {}) or {}),
+        structural_viability_fields=list(m.get("structural_viability_fields", []) or []),
     )
