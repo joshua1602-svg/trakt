@@ -95,6 +95,31 @@ def _domain_coverage_html(project: OnboardingProject) -> str:
                       "Blocking", "Coverage note"], rows))
 
 
+def _mapping_trace_html(project: OnboardingProject) -> str:
+    s = project.mapping_trace_summary or {}
+    if not s:
+        return '<p class="meta">Mapping trace not available.</p>'
+    alias_files = s.get("alias_files_loaded", []) or []
+    rows = [
+        ["Mapping trace available", "yes"],
+        ["Alias files loaded", "yes — " + ", ".join(alias_files) if alias_files else "no"],
+        ["Registry fields loaded", s.get("registry_fields_count", "—")],
+        ["Columns mapped by alias", s.get("mapped_by_alias", 0)],
+        ["Columns mapped by registry/header scoring", s.get("mapped_by_registry_header", 0)],
+        ["Columns mapped by value match/context", s.get("mapped_by_value_or_context", 0)],
+        ["Columns out of scope (mode)", s.get("out_of_scope", 0)],
+        ["Columns requiring user review", s.get("ambiguous_needs_review", 0)],
+        ["Columns unmapped", s.get("unmapped", 0)],
+        ["Columns sent to LLM", s.get("sent_to_llm", 0)],
+    ]
+    intro = ("Deterministic-first: Python profiling → field registry → alias libraries "
+             "→ scoring → value matching → source precedence. The LLM only reviews "
+             "unresolved ambiguity and never writes final mappings. Full detail in "
+             "<code>05c_mapping_trace.csv</code> / <code>05d_mapping_explanation.md</code>.")
+    return (f'<p class="meta">{intro}</p>'
+            + _table(["Metric", "Value"], [[_esc(a), _esc(b)] for a, b in rows]))
+
+
 def _azure_metadata_html(project: OnboardingProject) -> str:
     rows = [
         ["Client ID", project.client_id or "—"],
@@ -454,6 +479,7 @@ def build_review_pack(project: OnboardingProject, out_path: Path,
   <div class="card"><h2>1a. Onboarding mode &amp; mode-specific readiness</h2>{mode_readiness_html}</div>
   <div class="card"><h2>1a-i. Data domain coverage</h2>{_domain_coverage_html(project)}</div>
   <div class="card"><h2>1a-ii. Azure-ready run metadata</h2>{_azure_metadata_html(project)}</div>
+  <div class="card"><h2>1a-iii. Deterministic mapping trace</h2>{_mapping_trace_html(project)}</div>
   <div class="card"><h2>1b. Field scope for this onboarding mode</h2>{field_scope_html}</div>
   <div class="card"><h2>1c. Mapping ambiguities resolved by policy</h2>{ambiguities_html}</div>
   {f'<div class="card"><h2>1d. LLM mapping review usage &amp; cost</h2>{llm_html}</div>' if show_llm else ''}

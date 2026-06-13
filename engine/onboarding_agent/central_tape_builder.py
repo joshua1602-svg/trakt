@@ -30,6 +30,18 @@ Selection logic per canonical field (PART 7):
 
 Material conflicts are never silently resolved: differing values across sources
 with no approved precedence become conflict gaps.
+
+Audit note (deterministic-first): this builder does NOT invent source-to-canonical
+mappings. Every canonical field source comes from the existing mapping artefacts
+(12_approved_mapping_overrides + 05_mapping_candidates, which already encode the
+alias/registry/context/ambiguity decisions and are traced in 05c_mapping_trace).
+The only header-name logic here is loan/application KEY detection and pipeline
+field extraction (pipeline data lives outside the loan registry); no canonical
+field is ever guessed by header name.
+
+Input order: approved mapping overrides -> approved source precedence rules ->
+approved enum decisions -> 05_mapping_candidates (which reflect 05b ambiguity
+resolution) -> domain coverage.
 """
 
 from __future__ import annotations

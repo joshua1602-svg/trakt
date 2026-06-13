@@ -294,6 +294,9 @@ class OnboardingProject:
     llm_mapping_suggestions: List[Dict[str, Any]] = field(default_factory=list)
     llm_usage_summary: Dict[str, Any] = field(default_factory=dict)
 
+    # Deterministic-first mapping trace summary (explainability/audit).
+    mapping_trace_summary: Dict[str, Any] = field(default_factory=dict)
+
     # Run-level status
     review_status: str = "draft"     # draft | review_required | blocked
     generated_artifacts: List[str] = field(default_factory=list)

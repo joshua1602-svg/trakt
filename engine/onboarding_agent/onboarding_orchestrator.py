@@ -272,6 +272,28 @@ def run_onboarding(
     project.generated_artifacts.append(str(out_dir / "17_domain_coverage.csv"))
     project.generated_artifacts.append(str(out_dir / "17_domain_coverage.json"))
 
+    # --- Deterministic-first mapping trace (explainability/audit) ---
+    from . import mapping_trace
+    trace = mapping_trace.build_trace(
+        inventory=inventory,
+        dataframes=dataframes,
+        mapping_candidates=project.mapping_candidates,
+        out_of_scope_fields=project.out_of_scope_fields,
+        mapping_ambiguities=project.mapping_ambiguities,
+        overlap_analysis=project.overlap_analysis,
+        field_scope=field_scope,
+        registry_fields=registry_fields,
+        aliases_dir=aliases_dir,
+        llm_suggestions=project.llm_mapping_suggestions,
+        precedence={},  # approved precedence is decided later (answer ingestion)
+        profiles=profiles,
+    )
+    project.mapping_trace_summary = trace["summary"]
+    mapping_trace.write_trace_artifacts(trace, out_dir)
+    mapping_trace.write_explanation_report(trace, out_dir, policy.name, project.client_name)
+    for name in ("05c_mapping_trace.csv", "05c_mapping_trace.json", "05d_mapping_explanation.md"):
+        project.generated_artifacts.append(str(out_dir / name))
+
     # --- mode-aware review status / readiness ---
     project.review_status = compute_readiness(project.gap_questions, policy)
 
