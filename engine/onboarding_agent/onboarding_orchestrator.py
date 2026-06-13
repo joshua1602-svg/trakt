@@ -23,6 +23,8 @@ from typing import Dict, List
 import pandas as pd
 import yaml
 
+from engine.gate_1_alignment.semantic_alignment import load_field_registry
+
 from . import config_suggester, file_classifier, file_profiler, gap_analyzer, source_consolidator
 from .document_extractor import (
     extract_documents,
@@ -30,6 +32,8 @@ from .document_extractor import (
     write_document_extraction_summary,
 )
 from .field_scope import resolve_field_scope
+from .llm_mapping_reviewer import run_llm_mapping_review
+from .llm_policy import resolve_llm_policy
 from .mapping_proposer import propose_mappings
 from .mode_policy import ModePolicy, default_mode, load_mode_policy, severity_rank
 from .onboarding_models import OnboardingProject
@@ -99,6 +103,11 @@ def run_onboarding(
     enable_handoff: bool = True,
     mode: str = "",
     regulatory_reporting_enabled: bool = False,
+    enable_llm_review: bool = False,
+    llm_budget_profile: str = "",
+    llm_max_calls: int | None = None,
+    llm_max_items_per_call: int | None = None,
+    llm_callable=None,
 ) -> OnboardingProject:
     in_dir = Path(input_dir)
     out_dir = Path(output_dir)
@@ -106,6 +115,18 @@ def run_onboarding(
 
     mode = mode or default_mode()
     policy = load_mode_policy(mode)
+
+    # Low-cost LLM policy (off by default; opt-in via CLI/config). Resolved here
+    # so the whole run shares one budget.
+    # Only force-enable when --enable-llm-review is explicitly set; otherwise let
+    # the budget profile / config decide (so `--llm-budget-profile low` enables
+    # without the store_true default clobbering it back to off).
+    llm_policy = resolve_llm_policy(
+        enable_llm_review=True if enable_llm_review else None,
+        budget_profile=llm_budget_profile,
+        max_calls=llm_max_calls,
+        max_items_per_call=llm_max_items_per_call,
+    )
 
     project = OnboardingProject(
         project_id=project_id or client_name.lower().replace(" ", "_"),
@@ -148,8 +169,11 @@ def run_onboarding(
     project.candidate_keys = source_consolidator.detect_candidate_keys(profiles)
 
     # --- PART 6: mapping candidates (mode field scope diverts out-of-scope targets) ---
-    project.mapping_candidates, project.out_of_scope_fields = propose_mappings(
-        inventory, dataframes, Path(registry_path), Path(aliases_dir), field_scope=field_scope
+    (project.mapping_candidates, project.out_of_scope_fields,
+     project.mapping_ambiguities) = propose_mappings(
+        inventory, dataframes, Path(registry_path), Path(aliases_dir),
+        field_scope=field_scope,
+        regulatory_reporting_enabled=regulatory_reporting_enabled,
     )
 
     # Mapping coverage by registry category (for the review pack).
@@ -193,6 +217,25 @@ def run_onboarding(
         mapping_candidates=project.mapping_candidates,
     )
 
+    # --- PART 4/5/6: targeted, bounded LLM mapping review (off by default) ---
+    registry_fields = load_field_registry(Path(registry_path)).get("fields", {}) or {}
+    suggestions, llm_usage, llm_gap_questions = run_llm_mapping_review(
+        mapping_candidates=project.mapping_candidates,
+        mapping_ambiguities=project.mapping_ambiguities,
+        field_scope=field_scope,
+        registry_fields=registry_fields,
+        mode=policy.name,
+        policy=llm_policy,
+        regulatory_reporting_enabled=regulatory_reporting_enabled,
+        column_profiles=profiles,
+        llm_callable=llm_callable,
+        gap_question_start_index=len(project.gap_questions) + 1,
+    )
+    project.llm_mapping_suggestions = suggestions
+    project.llm_usage_summary = llm_usage
+    # Excess uncertainty becomes user gap questions instead of token spend.
+    project.gap_questions.extend(llm_gap_questions)
+
     # --- mode-aware review status / readiness ---
     project.review_status = compute_readiness(project.gap_questions, policy)
 
@@ -200,6 +243,9 @@ def run_onboarding(
     write_document_extraction_summary(project.document_extractions, out_dir, doc_policy)
     project.generated_artifacts.append(str(out_dir / "17_document_extraction_summary.yaml"))
     _write_artifacts(project)
+
+    # --- PART 5: LLM usage / cost summary (always written; off => zero cost) ---
+    _write_llm_artifacts(project, out_dir)
 
     # --- PART 9: review pack ---
     pack_path = out_dir / "08_onboarding_review_pack.html"
@@ -218,6 +264,32 @@ def run_onboarding(
     project.generated_artifacts.append(str(summary_path))
 
     return project
+
+
+def _write_llm_artifacts(project: OnboardingProject, out_dir: Path) -> None:
+    """PART 5 — write 22_llm_usage_summary.json (+ suggestions when present).
+
+    When the LLM is off the summary is the minimal zero-cost record.
+    """
+    usage = project.llm_usage_summary or {}
+    if not usage.get("llm_enabled"):
+        usage = {"llm_enabled": False, "calls_completed": 0, "estimated_cost": 0,
+                 **{k: v for k, v in usage.items() if k not in
+                    ("llm_enabled", "calls_completed", "estimated_cost")}}
+    summary_path = out_dir / "22_llm_usage_summary.json"
+    summary_path.write_text(json.dumps(usage, indent=2, default=str), encoding="utf-8")
+    project.generated_artifacts.append(str(summary_path))
+
+    if project.llm_mapping_suggestions:
+        sugg_path = out_dir / "22_llm_mapping_suggestions.json"
+        sugg_path.write_text(
+            json.dumps(
+                {"_warning": "SUGGESTION-ONLY — never promoted to final mappings.",
+                 "llm_mapping_suggestions": project.llm_mapping_suggestions},
+                indent=2, default=str),
+            encoding="utf-8",
+        )
+        project.generated_artifacts.append(str(sugg_path))
 
 
 def _write_artifacts(project: OnboardingProject) -> None:
@@ -255,6 +327,7 @@ def _write_artifacts(project: OnboardingProject) -> None:
         "source_file", "source_file_classification", "source_column",
         "candidate_canonical_field", "confidence", "method",
         "sample_values_redacted", "requires_review", "reason",
+        "ambiguity_rule_applied", "alternative_candidates",
     ]
     _write_csv(out / "05_mapping_candidates.csv", project.mapping_candidates, map_fields)
     _write_json(out / "05_mapping_candidates.json", project.mapping_candidates)
@@ -262,6 +335,17 @@ def _write_artifacts(project: OnboardingProject) -> None:
     # 05a out-of-scope fields (excluded by mode field scope)
     oos_fields = ["source_file", "source_column", "candidate_field", "category", "reason", "mode"]
     _write_csv(out / "05a_out_of_scope_fields.csv", project.out_of_scope_fields, oos_fields)
+
+    # 05b mapping ambiguities (resolved by the regulatory-preference rule)
+    amb_fields = [
+        "source_file", "source_column", "selected_canonical_field",
+        "selected_category", "selected_core_canonical", "selected_confidence",
+        "alternative_canonical_field", "alternative_category",
+        "alternative_core_canonical", "alternative_confidence", "confidence_delta",
+        "ambiguity_rule_applied", "review_required", "reason", "mode",
+    ]
+    _write_csv(out / "05b_mapping_ambiguities.csv", project.mapping_ambiguities, amb_fields)
+    _write_json(out / "05b_mapping_ambiguities.json", project.mapping_ambiguities)
 
     # 06 config suggestions
     cfg_fields = [
@@ -302,6 +386,7 @@ def _write_artifacts(project: OnboardingProject) -> None:
         "03_candidate_keys.csv", "04_source_overlap_analysis.csv",
         "05_mapping_candidates.csv", "05_mapping_candidates.json",
         "05a_out_of_scope_fields.csv",
+        "05b_mapping_ambiguities.csv", "05b_mapping_ambiguities.json",
         "06_config_suggestions.csv", "06_config_suggestions.yaml",
         "07_gap_questions.csv", "07_gap_questions.yaml",
     ]:
