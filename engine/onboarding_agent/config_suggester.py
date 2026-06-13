@@ -33,6 +33,54 @@ except Exception:  # pragma: no cover - defensive fallback
         "equity_release": ["equity_release", "no_negative_equity", "lifetime_mortgage"],
     }
 
+import yaml
+
+# Onboarding geography/regime policy file used to source the geographic
+# classification year (NOT the reporting date).
+_ONBOARDING_POLICY_PATH = Path(__file__).resolve().parents[2] / "config" / "system" / "onboarding_agent.yaml"
+# Final fallback if no policy is configured anywhere (still requires_review).
+_FALLBACK_CLASSIFICATION_YEAR = "2021"
+
+
+def _suggest_classification_year() -> "ConfigSuggestion":
+    """Source the geographic classification year from policy config.
+
+    classification_year is the year/version of the geographic (NUTS/ITL)
+    classification used for geography fields (ESMA RREL12 /
+    geographic_region_classification). It is deliberately NOT derived from the
+    reporting date. Resolution order: onboarding geography policy config, then a
+    documented fallback default — always flagged requires_review for human sign-off.
+    """
+    value = ""
+    source = ""
+    try:
+        if _ONBOARDING_POLICY_PATH.exists():
+            policy = yaml.safe_load(_ONBOARDING_POLICY_PATH.read_text(encoding="utf-8")) or {}
+            geo = policy.get("geography_policy", {}) or {}
+            if geo.get("classification_year") is not None:
+                value = str(geo["classification_year"])
+                source = "config/system/onboarding_agent.yaml:geography_policy.classification_year"
+    except Exception:
+        pass
+
+    if not value:
+        value = _FALLBACK_CLASSIFICATION_YEAR
+        source = "onboarding/regime policy default"
+
+    return ConfigSuggestion(
+        field="classification_year",
+        suggested_value=value,
+        confidence=0.6,
+        source_file="<policy>",
+        source_column_or_document_reference=source,
+        evidence=(
+            "Geographic (NUTS/ITL) classification year from onboarding/regime "
+            "policy; NOT derived from the reporting date."
+        ),
+        review_status="requires_review",
+    )
+
+
 _CURRENCY_RE = re.compile(r"\b(GBP|EUR|USD|CHF|JPY|AUD)\b")
 _PERCENT_RE = re.compile(r"(\d+(?:\.\d+)?)\s*%")
 _MONEY_RE = re.compile(r"(GBP|EUR|USD|£|€|\$)\s*([\d,]+(?:\.\d+)?)")
@@ -300,19 +348,14 @@ def suggest_config(
                 review_status="requires_review",
             )
         )
-        # classification_year inferred from year of reporting date.
-        year = dates[-1][:4]
-        suggestions.append(
-            ConfigSuggestion(
-                field="classification_year",
-                suggested_value=year,
-                confidence=0.5,
-                source_file="<structured>",
-                source_column_or_document_reference="reporting-date columns",
-                evidence=f"Year of latest reporting date ({dates[-1]}).",
-                review_status="requires_review",
-            )
-        )
+
+    # classification_year is the YEAR/VERSION of the geographic (NUTS/ITL)
+    # classification used for geography fields (ESMA RREL12 /
+    # geographic_region_classification). It is NOT the reporting date and must
+    # NEVER be derived from year(reporting_date). It is sourced from geography /
+    # regime policy config (e.g. nuts_classification_year), or marked
+    # requires_review when no policy is available.
+    suggestions.append(_suggest_classification_year())
 
     # regime — driven by asset class (equity release -> ESMA Annex 2).
     regime = "ESMA_Annex2"

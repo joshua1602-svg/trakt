@@ -57,3 +57,15 @@ required_config_by_asset_class:
   sme:
     - portfolio.country
     - portfolio.base_currency
+
+# ---------------------------------------------------------------------------
+# Onboarding Agent v2 — geography / classification policy defaults.
+# Used by config_suggester to source classification_year (the NUTS/ITL
+# classification YEAR for geographic_region_classification / ESMA RREL12).
+# This is the VERSION of the geography classification, NOT the reporting date,
+# and must never be derived from year(reporting_date).
+# ---------------------------------------------------------------------------
+geography_policy:
+  classification_year: 2021          # NUTS/ITL classification year (RREL12)
+  esma_uk_geography_mode: GBZZZ      # RREL11/RREC6 UK delivery mode for ESMA
+  mi_region_display_field: collateral_geography  # readable region for MI/FCA

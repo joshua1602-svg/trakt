@@ -212,8 +212,113 @@ def build_review_pack(project: OnboardingProject, out_path: Path) -> Path:
   <div class="card"><h2>8. Gap questions</h2>{q_html}</div>
   <div class="card"><h2>9. Readiness assessment</h2>{readiness}</div>
   <div class="card"><h2>10. Recommended next actions</h2>{actions_html}</div>
+  {_APPROVAL_MARKER}
 </div></body></html>"""
 
     out_path = Path(out_path)
+    # If approved artefacts already exist in this output dir, fold them in.
+    doc = doc.replace(_APPROVAL_MARKER, build_approval_section_html(out_path.parent))
     out_path.write_text(doc, encoding="utf-8")
     return out_path
+
+
+# ---------------------------------------------------------------------------
+# PART 7 — approved artefacts section (shown only once answers are ingested)
+# ---------------------------------------------------------------------------
+
+# Marker so the approval section can be (re)injected idempotently after ingestion.
+_APPROVAL_MARKER = "<!--APPROVAL_SECTION-->"
+
+
+def _load_yaml(path: Path):
+    import yaml
+    if not path.exists():
+        return None
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def _load_json(path: Path):
+    import json
+    if not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def build_approval_section_html(project_dir: Path) -> str:
+    """Return an HTML card for the approved artefacts, or '' if none exist."""
+    project_dir = Path(project_dir)
+    approved_project = _load_yaml(project_dir / "10_approved_onboarding_project.yaml")
+    approved_config = _load_yaml(project_dir / "11_approved_config.yaml")
+    precedence = _load_yaml(project_dir / "13_source_precedence_rules.yaml") or {}
+    enum_decisions = _load_yaml(project_dir / "14_enum_review_decisions.yaml") or {}
+    report = _load_json(project_dir / "15_answer_ingestion_report.json") or {}
+
+    if not approved_project:
+        return ""
+
+    status = approved_project.get("approval_status", "")
+    ready = status == "ready_for_handoff"
+    badge = (
+        '<span class="badge b-ok">READY FOR HANDOFF</span>' if ready
+        else f'<span class="badge b-warn">{_esc(status)}</span>'
+    )
+
+    answered = approved_project.get("answered_questions", [])
+    unresolved = approved_project.get("unresolved_questions", [])
+    cfg = approved_config or {}
+    geo = (cfg.get("geography_policy", {}) or {}).get("ESMA_Annex2", {}) or {}
+
+    # Source-of-truth rows
+    prec_rows = [
+        [_esc(field),
+         f"{_esc(v.get('primary_source_file',''))}<br><small>{_esc(v.get('primary_source_column',''))}</small>",
+         _esc(v.get("reconciliation_status", ""))]
+        for field, v in (precedence or {}).items()
+    ]
+    # Enum decision rows
+    enum_rows = []
+    for field, vals in (enum_decisions or {}).items():
+        for raw, d in vals.items():
+            enum_rows.append([_esc(field), _esc(raw), _esc(d.get("decision", ""))])
+
+    return f"""
+  <div class="card" id="approval"><h2>11. Approval status (answer ingestion)</h2>
+    <p class="meta">Approval: {badge} &nbsp;·&nbsp;
+      blocking answered {_esc(report.get('blocking_answered','?'))}/{_esc(report.get('blocking_total','?'))}
+      &nbsp;·&nbsp; invalid answers: {_esc(report.get('answers_invalid', 0))}</p>
+    <p class="meta">Answered: {_esc(', '.join(answered)) or '—'}</p>
+    <p class="meta">Unresolved: {_esc(', '.join(unresolved)) or '—'}</p>
+    <table><tbody>
+      <tr><th>Approved reporting date</th><td>{_esc(cfg.get('reporting_date',''))}</td></tr>
+      <tr><th>Classification year (policy)</th><td>{_esc(cfg.get('classification_year',''))}</td></tr>
+      <tr><th>ESMA UK geography mode</th><td>{_esc(geo.get('uk_geography_mode',''))}</td></tr>
+    </tbody></table>
+    <h4 class="chart-title">Approved source-of-truth</h4>
+    {_table(["Field", "Primary source", "Reconciliation"], prec_rows)}
+    <h4 class="chart-title">Approved enum decisions</h4>
+    {_table(["Field", "Raw value", "Decision"], enum_rows)}
+    <div class="callout {'pass' if ready else 'warn'}">
+      {"All blocking questions resolved — pack is READY for pipeline handoff (review-only)."
+       if ready else
+       "Pack is not yet ready for handoff: unresolved or invalid answers remain."}
+    </div>
+  </div>"""
+
+
+def refresh_review_pack_approval(project_dir: Path) -> None:
+    """Re-inject the approval section into an existing 08 review pack."""
+    project_dir = Path(project_dir)
+    pack = project_dir / "08_onboarding_review_pack.html"
+    if not pack.exists():
+        return
+    text = pack.read_text(encoding="utf-8")
+    section = build_approval_section_html(project_dir)
+    if _APPROVAL_MARKER in text:
+        text = text.replace(_APPROVAL_MARKER, section)
+    else:
+        # Remove any previously injected approval card, then re-add before close.
+        import re
+        text = re.sub(r'\s*<div class="card" id="approval">.*?</div>\s*(?=</div></body>)',
+                      "", text, flags=re.DOTALL)
+        text = text.replace("</div></body></html>", f"{section}\n</div></body></html>")
+    pack.write_text(text, encoding="utf-8")

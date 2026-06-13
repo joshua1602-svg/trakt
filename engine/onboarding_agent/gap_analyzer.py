@@ -43,6 +43,23 @@ _KNOWN_ENUM_FIELDS = {
 }
 _ENUM_NAME_HINTS = ("status", "type", "purpose", "channel", "flag")
 
+# Placeholder / process tokens that are never a meaningful enum value. They must
+# be surfaced as unresolved (requires_review) and must NOT be auto-defaulted to a
+# canonical code such as OTHR without an explicit human decision.
+_UNRESOLVED_ENUM_PLACEHOLDERS = {
+    "manual", "unknown", "n/a", "na", "none", "null", "tbc", "tbd",
+    "to be confirmed", "requires review", "requires_review", "?", "-", "",
+}
+
+# Allowed decision actions an answer may take on an unresolved enum value.
+ENUM_DECISION_ACTIONS = [
+    "treat_as_missing",
+    "map_to_ND1",
+    "map_to_OTHR",
+    "provide_custom_mapping",
+    "exclude_field_from_regulatory_delivery",
+]
+
 
 def _detect_conflicting_dates(profiles: List[ColumnProfile]) -> List[str]:
     dates = set()
@@ -82,36 +99,57 @@ def _enum_questions(
                 key = (col_norm, val)
                 if key in seen:
                     continue
-                suspicious = False
+                placeholder = val.strip().lower() in _UNRESOLVED_ENUM_PLACEHOLDERS
                 if valid is not None:
-                    suspicious = val.strip().upper() not in valid
+                    suspicious = placeholder or val.strip().upper() not in valid
                 else:
-                    # Heuristic: lowercase value among otherwise upper-cased codes.
+                    # Heuristic: lowercase value among otherwise upper-cased codes,
+                    # or an explicit unresolved placeholder token.
                     upper_siblings = [v for v in values if v.isupper()]
-                    suspicious = (
+                    suspicious = placeholder or (
                         val.islower()
                         and len(upper_siblings) >= 1
                         and val.strip().upper() not in {v.upper() for v in upper_siblings}
                     )
-                if suspicious:
-                    seen.add(key)
-                    idx += 1
-                    questions.append(
-                        GapQuestion(
-                            question_id=f"Q{idx}",
-                            category="enum",
-                            severity="high",
-                            question=(
-                                f'Should "{val}" in {col_norm} map to a canonical enum '
-                                f"value, or be treated as missing?"
-                            ),
-                            reason=f'Value "{val}" is not a recognised {col_norm} enum.',
-                            candidate_answers=["ND1", "OTHR", "treat as missing", "add as new alias"],
-                            default_recommendation="OTHR",
-                            blocking_for=["ESMA_Annex2"],
-                            source_evidence=f"{item.file_name}:{col}",
-                        )
+                if not suspicious:
+                    continue
+                seen.add(key)
+                idx += 1
+                if placeholder:
+                    # Unresolved placeholder: never auto-default to a canonical code.
+                    question = (
+                        f'The source value "{val}" appears in {col_norm} but is not a '
+                        f"recognised {col_norm} enum. How should it be treated?"
                     )
+                    reason = (
+                        f'"{val}" is a placeholder / process token, not a semantically '
+                        f"meaningful {col_norm} value."
+                    )
+                    candidates = list(ENUM_DECISION_ACTIONS)
+                    default = "requires_review"
+                else:
+                    question = (
+                        f'Should "{val}" in {col_norm} map to a canonical enum '
+                        f"value, or be treated as missing?"
+                    )
+                    reason = f'Value "{val}" is not a recognised {col_norm} enum.'
+                    candidates = list(ENUM_DECISION_ACTIONS)
+                    default = "requires_review"
+                questions.append(
+                    GapQuestion(
+                        question_id=f"Q{idx}",
+                        category="enum",
+                        severity="high",
+                        question=question,
+                        reason=reason,
+                        candidate_answers=candidates,
+                        default_recommendation=default,
+                        blocking_for=["ESMA_Annex2"],
+                        source_evidence=f"{item.file_name}:{col}",
+                        subject=col_norm,
+                        subject_value=val,
+                    )
+                )
     return questions
 
 
@@ -142,6 +180,7 @@ def analyze_gaps(
                 default_recommendation=dates[-1],
                 blocking_for=["canonical_loan_reporting", "ESMA_Annex2", "MI_Agent"],
                 source_evidence="reporting-date columns across sources",
+                subject="reporting_date",
             )
         )
     elif len(dates) == 1:
@@ -156,6 +195,7 @@ def analyze_gaps(
                 default_recommendation=dates[0],
                 blocking_for=[],
                 source_evidence="reporting-date columns",
+                subject="reporting_date",
             )
         )
 
@@ -182,6 +222,7 @@ def analyze_gaps(
                 default_recommendation=f.recommended_primary_source,
                 blocking_for=["canonical_loan_reporting"],
                 source_evidence=f"{f.source_file_a}:{f.source_column_a} | {f.source_file_b}:{f.source_column_b}",
+                subject=f.canonical_candidate,
             )
         )
 
@@ -214,6 +255,7 @@ def analyze_gaps(
                     default_recommendation=s.suggested_value if s else "",
                     blocking_for=["pipeline_handoff"],
                     source_evidence=s.evidence if s else "",
+                    subject=fld,
                 )
             )
 
@@ -226,10 +268,11 @@ def analyze_gaps(
             severity="medium",
             question="Confirm ESMA Annex 2 UK geography policy: should RREL11/RREC6 use GBZZZ?",
             reason="Current policy is GBZZZ for ESMA; ITL3 retained for MI/FCA display.",
-            candidate_answers=["GBZZZ (ESMA) + ITL3 (MI)", "ITL3 everywhere", "other"],
-            default_recommendation="GBZZZ (ESMA) + ITL3 (MI)",
+            candidate_answers=["GBZZZ", "ITL3", "other"],
+            default_recommendation="GBZZZ",
             blocking_for=["ESMA_Annex2"],
             source_evidence="geography projection policy",
+            subject="uk_geography_mode",
         )
     )
 

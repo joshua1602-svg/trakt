@@ -257,11 +257,48 @@ class TestGapQuestions(_ProjectFixture):
         self.assertTrue(enum_qs)
         self.assertIn("manual", enum_qs[0].question)
 
+    def test_manual_enum_default_is_requires_review_not_othr(self):
+        enum_qs = [
+            q for q in self.project.gap_questions
+            if q.category == "enum" and q.subject_value == "manual"
+        ]
+        self.assertTrue(enum_qs)
+        q = enum_qs[0]
+        self.assertEqual(q.default_recommendation, "requires_review")
+        self.assertNotEqual(q.default_recommendation, "OTHR")
+        self.assertEqual(q.severity, "high")
+        # Source evidence preserved.
+        self.assertIn("employment_status", q.source_evidence)
+        self.assertIn("treat_as_missing", q.candidate_answers)
+
+
     def test_ambiguous_source(self):
         self.assertIn("source_of_truth", self._categories())
 
     def test_geography_policy_question(self):
         self.assertIn("geography", self._categories())
+
+
+class TestClassificationYear(_ProjectFixture):
+    def _cfg(self, field):
+        return {c.field: c for c in self.project.config_suggestions}.get(field)
+
+    def test_classification_year_not_from_reporting_date(self):
+        cy = self._cfg("classification_year")
+        rd = self._cfg("reporting_date")
+        self.assertIsNotNone(cy)
+        # reporting date is 2026-0x; classification year must NOT be 2026.
+        self.assertNotEqual(cy.suggested_value, "2026")
+        if rd:
+            self.assertNotEqual(cy.suggested_value, rd.suggested_value[:4])
+
+    def test_classification_year_sourced_from_policy(self):
+        cy = self._cfg("classification_year")
+        self.assertEqual(cy.suggested_value, "2021")
+        self.assertEqual(cy.review_status, "requires_review")
+        self.assertIn("policy", (cy.source_column_or_document_reference + cy.evidence).lower())
+        # Evidence must clarify it is NOT the reporting date (RREL12 semantics).
+        self.assertIn("not derived from the reporting date", cy.evidence.lower())
 
 
 # ---------------------------------------------------------------------------

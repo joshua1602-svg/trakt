@@ -28,6 +28,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from engine.onboarding_agent.answer_ingestion import ingest_answers
 from engine.onboarding_agent.onboarding_orchestrator import run_onboarding
 
 
@@ -54,10 +55,52 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip writing the draft pipeline handoff artefacts (09_*).",
     )
+    p.add_argument(
+        "--answers",
+        default="",
+        help="Optional answers YAML — after generating the pack, ingest these "
+        "answers and write the approved artefacts (10..15).",
+    )
     return p
 
 
+def build_ingest_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        description="Ingest answered gap questions and write approved artefacts."
+    )
+    p.add_argument("--project-dir", required=True, help="Existing onboarding output folder.")
+    p.add_argument("--answers", required=True, help="Answers YAML file.")
+    return p
+
+
+def _print_ingestion_report(report) -> None:
+    print("=" * 64)
+    print("Answer ingestion complete")
+    print(f"Approval status: {report['approval_status']}")
+    print(f"  questions_total:   {report['questions_total']}")
+    print(f"  blocking_total:    {report['blocking_total']}")
+    print(f"  blocking_answered: {report['blocking_answered']}")
+    print(f"  answers_invalid:   {report['answers_invalid']}")
+    for inv in report.get("invalid_detail", []):
+        print(f"    ! {inv['question_id']}: {inv['reason']}")
+    print("Approved artefacts:")
+    for a in report["artefacts_written"]:
+        print(f"  - {a}")
+    print("=" * 64)
+
+
 def main(argv=None) -> int:
+    import sys as _sys
+
+    argv = list(_sys.argv[1:] if argv is None else argv)
+
+    # Subcommand: ingest-answers
+    if argv and argv[0] == "ingest-answers":
+        args = build_ingest_parser().parse_args(argv[1:])
+        report = ingest_answers(args.project_dir, args.answers)
+        _print_ingestion_report(report)
+        return 0
+
     args = build_parser().parse_args(argv)
 
     project = run_onboarding(
@@ -81,6 +124,12 @@ def main(argv=None) -> int:
     for a in project.generated_artifacts:
         print(f"  - {Path(a).name}")
     print("=" * 64)
+
+    # Optional inline answer ingestion.
+    if args.answers:
+        report = ingest_answers(args.output_dir, args.answers)
+        _print_ingestion_report(report)
+
     return 0
 
 

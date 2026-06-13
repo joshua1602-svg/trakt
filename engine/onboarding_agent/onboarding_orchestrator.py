@@ -218,12 +218,18 @@ def _write_artifacts(project: OnboardingProject) -> None:
     gap_fields = [
         "question_id", "category", "severity", "question", "reason",
         "candidate_answers", "default_recommendation", "blocking_for", "source_evidence",
+        "subject", "subject_value",
     ]
     _write_csv(out / "07_gap_questions.csv", project.gap_questions, gap_fields)
     (out / "07_gap_questions.yaml").write_text(
         yaml.safe_dump([dataclasses.asdict(q) for q in project.gap_questions], sort_keys=False),
         encoding="utf-8",
     )
+
+    # example_answers.yaml — a pre-filled answer template the user can edit and
+    # feed back via `--answers` (answer ingestion, PART 4).
+    _write_example_answers(project, out / "example_answers.yaml")
+    project.generated_artifacts.append(str(out / "example_answers.yaml"))
 
     for name in [
         "01_file_inventory.csv", "01_file_inventory.json",
@@ -234,6 +240,36 @@ def _write_artifacts(project: OnboardingProject) -> None:
         "07_gap_questions.csv", "07_gap_questions.yaml",
     ]:
         project.generated_artifacts.append(str(out / name))
+
+
+def _example_answer_for(q) -> str:
+    """Pick a sensible pre-filled answer for the example template."""
+    if q.default_recommendation and q.default_recommendation in q.candidate_answers:
+        return q.default_recommendation
+    if q.candidate_answers:
+        return q.candidate_answers[0]
+    return q.default_recommendation or ""
+
+
+def _write_example_answers(project: OnboardingProject, path: Path) -> None:
+    answers = {}
+    for q in project.gap_questions:
+        answers[q.question_id] = {
+            "answer": _example_answer_for(q),
+            "approved_by": "user",
+            "note": q.question,
+        }
+    payload = {
+        "_doc": (
+            "Answer the gap questions below, then run answer ingestion with "
+            "`--answers <this file>`. 'answer' must be one of the candidate answers "
+            "where candidates exist; dates must be ISO; source answers must be a "
+            "source file name."
+        ),
+        "project_id": project.project_id,
+        "answers": answers,
+    }
+    path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
 
 
 def _write_handoff(project: OnboardingProject) -> None:

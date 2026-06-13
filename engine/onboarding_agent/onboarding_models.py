@@ -150,6 +150,12 @@ class GapQuestion:
     default_recommendation: str = ""
     blocking_for: List[str] = field(default_factory=list)
     source_evidence: str = ""
+    # Structured targets so answer ingestion is deterministic (no text parsing):
+    #   subject        - the thing the answer configures (canonical field, config
+    #                     key, 'reporting_date', 'uk_geography_mode', enum field…)
+    #   subject_value  - a secondary qualifier (e.g. the raw enum value 'manual')
+    subject: str = ""
+    subject_value: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
