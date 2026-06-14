@@ -1,0 +1,26 @@
+# config/system/aliases_onboarding_lending.yaml
+# ---------------------------------------------------------------------------
+# Onboarding Agent — minimal, audited lending synonyms.
+#
+# Added ONLY after the deterministic mapping audit (mapping_trace) proved these
+# specific, unambiguous synonyms were genuinely absent from the existing alias
+# libraries (aliases_mandatory / aliases_optional / aliases_analytics) yet are
+# standard lending terms for their canonical target.
+#
+# Deliberately NOT added (genuinely ambiguous — left to review / value matching):
+#   "loan amount"          (normalises to a bare "amount"; could be original/current)
+#   "initial advance"      (could be original principal OR a drawdown advance)
+#   "principal outstanding" (already resolves deterministically via domain context;
+#                            kept review-eligible so the ambiguity rule still applies)
+#
+# This file is auto-discovered by load_aliases_from_dir's aliases_*.yaml glob and
+# is shared with Gate 1; entries are intentionally specific and low-risk.
+# ---------------------------------------------------------------------------
+
+current_valuation_amount:
+  aliases:
+    - valuation amount
+
+original_principal_balance:
+  aliases:
+    - original principal

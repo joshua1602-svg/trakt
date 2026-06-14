@@ -69,7 +69,135 @@ def _table(headers: List[str], rows: List[List[str]]) -> str:
     return f"<table><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table>"
 
 
-def build_review_pack(project: OnboardingProject, out_path: Path) -> Path:
+def _domain_status_badge(status: str) -> str:
+    cls = {"covered": "b-ok", "partially_covered": "b-warn",
+           "missing": "b-block", "out_of_scope": "b-info"}.get(status, "b-info")
+    return f'<span class="badge {cls}">{_esc(status)}</span>'
+
+
+def _domain_coverage_html(project: OnboardingProject) -> str:
+    rows = []
+    for d in project.domain_coverage:
+        rows.append([
+            _esc(d.domain), _domain_status_badge(d.status),
+            _esc(", ".join(d.source_files) or "—"),
+            _esc(f"{d.mapped_fields_count}/{d.required_fields_count}"),
+            '<span class="badge b-block">blocking</span>' if d.blocking else "—",
+            _esc(d.notes),
+        ])
+    intro = (
+        "Onboarding is domain-based, not file-based: a combined master tape can "
+        "cover the loan AND collateral domains at once, so a separate collateral "
+        "file is not required where collateral/property fields are present."
+    )
+    return (f'<p class="meta">{intro}</p>'
+            + _table(["Domain", "Status", "Source files", "Mapped/Required",
+                      "Blocking", "Coverage note"], rows))
+
+
+def _mapping_trace_html(project: OnboardingProject) -> str:
+    s = project.mapping_trace_summary or {}
+    if not s:
+        return '<p class="meta">Mapping trace not available.</p>'
+    alias_files = s.get("alias_files_loaded", []) or []
+    rows = [
+        ["Mapping trace available", "yes"],
+        ["Alias files loaded", "yes — " + ", ".join(alias_files) if alias_files else "no"],
+        ["Registry fields loaded", s.get("registry_fields_count", "—")],
+        ["Columns mapped by alias", s.get("mapped_by_alias", 0)],
+        ["Columns mapped by registry/header scoring", s.get("mapped_by_registry_header", 0)],
+        ["Columns mapped by value match/context", s.get("mapped_by_value_or_context", 0)],
+        ["Columns out of scope (mode)", s.get("out_of_scope", 0)],
+        ["Columns requiring user review", s.get("ambiguous_needs_review", 0)],
+        ["Columns unmapped", s.get("unmapped", 0)],
+        ["Columns sent to LLM", s.get("sent_to_llm", 0)],
+    ]
+    intro = ("Deterministic-first: Python profiling → field registry → alias libraries "
+             "→ scoring → value matching → source precedence. The LLM only reviews "
+             "unresolved ambiguity and never writes final mappings. Full detail in "
+             "<code>05c_mapping_trace.csv</code> / <code>05d_mapping_explanation.md</code>.")
+    return (f'<p class="meta">{intro}</p>'
+            + _table(["Metric", "Value"], [[_esc(a), _esc(b)] for a, b in rows]))
+
+
+def _azure_metadata_html(project: OnboardingProject) -> str:
+    rows = [
+        ["Client ID", project.client_id or "—"],
+        ["Run ID", project.run_id or "—"],
+        ["Storage backend", project.storage_backend or "local"],
+        ["Input URI", project.input_uri or "— (local)"],
+        ["Output URI", project.output_uri or "— (local)"],
+    ]
+    return _table(["Field", "Value"], [[_esc(a), _esc(b)] for a, b in rows])
+
+
+def _promotion_section_html(output_root: Path) -> str:
+    """Central tape / pipeline / readiness / manifest status (after promote)."""
+    import json as _json
+
+    central = output_root / "central"
+    manifests = output_root / "manifests"
+    lender_summary = central / "18d_central_tape_summary.json"
+    pipeline_summary = central / "18a_central_pipeline_summary.json"
+    readiness = manifests / "21_pipeline_handoff_readiness.json"
+
+    if not lender_summary.exists() and not readiness.exists():
+        return ('<div class="callout warn">Promotion not yet run. Run '
+                '<code>cli promote --project-dir &lt;dir&gt; --approved-only --dry-run</code> '
+                'to build the central tapes and Azure-ready handoff manifests.</div>')
+
+    def load(p):
+        try:
+            return _json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+
+    ls = load(lender_summary)
+    ps = load(pipeline_summary)
+    rj = load(readiness)
+
+    central_rows = [
+        ["Central lender tape created", "yes" if lender_summary.exists() else "no"],
+        ["Loan count", ls.get("loan_count", "—")],
+        ["Mapped fields", ls.get("canonical_fields_populated", "—")],
+        ["Unresolved gaps", ls.get("gap_count", "—")],
+        ["Conflict count", ls.get("conflict_count", "—")],
+        ["Lineage path", "output/lineage/18b_central_tape_lineage.csv"],
+    ]
+    pipeline_rows = [
+        ["Central pipeline tape created", "yes" if pipeline_summary.exists() else "no"],
+        ["Application count", ps.get("pipeline_count", "—")],
+        ["Linked funded loans", ps.get("linked_to_funded_loans", "—")],
+        ["Application-only rows", ps.get("application_only_rows", "—")],
+    ]
+    readiness_rows = [
+        ["Ready for MI", rj.get("ready_for_mi_agent", "—")],
+        ["Ready for Gate 1 handoff", rj.get("ready_for_gate1_handoff", "—")],
+        ["Ready for regulatory projection", rj.get("ready_for_regulatory_projection", "—")],
+        ["Ready for warehouse analysis", rj.get("ready_for_warehouse_analysis", "—")],
+    ]
+    manifest_files = [
+        "19_promotion_plan.yaml", "20_pipeline_handoff_manifest.yaml",
+        "21_pipeline_handoff_readiness.json", "23_pipeline_trigger.json",
+    ]
+    manifest_rows = [
+        [name, "present" if (manifests / name).exists() else "missing"]
+        for name in manifest_files
+    ]
+    return (
+        '<h4 class="chart-title">Central lender tape</h4>'
+        + _table(["Item", "Value"], [[_esc(a), _esc(b)] for a, b in central_rows])
+        + '<h4 class="chart-title">Central pipeline tape</h4>'
+        + _table(["Item", "Value"], [[_esc(a), _esc(b)] for a, b in pipeline_rows])
+        + '<h4 class="chart-title">Dry-run readiness</h4>'
+        + _table(["Readiness", "Value"], [[_esc(a), _esc(b)] for a, b in readiness_rows])
+        + '<h4 class="chart-title">Azure-ready handoff manifests</h4>'
+        + _table(["Manifest", "Status"], [[_esc(a), _esc(b)] for a, b in manifest_rows])
+    )
+
+
+def build_review_pack(project: OnboardingProject, out_path: Path,
+                      output_root: Path | None = None) -> Path:
     s = project.to_summary_dict()
     counts = s["counts"]
     blocking_qs = [q for q in project.gap_questions if q.severity == "blocking"]
@@ -349,6 +477,9 @@ def build_review_pack(project: OnboardingProject, out_path: Path) -> Path:
   </div>
 
   <div class="card"><h2>1a. Onboarding mode &amp; mode-specific readiness</h2>{mode_readiness_html}</div>
+  <div class="card"><h2>1a-i. Data domain coverage</h2>{_domain_coverage_html(project)}</div>
+  <div class="card"><h2>1a-ii. Azure-ready run metadata</h2>{_azure_metadata_html(project)}</div>
+  <div class="card"><h2>1a-iii. Deterministic mapping trace</h2>{_mapping_trace_html(project)}</div>
   <div class="card"><h2>1b. Field scope for this onboarding mode</h2>{field_scope_html}</div>
   <div class="card"><h2>1c. Mapping ambiguities resolved by policy</h2>{ambiguities_html}</div>
   {f'<div class="card"><h2>1d. LLM mapping review usage &amp; cost</h2>{llm_html}</div>' if show_llm else ''}
@@ -362,12 +493,16 @@ def build_review_pack(project: OnboardingProject, out_path: Path) -> Path:
   <div class="card"><h2>8. Gap questions</h2>{q_html}</div>
   <div class="card"><h2>9. Readiness assessment</h2>{readiness}</div>
   <div class="card"><h2>10. Recommended next actions</h2>{actions_html}</div>
+  <div class="card" id="promotion"><h2>12. Central tapes &amp; Azure-ready handoff (dry-run)</h2><!--PROMO_START-->{_PROMOTION_MARKER}<!--PROMO_END--></div>
   {_APPROVAL_MARKER}
 </div></body></html>"""
 
     out_path = Path(out_path)
+    if output_root is None:
+        output_root = out_path.parent / "output"
     # If approved artefacts already exist in this output dir, fold them in.
     doc = doc.replace(_APPROVAL_MARKER, build_approval_section_html(out_path.parent))
+    doc = doc.replace(_PROMOTION_MARKER, _promotion_section_html(Path(output_root)))
     out_path.write_text(doc, encoding="utf-8")
     return out_path
 
@@ -378,6 +513,26 @@ def build_review_pack(project: OnboardingProject, out_path: Path) -> Path:
 
 # Marker so the approval section can be (re)injected idempotently after ingestion.
 _APPROVAL_MARKER = "<!--APPROVAL_SECTION-->"
+# Marker so the promotion / central-tape section can be re-injected after promote.
+_PROMOTION_MARKER = "<!--PROMOTION_SECTION-->"
+
+
+def refresh_review_pack_promotion(project_dir: Path, output_root: Path | None = None) -> None:
+    """Re-inject the central-tape / handoff section into an existing review pack."""
+    import re
+
+    project_dir = Path(project_dir)
+    pack = project_dir / "08_onboarding_review_pack.html"
+    if not pack.exists():
+        return
+    if output_root is None:
+        output_root = project_dir / "output"
+    section = _promotion_section_html(Path(output_root))
+    text = pack.read_text(encoding="utf-8")
+    text = re.sub(r"<!--PROMO_START-->.*?<!--PROMO_END-->",
+                  f"<!--PROMO_START-->{section}<!--PROMO_END-->",
+                  text, flags=re.DOTALL)
+    pack.write_text(text, encoding="utf-8")
 
 
 def _load_yaml(path: Path):

@@ -23,6 +23,18 @@ alias matching and confidence scoring rather than reimplementing it.
 
 The agent produces *recommendations only*. It never mutates canonical data,
 production config, or makes final unreviewed decisions.
+
+Phase 1 (Azure-ready, domain-based consolidation) adds, on top of the above:
+
+    -> Azure-ready run-folder contract        (storage_paths)
+    -> domain detection + coverage            (domain_coverage)
+    -> central lender + pipeline tape build   (central_tape_builder)
+    -> dry-run handoff manifests / trigger    (promotion_planner)
+
+These reason about DATA DOMAINS, not a fixed set of files (a combined master
+tape may cover loan + borrower + collateral at once), produce blob-compatible
+paths/URIs, and remain review-first and dry-run: no live Azure upload, no Event
+Grid wiring, and Gates 1-5 are never run.
 """
 
 from .onboarding_models import OnboardingProject

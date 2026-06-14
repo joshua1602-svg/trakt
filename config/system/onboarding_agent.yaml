@@ -159,3 +159,40 @@ document_extraction:
       - reporting_regime
       - investor_report_frequency
       - cut_off_date_convention
+
+# ---------------------------------------------------------------------------
+# Onboarding Agent Phase 1 — source precedence policy by domain (PART 9).
+# These DEFAULTS order candidate sources for a canonical field when no approved
+# precedence rule (13_source_precedence_rules.yaml) exists. They are expressed
+# as an ordered list of file classifications; the central tape builder ranks
+# each field's sources by their file's classification for the field's domain.
+#
+# Defaults are NEVER treated as final when sources materially conflict — a
+# differing value with no APPROVED precedence still becomes a conflict gap and
+# is escalated to the user. The defaults only choose a sensible primary when
+# values agree or only one source is present.
+# ---------------------------------------------------------------------------
+source_precedence:
+  defaults_by_domain:
+    loan:
+      - current_loan_report
+      - historical_loan_report
+      - warehouse_agreement
+      - cashflow_report
+    borrower:
+      - current_loan_report
+      - collateral_report
+    collateral:
+      - collateral_report
+      - current_loan_report
+    cashflow:
+      - cashflow_report
+      - investor_report
+    pipeline:
+      - pipeline_report
+    warehouse_terms:
+      - warehouse_agreement
+  # Fields whose authoritative balance source is a client decision (loan tape vs
+  # cashflow/servicer). Left unranked here so a conflict is surfaced for review.
+  balance_fields_require_client_rule:
+    - current_principal_balance

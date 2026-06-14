@@ -1,0 +1,653 @@
+"""
+central_tape_builder.py
+=======================
+
+PART 7 / PART 8 — build consolidated raw input tapes from APPROVED onboarding
+decisions.
+
+This is a controlled, domain-based consolidator — *not* a generic "merge
+anything" engine. The files are containers; the domains are what matter. Loan,
+borrower and collateral fields can all be sourced from the same combined master
+tape, so the builder never requires a separate collateral file.
+
+Outputs (loan-level central lender tape)::
+    18_central_lender_tape.csv      one row per funded / live loan
+    18b_central_tape_lineage.csv    one row per populated field
+    18c_central_tape_gaps.csv       unmapped / conflicting / missing fields
+    18d_central_tape_summary.json
+
+Outputs (pipeline / origination — applications need no funded loan id)::
+    18a_central_pipeline_tape.csv
+    18a_central_pipeline_lineage.csv
+    18a_central_pipeline_summary.json
+
+Selection logic per canonical field (PART 7):
+  1. approved mapping override
+  2. approved source precedence rule (13_source_precedence_rules.yaml)
+  3. unambiguous in-scope mapping candidate
+  4. regulatory-preference ambiguity-selected candidate
+  5. otherwise leave blank and raise a gap
+
+Material conflicts are never silently resolved: differing values across sources
+with no approved precedence become conflict gaps.
+
+Audit note (deterministic-first): this builder does NOT invent source-to-canonical
+mappings. Every canonical field source comes from the existing mapping artefacts
+(12_approved_mapping_overrides + 05_mapping_candidates, which already encode the
+alias/registry/context/ambiguity decisions and are traced in 05c_mapping_trace).
+The only header-name logic here is loan/application KEY detection and pipeline
+field extraction (pipeline data lives outside the loan registry); no canonical
+field is ever guessed by header name.
+
+Input order: approved mapping overrides -> approved source precedence rules ->
+approved enum decisions -> 05_mapping_candidates (which reflect 05b ambiguity
+resolution) -> domain coverage.
+"""
+
+from __future__ import annotations
+
+import csv
+import json
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+import pandas as pd
+import yaml
+
+from engine.gate_1_alignment.semantic_alignment import load_field_registry
+from . import domain_coverage as dc
+from .field_scope import resolve_field_scope
+from .mode_policy import load_mode_policy
+
+# Loan-level domains that belong in the central lender tape. Cashflow is NOT a
+# lender-tape domain (per-period schedule rows belong to the pipeline/cashflow
+# extracts); however a *loan-domain* field such as current_principal_balance is
+# still consolidated even when its authoritative source is the cashflow extract,
+# because domain membership follows the canonical field, not the file.
+_LENDER_DOMAINS = {dc.LOAN, dc.BORROWER, dc.COLLATERAL}
+
+# Candidate loan-key column names (PART 7 primary key).
+_LOAN_KEY_NAMES = [
+    "loan_identifier", "loan_id", "loanid", "account_number", "account_no",
+    "facility_id", "account_id",
+]
+
+_LENDER_LINEAGE_COLUMNS = [
+    "loan_identifier", "canonical_field", "value", "source_file", "source_sheet",
+    "source_column", "source_value", "mapping_method", "confidence", "domain",
+    "source_precedence_applied", "validation_sources", "alternate_values",
+    "conflict_status", "enum_decision_applied", "review_required", "notes",
+]
+
+_GAP_COLUMNS = [
+    "gap_id", "severity", "mode", "domain", "canonical_field", "source_file",
+    "source_column", "issue_type", "description", "candidate_actions", "blocking",
+]
+
+_PIPELINE_COLUMNS = [
+    "application_id", "linked_loan_identifier", "broker_name", "pipeline_stage",
+    "application_date", "expected_completion_date", "expected_funded_amount",
+    "expected_ltv", "property_region", "property_post_code",
+]
+
+_PIPELINE_FIELD_PATTERNS: Dict[str, List[str]] = {
+    "application_id": ["application_id", "pipeline_id", "case_id", "app_id", "application_no"],
+    "linked_loan_identifier": ["linked_loan_id", "linked_loan_identifier",
+                               "funded_loan_id", "loan_identifier", "loan_id"],
+    "broker_name": ["broker_name", "broker", "intermediary"],
+    "pipeline_stage": ["pipeline_stage", "application_stage", "stage", "status"],
+    "application_date": ["application_date", "app_date", "offer_date"],
+    "expected_completion_date": ["expected_completion_date", "completion_date",
+                                 "expected_completion"],
+    "expected_funded_amount": ["expected_funding_amount", "expected_funded_amount",
+                               "requested_loan_amount", "expected_amount"],
+    "expected_ltv": ["expected_ltv", "anticipated_ltv"],
+    "property_region": ["property_region", "collateral_region", "region"],
+    "property_post_code": ["property_post_code", "post_code", "postcode"],
+}
+
+
+# ---------------------------------------------------------------------------
+# Loading helpers
+# ---------------------------------------------------------------------------
+
+
+def _load_json(path: Path) -> Any:
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+
+def _load_yaml(path: Path) -> Any:
+    return yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else None
+
+
+def _read_df(file_path: str) -> Optional[pd.DataFrame]:
+    p = Path(file_path)
+    try:
+        if p.suffix.lower() in (".xlsx", ".xls"):
+            return pd.read_excel(p)
+        if p.suffix.lower() == ".csv":
+            return pd.read_csv(p, low_memory=False)
+    except Exception:
+        return None
+    return None
+
+
+def _norm(col: str) -> str:
+    return str(col).strip().lower().replace(" ", "_")
+
+
+def _find_key_column(df: pd.DataFrame, names: List[str]) -> Optional[str]:
+    cols = {_norm(c): c for c in df.columns}
+    for n in names:
+        if n in cols:
+            return cols[n]
+    # substring fallback
+    for n in names:
+        for nc, orig in cols.items():
+            if n in nc:
+                return orig
+    return None
+
+
+def _values_match(a: Any, b: Any, tol: float = 0.01) -> bool:
+    if a is None or b is None:
+        return False
+    sa, sb = str(a).strip(), str(b).strip()
+    if sa == "" or sb == "":
+        return False
+    try:
+        fa, fb = float(sa), float(sb)
+        denom = max(abs(fa), abs(fb), 1.0)
+        return abs(fa - fb) / denom <= tol
+    except (ValueError, TypeError):
+        return sa == sb
+
+
+def _is_blank(v: Any) -> bool:
+    if v is None:
+        return True
+    if isinstance(v, float) and pd.isna(v):
+        return True
+    return str(v).strip() == ""
+
+
+# ---------------------------------------------------------------------------
+# Source assembly
+# ---------------------------------------------------------------------------
+
+
+class _Source:
+    """A (file, column) source for a canonical field, with its frame."""
+
+    def __init__(self, file_name: str, file_path: str, column: str, sheet: str,
+                 method: str, confidence: float, classification: str):
+        self.file_name = file_name
+        self.file_path = file_path
+        self.column = column
+        self.sheet = sheet
+        self.method = method
+        self.confidence = confidence
+        self.classification = classification
+
+
+def _collect_field_sources(
+    mapping_candidates: List[Dict[str, Any]],
+    overrides: Dict[str, Any],
+    inventory_by_name: Dict[str, Dict[str, Any]],
+    included_fields: set,
+) -> Dict[str, List[_Source]]:
+    """canonical_field -> ordered list of candidate sources (in-scope only)."""
+    sources: Dict[str, List[_Source]] = {}
+    seen: set = set()
+
+    def add(file_name: str, column: str, canon: str, method: str, conf: float):
+        if not canon or not file_name or not column:
+            return
+        if included_fields and canon not in included_fields:
+            return
+        key = (canon, file_name, column)
+        if key in seen:
+            return
+        seen.add(key)
+        inv = inventory_by_name.get(file_name, {})
+        sources.setdefault(canon, []).append(
+            _Source(
+                file_name=file_name,
+                file_path=inv.get("file_path", ""),
+                column=column,
+                sheet=inv.get("sheet_name", ""),
+                method=method,
+                confidence=float(conf or 0.0),
+                classification=inv.get("classification", ""),
+            )
+        )
+
+    # 1. Approved user overrides (highest priority — listed first).
+    for o in (overrides or {}).get("user_overrides", []) or []:
+        add(o.get("source_file", ""), o.get("source_column", ""),
+            o.get("canonical_field", ""), o.get("method", "approved_override"),
+            o.get("confidence", 1.0))
+    # 2. Approved high-confidence mappings.
+    for o in (overrides or {}).get("approved_high_confidence_mappings", []) or []:
+        add(o.get("source_file", ""), o.get("source_column", ""),
+            o.get("canonical_field", ""), o.get("method", "approved"),
+            o.get("confidence", 0.92))
+    # 3. Full deterministic mapping candidates (context hints etc.).
+    for m in mapping_candidates or []:
+        add(m.get("source_file", ""), m.get("source_column", ""),
+            m.get("candidate_canonical_field", ""), m.get("method", ""),
+            m.get("confidence", 0.0))
+    return sources
+
+
+_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "system" / "onboarding_agent.yaml"
+
+
+def _load_source_precedence_defaults() -> Dict[str, List[str]]:
+    """PART 9 — domain -> ordered classification precedence (config-driven)."""
+    try:
+        cfg = yaml.safe_load(_CONFIG_PATH.read_text(encoding="utf-8")) or {}
+        return dict((cfg.get("source_precedence", {}) or {}).get("defaults_by_domain", {}) or {})
+    except Exception:
+        return {}
+
+
+def _order_sources(
+    canon: str,
+    srcs: List[_Source],
+    precedence: Dict[str, Any],
+    registry_fields: Dict[str, Any],
+    defaults_by_domain: Dict[str, List[str]],
+) -> List[_Source]:
+    """Order sources: approved precedence primary first, else domain default.
+
+    The domain default (config/system/onboarding_agent.yaml) only chooses a
+    sensible primary; it never *resolves* a material conflict (that still raises
+    a gap unless an approved precedence rule exists).
+    """
+    rule = (precedence or {}).get(canon)
+    if rule and rule.get("primary_source_file"):
+        primary_file = rule["primary_source_file"]
+        return sorted(srcs, key=lambda s: 0 if s.file_name == primary_file else 1)
+
+    # Default ordering by the field's domain -> classification precedence.
+    domains = dc.field_domains(canon, registry_fields.get(canon, {}))
+    ranking: List[str] = []
+    for d in (dc.LOAN, dc.COLLATERAL, dc.BORROWER, dc.CASHFLOW):
+        if d in domains and d in defaults_by_domain:
+            ranking = defaults_by_domain[d]
+            break
+
+    def rank(s: _Source) -> int:
+        try:
+            return ranking.index(s.classification)
+        except ValueError:
+            return len(ranking) + 1
+
+    return sorted(srcs, key=rank)
+
+
+# ---------------------------------------------------------------------------
+# Central lender tape
+# ---------------------------------------------------------------------------
+
+
+def _build_lender_tape(
+    mapping_candidates: List[Dict[str, Any]],
+    overrides: Dict[str, Any],
+    precedence: Dict[str, Any],
+    enum_decisions: Dict[str, Any],
+    inventory: List[Dict[str, Any]],
+    field_scope: Any,
+    registry_fields: Dict[str, Any],
+    mode: str,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]:
+    inventory_by_name = {i.get("file_name", ""): i for i in inventory}
+    included = getattr(field_scope, "included_fields", set()) or set()
+
+    field_sources = _collect_field_sources(
+        mapping_candidates, overrides, inventory_by_name, included
+    )
+
+    # Restrict to loan-level domains for the lender tape.
+    def in_lender_scope(canon: str) -> bool:
+        return bool(dc.field_domains(canon, registry_fields.get(canon, {})) & _LENDER_DOMAINS)
+
+    field_sources = {f: s for f, s in field_sources.items() if in_lender_scope(f)}
+
+    # Load frames + loan-key columns for every file that has loan-level sources.
+    frames: Dict[str, pd.DataFrame] = {}
+    key_cols: Dict[str, str] = {}
+    files_in_play = {s.file_name for srcs in field_sources.values() for s in srcs}
+    for fname in files_in_play:
+        inv = inventory_by_name.get(fname, {})
+        df = _read_df(inv.get("file_path", ""))
+        if df is None:
+            continue
+        key = _find_key_column(df, _LOAN_KEY_NAMES)
+        if key is None:
+            continue
+        frames[fname] = df
+        key_cols[fname] = key
+
+    # Per-file lookup index: {file: {loan_id: {col: value}}}
+    indexes: Dict[str, Dict[str, Dict[str, Any]]] = {}
+    loan_ids: List[str] = []
+    seen_ids: set = set()
+    for fname, df in frames.items():
+        key = key_cols[fname]
+        idx: Dict[str, Dict[str, Any]] = {}
+        for _, row in df.iterrows():
+            lid = str(row[key]).strip()
+            if not lid or lid.lower() == "nan":
+                continue
+            idx[lid] = row.to_dict()
+            if lid not in seen_ids:
+                seen_ids.add(lid)
+                loan_ids.append(lid)
+        indexes[fname] = idx
+
+    # Funded/live loan universe: ids appearing in a loan-classified source file
+    # (a file whose detected domains include loan). Fall back to all ids.
+    loan_ids = sorted(loan_ids)
+
+    # The loan identifier is the primary key column, never also a data column.
+    canonical_order = sorted(f for f in field_sources.keys() if f != "loan_identifier")
+    enum_decisions = enum_decisions or {}
+    precedence_defaults = _load_source_precedence_defaults()
+
+    tape: List[Dict[str, Any]] = []
+    lineage: List[Dict[str, Any]] = []
+    gaps: List[Dict[str, Any]] = []
+    gap_seq = 0
+
+    def new_gap(severity, domain, canon, file, col, issue, desc, actions, blocking):
+        nonlocal gap_seq
+        gap_seq += 1
+        gaps.append({
+            "gap_id": f"CTG{gap_seq:03d}",
+            "severity": severity, "mode": mode, "domain": domain,
+            "canonical_field": canon, "source_file": file, "source_column": col,
+            "issue_type": issue, "description": desc,
+            "candidate_actions": "; ".join(actions), "blocking": blocking,
+        })
+
+    conflict_count = 0
+    populated_cells = 0
+
+    for lid in loan_ids:
+        row: Dict[str, Any] = {"loan_identifier": lid}
+        for canon in canonical_order:
+            srcs = _order_sources(
+                canon, field_sources[canon], precedence, registry_fields, precedence_defaults
+            )
+            srcs = [s for s in srcs if s.file_name in indexes and lid in indexes[s.file_name]]
+            if not srcs:
+                continue
+            domain = next(iter(dc.field_domains(canon, registry_fields.get(canon, {})) & _LENDER_DOMAINS), dc.LOAN)
+            primary = srcs[0]
+            primary_value = indexes[primary.file_name][lid].get(primary.column)
+
+            validation_sources: List[str] = []
+            alternate_values: List[str] = []
+            conflict_status = "single_source"
+            precedence_applied = bool((precedence or {}).get(canon, {}).get("primary_source_file"))
+
+            for other in srcs[1:]:
+                ov = indexes[other.file_name][lid].get(other.column)
+                if _is_blank(ov):
+                    continue
+                if _values_match(primary_value, ov):
+                    validation_sources.append(f"{other.file_name}:{other.column}")
+                    conflict_status = "validated"
+                else:
+                    alternate_values.append(f"{other.file_name}:{other.column}={ov}")
+                    if precedence_applied:
+                        conflict_status = "resolved_by_precedence"
+                    else:
+                        conflict_status = "conflict"
+
+            if conflict_status == "conflict":
+                conflict_count += 1
+                new_gap(
+                    "blocking" if mode in ("regulatory_mi", "warehouse_securitisation") else "high",
+                    domain, canon, primary.file_name, primary.column, "value_conflict",
+                    f"Loan {lid}: '{canon}' differs across sources "
+                    f"({primary.file_name}:{primary.column}={primary_value} vs "
+                    f"{'; '.join(alternate_values)}). No approved precedence.",
+                    ["approve_source_precedence", "confirm_authoritative_value"],
+                    True,
+                )
+
+            if _is_blank(primary_value):
+                continue
+
+            # Enum decision applied (e.g. employment_status = manual).
+            enum_applied = ""
+            if canon in enum_decisions:
+                raw = str(primary_value).strip()
+                dec = enum_decisions[canon].get(raw)
+                if dec:
+                    enum_applied = dec.get("decision", "")
+
+            row[canon] = primary_value
+            populated_cells += 1
+            lineage.append({
+                "loan_identifier": lid,
+                "canonical_field": canon,
+                "value": primary_value,
+                "source_file": primary.file_name,
+                "source_sheet": primary.sheet,
+                "source_column": primary.column,
+                "source_value": primary_value,
+                "mapping_method": primary.method,
+                "confidence": round(primary.confidence, 3),
+                "domain": domain,
+                "source_precedence_applied": precedence_applied,
+                "validation_sources": "; ".join(validation_sources),
+                "alternate_values": "; ".join(alternate_values),
+                "conflict_status": conflict_status,
+                "enum_decision_applied": enum_applied,
+                "review_required": conflict_status == "conflict",
+                "notes": "",
+            })
+        tape.append(row)
+
+    # Required-domain coverage gaps: representative fields that never mapped.
+    for domain in (dc.LOAN, dc.BORROWER, dc.COLLATERAL):
+        for canon in dc._DOMAIN_REQUIRED_FIELDS.get(domain, []):
+            if included and canon not in included:
+                continue
+            if canon not in field_sources:
+                new_gap(
+                    "high" if domain in (dc.LOAN,) else "medium",
+                    domain, canon, "", "", "unmapped_required_field",
+                    f"Required {domain} field '{canon}' has no approved/in-scope source.",
+                    ["map_source_column", "confirm_field_absent"],
+                    domain == dc.LOAN and mode in ("regulatory_mi", "warehouse_securitisation"),
+                )
+
+    summary = {
+        "loan_count": len(tape),
+        "canonical_fields_populated": len(canonical_order),
+        "populated_cells": populated_cells,
+        "conflict_count": conflict_count,
+        "gap_count": len(gaps),
+        "lineage_rows": len(lineage),
+        "mode": mode,
+        "columns": ["loan_identifier"] + canonical_order,
+    }
+    # Ensure every tape row has all columns (blank where unpopulated).
+    for r in tape:
+        for c in ["loan_identifier"] + canonical_order:
+            r.setdefault(c, "")
+    return tape, lineage, gaps, summary
+
+
+# ---------------------------------------------------------------------------
+# Central pipeline tape (PART 8)
+# ---------------------------------------------------------------------------
+
+
+def _build_pipeline_tape(
+    inventory: List[Dict[str, Any]],
+    lender_loan_ids: set,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    lineage: List[Dict[str, Any]] = []
+
+    pipeline_files = [
+        i for i in inventory
+        if i.get("classification") == "pipeline_report"
+        or dc.PIPELINE in (i.get("domains_detected") or [])
+    ]
+
+    linked_count = 0
+    application_only = 0
+    for inv in pipeline_files:
+        df = _read_df(inv.get("file_path", ""))
+        if df is None:
+            continue
+        norm_cols = {_norm(c): c for c in df.columns}
+        field_cols: Dict[str, str] = {}
+        for target, pats in _PIPELINE_FIELD_PATTERNS.items():
+            for p in pats:
+                if p in norm_cols:
+                    field_cols[target] = norm_cols[p]
+                    break
+        if "application_id" not in field_cols:
+            continue  # not a pipeline tape we can key
+        for _, r in df.iterrows():
+            out = {c: "" for c in _PIPELINE_COLUMNS}
+            for target, col in field_cols.items():
+                val = r.get(col)
+                out[target] = "" if _is_blank(val) else val
+                lineage.append({
+                    "application_id": out.get("application_id", ""),
+                    "pipeline_field": target,
+                    "value": out[target],
+                    "source_file": inv.get("file_name", ""),
+                    "source_column": col,
+                })
+            if not str(out.get("application_id", "")).strip():
+                continue
+            linked = str(out.get("linked_loan_identifier", "")).strip()
+            if linked:
+                out["linked_to_central_lender_tape"] = linked in lender_loan_ids
+                linked_count += 1
+            else:
+                out["linked_to_central_lender_tape"] = False
+                application_only += 1
+            rows.append(out)
+
+    summary = {
+        "pipeline_count": len(rows),
+        "linked_to_funded_loans": linked_count,
+        "application_only_rows": application_only,
+        "columns": _PIPELINE_COLUMNS + ["linked_to_central_lender_tape"],
+    }
+    return rows, lineage, summary
+
+
+# ---------------------------------------------------------------------------
+# CSV writers
+# ---------------------------------------------------------------------------
+
+
+def _write_rows(path: Path, columns: List[str], rows: List[Dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=columns, extrasaction="ignore")
+        writer.writeheader()
+        for r in rows:
+            writer.writerow({c: r.get(c, "") for c in columns})
+
+
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
+
+
+def build_central_tapes(
+    project_dir: str | Path,
+    run_paths: Any,
+    registry_path: str | Path,
+    mode: str = "",
+    regulatory_reporting_enabled: bool = False,
+) -> Dict[str, Any]:
+    """Build the central lender + pipeline tapes from approved artefacts."""
+    project_dir = Path(project_dir)
+    run_summary = _load_json(project_dir / "09_onboarding_run_summary.json") or {}
+    mode = mode or run_summary.get("onboarding_mode", "regulatory_mi")
+
+    mapping_candidates = _load_json(project_dir / "05_mapping_candidates.json") or []
+    overrides = _load_yaml(project_dir / "12_approved_mapping_overrides.yaml") or {}
+    precedence = _load_yaml(project_dir / "13_source_precedence_rules.yaml") or {}
+    enum_decisions = _load_yaml(project_dir / "14_enum_review_decisions.yaml") or {}
+    inventory = _load_json(project_dir / "01_file_inventory.json") or []
+
+    policy = load_mode_policy(mode)
+    field_scope = resolve_field_scope(
+        str(registry_path), policy,
+        regulatory_reporting_enabled=regulatory_reporting_enabled,
+    )
+    registry_fields = load_field_registry(Path(registry_path)).get("fields", {}) or {}
+
+    tape, lineage, gaps, summary = _build_lender_tape(
+        mapping_candidates, overrides, precedence, enum_decisions, inventory,
+        field_scope, registry_fields, mode,
+    )
+
+    central_dir = Path(run_paths.central_dir)
+    lineage_dir = Path(run_paths.lineage_dir)
+    gaps_dir = Path(run_paths.gaps_dir)
+    run_paths.guard(central_dir)
+    run_paths.guard(lineage_dir)
+    run_paths.guard(gaps_dir)
+
+    cols = summary["columns"]
+    tape_path = central_dir / "18_central_lender_tape.csv"
+    lineage_path = lineage_dir / "18b_central_tape_lineage.csv"
+    gaps_path = gaps_dir / "18c_central_tape_gaps.csv"
+    lender_summary_path = central_dir / "18d_central_tape_summary.json"
+
+    _write_rows(tape_path, cols, tape)
+    _write_rows(lineage_path, _LENDER_LINEAGE_COLUMNS, lineage)
+    _write_rows(gaps_path, _GAP_COLUMNS, gaps)
+    summary["central_lender_tape_path"] = str(tape_path)
+    lender_summary_path.write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
+
+    # Pipeline tape.
+    lender_loan_ids = {str(r.get("loan_identifier", "")).strip() for r in tape}
+    p_rows, p_lineage, p_summary = _build_pipeline_tape(inventory, lender_loan_ids)
+    pipeline_created = bool(p_rows)
+    pipeline_tape_path = central_dir / "18a_central_pipeline_tape.csv"
+    pipeline_lineage_path = lineage_dir / "18a_central_pipeline_lineage.csv"
+    pipeline_summary_path = central_dir / "18a_central_pipeline_summary.json"
+    if pipeline_created:
+        _write_rows(pipeline_tape_path, p_summary["columns"], p_rows)
+        _write_rows(pipeline_lineage_path,
+                    ["application_id", "pipeline_field", "value", "source_file", "source_column"],
+                    p_lineage)
+        p_summary["central_pipeline_tape_path"] = str(pipeline_tape_path)
+        pipeline_summary_path.write_text(
+            json.dumps(p_summary, indent=2, default=str), encoding="utf-8"
+        )
+
+    return {
+        "mode": mode,
+        "central_lender_tape_created": bool(tape),
+        "central_lender_tape_path": str(tape_path),
+        "central_tape_lineage_path": str(lineage_path),
+        "central_tape_gaps_path": str(gaps_path),
+        "central_tape_summary_path": str(lender_summary_path),
+        "lender_summary": summary,
+        "central_pipeline_tape_created": pipeline_created,
+        "central_pipeline_tape_path": str(pipeline_tape_path) if pipeline_created else "",
+        "pipeline_summary": p_summary,
+        "loan_count": summary["loan_count"],
+        "pipeline_count": p_summary["pipeline_count"],
+        "conflict_count": summary["conflict_count"],
+        "gap_count": summary["gap_count"],
+        "mapped_field_count": summary["canonical_fields_populated"],
+    }
