@@ -99,6 +99,27 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="For warehouse_securitisation: activate regulatory fields in scope.",
     )
+    # --- PART 9/10: client mapping memory ---
+    p.add_argument(
+        "--client-memory-dir",
+        default="",
+        help="Client-scoped mapping-memory dir (default "
+        "<output-parent>/<client_id>/client_memory).",
+    )
+    p.add_argument(
+        "--apply-client-memory",
+        dest="apply_client_memory",
+        action="store_true",
+        default=None,
+        help="Force-apply client mapping memory (default: apply if present and "
+        "--client-id is provided).",
+    )
+    p.add_argument(
+        "--no-apply-client-memory",
+        dest="apply_client_memory",
+        action="store_false",
+        help="Never apply client mapping memory for this run.",
+    )
     # --- Low-cost LLM mapping review (PART 8). Off / deterministic by default. ---
     p.add_argument(
         "--enable-llm-review",
@@ -352,6 +373,8 @@ def main(argv=None) -> int:
         storage_backend=args.storage_backend,
         input_uri=args.input_uri,
         output_uri=args.output_uri,
+        client_memory_dir=args.client_memory_dir,
+        apply_client_memory=args.apply_client_memory,
     )
 
     print("=" * 64)
