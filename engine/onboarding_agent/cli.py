@@ -301,6 +301,79 @@ def build_compare_parser() -> argparse.ArgumentParser:
     return p
 
 
+def build_llm_mapping_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        description="Controlled LLM-assisted mapping workbench for a source file: "
+        "evidence packs -> shortlist -> drift -> (optional LLM) -> deterministic "
+        "backstop -> concise review queue. Deterministic-first; LLM OFF by default."
+    )
+    p.add_argument("--input-file", required=True, help="Source CSV/XLSX to map.")
+    p.add_argument("--output-dir", required=True)
+    p.add_argument("--registry", default="config/system/fields_registry.yaml")
+    p.add_argument("--aliases-dir", default="config/system")
+    p.add_argument("--mode", choices=list(VALID_MODES) + ["mi_mna"], default="regulatory_mi")
+    p.add_argument("--client-id", default="")
+    p.add_argument("--run-id", default="")
+    p.add_argument("--enable-regulatory-reporting", action="store_true")
+    p.add_argument("--client-memory-dir", default="")
+    # PART 11 — LLM mapping review controls (all default to safe/off).
+    p.add_argument("--enable-llm-mapping-review", action="store_true",
+                   help="Enable the LLM reviewer (still requires a configured callable).")
+    p.add_argument("--llm-mapping-profile", choices=["off", "low", "standard"], default="off")
+    p.add_argument("--llm-max-mapping-items", type=int, default=60)
+    p.add_argument("--llm-max-cost-gbp", type=float, default=1.0)
+    p.add_argument("--llm-review-only-unresolved", action="store_true")
+    p.add_argument("--llm-review-pipeline-fields", action="store_true")
+    p.add_argument("--write-approved-aliases", action="store_true",
+                   help="Allow writing approved aliases (still needs explicit decisions).")
+    p.add_argument("--write-approved-registry-patches", action="store_true")
+    p.add_argument("--no-auto-approve-llm", action="store_true",
+                   help="Never auto-approve LLM-only proposals (default behaviour).")
+    return p
+
+
+def run_llm_mapping(args) -> int:
+    from engine.onboarding_agent.llm_assisted_mapping import run_llm_assisted_mapping
+    from engine.onboarding_agent import mapping_memory as _mm
+
+    memory_store = None
+    memory_dir = args.client_memory_dir or ""
+    if args.client_id:
+        try:
+            md = _mm.resolve_memory_dir(memory_dir=memory_dir or None,
+                                        output_dir=str(Path(args.output_dir).parent),
+                                        client_id=args.client_id)
+            memory_store = _mm.MappingMemoryStore(md, client_id=args.client_id)
+            memory_dir = str(md)
+        except ValueError:
+            memory_store = None
+
+    enable_llm = args.enable_llm_mapping_review and args.llm_mapping_profile != "off"
+    # No network LLM is wired here; a callable must be injected programmatically.
+    res = run_llm_assisted_mapping(
+        input_file=args.input_file, output_dir=args.output_dir,
+        registry_path=args.registry, aliases_dir=args.aliases_dir, mode=args.mode,
+        regulatory_reporting_enabled=args.enable_regulatory_reporting,
+        client_id=args.client_id, run_id=args.run_id,
+        enable_llm=enable_llm, llm_callable=None,
+        only_unresolved=args.llm_review_only_unresolved,
+        memory_store=memory_store, memory_dir=memory_dir or None,
+        max_llm_items=args.llm_max_mapping_items, max_cost_gbp=args.llm_max_cost_gbp,
+    )
+    s = res["summary"]
+    print("=" * 64)
+    print("LLM-assisted mapping review (deterministic-first)")
+    print(f"Columns reviewed:   {s['total_columns_reviewed']}")
+    print(f"Auto-approved:      {s['auto_approved']}")
+    print(f"Needs your review:  {s['needs_review']}")
+    print(f"Missing Trakt field:{s['group_counts'].get('missing_trakt_fields', 0)}")
+    print(f"Est. review time:   {s['estimated_review_minutes']} min")
+    print(f"LLM used:           {res['llm']['usage'].get('llm_enabled', False)}")
+    print(f"Artefacts (28..37): {args.output_dir}")
+    print("=" * 64)
+    return 0
+
+
 def run_compare(args) -> int:
     from engine.onboarding_agent.compare_semantic_alignment import run_and_write
 
@@ -375,6 +448,11 @@ def main(argv=None) -> int:
     if argv and argv[0] == "compare-semantic-alignment":
         args = build_compare_parser().parse_args(argv[1:])
         return run_compare(args)
+
+    # Subcommand: llm-mapping-review (controlled LLM-assisted mapping workbench)
+    if argv and argv[0] == "llm-mapping-review":
+        args = build_llm_mapping_parser().parse_args(argv[1:])
+        return run_llm_mapping(args)
 
     args = build_parser().parse_args(argv)
 

@@ -76,3 +76,5 @@ onboarding_output/
 # Onboarding Agent Phase 1 — domain-based synthetic packs (committed fixtures)
 !synthetic_onboarding_pack_domain_based/scenario_a_combined/*.csv
 !synthetic_onboarding_pack_domain_based/scenario_b_split/*.csv
+# Onboarding Agent — committed test fixtures (synthetic, no real data)
+!tests/fixtures/*.csv

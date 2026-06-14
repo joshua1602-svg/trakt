@@ -630,6 +630,55 @@ def apply_memory_and_rerun(
     }
 
 
+def load_mapping_review_queue(project_dir: str | Path) -> Dict[str, Any]:
+    """Load the concise LLM-assisted mapping review queue (33_*), if present."""
+    project_dir = Path(project_dir)
+    q = _load_json(project_dir / "33_mapping_review_queue.json")
+    return q or {"summary": {}, "items": []}
+
+
+def bulk_approve_safe_mappings(queue: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Return the auto-approved, high-confidence items as client-memory decisions.
+
+    Only items the deterministic backstop marked ``auto_approved_candidate`` are
+    returned — never review-required, conflicting, or out-of-scope items.
+    """
+    out: List[Dict[str, Any]] = []
+    for it in queue.get("items", []):
+        if it.get("validation_status") == "auto_approved_candidate" and it.get("suggested_mapping"):
+            out.append({
+                "source_column": it["source_column"],
+                "canonical_field": it["suggested_mapping"],
+                "decision_type": mm.DECISION_MAPPING_OVERRIDE,
+                "evidence": {"approved_via": "bulk_approve_high_confidence",
+                             "validation_status": it["validation_status"]},
+            })
+    return out
+
+
+def run_mapping_workbench(
+    project_dir: str | Path,
+    input_file: str,
+    client_id: str = "",
+    run_id: str = "",
+    mode: str = "regulatory_mi",
+    enable_llm: bool = False,
+    llm_callable=None,
+) -> Dict[str, Any]:
+    """Run the controlled LLM-assisted mapping pipeline for a file (workbench hook)."""
+    from engine.onboarding_agent.llm_assisted_mapping import run_llm_assisted_mapping
+    project_dir = Path(project_dir)
+    memory_dir = project_dir.parent / client_id / "client_memory" if client_id else None
+    store = None
+    if client_id:
+        store = mm.MappingMemoryStore(memory_dir, client_id=client_id)
+    return run_llm_assisted_mapping(
+        input_file=input_file, output_dir=str(project_dir), mode=mode,
+        client_id=client_id, run_id=run_id, enable_llm=enable_llm,
+        llm_callable=llm_callable, memory_store=store,
+        memory_dir=str(memory_dir) if memory_dir else None)
+
+
 def refresh_review_pack(project_dir: str | Path) -> List[str]:
     """Refresh the static HTML review pack with the latest approval/promotion state."""
     project_dir = Path(project_dir)
@@ -687,20 +736,22 @@ def main() -> None:  # pragma: no cover - exercised only under `streamlit run`
                                                             {"gap_answers": {}, "memory": []})
 
     tabs = st.tabs([
-        "1. Overview", "2. Domains", "3. Mappings", "4. Gaps", "5. Conflicts",
-        "6. Precedence", "7. Enums", "8. Client memory", "9. Actions", "10. Readiness",
+        "1. Overview", "2. Domains", "3. Mappings", "4. Mapping review", "5. Gaps",
+        "6. Conflicts", "7. Precedence", "8. Enums", "9. Client memory",
+        "10. Actions", "11. Readiness",
     ])
 
     _ui_overview(st, ctx, tabs[0])
     _ui_domains(st, ctx, tabs[1])
     _ui_mappings(st, ctx, tabs[2], decisions)
-    _ui_gaps(st, ctx, tabs[3], decisions)
-    _ui_conflicts(st, ctx, tabs[4], decisions)
-    _ui_precedence(st, ctx, tabs[5], decisions)
-    _ui_enums(st, ctx, tabs[6], decisions)
-    _ui_memory(st, ctx, tabs[7], decisions)
-    _ui_actions(st, ctx, tabs[8], decisions)
-    _ui_readiness(st, ctx, tabs[9])
+    _ui_mapping_review_queue(st, ctx, tabs[3], decisions)
+    _ui_gaps(st, ctx, tabs[4], decisions)
+    _ui_conflicts(st, ctx, tabs[5], decisions)
+    _ui_precedence(st, ctx, tabs[6], decisions)
+    _ui_enums(st, ctx, tabs[7], decisions)
+    _ui_memory(st, ctx, tabs[8], decisions)
+    _ui_actions(st, ctx, tabs[9], decisions)
+    _ui_readiness(st, ctx, tabs[10])
 
 
 # -- per-tab renderers (pragma: no cover — UI only) -------------------------
@@ -756,6 +807,60 @@ def _ui_mappings(st, ctx, tab, decisions):  # pragma: no cover
                         {"source_file": r["source_file"], "source_column": r["source_column"],
                          "action": act, "canonical_field": target})
                     st.success("Staged.")
+
+
+_QUEUE_GROUP_LABELS = [
+    ("high_confidence_approvals", "✅ High-confidence approvals"),
+    ("needs_your_decision", "🟡 Needs your decision"),
+    ("missing_trakt_fields", "🧩 Missing Trakt fields"),
+    ("conflicts_or_risky", "⚠️ Conflicts / risky mappings"),
+    ("ignored_or_out_of_scope", "➖ Ignored / out-of-scope"),
+]
+
+
+def _ui_mapping_review_queue(st, ctx, tab, decisions):  # pragma: no cover
+    with tab:
+        st.subheader("Mapping review (LLM-assisted, deterministic-controlled)")
+        queue = load_mapping_review_queue(ctx.project_dir)
+        s = queue.get("summary", {})
+        if not queue.get("items"):
+            st.info("No mapping review queue yet. Run the LLM-assisted mapping pipeline "
+                    "(`cli llm-mapping-review`) or the workbench hook to generate one.")
+            return
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric("Reviewed", s.get("total_columns_reviewed", 0))
+        c2.metric("Auto-approved", s.get("auto_approved", 0))
+        c3.metric("Needs review", s.get("needs_review", 0))
+        c4.metric("Missing target", s.get("blocked_or_missing_target", 0))
+        c5.metric("Est. minutes", s.get("estimated_review_minutes", 0))
+
+        if st.button("Approve all high-confidence safe mappings → client memory"):
+            safe = bulk_approve_safe_mappings(queue)
+            res = save_decisions_to_memory(
+                [{**d, "mode": ctx.mode} for d in safe], ctx.client_id,
+                output_dir=str(ctx.project_dir.parent), run_id=ctx.run_id)
+            append_action_log(ctx.project_dir, ctx.client_id, ctx.run_id,
+                              "bulk_approve_high_confidence",
+                              outputs_written=[res["memory_dir"]])
+            st.success(f"Saved {res['saved']} safe mappings to client memory.")
+
+        items = queue["items"]
+        for gkey, glabel in _QUEUE_GROUP_LABELS:
+            group = [it for it in items if it["group"] == gkey]
+            if not group:
+                continue
+            # Collapse the bulk-approvable / out-of-scope groups by default.
+            expanded = gkey in ("needs_your_decision", "conflicts_or_risky", "missing_trakt_fields")
+            with st.expander(f"{glabel} ({len(group)})", expanded=expanded):
+                for it in group:
+                    st.markdown(
+                        f"**{it['source_column']}** → `{it['suggested_mapping'] or '—'}` "
+                        f"· {it['confidence']} · {it['validation_status']}")
+                    st.caption(f"Likely meaning: {it['likely_meaning']} · Risk: {it['risk']}")
+                    with st.expander("Show evidence"):
+                        st.write(it["evidence_summary"])
+                        if it.get("llm_reasoning"):
+                            st.caption("LLM: " + it["llm_reasoning"])
 
 
 def _ui_gaps(st, ctx, tab, decisions):  # pragma: no cover
