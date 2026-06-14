@@ -77,6 +77,7 @@ def _enum_questions(
     dataframes: Dict[str, pd.DataFrame],
     start_idx: int,
     out_of_scope_columns: Optional[set] = None,
+    resolved_enums: Optional[set] = None,
 ) -> List[GapQuestion]:
     """Generate enum-quality gaps.
 
@@ -86,6 +87,7 @@ def _enum_questions(
     as an active enum, validated, or produce an actionable enum gap.
     """
     out_of_scope_columns = out_of_scope_columns or set()
+    resolved_enums = resolved_enums or set()
     questions: List[GapQuestion] = []
     idx = start_idx
     seen: set = set()
@@ -109,6 +111,10 @@ def _enum_questions(
             for val in sorted(values):
                 key = (col_norm, val)
                 if key in seen:
+                    continue
+                # Suppress enum gaps already resolved by client mapping memory.
+                if (col_norm, val) in resolved_enums:
+                    seen.add(key)
                     continue
                 placeholder = val.strip().lower() in _UNRESOLVED_ENUM_PLACEHOLDERS
                 if valid is not None:
@@ -283,6 +289,9 @@ def analyze_gaps(
     field_scope=None,
     out_of_scope_fields: Optional[List[Dict[str, Any]]] = None,
     mapping_candidates: Optional[List[Any]] = None,
+    memory_resolved_enums: Optional[set] = None,
+    memory_ignored_columns: Optional[set] = None,
+    memory_resolved_source_fields: Optional[set] = None,
 ) -> List[GapQuestion]:
     """Generate gap questions, then re-rank severity for the onboarding mode.
 
@@ -297,6 +306,10 @@ def analyze_gaps(
         (o.get("source_file"), o.get("source_column"))
         for o in (out_of_scope_fields or [])
     }
+    # Client mapping memory may suppress already-resolved gaps (PART 10).
+    out_of_scope_columns |= set(memory_ignored_columns or set())
+    memory_resolved_enums = memory_resolved_enums or set()
+    memory_resolved_source_fields = memory_resolved_source_fields or set()
     mode = getattr(mode_policy, "name", "regulatory_mi")
     questions: List[GapQuestion] = []
     idx = 0
@@ -341,6 +354,9 @@ def analyze_gaps(
         if f.canonical_candidate in seen_canon:
             continue
         seen_canon.add(f.canonical_candidate)
+        # Suppress source-of-truth gaps already resolved by client memory.
+        if f.canonical_candidate in memory_resolved_source_fields:
+            continue
         idx += 1
         questions.append(
             GapQuestion(
@@ -362,8 +378,10 @@ def analyze_gaps(
             )
         )
 
-    # --- Enum quality (skip out-of-scope fields) ---
-    questions.extend(_enum_questions(inventory, dataframes, idx, out_of_scope_columns))
+    # --- Enum quality (skip out-of-scope + memory-resolved fields) ---
+    questions.extend(_enum_questions(
+        inventory, dataframes, idx, out_of_scope_columns, memory_resolved_enums
+    ))
     idx = len(questions)  # keep numbering monotonic
 
     # --- Missing / unresolved mandatory config (mode-scoped) ---

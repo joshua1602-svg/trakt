@@ -120,6 +120,8 @@ def run_onboarding(
     storage_backend: str = "local",
     input_uri: str = "",
     output_uri: str = "",
+    client_memory_dir: str = "",
+    apply_client_memory: bool | None = None,
 ) -> OnboardingProject:
     in_dir = Path(input_dir)
     out_dir = Path(output_dir)
@@ -215,6 +217,43 @@ def run_onboarding(
         inventory, project.mapping_candidates, project.candidate_keys, dataframes
     )
 
+    # --- PART 9/10: client mapping memory (applied AFTER deterministic mapping,
+    # before gap generation). Mode-aware, field-scope-safe, never silently
+    # overrides a material conflict. ---
+    memory_resolved_enums: set = set()
+    memory_ignored_columns: set = set()
+    memory_resolved_source_fields: set = set()
+    memory_gap_questions: List = []
+    project.client_memory_summary = {"client_mapping_memory_loaded": False,
+                                     "memory_entries_applied": 0}
+    if client_id and apply_client_memory is not False:
+        from . import mapping_memory as _mm
+        try:
+            mem_dir = _mm.resolve_memory_dir(
+                memory_dir=client_memory_dir or None,
+                output_dir=str(out_dir.parent), client_id=client_id,
+            )
+        except ValueError:
+            mem_dir = None
+        store = _mm.MappingMemoryStore(mem_dir, client_id=client_id) if mem_dir else None
+        # When apply was not explicitly requested, only apply if memory exists.
+        if store is not None and (apply_client_memory or not store.is_empty):
+            conflict_signals = {
+                o.canonical_candidate: float(o.sample_match_rate or 0)
+                for o in project.overlap_analysis if o.canonical_candidate
+            }
+            mem_result = _mm.apply_mapping_memory(
+                project.mapping_candidates, store, field_scope=field_scope,
+                mode=policy.name, conflict_signals=conflict_signals,
+            )
+            memory_ignored_columns = set(mem_result["ignored_columns"])
+            memory_gap_questions = mem_result["gap_questions"]
+            memory_resolved_enums = _mm.resolved_enum_keys(store)
+            memory_resolved_source_fields = _mm.resolved_precedence_fields(store)
+            inv_dicts = [dataclasses.asdict(i) for i in inventory]
+            memory_ignored_columns |= _mm.ignored_column_keys(store, inv_dicts)
+            project.client_memory_summary = _mm.summarize_application(mem_result, store)
+
     # --- PART 6 (docs): extract config-relevant facts under minimisation policy ---
     doc_policy = load_document_policy()
     project.document_extractions = extract_documents(inventory, doc_policy)
@@ -232,7 +271,17 @@ def run_onboarding(
         dataframes, mode_policy=policy, field_scope=field_scope,
         out_of_scope_fields=project.out_of_scope_fields,
         mapping_candidates=project.mapping_candidates,
+        memory_resolved_enums=memory_resolved_enums,
+        memory_ignored_columns=memory_ignored_columns,
+        memory_resolved_source_fields=memory_resolved_source_fields,
     )
+    # Warning gaps from materially-conflicting client memory (PART 10).
+    if memory_gap_questions:
+        from .onboarding_models import GapQuestion as _GQ
+        for gq in memory_gap_questions:
+            project.gap_questions.append(_GQ(**{
+                k: v for k, v in gq.items() if k in _GQ.__dataclass_fields__
+            }))
 
     # --- PART 4/5/6: targeted, bounded LLM mapping review (off by default) ---
     registry_fields = load_field_registry(Path(registry_path)).get("fields", {}) or {}
