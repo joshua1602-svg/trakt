@@ -300,6 +300,9 @@ class OnboardingProject:
     # Client-specific mapping memory application summary (PART 9/10).
     client_memory_summary: Dict[str, Any] = field(default_factory=dict)
 
+    # Controlled LLM-assisted mapping review summary (artefacts 28-37).
+    mapping_review_summary: Dict[str, Any] = field(default_factory=dict)
+
     # Run-level status
     review_status: str = "draft"     # draft | review_required | blocked
     generated_artifacts: List[str] = field(default_factory=list)
@@ -329,6 +332,7 @@ class OnboardingProject:
             "out_of_scope_fields_count": len(self.out_of_scope_fields),
             "llm_usage_summary": self.llm_usage_summary,
             "client_memory_summary": self.client_memory_summary,
+            "mapping_review_summary": self.mapping_review_summary,
             "counts": {
                 "source_files": len(self.source_files),
                 "classified_files": len(self.file_inventory),

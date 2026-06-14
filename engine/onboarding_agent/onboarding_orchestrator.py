@@ -122,6 +122,13 @@ def run_onboarding(
     output_uri: str = "",
     client_memory_dir: str = "",
     apply_client_memory: bool | None = None,
+    enable_mapping_review: bool = False,
+    enable_llm_mapping_review: bool = False,
+    llm_mapping_callable=None,
+    llm_mapping_profile: str = "",
+    llm_mapping_only_unresolved: bool = False,
+    llm_max_mapping_items: int = 60,
+    llm_max_cost_gbp: float = 1.0,
 ) -> OnboardingProject:
     in_dir = Path(input_dir)
     out_dir = Path(output_dir)
@@ -342,6 +349,63 @@ def run_onboarding(
     mapping_trace.write_explanation_report(trace, out_dir, policy.name, project.client_name)
     for name in ("05c_mapping_trace.csv", "05c_mapping_trace.json", "05d_mapping_explanation.md"):
         project.generated_artifacts.append(str(out_dir / name))
+
+    # --- PARTS 2-9: controlled LLM-assisted mapping review (deterministic-first;
+    # LLM is off unless explicitly enabled AND a callable is available). Writes
+    # artefacts 28-37 next to the numbered onboarding pack. ---
+    if enable_mapping_review or enable_llm_mapping_review:
+        from . import llm_assisted_mapping as _lam
+        from . import mapping_memory as _mm
+        frames = {item.file_name: dataframes[item.file_path]
+                  for item in inventory if item.file_path in dataframes}
+        mr_store = None
+        mr_memory_dir = None
+        if client_id:
+            try:
+                mr_memory_dir = _mm.resolve_memory_dir(
+                    output_dir=str(out_dir.parent), client_id=client_id)
+                mr_store = _mm.MappingMemoryStore(mr_memory_dir, client_id=client_id)
+            except ValueError:
+                mr_store = None
+        enable_llm_map = bool(
+            enable_llm_mapping_review and (llm_mapping_profile or "low") != "off")
+        try:
+            mr = _lam.run_llm_assisted_mapping(
+                dataframes=frames, output_dir=str(out_dir), registry_path=registry_path,
+                aliases_dir=aliases_dir, mode=policy.name,
+                regulatory_reporting_enabled=regulatory_reporting_enabled,
+                client_id=client_id, run_id=run_id,
+                enable_llm=enable_llm_map, llm_callable=llm_mapping_callable,
+                only_unresolved=llm_mapping_only_unresolved,
+                memory_store=mr_store,
+                memory_dir=str(mr_memory_dir) if mr_memory_dir else None,
+                max_llm_items=llm_max_mapping_items, max_cost_gbp=llm_max_cost_gbp,
+            )
+            project.mapping_review_summary = {
+                **mr["summary"],
+                "llm_enabled": bool(mr["llm"]["usage"].get("llm_enabled")),
+                "llm_calls": mr["llm"]["usage"].get("calls_completed", 0),
+                "llm_estimated_cost_gbp": mr["llm"]["usage"].get("estimated_cost_gbp", 0.0),
+            }
+        except Exception as exc:  # never break the onboarding run on review failure
+            project.mapping_review_summary = {"error": str(exc)}
+        for name in (
+            "28_existing_pipeline_field_contract.csv",
+            "28_existing_pipeline_field_contract.json",
+            "28_existing_pipeline_field_contract_summary.md",
+            "29_column_evidence.csv", "29_column_evidence.json",
+            "29_column_evidence_summary.md", "30_mapping_candidate_shortlist.csv",
+            "30_mapping_candidate_shortlist.json", "31_llm_mapping_review.csv",
+            "31_llm_mapping_review.json", "31_llm_mapping_review_summary.md",
+            "31_llm_usage_summary.json", "32_mapping_backstop_validation.csv",
+            "32_mapping_backstop_validation.json", "33_mapping_review_queue.csv",
+            "33_mapping_review_queue.json", "34_mapping_review_decisions.yaml",
+            "35_mapping_review_action_log.json", "37_schema_drift_report.csv",
+            "37_schema_drift_report.json",
+        ):
+            ap = out_dir / name
+            if ap.exists():
+                project.generated_artifacts.append(str(ap))
 
     # --- mode-aware review status / readiness ---
     project.review_status = compute_readiness(project.gap_questions, policy)
