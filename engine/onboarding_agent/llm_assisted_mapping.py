@@ -17,7 +17,7 @@ finalises a mapping; the backstop validator and user approval do.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
 
@@ -53,10 +53,16 @@ def _best_candidate(cands: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
                                        -float(c["candidate_confidence"])))[0]
 
 
+def _ek(row: Dict[str, Any]):
+    return (row.get("source_file", ""), row.get("source_sheet", ""),
+            row.get("source_column", ""))
+
+
 def run_llm_assisted_mapping(
     input_file: Optional[str | Path] = None,
     df: Optional[pd.DataFrame] = None,
     dataframes: Optional[Dict[str, pd.DataFrame]] = None,
+    inventory: Optional[List[Dict[str, Any]]] = None,
     output_dir: str | Path = ".",
     registry_path: str | Path = "config/system/fields_registry.yaml",
     aliases_dir: str | Path = "config/system",
@@ -75,25 +81,34 @@ def run_llm_assisted_mapping(
 ) -> Dict[str, Any]:
     """Run the full controlled mapping workbench pipeline and write artefacts.
 
-    Accepts a single ``df``/``input_file`` OR a ``dataframes`` dict keyed by file
-    name (a normal onboarding pack). Evidence + relationships are built per file;
-    the shortlist/backstop/queue operate across all columns.
+    Input precedence: ``inventory`` (a full data room — every file is parsed via
+    the robust multi-sheet loader and a coverage record is emitted) > ``dataframes``
+    > single ``df``/``input_file``. Evidence + relationships are built per
+    (file, sheet); the shortlist/backstop/queue operate across ALL columns using
+    composite (file, sheet, column) keys so same-named columns never collide.
     """
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Resolve the input frame(s).
-    if dataframes:
-        frames = {str(k): v for k, v in dataframes.items()}
+    # Resolve the input table(s) + coverage.
+    tables: List[Tuple[str, str, pd.DataFrame]] = []
+    coverage: List[Dict[str, Any]] = []
+    if inventory is not None:
+        from . import source_table_loader as stl
+        loaded, cov = stl.load_source_tables(inventory)
+        tables = [(t.file_name, t.sheet_name, t.df) for t in loaded]
+        coverage = [c.__dict__ for c in cov]
+    elif dataframes:
+        tables = [(str(k), "", v) for k, v in dataframes.items()]
     elif df is not None:
-        frames = {source_file_name or "uploaded.csv": df}
+        tables = [(source_file_name or "uploaded.csv", "", df)]
     else:
         if input_file is None:
-            raise ValueError("provide df, dataframes, or input_file")
+            raise ValueError("provide inventory, dataframes, df, or input_file")
         p = Path(input_file)
-        loaded = pd.read_excel(p) if p.suffix.lower() in (".xlsx", ".xls") \
+        loaded_df = pd.read_excel(p) if p.suffix.lower() in (".xlsx", ".xls") \
             else pd.read_csv(p, low_memory=False)
-        frames = {source_file_name or p.name: loaded}
+        tables = [(source_file_name or p.name, "", loaded_df)]
 
     policy = load_mode_policy(mode)
     field_scope = resolve_field_scope(str(registry_path), policy,
@@ -106,19 +121,20 @@ def run_llm_assisted_mapping(
     contract_rows = contract.build_pipeline_field_contract(registry_path)
     contract.write_contract_artifacts(contract_rows, out_dir)
 
-    # 29 — deterministic column evidence packs (per file).
+    # 29 — deterministic column evidence packs (per file AND per sheet).
     evidence_rows: List[Dict[str, Any]] = []
-    for fname, fdf in frames.items():
+    for fname, sheet, fdf in tables:
         evidence_rows += ce.build_column_evidence(
             fdf, fname, registry_fields=registry_fields, field_scope=field_scope,
-            semantic_mapper=mapper, alias_index=alias_index, memory_store=memory_store)
+            semantic_mapper=mapper, alias_index=alias_index, memory_store=memory_store,
+            sheet_name=sheet)
     ce.write_evidence_artifacts(evidence_rows, out_dir)
-    evidence_by_col = {e["source_column"]: e for e in evidence_rows}
+    evidence_by_key = {_ek(e): e for e in evidence_rows}
 
-    # 30 — deterministic candidate shortlists.
+    # 30 — deterministic candidate shortlists (composite-keyed).
     shortlist_rows = finder.build_candidate_shortlist(evidence_rows, registry_fields, field_scope)
     finder.write_shortlist_artifacts(shortlist_rows, out_dir)
-    shortlist_by_col = finder.shortlist_by_column(shortlist_rows)
+    shortlist_by_key = finder.shortlist_by_key(shortlist_rows)
 
     # 37 — schema drift vs the client's previous signature.
     prev_sig = drift.load_signature(memory_dir) if memory_dir else None
@@ -131,13 +147,14 @@ def run_llm_assisted_mapping(
     # Columns lacking a confident deterministic mapping (LLM focus set).
     unresolved_cols = set()
     for e in evidence_rows:
-        best = _best_candidate(shortlist_by_col.get(e["source_column"], []))
+        best = _best_candidate(shortlist_by_key.get(_ek(e), []))
         if best is None or float(best["candidate_confidence"]) < 0.95:
             unresolved_cols.add(e["source_column"])
     if only_unresolved:
         unresolved_cols |= drift_review_cols
 
-    # 31 — controlled LLM reviewer (off unless enabled + callable provided).
+    # 31 — controlled LLM reviewer (off unless enabled + callable provided). The
+    # controller keys proposals by source_column; we map them back per (file,sheet).
     llm_result = {"proposals": [], "usage": {"llm_enabled": False, "calls_completed": 0,
                                              "estimated_cost_gbp": 0.0}}
     if enable_llm and llm_callable is not None:
@@ -145,27 +162,27 @@ def run_llm_assisted_mapping(
             llm_callable=llm_callable, registry_fields=registry_fields,
             field_scope=field_scope, max_items=max_llm_items, max_cost_gbp=max_cost_gbp)
         llm_result = controller.review(
-            evidence_rows, shortlist_by_col,
+            evidence_rows, finder.shortlist_by_column(shortlist_rows),
             only_unresolved=unresolved_cols if only_unresolved else None)
-    # 31 — only written when the LLM actually ran (requirement: 31_* depends on
-    # enabling the LLM; deterministic artefacts never depend on it).
     if llm_result["usage"].get("llm_enabled") or llm_result["proposals"]:
         write_llm_review_artifacts(llm_result, out_dir)
     llm_by_col = {p["source_column"]: p for p in llm_result["proposals"]}
+    llm_by_key = {_ek(e): llm_by_col[e["source_column"]]
+                  for e in evidence_rows if e["source_column"] in llm_by_col}
 
-    # Merge into one proposal per column for validation: deterministic best wins;
+    # Merge into one proposal per (file, sheet, column): deterministic best wins;
     # fall back to the LLM proposal where deterministic found nothing.
     proposals: List[Dict[str, Any]] = []
     for e in evidence_rows:
-        col = e["source_column"]
-        src_file = e.get("source_file", "")
-        best = _best_candidate(shortlist_by_col.get(col, []))
-        llm = llm_by_col.get(col)
+        key = _ek(e)
+        col, src_file, src_sheet = e["source_column"], e.get("source_file", ""), e.get("source_sheet", "")
+        best = _best_candidate(shortlist_by_key.get(key, []))
+        llm = llm_by_key.get(key)
         if best is not None:
-            proposals.append({**best, "source_file": src_file})
+            proposals.append({**best, "source_file": src_file, "source_sheet": src_sheet})
         elif llm is not None and llm.get("proposed_target_field"):
             proposals.append({
-                "source_file": src_file, "source_column": col,
+                "source_file": src_file, "source_sheet": src_sheet, "source_column": col,
                 "proposed_target_field": llm["proposed_target_field"],
                 "candidate_source": "llm_suggested", "confidence": llm["confidence"],
                 "ambiguity_flags": llm.get("ambiguity_flags", []),
@@ -173,7 +190,7 @@ def run_llm_assisted_mapping(
                 "is_pipeline_field": False})
         else:
             proposals.append({
-                "source_file": src_file, "source_column": col,
+                "source_file": src_file, "source_sheet": src_sheet, "source_column": col,
                 "proposed_target_field": "", "candidate_source":
                 ("pipeline_contract" if e.get("candidate_existing_pipeline_contract_fields")
                  else "value_profile"), "confidence": "no_match"})
@@ -181,16 +198,22 @@ def run_llm_assisted_mapping(
     # 32 — deterministic backstop validation.
     validation_rows = backstop.validate_mappings(
         proposals, registry_fields=registry_fields, field_scope=field_scope,
-        memory_store=memory_store, evidence_by_col=evidence_by_col)
+        memory_store=memory_store, evidence_by_col=evidence_by_key)
     backstop.write_validation_artifacts(validation_rows, out_dir)
 
-    # 33/34 — concise review queue.
-    review = queue.build_review_queue(validation_rows, evidence_by_col, llm_by_col)
+    # 33/34 — concise multi-file review queue.
+    review = queue.build_review_queue(validation_rows, evidence_by_key, llm_by_key)
     queue.write_queue_artifacts(review, out_dir)
+
+    # 29a — per-file coverage (what was parsed / excluded and why + counts).
+    coverage = _finalise_coverage(coverage, evidence_rows, shortlist_rows,
+                                  validation_rows, review["items"])
+    _write_coverage_artifacts(coverage, out_dir)
+
     queue.append_review_action_log(
         out_dir, client_id, run_id, "run_llm_assisted_mapping",
-        inputs={"file": source_file_name, "mode": mode, "llm_enabled": bool(
-            llm_result["usage"].get("llm_enabled"))},
+        inputs={"files": len(coverage) or len(tables), "mode": mode,
+                "llm_enabled": bool(llm_result["usage"].get("llm_enabled"))},
         outputs=["28..37 artefacts"], status="ok")
 
     return {
@@ -201,5 +224,75 @@ def run_llm_assisted_mapping(
         "llm": llm_result,
         "validation": validation_rows,
         "review_queue": review,
-        "summary": review["summary"],
+        "file_coverage": coverage,
+        "summary": {**review["summary"], "file_coverage": _coverage_summary(coverage)},
+    }
+
+
+_COVERAGE_COLUMNS = [
+    "file_name", "file_path", "file_type", "classification", "domains_detected",
+    "attempted_column_evidence", "column_evidence_rows", "included_in_candidate_shortlist",
+    "candidate_shortlist_rows", "included_in_backstop_validation", "backstop_rows",
+    "included_in_review_queue", "review_queue_rows", "parse_status", "parse_error",
+    "reason_excluded", "recommended_next_action",
+]
+
+
+def _finalise_coverage(coverage, evidence_rows, shortlist_rows, validation_rows, queue_items):
+    """Fill per-file counts into the coverage records (29a)."""
+    def counts(rows):
+        out: Dict[str, int] = {}
+        for r in rows:
+            out[r.get("source_file", "")] = out.get(r.get("source_file", ""), 0) + 1
+        return out
+    ev_c, sl_c, val_c, q_c = (counts(evidence_rows), counts(shortlist_rows),
+                              counts(validation_rows), counts(queue_items))
+    out = []
+    for c in coverage:
+        name = c.get("file_name", "")
+        ev_n = ev_c.get(name, 0)
+        out.append({
+            "file_name": name, "file_path": c.get("file_path", ""),
+            "file_type": c.get("file_type", ""), "classification": c.get("classification", ""),
+            "domains_detected": c.get("domains_detected", ""),
+            "attempted_column_evidence": bool(c.get("attempted_column_evidence")),
+            "column_evidence_rows": ev_n,
+            "included_in_candidate_shortlist": sl_c.get(name, 0) > 0,
+            "candidate_shortlist_rows": sl_c.get(name, 0),
+            "included_in_backstop_validation": val_c.get(name, 0) > 0,
+            "backstop_rows": val_c.get(name, 0),
+            "included_in_review_queue": q_c.get(name, 0) > 0,
+            "review_queue_rows": q_c.get(name, 0),
+            "parse_status": c.get("parse_status", ""), "parse_error": c.get("parse_error", ""),
+            "reason_excluded": c.get("reason_excluded", ""),
+            "recommended_next_action": c.get("recommended_next_action", ""),
+        })
+    return out
+
+
+def _write_coverage_artifacts(rows, out_dir: Path):
+    import csv as _csv
+    import json as _json
+    csv_path = out_dir / "29a_column_evidence_file_coverage.csv"
+    with csv_path.open("w", newline="", encoding="utf-8") as fh:
+        w = _csv.DictWriter(fh, fieldnames=_COVERAGE_COLUMNS, extrasaction="ignore")
+        w.writeheader()
+        for r in rows:
+            w.writerow({c: r.get(c, "") for c in _COVERAGE_COLUMNS})
+    (out_dir / "29a_column_evidence_file_coverage.json").write_text(
+        _json.dumps(rows, indent=2, default=str), encoding="utf-8")
+
+
+def _coverage_summary(coverage) -> Dict[str, Any]:
+    inventoried = len(coverage)
+    attempted = sum(1 for c in coverage if c.get("attempted_column_evidence"))
+    with_evidence = sum(1 for c in coverage if c.get("column_evidence_rows", 0) > 0)
+    in_queue = sum(1 for c in coverage if c.get("included_in_review_queue"))
+    excluded = inventoried - with_evidence
+    return {
+        "files_inventoried": inventoried,
+        "files_attempted_for_evidence": attempted,
+        "files_with_column_evidence": with_evidence,
+        "files_in_review_queue": in_queue,
+        "files_excluded": excluded,
     }

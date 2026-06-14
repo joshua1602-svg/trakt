@@ -635,6 +635,23 @@ def mapping_review_artifacts_present(project_dir: str | Path) -> bool:
     return (Path(project_dir) / "33_mapping_review_queue.json").exists()
 
 
+def load_file_coverage(project_dir: str | Path) -> List[Dict[str, Any]]:
+    """Load the per-file mapping coverage (29a_*), if present."""
+    return _load_json(Path(project_dir) / "29a_column_evidence_file_coverage.json") or []
+
+
+def file_coverage_summary(coverage: List[Dict[str, Any]]) -> Dict[str, int]:
+    """Headline file-coverage counts for the review tab."""
+    with_ev = sum(1 for c in coverage if c.get("column_evidence_rows", 0) > 0)
+    return {
+        "files_inventoried": len(coverage),
+        "files_attempted": sum(1 for c in coverage if c.get("attempted_column_evidence")),
+        "files_with_evidence": with_ev,
+        "files_in_review_queue": sum(1 for c in coverage if c.get("included_in_review_queue")),
+        "files_excluded": len(coverage) - with_ev,
+    }
+
+
 def load_mapping_review_queue(project_dir: str | Path) -> Dict[str, Any]:
     """Load the concise LLM-assisted mapping review queue (33_*), if present."""
     project_dir = Path(project_dir)
@@ -838,6 +855,31 @@ def _ui_mapping_review_queue(st, ctx, tab, decisions):  # pragma: no cover
             st.warning("33_mapping_review_queue.json is present but empty — no columns "
                        "were reviewed. Check the input file and rerun.")
             return
+
+        # ---- File coverage (PART: don't imply completeness on partial coverage) ----
+        coverage = load_file_coverage(ctx.project_dir)
+        fc = file_coverage_summary(coverage)
+        f1, f2, f3, f4 = st.columns(4)
+        f1.metric("Files inventoried", fc["files_inventoried"])
+        f2.metric("Attempted for evidence", fc["files_attempted"])
+        f3.metric("In review queue", fc["files_in_review_queue"])
+        f4.metric("Excluded", fc["files_excluded"])
+        if fc["files_inventoried"] and fc["files_with_evidence"] < fc["files_inventoried"]:
+            st.warning(
+                f"Only {fc['files_with_evidence']} of {fc['files_inventoried']} files "
+                f"produced column-level mapping evidence. See the file-coverage table "
+                f"below for why each other file was excluded — onboarding review is "
+                f"NOT complete for the excluded files.")
+        if coverage:
+            with st.expander("File coverage (29a) — what was parsed / excluded and why"):
+                st.dataframe([{
+                    "file": c["file_name"], "type": c["file_type"],
+                    "status": c["parse_status"], "evidence_rows": c["column_evidence_rows"],
+                    "queue_rows": c["review_queue_rows"],
+                    "reason": c.get("reason_excluded", ""),
+                    "next_action": c.get("recommended_next_action", "")}
+                    for c in coverage], use_container_width=True)
+
         c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric("Reviewed", s.get("total_columns_reviewed", 0))
         c2.metric("Auto-approved", s.get("auto_approved", 0))
@@ -855,23 +897,32 @@ def _ui_mapping_review_queue(st, ctx, tab, decisions):  # pragma: no cover
                               outputs_written=[res["memory_dir"]])
             st.success(f"Saved {res['saved']} safe mappings to client memory.")
 
+        # Group review items by file (then by status group) so a multi-file data
+        # room reads as one section per source, not one flat wall.
         items = queue["items"]
-        for gkey, glabel in _QUEUE_GROUP_LABELS:
-            group = [it for it in items if it["group"] == gkey]
-            if not group:
-                continue
-            # Collapse the bulk-approvable / out-of-scope groups by default.
-            expanded = gkey in ("needs_your_decision", "conflicts_or_risky", "missing_trakt_fields")
-            with st.expander(f"{glabel} ({len(group)})", expanded=expanded):
-                for it in group:
-                    st.markdown(
-                        f"**{it['source_column']}** → `{it['suggested_mapping'] or '—'}` "
-                        f"· {it['confidence']} · {it['validation_status']}")
-                    st.caption(f"Likely meaning: {it['likely_meaning']} · Risk: {it['risk']}")
-                    with st.expander("Show evidence"):
-                        st.write(it["evidence_summary"])
-                        if it.get("llm_reasoning"):
-                            st.caption("LLM: " + it["llm_reasoning"])
+        files = sorted({it["source_file"] for it in items})
+        for fname in files:
+            f_items = [it for it in items if it["source_file"] == fname]
+            domain = f_items[0].get("file_domain_guess") or "unknown"
+            st.markdown(f"### 📄 {fname}  · _{domain}_  ({len(f_items)})")
+            for gkey, glabel in _QUEUE_GROUP_LABELS:
+                group = [it for it in f_items if it["group"] == gkey]
+                if not group:
+                    continue
+                expanded = gkey in ("needs_your_decision", "conflicts_or_risky",
+                                    "missing_trakt_fields")
+                with st.expander(f"{glabel} ({len(group)})", expanded=expanded):
+                    for it in group:
+                        sheet = f" · sheet `{it['source_sheet']}`" if it.get("source_sheet") else ""
+                        st.markdown(
+                            f"**{it['source_column']}**{sheet} → "
+                            f"`{it['suggested_mapping'] or '—'}` · {it['confidence']} · "
+                            f"{it['validation_status']}")
+                        st.caption(f"Likely meaning: {it['likely_meaning']} · Risk: {it['risk']}")
+                        with st.expander("Show evidence"):
+                            st.write(it["evidence_summary"])
+                            if it.get("llm_reasoning"):
+                                st.caption("LLM: " + it["llm_reasoning"])
 
 
 def _ui_gaps(st, ctx, tab, decisions):  # pragma: no cover
