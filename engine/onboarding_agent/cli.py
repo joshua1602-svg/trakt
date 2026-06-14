@@ -120,6 +120,46 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_false",
         help="Never apply client mapping memory for this run.",
     )
+    # --- Controlled LLM-assisted mapping review (artefacts 28-37) ---
+    p.add_argument(
+        "--enable-mapping-review",
+        action="store_true",
+        help="Generate the deterministic controlled mapping artefacts (28,29,30,"
+        "32,33,34,35,37) during the onboarding run. LLM stays OFF.",
+    )
+    p.add_argument(
+        "--enable-llm-mapping-review",
+        action="store_true",
+        help="Also run the controlled LLM mapping reviewer (implies "
+        "--enable-mapping-review; writes 31_*). Needs ANTHROPIC_API_KEY or an "
+        "injected callable; otherwise the LLM step is skipped (off).",
+    )
+    p.add_argument(
+        "--llm-mapping-profile",
+        choices=["off", "low", "standard"],
+        default="",
+        help="Budget profile for the mapping LLM (default: low when LLM enabled, "
+        "else off). Falls back to --llm-budget-profile when unset.",
+    )
+    p.add_argument(
+        "--llm-review-only-unresolved",
+        action="store_true",
+        help="Send only columns with no confident deterministic mapping (and "
+        "drifted columns) to the LLM.",
+    )
+    p.add_argument(
+        "--llm-max-mapping-items",
+        type=int,
+        default=None,
+        help="Max columns sent to the mapping LLM (falls back to "
+        "--llm-max-items-per-call, else 60).",
+    )
+    p.add_argument(
+        "--llm-max-cost-gbp",
+        type=float,
+        default=1.0,
+        help="Hard cost cap (GBP) for the mapping LLM.",
+    )
     # --- Low-cost LLM mapping review (PART 8). Off / deterministic by default. ---
     p.add_argument(
         "--enable-llm-review",
@@ -400,6 +440,34 @@ def run_compare(args) -> int:
     return 0
 
 
+def _build_mapping_llm_callable(profile: str):
+    """Build a real Anthropic mapping-review callable iff a key is configured.
+
+    Returns ``None`` when no API key is present (the LLM step is then skipped and
+    reported as off — never a silent network call). Deterministic artefacts are
+    unaffected.
+    """
+    import os
+
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        return None
+    try:
+        import anthropic
+    except Exception:
+        return None
+    model = "claude-haiku-4-5-20251001" if profile == "low" else "claude-sonnet-4-6"
+
+    def _call(prompt: str) -> str:
+        client = anthropic.Anthropic()
+        msg = client.messages.create(
+            model=model, max_tokens=4096,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return "".join(getattr(b, "text", "") for b in msg.content)
+
+    return _call
+
+
 def _print_ingestion_report(report) -> None:
     print("=" * 64)
     print("Answer ingestion complete")
@@ -503,6 +571,19 @@ def main(argv=None) -> int:
         output_uri=args.output_uri,
         client_memory_dir=args.client_memory_dir,
         apply_client_memory=args.apply_client_memory,
+        enable_mapping_review=args.enable_mapping_review or args.enable_llm_mapping_review,
+        enable_llm_mapping_review=args.enable_llm_mapping_review,
+        llm_mapping_callable=(
+            _build_mapping_llm_callable(args.llm_mapping_profile or args.llm_budget_profile or "low")
+            if args.enable_llm_mapping_review else None),
+        # New flag wins; otherwise fall back to the legacy budget profile.
+        llm_mapping_profile=args.llm_mapping_profile or args.llm_budget_profile or "",
+        llm_mapping_only_unresolved=args.llm_review_only_unresolved,
+        # New cap wins; otherwise fall back to the legacy per-call cap, else 60.
+        llm_max_mapping_items=(
+            args.llm_max_mapping_items if args.llm_max_mapping_items is not None
+            else (args.llm_max_items_per_call or 60)),
+        llm_max_cost_gbp=args.llm_max_cost_gbp,
     )
 
     print("=" * 64)
@@ -511,6 +592,17 @@ def main(argv=None) -> int:
     summary = project.to_summary_dict()["counts"]
     for k, v in summary.items():
         print(f"  {k}: {v}")
+    if project.mapping_review_summary and "error" not in project.mapping_review_summary:
+        mrs = project.mapping_review_summary
+        print("Mapping review (controlled, deterministic-first):")
+        print(f"  columns reviewed:  {mrs.get('total_columns_reviewed', 0)}")
+        print(f"  auto-approved:     {mrs.get('auto_approved', 0)}")
+        print(f"  needs review:      {mrs.get('needs_review', 0)}")
+        print(f"  missing target:    {mrs.get('group_counts', {}).get('missing_trakt_fields', 0)}")
+        print(f"  LLM used:          {mrs.get('llm_enabled', False)} "
+              f"(calls={mrs.get('llm_calls', 0)}, est £{mrs.get('llm_estimated_cost_gbp', 0)})")
+    elif project.mapping_review_summary.get("error"):
+        print(f"Mapping review: skipped ({project.mapping_review_summary['error']})")
     print(f"Output dir: {project.output_dir}")
     print("Artifacts:")
     for a in project.generated_artifacts:

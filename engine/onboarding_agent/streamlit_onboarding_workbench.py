@@ -630,6 +630,11 @@ def apply_memory_and_rerun(
     }
 
 
+def mapping_review_artifacts_present(project_dir: str | Path) -> bool:
+    """True when the controlled mapping review queue (33_*) was generated."""
+    return (Path(project_dir) / "33_mapping_review_queue.json").exists()
+
+
 def load_mapping_review_queue(project_dir: str | Path) -> Dict[str, Any]:
     """Load the concise LLM-assisted mapping review queue (33_*), if present."""
     project_dir = Path(project_dir)
@@ -821,11 +826,17 @@ _QUEUE_GROUP_LABELS = [
 def _ui_mapping_review_queue(st, ctx, tab, decisions):  # pragma: no cover
     with tab:
         st.subheader("Mapping review (LLM-assisted, deterministic-controlled)")
+        if not mapping_review_artifacts_present(ctx.project_dir):
+            st.warning(
+                "Mapping review artefacts have not been generated. Rerun onboarding "
+                "with `--enable-mapping-review` (deterministic, LLM off) or "
+                "`--enable-llm-mapping-review` (LLM on), or update CLI integration.")
+            return
         queue = load_mapping_review_queue(ctx.project_dir)
         s = queue.get("summary", {})
         if not queue.get("items"):
-            st.info("No mapping review queue yet. Run the LLM-assisted mapping pipeline "
-                    "(`cli llm-mapping-review`) or the workbench hook to generate one.")
+            st.warning("33_mapping_review_queue.json is present but empty — no columns "
+                       "were reviewed. Check the input file and rerun.")
             return
         c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric("Reviewed", s.get("total_columns_reviewed", 0))

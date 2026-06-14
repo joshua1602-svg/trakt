@@ -56,6 +56,7 @@ def _best_candidate(cands: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
 def run_llm_assisted_mapping(
     input_file: Optional[str | Path] = None,
     df: Optional[pd.DataFrame] = None,
+    dataframes: Optional[Dict[str, pd.DataFrame]] = None,
     output_dir: str | Path = ".",
     registry_path: str | Path = "config/system/fields_registry.yaml",
     aliases_dir: str | Path = "config/system",
@@ -72,17 +73,27 @@ def run_llm_assisted_mapping(
     max_llm_items: int = 60,
     max_cost_gbp: float = 1.0,
 ) -> Dict[str, Any]:
-    """Run the full controlled mapping workbench pipeline and write artefacts."""
+    """Run the full controlled mapping workbench pipeline and write artefacts.
+
+    Accepts a single ``df``/``input_file`` OR a ``dataframes`` dict keyed by file
+    name (a normal onboarding pack). Evidence + relationships are built per file;
+    the shortlist/backstop/queue operate across all columns.
+    """
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    if df is None:
+
+    # Resolve the input frame(s).
+    if dataframes:
+        frames = {str(k): v for k, v in dataframes.items()}
+    elif df is not None:
+        frames = {source_file_name or "uploaded.csv": df}
+    else:
         if input_file is None:
-            raise ValueError("provide df or input_file")
+            raise ValueError("provide df, dataframes, or input_file")
         p = Path(input_file)
-        df = pd.read_excel(p) if p.suffix.lower() in (".xlsx", ".xls") \
+        loaded = pd.read_excel(p) if p.suffix.lower() in (".xlsx", ".xls") \
             else pd.read_csv(p, low_memory=False)
-        source_file_name = source_file_name or p.name
-    source_file_name = source_file_name or "uploaded.csv"
+        frames = {source_file_name or p.name: loaded}
 
     policy = load_mode_policy(mode)
     field_scope = resolve_field_scope(str(registry_path), policy,
@@ -95,10 +106,12 @@ def run_llm_assisted_mapping(
     contract_rows = contract.build_pipeline_field_contract(registry_path)
     contract.write_contract_artifacts(contract_rows, out_dir)
 
-    # 29 — deterministic column evidence packs.
-    evidence_rows = ce.build_column_evidence(
-        df, source_file_name, registry_fields=registry_fields, field_scope=field_scope,
-        semantic_mapper=mapper, alias_index=alias_index, memory_store=memory_store)
+    # 29 — deterministic column evidence packs (per file).
+    evidence_rows: List[Dict[str, Any]] = []
+    for fname, fdf in frames.items():
+        evidence_rows += ce.build_column_evidence(
+            fdf, fname, registry_fields=registry_fields, field_scope=field_scope,
+            semantic_mapper=mapper, alias_index=alias_index, memory_store=memory_store)
     ce.write_evidence_artifacts(evidence_rows, out_dir)
     evidence_by_col = {e["source_column"]: e for e in evidence_rows}
 
@@ -134,7 +147,10 @@ def run_llm_assisted_mapping(
         llm_result = controller.review(
             evidence_rows, shortlist_by_col,
             only_unresolved=unresolved_cols if only_unresolved else None)
-    write_llm_review_artifacts(llm_result, out_dir)
+    # 31 — only written when the LLM actually ran (requirement: 31_* depends on
+    # enabling the LLM; deterministic artefacts never depend on it).
+    if llm_result["usage"].get("llm_enabled") or llm_result["proposals"]:
+        write_llm_review_artifacts(llm_result, out_dir)
     llm_by_col = {p["source_column"]: p for p in llm_result["proposals"]}
 
     # Merge into one proposal per column for validation: deterministic best wins;
@@ -142,13 +158,14 @@ def run_llm_assisted_mapping(
     proposals: List[Dict[str, Any]] = []
     for e in evidence_rows:
         col = e["source_column"]
+        src_file = e.get("source_file", "")
         best = _best_candidate(shortlist_by_col.get(col, []))
         llm = llm_by_col.get(col)
         if best is not None:
-            proposals.append({**best, "source_file": source_file_name})
+            proposals.append({**best, "source_file": src_file})
         elif llm is not None and llm.get("proposed_target_field"):
             proposals.append({
-                "source_file": source_file_name, "source_column": col,
+                "source_file": src_file, "source_column": col,
                 "proposed_target_field": llm["proposed_target_field"],
                 "candidate_source": "llm_suggested", "confidence": llm["confidence"],
                 "ambiguity_flags": llm.get("ambiguity_flags", []),
@@ -156,7 +173,7 @@ def run_llm_assisted_mapping(
                 "is_pipeline_field": False})
         else:
             proposals.append({
-                "source_file": source_file_name, "source_column": col,
+                "source_file": src_file, "source_column": col,
                 "proposed_target_field": "", "candidate_source":
                 ("pipeline_contract" if e.get("candidate_existing_pipeline_contract_fields")
                  else "value_profile"), "confidence": "no_match"})
