@@ -160,6 +160,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=1.0,
         help="Hard cost cap (GBP) for the mapping LLM.",
     )
+    p.add_argument(
+        "--enable-file-conversion-fallback",
+        action="store_true",
+        help="When a workbook fails to parse, try converting it to xlsx via "
+        "LibreOffice/soffice (only if installed). Never fails the run; coverage "
+        "records whether conversion was available/attempted.",
+    )
     # --- Low-cost LLM mapping review (PART 8). Off / deterministic by default. ---
     p.add_argument(
         "--enable-llm-review",
@@ -584,6 +591,7 @@ def main(argv=None) -> int:
             args.llm_max_mapping_items if args.llm_max_mapping_items is not None
             else (args.llm_max_items_per_call or 60)),
         llm_max_cost_gbp=args.llm_max_cost_gbp,
+        enable_file_conversion_fallback=args.enable_file_conversion_fallback,
     )
 
     print("=" * 64)

@@ -129,6 +129,7 @@ def run_onboarding(
     llm_mapping_only_unresolved: bool = False,
     llm_max_mapping_items: int = 60,
     llm_max_cost_gbp: float = 1.0,
+    enable_file_conversion_fallback: bool = False,
 ) -> OnboardingProject:
     in_dir = Path(input_dir)
     out_dir = Path(output_dir)
@@ -382,6 +383,7 @@ def run_onboarding(
                 memory_store=mr_store,
                 memory_dir=str(mr_memory_dir) if mr_memory_dir else None,
                 max_llm_items=llm_max_mapping_items, max_cost_gbp=llm_max_cost_gbp,
+                enable_file_conversion_fallback=enable_file_conversion_fallback,
             )
             project.mapping_review_summary = {
                 **mr["summary"],
@@ -399,6 +401,8 @@ def run_onboarding(
             "29_column_evidence_summary.md",
             "29a_column_evidence_file_coverage.csv",
             "29a_column_evidence_file_coverage.json",
+            "29b_excel_sheet_parse_coverage.csv",
+            "29b_excel_sheet_parse_coverage.json",
             "30_mapping_candidate_shortlist.csv",
             "30_mapping_candidate_shortlist.json", "31_llm_mapping_review.csv",
             "31_llm_mapping_review.json", "31_llm_mapping_review_summary.md",

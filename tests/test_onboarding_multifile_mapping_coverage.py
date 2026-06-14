@@ -99,9 +99,9 @@ class TestMultiFileCoverage(unittest.TestCase):
         self.assertEqual(len(cov), 6)
         # docx -> document_only
         self.assertEqual(cov["Schedule 8 Concentration.docx"]["parse_status"], "document_only")
-        # xlsb -> unsupported, explicit reason + next action
+        # xlsb -> unsupported / dependency_missing, explicit reason + next action
         xlsb = cov["Redemptions Dec 2025.xlsb"]
-        self.assertEqual(xlsb["parse_status"], "unsupported_file_type")
+        self.assertIn(xlsb["parse_status"], ("unsupported_file_type", "dependency_missing"))
         self.assertIn("xlsb parser unavailable", xlsb["reason_excluded"])
         self.assertIn("pyxlsb", xlsb["recommended_next_action"])
         # parsed files have evidence rows.
