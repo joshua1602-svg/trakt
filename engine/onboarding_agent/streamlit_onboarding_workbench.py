@@ -262,6 +262,7 @@ def mapping_rows(ctx: WorkbenchContext) -> List[Dict[str, Any]]:
         (t.get("source_file"), t.get("source_column")): t for t in ctx.mapping_trace
     }
     oos_keys = {(o.get("source_file"), o.get("source_column")) for o in ctx.out_of_scope}
+    _semantic_methods = {"token_set", "fuzz_token_set", "fuzz_ratio_norm"}
     rows = []
     for m in ctx.mapping_candidates:
         key = (m.get("source_file"), m.get("source_column"))
@@ -272,8 +273,9 @@ def mapping_rows(ctx: WorkbenchContext) -> List[Dict[str, Any]]:
             "source_column": m.get("source_column", ""),
             "selected_candidate": m.get("candidate_canonical_field", ""),
             "confidence": m.get("confidence", 0),
-            "selection_reason": m.get("reason", "") or trace.get("decision_reason", ""),
+            "selection_reason": m.get("reason", "") or trace.get("selection_reason", ""),
             "alias_hit": method == "alias",
+            "semantic_alignment_used": bool(m.get("candidate_canonical_field")) and method in _semantic_methods,
             "ambiguity_rule_applied": bool(m.get("ambiguity_rule_applied")),
             "review_required": bool(m.get("requires_review")),
             "field_scope_status": "out_of_scope" if key in oos_keys else "in_scope",

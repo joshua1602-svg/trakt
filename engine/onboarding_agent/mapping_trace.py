@@ -61,9 +61,13 @@ _TRACE_COLUMNS = [
     "alias_target_field", "registry_field_exists", "candidate_fields",
     "candidate_scores", "field_scope_status", "selected_candidate",
     "selection_reason", "ambiguity_rule_applied", "value_match_evidence",
-    "source_precedence_evidence", "llm_used", "llm_suggestion_used",
-    "final_status", "unmapped_reason",
+    "source_precedence_evidence", "semantic_alignment_used",
+    "semantic_alignment_method", "semantic_alignment_confidence",
+    "llm_used", "llm_suggestion_used", "final_status", "unmapped_reason",
 ]
+
+# Mapping methods that come from the Gate 1 *semantic* (fuzzy similarity) tiers.
+_SEMANTIC_ALIGNMENT_METHODS = {"token_set", "fuzz_token_set", "fuzz_ratio_norm"}
 
 
 @dataclass
@@ -169,6 +173,7 @@ def build_trace(
         "registry_fields_count": len(registry_fields),
         "mapped_by_alias": 0,
         "mapped_by_registry_header": 0,
+        "mapped_by_semantic_alignment": 0,
         "mapped_by_value_or_context": 0,
         "out_of_scope": 0,
         "ambiguous_needs_review": 0,
@@ -252,6 +257,14 @@ def build_trace(
             if llm_used:
                 summary["sent_to_llm"] += 1
 
+            # Gate 1 semantic-alignment (fuzzy tier) attribution.
+            semantic_used = bool(selected) and method in _SEMANTIC_ALIGNMENT_METHODS
+            if semantic_used:
+                summary["mapped_by_semantic_alignment"] = (
+                    summary.get("mapped_by_semantic_alignment", 0) + 1)
+                if reason == "header_similarity":
+                    reason = "semantic_alignment_adapter"
+
             rows.append({
                 "source_file": item.file_name,
                 "source_sheet": item.sheet_name,
@@ -277,6 +290,10 @@ def build_trace(
                 "ambiguity_rule_applied": ambiguity_rule,
                 "value_match_evidence": value_ev,
                 "source_precedence_evidence": prec_ev,
+                "semantic_alignment_used": semantic_used,
+                "semantic_alignment_method": method if semantic_used else "",
+                "semantic_alignment_confidence": (
+                    round(cand.confidence, 4) if (semantic_used and cand) else ""),
                 "llm_used": llm_used,
                 "llm_suggestion_used": False,  # suggestions are NEVER promoted to final
                 "final_status": final_status,
@@ -346,7 +363,9 @@ def write_explanation_report(
         f"{s['registry_fields_count']} registry fields.")
     lines.append(
         f"It mapped {s['mapped_by_alias']} source columns by alias, "
-        f"{s['mapped_by_registry_header']} by registry/header similarity, and "
+        f"{s['mapped_by_registry_header']} by registry/header similarity "
+        f"(of which {s.get('mapped_by_semantic_alignment', 0)} via the Gate 1 "
+        f"semantic alignment fuzzy tiers), and "
         f"{s['mapped_by_value_or_context']} by value matching/context.")
     lines.append(
         f"{s['out_of_scope']} columns were excluded as out-of-scope for `{mode}` mode, "

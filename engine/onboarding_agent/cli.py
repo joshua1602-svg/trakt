@@ -282,6 +282,51 @@ def build_interpret_parser() -> argparse.ArgumentParser:
     return p
 
 
+def build_compare_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        description="Semantic-alignment parity audit: run the same headers through the "
+        "Gate 1 semantic alignment engine and the new Onboarding Agent mapping path "
+        "and emit a column-by-column delta (27_* artefacts). Read-only; no LLM."
+    )
+    p.add_argument("--input-file", required=True, help="Source CSV/XLSX to audit.")
+    p.add_argument("--registry", default="config/system/fields_registry.yaml")
+    p.add_argument("--aliases-dir", default="config/system")
+    p.add_argument(
+        "--mode", choices=list(VALID_MODES) + ["mi_mna"], default="regulatory_mi",
+        help="Onboarding mode (default regulatory_mi).",
+    )
+    p.add_argument("--output-dir", required=True, help="Where to write 27_* artefacts.")
+    p.add_argument("--enable-regulatory-reporting", action="store_true",
+                   help="Activate regulatory fields in scope (warehouse mode).")
+    return p
+
+
+def run_compare(args) -> int:
+    from engine.onboarding_agent.compare_semantic_alignment import run_and_write
+
+    res = run_and_write(
+        input_file=args.input_file, registry=args.registry, aliases_dir=args.aliases_dir,
+        output_dir=args.output_dir, mode=args.mode,
+        regulatory_reporting_enabled=args.enable_regulatory_reporting,
+    )
+    s = res["summary"]
+    print("=" * 64)
+    print("Semantic alignment parity audit")
+    print(f"Input: {s['source_file']} · mode: {s['mode']} · columns: {s['columns_total']}")
+    print(f"  mapped the same by both paths:        {s['mapped_both']}")
+    print(f"  old mapped / new UNMAPPED (regression):{s['old_mapped_new_unmapped']}")
+    print(f"  mapped differently:                   {s['old_mapped_new_different']}")
+    print(f"  new mapped / old unmapped (stronger): {s['new_mapped_old_unmapped']}")
+    print(f"  unmapped by both:                     {s['unmapped_both']}")
+    print(f"  diverted out-of-scope (mode-safe):    {s['field_scope_excluded']}")
+    print(f"  LLM used:                             {s['llm_used']}")
+    print("Artefacts:")
+    for k in ("csv", "json", "summary_md"):
+        print(f"  - {res['paths'][k]}")
+    print("=" * 64)
+    return 0
+
+
 def _print_ingestion_report(report) -> None:
     print("=" * 64)
     print("Answer ingestion complete")
@@ -325,6 +370,11 @@ def main(argv=None) -> int:
     if argv and argv[0] == "promote":
         args = build_promote_parser().parse_args(argv[1:])
         return run_promote(args)
+
+    # Subcommand: compare-semantic-alignment (parity audit, read-only)
+    if argv and argv[0] == "compare-semantic-alignment":
+        args = build_compare_parser().parse_args(argv[1:])
+        return run_compare(args)
 
     args = build_parser().parse_args(argv)
 
