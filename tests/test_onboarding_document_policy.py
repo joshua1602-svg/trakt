@@ -138,7 +138,7 @@ class TestEndToEndPersistence(unittest.TestCase):
             ln for ln in result.stdout.splitlines()
             if ln and not ln.endswith((
                 "onboarding_modes.yaml", "onboarding_agent.yaml",
-                "aliases_onboarding_lending.yaml",
+                "aliases_onboarding_lending.yaml", "aliases_onboarding_kfi.yaml",
             ))
         ]
         self.assertEqual(dirty, [], f"unexpected config changes: {dirty}")

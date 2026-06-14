@@ -106,6 +106,7 @@ def _mapping_trace_html(project: OnboardingProject) -> str:
         ["Registry fields loaded", s.get("registry_fields_count", "—")],
         ["Columns mapped by alias", s.get("mapped_by_alias", 0)],
         ["Columns mapped by registry/header scoring", s.get("mapped_by_registry_header", 0)],
+        ["— of which via Gate 1 semantic alignment (fuzzy)", s.get("mapped_by_semantic_alignment", 0)],
         ["Columns mapped by value match/context", s.get("mapped_by_value_or_context", 0)],
         ["Columns out of scope (mode)", s.get("out_of_scope", 0)],
         ["Columns requiring user review", s.get("ambiguous_needs_review", 0)],

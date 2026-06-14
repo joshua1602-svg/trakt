@@ -1,0 +1,38 @@
+# config/system/aliases_onboarding_kfi.yaml
+# ---------------------------------------------------------------------------
+# Onboarding Agent — minimal, audited KFI / pipeline synonyms.
+#
+# Added ONLY after the semantic-alignment parity audit
+# (`python -m engine.onboarding_agent.cli compare-semantic-alignment`) proved
+# that:
+#   * the column maps to a canonical field that EXISTS in fields_registry.yaml,
+#   * no existing alias covers the lender's KFI spelling,
+#   * the synonym is unambiguous AND normalises to a specific token
+#     (not collapsed to a bare stopword like "number"), and
+#   * it does not collide with an existing alias key.
+#
+# Deliberately NOT added (genuinely ambiguous or normalises too broadly — left to
+# review / value matching, consistent with aliases_onboarding_lending.yaml):
+#   "loan amount"                 (documented ambiguous: original vs current)
+#   "account number"             (normalises to bare "number" — too broad)
+#   "property value"             (existing alias already maps it; collision)
+#   "interest payment percentage" (ambiguous vs the headline product rate)
+#   KFI / offer / application / funds-released dates, gender, DOB, product,
+#   facility, entitlement, PEG, etc. (no canonical target in the registry yet —
+#   reported as registry_target_missing in the parity audit).
+#
+# This file is auto-discovered by load_aliases_from_dir's aliases_*.yaml glob and
+# is shared with Gate 1; entries are intentionally specific and low-risk.
+# ---------------------------------------------------------------------------
+
+current_interest_rate:
+  aliases:
+    - product rate
+
+current_valuation_amount:
+  aliases:
+    - estimated value
+
+collateral_geography:
+  aliases:
+    - property region
