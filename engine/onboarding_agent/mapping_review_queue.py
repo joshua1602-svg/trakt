@@ -85,20 +85,31 @@ def _evidence_summary(ev: Dict[str, Any]) -> str:
     return "; ".join(bits)
 
 
+def _ekey(row: Dict[str, Any]):
+    return (row.get("source_file", ""), row.get("source_sheet", ""),
+            row.get("source_column", ""))
+
+
 def build_review_queue(
     validation_rows: List[Dict[str, Any]],
-    evidence_by_col: Optional[Dict[str, Dict[str, Any]]] = None,
-    llm_by_col: Optional[Dict[str, Dict[str, Any]]] = None,
+    evidence_by_key: Optional[Dict[Any, Dict[str, Any]]] = None,
+    llm_by_key: Optional[Dict[Any, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
-    """Build the grouped, prioritised review queue + a top summary."""
-    evidence_by_col = evidence_by_col or {}
-    llm_by_col = llm_by_col or {}
+    """Build the grouped, prioritised, MULTI-FILE review queue + a top summary.
+
+    ``evidence_by_key`` / ``llm_by_key`` are keyed by the composite
+    (source_file, source_sheet, source_column) so columns with the same name in
+    different files never collide.
+    """
+    evidence_by_key = evidence_by_key or {}
+    llm_by_key = llm_by_key or {}
     items: List[Dict[str, Any]] = []
     for v in validation_rows:
         col = v["source_column"]
         status = v["validation_status"]
-        ev = evidence_by_col.get(col, {})
-        llm = llm_by_col.get(col, {})
+        key = _ekey(v)
+        ev = evidence_by_key.get(key, {})
+        llm = llm_by_key.get(key, {})
         etype = ev.get("data_type_guess", "")
         group = _STATUS_GROUP.get(status, G_DECISIONS)
         meaning = llm.get("proposed_business_meaning", "") or ev.get(
@@ -109,7 +120,11 @@ def build_review_queue(
         elif status == REVIEW_REQUIRED and v.get("validation_reasons"):
             risk = "medium — " + v["validation_reasons"]
         items.append({
+            "source_file": v.get("source_file", ""),
+            "source_sheet": v.get("source_sheet", "") or ev.get("source_sheet", ""),
             "source_column": col,
+            "domain_guess": ev.get("domain_guess", ""),
+            "file_domain_guess": ev.get("file_domain_guess", ""),
             "group": group,
             "priority": _priority(col, etype, status),
             "likely_meaning": meaning,
@@ -124,11 +139,13 @@ def build_review_queue(
             "llm_reasoning": llm.get("reasoning_summary", ""),
             "requires_user_approval": v.get("requires_user_approval", True),
         })
-    items.sort(key=lambda x: (x["priority"], x["source_column"]))
+    items.sort(key=lambda x: (x["source_file"], x["priority"], x["source_column"]))
 
     counts: Dict[str, int] = {}
+    by_file: Dict[str, int] = {}
     for it in items:
         counts[it["group"]] = counts.get(it["group"], 0) + 1
+        by_file[it["source_file"]] = by_file.get(it["source_file"], 0) + 1
     high_priority = sum(1 for it in items if it["priority"] <= 1
                         and it["group"] == G_DECISIONS)
     needs_review = counts.get(G_DECISIONS, 0) + counts.get(G_CONFLICTS, 0)
@@ -142,12 +159,15 @@ def build_review_queue(
         # ~30s per decision item; approvals/ignored are near-zero effort.
         "estimated_review_minutes": round(needs_review * 0.5 + high_priority * 0.5, 1),
         "group_counts": counts,
+        "files_in_review_queue": len(by_file),
+        "review_items_by_file": by_file,
     }
     return {"summary": summary, "items": items}
 
 
 _QUEUE_COLUMNS = [
-    "source_column", "group", "priority", "likely_meaning", "suggested_mapping",
+    "source_file", "source_sheet", "source_column", "domain_guess",
+    "file_domain_guess", "group", "priority", "likely_meaning", "suggested_mapping",
     "candidate_source", "confidence", "validation_status", "is_pipeline_field",
     "evidence_summary", "risk", "requires_user_approval",
 ]

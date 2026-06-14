@@ -19,7 +19,7 @@ from __future__ import annotations
 import csv
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .pipeline_field_contract import _FIELD_META as _PIPE_META, RAW_TO_PIPELINE_FIELD
 
@@ -49,6 +49,7 @@ def _shortlist_for_column(
 ) -> List[Dict[str, Any]]:
     col = ev["source_column"]
     src_file = ev["source_file"]
+    src_sheet = ev.get("source_sheet", "")
     etype = ev["data_type_guess"]
     out: List[Dict[str, Any]] = []
 
@@ -73,6 +74,7 @@ def _shortlist_for_column(
             or (source in ("value_profile", "registry_description"))
         out.append({
             "source_file": src_file,
+            "source_sheet": src_sheet,
             "source_column": col,
             "candidate_target_field": target,
             "candidate_source": source,
@@ -144,11 +146,17 @@ def build_candidate_shortlist(
 
 
 _SHORTLIST_COLUMNS = [
-    "source_file", "source_column", "candidate_target_field", "candidate_source",
-    "candidate_confidence", "candidate_reason", "field_scope_status",
-    "type_compatible", "value_profile_compatible", "domain_compatible",
-    "is_pipeline_field", "requires_user_approval",
+    "source_file", "source_sheet", "source_column", "candidate_target_field",
+    "candidate_source", "candidate_confidence", "candidate_reason",
+    "field_scope_status", "type_compatible", "value_profile_compatible",
+    "domain_compatible", "is_pipeline_field", "requires_user_approval",
 ]
+
+
+def column_key(row: Dict[str, Any]) -> Tuple[str, str, str]:
+    """Composite key (source_file, source_sheet, source_column) — unique across files."""
+    return (row.get("source_file", ""), row.get("source_sheet", ""),
+            row.get("source_column", ""))
 
 
 def write_shortlist_artifacts(rows: List[Dict[str, Any]], output_dir: str | Path) -> Dict[str, str]:
@@ -169,4 +177,12 @@ def shortlist_by_column(rows: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, 
     out: Dict[str, List[Dict[str, Any]]] = {}
     for r in rows:
         out.setdefault(r["source_column"], []).append(r)
+    return out
+
+
+def shortlist_by_key(rows: List[Dict[str, Any]]) -> Dict[Tuple[str, str, str], List[Dict[str, Any]]]:
+    """Group shortlist rows by composite key (file, sheet, column) — multi-file safe."""
+    out: Dict[Tuple[str, str, str], List[Dict[str, Any]]] = {}
+    for r in rows:
+        out.setdefault(column_key(r), []).append(r)
     return out

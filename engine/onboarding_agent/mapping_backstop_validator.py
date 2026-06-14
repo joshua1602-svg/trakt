@@ -17,7 +17,7 @@ from __future__ import annotations
 import csv
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .pipeline_field_contract import _FIELD_META as _PIPE_META
 
@@ -72,12 +72,15 @@ def validate_mappings(
         for e in memory_store.by_type(DECISION_MAPPING_OVERRIDE):
             memory_targets[e.normalized_source_column or e.source_column] = e.canonical_field
 
-    # Detect two source columns assigned the same target.
-    target_assignees: Dict[str, List[str]] = {}
+    # Detect two source columns in the SAME FILE assigned the same target. The
+    # same target appearing in different files (e.g. loan_id in a loan tape and a
+    # cashflow extract) is expected and not a conflict.
+    target_assignees: Dict[Tuple[str, str], List[str]] = {}
     for p in proposals:
         tgt = p.get("proposed_target_field") or p.get("candidate_target_field") or ""
         if tgt:
-            target_assignees.setdefault(tgt, []).append(p["source_column"])
+            target_assignees.setdefault((p.get("source_file", ""), tgt), []).append(
+                p["source_column"])
 
     rows: List[Dict[str, Any]] = []
     for p in proposals:
@@ -127,8 +130,9 @@ def validate_mappings(
             rows.append(_row(p, col, target, source, conf, CONFLICTS_MEMORY, False, reasons, is_pipeline))
             continue
 
-        # 5. conflict with another source column mapped to same target.
-        assignees = [a for a in target_assignees.get(target, []) if a != col]
+        # 5. conflict with another source column (same file) mapped to same target.
+        assignees = [a for a in target_assignees.get((p.get("source_file", ""), target), [])
+                     if a != col]
         if assignees:
             reasons.append(f"target also claimed by: {', '.join(sorted(set(assignees)))}")
             rows.append(_row(p, col, target, source, conf, CONFLICTS_MAPPING, False, reasons, is_pipeline))
@@ -168,6 +172,7 @@ def validate_mappings(
 def _row(p, col, target, source, conf, status, approvable, reasons, is_pipeline):
     return {
         "source_file": p.get("source_file", ""),
+        "source_sheet": p.get("source_sheet", ""),
         "source_column": col,
         "proposed_target_field": target,
         "candidate_source": source,
@@ -181,9 +186,9 @@ def _row(p, col, target, source, conf, status, approvable, reasons, is_pipeline)
 
 
 _VAL_COLUMNS = [
-    "source_file", "source_column", "proposed_target_field", "candidate_source",
-    "confidence", "validation_status", "auto_approvable", "requires_user_approval",
-    "is_pipeline_field", "validation_reasons",
+    "source_file", "source_sheet", "source_column", "proposed_target_field",
+    "candidate_source", "confidence", "validation_status", "auto_approvable",
+    "requires_user_approval", "is_pipeline_field", "validation_reasons",
 ]
 
 

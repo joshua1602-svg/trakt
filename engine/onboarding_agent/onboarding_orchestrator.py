@@ -356,8 +356,10 @@ def run_onboarding(
     if enable_mapping_review or enable_llm_mapping_review:
         from . import llm_assisted_mapping as _lam
         from . import mapping_memory as _mm
-        frames = {item.file_name: dataframes[item.file_path]
-                  for item in inventory if item.file_path in dataframes}
+        # Pass the FULL inventory so the review's robust loader parses every file
+        # (all sheets) and emits explicit per-file coverage (29a) — never silently
+        # limited to one file.
+        inventory_dicts = [dataclasses.asdict(i) for i in inventory]
         mr_store = None
         mr_memory_dir = None
         if client_id:
@@ -371,7 +373,7 @@ def run_onboarding(
             enable_llm_mapping_review and (llm_mapping_profile or "low") != "off")
         try:
             mr = _lam.run_llm_assisted_mapping(
-                dataframes=frames, output_dir=str(out_dir), registry_path=registry_path,
+                inventory=inventory_dicts, output_dir=str(out_dir), registry_path=registry_path,
                 aliases_dir=aliases_dir, mode=policy.name,
                 regulatory_reporting_enabled=regulatory_reporting_enabled,
                 client_id=client_id, run_id=run_id,
@@ -394,7 +396,10 @@ def run_onboarding(
             "28_existing_pipeline_field_contract.json",
             "28_existing_pipeline_field_contract_summary.md",
             "29_column_evidence.csv", "29_column_evidence.json",
-            "29_column_evidence_summary.md", "30_mapping_candidate_shortlist.csv",
+            "29_column_evidence_summary.md",
+            "29a_column_evidence_file_coverage.csv",
+            "29a_column_evidence_file_coverage.json",
+            "30_mapping_candidate_shortlist.csv",
             "30_mapping_candidate_shortlist.json", "31_llm_mapping_review.csv",
             "31_llm_mapping_review.json", "31_llm_mapping_review_summary.md",
             "31_llm_usage_summary.json", "32_mapping_backstop_validation.csv",
