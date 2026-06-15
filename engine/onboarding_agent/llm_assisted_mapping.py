@@ -82,6 +82,10 @@ def run_llm_assisted_mapping(
     enable_context_resolver: bool = False,
     context_llm_callable: Optional[Callable[[str], str]] = None,
     target_first_decisions_path: Optional[str] = None,
+    enable_llm_target_advisor: bool = False,
+    llm_target_advisor_callable: Optional[Callable[[str], str]] = None,
+    llm_target_advisor_max_calls: int = 1,
+    llm_target_advisor_model: str = "",
 ) -> Dict[str, Any]:
     """Run the full controlled mapping workbench pipeline and write artefacts.
 
@@ -326,6 +330,27 @@ def run_llm_assisted_mapping(
         resolved_rows=res["resolved"], output_dir=out_dir,
         client_id=client_id, run_id=run_id,
         decisions_path=target_first_decisions_path)
+
+    # 36 — OPTIONAL target-first LLM ADVISOR. Operates on the 28c decisions +
+    # 28a/28b evidence (NOT the raw source-column universe). Advisory only: it
+    # never mutates the deterministic target-first state.
+    if enable_llm_target_advisor:
+        from . import target_first_llm_advisor as adv
+        try:
+            adv_res = adv.run_target_advisor(
+                decision_rows=target_first["decision_queue"],
+                coverage_rows=target_first["coverage"],
+                residual_rows=target_first["residual"],
+                file_inventory=inventory,
+                evidence_rows=evidence_rows,
+                llm_callable=llm_target_advisor_callable,
+                max_items=max_llm_items, max_calls=llm_target_advisor_max_calls,
+                max_cost_gbp=max_cost_gbp, model=llm_target_advisor_model)
+            adv.write_advisor_artifacts(adv_res, out_dir)
+            target_first["llm_advisor"] = {"usage": adv_res["usage"],
+                                           "summary": adv.advisor_summary(adv_res["recommendations"])}
+        except Exception as exc:  # never break onboarding on advisor failure
+            target_first["llm_advisor"] = {"error": str(exc)}
 
     # 33/34 — concise multi-file review queue (source-column audit detail).
     review = queue.build_review_queue(validation_rows, evidence_by_key, llm_by_key)

@@ -133,6 +133,9 @@ def run_onboarding(
     enable_context_resolver: bool = False,
     context_llm_callable=None,
     target_first_decisions_path: str = "",
+    enable_llm_target_advisor: bool = False,
+    llm_target_advisor_callable=None,
+    llm_target_advisor_model: str = "",
 ) -> OnboardingProject:
     in_dir = Path(input_dir)
     out_dir = Path(output_dir)
@@ -357,7 +360,7 @@ def run_onboarding(
     # --- PARTS 2-9: controlled LLM-assisted mapping review (deterministic-first;
     # LLM is off unless explicitly enabled AND a callable is available). Writes
     # artefacts 28-37 next to the numbered onboarding pack. ---
-    if enable_mapping_review or enable_llm_mapping_review:
+    if enable_mapping_review or enable_llm_mapping_review or enable_llm_target_advisor:
         from . import llm_assisted_mapping as _lam
         from . import mapping_memory as _mm
         # Pass the FULL inventory so the review's robust loader parses every file
@@ -390,6 +393,10 @@ def run_onboarding(
                 enable_context_resolver=enable_context_resolver,
                 context_llm_callable=context_llm_callable,
                 target_first_decisions_path=(target_first_decisions_path or None),
+                enable_llm_target_advisor=enable_llm_target_advisor,
+                llm_target_advisor_callable=llm_target_advisor_callable,
+                llm_target_advisor_max_calls=(llm_max_calls or 1),
+                llm_target_advisor_model=llm_target_advisor_model,
             )
             ru = mr.get("resolver_usage", {})
             project.mapping_review_summary = {
@@ -418,6 +425,11 @@ def run_onboarding(
             "34_target_first_decisions.yaml",
             "35_target_first_decision_application_log.json",
             "35_target_first_decision_application_log.csv",
+            "36_target_first_llm_recommendations.csv",
+            "36_target_first_llm_recommendations.json",
+            "36_target_first_llm_recommendations_summary.md",
+            "36_target_first_llm_raw_response.json",
+            "36_target_first_llm_usage_summary.json",
             "31_llm_mapping_resolver.csv", "31_llm_mapping_resolver.json",
             "31_llm_mapping_resolver_summary.md", "31_llm_usage_summary.json",
             "31_llm_resolver_usage_summary.json", "31_llm_field_raw_response.json",
