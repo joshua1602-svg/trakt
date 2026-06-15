@@ -193,10 +193,16 @@ def run_llm_assisted_mapping(
         llm_callable=(llm_callable if enable_llm else None),
         only_unresolved=only_unresolved, max_items=max_llm_items, max_cost_gbp=max_cost_gbp)
     resolver.write_resolver_artifacts(res, out_dir)
-    # Combined usage summary separating context vs field LLM calls (auditable).
-    fu = res["usage"]
-    cu = context_usage
+    # Persist the raw field LLM response for inspection (change 4).
     import json as _json
+    fu = res["usage"]
+    if fu.get("field_raw_response") is not None:
+        (out_dir / "31_llm_field_raw_response.json").write_text(
+            _json.dumps({"llm_batch_id": fu.get("llm_batch_id", ""),
+                         "raw_response": fu.get("field_raw_response", "")},
+                        indent=2, default=str), encoding="utf-8")
+    # Combined usage summary separating context vs field LLM calls (auditable).
+    cu = context_usage
     resolver_usage = {
         "llm_enabled": bool(cu.get("llm_enabled") or fu.get("llm_enabled")),
         "context_calls_completed": int(cu.get("calls_completed", 0)),
@@ -205,12 +211,21 @@ def run_llm_assisted_mapping(
         "field_llm_callable_present": fu.get("field_llm_callable_present", False),
         "eligible_field_rows": fu.get("eligible_field_rows", 0),
         "eligible_reason_counts": fu.get("eligible_reason_counts", {}),
+        "field_rows_requested": fu.get("field_rows_requested", 0),
         "field_rows_selected_for_llm": fu.get("field_rows_selected_for_llm", 0),
         "field_rows_reviewed": fu.get("rows_llm_reviewed", 0),
         "field_rows_skipped_due_to_cap": fu.get("field_rows_skipped_due_to_cap", 0),
         "field_rows_skipped_reason_counts": fu.get("field_rows_skipped_reason_counts", {}),
         "field_parse_status": fu.get("parse_status", ""),
         "field_parse_error": fu.get("parse_error", ""),
+        # Row-level join diagnostics (change 5).
+        "field_response_chars": fu.get("field_response_chars", 0),
+        "field_response_shape": fu.get("field_response_shape", ""),
+        "field_results_parsed": fu.get("field_results_parsed", 0),
+        "field_results_matched": fu.get("field_results_matched", 0),
+        "field_results_unmatched": fu.get("field_results_unmatched", 0),
+        "field_results_missing_row_id": fu.get("field_results_missing_row_id", 0),
+        "field_incomplete_response": fu.get("field_incomplete_response", False),
         "estimated_cost_gbp": round(float(cu.get("estimated_cost_gbp", 0))
                                     + float(fu.get("estimated_cost_gbp", 0)), 6),
     }
