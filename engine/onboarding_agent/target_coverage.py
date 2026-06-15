@@ -68,6 +68,11 @@ DEFAULTED_ND = "defaulted_ND"
 NOT_APPLICABLE = "not_applicable"
 MISSING_REQUIRED = "missing_required"
 NEEDS_CONFIRMATION = "needs_confirmation"
+OPTIONAL_FOR_MI = "optional_for_mi"
+
+# Overlay coverage statuses that are valid as `coverage_status_if_no_source`.
+_OVERLAY_STATUSES = {NOT_APPLICABLE, OPTIONAL_FOR_MI, NEEDS_CONFIRMATION,
+                     CONFIGURED_STATIC, DEFAULTED, DERIVED, DEFAULTED_ND}
 
 # --- residual classes ---
 R_DUP_ALT = "duplicate_or_alternative_source"
@@ -230,6 +235,66 @@ def load_annex2_target_contract(
     return "esma_annex_2", str(path), rows
 
 
+# ---------------------------------------------------------------------------
+# MI applicability / default overlay (asset/regime-aware, config-driven)
+# ---------------------------------------------------------------------------
+
+_MI_OVERLAY_PATH = _REPO_ROOT / "config" / "mi" / "mi_equity_release_uk_applicability.yaml"
+
+
+def _matches(rule_val: Any, ctx_val: Any) -> bool:
+    """An overlay scope value matches when it is absent / '*' / equal to context."""
+    rv = str(rule_val or "").strip().lower()
+    if rv in ("", "*", "any"):
+        return True
+    return rv == str(ctx_val or "").strip().lower()
+
+
+def load_mi_applicability_overlay(
+    mode: str,
+    context: Optional[Dict[str, Any]] = None,
+    overlay_path: Optional[str | Path] = None,
+) -> Dict[str, Dict[str, Any]]:
+    """Load the MI applicability/default overlay for the run context.
+
+    Returns ``{target_field: rule}``. The overlay only applies to MI modes and is
+    scoped by asset_class / jurisdiction / mode (both file-level ``meta`` and
+    per-rule overrides). Returns ``{}`` when the overlay does not apply or is
+    missing — the generic registry behaviour is then used unchanged.
+    """
+    if target_contract_kind(mode, context) != "mi_semantics":
+        return {}
+    path = Path(overlay_path) if overlay_path else _MI_OVERLAY_PATH
+    if not path.exists():
+        return {}
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    meta = data.get("meta", {}) or {}
+    ctx = context or {}
+    asset = ctx.get("asset_class", "")
+    juris = ctx.get("jurisdiction", "")
+    # File-level scope gate.
+    if not (_matches(meta.get("asset_class"), asset)
+            and _matches(meta.get("jurisdiction"), juris)
+            and _matches(meta.get("mode"), mode)):
+        return {}
+    out: Dict[str, Dict[str, Any]] = {}
+    for rule in data.get("rules", []) or []:
+        field = rule.get("field")
+        if not field:
+            continue
+        # Per-rule scope overrides (default to file-level meta when omitted).
+        if not (_matches(rule.get("asset_class", meta.get("asset_class")), asset)
+                and _matches(rule.get("jurisdiction", meta.get("jurisdiction")), juris)
+                and _matches(rule.get("mode", meta.get("mode")), mode)):
+            continue
+        status = str(rule.get("coverage_status_if_no_source", "")).strip()
+        if status and status not in _OVERLAY_STATUSES:
+            # Unknown status -> safest is to require confirmation, never silently drop.
+            status = NEEDS_CONFIRMATION
+        out[field] = {**rule, "coverage_status_if_no_source": status}
+    return out
+
+
 def load_target_contract(
     mode: str, context: Optional[Dict[str, Any]] = None,
     mi_registry_path: Optional[str | Path] = None,
@@ -312,8 +377,18 @@ def _match_candidates(
 # Coverage classification (artefact 28a)
 # ---------------------------------------------------------------------------
 
-def _classify(tf: Dict[str, Any], cands: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Decide coverage_status + basis + decision flags for one target field."""
+def _classify(
+    tf: Dict[str, Any],
+    cands: List[Dict[str, Any]],
+    overlay_rule: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Decide coverage_status + basis + decision flags for one target field.
+
+    When there is no source candidate, an MI applicability/default ``overlay_rule``
+    (if present) is consulted BEFORE the generic required/optional fallback, so a
+    field that is genuinely not-applicable / configured / defaulted / derived for
+    the asset class & jurisdiction is not reported as ``missing_required``.
+    """
     required = tf["required_status"] in ("mandatory", "required")
     applicable = tf["applicability_status"] not in ("not_applicable",)
     nd_default = _is_nd(tf.get("default_value"))
@@ -326,6 +401,8 @@ def _classify(tf: Dict[str, Any], cands: List[Dict[str, Any]]) -> Dict[str, Any]
     decision_reason = ""
     operator_question = ""
     value_compat = ""
+    # Optional overrides written back onto the coverage row by the overlay.
+    overrides: Dict[str, Any] = {}
 
     if cands:
         primary = cands[0]
@@ -351,6 +428,22 @@ def _classify(tf: Dict[str, Any], cands: List[Dict[str, Any]]) -> Dict[str, Any]
             value_compat = "enum_mapping_required"
         else:
             value_compat = "compatible"
+    elif overlay_rule and overlay_rule.get("coverage_status_if_no_source"):
+        # Asset/regime-aware overlay: reclassify a no-source field by config rule.
+        status = overlay_rule["coverage_status_if_no_source"]
+        coverage_basis = "mi_applicability_overlay"
+        blocking = bool(overlay_rule.get("blocking", False))
+        requires_decision = blocking or bool(overlay_rule.get("requires_confirmation", False))
+        decision_reason = overlay_rule.get("reason", "")
+        operator_question = overlay_rule.get("operator_question", "")
+        if overlay_rule.get("applicability_status"):
+            overrides["applicability_status"] = overlay_rule["applicability_status"]
+        if overlay_rule.get("default_rule"):
+            overrides["default_rule"] = overlay_rule["default_rule"]
+        if overlay_rule.get("configured_value_source"):
+            overrides["configured_value_source"] = overlay_rule["configured_value_source"]
+        if status == DERIVED and overlay_rule.get("default_rule"):
+            overrides["derivation_rule"] = overlay_rule["default_rule"]
     elif has_derive:
         status, coverage_basis = DERIVED, "derivation_rule"
     elif nd_default:
@@ -380,6 +473,7 @@ def _classify(tf: Dict[str, Any], cands: List[Dict[str, Any]]) -> Dict[str, Any]
         "decision_reason": decision_reason,
         "operator_question": operator_question,
         "value_compatibility_status": value_compat,
+        "overrides": overrides,
     }
 
 
@@ -391,6 +485,7 @@ def build_target_coverage(
     target_fields: List[Dict[str, Any]],
     evidence_rows: List[Dict[str, Any]],
     resolved_rows: List[Dict[str, Any]],
+    overlay: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Tuple[List[Dict[str, Any]], Dict[Tuple[str, str, str], List[Tuple[str, float, bool]]]]:
     """Build the target coverage matrix (28a) — one row per TARGET field.
 
@@ -398,7 +493,11 @@ def build_target_coverage(
     maps each source (file, sheet, column) to the list of
     ``(target_field, confidence, is_primary)`` it matched (used to build the
     residual register).
+
+    ``overlay`` is the optional MI applicability/default overlay (asset/regime
+    aware); it is applied only to fields with no source candidate.
     """
+    overlay = overlay or {}
     resolved_by_key = {_ek(r): r for r in resolved_rows}
     matched_by_key: Dict[Tuple[str, str, str], List[Tuple[str, float, bool]]] = {}
     rows: List[Dict[str, Any]] = []
@@ -408,7 +507,9 @@ def build_target_coverage(
             k = (c["source_file"], c["source_sheet"], c["source_column"])
             matched_by_key.setdefault(k, []).append(
                 (tf["target_field"], c["confidence"], i == 0))
-        cls = _classify(tf, cands)
+        overlay_rule = overlay.get(tf["target_field"]) if not cands else None
+        cls = _classify(tf, cands, overlay_rule)
+        ov = cls.get("overrides", {})
         primary = cands[0] if cands else {}
         alts = cands[1:]
         nd_applied = (cls["coverage_status"] == DEFAULTED_ND
@@ -421,7 +522,7 @@ def build_target_coverage(
             "target_domain": tf["target_domain"],
             "target_label": tf["target_label"],
             "required_status": tf["required_status"],
-            "applicability_status": tf["applicability_status"],
+            "applicability_status": ov.get("applicability_status", tf["applicability_status"]),
             "coverage_status": cls["coverage_status"],
             "coverage_basis": cls["coverage_basis"],
             "selected_source_file": primary.get("source_file", ""),
@@ -434,10 +535,11 @@ def build_target_coverage(
             "overlap_evidence": (
                 f"{len(cands)} candidate source columns" if len(cands) > 1 else ""),
             "value_compatibility_status": cls["value_compatibility_status"],
-            "derivation_rule": tf.get("derivation_rule", ""),
-            "default_rule": tf.get("default_rule", ""),
+            "derivation_rule": ov.get("derivation_rule", tf.get("derivation_rule", "")),
+            "default_rule": ov.get("default_rule", tf.get("default_rule", "")),
             "nd_rule_applied": ("; ".join(tf.get("nd_allowed", [])) if nd_applied else ""),
-            "configured_value_source": tf.get("configured_value_source", ""),
+            "configured_value_source": ov.get("configured_value_source",
+                                              tf.get("configured_value_source", "")),
             "requires_user_decision": cls["requires_user_decision"],
             "blocking": cls["blocking"],
             "decision_reason": cls["decision_reason"],
@@ -601,6 +703,15 @@ def build_human_decision_queue(
                  ["set_config_value", "confirm_ND_code", "mark_not_applicable"],
                  True, cov["operator_question"],
                  f"status={status}; basis={cov['coverage_basis']}")
+        elif cov["requires_user_decision"]:
+            # Non-blocking operator confirmation requested by the overlay/config.
+            dtype = D_ND if status == DEFAULTED_ND else D_CONFIG
+            _add(dtype, "medium", cov["target_field"], cov["selected_source_file"],
+                 cov["selected_source_column"], cov["decision_reason"],
+                 "Confirm the configured / default / ND value.",
+                 ["confirm_value", "provide_source", "mark_not_applicable"],
+                 False, cov["operator_question"],
+                 f"status={status}; basis={cov['coverage_basis']}")
 
     # Residuals: only escalate genuinely-blocking ones (suppressed otherwise).
     for r in residual_rows:
@@ -642,6 +753,7 @@ def coverage_summary(coverage_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         "missing_required_fields": status_counts.get(MISSING_REQUIRED, 0),
         "needs_confirmation_fields": status_counts.get(NEEDS_CONFIRMATION, 0),
         "not_applicable_fields": status_counts.get(NOT_APPLICABLE, 0),
+        "optional_for_mi_fields": status_counts.get(OPTIONAL_FOR_MI, 0),
     }
 
 
@@ -822,13 +934,16 @@ def run_target_first_coverage(
     output_dir: str | Path,
     mi_registry_path: Optional[str | Path] = None,
     annex2_config_path: Optional[str | Path] = None,
+    mi_overlay_path: Optional[str | Path] = None,
 ) -> Dict[str, Any]:
     """Build + write the target-first coverage artefacts (28a/28b/28c)."""
     cid, csrc, target_fields = load_target_contract(
         mode, context, mi_registry_path=mi_registry_path,
         annex2_config_path=annex2_config_path)
+    overlay = load_mi_applicability_overlay(mode, context, overlay_path=mi_overlay_path)
     coverage_rows, matched_by_key = build_target_coverage(
-        mode, context, cid, csrc, target_fields, evidence_rows, resolved_rows)
+        mode, context, cid, csrc, target_fields, evidence_rows, resolved_rows,
+        overlay=overlay)
     residual_rows = build_source_residual_register(mode, evidence_rows, matched_by_key)
     decision_rows = build_human_decision_queue(mode, coverage_rows, residual_rows)
     paths = write_artifacts(output_dir, coverage_rows, residual_rows, decision_rows,
@@ -837,6 +952,8 @@ def run_target_first_coverage(
         "target_contract_id": cid,
         "target_contract_source": csrc,
         "target_contract_kind": target_contract_kind(mode, context),
+        "overlay_applied": bool(overlay),
+        "overlay_fields": sorted(overlay.keys()),
         "coverage": coverage_rows,
         "residual": residual_rows,
         "decision_queue": decision_rows,
