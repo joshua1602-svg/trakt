@@ -109,7 +109,8 @@ class TestTargetFieldLed(unittest.TestCase):
         res, _ = _run(ERE, "mi_only")
         allowed = {tcov.SOURCE_MAPPED, tcov.SOURCE_MAPPED_ALT, tcov.DERIVED,
                    tcov.CONFIGURED_STATIC, tcov.DEFAULTED, tcov.DEFAULTED_ND,
-                   tcov.NOT_APPLICABLE, tcov.MISSING_REQUIRED, tcov.NEEDS_CONFIRMATION}
+                   tcov.NOT_APPLICABLE, tcov.MISSING_REQUIRED, tcov.NEEDS_CONFIRMATION,
+                   tcov.OPTIONAL_FOR_MI}
         for r in res["target_first_coverage"]["coverage"]:
             self.assertIn(r["coverage_status"], allowed)
 
@@ -208,6 +209,86 @@ class TestAnnex2DefaultsNotMissing(unittest.TestCase):
         for code in ("RREL16", "RREL22", "RREC8", "RREL25", "RREC6"):
             self.assertNotEqual(self.cov[code]["coverage_status"], tcov.MISSING_REQUIRED)
         self.assertGreater(summary["derived_config_defaulted_fields"], 0)
+
+
+# --------------------------------------------------------------------------- #
+# MI applicability / default overlay (asset/regime-aware)
+# --------------------------------------------------------------------------- #
+class TestMiApplicabilityOverlay(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.res, _ = _run(ERE, "mi_only")
+        cls.tf = cls.res["target_first_coverage"]
+        cls.cov = {r["target_field"]: r for r in cls.tf["coverage"]}
+
+    def test_overlay_applies_for_uk_ere_mi(self):
+        self.assertTrue(self.tf["overlay_applied"])
+        self.assertGreater(len(self.tf["overlay_fields"]), 0)
+
+    def test_overlay_only_applies_to_mi_modes(self):
+        # Regulatory / Annex 2 mode must NOT load the MI overlay.
+        self.assertEqual(
+            tcov.load_mi_applicability_overlay(
+                "regulatory_mi", {"asset_class": "equity_release_mortgage",
+                                  "jurisdiction": "UK"}),
+            {})
+
+    def test_overlay_scope_gate(self):
+        # Non-UK / non-ERE context does not pick up the UK-ERE overlay.
+        self.assertEqual(
+            tcov.load_mi_applicability_overlay(
+                "mi_only", {"asset_class": "consumer_loan", "jurisdiction": "US"}),
+            {})
+        ovl = tcov.load_mi_applicability_overlay(
+            "mi_only", {"asset_class": "equity_release_mortgage", "jurisdiction": "UK"})
+        self.assertIn("maturity_date", ovl)
+
+    def test_false_blockers_downgraded(self):
+        # Previously-blocking fields (absent from this pack's source) are
+        # reclassified away from missing_required by the overlay.
+        expected = {
+            "borrower_jurisdiction": tcov.CONFIGURED_STATIC,
+            "negative_equity_guarantee": tcov.CONFIGURED_STATIC,
+            "valuation_type": tcov.CONFIGURED_STATIC,
+            "further_advance_flag": tcov.CONFIGURED_STATIC,
+            "originator_name": tcov.CONFIGURED_STATIC,
+            "indexed_loan_to_value": tcov.DERIVED,
+            "interest_arrears_amount": tcov.NEEDS_CONFIRMATION,
+            "principal_arrears_amount": tcov.NEEDS_CONFIRMATION,
+            "borrower_1_gender": tcov.OPTIONAL_FOR_MI,
+        }
+        for field, status in expected.items():
+            r = self.cov[field]
+            self.assertEqual(r["coverage_status"], status, field)
+            self.assertNotEqual(r["coverage_status"], tcov.MISSING_REQUIRED, field)
+            self.assertFalse(r["blocking"], field)
+            self.assertEqual(r["coverage_basis"], "mi_applicability_overlay", field)
+
+    def test_overlay_rows_carry_rule_metadata(self):
+        # The matrix reflects the overlay's default_rule / configured_value_source.
+        juris = self.cov["borrower_jurisdiction"]
+        self.assertTrue(juris["default_rule"])
+        self.assertTrue(juris["configured_value_source"])
+        self.assertEqual(juris["applicability_status"], "applicable")
+        # not_applicable applicability flows through from the overlay rule.
+        self.assertEqual(self.cov["borrower_1_gender"]["applicability_status"],
+                         "not_applicable")
+
+    def test_overlay_does_not_override_real_source_mapping(self):
+        # A field with a genuine source candidate stays source_mapped, never
+        # downgraded by the overlay.
+        mapped = [r for r in self.tf["coverage"]
+                  if r["coverage_status"] in (tcov.SOURCE_MAPPED, tcov.SOURCE_MAPPED_ALT)]
+        for r in mapped:
+            self.assertNotEqual(r["coverage_basis"], "mi_applicability_overlay")
+
+    def test_blocking_materially_reduced_and_remaining_explainable(self):
+        blocking = [r for r in self.tf["coverage"] if r["blocking"]]
+        # False blockers materially reduced (baseline was 19 on this pack).
+        self.assertLessEqual(len(blocking), 5)
+        # Every remaining blocker is a genuine missing_required input.
+        for r in blocking:
+            self.assertEqual(r["coverage_status"], tcov.MISSING_REQUIRED)
 
 
 # --------------------------------------------------------------------------- #

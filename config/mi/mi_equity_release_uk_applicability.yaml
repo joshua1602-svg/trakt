@@ -1,0 +1,269 @@
+# MI applicability / default overlay — UK equity-release, MI-only onboarding.
+# =========================================================================
+#
+# Purpose
+# -------
+# The MI semantics field registry (mi_agent/mi_semantics_field_registry.yaml) is
+# GENERIC and not yet asset/regime-aware. In target-contract-first MI coverage
+# this makes some fields look like hard `missing_required` blockers even though,
+# for a UK equity-release MI-only pack, they are commercially:
+#   * not applicable (e.g. contractual maturity for a lifetime mortgage),
+#   * configured/static at client/product config level (e.g. jurisdiction = UK),
+#   * derivable from other fields, or
+#   * optional for the MI view / awaiting operator confirmation.
+#
+# This overlay is a CONFIG-DRIVEN applicability + default layer. It is consulted
+# ONLY when target-first coverage finds NO source candidate for a field — it
+# never overrides a real source mapping, and it does NOT prune the registry.
+#
+# Matching
+# --------
+# A rule applies to a target field when `meta` (asset_class / jurisdiction / mode)
+# matches the run context. Per-rule overrides of asset_class/jurisdiction/mode
+# are supported; "*" (or omission) means "any".
+#
+# Recognised `coverage_status_if_no_source` values:
+#   not_applicable | optional_for_mi | needs_confirmation | configured_static |
+#   defaulted | derived
+#
+# `blocking: false` keeps the field OUT of the compact human decision queue
+# (28c). Set `blocking: true` only for a genuine operator-blocking config value.
+
+meta:
+  asset_class: equity_release_mortgage
+  jurisdiction: UK
+  mode: mi_only
+  version: 1
+
+rules:
+  # --- jurisdiction / originator / product config (static at config level) ---
+  - field: borrower_jurisdiction
+    applicability_status: applicable
+    coverage_status_if_no_source: configured_static
+    default_rule: "default to UK"
+    configured_value_source: client_config
+    operator_question: "Confirm the portfolio obligor jurisdiction is UK."
+    blocking: false
+    reason: "UK equity-release pack; obligor jurisdiction is set at client config level."
+
+  - field: originator_name
+    applicability_status: applicable
+    coverage_status_if_no_source: configured_static
+    default_rule: "from client config"
+    configured_value_source: client_config
+    operator_question: "Confirm the originator / lender name from client config."
+    blocking: false
+    reason: "Originator name is a client-config attribute, not a per-loan source column."
+
+  - field: erm_product_type
+    applicability_status: applicable
+    coverage_status_if_no_source: configured_static
+    default_rule: "from product config"
+    configured_value_source: product_config
+    operator_question: "Confirm the ERM product type (e.g. lifetime mortgage) from product config."
+    blocking: false
+    reason: "ERM product type is known from the product setup, not necessarily a source column."
+
+  - field: erm_sub_product_type
+    applicability_status: applicable
+    coverage_status_if_no_source: configured_static
+    default_rule: "from product config"
+    configured_value_source: product_config
+    operator_question: "Confirm the ERM sub-product type (lump sum / drawdown) from product config."
+    blocking: false
+    reason: "ERM sub-product type is a product-config attribute."
+
+  - field: broker_channel
+    applicability_status: applicable
+    coverage_status_if_no_source: needs_confirmation
+    configured_value_source: client_config
+    operator_question: "Confirm distribution / broker channel if required for the MI view."
+    blocking: false
+    reason: "Distribution channel is optional for core MI; confirm only if needed."
+
+  # --- interest-rate structure (configured for a known product) ---
+  - field: interest_rate_type
+    applicability_status: applicable
+    coverage_status_if_no_source: configured_static
+    default_rule: "fixed (lifetime mortgage roll-up)"
+    configured_value_source: product_config
+    operator_question: "Confirm the interest-rate type from the product rate structure."
+    blocking: false
+    reason: "Equity-release rate structure is known at product config (typically fixed roll-up)."
+
+  # --- UK equity-release product guarantees (static at product config) ---
+  - field: negative_equity_guarantee
+    applicability_status: applicable
+    coverage_status_if_no_source: configured_static
+    default_rule: "true (UK NNEG standard)"
+    configured_value_source: product_config
+    operator_question: "Confirm the no-negative-equity guarantee applies (UK ERE standard)."
+    blocking: false
+    reason: "UK equity-release products carry the NNEG by standard; set at product config."
+
+  - field: protected_equity_flag
+    applicability_status: applicable
+    coverage_status_if_no_source: configured_static
+    default_rule: "from product config"
+    configured_value_source: product_config
+    operator_question: "Confirm whether a protected-equity / inheritance-guarantee option applies."
+    blocking: false
+    reason: "Protected-equity is a product option configured at setup."
+
+  - field: further_advance_flag
+    applicability_status: applicable
+    coverage_status_if_no_source: configured_static
+    default_rule: "false unless a further-advance event is supplied"
+    configured_value_source: product_config
+    operator_question: "Confirm whether further advances are in scope for this pack."
+    blocking: false
+    reason: "Further-advance flag defaults off unless source evidence is provided."
+
+  # --- valuation / occupancy (defaulted/configured for ERE) ---
+  - field: valuation_type
+    applicability_status: applicable
+    coverage_status_if_no_source: configured_static
+    default_rule: "full valuation"
+    configured_value_source: client_config
+    operator_question: "Confirm the valuation type if not supplied in the source pack."
+    blocking: false
+    reason: "Valuation type defaults to full valuation when no source value is provided."
+
+  - field: occupancy_type
+    applicability_status: applicable
+    coverage_status_if_no_source: configured_static
+    default_rule: "owner-occupied"
+    configured_value_source: product_config
+    operator_question: "Confirm occupancy type (owner-occupied is standard for ERE)."
+    blocking: false
+    reason: "Equity-release collateral is owner-occupied by product eligibility."
+
+  # --- not applicable for lifetime / equity-release loans ---
+  - field: maturity_date
+    applicability_status: not_applicable
+    coverage_status_if_no_source: not_applicable
+    operator_question: ""
+    blocking: false
+    reason: "Lifetime mortgage / equity release has no contractual maturity in the amortising sense (matures on death/move into care)."
+
+  - field: borrower_1_gender
+    applicability_status: not_applicable
+    coverage_status_if_no_source: optional_for_mi
+    operator_question: "Borrower gender is optional for the MI view; supply only if a demographic cut is required."
+    blocking: false
+    reason: "Borrower demographics are optional for core MI, not a blocking requirement."
+
+  # --- derivable fields (computed from other coverage) ---
+  - field: original_loan_to_value
+    applicability_status: applicable
+    coverage_status_if_no_source: derived
+    default_rule: "original_principal_balance / original_valuation_amount"
+    operator_question: ""
+    blocking: false
+    reason: "Original LTV is derivable from original advance and original valuation."
+
+  - field: indexed_value
+    applicability_status: applicable
+    coverage_status_if_no_source: derived
+    default_rule: "current_valuation_amount indexed to reporting date"
+    operator_question: ""
+    blocking: false
+    reason: "Indexed value is derived from the current valuation and a house-price index."
+
+  - field: indexed_loan_to_value
+    applicability_status: applicable
+    coverage_status_if_no_source: derived
+    default_rule: "current_outstanding_balance / indexed_value"
+    operator_question: ""
+    blocking: false
+    reason: "Indexed LTV is derived from the outstanding balance and indexed value."
+
+  - field: geographic_region_obligor
+    applicability_status: applicable
+    coverage_status_if_no_source: derived
+    default_rule: "default to collateral / property region"
+    operator_question: "Confirm the obligor region defaults to the collateral region."
+    blocking: false
+    reason: "For owner-occupied ERE the obligor region tracks the collateral region."
+
+  - field: loan_redemption_flag
+    applicability_status: applicable
+    coverage_status_if_no_source: derived
+    default_rule: "from account_status / redemption_date"
+    operator_question: ""
+    blocking: false
+    reason: "Redemption flag is derived from account status / redemption date."
+
+  # --- arrears / default / period-movement fields (optional unless required) ---
+  - field: arrears_balance
+    applicability_status: applicable
+    coverage_status_if_no_source: needs_confirmation
+    default_rule: "0.00 if account is performing"
+    operator_question: "Confirm arrears balance (defaults to 0 for performing accounts)."
+    blocking: false
+    reason: "Equity-release loans roll up interest and are typically non-amortising; arrears default to nil unless flagged."
+
+  - field: interest_arrears_amount
+    applicability_status: applicable
+    coverage_status_if_no_source: needs_confirmation
+    default_rule: "0.00 if account is performing"
+    operator_question: "Confirm interest-arrears amount (defaults to 0 for performing accounts)."
+    blocking: false
+    reason: "Roll-up interest products typically carry no interest arrears; confirm if required."
+
+  - field: principal_arrears_amount
+    applicability_status: applicable
+    coverage_status_if_no_source: needs_confirmation
+    default_rule: "0.00 if account is performing"
+    operator_question: "Confirm principal-arrears amount (defaults to 0 for performing accounts)."
+    blocking: false
+    reason: "Non-amortising products typically carry no principal arrears; confirm if required."
+
+  - field: interest_in_arrears
+    applicability_status: applicable
+    coverage_status_if_no_source: needs_confirmation
+    default_rule: "false if account is performing"
+    operator_question: "Confirm whether interest is in arrears (defaults to no for performing accounts)."
+    blocking: false
+    reason: "Interest-in-arrears defaults off for performing roll-up loans."
+
+  - field: number_of_days_in_arrears
+    applicability_status: applicable
+    coverage_status_if_no_source: needs_confirmation
+    default_rule: "0 if account is performing"
+    operator_question: "Confirm days-in-arrears (defaults to 0 for performing accounts)."
+    blocking: false
+    reason: "Days-in-arrears defaults to 0 for performing accounts."
+
+  - field: default_amount
+    applicability_status: applicable
+    coverage_status_if_no_source: needs_confirmation
+    default_rule: "0.00 unless a default event is supplied"
+    operator_question: "Confirm default amount (defaults to 0 unless a default event is present)."
+    blocking: false
+    reason: "Default amount is only material when a default event is present in the source."
+
+  - field: recoveries_in_period
+    applicability_status: applicable
+    coverage_status_if_no_source: needs_confirmation
+    default_rule: "0.00 if no recoveries in the period"
+    operator_question: "Confirm period recoveries (defaults to 0 if none in the period)."
+    blocking: false
+    reason: "Period recoveries default to nil unless supplied."
+
+  - field: redemptions_received_in_period
+    applicability_status: applicable
+    coverage_status_if_no_source: needs_confirmation
+    default_rule: "0.00 if no redemptions in the period"
+    operator_question: "Confirm period redemptions (defaults to 0 if none in the period)."
+    blocking: false
+    reason: "Period redemptions default to nil unless supplied."
+
+  # --- ERM balance nuance ---
+  - field: current_principal_balance
+    applicability_status: applicable
+    coverage_status_if_no_source: needs_confirmation
+    default_rule: "use current_outstanding_balance where principal-only is not separated"
+    operator_question: "Confirm whether principal-only balance is separated from rolled-up interest."
+    blocking: false
+    reason: "ERE reports current_outstanding_balance (incl. rolled-up interest); a principal-only split may not exist."
