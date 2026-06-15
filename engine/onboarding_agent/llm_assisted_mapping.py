@@ -81,6 +81,7 @@ def run_llm_assisted_mapping(
     enable_file_conversion_fallback: bool = False,
     enable_context_resolver: bool = False,
     context_llm_callable: Optional[Callable[[str], str]] = None,
+    target_first_decisions_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run the full controlled mapping workbench pipeline and write artefacts.
 
@@ -322,7 +323,9 @@ def run_llm_assisted_mapping(
     from . import target_coverage as tcov
     target_first = tcov.run_target_first_coverage(
         mode=policy.name, context=context, evidence_rows=evidence_rows,
-        resolved_rows=res["resolved"], output_dir=out_dir)
+        resolved_rows=res["resolved"], output_dir=out_dir,
+        client_id=client_id, run_id=run_id,
+        decisions_path=target_first_decisions_path)
 
     # 33/34 — concise multi-file review queue (source-column audit detail).
     review = queue.build_review_queue(validation_rows, evidence_by_key, llm_by_key)

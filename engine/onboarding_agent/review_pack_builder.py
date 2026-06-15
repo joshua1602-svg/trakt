@@ -210,6 +210,9 @@ def _load_target_first_artifacts(project_dir: Path, output_root: Path | None = N
         tf[key] = data
     fc = _find_artifact(project_dir, output_root, "29a_column_evidence_file_coverage.json")
     tf["file_coverage"] = _load_json(fc) if fc else None
+    dlog = _find_artifact(project_dir, output_root,
+                          "35_target_first_decision_application_log.json")
+    tf["decision_log"] = _load_json(dlog) if dlog else None
     _derive_summaries(tf)
     return tf
 
@@ -325,6 +328,25 @@ def _gate3_summary_html(tf: dict) -> str:
             f"(audit/detail)</strong> — {len(rows)} target fields</summary>"
             f"{_coverage_full_table(rows)}</details>")
     return intro + miss_html + counts_html + grouped_html + req_html + full
+
+
+def _decision_application_html(tf: dict) -> str:
+    """Minimal applied-decisions summary (35 log) for the operator pack."""
+    dlog = tf.get("decision_log")
+    if not dlog:
+        return ""
+    summary = dlog.get("summary", {}) or {}
+    rows = [
+        ["Decisions supplied", summary.get("decisions_supplied", 0)],
+        ["Applied", summary.get("applied", 0)],
+        ["Deferred", summary.get("deferred", 0)],
+        ["Requires operator review", summary.get("requires_operator_review", 0)],
+        ["Invalid / not found", summary.get("invalid", 0)],
+    ]
+    return ('<h4 class="chart-title">Applied target-first decisions</h4>'
+            '<p class="meta">Approved Gate 4 decisions applied this run from '
+            f'<code>{_esc(dlog.get("decisions_source",""))}</code>.</p>'
+            + _table(["Metric", "Value"], [[_esc(a), _esc(b)] for a, b in rows]))
 
 
 def _gate5_mi_handoff_status_html(tf: dict, n_block: int, n_decisions: int) -> str:
@@ -981,6 +1003,7 @@ def build_review_pack(project: OnboardingProject, out_path: Path,
 
   <div class="card"><h2>5. Gate 5 — MI handoff readiness</h2>
     {_gate5_mi_handoff_status_html(tf, tf_n_block, tf_n_decisions)}
+    {_decision_application_html(tf)}
     <h4 class="chart-title">Config suggestions</h4>{cfg_html}
     <h4 class="chart-title">Central tapes &amp; Azure-ready handoff (dry-run)</h4>
     <span id="promotion"></span><!--PROMO_START-->{_PROMOTION_MARKER}<!--PROMO_END-->

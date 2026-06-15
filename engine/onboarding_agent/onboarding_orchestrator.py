@@ -132,6 +132,7 @@ def run_onboarding(
     enable_file_conversion_fallback: bool = False,
     enable_context_resolver: bool = False,
     context_llm_callable=None,
+    target_first_decisions_path: str = "",
 ) -> OnboardingProject:
     in_dir = Path(input_dir)
     out_dir = Path(output_dir)
@@ -388,6 +389,7 @@ def run_onboarding(
                 enable_file_conversion_fallback=enable_file_conversion_fallback,
                 enable_context_resolver=enable_context_resolver,
                 context_llm_callable=context_llm_callable,
+                target_first_decisions_path=(target_first_decisions_path or None),
             )
             ru = mr.get("resolver_usage", {})
             project.mapping_review_summary = {
@@ -413,6 +415,9 @@ def run_onboarding(
             "28b_source_residual_summary.md",
             "28c_human_decision_queue.csv", "28c_human_decision_queue.json",
             "28c_human_decision_summary.md",
+            "34_target_first_decisions.yaml",
+            "35_target_first_decision_application_log.json",
+            "35_target_first_decision_application_log.csv",
             "31_llm_mapping_resolver.csv", "31_llm_mapping_resolver.json",
             "31_llm_mapping_resolver_summary.md", "31_llm_usage_summary.json",
             "31_llm_resolver_usage_summary.json", "31_llm_field_raw_response.json",

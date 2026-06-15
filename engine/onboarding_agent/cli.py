@@ -128,6 +128,13 @@ def build_parser() -> argparse.ArgumentParser:
         "32,33,34,35,37) during the onboarding run. LLM stays OFF.",
     )
     p.add_argument(
+        "--target-first-decisions",
+        default="",
+        help="Path to an approved 34_target_first_decisions.yaml. Approved Gate 4 "
+        "decisions are applied deterministically to 28a/28c and a 35 application "
+        "log is written. When omitted, a fresh 34 template is generated from 28c.",
+    )
+    p.add_argument(
         "--enable-llm-mapping-review",
         action="store_true",
         help="Also run the controlled LLM mapping reviewer (implies "
@@ -609,6 +616,7 @@ def main(argv=None) -> int:
         enable_file_conversion_fallback=args.enable_file_conversion_fallback,
         enable_context_resolver=args.enable_llm_context_resolver,
         context_llm_callable=(_shared_llm if args.enable_llm_context_resolver else None),
+        target_first_decisions_path=args.target_first_decisions,
     )
 
     print("=" * 64)
