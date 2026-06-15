@@ -52,7 +52,7 @@ class TestReviewPackTargetFirst(unittest.TestCase):
         self.assertIn("Onboarding Review Pack", self.html)
 
     def test_includes_target_coverage_section(self):
-        self.assertIn("Gate 3 — Target coverage matrix", self.html)
+        self.assertIn("Gate 3 — Target coverage summary", self.html)
         self.assertIn("Coverage status counts", self.html)
 
     def test_includes_compact_decision_queue_section(self):
@@ -70,45 +70,131 @@ class TestReviewPackTargetFirst(unittest.TestCase):
         self.assertIn("Source-column audit detail, not the primary gate", self.html)
         self.assertIn("audit only", self.html)
 
-    def test_does_not_lead_with_33_approval_burden(self):
-        # The legacy 33 audit section must come AFTER the target-first gates.
-        # Anchor on the <h2> card headings (gate names also appear in callouts).
-        pos_exec = self.html.find("<h2>1. Executive onboarding summary")
-        pos_g3 = self.html.find("<h2>3. Gate 3 — Target coverage matrix")
-        pos_g4 = self.html.find("<h2>4. Gate 4 — Compact human decision queue")
-        pos_audit = self.html.find("<h2>7. Detailed source-column audit queue")
-        self.assertGreater(pos_g3, pos_exec)
-        self.assertGreater(pos_g4, pos_g3)
-        self.assertGreater(pos_audit, pos_g4)
-        # The old 33 approval count is explicitly labelled audit-only, not the headline.
-        self.assertIn("Old 33 approvals (audit only)", self.html)
+    def test_decision_queue_before_full_target_matrix(self):
+        # Operator-first: the compact queue (Gate 4) must precede the full matrix.
+        pos_g4 = self.html.find("<h2>2. Gate 4 — Compact human decision queue")
+        pos_g3 = self.html.find("<h2>3. Gate 3 — Target coverage summary")
+        pos_matrix = self.html.find("Full target coverage matrix (audit/detail)")
+        pos_appendix = self.html.find("<h2>6. Appendices")
+        self.assertGreater(pos_g4, 0)
+        self.assertGreater(pos_g3, pos_g4)
+        self.assertGreater(pos_matrix, pos_g4)
+        self.assertGreater(pos_appendix, pos_g3)
+
+    def test_full_matrix_is_collapsed_detail_only(self):
+        # The 72-row matrix must live inside a collapsible <details> block.
+        self.assertIn("Full target coverage matrix (audit/detail)", self.html)
+        idx = self.html.find("Full target coverage matrix (audit/detail)")
+        pre = self.html[:idx]
+        # The nearest preceding tag opening the disclosure must be <details>.
+        self.assertEqual(pre.rfind("<details>"), pre.rfind("<details"),
+                         "matrix label should sit inside a <details> block")
+        self.assertGreater(pre.rfind("<details>"), pre.rfind("</details>"))
+
+    def test_legacy_sections_are_appendix_only(self):
+        appendix_start = self.html.find("<h2>6. Appendices")
+        main, appendix = self.html[:appendix_start], self.html[appendix_start:]
+        # Legacy diagnostics live only in the appendix.
+        for s in ("Legacy readiness assessment", "Legacy / supporting gap questions",
+                  "Deterministic mapping trace", "Mapping candidates"):
+            self.assertNotIn(s, main, f"{s} leaked into the main body")
+            self.assertIn(s, appendix)
+        self.assertIn("superseded by target-first", appendix)
+        # No legacy red blocking styling survives in the appendix.
+        self.assertNotIn("badge b-block", appendix)
+        self.assertNotIn("callout block", appendix)
 
     def test_headline_status_from_28c_not_legacy(self):
-        # The headline (before Gate 2) must be driven by 28c, not the legacy
-        # "N blocking question(s)" gap-question banner.
-        head = self.html[: self.html.find("<h2>2. Gate 2")]
-        self.assertIn("Only ONE blocking target decision remains", head)
-        self.assertNotIn("blocking question(s)", head)
+        # The headline (before the appendix) must be driven by 28c, never the
+        # legacy "N blocking question(s)" gap-question banner / "Readiness: BLOCKED".
+        main = self.html[: self.html.find("<h2>6. Appendices")]
+        self.assertNotIn("blocking question(s)", main)
+        self.assertNotIn("Readiness: BLOCKED", main)
+        # This synthetic pack has exactly one genuine blocker.
+        self.assertIn("Only ONE blocking target decision remains", main)
 
     def test_headline_counts_from_target_first(self):
         # Headline KPIs come from 28a/28b/28c.
         import json
         cov = json.loads((self.out / "28a_target_coverage_matrix.json").read_text())
-        dec = json.loads((self.out / "28c_human_decision_queue.json").read_text())
         self.assertIn("Target fields", self.html)
         self.assertIn(str(cov["summary"]["target_fields_total"]), self.html)
         self.assertIn("Compact decision queue", self.html)
-        # The blocking decision count from 28c is surfaced in Gate 4.
-        n_block = dec["summary"]["blocking_decisions"]
-        if n_block == 1:
-            self.assertIn("Only ONE blocking decision remains", self.html)
+        self.assertIn("Old source-column approvals — audit only", self.html)
+
+    def test_gate5_handoff_status_not_legacy_blocked(self):
+        # Gate 5 MI handoff status is derived from 28c, never the legacy readiness.
+        self.assertIn("Gate 5 — MI handoff readiness", self.html)
+        self.assertIn("MI handoff:", self.html)
 
     def test_preserves_existing_supporting_sections(self):
-        # Existing managed-service detail still present (re-homed under gates).
+        # Existing managed-service detail still present (re-homed under gates/appendix).
         for s in ("Data domain coverage", "Azure-ready run metadata",
                   "Field scope for this onboarding mode", "Central tapes",
                   "Mapping ambiguities resolved by policy"):
             self.assertIn(s, self.html)
+
+
+class TestZeroBlockingHeadline(unittest.TestCase):
+    """With a hand-built 28c that has zero blocking rows, the headline must be
+    'NEEDS CONFIRMATION' with no red/legacy blocking language in the main body."""
+
+    @classmethod
+    def setUpClass(cls):
+        import json
+        from engine.onboarding_agent.onboarding_models import OnboardingProject
+        from engine.onboarding_agent.review_pack_builder import build_review_pack
+        cls.dir = Path(tempfile.mkdtemp(prefix="zero_block_"))
+        # 28a: a couple of covered fields, no missing_required.
+        (cls.dir / "28a_target_coverage_matrix.json").write_text(json.dumps({
+            "target_contract_id": "mi_semantics_field_registry",
+            "summary": {"target_fields_total": 2,
+                        "coverage_status_counts": {"source_mapped": 1, "needs_confirmation": 1},
+                        "source_mapped_fields": 1, "needs_confirmation_fields": 1,
+                        "missing_required_fields": 0},
+            "rows": [
+                {"target_field": "a", "target_domain": "core", "required_status": "required",
+                 "coverage_status": "source_mapped", "blocking": False},
+                {"target_field": "b", "target_domain": "core", "required_status": "required",
+                 "coverage_status": "needs_confirmation", "blocking": False},
+            ]}), encoding="utf-8")
+        # 28b: residuals.
+        (cls.dir / "28b_source_residual_register.json").write_text(json.dumps({
+            "summary": {"residual_source_columns_total": 3, "suppressed_from_main_queue": 3,
+                        "operator_visible": 3, "residual_class_counts": {"not_relevant_to_current_mode": 3}},
+            "rows": []}), encoding="utf-8")
+        # 28c: 8 decisions, NONE blocking.
+        (cls.dir / "28c_human_decision_queue.json").write_text(json.dumps({
+            "summary": {"human_decision_rows_total": 8, "blocking_decisions": 0,
+                        "decision_type_counts": {"source_priority_confirmation": 8}},
+            "rows": [{"decision_id": f"DQ-{i}", "decision_type": "source_priority_confirmation",
+                      "priority": "medium", "target_field": f"f{i}", "blocking": False,
+                      "operator_question": "confirm", "recommendation": "ok",
+                      "options": "", "evidence_summary": ""} for i in range(8)]}),
+            encoding="utf-8")
+        # A blocked legacy project, to prove legacy BLOCKED never leaks to the headline.
+        proj = OnboardingProject(project_id="p", client_name="C", input_dir="i",
+                                 output_dir=str(cls.dir), onboarding_mode="mi_only")
+        proj.review_status = "blocked"
+        build_review_pack(proj, cls.dir / "08_onboarding_review_pack.html")
+        cls.html = (cls.dir / "08_onboarding_review_pack.html").read_text(encoding="utf-8")
+        cls.main = cls.html[: cls.html.find("<h2>6. Appendices")]
+
+    def test_headline_needs_confirmation_no_red(self):
+        self.assertIn("NEEDS CONFIRMATION", self.main)
+        self.assertIn("8 non-blocking confirmations remain", self.main)
+        # No blocked/red language in the headline/main body.
+        self.assertNotIn("Status: BLOCKED", self.main)
+        self.assertNotIn("Readiness: BLOCKED", self.main)
+        self.assertNotIn("BLOCKED</span>", self.main)
+
+    def test_hero_badge_is_target_first_not_legacy_blocked(self):
+        hero = self.html[: self.html.find("<h2>1.")]
+        self.assertIn("NEEDS CONFIRMATION", hero)
+        self.assertNotIn("BLOCKED", hero)
+
+    def test_gate5_status_needs_confirmation(self):
+        self.assertIn("MI handoff: NEEDS CONFIRMATION", self.main)
 
 
 class TestArtifactLoader(unittest.TestCase):
