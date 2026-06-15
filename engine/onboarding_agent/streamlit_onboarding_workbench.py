@@ -635,6 +635,16 @@ def mapping_review_artifacts_present(project_dir: str | Path) -> bool:
     return (Path(project_dir) / "33_mapping_review_queue.json").exists()
 
 
+def load_onboarding_context(project_dir: str | Path) -> Dict[str, Any]:
+    """Load the final onboarding context (27_*) + deterministic/LLM inputs."""
+    pd_ = Path(project_dir)
+    return {
+        "final": _load_json(pd_ / "27_onboarding_context.json") or {},
+        "deterministic": _load_json(pd_ / "27a_deterministic_context_guess.json") or {},
+        "llm": _load_json(pd_ / "27b_llm_context_resolution.json") or {},
+    }
+
+
 def load_file_coverage(project_dir: str | Path) -> List[Dict[str, Any]]:
     """Load the per-file mapping coverage (29a_*), if present."""
     return _load_json(Path(project_dir) / "29a_column_evidence_file_coverage.json") or []
@@ -781,6 +791,8 @@ def main() -> None:  # pragma: no cover - exercised only under `streamlit run`
 
 def _ui_overview(st, ctx, tab):  # pragma: no cover
     with tab:
+        _ui_context_panel(st, ctx)
+        st.divider()
         ov = run_overview(ctx)
         badge = {"Ready": "🟢", "Needs review": "🟡", "Blocked": "🔴"}.get(
             ov["readiness_status"], "⚪")
@@ -798,6 +810,46 @@ def _ui_overview(st, ctx, tab):  # pragma: no cover
         st.write(f"**LLM used:** {'yes' if ov['llm_used'] else 'no'} · "
                  f"**Client memory loaded:** {'yes' if ov['client_mapping_memory_loaded'] else 'no'} "
                  f"({ov['memory_entries_applied']} applied)")
+
+
+def _ui_context_panel(st, ctx):  # pragma: no cover
+    data = load_onboarding_context(ctx.project_dir)
+    fin = data["final"]
+    if not fin:
+        return
+    src = fin.get("final_context_source", "deterministic")
+    badge = {"llm": "🤖 LLM", "deterministic": "📐 deterministic",
+             "user_confirmed": "✅ user", "hybrid": "🔀 hybrid"}.get(src, src)
+    st.markdown(f"#### Onboarding context — source: {badge} "
+                f"({fin.get('context_backstop_decision','')})")
+    c1, c2, c3 = st.columns(3)
+    c1.write(f"**Asset class:** {fin.get('asset_class')}")
+    c1.write(f"**Jurisdiction:** {fin.get('jurisdiction')}")
+    c2.write(f"**Reporting regime:** {fin.get('reporting_regime')}")
+    c2.write(f"**Target contract:** {fin.get('selected_target_contract')}")
+    c3.write(f"**Confidence:** {fin.get('confidence')}")
+    c3.write(f"**Domains:** {', '.join(fin.get('required_domains', []))}")
+    st.caption(f"Use cases: {', '.join(fin.get('use_cases', []))}")
+    st.caption(f"Backstop: {fin.get('context_backstop_reason','')}")
+    if fin.get("needs_user_confirmation"):
+        st.warning("Please confirm asset class / reporting regime / required outputs.")
+        with st.form("ctx_confirm"):
+            asset = st.text_input("asset_class", fin.get("asset_class", ""))
+            regime = st.text_input("reporting_regime", fin.get("reporting_regime", ""))
+            contract = st.text_input("target_contract", fin.get("selected_target_contract", ""))
+            if st.form_submit_button("Confirm context (user override)"):
+                fin.update({"asset_class": asset, "reporting_regime": regime,
+                            "selected_target_contract": contract,
+                            "final_context_source": "user_confirmed",
+                            "needs_user_confirmation": False})
+                (ctx.project_dir / "27_onboarding_context.json").write_text(
+                    json.dumps(fin, indent=2), encoding="utf-8")
+                append_action_log(ctx.project_dir, ctx.client_id, ctx.run_id,
+                                  "confirm_context", status="user_confirmed")
+                st.success("Context confirmed.")
+    with st.expander("Deterministic guess vs LLM resolution"):
+        st.write("**Deterministic (27a):**", data["deterministic"])
+        st.write("**LLM (27b):**", data["llm"])
 
 
 def _ui_domains(st, ctx, tab):  # pragma: no cover

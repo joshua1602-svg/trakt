@@ -130,6 +130,8 @@ def run_onboarding(
     llm_max_mapping_items: int = 60,
     llm_max_cost_gbp: float = 1.0,
     enable_file_conversion_fallback: bool = False,
+    enable_context_resolver: bool = False,
+    context_llm_callable=None,
 ) -> OnboardingProject:
     in_dir = Path(input_dir)
     out_dir = Path(output_dir)
@@ -384,6 +386,8 @@ def run_onboarding(
                 memory_dir=str(mr_memory_dir) if mr_memory_dir else None,
                 max_llm_items=llm_max_mapping_items, max_cost_gbp=llm_max_cost_gbp,
                 enable_file_conversion_fallback=enable_file_conversion_fallback,
+                enable_context_resolver=enable_context_resolver,
+                context_llm_callable=context_llm_callable,
             )
             project.mapping_review_summary = {
                 **mr["summary"],
@@ -394,6 +398,7 @@ def run_onboarding(
         except Exception as exc:  # never break the onboarding run on review failure
             project.mapping_review_summary = {"error": str(exc)}
         for name in (
+            "27a_deterministic_context_guess.json", "27b_llm_context_resolution.json",
             "27_onboarding_context.json", "27_onboarding_context_summary.md",
             "28_required_target_contract.csv", "28_required_target_contract.json",
             "28_required_target_contract_summary.md",

@@ -123,15 +123,32 @@ _EQUITY_RELEASE_MI: List[tuple] = [
 ]
 
 
+# ESMA Annex 12 additions (mandatory/conditional regulatory fields) layered on
+# top of the MI contract when reporting_regime == esma_annex_12.
+_ESMA_ANNEX12_EXTRA: List[tuple] = [
+    ("geographic_region_classification", "collateral_property", "mandatory", "string",
+     ["region nuts", "esma region", "geographic region"], "ESMA geographic region classification (RREL11/RREC6)."),
+    ("originator_legal_entity_identifier", "funded_loan", "mandatory", "identifier",
+     ["lei", "originator lei"], "Originator legal entity identifier."),
+    ("interest_rate_type", "funded_loan", "mandatory", "enum",
+     ["interest rate type", "rate type"], "Interest rate type (fixed/floating)."),
+]
+
+
 def build_required_contract(context: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Build the required target contract for the detected context."""
+    """Build the required target contract for the FINAL context (not mode alone)."""
     asset = context.get("asset_class", "equity_release_mortgage")
     regime = context.get("reporting_regime", "mi_only")
+    selected = context.get("selected_target_contract", "")
     required_domains = set(context.get("required_domains", []) or [])
     use_cases = context.get("use_cases", []) or []
 
+    base = list(_EQUITY_RELEASE_MI)
+    if regime == "esma_annex_12" or selected == "uk_equity_release_esma_annex12_v1":
+        base = base + _ESMA_ANNEX12_EXTRA
+
     rows: List[Dict[str, Any]] = []
-    for (field, domain, level, etype, synonyms, desc) in _EQUITY_RELEASE_MI:
+    for (field, domain, level, etype, synonyms, desc) in base:
         # Mandatory only stays mandatory if its domain is required for this run.
         eff_level = level
         if level == "mandatory" and required_domains and domain not in required_domains:

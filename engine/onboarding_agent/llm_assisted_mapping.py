@@ -79,6 +79,8 @@ def run_llm_assisted_mapping(
     max_llm_items: int = 60,
     max_cost_gbp: float = 1.0,
     enable_file_conversion_fallback: bool = False,
+    enable_context_resolver: bool = False,
+    context_llm_callable: Optional[Callable[[str], str]] = None,
 ) -> Dict[str, Any]:
     """Run the full controlled mapping workbench pipeline and write artefacts.
 
@@ -147,17 +149,23 @@ def run_llm_assisted_mapping(
     finder.write_shortlist_artifacts(shortlist_rows, out_dir)
     shortlist_by_key = finder.shortlist_by_key(shortlist_rows)
 
-    # 27 — detect asset / regime / use-case context.
+    # 27 — context resolution: deterministic guess -> optional LLM resolver ->
+    # deterministic backstop -> final context (27a/27b/27). LLM is used only when a
+    # context callable is supplied; the final context is always backstopped.
     from . import onboarding_context as octx
     from . import required_target_contract as rtc
     from . import llm_mapping_resolver as resolver
     ctx_inventory = inventory or [{"file_name": t[0], "classification": "",
                                    "domains_detected": []} for t in tables]
-    context = octx.detect_context(ctx_inventory, evidence_rows, mode=mode,
-                                  client_name=client_id)
-    octx.write_context_artifacts(context, out_dir)
+    ctx_out = octx.resolve_onboarding_context(
+        ctx_inventory, evidence_rows, mode=mode, client_name=client_id,
+        llm_callable=(context_llm_callable if enable_context_resolver else None))
+    context = ctx_out["final"]
+    context_usage = ctx_out["usage"]
+    octx.write_context_artifacts(context, out_dir, deterministic=ctx_out["deterministic"],
+                                 llm=ctx_out["llm"])
 
-    # 28b — required target data contract for the detected context.
+    # 28b — required target data contract SELECTED from the final context.
     required_contract = rtc.build_required_contract(context)
     rtc.write_contract_artifacts(required_contract, out_dir)
 
@@ -279,6 +287,9 @@ def run_llm_assisted_mapping(
     return {
         "contract": contract_rows,
         "context": context,
+        "context_deterministic": ctx_out["deterministic"],
+        "context_llm": ctx_out["llm"],
+        "context_usage": context_usage,
         "required_contract": required_contract,
         "resolver": res,
         "evidence": evidence_rows,

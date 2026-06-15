@@ -114,5 +114,74 @@ class TestResolverEndToEnd(unittest.TestCase):
         self.assertTrue(rr["Loan Plan"]["llm_batch_id"])
 
 
+class TestLlmContextResolver(unittest.TestCase):
+    def _good_ctx(self, prompt):
+        return json.dumps({
+            "asset_class": "equity_release_mortgage", "jurisdiction": "UK",
+            "product_type": "lifetime_mortgage", "reporting_regime": "mi_only",
+            "use_cases": ["portfolio_mi", "cashflow_monitoring"],
+            "required_domains": ["pipeline", "funded_loan", "collateral_property",
+                                 "cashflow_ledger"],
+            "suggested_target_contract": "uk_equity_release_mi_v1", "confidence": 0.92,
+            "rationale": "KFI/pipeline + cashflow + property indicate UK ERM MI",
+            "supporting_evidence": ["KFI and Pipeline"], "open_questions": []})
+
+    def _bad_ctx(self, prompt):
+        return json.dumps({"asset_class": "consumer_loan", "jurisdiction": "US",
+                           "reporting_regime": "mi_only", "confidence": 0.9,
+                           "required_domains": ["funded_loan"]})
+
+    def test_llm_context_accepted_and_artefacts(self):
+        out = Path(tempfile.mkdtemp())
+        res = run_llm_assisted_mapping(input_file=KFI, output_dir=str(out), mode="mi_only",
+                                       client_id="c", run_id="r1",
+                                       enable_context_resolver=True,
+                                       context_llm_callable=self._good_ctx)
+        self.assertTrue((out / "27a_deterministic_context_guess.json").exists())
+        self.assertTrue((out / "27b_llm_context_resolution.json").exists())
+        self.assertEqual(res["context"]["final_context_source"], "llm")
+        self.assertEqual(res["context"]["context_backstop_decision"], "accepted_llm")
+        self.assertEqual(res["context_usage"]["calls_completed"], 1)
+        # 27b records the LLM's resolution.
+        llm = json.loads((out / "27b_llm_context_resolution.json").read_text())
+        self.assertEqual(llm["asset_class"], "equity_release_mortgage")
+
+    def test_conflicting_llm_downgraded_to_user_confirmation(self):
+        out = Path(tempfile.mkdtemp())
+        res = run_llm_assisted_mapping(input_file=KFI, output_dir=str(out), mode="mi_only",
+                                       client_id="c", run_id="r1",
+                                       enable_context_resolver=True,
+                                       context_llm_callable=self._bad_ctx)
+        ctx = res["context"]
+        # Unsupported asset -> backstop downgrades to deterministic and asks the user.
+        self.assertEqual(ctx["context_backstop_decision"], "downgraded_to_deterministic")
+        self.assertEqual(ctx["asset_class"], "equity_release_mortgage")
+        self.assertTrue(ctx["needs_user_confirmation"])
+        self.assertTrue(ctx["open_questions"])
+
+    def test_contract_selected_from_context_not_mode(self):
+        from engine.onboarding_agent import onboarding_context as octx
+        ctx = octx.detect_context([], [], mode="regulatory_mi")
+        ctx["reporting_regime"] = "esma_annex_12"
+        self.assertEqual(octx.select_target_contract(ctx),
+                         "uk_equity_release_esma_annex12_v1")
+        contract = rtc.build_required_contract(
+            {**ctx, "selected_target_contract": "uk_equity_release_esma_annex12_v1"})
+        fields = rtc.contract_field_set(contract)
+        self.assertIn("geographic_region_classification", fields)
+
+
+class TestWorkbenchContextPanel(unittest.TestCase):
+    def test_load_context(self):
+        from engine.onboarding_agent import streamlit_onboarding_workbench as wb
+        out = Path(tempfile.mkdtemp())
+        run_llm_assisted_mapping(input_file=KFI, output_dir=str(out), mode="mi_only",
+                                 client_id="c", run_id="r1")
+        data = wb.load_onboarding_context(out)
+        self.assertTrue(data["final"])
+        self.assertIn("final_context_source", data["final"])
+        self.assertIn("selected_target_contract", data["final"])
+
+
 if __name__ == "__main__":
     unittest.main()
