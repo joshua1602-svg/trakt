@@ -135,8 +135,15 @@ def run_llm_assisted_mapping(
     ce.write_evidence_artifacts(evidence_rows, out_dir)
     evidence_by_key = {_ek(e): e for e in evidence_rows}
 
+    # MI-relevant regulatory fields stay in scope for the REVIEW under mi_only /
+    # mna_dd (they feed MI/static-pools). The regulatory funded-tape scope is
+    # unchanged — this only affects how the review classifies them.
+    extra_in_scope = (finder.MI_RELEVANT_FIELDS
+                      if mode in ("mi_only", "mna_dd") else set())
+
     # 30 — deterministic candidate shortlists (composite-keyed).
-    shortlist_rows = finder.build_candidate_shortlist(evidence_rows, registry_fields, field_scope)
+    shortlist_rows = finder.build_candidate_shortlist(
+        evidence_rows, registry_fields, field_scope, extra_in_scope=extra_in_scope)
     finder.write_shortlist_artifacts(shortlist_rows, out_dir)
     shortlist_by_key = finder.shortlist_by_key(shortlist_rows)
 
@@ -202,7 +209,8 @@ def run_llm_assisted_mapping(
     # 32 — deterministic backstop validation.
     validation_rows = backstop.validate_mappings(
         proposals, registry_fields=registry_fields, field_scope=field_scope,
-        memory_store=memory_store, evidence_by_col=evidence_by_key)
+        memory_store=memory_store, evidence_by_col=evidence_by_key,
+        extra_in_scope=extra_in_scope)
     backstop.write_validation_artifacts(validation_rows, out_dir)
 
     # 33/34 — concise multi-file review queue.

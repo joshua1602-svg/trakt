@@ -832,11 +832,13 @@ def _ui_mappings(st, ctx, tab, decisions):  # pragma: no cover
 
 
 _QUEUE_GROUP_LABELS = [
-    ("high_confidence_approvals", "✅ High-confidence approvals"),
-    ("needs_your_decision", "🟡 Needs your decision"),
-    ("missing_trakt_fields", "🧩 Missing Trakt fields"),
-    ("conflicts_or_risky", "⚠️ Conflicts / risky mappings"),
-    ("ignored_or_out_of_scope", "➖ Ignored / out-of-scope"),
+    ("auto_approved_canonical_mappings", "✅ Auto-approved canonical mappings"),
+    ("needs_user_decision_risky_conflicting", "🟡 Needs your decision: risky / conflicting"),
+    ("missing_target_propose_schema_extension", "🧩 Missing target: propose schema extension"),
+    ("cashflow_ledger_extension_candidates", "💷 Cashflow / ledger extension candidates"),
+    ("out_of_scope_but_useful_mi_fields", "📊 Out-of-scope but useful MI fields"),
+    ("ignored_empty_or_null_fields", "➖ Ignored / empty / 100% null fields"),
+    ("header_detection_failures", "🛠️ Header detection failures"),
 ]
 
 

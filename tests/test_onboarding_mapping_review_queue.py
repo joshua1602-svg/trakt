@@ -43,8 +43,8 @@ class TestReviewQueue(unittest.TestCase):
     # 13. The queue groups high-confidence, review, missing-target and OOS items.
     def test_groups_present(self):
         groups = {it["group"] for it in self.queue["items"]}
-        self.assertIn("high_confidence_approvals", groups)
-        self.assertIn("missing_trakt_fields", groups)
+        self.assertIn("auto_approved_canonical_mappings", groups)
+        self.assertIn("missing_target_propose_schema_extension", groups)
 
     # 14. The queue is concise + prioritised (not a flat wall): a top summary with
     #     an estimated review time, and items sorted by priority.

@@ -159,6 +159,52 @@ def _find_converter() -> Tuple[bool, str]:
     return False, "none"
 
 
+import re as _re  # noqa: E402
+
+
+def _unnamed_fraction(cols) -> float:
+    cols = [str(c) for c in cols]
+    if not cols:
+        return 1.0
+    bad = sum(1 for c in cols if _re.match(r"^Unnamed: ?\d+$", c) or c.strip() == "")
+    return bad / len(cols)
+
+
+def _is_numberish(v: str) -> bool:
+    try:
+        float(str(v).replace(",", "").replace("£", "").replace("%", ""))
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+def redetect_header(df):
+    """Rescan for the real header row when >40% of columns are ``Unnamed:*``.
+
+    Returns (df, header_row_index, header_detection_failed). Leaves the frame
+    untouched when the header already looks valid.
+    """
+    if _unnamed_fraction(df.columns) <= 0.4:
+        return df, 0, False
+    best_i, best_score = None, -1.0
+    for i in range(min(15, len(df))):
+        vals = [str(v).strip() for v in df.iloc[i].tolist()]
+        present = [v for v in vals if v and v.lower() != "nan"]
+        if not present:
+            continue
+        stringy = sum(1 for v in present if not _is_numberish(v))
+        score = len(present) + 0.5 * stringy + 0.3 * len(set(present))
+        if score > best_score:
+            best_score, best_i = score, i
+    if best_i is None:
+        return df, 0, True
+    new_cols = [str(v).strip() or f"col_{j}" for j, v in enumerate(df.iloc[best_i].tolist())]
+    out = df.iloc[best_i + 1:].copy()
+    out.columns = new_cols
+    out = out.reset_index(drop=True)
+    return out, best_i, _unnamed_fraction(out.columns) > 0.4
+
+
 def _fmt_err(exc: Exception) -> str:
     msg = str(exc).splitlines()[0].strip() if str(exc) else ""
     return f'{type(exc).__name__}("{msg[:160]}")'
@@ -333,6 +379,7 @@ def load_source_tables(
                         sheet_cov.append(SheetCoverage(name, suffix, container, sh, EMPTY, 0,
                                                        df.shape[1], engine, ""))
                         continue
+                    df, _hr, _hfail = redetect_header(df)
                     tables.append(LoadedTable(name, path, sh if multi else "", df))
                     cov.sheets_parsed.append(sh)
                     sheet_cov.append(SheetCoverage(name, suffix, container, sh, PARSED,
@@ -379,6 +426,7 @@ def load_source_tables(
 
 
 def _record_table(tables, sheet_cov, cov, name, path, sheet, df, engine, suffix, container):
+    df, _hr, _hfail = redetect_header(df)
     if df.shape[1] == 0 or df.dropna(how="all").empty:
         cov.parse_status = EMPTY
         cov.reason_excluded = "file has no data rows/columns"
