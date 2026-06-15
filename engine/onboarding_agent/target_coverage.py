@@ -935,8 +935,20 @@ def run_target_first_coverage(
     mi_registry_path: Optional[str | Path] = None,
     annex2_config_path: Optional[str | Path] = None,
     mi_overlay_path: Optional[str | Path] = None,
+    client_id: str = "",
+    run_id: str = "",
+    decisions_path: Optional[str | Path] = None,
 ) -> Dict[str, Any]:
-    """Build + write the target-first coverage artefacts (28a/28b/28c)."""
+    """Build + write the target-first coverage artefacts (28a/28b/28c).
+
+    When approved Gate 4 decisions are available (``decisions_path``, else an
+    auto-discovered ``34_target_first_decisions.yaml`` in ``output_dir``), they
+    are applied deterministically to 28a/28c BEFORE the artefacts are written,
+    and a 35 application log is emitted. A fresh 34 template is (re)generated
+    from the resulting decision queue for the next loop.
+    """
+    from . import target_first_decisions as tfd
+
     cid, csrc, target_fields = load_target_contract(
         mode, context, mi_registry_path=mi_registry_path,
         annex2_config_path=annex2_config_path)
@@ -946,8 +958,42 @@ def run_target_first_coverage(
         overlay=overlay)
     residual_rows = build_source_residual_register(mode, evidence_rows, matched_by_key)
     decision_rows = build_human_decision_queue(mode, coverage_rows, residual_rows)
+
+    # --- Gate 4 decision application (deterministic, auditable) ---
+    out = Path(output_dir)
+    template_path = out / "34_target_first_decisions.yaml"
+    decisions_file: Optional[Path] = None
+    if decisions_path:
+        p = Path(decisions_path)
+        if p.exists():
+            decisions_file = p
+    if decisions_file is None and template_path.exists():
+        decisions_file = template_path  # auto-discover an in-project approved file
+
+    decision_application: Optional[Dict[str, Any]] = None
+    if decisions_file is not None:
+        doc = tfd.load_decisions(decisions_file)
+        approved = tfd.approved_decisions(doc)
+        coverage_rows, decision_rows, app_log = tfd.apply_decisions(
+            coverage_rows, decision_rows, approved)
+        tfd.write_application_log(app_log, out, client_id=client_id, run_id=run_id,
+                                  decisions_source=str(decisions_file))
+        decision_application = {
+            "decisions_source": str(decisions_file),
+            "log": app_log,
+            "summary": tfd.application_summary(app_log),
+        }
+
     paths = write_artifacts(output_dir, coverage_rows, residual_rows, decision_rows,
                             cid, csrc, mode)
+
+    # (Re)generate the operator-editable 34 template from the resulting 28c —
+    # unless we just applied that very file in place (never clobber approvals).
+    template = tfd.build_decision_template(decision_rows, mode, client_id=client_id,
+                                           run_id=run_id, target_contract_id=cid)
+    if decisions_file is None or Path(decisions_file).resolve() != template_path.resolve():
+        tfd.write_decision_template(template, out)
+
     return {
         "target_contract_id": cid,
         "target_contract_source": csrc,
@@ -960,5 +1006,7 @@ def run_target_first_coverage(
         "coverage_summary": coverage_summary(coverage_rows),
         "residual_summary": residual_summary(residual_rows),
         "decision_summary": decision_summary(decision_rows),
+        "decision_application": decision_application,
+        "decision_template_path": str(template_path),
         "paths": paths,
     }
