@@ -72,15 +72,23 @@ class TestReviewPackTargetFirst(unittest.TestCase):
 
     def test_does_not_lead_with_33_approval_burden(self):
         # The legacy 33 audit section must come AFTER the target-first gates.
-        pos_exec = self.html.find("Executive onboarding summary")
-        pos_g3 = self.html.find("Gate 3 — Target coverage matrix")
-        pos_g4 = self.html.find("Gate 4 — Compact human decision queue")
-        pos_audit = self.html.find("Detailed source-column audit queue")
+        # Anchor on the <h2> card headings (gate names also appear in callouts).
+        pos_exec = self.html.find("<h2>1. Executive onboarding summary")
+        pos_g3 = self.html.find("<h2>3. Gate 3 — Target coverage matrix")
+        pos_g4 = self.html.find("<h2>4. Gate 4 — Compact human decision queue")
+        pos_audit = self.html.find("<h2>7. Detailed source-column audit queue")
         self.assertGreater(pos_g3, pos_exec)
         self.assertGreater(pos_g4, pos_g3)
         self.assertGreater(pos_audit, pos_g4)
         # The old 33 approval count is explicitly labelled audit-only, not the headline.
         self.assertIn("Old 33 approvals (audit only)", self.html)
+
+    def test_headline_status_from_28c_not_legacy(self):
+        # The headline (before Gate 2) must be driven by 28c, not the legacy
+        # "N blocking question(s)" gap-question banner.
+        head = self.html[: self.html.find("<h2>2. Gate 2")]
+        self.assertIn("Only ONE blocking target decision remains", head)
+        self.assertNotIn("blocking question(s)", head)
 
     def test_headline_counts_from_target_first(self):
         # Headline KPIs come from 28a/28b/28c.
@@ -101,6 +109,61 @@ class TestReviewPackTargetFirst(unittest.TestCase):
                   "Field scope for this onboarding mode", "Central tapes",
                   "Mapping ambiguities resolved by policy"):
             self.assertIn(s, self.html)
+
+
+class TestArtifactLoader(unittest.TestCase):
+    """The loader must find 28a/28b/28c in all plausible run locations."""
+
+    def _write(self, d: Path, name: str, payload: dict):
+        import json
+        d.mkdir(parents=True, exist_ok=True)
+        (d / name).write_text(json.dumps(payload), encoding="utf-8")
+
+    def test_finds_files_in_project_dir_root(self):
+        from engine.onboarding_agent.review_pack_builder import _load_target_first_artifacts
+        proj = Path(tempfile.mkdtemp(prefix="loader_root_"))
+        self._write(proj, "28a_target_coverage_matrix.json",
+                    {"summary": {"target_fields_total": 3}, "rows": [{"target_field": "x"}]})
+        self._write(proj, "28c_human_decision_queue.json",
+                    {"summary": {"blocking_decisions": 1}, "rows": [{"blocking": True}]})
+        tf = _load_target_first_artifacts(proj)
+        self.assertIsNotNone(tf["coverage"])
+        self.assertIsNotNone(tf["decision"])
+        self.assertEqual(tf["coverage"]["summary"]["target_fields_total"], 3)
+
+    def test_finds_files_under_output_dir(self):
+        from engine.onboarding_agent.review_pack_builder import _load_target_first_artifacts
+        proj = Path(tempfile.mkdtemp(prefix="loader_out_"))
+        self._write(proj / "output", "28b_source_residual_register.json",
+                    {"summary": {"residual_source_columns_total": 5}, "rows": []})
+        tf = _load_target_first_artifacts(proj)
+        self.assertIsNotNone(tf["residual"])
+        self.assertEqual(tf["residual"]["summary"]["residual_source_columns_total"], 5)
+
+    def test_finds_files_under_output_root_and_parent(self):
+        from engine.onboarding_agent.review_pack_builder import _load_target_first_artifacts
+        proj = Path(tempfile.mkdtemp(prefix="loader_root2_"))
+        output_root = proj / "output"
+        # 28a in output_root, 28c in parent(output_root) == proj.
+        self._write(output_root, "28a_target_coverage_matrix.json",
+                    {"summary": {"target_fields_total": 9}, "rows": []})
+        self._write(proj, "28c_human_decision_queue.json",
+                    {"summary": {"blocking_decisions": 0}, "rows": []})
+        tf = _load_target_first_artifacts(proj, output_root)
+        self.assertIsNotNone(tf["coverage"])
+        self.assertIsNotNone(tf["decision"])
+
+    def test_csv_fallback_when_no_json(self):
+        from engine.onboarding_agent.review_pack_builder import _load_target_first_artifacts
+        proj = Path(tempfile.mkdtemp(prefix="loader_csv_"))
+        proj.mkdir(parents=True, exist_ok=True)
+        (proj / "28c_human_decision_queue.csv").write_text(
+            "decision_id,decision_type,blocking\nDQ-1,missing_required_target,True\n",
+            encoding="utf-8")
+        tf = _load_target_first_artifacts(proj)
+        self.assertIsNotNone(tf["decision"])
+        # Summary derived from CSV rows; CSV 'True' string coerced to a real bool.
+        self.assertEqual(tf["decision"]["summary"]["blocking_decisions"], 1)
 
 
 if __name__ == "__main__":
