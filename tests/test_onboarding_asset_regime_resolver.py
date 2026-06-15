@@ -401,6 +401,79 @@ class TestFieldRowIdJoinDiagnostics(unittest.TestCase):
         self.assertIn("results", data["raw_response"])
 
 
+class TestLiveResponseDecisionApplication(unittest.TestCase):
+    def _file(self):
+        cols = {f"B/F Field {i} Balance": [1, 2] for i in range(8)}
+        cols.update({f"Unknown Metric {i}": ["a", "b"] for i in range(8)})
+        p = Path(tempfile.mkdtemp()) / "Funder.csv"
+        pd.DataFrame(cols).to_csv(p, index=False)
+        return p
+
+    # 6. Exact live shape: prose + fenced {"results":[...]} with the LLM's actual
+    #    decision vocabulary (map_to_contract_target_field / ignore_source_field).
+    def _live(self, prompt):
+        import re
+        ids = re.findall(r'"row_id": "(row_\d+)"', prompt)
+        res = []
+        for j, rid in enumerate(ids):
+            if j % 3 == 0:
+                res.append({"row_id": rid, "decision": "map_to_contract_target_field",
+                            "resolved_target_field": "current_principal_balance",
+                            "confidence": 0.8, "rationale": "balance"})
+            elif j % 3 == 1:
+                res.append({"row_id": rid, "decision": "propose_new_target_field",
+                            "resolved_target_field": "cf_x", "confidence": 0.7,
+                            "rationale": "ledger"})
+            else:
+                res.append({"row_id": rid, "decision": "ignore_source_field",
+                            "resolved_target_field": "", "confidence": 0.5,
+                            "rationale": "not needed"})
+        return "Here are the results:\n```json\n" + json.dumps({"results": res}) + "\n```"
+
+    def test_live_decisions_applied(self):
+        out = Path(tempfile.mkdtemp())
+        run_llm_assisted_mapping(input_file=str(self._file()), output_dir=str(out),
+                                 mode="mi_only", client_id="c", run_id="r1",
+                                 enable_llm=True, llm_callable=self._live,
+                                 only_unresolved=True, max_llm_items=50)
+        u = json.loads((out / "31_llm_resolver_usage_summary.json").read_text())
+        self.assertGreater(u["field_results_parsed"], 1)
+        self.assertGreater(u["field_results_matched"], 1)
+        self.assertGreater(u["field_results_applied"], 1)
+        # Raw + normalised decision counts are visible.
+        self.assertIn("map_to_contract_target_field", u["field_result_decision_counts_raw"])
+        self.assertIn("map_existing_target", u["field_result_decision_counts_normalised"])
+        r = pd.read_csv(out / "31_llm_mapping_resolver.csv")
+        self.assertGreater(int((r["llm_used"] == True).sum()), 1)  # noqa: E712
+        q = pd.read_csv(out / "33_mapping_review_queue.csv")
+        self.assertGreater(int((q["llm_reviewed"] == True).sum()), 1)  # noqa: E712
+        self.assertNotEqual(set(q["llm_decision"]), {"no_llm"})
+
+    def test_wrapper_object_unwrapped(self):
+        # If the field response is accidentally the persisted wrapper, unwrap it.
+        def wrapper(prompt):
+            import re
+            rid = re.findall(r'"row_id": "(row_\d+)"', prompt)[0]
+            inner = json.dumps({"results": [{"row_id": rid,
+                                             "decision": "map_to_contract_target_field",
+                                             "resolved_target_field": "current_principal_balance",
+                                             "confidence": 0.8, "rationale": "x"}]})
+            return json.dumps({"llm_batch_id": "res_abc", "raw_response": inner})
+        out = Path(tempfile.mkdtemp())
+        run_llm_assisted_mapping(input_file=str(self._file()), output_dir=str(out),
+                                 mode="mi_only", client_id="c", run_id="r1",
+                                 enable_llm=True, llm_callable=wrapper,
+                                 only_unresolved=True, max_llm_items=50)
+        u = json.loads((out / "31_llm_resolver_usage_summary.json").read_text())
+        self.assertGreaterEqual(u["field_results_applied"], 1)
+
+    def test_unknown_decision_retained_with_warning(self):
+        from engine.onboarding_agent.llm_mapping_resolver import normalise_decision
+        norm, known = normalise_decision("some_made_up_decision")
+        self.assertFalse(known)
+        self.assertEqual(norm, "needs_user_clarification")
+
+
 class TestWorkbenchContextPanel(unittest.TestCase):
     def test_load_context(self):
         from engine.onboarding_agent import streamlit_onboarding_workbench as wb
