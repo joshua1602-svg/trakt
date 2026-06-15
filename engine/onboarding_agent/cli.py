@@ -175,6 +175,14 @@ def build_parser() -> argparse.ArgumentParser:
         "ANTHROPIC_API_KEY; otherwise the deterministic guess is used.",
     )
     p.add_argument(
+        "--enable-llm-target-advisor",
+        action="store_true",
+        help="Run the TARGET-FIRST LLM advisor over the 28c Gate 4 decisions "
+        "(advisory only; writes 36_target_first_llm_* artefacts). Independent of "
+        "--enable-llm-mapping-review. Reuses the LLM cost/call guardrails. Never "
+        "mutates the deterministic 28a/28c state.",
+    )
+    p.add_argument(
         "--enable-file-conversion-fallback",
         action="store_true",
         help="When a workbook fails to parse, try converting it to xlsx via "
@@ -574,12 +582,14 @@ def main(argv=None) -> int:
     # Build ONE shared Anthropic provider callable, reused by BOTH the context
     # resolver and the field-level resolver, so they can never diverge (req 2).
     _llm_profile = args.llm_mapping_profile or args.llm_budget_profile or "low"
-    _shared_llm = (_build_mapping_llm_callable(_llm_profile)
-                   if (args.enable_llm_mapping_review or args.enable_llm_context_resolver)
-                   else None)
-    if (args.enable_llm_mapping_review or args.enable_llm_context_resolver) and _shared_llm is None:
+    _want_llm = (args.enable_llm_mapping_review or args.enable_llm_context_resolver
+                 or args.enable_llm_target_advisor)
+    _shared_llm = _build_mapping_llm_callable(_llm_profile) if _want_llm else None
+    _advisor_model = ("claude-haiku-4-5-20251001" if _llm_profile == "low"
+                      else "claude-sonnet-4-6")
+    if _want_llm and _shared_llm is None:
         print("[llm] No ANTHROPIC_API_KEY / anthropic client available — LLM "
-              "resolvers will run in deterministic fallback (llm_enabled=false).")
+              "resolvers/advisor will run in deterministic fallback (llm_enabled=false).")
 
     project = run_onboarding(
         input_dir=args.input_dir,
@@ -602,7 +612,8 @@ def main(argv=None) -> int:
         output_uri=args.output_uri,
         client_memory_dir=args.client_memory_dir,
         apply_client_memory=args.apply_client_memory,
-        enable_mapping_review=args.enable_mapping_review or args.enable_llm_mapping_review,
+        enable_mapping_review=(args.enable_mapping_review or args.enable_llm_mapping_review
+                               or args.enable_llm_target_advisor),
         enable_llm_mapping_review=args.enable_llm_mapping_review,
         llm_mapping_callable=(_shared_llm if args.enable_llm_mapping_review else None),
         # New flag wins; otherwise fall back to the legacy budget profile.
@@ -617,6 +628,9 @@ def main(argv=None) -> int:
         enable_context_resolver=args.enable_llm_context_resolver,
         context_llm_callable=(_shared_llm if args.enable_llm_context_resolver else None),
         target_first_decisions_path=args.target_first_decisions,
+        enable_llm_target_advisor=args.enable_llm_target_advisor,
+        llm_target_advisor_callable=(_shared_llm if args.enable_llm_target_advisor else None),
+        llm_target_advisor_model=(_advisor_model if args.enable_llm_target_advisor else ""),
     )
 
     print("=" * 64)

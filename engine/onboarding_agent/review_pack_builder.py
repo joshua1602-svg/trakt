@@ -213,6 +213,12 @@ def _load_target_first_artifacts(project_dir: Path, output_root: Path | None = N
     dlog = _find_artifact(project_dir, output_root,
                           "35_target_first_decision_application_log.json")
     tf["decision_log"] = _load_json(dlog) if dlog else None
+    adv = _find_artifact(project_dir, output_root,
+                         "36_target_first_llm_recommendations.json")
+    tf["llm_advisor"] = _load_json(adv) if adv else None
+    advu = _find_artifact(project_dir, output_root,
+                          "36_target_first_llm_usage_summary.json")
+    tf["llm_advisor_usage"] = _load_json(advu) if advu else None
     _derive_summaries(tf)
     return tf
 
@@ -396,12 +402,37 @@ def _gate4_decision_queue_html(tf: dict) -> str:
              "blocking residuals — NOT from every source column.</p>")
     counts_html = _counts_table("Decision type counts", summary.get("decision_type_counts", {}))
 
+    # Optional target-first LLM ADVISOR overlay (advisory only).
+    adv = tf.get("llm_advisor") or {}
+    rec_by_id = {r.get("decision_id", ""): r for r in (adv.get("rows", []) or [])}
+    advisor_present = bool(rec_by_id)
+    advisor_html = ""
+    if advisor_present or tf.get("llm_advisor_usage"):
+        u = tf.get("llm_advisor_usage") or {}
+        asum = adv.get("summary", {}) or {}
+        reviewed = u.get("decision_rows_reviewed", asum.get("recommendations_total", 0))
+        advised = u.get("decision_rows_advised", asum.get("advised", 0))
+        review = asum.get("requires_operator_review", 0)
+        advisor_html = (
+            '<div class="callout pass"><strong>Target-first LLM advisor:</strong> '
+            f"reviewed {len(rec_by_id)} Gate 4 decision(s); {advised} advised; "
+            f"{review} require operator review. Advisory only — deterministic 28a/28c "
+            "are unchanged; the operator still approves via 34_target_first_decisions.yaml."
+            "</div>"
+            '<p class="meta">Source-column LLM review and the target-first LLM advisor '
+            "are separate layers; a source-column count of 0 does not mean the advisor "
+            "did nothing.</p>")
+
     def block(label, items, badge):
         if not items:
             return ""
         body = []
+        hdr = ["ID", "Type / priority", "Target field", "Operator question",
+               "Deterministic recommendation", "Options", "Evidence"]
+        if advisor_present:
+            hdr += ["LLM advisory", "LLM conf.", "LLM rationale / note"]
         for r in items:
-            body.append([
+            row = [
                 _esc(r.get("decision_id", "")),
                 f'<span class="badge {badge}">{_esc(r.get("decision_type",""))}</span>'
                 f'<br><small>{_esc(r.get("priority",""))}</small>',
@@ -410,12 +441,20 @@ def _gate4_decision_queue_html(tf: dict) -> str:
                 _esc(r.get("recommendation", "")),
                 _esc(r.get("options", "") or "—"),
                 _esc(r.get("evidence_summary", "") or "—"),
-            ])
+            ]
+            if advisor_present:
+                rec = rec_by_id.get(r.get("decision_id", ""), {})
+                src = rec.get("llm_recommended_source_column", "")
+                action = rec.get("llm_recommended_action", "") or "—"
+                adv_cell = _esc(action) + (f"<br><small>{_esc(src)}</small>" if src else "")
+                note = (rec.get("llm_rationale", "") or rec.get("llm_operator_note", "") or "")
+                row += [adv_cell, _esc(rec.get("llm_confidence", "")),
+                        _esc(note or "—")]
+            body.append(row)
         return (f'<h4 class="chart-title">{_esc(label)} ({len(items)})</h4>'
-                + _table(["ID", "Type / priority", "Target field", "Operator question",
-                          "Recommendation", "Options", "Evidence"], body))
+                + _table(hdr, body))
 
-    return (intro + head + counts_html
+    return (intro + head + advisor_html + counts_html
             + block("Blocking decisions", blocking, "b-block")
             + block("Confirmations / non-blocking", nonblocking, "b-warn"))
 
