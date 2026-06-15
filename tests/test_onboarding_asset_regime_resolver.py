@@ -171,6 +171,73 @@ class TestLlmContextResolver(unittest.TestCase):
         self.assertIn("geographic_region_classification", fields)
 
 
+class TestRobustJsonAndAudit(unittest.TestCase):
+    def test_extract_json_from_fenced_and_prose(self):
+        from engine.onboarding_agent.llm_json import extract_json
+        obj, status, _ = extract_json('```json\n{"a": 1}\n```')
+        self.assertEqual(obj, {"a": 1})
+        self.assertIn(status, ("ok", "ok_extracted"))
+        obj2, status2, _ = extract_json('Sure! Here:\n[{"x": 2}]\nHope that helps.')
+        self.assertEqual(obj2, [{"x": 2}])
+        obj3, status3, err = extract_json("I am not sure, no JSON here.")
+        self.assertIsNone(obj3)
+        self.assertEqual(status3, "parse_failed")
+        self.assertTrue(err)
+
+    def test_27b_fully_auditable_on_fenced_response(self):
+        def fake(prompt):
+            return ('```json\n{"asset_class":"equity_release_mortgage","jurisdiction":"UK",'
+                    '"product_type":"lifetime_mortgage","reporting_regime":"mi_only",'
+                    '"use_cases":["portfolio_mi"],"required_domains":["funded_loan"],'
+                    '"suggested_target_contract":"uk_equity_release_mi_v1","confidence":0.9,'
+                    '"rationale":"r","supporting_evidence":["e"],"open_questions":[]}\n```')
+        out = Path(tempfile.mkdtemp())
+        res = run_llm_assisted_mapping(input_file=KFI, output_dir=str(out), mode="mi_only",
+                                       client_id="c", run_id="r1",
+                                       enable_context_resolver=True, context_llm_callable=fake)
+        b = json.loads((out / "27b_llm_context_resolution.json").read_text())
+        for k in ("llm_enabled", "calls_completed", "model", "estimated_cost_gbp",
+                  "asset_class", "jurisdiction", "reporting_regime", "confidence",
+                  "rationale", "supporting_evidence", "open_questions",
+                  "raw_response_or_parsed_response", "parse_status", "parse_error"):
+            self.assertIn(k, b)
+        self.assertIn(b["parse_status"], ("ok", "ok_extracted"))
+        self.assertEqual(res["context"]["final_context_source"], "llm")
+
+    def test_context_parse_failure_not_labelled_llm(self):
+        def prose(prompt):
+            return "It looks like UK equity release but I can't be certain."
+        out = Path(tempfile.mkdtemp())
+        res = run_llm_assisted_mapping(input_file=KFI, output_dir=str(out), mode="mi_only",
+                                       client_id="c", run_id="r1",
+                                       enable_context_resolver=True, context_llm_callable=prose)
+        self.assertEqual(res["context"]["final_context_source"], "deterministic")
+        self.assertEqual(res["context"]["context_backstop_decision"],
+                         "llm_unavailable_or_parse_failed")
+        b = json.loads((out / "27b_llm_context_resolution.json").read_text())
+        self.assertEqual(b["parse_status"], "parse_failed")
+
+    def test_field_resolver_reviews_rows_and_surfaces_in_queue(self):
+        def fake(prompt):
+            return ('```json\n[{"source_column":"B/F Current Balance",'
+                    '"resolved_target_field":"cf_bf_current_balance",'
+                    '"decision":"propose_new_target_field","confidence":0.8,'
+                    '"rationale":"opening ledger balance"}]\n```')
+        out = Path(tempfile.mkdtemp())
+        inp = Path(tempfile.mkdtemp()) / "Funder PandI.csv"
+        pd.DataFrame({"Loan Policy Number": ["L1", "L2"],
+                      "B/F Current Balance": [100, 200],
+                      "Made Up Field": ["x", "y"]}).to_csv(inp, index=False)
+        res = run_llm_assisted_mapping(input_file=str(inp), output_dir=str(out),
+                                       mode="mi_only", client_id="c", run_id="r1",
+                                       enable_llm=True, llm_callable=fake, only_unresolved=True)
+        self.assertEqual(res["resolver"]["usage"]["calls_completed"], 1)
+        self.assertGreaterEqual(res["resolver"]["usage"]["rows_llm_reviewed"], 1)
+        q = pd.read_csv(out / "33_mapping_review_queue.csv")
+        self.assertGreaterEqual(int((q["llm_reviewed"] == True).sum()), 1)  # noqa: E712
+        self.assertNotEqual(set(q["llm_decision"]), {"no_llm"})
+
+
 class TestWorkbenchContextPanel(unittest.TestCase):
     def test_load_context(self):
         from engine.onboarding_agent import streamlit_onboarding_workbench as wb

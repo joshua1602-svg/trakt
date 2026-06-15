@@ -171,25 +171,37 @@ def build_context_evidence(
 
 
 def resolve_context_with_llm(
-    package: Dict[str, Any], llm_callable: Callable[[str], str]
+    package: Dict[str, Any], llm_callable: Callable[[str], str],
+    model: str = "claude-haiku-4-5", cost_per_call_gbp: float = 0.01,
 ) -> Dict[str, Any]:
-    """Call the LLM context resolver. Returns {"context": {...}, "usage": {...}}."""
+    """Call the LLM context resolver. Returns {"context", "record", "usage"}.
+
+    ``record`` is the FULL, auditable 27b payload (usage + parsed fields + raw +
+    parse status). ``context`` is the parsed dict ONLY when parsing succeeded,
+    else None (so the backstop never mislabels a failed call as an LLM result).
+    """
     import uuid
+    from .llm_json import extract_json, OK, OK_EXTRACTED
     batch_id = "ctx_" + uuid.uuid4().hex[:10]
     prompt = _CONTEXT_PROMPT + "\nEVIDENCE = " + json.dumps(package, default=str)
     raw = llm_callable(prompt)
-    usage = {"llm_enabled": True, "calls_completed": 1, "estimated_cost_gbp": 0.01,
-             "llm_batch_id": batch_id, "prompt_chars": len(prompt)}
-    try:
-        parsed = json.loads(raw) if isinstance(raw, str) else raw
-        if isinstance(parsed, list) and parsed:
-            parsed = parsed[0]
-    except (json.JSONDecodeError, TypeError):
-        parsed = {}
-    if not isinstance(parsed, dict):
-        parsed = {}
-    parsed["llm_batch_id"] = batch_id
-    return {"context": parsed, "usage": usage}
+    parsed, parse_status, parse_error = extract_json(raw)
+    ok = parse_status in (OK, OK_EXTRACTED) and isinstance(parsed, dict) and bool(parsed)
+    usage = {"llm_enabled": True, "calls_completed": 1, "model": model,
+             "estimated_cost_gbp": round(cost_per_call_gbp, 6), "llm_batch_id": batch_id,
+             "prompt_chars": len(prompt)}
+    record: Dict[str, Any] = {
+        "llm_enabled": True, "calls_completed": 1, "model": model,
+        "estimated_cost_gbp": round(cost_per_call_gbp, 6), "llm_batch_id": batch_id,
+        "parse_status": parse_status, "parse_error": parse_error,
+        "raw_response_or_parsed_response": (raw[:4000] if isinstance(raw, str) else str(raw)[:4000]),
+        "parsed_response": parsed if isinstance(parsed, dict) else None,
+    }
+    for k in ("asset_class", "jurisdiction", "product_type", "reporting_regime",
+              "use_cases", "required_domains", "suggested_target_contract",
+              "confidence", "rationale", "supporting_evidence", "open_questions"):
+        record[k] = parsed.get(k) if ok else None
+    return {"context": (parsed if ok else None), "record": record, "usage": usage}
 
 
 def _token_blob(inventory, evidence_rows, document_terms) -> str:
@@ -206,14 +218,21 @@ def backstop_context(
     evidence_rows: List[Dict[str, Any]],
     mode: str,
     document_terms: Optional[List[str]] = None,
+    llm_record: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Validate the (LLM or deterministic) context against deterministic evidence.
 
-    Never blindly accepts LLM context. Produces the FINAL context plus
-    context_backstop_decision / reason / final_context_source.
+    Never blindly accepts LLM context: an LLM result is only used when it was
+    actually parsed (``llm_context`` is a non-empty dict). A call that ran but
+    failed to parse is labelled ``llm_unavailable_or_parse_failed`` and falls back
+    to the deterministic guess.
     """
     blob = _token_blob(inventory, evidence_rows, document_terms)
-    proposed = dict(llm_context) if llm_context else None
+    llm_record = llm_record or {}
+    llm_attempted = bool(llm_record.get("llm_enabled"))
+    parse_failed = llm_attempted and not (
+        isinstance(llm_context, dict) and bool(llm_context))
+    proposed = dict(llm_context) if (isinstance(llm_context, dict) and llm_context) else None
     base = proposed or deterministic_guess
     asset = base.get("asset_class", deterministic_guess.get("asset_class"))
     regime = base.get("reporting_regime", deterministic_guess.get("reporting_regime"))
@@ -248,8 +267,13 @@ def backstop_context(
 
     # Decide.
     if proposed is None:
-        decision, source, reason = ("deterministic_only", "deterministic",
-                                    "LLM context resolver not run")
+        if parse_failed:
+            decision, source = "llm_unavailable_or_parse_failed", "deterministic"
+            reason = (f"LLM context did not parse "
+                      f"({llm_record.get('parse_error', 'parse_failed')}); using deterministic")
+        else:
+            decision, source, reason = ("deterministic_only", "deterministic",
+                                        "LLM context resolver not run")
         final = dict(deterministic_guess)
     elif conflict or not asset_supported or not domains_supported:
         decision, source = "downgraded_to_deterministic", "deterministic"
@@ -320,12 +344,15 @@ def resolve_onboarding_context(
                            document_terms=document_terms)
     llm_ctx, usage = None, {"llm_enabled": False, "calls_completed": 0,
                             "estimated_cost_gbp": 0.0}
+    record: Dict[str, Any] = {"llm_enabled": False}
     if llm_callable is not None:
         pkg = build_context_evidence(inventory, evidence_rows, guess, document_terms)
         out = resolve_context_with_llm(pkg, llm_callable)
-        llm_ctx, usage = out["context"], out["usage"]
-    final = backstop_context(guess, llm_ctx, inventory, evidence_rows, mode, document_terms)
-    return {"deterministic": guess, "llm": llm_ctx, "final": final, "usage": usage}
+        llm_ctx, record, usage = out["context"], out["record"], out["usage"]
+    final = backstop_context(guess, llm_ctx, inventory, evidence_rows, mode,
+                             document_terms, llm_record=record)
+    # The 27b artefact is the FULL auditable record (usage + parsed + raw + status).
+    return {"deterministic": guess, "llm": record, "final": final, "usage": usage}
 
 
 def write_context_artifacts(context: Dict[str, Any], output_dir: str | Path,

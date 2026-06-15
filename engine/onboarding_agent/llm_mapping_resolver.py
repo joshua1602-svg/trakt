@@ -67,6 +67,22 @@ def _norm(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", str(s).lower()).strip()
 
 
+_CONF_WORDS = {"high": 0.9, "medium": 0.6, "low": 0.3, "no_match": 0.0, "none": 0.0}
+
+
+def _coerce_conf(value: Any, default: float = 0.6) -> float:
+    """Coerce an LLM confidence (number or word) to a float; never raises."""
+    if isinstance(value, (int, float)):
+        return float(value)
+    v = str(value or "").strip().lower()
+    if v in _CONF_WORDS:
+        return _CONF_WORDS[v]
+    try:
+        return float(v)
+    except (ValueError, TypeError):
+        return default
+
+
 def _resolve_deterministic(
     ev: Dict[str, Any], cands: List[Dict[str, Any]],
     contract_fields: set, domain_map: Dict[str, str], syn_idx: Dict[str, str],
@@ -176,37 +192,50 @@ def resolve_mappings(
         resolved.append(r)
 
     usage = {"llm_enabled": bool(llm_callable), "calls_completed": 0, "items_sent": 0,
-             "estimated_cost_gbp": 0.0, "llm_batch_id": "", "resolver": True}
+             "estimated_cost_gbp": 0.0, "llm_batch_id": "", "resolver": True,
+             "parse_status": "", "parse_error": "", "rows_llm_reviewed": 0}
 
-    # LLM resolution for unresolved / low-confidence columns.
+    # LLM resolution: prioritise rows that genuinely need it (propose-new /
+    # needs-clarification / low-confidence maps). EXCLUDE ignored, empty/null and
+    # blank-header rows so we never waste calls on auto-approved or junk columns.
     if llm_callable is not None:
-        targets = [ev for ev in evidence_rows
-                   if det_by_key[key(ev)]["decision"] in
-                   (NEEDS_CLARIFICATION, PROPOSE_NEW, HEADER_ISSUE)
-                   or det_by_key[key(ev)]["confidence"] < 0.8]
-        if not only_unresolved:
-            targets = evidence_rows
+        def _needs_llm(ev):
+            r = det_by_key[key(ev)]
+            if r["decision"] in (IGNORE, HEADER_ISSUE):
+                return False
+            return (r["decision"] in (NEEDS_CLARIFICATION, PROPOSE_NEW)
+                    or (r["decision"] == MAP_EXISTING and r["confidence"] < 0.85))
+        targets = [ev for ev in evidence_rows if _needs_llm(ev)] if only_unresolved \
+            else [ev for ev in evidence_rows
+                  if det_by_key[key(ev)]["decision"] not in (IGNORE, HEADER_ISSUE)]
         targets = targets[:max_items]
         if targets and cost_per_call_gbp <= max_cost_gbp:
+            from .llm_json import extract_json, OK, OK_EXTRACTED
             batch_id = "res_" + uuid.uuid4().hex[:10]
             packages = [_build_package(ev, shortlist_by_key.get(key(ev), []), context, contract)
                         for ev in targets]
             prompt = _CONTRACT_PROMPT + "\nPACKAGES = " + json.dumps(packages, default=str)
             raw = llm_callable(prompt)
-            usage.update(calls_completed=1, items_sent=len(packages),
-                         estimated_cost_gbp=round(cost_per_call_gbp, 6), llm_batch_id=batch_id)
-            try:
-                parsed = json.loads(raw) if isinstance(raw, str) else raw
-                if isinstance(parsed, dict):
-                    parsed = parsed.get("mappings", parsed.get("proposals", []))
-            except (json.JSONDecodeError, TypeError):
+            parsed, parse_status, parse_error = extract_json(raw)
+            if isinstance(parsed, dict):
+                parsed = parsed.get("mappings", parsed.get("proposals", [])) or [parsed]
+            if not isinstance(parsed, list):
                 parsed = []
-            by_col = {(p.get("source_file", ""), p.get("source_column", "")): p
-                      for p in parsed if isinstance(p, dict)}
+            usage.update(calls_completed=1, items_sent=len(packages),
+                         estimated_cost_gbp=round(cost_per_call_gbp, 6), llm_batch_id=batch_id,
+                         parse_status=parse_status, parse_error=parse_error)
+            # Match by (file,column) then fall back to column only (models don't
+            # always echo the file name exactly).
+            by_fc = {(p.get("source_file", ""), p.get("source_column", "")): p
+                     for p in parsed if isinstance(p, dict)}
+            by_col_only = {p.get("source_column", ""): p for p in parsed if isinstance(p, dict)}
+            reviewed = 0
             for ev in targets:
-                p = by_col.get((ev.get("source_file", ""), ev.get("source_column", "")))
+                p = by_fc.get((ev.get("source_file", ""), ev.get("source_column", ""))) \
+                    or by_col_only.get(ev.get("source_column", ""))
                 if not p:
                     continue
+                reviewed += 1
                 tgt = str(p.get("resolved_target_field", "") or "").strip()
                 decision = str(p.get("decision", "") or "").strip() or MAP_EXISTING
                 # Hard rule: LLM may only map to a contract field, else it must be a
@@ -216,13 +245,14 @@ def resolve_mappings(
                 det_by_key[key(ev)].update({
                     "resolved_target_field": tgt or det_by_key[key(ev)]["resolved_target_field"],
                     "resolved_domain": p.get("resolved_domain") or dmap.get(tgt, ""),
-                    "decision": decision, "confidence": float(p.get("confidence", 0.6) or 0.6),
+                    "decision": decision, "confidence": _coerce_conf(p.get("confidence")),
                     "rationale": str(p.get("rationale", "")), "llm_used": True,
                     "llm_batch_id": batch_id,
                     "new_field_candidate": p.get("new_field_candidate", ""),
                     "required_user_question": p.get("required_user_question", ""),
                     "out_of_scope_reason": p.get("out_of_scope_reason", ""),
                 })
+            usage["rows_llm_reviewed"] = reviewed
 
     return {"resolved": list(det_by_key.values()), "usage": usage}
 
