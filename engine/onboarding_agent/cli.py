@@ -564,6 +564,16 @@ def main(argv=None) -> int:
         if _dep:
             print(f"[deprecation] {_dep}")
 
+    # Build ONE shared Anthropic provider callable, reused by BOTH the context
+    # resolver and the field-level resolver, so they can never diverge (req 2).
+    _llm_profile = args.llm_mapping_profile or args.llm_budget_profile or "low"
+    _shared_llm = (_build_mapping_llm_callable(_llm_profile)
+                   if (args.enable_llm_mapping_review or args.enable_llm_context_resolver)
+                   else None)
+    if (args.enable_llm_mapping_review or args.enable_llm_context_resolver) and _shared_llm is None:
+        print("[llm] No ANTHROPIC_API_KEY / anthropic client available — LLM "
+              "resolvers will run in deterministic fallback (llm_enabled=false).")
+
     project = run_onboarding(
         input_dir=args.input_dir,
         client_name=args.client_name,
@@ -587,9 +597,7 @@ def main(argv=None) -> int:
         apply_client_memory=args.apply_client_memory,
         enable_mapping_review=args.enable_mapping_review or args.enable_llm_mapping_review,
         enable_llm_mapping_review=args.enable_llm_mapping_review,
-        llm_mapping_callable=(
-            _build_mapping_llm_callable(args.llm_mapping_profile or args.llm_budget_profile or "low")
-            if args.enable_llm_mapping_review else None),
+        llm_mapping_callable=(_shared_llm if args.enable_llm_mapping_review else None),
         # New flag wins; otherwise fall back to the legacy budget profile.
         llm_mapping_profile=args.llm_mapping_profile or args.llm_budget_profile or "",
         llm_mapping_only_unresolved=args.llm_review_only_unresolved,
@@ -600,9 +608,7 @@ def main(argv=None) -> int:
         llm_max_cost_gbp=args.llm_max_cost_gbp,
         enable_file_conversion_fallback=args.enable_file_conversion_fallback,
         enable_context_resolver=args.enable_llm_context_resolver,
-        context_llm_callable=(
-            _build_mapping_llm_callable(args.llm_mapping_profile or args.llm_budget_profile or "low")
-            if args.enable_llm_context_resolver else None),
+        context_llm_callable=(_shared_llm if args.enable_llm_context_resolver else None),
     )
 
     print("=" * 64)
@@ -613,13 +619,20 @@ def main(argv=None) -> int:
         print(f"  {k}: {v}")
     if project.mapping_review_summary and "error" not in project.mapping_review_summary:
         mrs = project.mapping_review_summary
+        gc = mrs.get("group_counts", {})
         print("Mapping review (controlled, deterministic-first):")
         print(f"  columns reviewed:  {mrs.get('total_columns_reviewed', 0)}")
-        print(f"  auto-approved:     {mrs.get('auto_approved', 0)}")
-        print(f"  needs review:      {mrs.get('needs_review', 0)}")
-        print(f"  missing target:    {mrs.get('group_counts', {}).get('missing_trakt_fields', 0)}")
-        print(f"  LLM used:          {mrs.get('llm_enabled', False)} "
-              f"(calls={mrs.get('llm_calls', 0)}, est £{mrs.get('llm_estimated_cost_gbp', 0)})")
+        print(f"  auto-approved:     {gc.get('auto_approved_canonical_mappings', 0)}")
+        print(f"  needs decision:    {gc.get('needs_user_decision_risky_conflicting', 0)}")
+        print(f"  missing target:    {gc.get('missing_target_propose_schema_extension', 0)}")
+        print(f"  cashflow ext:      {gc.get('cashflow_ledger_extension_candidates', 0)}")
+        print(f"  out-of-scope MI:   {gc.get('out_of_scope_but_useful_mi_fields', 0)}")
+        print(f"  ignored/null:      {gc.get('ignored_empty_or_null_fields', 0)}")
+        print(f"  header failures:   {gc.get('header_detection_failures', 0)}")
+        print(f"  LLM context calls: {mrs.get('context_calls_completed', 0)} · "
+              f"field calls: {mrs.get('field_calls_completed', 0)} · "
+              f"field rows reviewed: {mrs.get('field_rows_reviewed', 0)} "
+              f"(eligible {mrs.get('eligible_field_rows', 0)}, est £{mrs.get('llm_estimated_cost_gbp', 0)})")
     elif project.mapping_review_summary.get("error"):
         print(f"Mapping review: skipped ({project.mapping_review_summary['error']})")
     print(f"Output dir: {project.output_dir}")

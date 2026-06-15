@@ -389,11 +389,16 @@ def run_onboarding(
                 enable_context_resolver=enable_context_resolver,
                 context_llm_callable=context_llm_callable,
             )
+            ru = mr.get("resolver_usage", {})
             project.mapping_review_summary = {
                 **mr["summary"],
-                "llm_enabled": bool(mr["llm"]["usage"].get("llm_enabled")),
-                "llm_calls": mr["llm"]["usage"].get("calls_completed", 0),
-                "llm_estimated_cost_gbp": mr["llm"]["usage"].get("estimated_cost_gbp", 0.0),
+                "llm_enabled": bool(ru.get("llm_enabled")),
+                "context_calls_completed": ru.get("context_calls_completed", 0),
+                "field_calls_completed": ru.get("field_calls_completed", 0),
+                "field_rows_reviewed": ru.get("field_rows_reviewed", 0),
+                "eligible_field_rows": ru.get("eligible_field_rows", 0),
+                "field_rows_selected_for_llm": ru.get("field_rows_selected_for_llm", 0),
+                "llm_estimated_cost_gbp": ru.get("estimated_cost_gbp", 0.0),
             }
         except Exception as exc:  # never break the onboarding run on review failure
             project.mapping_review_summary = {"error": str(exc)}
@@ -403,7 +408,8 @@ def run_onboarding(
             "28_required_target_contract.csv", "28_required_target_contract.json",
             "28_required_target_contract_summary.md",
             "31_llm_mapping_resolver.csv", "31_llm_mapping_resolver.json",
-            "31_llm_mapping_resolver_summary.md",
+            "31_llm_mapping_resolver_summary.md", "31_llm_usage_summary.json",
+            "31_llm_resolver_usage_summary.json",
             "28_existing_pipeline_field_contract.csv",
             "28_existing_pipeline_field_contract.json",
             "28_existing_pipeline_field_contract_summary.md",

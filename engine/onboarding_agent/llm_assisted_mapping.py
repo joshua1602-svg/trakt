@@ -193,6 +193,29 @@ def run_llm_assisted_mapping(
         llm_callable=(llm_callable if enable_llm else None),
         only_unresolved=only_unresolved, max_items=max_llm_items, max_cost_gbp=max_cost_gbp)
     resolver.write_resolver_artifacts(res, out_dir)
+    # Combined usage summary separating context vs field LLM calls (auditable).
+    fu = res["usage"]
+    cu = context_usage
+    import json as _json
+    resolver_usage = {
+        "llm_enabled": bool(cu.get("llm_enabled") or fu.get("llm_enabled")),
+        "context_calls_completed": int(cu.get("calls_completed", 0)),
+        "field_calls_completed": int(fu.get("calls_completed", 0)),
+        "total_calls_completed": int(cu.get("calls_completed", 0)) + int(fu.get("calls_completed", 0)),
+        "field_llm_callable_present": fu.get("field_llm_callable_present", False),
+        "eligible_field_rows": fu.get("eligible_field_rows", 0),
+        "eligible_reason_counts": fu.get("eligible_reason_counts", {}),
+        "field_rows_selected_for_llm": fu.get("field_rows_selected_for_llm", 0),
+        "field_rows_reviewed": fu.get("rows_llm_reviewed", 0),
+        "field_rows_skipped_due_to_cap": fu.get("field_rows_skipped_due_to_cap", 0),
+        "field_rows_skipped_reason_counts": fu.get("field_rows_skipped_reason_counts", {}),
+        "field_parse_status": fu.get("parse_status", ""),
+        "field_parse_error": fu.get("parse_error", ""),
+        "estimated_cost_gbp": round(float(cu.get("estimated_cost_gbp", 0))
+                                    + float(fu.get("estimated_cost_gbp", 0)), 6),
+    }
+    (out_dir / "31_llm_resolver_usage_summary.json").write_text(
+        _json.dumps(resolver_usage, indent=2, default=str), encoding="utf-8")
     resolved_by_key = {(r["source_file"], r["source_sheet"], r["source_column"]): r
                        for r in res["resolved"]}
     llm_result = {"proposals": [], "usage": res["usage"]}
@@ -216,8 +239,12 @@ def run_llm_assisted_mapping(
             proposals.append({**best, "source_file": src_file, "source_sheet": src_sheet})
         elif rr.get("resolved_target_field") and rr.get("decision") in (
                 resolver.MAP_EXISTING, resolver.PROPOSE_NEW):
-            src = ("cashflow_ledger" if rr["decision"] == resolver.PROPOSE_NEW
-                   else ("llm_suggested" if rr.get("llm_used") else "contract_resolver"))
+            # An LLM-resolved row that becomes the ACTIVE proposal is tagged
+            # llm_suggested (so the queue shows used_as_active_proposal, not
+            # superseded); a deterministic cashflow extension stays cashflow_ledger.
+            src = ("llm_suggested" if rr.get("llm_used")
+                   else ("cashflow_ledger" if rr["decision"] == resolver.PROPOSE_NEW
+                         else "contract_resolver"))
             proposals.append({
                 "source_file": src_file, "source_sheet": src_sheet, "source_column": col,
                 "proposed_target_field": rr["resolved_target_field"],
@@ -290,6 +317,7 @@ def run_llm_assisted_mapping(
         "context_deterministic": ctx_out["deterministic"],
         "context_llm": ctx_out["llm"],
         "context_usage": context_usage,
+        "resolver_usage": resolver_usage,
         "required_contract": required_contract,
         "resolver": res,
         "evidence": evidence_rows,

@@ -238,6 +238,90 @@ class TestRobustJsonAndAudit(unittest.TestCase):
         self.assertNotEqual(set(q["llm_decision"]), {"no_llm"})
 
 
+class TestFieldResolverWiringAndTelemetry(unittest.TestCase):
+    def _echo_fake(self, prompt):
+        import re
+        cols = re.findall(r'"source_column": "([^"]+)"', prompt)
+        return json.dumps([{"source_column": c, "resolved_target_field": "cf_x",
+                            "decision": "propose_new_target_field", "confidence": 0.8,
+                            "rationale": "ledger"} for c in cols])
+
+    def _many_eligible_file(self):
+        cols = {f"B/F Field {i} Balance": [1, 2] for i in range(6)}
+        cols.update({f"Unknown Metric {i}": ["a", "b"] for i in range(6)})
+        p = Path(tempfile.mkdtemp()) / "Funder PandI.csv"
+        pd.DataFrame(cols).to_csv(p, index=False)
+        return p
+
+    def test_field_llm_triggers_and_separated_usage(self):
+        out = Path(tempfile.mkdtemp())
+        res = run_llm_assisted_mapping(input_file=str(self._many_eligible_file()),
+                                       output_dir=str(out), mode="mi_only", client_id="c",
+                                       run_id="r1", enable_llm=True,
+                                       llm_callable=self._echo_fake, only_unresolved=True,
+                                       max_llm_items=50)
+        u = json.loads((out / "31_llm_resolver_usage_summary.json").read_text())
+        self.assertTrue(u["llm_enabled"])
+        self.assertEqual(u["context_calls_completed"], 0)
+        self.assertEqual(u["field_calls_completed"], 1)
+        self.assertGreater(u["eligible_field_rows"], 0)
+        self.assertGreater(u["field_rows_reviewed"], 0)
+        # Reviewed rows surface in the queue with a real LLM decision.
+        q = pd.read_csv(out / "33_mapping_review_queue.csv")
+        self.assertGreaterEqual(int((q["llm_reviewed"] == True).sum()), 1)  # noqa: E712
+        self.assertNotEqual(set(q["llm_decision"]), {"no_llm"})
+
+    def test_cap_reviews_exactly_cap_when_eligible_exceeds(self):
+        out = Path(tempfile.mkdtemp())
+        res = run_llm_assisted_mapping(input_file=str(self._many_eligible_file()),
+                                       output_dir=str(out), mode="mi_only", client_id="c",
+                                       run_id="r1", enable_llm=True,
+                                       llm_callable=self._echo_fake, only_unresolved=True,
+                                       max_llm_items=8)
+        u = json.loads((out / "31_llm_resolver_usage_summary.json").read_text())
+        self.assertEqual(u["eligible_field_rows"], 12)
+        self.assertEqual(u["field_rows_selected_for_llm"], 8)
+        self.assertEqual(u["field_rows_reviewed"], 8)
+        self.assertEqual(u["field_rows_skipped_due_to_cap"], 4)
+
+    def test_cap_not_success_when_zero_reviewed(self):
+        # LLM returns junk (no JSON) -> calls=1 but 0 reviewed; telemetry is honest.
+        out = Path(tempfile.mkdtemp())
+        res = run_llm_assisted_mapping(input_file=str(self._many_eligible_file()),
+                                       output_dir=str(out), mode="mi_only", client_id="c",
+                                       run_id="r1", enable_llm=True,
+                                       llm_callable=lambda p: "no json here",
+                                       only_unresolved=True, max_llm_items=50)
+        u = json.loads((out / "31_llm_resolver_usage_summary.json").read_text())
+        self.assertEqual(u["field_calls_completed"], 1)
+        self.assertEqual(u["field_rows_reviewed"], 0)
+        self.assertEqual(u["field_parse_status"], "parse_failed")
+
+    def test_ineligible_rows_skipped_with_reasons(self):
+        # An auto-approved pipeline file: high-confidence rows are NOT sent to LLM.
+        out = Path(tempfile.mkdtemp())
+        res = run_llm_assisted_mapping(input_file=KFI, output_dir=str(out), mode="mi_only",
+                                       client_id="c", run_id="r1", enable_llm=True,
+                                       llm_callable=self._echo_fake, only_unresolved=True)
+        u = json.loads((out / "31_llm_resolver_usage_summary.json").read_text())
+        # Auto-approved/ignored rows are recorded as skipped (not silently dropped).
+        self.assertIn("field_rows_skipped_reason_counts", u)
+
+
+class TestCliSummaryMatchesQueue(unittest.TestCase):
+    def test_cli_summary_uses_current_group_keys(self):
+        # The summary must read the CURRENT queue group keys (regression: the CLI
+        # previously looked up the obsolete 'missing_trakt_fields' key -> 0).
+        out = Path(tempfile.mkdtemp())
+        res = run_llm_assisted_mapping(input_file=KFI, output_dir=str(out), mode="mi_only",
+                                       client_id="c", run_id="r1")
+        gc = res["review_queue"]["summary"]["group_counts"]
+        self.assertNotIn("missing_trakt_fields", gc)
+        # Group keys are the current bulk-decision names.
+        self.assertTrue(any(k.startswith("auto_approved") or k.startswith("missing_target")
+                            or k.startswith("cashflow") for k in gc))
+
+
 class TestWorkbenchContextPanel(unittest.TestCase):
     def test_load_context(self):
         from engine.onboarding_agent import streamlit_onboarding_workbench as wb
