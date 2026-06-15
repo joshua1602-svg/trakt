@@ -98,15 +98,125 @@ def _cov_badge(status: str) -> str:
     return f'<span class="badge {_COV_BADGE.get(status, "b-info")}">{_esc(status)}</span>'
 
 
-def _load_target_first(project_dir: Path) -> dict:
-    """Load the 28a/28b/28c artefacts from the project dir (None when absent)."""
-    return {
-        "coverage": _load_json(project_dir / "28a_target_coverage_matrix.json"),
-        "residual": _load_json(project_dir / "28b_source_residual_register.json"),
-        "decision": _load_json(project_dir / "28c_human_decision_queue.json"),
-        "queue33": _load_json(project_dir / "33_mapping_review_queue.json"),
-        "file_coverage": _load_json(project_dir / "29a_column_evidence_file_coverage.json"),
+def _as_bool(v) -> bool:
+    """Coerce a JSON bool OR a CSV string ('True'/'False'/'') to a real bool."""
+    if isinstance(v, bool):
+        return v
+    return str(v).strip().lower() in ("true", "1", "yes")
+
+
+def _candidate_dirs(project_dir: Path, output_root: Path | None) -> list:
+    """All plausible run locations for the numbered artefacts (de-duplicated)."""
+    dirs = [project_dir, project_dir / "output"]
+    if output_root is not None:
+        dirs += [output_root, output_root.parent]
+    seen, out = set(), []
+    for d in dirs:
+        d = Path(d)
+        if str(d) not in seen:
+            seen.add(str(d))
+            out.append(d)
+    return out
+
+
+def _find_artifact(project_dir: Path, output_root: Path | None, basename: str):
+    for d in _candidate_dirs(project_dir, output_root):
+        p = d / basename
+        if p.exists():
+            return p
+    return None
+
+
+def _load_csv_rows(path: Path) -> list:
+    import csv
+    with path.open(newline="", encoding="utf-8") as fh:
+        return list(csv.DictReader(fh))
+
+
+def _derive_summaries(tf: dict) -> None:
+    """Fill missing summaries from rows (e.g. when only the CSV was found)."""
+    cov = tf.get("coverage")
+    if cov is not None and not cov.get("summary"):
+        rows = cov.get("rows", [])
+        sc: dict = {}
+        for r in rows:
+            st = r.get("coverage_status", "")
+            sc[st] = sc.get(st, 0) + 1
+        cov["summary"] = {
+            "target_fields_total": len(rows),
+            "coverage_status_counts": sc,
+            "source_mapped_fields": sc.get("source_mapped", 0) + sc.get("source_mapped_with_alternatives", 0),
+            "derived_config_defaulted_fields": (sc.get("derived", 0) + sc.get("configured_static", 0)
+                                                + sc.get("defaulted", 0) + sc.get("defaulted_ND", 0)),
+            "missing_required_fields": sc.get("missing_required", 0),
+            "needs_confirmation_fields": sc.get("needs_confirmation", 0),
+            "not_applicable_fields": sc.get("not_applicable", 0),
+            "optional_for_mi_fields": sc.get("optional_for_mi", 0),
+        }
+    res = tf.get("residual")
+    if res is not None and not res.get("summary"):
+        rows = res.get("rows", [])
+        cc: dict = {}
+        for r in rows:
+            cl = r.get("residual_class", "")
+            cc[cl] = cc.get(cl, 0) + 1
+        res["summary"] = {
+            "residual_source_columns_total": len(rows),
+            "suppressed_from_main_queue": sum(1 for r in rows if _as_bool(r.get("suppressed_from_main_queue"))),
+            "operator_visible": sum(1 for r in rows if _as_bool(r.get("operator_visible"))),
+            "residual_class_counts": cc,
+        }
+    dec = tf.get("decision")
+    if dec is not None and not dec.get("summary"):
+        rows = dec.get("rows", [])
+        tc: dict = {}
+        for r in rows:
+            dt = r.get("decision_type", "")
+            tc[dt] = tc.get(dt, 0) + 1
+        dec["summary"] = {
+            "human_decision_rows_total": len(rows),
+            "blocking_decisions": sum(1 for r in rows if _as_bool(r.get("blocking"))),
+            "decision_type_counts": tc,
+        }
+
+
+def _load_target_first_artifacts(project_dir: Path, output_root: Path | None = None) -> dict:
+    """Load the 28a/28b/28c (+33/29a) artefacts, searching all plausible run dirs.
+
+    Prefers the JSON artefact (rich, native types + summary) and falls back to the
+    CSV when only that is present. Searched locations, in order:
+        project_dir / filename
+        project_dir / output / filename
+        output_root / filename
+        parent(output_root) / filename
+    """
+    project_dir = Path(project_dir)
+    output_root = Path(output_root) if output_root else None
+    specs = {
+        "coverage": "28a_target_coverage_matrix",
+        "residual": "28b_source_residual_register",
+        "decision": "28c_human_decision_queue",
+        "queue33": "33_mapping_review_queue",
     }
+    tf: dict = {}
+    for key, base in specs.items():
+        json_p = _find_artifact(project_dir, output_root, base + ".json")
+        data = _load_json(json_p) if json_p else None
+        if data is None:
+            csv_p = _find_artifact(project_dir, output_root, base + ".csv")
+            if csv_p:
+                rows = _load_csv_rows(csv_p)
+                data = {"summary": {}, ("items" if key == "queue33" else "rows"): rows}
+        tf[key] = data
+    fc = _find_artifact(project_dir, output_root, "29a_column_evidence_file_coverage.json")
+    tf["file_coverage"] = _load_json(fc) if fc else None
+    _derive_summaries(tf)
+    return tf
+
+
+# Backwards-compatible alias (single-dir lookup) used by older call sites.
+def _load_target_first(project_dir: Path) -> dict:
+    return _load_target_first_artifacts(project_dir)
 
 
 def _counts_table(title: str, counts: dict) -> str:
@@ -137,11 +247,14 @@ def _gate3_target_coverage_html(tf: dict) -> str:
     def sort_key(r):
         st = r.get("coverage_status", "")
         idx = _COV_ORDER.index(st) if st in _COV_ORDER else len(_COV_ORDER)
-        return (0 if r.get("blocking") else 1, idx, r.get("target_field", ""))
+        return (0 if _as_bool(r.get("blocking")) else 1, idx, r.get("target_field", ""))
 
     body = []
     for r in sorted(rows, key=sort_key):
+        sel_file = r.get("selected_source_file", "")
         sel = r.get("selected_source_column", "") or "—"
+        if sel_file:
+            sel = f"{sel}<br><small>{_esc(sel_file)}</small>"
         if r.get("selected_source_confidence") not in ("", None):
             sel += f'<br><small>conf {_esc(r.get("selected_source_confidence"))}</small>'
         rule = " · ".join(x for x in [
@@ -150,14 +263,16 @@ def _gate3_target_coverage_html(tf: dict) -> str:
             (f"derive: {r.get('derivation_rule')}" if r.get("derivation_rule") else ""),
             (f"config: {r.get('configured_value_source')}" if r.get("configured_value_source") else ""),
         ] if x)
+        if r.get("operator_question"):
+            rule += f'<br><small>Q: {_esc(r.get("operator_question"))}</small>'
         body.append([
             _esc(r.get("target_field", "")), _esc(r.get("target_domain", "")),
             _esc(r.get("required_status", "")), _cov_badge(r.get("coverage_status", "")),
             sel, _esc(r.get("alternative_source_candidates", "") or "—"),
-            _esc(rule) or "—",
+            rule or "—",
         ])
     table = _table(["Target field", "Domain", "Required", "Coverage", "Selected source",
-                    "Alternatives", "Coverage basis / rule"], body)
+                    "Alternatives", "Coverage basis / rule / question"], body)
     miss = summary.get("missing_required_fields", 0)
     if miss:
         flag = (f'<div class="callout block">{miss} required target field(s) are '
@@ -176,8 +291,8 @@ def _gate4_decision_queue_html(tf: dict) -> str:
                 '(<code>28c_human_decision_queue.csv</code>) not available for this run.</div>')
     summary = dec.get("summary", {})
     rows = dec.get("rows", [])
-    blocking = [r for r in rows if r.get("blocking")]
-    nonblocking = [r for r in rows if not r.get("blocking")]
+    blocking = [r for r in rows if _as_bool(r.get("blocking"))]
+    nonblocking = [r for r in rows if not _as_bool(r.get("blocking"))]
     n_block = summary.get("blocking_decisions", len(blocking))
 
     if not rows:
@@ -557,15 +672,69 @@ def build_review_pack(project: OnboardingProject, out_path: Path,
         llm_html = _table(["Metric", "Value"],
                           [[_esc(a), _esc(b)] for a, b in llm_rows])
 
+    # Legacy readiness callout (gap-question based). Retained for the supporting
+    # section and as the fallback headline only when no target-first artefacts exist.
+    if status == "blocked":
+        readiness = (
+            f'<div class="callout block">{len(blocking_qs)} blocking question(s) must be '
+            "answered before any pipeline handoff. The pack is NOT ready to run Gates 1–5.</div>"
+        )
+    else:
+        readiness = (
+            '<div class="callout warn">No hard blockers, but mappings and config require '
+            "human review before handoff. Draft handoff artefacts have been generated for review only.</div>"
+        )
+
     # Target-contract-first artefacts (28a/28b/28c) drive the primary headline.
-    tf = _load_target_first(Path(out_path).parent)
+    # Search all plausible run dirs so the pack is correct wherever it is written.
+    _eff_root = Path(output_root) if output_root is not None else (Path(out_path).parent / "output")
+    tf = _load_target_first_artifacts(Path(out_path).parent, _eff_root)
+    tf_present = tf.get("coverage") is not None
+    tf_decision_present = tf.get("decision") is not None
     cov_sum = (tf.get("coverage") or {}).get("summary", {}) or {}
     res_sum = (tf.get("residual") or {}).get("summary", {}) or {}
     dec_sum = (tf.get("decision") or {}).get("summary", {}) or {}
     cov_counts = cov_sum.get("coverage_status_counts", {}) or {}
     q33 = tf.get("queue33") or {}
     q33_items = q33.get("items", []) or []
-    old33_approvals = sum(1 for it in q33_items if it.get("requires_user_approval"))
+    old33_approvals = sum(1 for it in q33_items if _as_bool(it.get("requires_user_approval")))
+
+    # Headline status: when 28c exists it SUPERSEDES the legacy gap-question
+    # blocker count (never let the two contradict each other).
+    tf_n_block = dec_sum.get("blocking_decisions",
+                            sum(1 for r in (tf.get("decision") or {}).get("rows", [])
+                                if _as_bool(r.get("blocking"))))
+    tf_n_decisions = dec_sum.get("human_decision_rows_total",
+                                len((tf.get("decision") or {}).get("rows", [])))
+    if tf_decision_present:
+        if tf_n_block == 1:
+            tf_status_badge = '<span class="badge b-block">1 BLOCKING TARGET DECISION</span>'
+            exec_status_html = (
+                '<div class="callout block"><strong>Only ONE blocking target decision '
+                "remains.</strong> Resolve it in Gate 4 — Compact human decision queue. "
+                "The legacy source-column gap questions are superseded by the "
+                "target-first queue.</div>")
+        elif tf_n_block > 1:
+            tf_status_badge = (f'<span class="badge b-block">{tf_n_block} BLOCKING '
+                               "TARGET DECISIONS</span>")
+            exec_status_html = (
+                f'<div class="callout block"><strong>{tf_n_block} blocking target '
+                "decisions</strong> remain — see Gate 4. These supersede the legacy "
+                "source-column gap questions.</div>")
+        elif tf_n_decisions:
+            tf_status_badge = '<span class="badge b-warn">NEEDS CONFIRMATION</span>'
+            exec_status_html = (
+                '<div class="callout warn">No blocking target decisions; only optional '
+                "confirmations remain — see Gate 4.</div>")
+        else:
+            tf_status_badge = '<span class="badge b-ok">READY FOR MI HANDOFF REVIEW</span>'
+            exec_status_html = (
+                '<div class="callout pass">No outstanding target decisions — target '
+                "coverage is complete for MI handoff review.</div>")
+        # Override the hero badge so it cannot show a stale legacy blocker count.
+        status_badge = tf_status_badge
+    else:
+        exec_status_html = readiness  # legacy readiness when no target-first artefacts
     fcov = tf.get("file_coverage") or []
     parsed_files = (sum(1 for f in fcov if f.get("column_evidence_rows", 0) > 0)
                     if fcov else counts["classified_files"])
@@ -663,18 +832,6 @@ def build_review_pack(project: OnboardingProject, out_path: Path,
     ]
     q_html = _table(["ID", "Severity", "Category", "Question", "Default"], q_rows)
 
-    # 9. Readiness assessment
-    if status == "blocked":
-        readiness = (
-            f'<div class="callout block">{len(blocking_qs)} blocking question(s) must be '
-            "answered before any pipeline handoff. The pack is NOT ready to run Gates 1–5.</div>"
-        )
-    else:
-        readiness = (
-            '<div class="callout warn">No hard blockers, but mappings and config require '
-            "human review before handoff. Draft handoff artefacts have been generated for review only.</div>"
-        )
-
     # 10. Recommended next actions
     actions = [
         "Resolve all blocking gap questions (dates, mandatory config).",
@@ -688,6 +845,17 @@ def build_review_pack(project: OnboardingProject, out_path: Path,
 
     llm_block = (f'<h4 class="chart-title">LLM mapping review usage &amp; cost</h4>{llm_html}'
                  if show_llm else '')
+
+    # When 28c exists, the legacy gap-question / readiness views are clearly
+    # marked as superseded so the two blocker counts can never contradict.
+    _legacy_note = (
+        '<p class="meta"><span class="badge b-info">audit</span> Legacy/supporting gap '
+        "questions — superseded by target-first Gate 4 where 28c is available.</p>"
+        if tf_decision_present else "")
+    gate5_readiness_html = (
+        ('<p class="meta">Legacy readiness (source-column / gap-question view) — '
+         "superseded by the target-first headline above where 28c is available.</p>"
+         + readiness) if tf_decision_present else readiness)
 
     doc = f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
@@ -707,7 +875,7 @@ def build_review_pack(project: OnboardingProject, out_path: Path,
       The 33 source-column queue is retained as audit detail only.</p>
     <div class="kpi-grid">{kpi_html}</div>
     <p class="meta">Input: {_esc(project.input_dir)} &nbsp;·&nbsp; Output: {_esc(project.output_dir)}</p>
-    {readiness}
+    {exec_status_html}
   </div>
 
   <div class="card"><h2>2. Gate 2 — Source pack readiness</h2>
@@ -728,7 +896,7 @@ def build_review_pack(project: OnboardingProject, out_path: Path,
     <h4 class="chart-title">Field scope for this onboarding mode</h4>{field_scope_html}
     <h4 class="chart-title">Config suggestions</h4>{cfg_html}
     {llm_block}
-    <h4 class="chart-title">Readiness assessment</h4>{readiness}
+    <h4 class="chart-title">Readiness assessment</h4>{gate5_readiness_html}
     <h4 class="chart-title">Recommended next actions</h4>{actions_html}
     <h4 class="chart-title">Central tapes &amp; Azure-ready handoff (dry-run)</h4>
     <span id="promotion"></span><!--PROMO_START-->{_PROMOTION_MARKER}<!--PROMO_END-->
@@ -742,7 +910,7 @@ def build_review_pack(project: OnboardingProject, out_path: Path,
     <h4 class="chart-title">Deterministic mapping trace</h4>{_mapping_trace_html(project)}
     <h4 class="chart-title">Source overlap / duplicate fields</h4>{ov_html}
     <h4 class="chart-title">Mapping candidates (source-column detail)</h4>{map_html}
-    <h4 class="chart-title">Gap questions</h4>{q_html}
+    <h4 class="chart-title">Legacy / supporting gap questions</h4>{_legacy_note}{q_html}
   </div>
   {_APPROVAL_MARKER}
 </div></body></html>"""
