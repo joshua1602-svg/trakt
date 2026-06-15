@@ -43,6 +43,35 @@ _SOURCE_RANK = {"client_memory": 0, "mi_useful": 1, "pipeline_contract": 2, "ali
                 "semantic_alignment": 4, "registry_description": 5, "cashflow_ledger": 6,
                 "value_profile": 7}
 
+# Normalise the LLM's decision vocabulary to internal decisions (change 3). Unknown
+# values are retained (mapped to needs_user_clarification) with a warning, never
+# silently dropped.
+_DECISION_NORMALISE = {
+    "map_to_contract_target_field": MAP_EXISTING,
+    "map_to_contract_target": MAP_EXISTING,
+    "map_existing_target": MAP_EXISTING,
+    "map_existing": MAP_EXISTING,
+    "map": MAP_EXISTING,
+    "propose_new_target_field": PROPOSE_NEW,
+    "propose_new": PROPOSE_NEW,
+    "new_field": PROPOSE_NEW,
+    "needs_user_clarification": NEEDS_CLARIFICATION,
+    "needs_clarification": NEEDS_CLARIFICATION,
+    "ignore_source_field": IGNORE,
+    "ignore": IGNORE,
+    "reject_candidate": REJECT,
+    "reject": REJECT,
+    "header_or_parse_issue": HEADER_ISSUE,
+}
+
+
+def normalise_decision(raw_decision: str):
+    """Return (normalised_decision, is_known). Unknown -> needs_clarification."""
+    key = str(raw_decision or "").strip().lower()
+    if key in _DECISION_NORMALISE:
+        return _DECISION_NORMALISE[key], True
+    return NEEDS_CLARIFICATION, False
+
 _CONTRACT_PROMPT = """\
 You map lender source columns to a REQUIRED target data contract for the detected
 asset class / regime. Map to a contract target_field when one fits; otherwise use
@@ -264,6 +293,11 @@ def resolve_mappings(
 
         # Shape-aware parse: accept {"results":[...]}, a bare [...], or one {...}.
         obj, parse_status, parse_error = extract_json(raw)
+        # Defensive: if we accidentally got the persisted WRAPPER object
+        # ({"llm_batch_id":..., "raw_response": "```json ...```"}) re-parse the
+        # inner fenced JSON string (change 1).
+        if isinstance(obj, dict) and "raw_response" in obj and "results" not in obj:
+            obj, parse_status, parse_error = extract_json(obj.get("raw_response"))
         shape = "unknown"
         results: List[Dict[str, Any]] = []
         if isinstance(obj, dict) and isinstance(obj.get("results"), list):
@@ -285,27 +319,22 @@ def resolve_mappings(
             return _norm(str(s))
         by_fc = {(p.get("source_file", ""), p.get("source_column", "")): p for p in results}
         by_col = {_nk(p.get("source_column", "")): p for p in results}
-        reviewed = 0
-        unmatched = 0
-        missing_row_id = 0
+        matched = applied = unmatched = missing_row_id = 0
+        rejected_invalid_decision = rejected_missing_fields = 0
+        decision_counts_raw: Dict[str, int] = {}
+        decision_counts_norm: Dict[str, int] = {}
         for p in results:
             rid = str(p.get("row_id", "") or "")
-            if rid and rid in target_by_row_id:
-                ev = target_by_row_id[rid]
-            else:
-                if not rid:
-                    missing_row_id += 1
-                ev = None  # fall back below
+            ev = target_by_row_id.get(rid) if rid else None
+            if not rid:
+                missing_row_id += 1
             if ev is None:
-                # Fallback match by (file,column) / normalised column.
+                # Fall back to normalised (file,column) only when row_id is absent.
                 fc = (p.get("source_file", ""), p.get("source_column", ""))
-                hit_key = None
-                if fc in by_fc:
-                    # locate the target whose (file,col) matches
-                    for cand in targets:
-                        if (cand.get("source_file", ""), cand.get("source_column", "")) == fc:
-                            ev = cand
-                            break
+                for cand in targets:
+                    if (cand.get("source_file", ""), cand.get("source_column", "")) == fc:
+                        ev = cand
+                        break
                 if ev is None:
                     nk = _nk(p.get("source_column", ""))
                     for cand in targets:
@@ -315,30 +344,47 @@ def resolve_mappings(
             if ev is None:
                 unmatched += 1
                 continue
-            reviewed += 1
+            matched += 1
+            raw_decision = str(p.get("decision", "") or "").strip()
+            decision_counts_raw[raw_decision or "(none)"] = \
+                decision_counts_raw.get(raw_decision or "(none)", 0) + 1
+            decision, known = normalise_decision(raw_decision)
+            if not known and raw_decision:
+                rejected_invalid_decision += 1  # retained with a warning, not dropped
+            decision_counts_norm[decision] = decision_counts_norm.get(decision, 0) + 1
             tgt = str(p.get("resolved_target_field", "") or "").strip()
-            decision = str(p.get("decision", "") or "").strip() or MAP_EXISTING
+            # A contract-map decision with no target is downgraded (not silently kept).
+            if decision == MAP_EXISTING and not tgt:
+                rejected_missing_fields += 1
+                decision = NEEDS_CLARIFICATION
             if tgt and tgt not in cfields and decision == MAP_EXISTING:
                 decision = PROPOSE_NEW
+            warn = "" if known else f" [warning: unknown LLM decision '{raw_decision}']"
             det_by_key[key(ev)].update({
                 "resolved_target_field": tgt or det_by_key[key(ev)]["resolved_target_field"],
                 "resolved_domain": p.get("resolved_domain") or dmap.get(tgt, ""),
                 "decision": decision, "confidence": _coerce_conf(p.get("confidence")),
-                "rationale": "LLM: " + str(p.get("rationale", "")), "llm_used": True,
-                "llm_batch_id": batch_id,
+                "rationale": "LLM: " + str(p.get("rationale", "")) + warn, "llm_used": True,
+                "llm_batch_id": batch_id, "llm_raw_decision": raw_decision,
                 "new_field_candidate": p.get("new_field_candidate", ""),
                 "required_user_question": p.get("required_user_question", ""),
                 "out_of_scope_reason": p.get("out_of_scope_reason", ""),
             })
-        usage["rows_llm_reviewed"] = reviewed
+            applied += 1
+        usage["rows_llm_reviewed"] = matched
         usage.update(
             field_response_chars=len(raw_text),
             field_response_shape=shape,
             field_results_parsed=len(results),
-            field_results_matched=reviewed,
+            field_results_matched=matched,
+            field_results_applied=applied,
+            field_results_rejected_invalid_decision=rejected_invalid_decision,
+            field_results_rejected_missing_required_fields=rejected_missing_fields,
             field_results_unmatched=unmatched,
             field_results_missing_row_id=missing_row_id,
-            field_incomplete_response=bool(reviewed < len(targets)),
+            field_result_decision_counts_raw=decision_counts_raw,
+            field_result_decision_counts_normalised=decision_counts_norm,
+            field_incomplete_response=bool(matched < len(targets)),
         )
 
     return {"resolved": list(det_by_key.values()), "usage": usage}
