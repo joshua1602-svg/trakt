@@ -75,6 +75,208 @@ def _domain_status_badge(status: str) -> str:
     return f'<span class="badge {cls}">{_esc(status)}</span>'
 
 
+# ---------------------------------------------------------------------------
+# Target-contract-first gates (28a / 28b / 28c) — primary managed-service flow
+# ---------------------------------------------------------------------------
+
+# Coverage status -> badge class.
+_COV_BADGE = {
+    "source_mapped": "b-ok", "source_mapped_with_alternatives": "b-ok",
+    "derived": "b-info", "configured_static": "b-info", "defaulted": "b-info",
+    "defaulted_ND": "b-info", "not_applicable": "b-info",
+    "needs_confirmation": "b-warn", "optional_for_mi": "b-warn",
+    "missing_required": "b-block",
+}
+
+# Render order for the coverage matrix: blocking first, then by "settledness".
+_COV_ORDER = ["missing_required", "needs_confirmation", "source_mapped_with_alternatives",
+              "optional_for_mi", "source_mapped", "derived", "configured_static",
+              "defaulted", "defaulted_ND", "not_applicable"]
+
+
+def _cov_badge(status: str) -> str:
+    return f'<span class="badge {_COV_BADGE.get(status, "b-info")}">{_esc(status)}</span>'
+
+
+def _load_target_first(project_dir: Path) -> dict:
+    """Load the 28a/28b/28c artefacts from the project dir (None when absent)."""
+    return {
+        "coverage": _load_json(project_dir / "28a_target_coverage_matrix.json"),
+        "residual": _load_json(project_dir / "28b_source_residual_register.json"),
+        "decision": _load_json(project_dir / "28c_human_decision_queue.json"),
+        "queue33": _load_json(project_dir / "33_mapping_review_queue.json"),
+        "file_coverage": _load_json(project_dir / "29a_column_evidence_file_coverage.json"),
+    }
+
+
+def _counts_table(title: str, counts: dict) -> str:
+    if not counts:
+        return ""
+    rows = [[_esc(k), _esc(v)] for k, v in sorted(counts.items(), key=lambda kv: -kv[1])]
+    return f'<h4 class="chart-title">{_esc(title)}</h4>' + _table(["Status", "Count"], rows)
+
+
+def _gate3_target_coverage_html(tf: dict) -> str:
+    """Gate 3 — target coverage matrix (28a), missing_required highlighted first."""
+    cov = tf.get("coverage")
+    if not cov:
+        return ('<div class="callout warn">Target coverage matrix '
+                '(<code>28a_target_coverage_matrix.csv</code>) not available for this run. '
+                'Run with <code>--enable-mapping-review</code>.</div>')
+    summary = cov.get("summary", {})
+    rows = cov.get("rows", [])
+    intro = (
+        f'<p class="meta">Target contract: '
+        f'<span class="badge b-info">{_esc(cov.get("target_contract_id",""))}</span> '
+        f'&nbsp;·&nbsp; {summary.get("target_fields_total", len(rows))} target fields. '
+        "This is the PRIMARY onboarding gate — coverage is target-field-led, not "
+        "source-column-led.</p>")
+    counts_html = _counts_table("Coverage status counts",
+                                summary.get("coverage_status_counts", {}))
+
+    def sort_key(r):
+        st = r.get("coverage_status", "")
+        idx = _COV_ORDER.index(st) if st in _COV_ORDER else len(_COV_ORDER)
+        return (0 if r.get("blocking") else 1, idx, r.get("target_field", ""))
+
+    body = []
+    for r in sorted(rows, key=sort_key):
+        sel = r.get("selected_source_column", "") or "—"
+        if r.get("selected_source_confidence") not in ("", None):
+            sel += f'<br><small>conf {_esc(r.get("selected_source_confidence"))}</small>'
+        rule = " · ".join(x for x in [
+            r.get("coverage_basis", ""),
+            (f"default: {r.get('default_rule')}" if r.get("default_rule") else ""),
+            (f"derive: {r.get('derivation_rule')}" if r.get("derivation_rule") else ""),
+            (f"config: {r.get('configured_value_source')}" if r.get("configured_value_source") else ""),
+        ] if x)
+        body.append([
+            _esc(r.get("target_field", "")), _esc(r.get("target_domain", "")),
+            _esc(r.get("required_status", "")), _cov_badge(r.get("coverage_status", "")),
+            sel, _esc(r.get("alternative_source_candidates", "") or "—"),
+            _esc(rule) or "—",
+        ])
+    table = _table(["Target field", "Domain", "Required", "Coverage", "Selected source",
+                    "Alternatives", "Coverage basis / rule"], body)
+    miss = summary.get("missing_required_fields", 0)
+    if miss:
+        flag = (f'<div class="callout block">{miss} required target field(s) are '
+                "missing source/derivation/default inputs — see the decision queue (Gate 4).</div>")
+    else:
+        flag = ('<div class="callout pass">All required target fields are covered by a '
+                "source mapping, derivation, default or ND rule.</div>")
+    return intro + counts_html + flag + table
+
+
+def _gate4_decision_queue_html(tf: dict) -> str:
+    """Gate 4 — compact human decision queue (28c) ONLY, grouped by blocking/type."""
+    dec = tf.get("decision")
+    if not dec:
+        return ('<div class="callout warn">Compact human decision queue '
+                '(<code>28c_human_decision_queue.csv</code>) not available for this run.</div>')
+    summary = dec.get("summary", {})
+    rows = dec.get("rows", [])
+    blocking = [r for r in rows if r.get("blocking")]
+    nonblocking = [r for r in rows if not r.get("blocking")]
+    n_block = summary.get("blocking_decisions", len(blocking))
+
+    if not rows:
+        head = ('<div class="callout pass">No operator decisions required — target '
+                "coverage is complete for this pack.</div>")
+    elif n_block == 1:
+        b = blocking[0]
+        head = ('<div class="callout block"><strong>Only ONE blocking decision remains.</strong>'
+                f'<br>{_esc(b.get("target_field",""))}: {_esc(b.get("operator_question") or b.get("issue",""))}</div>')
+    elif n_block:
+        head = (f'<div class="callout block"><strong>{n_block} blocking decision(s)</strong> '
+                "must be resolved before MI handoff.</div>")
+    else:
+        head = ('<div class="callout warn">No blocking decisions; only optional '
+                "confirmations remain.</div>")
+
+    intro = ('<p class="meta">This compact queue is the managed-service operator '
+             "workflow. It is derived from target coverage gaps/conflicts (Gate 3) and "
+             "blocking residuals — NOT from every source column.</p>")
+    counts_html = _counts_table("Decision type counts", summary.get("decision_type_counts", {}))
+
+    def block(label, items, badge):
+        if not items:
+            return ""
+        body = []
+        for r in items:
+            body.append([
+                _esc(r.get("decision_id", "")),
+                f'<span class="badge {badge}">{_esc(r.get("decision_type",""))}</span>'
+                f'<br><small>{_esc(r.get("priority",""))}</small>',
+                _esc(r.get("target_field", "") or "—"),
+                f'<strong>{_esc(r.get("operator_question") or r.get("issue",""))}</strong>',
+                _esc(r.get("recommendation", "")),
+                _esc(r.get("options", "") or "—"),
+                _esc(r.get("evidence_summary", "") or "—"),
+            ])
+        return (f'<h4 class="chart-title">{_esc(label)} ({len(items)})</h4>'
+                + _table(["ID", "Type / priority", "Target field", "Operator question",
+                          "Recommendation", "Options", "Evidence"], body))
+
+    return (intro + head + counts_html
+            + block("Blocking decisions", blocking, "b-block")
+            + block("Confirmations / non-blocking", nonblocking, "b-warn"))
+
+
+def _residual_section_html(tf: dict) -> str:
+    """Residual source fields (28b) — explicitly NOT primary approvals."""
+    res = tf.get("residual")
+    if not res:
+        return ('<div class="callout warn">Source residual register '
+                '(<code>28b_source_residual_register.csv</code>) not available for this run.</div>')
+    summary = res.get("summary", {})
+    rows = res.get("rows", [])
+    intro = (
+        '<div class="callout pass">These source columns are NOT part of the primary '
+        "approval workflow. They were not selected as the primary source for any target "
+        f"field and are suppressed from the main queue "
+        f'({summary.get("suppressed_from_main_queue", 0)} of '
+        f'{summary.get("residual_source_columns_total", len(rows))} suppressed).</div>')
+    counts_html = _counts_table("Residual class counts", summary.get("residual_class_counts", {}))
+    body = [[
+        _esc(r.get("source_file", "")), _esc(r.get("source_column", "")),
+        _esc(r.get("residual_class", "")),
+        _esc(r.get("duplicate_of_target_field", "") or "—"),
+        _esc(r.get("residual_reason", "")),
+        _esc(r.get("possible_future_use", "") or "—"),
+    ] for r in rows]
+    detail = _table(["File", "Source column", "Residual class", "Duplicate of target",
+                     "Reason", "Possible future use"], body)
+    return (intro + counts_html
+            + f"<details><summary class='meta'>Show {len(rows)} residual source "
+              f"columns (detail)</summary>{detail}</details>")
+
+
+def _audit_queue_html(tf: dict) -> str:
+    """Detailed source-column audit detail (33) — NOT the primary gate."""
+    q = tf.get("queue33")
+    banner = ('<div class="callout warn"><strong>Source-column audit detail, not the '
+              "primary gate.</strong> The legacy 33 review queue lists one row per source "
+              "column. It is retained for audit/traceability only; the managed-service "
+              "onboarding burden is the compact decision queue (Gate 4), not this list.</div>")
+    if not q:
+        return banner + '<p class="meta">33_mapping_review_queue.json not available.</p>'
+    summary = q.get("summary", {})
+    items = q.get("items", [])
+    approvals = sum(1 for it in items if it.get("requires_user_approval"))
+    rows = [
+        ["Columns reviewed (audit)", summary.get("total_columns_reviewed", len(items))],
+        ["requires_user_approval rows (audit only)", approvals],
+        ["auto-approved", summary.get("auto_approved", 0)],
+        ["needs decision (audit grouping)", summary.get("needs_review", 0)],
+        ["missing target (audit grouping)", summary.get("missing_target", 0)],
+        ["cashflow ledger candidates (audit)", summary.get("cashflow_ledger_candidates", 0)],
+        ["ignored / null / empty (audit)", summary.get("ignored_null_empty", 0)],
+    ]
+    return (banner
+            + _table(["Audit metric", "Value"], [[_esc(a), _esc(b)] for a, b in rows]))
+
+
 def _domain_coverage_html(project: OnboardingProject) -> str:
     rows = []
     for d in project.domain_coverage:
@@ -355,13 +557,38 @@ def build_review_pack(project: OnboardingProject, out_path: Path,
         llm_html = _table(["Metric", "Value"],
                           [[_esc(a), _esc(b)] for a, b in llm_rows])
 
-    # 1. Executive summary KPIs
+    # Target-contract-first artefacts (28a/28b/28c) drive the primary headline.
+    tf = _load_target_first(Path(out_path).parent)
+    cov_sum = (tf.get("coverage") or {}).get("summary", {}) or {}
+    res_sum = (tf.get("residual") or {}).get("summary", {}) or {}
+    dec_sum = (tf.get("decision") or {}).get("summary", {}) or {}
+    cov_counts = cov_sum.get("coverage_status_counts", {}) or {}
+    q33 = tf.get("queue33") or {}
+    q33_items = q33.get("items", []) or []
+    old33_approvals = sum(1 for it in q33_items if it.get("requires_user_approval"))
+    fcov = tf.get("file_coverage") or []
+    parsed_files = (sum(1 for f in fcov if f.get("column_evidence_rows", 0) > 0)
+                    if fcov else counts["classified_files"])
+
+    def _dash(v):  # show — when the target-first artefacts are not present
+        return v if (tf.get("coverage") is not None) else "—"
+
+    configured_defaulted = (cov_counts.get("configured_static", 0)
+                            + cov_counts.get("defaulted", 0)
+                            + cov_counts.get("defaulted_ND", 0))
+    # 1. Executive onboarding summary KPIs — headline from 28a/28b/28c.
     kpis = [
-        ("Files", counts["classified_files"]),
-        ("Columns profiled", counts["column_profiles"]),
-        ("Overlap findings", counts["overlap_findings"]),
-        ("Mapping candidates", counts["mapping_candidates"]),
-        ("Open questions", counts["gap_questions"]),
+        ("Source files", counts["classified_files"]),
+        ("Parsed / classified", parsed_files),
+        ("Target fields", _dash(cov_sum.get("target_fields_total", 0))),
+        ("Source mapped", _dash(cov_sum.get("source_mapped_fields", 0))),
+        ("Derived", _dash(cov_counts.get("derived", 0))),
+        ("Configured / static / defaulted", _dash(configured_defaulted)),
+        ("Needs confirmation", _dash(cov_sum.get("needs_confirmation_fields", 0))),
+        ("Missing required / blocking", _dash(cov_sum.get("missing_required_fields", 0))),
+        ("Residual fields suppressed", _dash(res_sum.get("suppressed_from_main_queue", 0))),
+        ("Compact decision queue", _dash(dec_sum.get("human_decision_rows_total", 0))),
+        ("Old 33 approvals (audit only)", _dash(old33_approvals)),
     ]
     kpi_html = "".join(
         f'<div class="kpi-card"><div class="kpi-label">{_esc(l)}</div>'
@@ -459,6 +686,9 @@ def build_review_pack(project: OnboardingProject, out_path: Path,
     ]
     actions_html = "<ul>" + "".join(f"<li>{_esc(a)}</li>" for a in actions) + "</ul>"
 
+    llm_block = (f'<h4 class="chart-title">LLM mapping review usage &amp; cost</h4>{llm_html}'
+                 if show_llm else '')
+
     doc = f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -471,30 +701,49 @@ def build_review_pack(project: OnboardingProject, out_path: Path,
     &nbsp;·&nbsp; Mode: {_esc(mode_name)} &nbsp;·&nbsp; Status: {status_badge}</div>
   </div>
 
-  <div class="card"><h2>1. Executive summary</h2>
+  <div class="card"><h2>1. Executive onboarding summary</h2>
+    <p class="meta">Executive summary — the primary managed-service gate is the
+      target coverage matrix (28a) and the compact human decision queue (28c).
+      The 33 source-column queue is retained as audit detail only.</p>
     <div class="kpi-grid">{kpi_html}</div>
     <p class="meta">Input: {_esc(project.input_dir)} &nbsp;·&nbsp; Output: {_esc(project.output_dir)}</p>
     {readiness}
   </div>
 
-  <div class="card"><h2>1a. Onboarding mode &amp; mode-specific readiness</h2>{mode_readiness_html}</div>
-  <div class="card"><h2>1a-i. Data domain coverage</h2>{_domain_coverage_html(project)}</div>
-  <div class="card"><h2>1a-ii. Azure-ready run metadata</h2>{_azure_metadata_html(project)}</div>
-  <div class="card"><h2>1a-iii. Deterministic mapping trace</h2>{_mapping_trace_html(project)}</div>
-  <div class="card"><h2>1b. Field scope for this onboarding mode</h2>{field_scope_html}</div>
-  <div class="card"><h2>1c. Mapping ambiguities resolved by policy</h2>{ambiguities_html}</div>
-  {f'<div class="card"><h2>1d. LLM mapping review usage &amp; cost</h2>{llm_html}</div>' if show_llm else ''}
+  <div class="card"><h2>2. Gate 2 — Source pack readiness</h2>
+    <p class="meta">Files received, parsed and classified for this pack.</p>
+    <h4 class="chart-title">File inventory</h4>{inv_html}
+    <h4 class="chart-title">Detected reporting periods</h4>{periods_html}
+    <h4 class="chart-title">Candidate keys</h4>{keys_html}
+    <h4 class="chart-title">Data domain coverage</h4>{_domain_coverage_html(project)}
+    <h4 class="chart-title">Azure-ready run metadata</h4>{_azure_metadata_html(project)}
+  </div>
 
-  <div class="card"><h2>2. File inventory</h2>{inv_html}</div>
-  <div class="card"><h2>3. Detected reporting periods</h2>{periods_html}</div>
-  <div class="card"><h2>4. Candidate keys</h2>{keys_html}</div>
-  <div class="card"><h2>5. Source overlap / duplicate fields</h2>{ov_html}</div>
-  <div class="card"><h2>6. Mapping candidates</h2>{map_html}</div>
-  <div class="card"><h2>7. Config suggestions</h2>{cfg_html}</div>
-  <div class="card"><h2>8. Gap questions</h2>{q_html}</div>
-  <div class="card"><h2>9. Readiness assessment</h2>{readiness}</div>
-  <div class="card"><h2>10. Recommended next actions</h2>{actions_html}</div>
-  <div class="card" id="promotion"><h2>12. Central tapes &amp; Azure-ready handoff (dry-run)</h2><!--PROMO_START-->{_PROMOTION_MARKER}<!--PROMO_END--></div>
+  <div class="card"><h2>3. Gate 3 — Target coverage matrix</h2>{_gate3_target_coverage_html(tf)}</div>
+
+  <div class="card"><h2>4. Gate 4 — Compact human decision queue</h2>{_gate4_decision_queue_html(tf)}</div>
+
+  <div class="card"><h2>5. Gate 5 — Draft config / MI handoff readiness</h2>
+    <h4 class="chart-title">Onboarding mode &amp; mode-specific readiness</h4>{mode_readiness_html}
+    <h4 class="chart-title">Field scope for this onboarding mode</h4>{field_scope_html}
+    <h4 class="chart-title">Config suggestions</h4>{cfg_html}
+    {llm_block}
+    <h4 class="chart-title">Readiness assessment</h4>{readiness}
+    <h4 class="chart-title">Recommended next actions</h4>{actions_html}
+    <h4 class="chart-title">Central tapes &amp; Azure-ready handoff (dry-run)</h4>
+    <span id="promotion"></span><!--PROMO_START-->{_PROMOTION_MARKER}<!--PROMO_END-->
+  </div>
+
+  <div class="card"><h2>6. Residual source fields</h2>{_residual_section_html(tf)}</div>
+
+  <div class="card"><h2>7. Detailed source-column audit queue</h2>
+    {_audit_queue_html(tf)}
+    <h4 class="chart-title">Mapping ambiguities resolved by policy</h4>{ambiguities_html}
+    <h4 class="chart-title">Deterministic mapping trace</h4>{_mapping_trace_html(project)}
+    <h4 class="chart-title">Source overlap / duplicate fields</h4>{ov_html}
+    <h4 class="chart-title">Mapping candidates (source-column detail)</h4>{map_html}
+    <h4 class="chart-title">Gap questions</h4>{q_html}
+  </div>
   {_APPROVAL_MARKER}
 </div></body></html>"""
 
