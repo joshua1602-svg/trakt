@@ -226,24 +226,8 @@ def _counts_table(title: str, counts: dict) -> str:
     return f'<h4 class="chart-title">{_esc(title)}</h4>' + _table(["Status", "Count"], rows)
 
 
-def _gate3_target_coverage_html(tf: dict) -> str:
-    """Gate 3 — target coverage matrix (28a), missing_required highlighted first."""
-    cov = tf.get("coverage")
-    if not cov:
-        return ('<div class="callout warn">Target coverage matrix '
-                '(<code>28a_target_coverage_matrix.csv</code>) not available for this run. '
-                'Run with <code>--enable-mapping-review</code>.</div>')
-    summary = cov.get("summary", {})
-    rows = cov.get("rows", [])
-    intro = (
-        f'<p class="meta">Target contract: '
-        f'<span class="badge b-info">{_esc(cov.get("target_contract_id",""))}</span> '
-        f'&nbsp;·&nbsp; {summary.get("target_fields_total", len(rows))} target fields. '
-        "This is the PRIMARY onboarding gate — coverage is target-field-led, not "
-        "source-column-led.</p>")
-    counts_html = _counts_table("Coverage status counts",
-                                summary.get("coverage_status_counts", {}))
-
+def _coverage_full_table(rows: list) -> str:
+    """The full one-row-per-target-field matrix (audit/detail)."""
     def sort_key(r):
         st = r.get("coverage_status", "")
         idx = _COV_ORDER.index(st) if st in _COV_ORDER else len(_COV_ORDER)
@@ -271,16 +255,92 @@ def _gate3_target_coverage_html(tf: dict) -> str:
             sel, _esc(r.get("alternative_source_candidates", "") or "—"),
             rule or "—",
         ])
-    table = _table(["Target field", "Domain", "Required", "Coverage", "Selected source",
-                    "Alternatives", "Coverage basis / rule / question"], body)
-    miss = summary.get("missing_required_fields", 0)
-    if miss:
-        flag = (f'<div class="callout block">{miss} required target field(s) are '
-                "missing source/derivation/default inputs — see the decision queue (Gate 4).</div>")
+    return _table(["Target field", "Domain", "Required", "Coverage", "Selected source",
+                   "Alternatives", "Coverage basis / rule / question"], body)
+
+
+def _gate3_summary_html(tf: dict) -> str:
+    """Gate 3 — target coverage SUMMARY (counts + grouped table + missing-first).
+
+    The full 72-row matrix is collapsed into a <details> block so the main body
+    stays decision-led rather than dominated by the per-field matrix.
+    """
+    cov = tf.get("coverage")
+    if not cov:
+        return ('<div class="callout warn">Target coverage matrix '
+                '(<code>28a_target_coverage_matrix.csv</code>) not available for this run. '
+                'Run with <code>--enable-mapping-review</code>.</div>')
+    summary = cov.get("summary", {})
+    rows = cov.get("rows", [])
+    intro = (
+        f'<p class="meta">Target contract: '
+        f'<span class="badge b-info">{_esc(cov.get("target_contract_id",""))}</span> '
+        f'&nbsp;·&nbsp; {summary.get("target_fields_total", len(rows))} target fields. '
+        "Coverage is target-field-led. The full per-field matrix is in the collapsible "
+        "block below.</p>")
+    counts_html = _counts_table("Coverage status counts",
+                                summary.get("coverage_status_counts", {}))
+
+    # Short table grouped by coverage_status x target_domain.
+    grouped: dict = {}
+    for r in rows:
+        key = (r.get("coverage_status", ""), r.get("target_domain", ""))
+        grouped[key] = grouped.get(key, 0) + 1
+
+    def gkey(item):
+        (st, dom), _c = item
+        idx = _COV_ORDER.index(st) if st in _COV_ORDER else len(_COV_ORDER)
+        return (idx, dom)
+
+    grp_rows = [[_cov_badge(st), _esc(dom), _esc(c)]
+                for (st, dom), c in sorted(grouped.items(), key=gkey)]
+    grouped_html = ('<h4 class="chart-title">Coverage by status &amp; domain</h4>'
+                    + _table(["Coverage status", "Target domain", "Count"], grp_rows))
+
+    # Required-fields summary.
+    req = [r for r in rows if r.get("required_status") in ("required", "mandatory")]
+    req_missing = sum(1 for r in req if r.get("coverage_status") == "missing_required")
+    req_confirm = sum(1 for r in req if r.get("coverage_status") == "needs_confirmation")
+    req_covered = len(req) - req_missing - req_confirm
+    req_html = ('<h4 class="chart-title">Required target fields</h4>'
+                + _table(["Required total", "Covered by source/rule", "Needs confirmation",
+                          "Missing / blocking"],
+                         [[_esc(len(req)), _esc(req_covered), _esc(req_confirm),
+                           _esc(req_missing)]]))
+
+    # Missing / blocking first if present.
+    miss_rows = [r for r in rows if r.get("coverage_status") == "missing_required"]
+    if miss_rows:
+        ml = "".join(f"<li><code>{_esc(r.get('target_field',''))}</code> "
+                     f"({_esc(r.get('target_domain',''))}) — "
+                     f"{_esc(r.get('decision_reason',''))}</li>" for r in miss_rows)
+        miss_html = (f'<div class="callout block">{len(miss_rows)} missing / blocking '
+                     f"required target field(s) — see Gate 4:<ul>{ml}</ul></div>")
     else:
-        flag = ('<div class="callout pass">All required target fields are covered by a '
-                "source mapping, derivation, default or ND rule.</div>")
-    return intro + counts_html + flag + table
+        miss_html = ('<div class="callout pass">No missing / blocking required target '
+                     "fields — all are covered by a source mapping, derivation, default "
+                     "or ND rule.</div>")
+
+    full = (f'<details><summary class="meta"><strong>Full target coverage matrix '
+            f"(audit/detail)</strong> — {len(rows)} target fields</summary>"
+            f"{_coverage_full_table(rows)}</details>")
+    return intro + miss_html + counts_html + grouped_html + req_html + full
+
+
+def _gate5_mi_handoff_status_html(tf: dict, n_block: int, n_decisions: int) -> str:
+    """Gate 5 — MI handoff status derived from 28c (never legacy BLOCKED)."""
+    if tf.get("decision") is None:
+        return ('<div class="callout warn">MI handoff status unavailable — the compact '
+                "decision queue (28c) was not found for this run.</div>")
+    if n_block > 0:
+        return (f'<div class="callout block"><strong>MI handoff: BLOCKED.</strong> '
+                f"{n_block} blocking target decision(s) must be resolved (Gate 4).</div>")
+    if n_decisions > 0:
+        return ('<div class="callout warn"><strong>MI handoff: NEEDS CONFIRMATION.</strong> '
+                f"No blocking decisions; {n_decisions} non-blocking confirmation(s) remain "
+                "(Gate 4). The pack can proceed once confirmations are acknowledged.</div>")
+    return ('<div class="callout pass"><strong>MI handoff: READY.</strong> No blocking '
+            "decisions and no outstanding required confirmations.</div>")
 
 
 def _gate4_decision_queue_html(tf: dict) -> str:
@@ -706,31 +766,33 @@ def build_review_pack(project: OnboardingProject, out_path: Path,
                                 if _as_bool(r.get("blocking"))))
     tf_n_decisions = dec_sum.get("human_decision_rows_total",
                                 len((tf.get("decision") or {}).get("rows", [])))
+    tf_n_nonblock = max(0, tf_n_decisions - tf_n_block)
     if tf_decision_present:
         if tf_n_block == 1:
             tf_status_badge = '<span class="badge b-block">1 BLOCKING TARGET DECISION</span>'
             exec_status_html = (
-                '<div class="callout block"><strong>Only ONE blocking target decision '
-                "remains.</strong> Resolve it in Gate 4 — Compact human decision queue. "
-                "The legacy source-column gap questions are superseded by the "
+                '<div class="callout block"><strong>Status: BLOCKED.</strong> Only ONE '
+                "blocking target decision remains — resolve it in Gate 4 — Compact human "
+                "decision queue. Legacy source-column gap questions are superseded by the "
                 "target-first queue.</div>")
         elif tf_n_block > 1:
             tf_status_badge = (f'<span class="badge b-block">{tf_n_block} BLOCKING '
                                "TARGET DECISIONS</span>")
             exec_status_html = (
-                f'<div class="callout block"><strong>{tf_n_block} blocking target '
-                "decisions</strong> remain — see Gate 4. These supersede the legacy "
+                f'<div class="callout block"><strong>Status: BLOCKED — {tf_n_block} blocking '
+                "target decisions</strong> remain — see Gate 4. These supersede the legacy "
                 "source-column gap questions.</div>")
         elif tf_n_decisions:
             tf_status_badge = '<span class="badge b-warn">NEEDS CONFIRMATION</span>'
             exec_status_html = (
-                '<div class="callout warn">No blocking target decisions; only optional '
-                "confirmations remain — see Gate 4.</div>")
+                '<div class="callout warn"><strong>Status: NEEDS CONFIRMATION.</strong> '
+                f"No blocking target decisions. {tf_n_nonblock} non-blocking confirmation"
+                f"{'s' if tf_n_nonblock != 1 else ''} remain — see Gate 4.</div>")
         else:
-            tf_status_badge = '<span class="badge b-ok">READY FOR MI HANDOFF REVIEW</span>'
+            tf_status_badge = '<span class="badge b-ok">READY FOR MI HANDOFF</span>'
             exec_status_html = (
-                '<div class="callout pass">No outstanding target decisions — target '
-                "coverage is complete for MI handoff review.</div>")
+                '<div class="callout pass"><strong>Status: READY FOR MI HANDOFF.</strong> '
+                "No outstanding target decisions — target coverage is complete.</div>")
         # Override the hero badge so it cannot show a stale legacy blocker count.
         status_badge = tf_status_badge
     else:
@@ -745,19 +807,18 @@ def build_review_pack(project: OnboardingProject, out_path: Path,
     configured_defaulted = (cov_counts.get("configured_static", 0)
                             + cov_counts.get("defaulted", 0)
                             + cov_counts.get("defaulted_ND", 0))
-    # 1. Executive onboarding summary KPIs — headline from 28a/28b/28c.
+    mapped_derived_configured = (cov_sum.get("source_mapped_fields", 0)
+                                 + cov_counts.get("derived", 0) + configured_defaulted)
+    # 1. Executive onboarding summary KPIs — operator-first headline from 28a/28b/28c.
     kpis = [
-        ("Source files", counts["classified_files"]),
-        ("Parsed / classified", parsed_files),
+        ("Input source files", counts["classified_files"]),
         ("Target fields", _dash(cov_sum.get("target_fields_total", 0))),
-        ("Source mapped", _dash(cov_sum.get("source_mapped_fields", 0))),
-        ("Derived", _dash(cov_counts.get("derived", 0))),
-        ("Configured / static / defaulted", _dash(configured_defaulted)),
-        ("Needs confirmation", _dash(cov_sum.get("needs_confirmation_fields", 0))),
-        ("Missing required / blocking", _dash(cov_sum.get("missing_required_fields", 0))),
-        ("Residual fields suppressed", _dash(res_sum.get("suppressed_from_main_queue", 0))),
+        ("Mapped / derived / configured", _dash(mapped_derived_configured)),
+        ("Non-blocking confirmations", _dash(tf_n_nonblock) if tf_decision_present else "—"),
+        ("Blocking target decisions", _dash(tf_n_block) if tf_decision_present else "—"),
+        ("Residual source fields suppressed", _dash(res_sum.get("suppressed_from_main_queue", 0))),
         ("Compact decision queue", _dash(dec_sum.get("human_decision_rows_total", 0))),
-        ("Old 33 approvals (audit only)", _dash(old33_approvals)),
+        ("Old source-column approvals — audit only", _dash(old33_approvals)),
     ]
     kpi_html = "".join(
         f'<div class="kpi-card"><div class="kpi-label">{_esc(l)}</div>'
@@ -852,10 +913,41 @@ def build_review_pack(project: OnboardingProject, out_path: Path,
         '<p class="meta"><span class="badge b-info">audit</span> Legacy/supporting gap '
         "questions — superseded by target-first Gate 4 where 28c is available.</p>"
         if tf_decision_present else "")
-    gate5_readiness_html = (
-        ('<p class="meta">Legacy readiness (source-column / gap-question view) — '
-         "superseded by the target-first headline above where 28c is available.</p>"
-         + readiness) if tf_decision_present else readiness)
+
+    # Gate 2 source-pack readiness summary (file-level; never implies the pack is
+    # blocked when target-first Gate 4 has no blocking rows).
+    gate2_html = (
+        f'<p class="meta">{counts["classified_files"]} source file(s) received; '
+        f"{parsed_files} parsed / classified.</p>"
+        f'<h4 class="chart-title">File inventory</h4>{inv_html}'
+        f'<h4 class="chart-title">Data domain coverage</h4>{_domain_coverage_html(project)}')
+
+    # Appendices: every legacy / source-column section, clearly superseded.
+    appendix = f"""
+  <div class="card"><h2>6. Appendices / audit detail</h2>
+    <div class="callout warn"><strong>Legacy / audit detail — superseded by target-first
+      Gate 4 where 28c is available.</strong> These source-column diagnostics are NOT the
+      managed-service approval burden.</div>
+    <h4 class="chart-title">Residual source fields</h4>{_residual_section_html(tf)}
+    <h4 class="chart-title">Detailed source-column audit queue (33) — audit only, not the primary gate</h4>{_audit_queue_html(tf)}
+    <h4 class="chart-title">Legacy / supporting gap questions</h4>{_legacy_note}{q_html}
+    <h4 class="chart-title">Legacy readiness assessment</h4>{readiness}
+    <h4 class="chart-title">Onboarding mode &amp; mode-specific readiness (legacy)</h4>{mode_readiness_html}
+    <h4 class="chart-title">Field scope for this onboarding mode (legacy)</h4>{field_scope_html}
+    <h4 class="chart-title">Recommended next actions (legacy)</h4>{actions_html}
+    <h4 class="chart-title">Mapping ambiguities resolved by policy (audit)</h4>{ambiguities_html}
+    <h4 class="chart-title">Deterministic mapping trace (audit)</h4>{_mapping_trace_html(project)}
+    <h4 class="chart-title">Source overlap / duplicate fields (audit)</h4>{ov_html}
+    <h4 class="chart-title">Mapping candidates — source-column detail (audit)</h4>{map_html}
+    {llm_block}
+    <h4 class="chart-title">Azure-ready run metadata</h4>{_azure_metadata_html(project)}
+    <h4 class="chart-title">Detected reporting periods</h4>{periods_html}
+    <h4 class="chart-title">Candidate keys</h4>{keys_html}
+  </div>"""
+    # Neutralise legacy red blocking styling in the appendix when 28c supersedes it.
+    if tf_decision_present:
+        appendix = appendix.replace("badge b-block", "badge b-info").replace(
+            "callout block", "callout warn")
 
     doc = f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
@@ -870,48 +962,30 @@ def build_review_pack(project: OnboardingProject, out_path: Path,
   </div>
 
   <div class="card"><h2>1. Executive onboarding summary</h2>
-    <p class="meta">Executive summary — the primary managed-service gate is the
-      target coverage matrix (28a) and the compact human decision queue (28c).
-      The 33 source-column queue is retained as audit detail only.</p>
+    <p class="meta">Executive summary — operator-first. The managed-service workflow is
+      the compact human decision queue (Gate 4); the full target matrix and the 33
+      source-column queue are audit detail.</p>
     <div class="kpi-grid">{kpi_html}</div>
     <p class="meta">Input: {_esc(project.input_dir)} &nbsp;·&nbsp; Output: {_esc(project.output_dir)}</p>
     {exec_status_html}
   </div>
 
-  <div class="card"><h2>2. Gate 2 — Source pack readiness</h2>
-    <p class="meta">Files received, parsed and classified for this pack.</p>
-    <h4 class="chart-title">File inventory</h4>{inv_html}
-    <h4 class="chart-title">Detected reporting periods</h4>{periods_html}
-    <h4 class="chart-title">Candidate keys</h4>{keys_html}
-    <h4 class="chart-title">Data domain coverage</h4>{_domain_coverage_html(project)}
-    <h4 class="chart-title">Azure-ready run metadata</h4>{_azure_metadata_html(project)}
+  <div class="card"><h2>2. Gate 4 — Compact human decision queue</h2>
+    <p class="meta">What the operator must action — read this before the 72-field matrix.</p>
+    {_gate4_decision_queue_html(tf)}
   </div>
 
-  <div class="card"><h2>3. Gate 3 — Target coverage matrix</h2>{_gate3_target_coverage_html(tf)}</div>
+  <div class="card"><h2>3. Gate 3 — Target coverage summary</h2>{_gate3_summary_html(tf)}</div>
 
-  <div class="card"><h2>4. Gate 4 — Compact human decision queue</h2>{_gate4_decision_queue_html(tf)}</div>
+  <div class="card"><h2>4. Gate 2 — Source pack readiness summary</h2>{gate2_html}</div>
 
-  <div class="card"><h2>5. Gate 5 — Draft config / MI handoff readiness</h2>
-    <h4 class="chart-title">Onboarding mode &amp; mode-specific readiness</h4>{mode_readiness_html}
-    <h4 class="chart-title">Field scope for this onboarding mode</h4>{field_scope_html}
+  <div class="card"><h2>5. Gate 5 — MI handoff readiness</h2>
+    {_gate5_mi_handoff_status_html(tf, tf_n_block, tf_n_decisions)}
     <h4 class="chart-title">Config suggestions</h4>{cfg_html}
-    {llm_block}
-    <h4 class="chart-title">Readiness assessment</h4>{gate5_readiness_html}
-    <h4 class="chart-title">Recommended next actions</h4>{actions_html}
     <h4 class="chart-title">Central tapes &amp; Azure-ready handoff (dry-run)</h4>
     <span id="promotion"></span><!--PROMO_START-->{_PROMOTION_MARKER}<!--PROMO_END-->
   </div>
-
-  <div class="card"><h2>6. Residual source fields</h2>{_residual_section_html(tf)}</div>
-
-  <div class="card"><h2>7. Detailed source-column audit queue</h2>
-    {_audit_queue_html(tf)}
-    <h4 class="chart-title">Mapping ambiguities resolved by policy</h4>{ambiguities_html}
-    <h4 class="chart-title">Deterministic mapping trace</h4>{_mapping_trace_html(project)}
-    <h4 class="chart-title">Source overlap / duplicate fields</h4>{ov_html}
-    <h4 class="chart-title">Mapping candidates (source-column detail)</h4>{map_html}
-    <h4 class="chart-title">Legacy / supporting gap questions</h4>{_legacy_note}{q_html}
-  </div>
+  {appendix}
   {_APPROVAL_MARKER}
 </div></body></html>"""
 
