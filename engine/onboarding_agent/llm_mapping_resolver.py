@@ -44,14 +44,20 @@ _SOURCE_RANK = {"client_memory": 0, "mi_useful": 1, "pipeline_contract": 2, "ali
                 "value_profile": 7}
 
 _CONTRACT_PROMPT = """\
-You map a lender source column to a REQUIRED target data contract for the
-detected asset class / regime. Map to a contract target_field when one fits;
-otherwise return propose_new_target_field, ignore_source_field,
-needs_user_clarification, reject_candidate or header_or_parse_issue. Use only the
-provided evidence; do NOT invent broad generic fields. Return STRUCTURED JSON: a
-list of objects with keys source_file, source_column, resolved_target_field,
-resolved_domain, decision, confidence, rationale, alternative_targets,
-new_field_candidate, out_of_scope_reason, required_user_question.
+You map lender source columns to a REQUIRED target data contract for the detected
+asset class / regime. Map to a contract target_field when one fits; otherwise use
+propose_new_target_field, ignore_source_field, needs_user_clarification,
+reject_candidate or header_or_parse_issue. Use ONLY the provided evidence; do NOT
+invent broad generic fields.
+
+You are given PACKAGES, one per source column, each with a unique "row_id". You
+MUST return ONE result for EVERY row_id, as STRICT JSON of this exact shape:
+{"results": [
+  {"row_id": "...", "source_file": "...", "source_column": "...", "decision": "...",
+   "resolved_target_field": "...", "confidence": 0.0, "rationale": "...",
+   "new_field_candidate": "...", "required_user_question": "..."}
+]}
+Echo each row_id exactly. Return only the JSON object.
 """
 
 
@@ -234,36 +240,84 @@ def resolve_mappings(
 
     # LLM resolution over the eligible rows (capped).
     if llm_callable is not None and candidate_rows and cost_per_call_gbp <= max_cost_gbp:
-        from .llm_json import extract_json_list
+        from .llm_json import extract_json
         usage["llm_enabled"] = True
         targets = candidate_rows[:max_items]
         usage["field_rows_selected_for_llm"] = len(targets)
         usage["field_rows_skipped_due_to_cap"] = max(0, len(candidate_rows) - max_items)
+        usage["field_rows_requested"] = len(targets)
         batch_id = "res_" + uuid.uuid4().hex[:10]
-        packages = [_build_package(ev, shortlist_by_key.get(key(ev), []), context, contract)
-                    for ev in targets]
+        # Stable row_id per selected row (change 1/2); included in the package so
+        # the LLM can echo it and we can join back reliably (change 6).
+        row_ids = [f"row_{i:03d}" for i in range(len(targets))]
+        target_by_row_id = {rid: ev for rid, ev in zip(row_ids, targets)}
+        packages = []
+        for rid, ev in zip(row_ids, targets):
+            pkg = _build_package(ev, shortlist_by_key.get(key(ev), []), context, contract)
+            pkg = {"row_id": rid, "source_file": ev.get("source_file", ""),
+                   "source_column": ev.get("source_column", ""), **pkg}
+            packages.append(pkg)
         prompt = _CONTRACT_PROMPT + "\nPACKAGES = " + json.dumps(packages, default=str)
         raw = llm_callable(prompt)
-        parsed, parse_status, parse_error = extract_json_list(raw)
+        raw_text = raw if isinstance(raw, str) else json.dumps(raw, default=str)
+        usage["field_raw_response"] = raw_text  # persisted by the caller (change 4)
+
+        # Shape-aware parse: accept {"results":[...]}, a bare [...], or one {...}.
+        obj, parse_status, parse_error = extract_json(raw)
+        shape = "unknown"
+        results: List[Dict[str, Any]] = []
+        if isinstance(obj, dict) and isinstance(obj.get("results"), list):
+            results = [r for r in obj["results"] if isinstance(r, dict)]
+            shape = "dict_with_results"
+        elif isinstance(obj, list):
+            results = [r for r in obj if isinstance(r, dict)]
+            shape = "list"
+        elif isinstance(obj, dict):
+            results = [obj]
+            shape = "single_object"
         usage.update(calls_completed=1, items_sent=len(packages),
                      estimated_cost_gbp=round(cost_per_call_gbp, 6), llm_batch_id=batch_id,
                      parse_status=parse_status, parse_error=parse_error)
-        # Match by (file,column) then by normalised column (models don't always
-        # echo the file name or exact casing).
+
+        # Join by row_id FIRST; fall back to normalised (file,column) only when the
+        # row_id is absent (change 6).
         def _nk(s):
             return _norm(str(s))
-        by_fc = {(p.get("source_file", ""), p.get("source_column", "")): p for p in parsed}
-        by_col = {_nk(p.get("source_column", "")): p for p in parsed}
+        by_fc = {(p.get("source_file", ""), p.get("source_column", "")): p for p in results}
+        by_col = {_nk(p.get("source_column", "")): p for p in results}
         reviewed = 0
-        for ev in targets:
-            p = by_fc.get((ev.get("source_file", ""), ev.get("source_column", ""))) \
-                or by_col.get(_nk(ev.get("source_column", "")))
-            if not p:
+        unmatched = 0
+        missing_row_id = 0
+        for p in results:
+            rid = str(p.get("row_id", "") or "")
+            if rid and rid in target_by_row_id:
+                ev = target_by_row_id[rid]
+            else:
+                if not rid:
+                    missing_row_id += 1
+                ev = None  # fall back below
+            if ev is None:
+                # Fallback match by (file,column) / normalised column.
+                fc = (p.get("source_file", ""), p.get("source_column", ""))
+                hit_key = None
+                if fc in by_fc:
+                    # locate the target whose (file,col) matches
+                    for cand in targets:
+                        if (cand.get("source_file", ""), cand.get("source_column", "")) == fc:
+                            ev = cand
+                            break
+                if ev is None:
+                    nk = _nk(p.get("source_column", ""))
+                    for cand in targets:
+                        if _nk(cand.get("source_column", "")) == nk:
+                            ev = cand
+                            break
+            if ev is None:
+                unmatched += 1
                 continue
             reviewed += 1
             tgt = str(p.get("resolved_target_field", "") or "").strip()
             decision = str(p.get("decision", "") or "").strip() or MAP_EXISTING
-            # Hard rule: LLM may only map to a contract field, else propose_new.
             if tgt and tgt not in cfields and decision == MAP_EXISTING:
                 decision = PROPOSE_NEW
             det_by_key[key(ev)].update({
@@ -277,6 +331,15 @@ def resolve_mappings(
                 "out_of_scope_reason": p.get("out_of_scope_reason", ""),
             })
         usage["rows_llm_reviewed"] = reviewed
+        usage.update(
+            field_response_chars=len(raw_text),
+            field_response_shape=shape,
+            field_results_parsed=len(results),
+            field_results_matched=reviewed,
+            field_results_unmatched=unmatched,
+            field_results_missing_row_id=missing_row_id,
+            field_incomplete_response=bool(reviewed < len(targets)),
+        )
 
     return {"resolved": list(det_by_key.values()), "usage": usage}
 

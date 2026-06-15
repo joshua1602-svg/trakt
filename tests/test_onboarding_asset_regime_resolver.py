@@ -322,6 +322,85 @@ class TestCliSummaryMatchesQueue(unittest.TestCase):
                             or k.startswith("cashflow") for k in gc))
 
 
+class TestFieldRowIdJoinDiagnostics(unittest.TestCase):
+    def _file(self, n_cf=30, n_unknown=30):
+        cols = {f"B/F Field {i} Balance": [1, 2] for i in range(n_cf)}
+        cols.update({f"Unknown Metric {i}": ["a", "b"] for i in range(n_unknown)})
+        p = Path(tempfile.mkdtemp()) / "Funder.csv"
+        pd.DataFrame(cols).to_csv(p, index=False)
+        return p
+
+    def _run(self, fake, out, max_items=50):
+        return run_llm_assisted_mapping(input_file=str(self._file()), output_dir=str(out),
+                                        mode="mi_only", client_id="c", run_id="r1",
+                                        enable_llm=True, llm_callable=fake,
+                                        only_unresolved=True, max_llm_items=max_items)
+
+    def _echo_all(self, prompt):
+        import re
+        ids = re.findall(r'"row_id": "(row_\d+)"', prompt)
+        cols = re.findall(
+            r'"row_id": "row_\d+", "source_file": "([^"]*)", "source_column": "([^"]*)"', prompt)
+        res = [{"row_id": rid, "source_file": sf, "source_column": sc,
+                "decision": "propose_new_target_field", "resolved_target_field": "cf_x",
+                "confidence": 0.8, "rationale": "x"} for rid, (sf, sc) in zip(ids, cols)]
+        return "```json\n" + json.dumps({"results": res}) + "\n```"
+
+    # 1. 50 selected, response has 50 results -> 50 matched.
+    def test_50_results_50_matched(self):
+        out = Path(tempfile.mkdtemp())
+        self._run(self._echo_all, out)
+        u = json.loads((out / "31_llm_resolver_usage_summary.json").read_text())
+        self.assertEqual(u["field_rows_selected_for_llm"], 50)
+        self.assertEqual(u["field_results_parsed"], 50)
+        self.assertEqual(u["field_results_matched"], 50)
+        self.assertEqual(u["field_rows_reviewed"], 50)
+        self.assertFalse(u["field_incomplete_response"])
+
+    # 2. response has only 1 result -> parsed=1, matched=1, incomplete=true.
+    def test_one_result_incomplete(self):
+        import re
+
+        def echo_one(prompt):
+            rid = re.findall(r'"row_id": "(row_\d+)"', prompt)[0]
+            return json.dumps({"results": [{"row_id": rid, "decision": "propose_new_target_field",
+                                            "resolved_target_field": "cf_x", "confidence": 0.8,
+                                            "rationale": "x"}]})
+        out = Path(tempfile.mkdtemp())
+        self._run(echo_one, out)
+        u = json.loads((out / "31_llm_resolver_usage_summary.json").read_text())
+        self.assertEqual(u["field_results_parsed"], 1)
+        self.assertEqual(u["field_results_matched"], 1)
+        self.assertTrue(u["field_incomplete_response"])
+
+    # 3. 50 results with row_id but SHUFFLED / no source-column echo -> still matched
+    #    purely by row_id (no dependence on column-string matching).
+    def test_row_id_join_independent_of_column_strings(self):
+        import re
+
+        def echo_rowid_only(prompt):
+            ids = re.findall(r'"row_id": "(row_\d+)"', prompt)
+            res = [{"row_id": rid, "source_column": "DIFFERENT_NAME",
+                    "decision": "propose_new_target_field", "resolved_target_field": "cf_x",
+                    "confidence": 0.8, "rationale": "x"} for rid in ids]
+            return json.dumps({"results": list(reversed(res))})  # shuffled
+        out = Path(tempfile.mkdtemp())
+        self._run(echo_rowid_only, out)
+        u = json.loads((out / "31_llm_resolver_usage_summary.json").read_text())
+        self.assertEqual(u["field_results_matched"], 50)
+        self.assertEqual(u["field_results_unmatched"], 0)
+
+    # 4. raw response is persisted for inspection.
+    def test_raw_response_persisted(self):
+        out = Path(tempfile.mkdtemp())
+        self._run(self._echo_all, out)
+        raw_path = out / "31_llm_field_raw_response.json"
+        self.assertTrue(raw_path.exists())
+        data = json.loads(raw_path.read_text())
+        self.assertIn("raw_response", data)
+        self.assertIn("results", data["raw_response"])
+
+
 class TestWorkbenchContextPanel(unittest.TestCase):
     def test_load_context(self):
         from engine.onboarding_agent import streamlit_onboarding_workbench as wb

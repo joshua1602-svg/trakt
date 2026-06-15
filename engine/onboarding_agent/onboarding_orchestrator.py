@@ -409,7 +409,7 @@ def run_onboarding(
             "28_required_target_contract_summary.md",
             "31_llm_mapping_resolver.csv", "31_llm_mapping_resolver.json",
             "31_llm_mapping_resolver_summary.md", "31_llm_usage_summary.json",
-            "31_llm_resolver_usage_summary.json",
+            "31_llm_resolver_usage_summary.json", "31_llm_field_raw_response.json",
             "28_existing_pipeline_field_contract.csv",
             "28_existing_pipeline_field_contract.json",
             "28_existing_pipeline_field_contract_summary.md",
