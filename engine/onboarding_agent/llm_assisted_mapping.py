@@ -315,7 +315,16 @@ def run_llm_assisted_mapping(
         "covered_fields": sorted(cfields & mapped_targets),
     }
 
-    # 33/34 — concise multi-file review queue.
+    # 28a/28b/28c — TARGET-CONTRACT-FIRST coverage. The compact human decision
+    # queue is driven by target coverage gaps/conflicts, not by every source
+    # column. The 33/34 source-column queue (below) remains as audit detail but
+    # is no longer the primary gate artefact.
+    from . import target_coverage as tcov
+    target_first = tcov.run_target_first_coverage(
+        mode=policy.name, context=context, evidence_rows=evidence_rows,
+        resolved_rows=res["resolved"], output_dir=out_dir)
+
+    # 33/34 — concise multi-file review queue (source-column audit detail).
     review = queue.build_review_queue(validation_rows, evidence_by_key, llm_by_key)
     queue.write_queue_artifacts(review, out_dir)
 
@@ -346,10 +355,15 @@ def run_llm_assisted_mapping(
         "llm": llm_result,
         "validation": validation_rows,
         "review_queue": review,
+        "target_first_coverage": target_first,
         "file_coverage": coverage,
         "sheet_coverage": sheet_coverage,
         "contract_coverage": contract_coverage,
         "summary": {**review["summary"], "file_coverage": _coverage_summary(coverage),
+                    "target_coverage": target_first["coverage_summary"],
+                    "source_residual": target_first["residual_summary"],
+                    "human_decision_queue": target_first["decision_summary"],
+                    "target_contract_id": target_first["target_contract_id"],
                     "context": {k: context[k] for k in ("asset_class", "reporting_regime",
                                                         "required_domains", "confidence")},
                     "contract_coverage": contract_coverage},
