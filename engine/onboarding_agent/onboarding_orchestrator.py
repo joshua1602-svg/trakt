@@ -394,6 +394,11 @@ def run_onboarding(
         except Exception as exc:  # never break the onboarding run on review failure
             project.mapping_review_summary = {"error": str(exc)}
         for name in (
+            "27_onboarding_context.json", "27_onboarding_context_summary.md",
+            "28_required_target_contract.csv", "28_required_target_contract.json",
+            "28_required_target_contract_summary.md",
+            "31_llm_mapping_resolver.csv", "31_llm_mapping_resolver.json",
+            "31_llm_mapping_resolver_summary.md",
             "28_existing_pipeline_field_contract.csv",
             "28_existing_pipeline_field_contract.json",
             "28_existing_pipeline_field_contract_summary.md",

@@ -61,11 +61,19 @@ def validate_mappings(
     memory_store: Any = None,
     evidence_by_col: Optional[Dict[str, Dict[str, Any]]] = None,
     extra_in_scope: Optional[set] = None,
+    contract_fields: Optional[set] = None,
 ) -> List[Dict[str, Any]]:
-    """Validate proposed mappings. One row per proposal."""
+    """Validate proposed mappings. One row per proposal.
+
+    ``contract_fields`` (when supplied) is the required target contract: a target
+    that is a contract field is accepted as valid even if it is not in the funded
+    registry (e.g. a cashflow-ledger extension), and pipeline-contract fields
+    remain valid.
+    """
     registry_fields = registry_fields or {}
     evidence_by_col = evidence_by_col or {}
     extra_in_scope = extra_in_scope or set()
+    contract_fields = contract_fields or set()
     included = getattr(field_scope, "included_fields", set()) or set()
 
     # Memory target lookup (client memory says column X -> field Y).
@@ -111,9 +119,10 @@ def validate_mappings(
             reasons.append("no canonical target")
             rows.append(_row(p, col, target, source, conf, status, False, reasons, is_pipeline))
             continue
-        if not target_exists and not proposed_new and not is_pipeline:
+        in_contract = target in contract_fields
+        if not target_exists and not proposed_new and not is_pipeline and not in_contract:
             status = REGISTRY_TARGET_MISSING
-            reasons.append("target not in registry and not a proposed_new_field")
+            reasons.append("target not in registry/contract and not a proposed_new_field")
             rows.append(_row(p, col, target, source, conf, status, False, reasons, is_pipeline))
             continue
 
@@ -210,6 +219,9 @@ _VAL_COLUMNS = [
     "source_file", "source_sheet", "source_column", "proposed_target_field",
     "candidate_source", "confidence", "validation_status", "auto_approvable",
     "requires_user_approval", "is_pipeline_field", "validation_reasons",
+    # Resolver / LLM audit + final outcome (attached by the orchestrator).
+    "llm_suggested_mapping", "llm_confidence", "llm_rationale", "final_mapping",
+    "final_status", "backstop_decision", "backstop_rejection_reason",
 ]
 
 
