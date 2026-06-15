@@ -219,6 +219,9 @@ def _load_target_first_artifacts(project_dir: Path, output_root: Path | None = N
     advu = _find_artifact(project_dir, output_root,
                           "36_target_first_llm_usage_summary.json")
     tf["llm_advisor_usage"] = _load_json(advu) if advu else None
+    cfgval = _find_artifact(project_dir, output_root,
+                            "42_annex2_config_validation.json")
+    tf["config_validation"] = _load_json(cfgval) if cfgval else None
     _derive_summaries(tf)
     return tf
 
@@ -268,6 +271,48 @@ def _coverage_full_table(rows: list) -> str:
                    "Alternatives", "Coverage basis / rule / question"], body)
 
 
+def _is_annex2(tf: dict) -> bool:
+    return ((tf.get("coverage") or {}).get("target_contract_id", "") == "esma_annex_2")
+
+
+def _annex2_executive_html(tf: dict) -> str:
+    """ESMA Annex 2 executive lines (Gate 1) — target contract + two config layers."""
+    if not _is_annex2(tf):
+        return ""
+    cov = tf.get("coverage") or {}
+    cov_sum = cov.get("summary", {}) or {}
+    dec_sum = (tf.get("decision") or {}).get("summary", {}) or {}
+    cfg = tf.get("config_validation") or {}
+    cfg_sum = cfg.get("summary", {}) or {}
+    n_block = dec_sum.get("blocking_decisions", 0)
+    n_total = dec_sum.get("human_decision_rows_total", 0)
+    rows = [
+        ["Target contract", _esc(cov.get("target_contract_id", "ESMA_Annex2"))],
+        ["Regime config", _esc(cfg.get("regime_config_source", "")
+                               or cov.get("target_contract_source", ""))],
+        ["Asset config", _esc(cfg.get("asset_config_source", ""))],
+        ["Annex 2 fields", _esc(cov_sum.get("target_fields_total", 0))],
+        ["Source mapped / derived",
+         _esc(cov_sum.get("source_mapped_fields", 0) + cov_sum.get("derived_fields", 0))],
+        ["Configured / static / defaulted",
+         _esc(cov_sum.get("configured_static_fields", 0)
+              + cov_sum.get("defaulted_value_fields", 0)
+              + cov_sum.get("defaulted_nd_fields", 0))],
+        ["ND / defaulted", _esc(cov_sum.get("defaulted_nd_fields", 0))],
+        ["Blocking decisions", _esc(n_block)],
+        ["Non-blocking confirmations", _esc(max(0, n_total - n_block))],
+        ["Invalid asset defaults (surfaced)",
+         _esc(cfg_sum.get("invalid_default_not_allowed", 0))],
+    ]
+    return ('<h4 class="chart-title">ESMA Annex 2 delivery — target contract &amp; '
+            'config layers</h4>'
+            '<p class="meta">Annex 2 delivery runs through the target-first operator '
+            'workflow with two config layers: the ESMA regime rules and the ERM asset '
+            'defaults. Asset defaults are validated against the regime envelope '
+            '(see <code>42_annex2_config_validation.csv</code>).</p>'
+            + _table(["Item", "Value"], rows))
+
+
 def _gate3_summary_html(tf: dict) -> str:
     """Gate 3 — target coverage SUMMARY (counts + grouped table + missing-first).
 
@@ -306,6 +351,22 @@ def _gate3_summary_html(tf: dict) -> str:
     grouped_html = ('<h4 class="chart-title">Coverage by status &amp; domain</h4>'
                     + _table(["Coverage status", "Target domain", "Count"], grp_rows))
 
+    # Annex 2: also break coverage down by ESMA field family (RREL / RREC).
+    family_html = ""
+    if cov.get("target_contract_id", "") == "esma_annex_2":
+        fam: dict = {}
+        for r in rows:
+            code = str(r.get("esma_code", "") or r.get("target_field", ""))
+            family = "RREL" if code.startswith("RREL") else (
+                "RREC" if code.startswith("RREC") else "other")
+            key = (family, r.get("coverage_status", ""))
+            fam[key] = fam.get(key, 0) + 1
+        fam_rows = [[_esc(family), _cov_badge(st), _esc(c)]
+                    for (family, st), c in sorted(fam.items())]
+        family_html = ('<h4 class="chart-title">Annex 2 coverage by field family '
+                       '(RREL / RREC)</h4>'
+                       + _table(["Field family", "Coverage status", "Count"], fam_rows))
+
     # Required-fields summary.
     req = [r for r in rows if r.get("required_status") in ("required", "mandatory")]
     req_missing = sum(1 for r in req if r.get("coverage_status") == "missing_required")
@@ -333,7 +394,8 @@ def _gate3_summary_html(tf: dict) -> str:
     full = (f'<details><summary class="meta"><strong>Full target coverage matrix '
             f"(audit/detail)</strong> — {len(rows)} target fields</summary>"
             f"{_coverage_full_table(rows)}</details>")
-    return intro + miss_html + counts_html + grouped_html + req_html + full
+    return (intro + miss_html + counts_html + grouped_html + family_html
+            + req_html + full)
 
 
 def _decision_application_html(tf: dict) -> str:
@@ -356,18 +418,23 @@ def _decision_application_html(tf: dict) -> str:
 
 
 def _gate5_mi_handoff_status_html(tf: dict, n_block: int, n_decisions: int) -> str:
-    """Gate 5 — MI handoff status derived from 28c (never legacy BLOCKED)."""
+    """Gate 5 — handoff/readiness status derived from 28c (never legacy BLOCKED).
+
+    Wording reflects the target contract: ESMA Annex 2 delivery for the regulatory
+    contract, MI handoff otherwise.
+    """
+    label = "Annex 2 delivery" if _is_annex2(tf) else "MI handoff"
     if tf.get("decision") is None:
-        return ('<div class="callout warn">MI handoff status unavailable — the compact '
+        return (f'<div class="callout warn">{label} status unavailable — the compact '
                 "decision queue (28c) was not found for this run.</div>")
     if n_block > 0:
-        return (f'<div class="callout block"><strong>MI handoff: BLOCKED.</strong> '
+        return (f'<div class="callout block"><strong>{label}: BLOCKED.</strong> '
                 f"{n_block} blocking target decision(s) must be resolved (Gate 4).</div>")
     if n_decisions > 0:
-        return ('<div class="callout warn"><strong>MI handoff: NEEDS CONFIRMATION.</strong> '
+        return (f'<div class="callout warn"><strong>{label}: NEEDS CONFIRMATION.</strong> '
                 f"No blocking decisions; {n_decisions} non-blocking confirmation(s) remain "
                 "(Gate 4). The pack can proceed once confirmations are acknowledged.</div>")
-    return ('<div class="callout pass"><strong>MI handoff: READY.</strong> No blocking '
+    return (f'<div class="callout pass"><strong>{label}: READY.</strong> No blocking '
             "decisions and no outstanding required confirmations.</div>")
 
 
@@ -850,9 +917,11 @@ def build_review_pack(project: OnboardingProject, out_path: Path,
                 f"No blocking target decisions. {tf_n_nonblock} non-blocking confirmation"
                 f"{'s' if tf_n_nonblock != 1 else ''} remain — see Gate 4.</div>")
         else:
-            tf_status_badge = '<span class="badge b-ok">READY FOR MI HANDOFF</span>'
+            _ready_label = ("READY FOR ANNEX 2 DELIVERY" if _is_annex2(tf)
+                            else "READY FOR MI HANDOFF")
+            tf_status_badge = f'<span class="badge b-ok">{_ready_label}</span>'
             exec_status_html = (
-                '<div class="callout pass"><strong>Status: READY FOR MI HANDOFF.</strong> '
+                f'<div class="callout pass"><strong>Status: {_ready_label}.</strong> '
                 "No outstanding target decisions — target coverage is complete.</div>")
         # Override the hero badge so it cannot show a stale legacy blocker count.
         status_badge = tf_status_badge
@@ -1029,6 +1098,7 @@ def build_review_pack(project: OnboardingProject, out_path: Path,
     <div class="kpi-grid">{kpi_html}</div>
     <p class="meta">Input: {_esc(project.input_dir)} &nbsp;·&nbsp; Output: {_esc(project.output_dir)}</p>
     {exec_status_html}
+    {_annex2_executive_html(tf)}
   </div>
 
   <div class="card"><h2>2. Gate 4 — Compact human decision queue</h2>
@@ -1040,7 +1110,7 @@ def build_review_pack(project: OnboardingProject, out_path: Path,
 
   <div class="card"><h2>4. Gate 2 — Source pack readiness summary</h2>{gate2_html}</div>
 
-  <div class="card"><h2>5. Gate 5 — MI handoff readiness</h2>
+  <div class="card"><h2>5. Gate 5 — {"Annex 2 delivery readiness" if _is_annex2(tf) else "MI handoff readiness"}</h2>
     {_gate5_mi_handoff_status_html(tf, tf_n_block, tf_n_decisions)}
     {_decision_application_html(tf)}
     <h4 class="chart-title">Config suggestions</h4>{cfg_html}

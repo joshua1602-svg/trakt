@@ -195,9 +195,12 @@ class TestAnnex2DefaultsNotMissing(unittest.TestCase):
         self.assertNotEqual(r["coverage_status"], tcov.MISSING_REQUIRED)
         self.assertTrue(r["nd_rule_applied"])
 
-    def test_static_default_is_configured_static(self):
-        # RREC8 (lien) has a fixed default value of "1".
-        self.assertEqual(self.cov["RREC8"]["coverage_status"], tcov.CONFIGURED_STATIC)
+    def test_static_default_is_defaulted_value(self):
+        # RREC8 (lien) has a fixed, explicit non-ND regulatory default "1": that
+        # is a defaulted_value (distinct from a configured/static transform value
+        # and from an ND default).
+        self.assertEqual(self.cov["RREC8"]["coverage_status"], tcov.DEFAULTED_VALUE)
+        self.assertEqual(self.cov["RREC8"]["selected_value"], "1")
 
     def test_derive_rule_is_derived(self):
         # RREL25 (original_term) has a months_between_dates derivation.

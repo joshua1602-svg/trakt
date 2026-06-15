@@ -145,6 +145,8 @@ def build_workflow_summary(
     advisor_enabled: bool,
     input_source_files_count: int,
     run_error: str = "",
+    regime_config_path: str = "",
+    asset_config_path: str = "",
 ) -> Dict[str, Any]:
     """Read the run's artefacts and build the 40 workflow summary dict."""
     stage = SECOND_PASS if decisions_supplied_file else FIRST_PASS
@@ -153,6 +155,8 @@ def build_workflow_summary(
     cov_sum = cov.get("summary", {}) or {}
     dec = _read_json(project_dir / "28c_human_decision_queue.json") or {}
     dec_sum = dec.get("summary", {}) or {}
+    cfgval = _read_json(project_dir / "42_annex2_config_validation.json") or {}
+    cfgval_sum = cfgval.get("summary", {}) or {}
     app = _read_json(project_dir / "35_target_first_decision_application_log.json")
     app_sum = (app or {}).get("summary", {}) or {}
     advu = _read_json(project_dir / "36_target_first_llm_usage_summary.json")
@@ -226,6 +230,30 @@ def build_workflow_summary(
         "warnings": warnings,
         "error": run_error,
     }
+
+    # --- Target contract identity + Annex 2 (ESMA) config layers ---
+    target_contract_id = cov.get("target_contract_id", "")
+    summary["target_contract_id"] = target_contract_id
+    summary["target_contract_source"] = cov.get("target_contract_source", "")
+    summary["regime_config_path"] = regime_config_path or cfgval.get("regime_config_source", "")
+    summary["asset_config_path"] = asset_config_path or cfgval.get("asset_config_source", "")
+    if target_contract_id == "esma_annex_2":
+        dtc = dec_sum.get("decision_type_counts", {}) or {}
+        summary.update({
+            "annex2_field_count": int(cov_sum.get("target_fields_total", 0)),
+            "annex2_source_mapped_count": int(cov_sum.get("source_mapped_fields", 0)),
+            "annex2_derived_count": int(cov_sum.get("derived_fields", 0)),
+            "annex2_defaulted_nd_count": int(cov_sum.get("defaulted_nd_fields", 0)),
+            "annex2_defaulted_value_count": int(cov_sum.get("defaulted_value_fields", 0)),
+            "annex2_configured_static_count": int(cov_sum.get("configured_static_fields", 0)),
+            "annex2_missing_required_count": int(cov_sum.get("missing_required_fields", 0)),
+            "annex2_gate4_decision_count": decisions_after,
+            "annex2_invalid_default_count": int(
+                cfgval_sum.get("invalid_default_not_allowed",
+                               dtc.get("invalid_default_value", 0))),
+            "annex2_config_validation_summary": _p("42_annex2_config_validation_summary.md"),
+        })
+
     summary["next_operator_action"] = _next_action(stage, status, advisor_enabled)
     return summary
 
@@ -239,6 +267,31 @@ def _write_summary_md(path: Path, s: Dict[str, Any]) -> None:
         f"Mode: {s['mode']}  ",
         f"Run: {s['workflow_run_id']}  ",
         f"Status: {s['status']}", "",
+    ]
+    if s.get("target_contract_id"):
+        md += [
+            "## Target contract", "",
+            f"- target_contract_id: {s.get('target_contract_id', '')}",
+        ]
+        if s.get("regime_config_path"):
+            md.append(f"- regime_config: {s.get('regime_config_path', '')}")
+        if s.get("asset_config_path"):
+            md.append(f"- asset_config: {s.get('asset_config_path', '')}")
+        md.append("")
+    if s.get("target_contract_id") == "esma_annex_2":
+        md += [
+            "## ESMA Annex 2 coverage", "",
+            f"- Annex 2 fields: {s.get('annex2_field_count', 0)}",
+            f"- Source mapped: {s.get('annex2_source_mapped_count', 0)}",
+            f"- Derived: {s.get('annex2_derived_count', 0)}",
+            f"- ND defaulted: {s.get('annex2_defaulted_nd_count', 0)}",
+            f"- Value defaulted: {s.get('annex2_defaulted_value_count', 0)}",
+            f"- Configured / static: {s.get('annex2_configured_static_count', 0)}",
+            f"- Missing required: {s.get('annex2_missing_required_count', 0)}",
+            f"- Gate 4 decisions: {s.get('annex2_gate4_decision_count', 0)}",
+            f"- Invalid asset defaults: {s.get('annex2_invalid_default_count', 0)}", "",
+        ]
+    md += [
         "## Target-first status", "",
         f"- Target fields: {s['target_fields_count']}",
         f"- Gate 4 decisions remaining: {s['human_decision_queue_count_after']}",
@@ -282,6 +335,7 @@ _AUDIT_CATALOG = [
     # --- workflow artefacts that MUST be kept ---
     ("40_operator_workflow_summary.json", "artefact", "keep_core", "Operator workflow summary (this command)."),
     ("41_onboarding_legacy_file_audit.json", "artefact", "keep_core", "Legacy-file audit (this command)."),
+    ("42_annex2_config_validation.csv", "artefact", "keep_core", "ESMA Annex 2 regime/asset config validation (Annex 2 mode only)."),
     # --- source-column legacy decision artefacts RETAINED FOR AUDIT ---
     ("33_mapping_review_queue.csv", "artefact", "keep_legacy_audit", "Source-column review queue; retained as audit detail, no longer the primary gate."),
     ("34_mapping_review_decisions.yaml", "artefact", "keep_legacy_audit", "Source-column decision template; superseded by 34_target_first_decisions.yaml; kept for audit."),
@@ -367,6 +421,9 @@ def run_operator_workflow(
     llm_max_cost_gbp: float = 1.0,
     llm_max_calls: Optional[int] = None,
     llm_max_items_per_call: Optional[int] = None,
+    target_contract: str = "",
+    regime_config: str = "",
+    asset_config: str = "",
 ) -> Dict[str, Any]:
     """Run the managed-service operator workflow; returns the 40 summary dict."""
     client_id = client_id or client_name.lower().replace(" ", "_")
@@ -375,6 +432,23 @@ def run_operator_workflow(
         _REPO_ROOT / "onboarding_output" / client_id / run_id)
     oroot = Path(output_root) if output_root else (pdir / "output")
     pdir.mkdir(parents=True, exist_ok=True)
+
+    # --- Annex 2 (ESMA) target-contract resolution -------------------------
+    # regulatory_mi already means "ESMA Annex 2 delivery". When the run targets
+    # the Annex 2 contract we load TWO config layers: the regime rules
+    # (config/regime/annex2_delivery_rules.yaml) and the ERM asset defaults
+    # (config/asset/product_defaults_ERM.yaml) — both default automatically and
+    # can be overridden by explicit flags.
+    from engine.onboarding_agent.mode_policy import resolve_mode_alias
+    from engine.onboarding_agent import target_coverage as _tcov
+    resolved_mode, _ = resolve_mode_alias(mode)
+    explicit_annex2 = str(target_contract or "").strip().lower() in (
+        "esma_annex2", "esma_annex_2", "annex2", "annex_2")
+    is_annex2 = (explicit_annex2
+                 or _tcov.target_contract_kind(resolved_mode) == "esma_annex_2")
+    if is_annex2:
+        regime_config = regime_config or str(_tcov._ANNEX2_REGIME_DEFAULT)
+        asset_config = asset_config or str(_tcov._ASSET_CONFIG_DEFAULT)
 
     # Build a shared LLM callable only when the advisor is enabled (None when no
     # ANTHROPIC_API_KEY — the advisor then records a deterministic no_advice).
@@ -404,6 +478,9 @@ def run_operator_workflow(
             llm_max_cost_gbp=llm_max_cost_gbp,
             llm_max_calls=llm_max_calls,
             llm_max_items_per_call=llm_max_items_per_call,
+            target_contract=("ESMA_Annex2" if is_annex2 else target_contract),
+            regime_config_path=regime_config,
+            asset_config_path=asset_config,
         )
         input_files = len(project.file_inventory)
     except Exception as exc:  # produce a FAILED summary instead of crashing
@@ -413,7 +490,9 @@ def run_operator_workflow(
         pdir, oroot, client_id=client_id, client_name=client_name, run_id=run_id,
         mode=mode, decisions_supplied_file=(target_first_decisions or ""),
         advisor_enabled=enable_llm_target_advisor,
-        input_source_files_count=input_files, run_error=run_error)
+        input_source_files_count=input_files, run_error=run_error,
+        regime_config_path=(regime_config if is_annex2 else ""),
+        asset_config_path=(asset_config if is_annex2 else ""))
 
     (pdir / "40_operator_workflow_summary.json").write_text(
         json.dumps(summary, indent=2, default=str), encoding="utf-8")
@@ -461,6 +540,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--llm-max-cost-gbp", type=float, default=1.0)
     p.add_argument("--llm-max-calls", type=int, default=None)
     p.add_argument("--llm-max-items-per-call", type=int, default=None)
+    # Explicit target-contract / two-layer config selection. regulatory_mi already
+    # means ESMA Annex 2; these flags make the selection explicit and override the
+    # default config paths. Backwards compatible (all optional).
+    p.add_argument("--target-contract", default="",
+                   help="explicit target contract id, e.g. ESMA_Annex2 (default: mode-derived).")
+    p.add_argument("--regime-config", default="",
+                   help="regime rules config (default: config/regime/annex2_delivery_rules.yaml "
+                        "for Annex 2 mode).")
+    p.add_argument("--asset-config", default="",
+                   help="asset-class defaults config (default: "
+                        "config/asset/product_defaults_ERM.yaml for Annex 2 mode).")
     return p
 
 
@@ -470,6 +560,12 @@ def _print_console(s: Dict[str, Any]) -> None:
     print(f"Operator workflow completed for: {s['client_name']}")
     print(f"Status: {s['status']}")
     print(f"Run ID: {s['workflow_run_id']}")
+    if s.get("target_contract_id"):
+        print(f"Target contract: {s['target_contract_id']}")
+    if s.get("target_contract_id") == "esma_annex_2":
+        print(f"Regime config: {s.get('regime_config_path', '')}")
+        print(f"Asset config: {s.get('asset_config_path', '')}")
+        print(f"Annex 2 invalid asset defaults surfaced: {s.get('annex2_invalid_default_count', 0)}")
     print("")
     print(f"Target fields: {s['target_fields_count']}")
     print(f"Gate 4 decisions remaining: {s['human_decision_queue_count_after']}")
@@ -507,7 +603,9 @@ def main(argv=None) -> int:
         enable_llm_target_advisor=args.enable_llm_target_advisor,
         target_first_decisions=args.target_first_decisions,
         llm_max_cost_gbp=args.llm_max_cost_gbp, llm_max_calls=args.llm_max_calls,
-        llm_max_items_per_call=args.llm_max_items_per_call)
+        llm_max_items_per_call=args.llm_max_items_per_call,
+        target_contract=args.target_contract, regime_config=args.regime_config,
+        asset_config=args.asset_config)
     _print_console(summary)
     return 0 if summary["status"] != FAILED else 2
 
