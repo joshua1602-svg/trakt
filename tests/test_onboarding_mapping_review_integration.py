@@ -83,18 +83,18 @@ class TestDeterministicReviewGenerated(unittest.TestCase):
 
 
 class TestLlmReviewGated(unittest.TestCase):
-    # 2. A run with the LLM enabled (injected callable) writes 31_* + usage.
+    # 2. A run with the LLM enabled (injected callable) writes 31_* resolver + usage.
     def test_llm_artefacts_when_enabled(self):
         import json
 
         def fake_llm(prompt):
-            return json.dumps([{"source_column": "Gender APP 1",
-                                "proposed_target_field": "",
-                                "proposed_target_source": "registry_target_missing",
-                                "confidence": "no_match"}])
+            return json.dumps([{"source_file": "kfi_pipeline.csv",
+                                "source_column": "Gender APP 1",
+                                "resolved_target_field": "", "decision": "ignore_source_field",
+                                "confidence": 0.3, "rationale": "no contract target"}])
         out = Path(tempfile.mkdtemp()) / "run"
         project = _run(out, enable_llm=True, llm=fake_llm)
-        self.assertTrue((out / "31_llm_mapping_review.json").exists())
+        self.assertTrue((out / "31_llm_mapping_resolver.json").exists())
         self.assertTrue((out / "31_llm_usage_summary.json").exists())
         self.assertTrue((out / "22_llm_usage_summary.json").exists())
         self.assertTrue(project.mapping_review_summary.get("llm_enabled"))

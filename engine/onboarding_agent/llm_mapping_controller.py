@@ -190,6 +190,9 @@ class LLMMappingController:
             usage["stopped_for_budget"] = True
             return {"proposals": [], "usage": usage}
 
+        import uuid
+        batch_id = "llm_" + uuid.uuid4().hex[:10]
+        usage["llm_batch_id"] = batch_id
         prompt = build_prompt(packs)
         usage["prompt_chars"] = len(prompt)
         raw = self.llm_callable(prompt)
@@ -206,10 +209,13 @@ class LLMMappingController:
 
         shortlist_targets = {s["candidate_target_field"]
                              for sl in shortlist_by_col.values() for s in sl}
-        proposals = [
-            _sanitize_proposal(p, shortlist_targets, self.registry_fields, self.field_scope)
-            for p in parsed if isinstance(p, dict)
-        ]
+        proposals = []
+        for p in parsed:
+            if not isinstance(p, dict):
+                continue
+            sp = _sanitize_proposal(p, shortlist_targets, self.registry_fields, self.field_scope)
+            sp["llm_batch_id"] = batch_id
+            proposals.append(sp)
         return {"proposals": proposals, "usage": usage}
 
 

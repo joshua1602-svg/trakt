@@ -93,21 +93,28 @@ class TestLlmUsageAndControl(unittest.TestCase):
 
 
 class TestFieldScopeModes(unittest.TestCase):
-    # 29. Field scope still works across modes.
+    # 29. Field scope still works across modes; MI-useful regulatory fields are
+    #     surfaced (not silently excluded) for mi_only.
     def test_field_scope_enforced(self):
+        from engine.onboarding_agent.field_scope import resolve_field_scope
+        from engine.onboarding_agent.mode_policy import load_mode_policy
         reg_res, _ = _run(mode="regulatory_mi")
         mi_res, _ = _run(mode="mi_only")
         reg_sl = {(r["source_column"], r["candidate_target_field"]): r
                   for r in reg_res["shortlist"]}
         mi_sl = {(r["source_column"], r["candidate_target_field"]): r
                  for r in mi_res["shortlist"]}
-        # current_valuation_amount (regulatory non-core) is in scope for regulatory_mi
-        # but out of scope for mi_only.
         key = ("Estimated Value", "current_valuation_amount")
         if key in reg_sl:
             self.assertEqual(reg_sl[key]["field_scope_status"], "in_scope")
+        # MI-useful: surfaced as in_scope_mi_useful for mi_only, never dropped.
         if key in mi_sl:
-            self.assertEqual(mi_sl[key]["field_scope_status"], "out_of_scope")
+            self.assertEqual(mi_sl[key]["field_scope_status"], "in_scope_mi_useful")
+        # The REGULATORY funded-tape scope is unchanged: it still excludes it.
+        fs = resolve_field_scope(
+            str(_REPO_ROOT / "config" / "system" / "fields_registry.yaml"),
+            load_mode_policy("mi_only"))
+        self.assertTrue(fs.is_excluded("current_valuation_amount"))
 
 
 class TestTapesNotPolluted(unittest.TestCase):

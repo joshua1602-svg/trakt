@@ -31,6 +31,7 @@ UNSAFE = "unsafe_mapping"
 OUT_OF_SCOPE = "out_of_scope"
 CONFLICTS_MEMORY = "conflicts_with_memory"
 CONFLICTS_MAPPING = "conflicts_with_existing_mapping"
+CASHFLOW_LEDGER_EXTENSION = "cashflow_ledger_extension"
 
 
 def _norm_conf(value: Any) -> str:
@@ -59,10 +60,20 @@ def validate_mappings(
     field_scope: Any = None,
     memory_store: Any = None,
     evidence_by_col: Optional[Dict[str, Dict[str, Any]]] = None,
+    extra_in_scope: Optional[set] = None,
+    contract_fields: Optional[set] = None,
 ) -> List[Dict[str, Any]]:
-    """Validate proposed mappings. One row per proposal."""
+    """Validate proposed mappings. One row per proposal.
+
+    ``contract_fields`` (when supplied) is the required target contract: a target
+    that is a contract field is accepted as valid even if it is not in the funded
+    registry (e.g. a cashflow-ledger extension), and pipeline-contract fields
+    remain valid.
+    """
     registry_fields = registry_fields or {}
     evidence_by_col = evidence_by_col or {}
+    extra_in_scope = extra_in_scope or set()
+    contract_fields = contract_fields or set()
     included = getattr(field_scope, "included_fields", set()) or set()
 
     # Memory target lookup (client memory says column X -> field Y).
@@ -94,6 +105,13 @@ def validate_mappings(
         target_exists = target in registry_fields
         proposed_new = source == "proposed_new_field" or bool(p.get("proposed_new_field"))
 
+        # 0. cashflow / servicing / ledger header -> proposed extension domain.
+        if source == "cashflow_ledger":
+            reasons.append("cashflow/servicing/ledger field — propose as extension")
+            rows.append(_row(p, col, target, source, conf, CASHFLOW_LEDGER_EXTENSION,
+                             False, reasons, is_pipeline))
+            continue
+
         # 1. missing target.
         if not target:
             status = (PIPELINE_TARGET_MISSING if source in ("pipeline_contract", "value_profile")
@@ -101,23 +119,34 @@ def validate_mappings(
             reasons.append("no canonical target")
             rows.append(_row(p, col, target, source, conf, status, False, reasons, is_pipeline))
             continue
-        if not target_exists and not proposed_new and not is_pipeline:
+        in_contract = target in contract_fields
+        if not target_exists and not proposed_new and not is_pipeline and not in_contract:
             status = REGISTRY_TARGET_MISSING
-            reasons.append("target not in registry and not a proposed_new_field")
+            reasons.append("target not in registry/contract and not a proposed_new_field")
             rows.append(_row(p, col, target, source, conf, status, False, reasons, is_pipeline))
             continue
 
-        # 2. field scope.
+        # 2. field scope. MI-relevant fields (extra_in_scope) stay in scope for
+        #    the review even though the regulatory funded-tape scope excludes them.
         out_of_scope = (field_scope is not None and target_exists
                         and getattr(field_scope, "is_excluded", None)
-                        and field_scope.is_excluded(target))
+                        and field_scope.is_excluded(target)
+                        and target not in extra_in_scope)
         if out_of_scope:
             reasons.append(f"target out of scope for mode {getattr(field_scope,'mode_name','')}")
             rows.append(_row(p, col, target, source, conf, OUT_OF_SCOPE, False, reasons, is_pipeline))
             continue
 
-        # 3. type / value-profile compatibility.
+        # 3. type / value-profile compatibility. A STRONG header match
+        #    (exact contract / alias / memory / curated MI) overrides a noisy raw
+        #    value profile: route to review, not a hard unsafe block.
+        header_trusted = source in ("client_memory", "alias", "pipeline_contract", "mi_useful")
         if not _type_compatible_proposal(p):
+            if header_trusted:
+                reasons.append("header-trusted mapping; value profile differs — review")
+                rows.append(_row(p, col, target, source, conf, REVIEW_REQUIRED, False,
+                                 reasons, is_pipeline))
+                continue
             reasons.append("type/value-profile incompatible")
             rows.append(_row(p, col, target, source, conf, UNSAFE, False, reasons, is_pipeline))
             continue
@@ -146,13 +175,14 @@ def validate_mappings(
         # Material regulatory/economic fields never auto-approve from a fuzzy
         # semantic-alignment or LLM source — only from deterministic exact
         # sources (client memory / alias).
-        material_ok = (not material) or source in ("client_memory", "alias")
+        material_ok = (not material) or source in ("client_memory", "alias", "mi_useful")
         auto_ok = (
             conf == "high" and target and (target_exists or is_pipeline)
             and not out_of_scope and _type_compatible_proposal(p)
             and competitors == 0 and not (material and ambiguous) and material_ok
             and not mem_target and not assignees
-            and source in ("client_memory", "alias", "pipeline_contract", "semantic_alignment")
+            and source in ("client_memory", "alias", "pipeline_contract",
+                           "semantic_alignment", "mi_useful")
         )
         if auto_ok:
             status = AUTO_APPROVED
@@ -189,6 +219,9 @@ _VAL_COLUMNS = [
     "source_file", "source_sheet", "source_column", "proposed_target_field",
     "candidate_source", "confidence", "validation_status", "auto_approvable",
     "requires_user_approval", "is_pipeline_field", "validation_reasons",
+    # Resolver / LLM audit + final outcome (attached by the orchestrator).
+    "llm_suggested_mapping", "llm_confidence", "llm_rationale", "final_mapping",
+    "final_status", "backstop_decision", "backstop_rejection_reason",
 ]
 
 
