@@ -95,10 +95,11 @@ class TestLlmReviewGated(unittest.TestCase):
         out = Path(tempfile.mkdtemp()) / "run"
         project = _run(out, enable_llm=True, llm=fake_llm)
         self.assertTrue((out / "31_llm_mapping_resolver.json").exists())
-        self.assertTrue((out / "31_llm_usage_summary.json").exists())
+        self.assertTrue((out / "31_llm_resolver_usage_summary.json").exists())
         self.assertTrue((out / "22_llm_usage_summary.json").exists())
         self.assertTrue(project.mapping_review_summary.get("llm_enabled"))
-        self.assertGreaterEqual(project.mapping_review_summary.get("llm_calls", 0), 1)
+        self.assertGreaterEqual(
+            project.mapping_review_summary.get("field_calls_completed", 0), 1)
 
 
 class TestBackwardCompatFlags(unittest.TestCase):

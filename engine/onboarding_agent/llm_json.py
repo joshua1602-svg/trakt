@@ -80,3 +80,30 @@ def extract_json(raw: Any) -> Tuple[Optional[Any], str, str]:
                         last_err = str(exc)
                         break
     return None, PARSE_FAILED, last_err or "could not parse JSON from response"
+
+
+def extract_json_list(raw: Any) -> Tuple[list, str, str]:
+    """Extract a LIST of JSON objects from an LLM response.
+
+    Handles a JSON array, a single object, or JSON-lines (one object per line).
+    Returns (list, parse_status, parse_error) — list may be empty.
+    """
+    obj, status, err = extract_json(raw)
+    if isinstance(obj, list):
+        return [o for o in obj if isinstance(o, dict)], status, err
+    if isinstance(obj, dict):
+        return [obj], status, err
+    # Fallback: scan for multiple standalone objects (JSON-lines or concatenated).
+    if isinstance(raw, str):
+        items: list = []
+        for chunk in re.findall(r"\{(?:[^{}]|\{[^{}]*\})*\}", raw, re.S):
+            try:
+                d = json.loads(chunk)
+                if isinstance(d, dict):
+                    items.append(d)
+            except json.JSONDecodeError:
+                continue
+        if items:
+            return items, OK_EXTRACTED, ""
+    return [], status, err
+
