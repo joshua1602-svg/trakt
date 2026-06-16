@@ -506,6 +506,65 @@ class TestAnnex2SemanticMapping(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------- #
+# Mapping-correction proposals (48): report-only proposed source/ND/mechanics
+# --------------------------------------------------------------------------- #
+class TestAnnex2MappingProposals(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.out = Path(tempfile.mkdtemp(prefix="annex2_prop_"))
+        cls.summary = _run_annex2(cls.out)
+        cls.prop = json.loads(
+            (cls.out / "48_annex2_mapping_correction_proposals.json").read_text())
+        cls.by = {r["esma_code"]: r for r in cls.prop["rows"]}
+
+    def test_48_artefacts_written(self):
+        for name in ("48_annex2_mapping_correction_proposals.csv",
+                     "48_annex2_mapping_correction_proposals.json",
+                     "48_annex2_mapping_correction_proposals_summary.md"):
+            self.assertTrue((self.out / name).exists(), name)
+
+    def test_one_proposal_per_semantic_mismatch(self):
+        sem = json.loads(
+            (self.out / "47_annex2_semantic_mapping_reconciliation.json").read_text())
+        mismatches = {r["esma_code"] for r in sem["rows"]
+                      if r["semantic_status"] == "semantic_mismatch"}
+        self.assertEqual(set(self.by), mismatches)
+        self.assertEqual(self.prop["summary"]["proposal_rows_total"], len(mismatches))
+
+    def test_proposed_source_is_registry_canonical_workbook_field(self):
+        # Spot-check the proposed source matches the workbook-aligned field.
+        self.assertEqual(self.by["RREL70"]["proposed_source"],
+                         "reason_for_default_or_foreclosure")
+        self.assertEqual(self.by["RREL14"]["proposed_source"], "credit_impaired_obligor")
+        self.assertEqual(self.by["RREC21"]["proposed_source"], "sale_price")
+
+    def test_proposed_nd_matches_workbook_and_flags_divergence(self):
+        # RREL10/RREL13 currently allow ND5 but the workbook forbids it -> the
+        # proposal resets nd_allowed to ND1-ND4 and marks it divergent.
+        for code in ("RREL10", "RREL13"):
+            self.assertEqual(self.by[code]["proposed_nd_allowed"], "ND1; ND2; ND3; ND4")
+            self.assertEqual(self.by[code]["nd_status"], "divergent")
+
+    def test_mechanics_split_and_report_only(self):
+        s = self.prop["summary"]
+        self.assertEqual(s["re_point_source_only"]
+                         + s["needs_rule_mechanics_changes"]
+                         + s["needs_mechanics_review"], s["proposal_rows_total"])
+        self.assertTrue(all(r["requires_manual_review"] for r in self.prop["rows"]))
+        self.assertTrue(all(r["xml_output_changes"] == "yes" for r in self.prop["rows"]))
+
+    def test_proposals_did_not_mutate_regime_rules(self):
+        import yaml as _y
+        fr = _y.safe_load(open("config/regime/annex2_delivery_rules.yaml"))["field_rules"]
+        # report-only: the mismapped source is untouched on disk.
+        self.assertEqual(fr["RREL70"]["projected_source_field"], "interest_only_period")
+
+    def test_review_pack_shows_mapping_proposals(self):
+        html = (self.out / "08_onboarding_review_pack.html").read_text()
+        self.assertIn("Annex 2 mapping-correction proposals", html)
+
+
+# --------------------------------------------------------------------------- #
 # Config-alignment review (45): actions taken + manual-review items
 # --------------------------------------------------------------------------- #
 class TestAnnex2ConfigAlignment(unittest.TestCase):
@@ -602,7 +661,8 @@ class TestMiUnchanged(unittest.TestCase):
                      "44_annex2_nd_eligibility_reconciliation.csv",
                      "45_annex2_config_alignment_review.csv",
                      "46_annex2_enum_coverage_reconciliation.csv",
-                     "47_annex2_semantic_mapping_reconciliation.csv"):
+                     "47_annex2_semantic_mapping_reconciliation.csv",
+                     "48_annex2_mapping_correction_proposals.csv"):
             self.assertFalse((self.out / name).exists(), name)
         self.assertNotIn("annex2_field_count", self.summary)
         self.assertNotIn("annex2_authoritative_field_count", self.summary)
