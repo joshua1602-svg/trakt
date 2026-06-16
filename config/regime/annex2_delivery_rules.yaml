@@ -152,6 +152,10 @@ field_rules:
         STNT: STNT
         PNNR: PNNR
         OTHR: OTHR
+        # Source-value synonym retained from the prior rule: the projected data
+        # carries "manual" for non-categorised employment status -> ESMA OTHR.
+        manual: OTHR
+        MANUAL: OTHR
 
   RREL27:
     esma_code: RREL27
