@@ -227,6 +227,18 @@ def _load_target_first_artifacts(project_dir: Path, output_root: Path | None = N
     recon = _find_artifact(project_dir, output_root,
                            "43_annex2_field_universe_reconciliation.json")
     tf["field_universe"] = _load_json(recon) if recon else None
+    nd = _find_artifact(project_dir, output_root,
+                        "44_annex2_nd_eligibility_reconciliation.json")
+    tf["nd_eligibility"] = _load_json(nd) if nd else None
+    ca = _find_artifact(project_dir, output_root,
+                        "45_annex2_config_alignment_review.json")
+    tf["config_alignment"] = _load_json(ca) if ca else None
+    ec = _find_artifact(project_dir, output_root,
+                        "46_annex2_enum_coverage_reconciliation.json")
+    tf["enum_coverage"] = _load_json(ec) if ec else None
+    sm = _find_artifact(project_dir, output_root,
+                        "47_annex2_semantic_mapping_reconciliation.json")
+    tf["semantic_mapping"] = _load_json(sm) if sm else None
     _derive_summaries(tf)
     return tf
 
@@ -328,12 +340,14 @@ def _annex2_universe_html(tf: dict) -> str:
     missing = int(s.get("missing_from_28a_count", 0))
     pending = int(s.get("missing_from_regime_rules_count", 0))
     rows = [
-        ["Authoritative Annex 2 fields", _esc(s.get("authoritative_field_count", 0))],
-        ["Present in workbook registry", _esc(s.get("workbook_reconciliation_count", 0))],
+        ["Authoritative Annex 2 fields (workbook)", _esc(s.get("authoritative_field_count", 0))],
+        ["Registry mapped", _esc(s.get("registry_mapped_count", 0))],
+        ["Registry gaps", _esc(s.get("registry_gap_count", 0))],
         ["Present in regime rules", _esc(s.get("regime_rule_count", 0))],
         ["Present in 28a coverage", _esc(s.get("coverage_field_count", 0))],
         ["Deferred / pending reconciliation", _esc(s.get("deferred_field_count", 0))],
         ["Pending regime rule (config gap)", _esc(pending)],
+        ["Active phantom deferred fields", _esc(s.get("not_in_authoritative_universe_count", 0))],
         ["Missing from 28a", _esc(missing)],
         ["Deliverable (rule + coverage)", _esc(s.get("deliverable_field_count", 0))],
     ]
@@ -352,7 +366,111 @@ def _annex2_universe_html(tf: dict) -> str:
     for w in (fu.get("warnings") or []):
         warn_html += f'<p class="meta">⚠ {_esc(w)}</p>'
     return ('<h4 class="chart-title">Annex 2 field universe reconciliation</h4>'
-            + note + warn_html + _table(["Item", "Value"], rows))
+            + note + warn_html + _table(["Item", "Value"], rows)
+            + _annex2_nd_eligibility_html(tf)
+            + _annex2_config_alignment_html(tf)
+            + _annex2_enum_coverage_html(tf)
+            + _annex2_semantic_mapping_html(tf))
+
+
+def _annex2_semantic_mapping_html(tf: dict) -> str:
+    """Semantic-mapping reconciliation (47): regime source vs workbook field."""
+    sm = tf.get("semantic_mapping")
+    if not sm:
+        return ""
+    s = sm.get("summary", {}) or {}
+    mism = int(s.get("semantic_mismatch", 0))
+    rows = [
+        ["Ruled codes checked", _esc(s.get("semantic_rows_total", 0))],
+        ["Source matches workbook field", _esc(s.get("aligned", 0))],
+        ["Suspected code↔field mismap (review)", _esc(mism)],
+    ]
+    if mism:
+        note = ('<div class="callout warn">' + _esc(mism) +
+                " Annex 2 regime rule(s) map a source field that does not match the "
+                "workbook field for that code — manual mapping review required; see "
+                "<code>47_annex2_semantic_mapping_reconciliation.csv</code>.</div>")
+    else:
+        note = ('<div class="callout pass">Every regime rule maps the workbook field '
+                "for its code.</div>")
+    return ('<h4 class="chart-title">Annex 2 semantic-mapping reconciliation</h4>'
+            + note + _table(["Item", "Value"], rows))
+
+
+def _annex2_enum_coverage_html(tf: dict) -> str:
+    """Enum-coverage reconciliation (46): regime enum_map vs workbook codes."""
+    ec = tf.get("enum_coverage")
+    if not ec:
+        return ""
+    s = ec.get("summary", {}) or {}
+    outside = int(s.get("targets_outside_workbook", 0))
+    semantic = int(s.get("semantic_mismatch", 0))
+    rows = [
+        ["Constrained to workbook codes", _esc(s.get("constrained_within_workbook", 0))],
+        ["Unconstrained (no enum_map)", _esc(s.get("unconstrained_no_enum_map", 0))],
+        ["Targets outside workbook (risk)", _esc(outside)],
+        ["Semantic mismatch (mapping review)", _esc(semantic)],
+        ["No regime rule yet", _esc(s.get("no_regime_rule", 0))],
+    ]
+    if outside or semantic:
+        note = ('<div class="callout warn">' + _esc(outside + semantic) +
+                " Annex 2 {LIST} field(s) need enum review (targets outside workbook "
+                "or source/field mismatch) — see "
+                "<code>46_annex2_enum_coverage_reconciliation.csv</code>.</div>")
+    else:
+        note = ('<div class="callout pass">All constrained enum maps are within the '
+                "workbook's allowed codes; no enum values exceed ESMA.</div>")
+    return ('<h4 class="chart-title">Annex 2 enum-coverage reconciliation</h4>'
+            + note + _table(["Item", "Value"], rows))
+
+
+def _annex2_config_alignment_html(tf: dict) -> str:
+    """Config-alignment review (45): actions taken + manual-review items."""
+    ca = tf.get("config_alignment")
+    if not ca:
+        return ""
+    s = ca.get("summary", {}) or {}
+    manual = int(s.get("requires_manual_review_count", 0))
+    rows = [
+        ["Tightened to workbook (compliance fixes)", _esc(s.get("tightened_to_workbook", 0))],
+        ["Registry mappings added", _esc(s.get("registry_mapping_added", 0))],
+        ["Phantom deferred removed", _esc(s.get("phantom_deferred_removed", 0))],
+        ["Left stricter by policy", _esc(s.get("left_stricter_by_policy", 0))],
+        ["Divergent (manual review)", _esc(s.get("divergent_requires_review", 0))],
+        ["Asset-default conflicts", _esc(s.get("asset_default_conflict", 0))],
+        ["Items requiring manual review", _esc(manual)],
+    ]
+    note = (f'<div class="callout warn">{manual} Annex 2 alignment item(s) require manual '
+            "review — see <code>45_annex2_config_alignment_review.csv</code>.</div>"
+            if manual else
+            '<div class="callout pass">All Annex 2 config-alignment actions resolved; '
+            "no items require manual review.</div>")
+    return ('<h4 class="chart-title">Annex 2 config-alignment review</h4>'
+            + note + _table(["Item", "Value"], rows))
+
+
+def _annex2_nd_eligibility_html(tf: dict) -> str:
+    """ND-eligibility reconciliation (44): regime nd_allowed vs workbook."""
+    nd = tf.get("nd_eligibility")
+    if not nd:
+        return ""
+    s = nd.get("summary", {}) or {}
+    risk = int(s.get("nd_compliance_risk_count", 0))
+    rows = [
+        ["Match", _esc(s.get("match", 0))],
+        ["Regime stricter than workbook", _esc(s.get("regime_stricter", 0))],
+        ["Regime broader than workbook (risk)", _esc(s.get("regime_broader", 0))],
+        ["Divergent ND sets", _esc(s.get("divergent", 0))],
+    ]
+    note = ('<div class="callout warn">' + _esc(risk) +
+            " Annex 2 code(s) where the regime ND policy diverges from the "
+            "authoritative workbook ND eligibility — see "
+            "<code>44_annex2_nd_eligibility_reconciliation.csv</code>.</div>"
+            ) if risk else (
+            '<div class="callout pass">Regime ND policy is within the workbook ND '
+            "eligibility for all compared codes.</div>")
+    return ('<h4 class="chart-title">Annex 2 ND-eligibility reconciliation</h4>'
+            + note + _table(["Item", "Value"], rows))
 
 
 def _gate3_summary_html(tf: dict) -> str:

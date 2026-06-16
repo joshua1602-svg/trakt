@@ -167,6 +167,14 @@ def build_workflow_summary(
     cfgval_sum = cfgval.get("summary", {}) or {}
     recon = _read_json(project_dir / "43_annex2_field_universe_reconciliation.json") or {}
     recon_sum = recon.get("summary", {}) or {}
+    nd_recon = _read_json(project_dir / "44_annex2_nd_eligibility_reconciliation.json") or {}
+    nd_sum = nd_recon.get("summary", {}) or {}
+    align = _read_json(project_dir / "45_annex2_config_alignment_review.json") or {}
+    align_sum = align.get("summary", {}) or {}
+    enumc = _read_json(project_dir / "46_annex2_enum_coverage_reconciliation.json") or {}
+    enum_sum = enumc.get("summary", {}) or {}
+    semm = _read_json(project_dir / "47_annex2_semantic_mapping_reconciliation.json") or {}
+    sem_sum = semm.get("summary", {}) or {}
     app = _read_json(project_dir / "35_target_first_decision_application_log.json")
     app_sum = (app or {}).get("summary", {}) or {}
     advu = _read_json(project_dir / "36_target_first_llm_usage_summary.json")
@@ -283,10 +291,79 @@ def build_workflow_summary(
             "annex2_invalid_default_count": int(
                 cfgval_sum.get("invalid_default_not_allowed",
                                dtc.get("invalid_default_value", 0))),
+            # Registry mapping coverage (fields_registry ESMA_Annex2 mappings).
+            "annex2_registry_mapped_count": int(recon_sum.get("registry_mapped_count", 0)),
+            "annex2_registry_gap_count": int(recon_sum.get("registry_gap_count", 0)),
+            # Active phantom deferred fields (codes outside the workbook universe).
+            "annex2_active_phantom_deferred_count": int(
+                recon_sum.get("not_in_authoritative_universe_count", 0)),
             "annex2_config_validation_summary": _p("42_annex2_config_validation_summary.md"),
             "annex2_field_universe_reconciliation_summary": _p(
                 "43_annex2_field_universe_reconciliation_summary.md"),
+            # ND-eligibility reconciliation (regime nd_allowed vs workbook).
+            "annex2_nd_match_count": int(nd_sum.get("match", 0)),
+            "annex2_nd_regime_stricter_count": int(nd_sum.get("regime_stricter", 0)),
+            "annex2_nd_regime_broader_count": int(nd_sum.get("regime_broader", 0)),
+            "annex2_nd_divergent_count": int(nd_sum.get("divergent", 0)),
+            "annex2_nd_compliance_risk_count": int(nd_sum.get("nd_compliance_risk_count", 0)),
+            "annex2_nd_eligibility_reconciliation_summary": _p(
+                "44_annex2_nd_eligibility_reconciliation_summary.md"),
+            # Config-alignment review (45).
+            "annex2_alignment_tightened_count": int(align_sum.get("tightened_to_workbook", 0)),
+            "annex2_alignment_left_stricter_count": int(align_sum.get("left_stricter_by_policy", 0)),
+            "annex2_alignment_divergent_count": int(align_sum.get("divergent_requires_review", 0)),
+            "annex2_alignment_phantom_removed_count": int(align_sum.get("phantom_deferred_removed", 0)),
+            "annex2_alignment_registry_added_count": int(align_sum.get("registry_mapping_added", 0)),
+            "annex2_asset_default_conflict_count": int(align_sum.get("asset_default_conflict", 0)),
+            "annex2_alignment_manual_review_count": int(
+                align_sum.get("requires_manual_review_count", 0)),
+            "annex2_config_alignment_review_summary": _p(
+                "45_annex2_config_alignment_review_summary.md"),
+            # Enum-coverage reconciliation (46).
+            "annex2_enum_constrained_count": int(enum_sum.get("constrained_within_workbook", 0)),
+            "annex2_enum_unconstrained_count": int(enum_sum.get("unconstrained_no_enum_map", 0)),
+            "annex2_enum_targets_outside_workbook_count": int(
+                enum_sum.get("targets_outside_workbook", 0)),
+            "annex2_enum_semantic_mismatch_count": int(enum_sum.get("semantic_mismatch", 0)),
+            "annex2_enum_no_rule_count": int(enum_sum.get("no_regime_rule", 0)),
+            "annex2_enum_coverage_reconciliation_summary": _p(
+                "46_annex2_enum_coverage_reconciliation_summary.md"),
+            # Semantic-mapping reconciliation (47).
+            "annex2_semantic_aligned_count": int(sem_sum.get("aligned", 0)),
+            "annex2_semantic_mismatch_count": int(sem_sum.get("semantic_mismatch", 0)),
+            "annex2_semantic_mapping_reconciliation_summary": _p(
+                "47_annex2_semantic_mapping_reconciliation_summary.md"),
         })
+        sem_mismatch = int(sem_sum.get("semantic_mismatch", 0))
+        if sem_mismatch > 0:
+            warnings.append(
+                f"{sem_mismatch} Annex 2 regime rule(s) map a source field that does not match "
+                "the workbook field for that code (suspected code↔field mismap) — manual "
+                "review required; see 47_annex2_semantic_mapping_reconciliation.")
+        enum_outside = int(enum_sum.get("targets_outside_workbook", 0))
+        if enum_outside > 0:
+            warnings.append(
+                f"{enum_outside} Annex 2 {{LIST}} field(s) map to enum codes the workbook FORBIDS "
+                "(must be zero) — see 46_annex2_enum_coverage_reconciliation.")
+        enum_semantic = int(enum_sum.get("semantic_mismatch", 0))
+        if enum_semantic > 0:
+            warnings.append(
+                f"{enum_semantic} Annex 2 {{LIST}} field(s) have a regime rule whose source "
+                "field does not match the workbook field — enum left unconstrained pending "
+                "mapping review; see 46_annex2_enum_coverage_reconciliation.")
+        # regime_broader (regime permits ND the workbook FORBIDS) must be zero.
+        nd_broader = int(nd_sum.get("regime_broader", 0))
+        if nd_broader > 0:
+            warnings.append(
+                f"{nd_broader} Annex 2 code(s) where the regime nd_allowed set is BROADER than "
+                "the authoritative workbook ND eligibility (compliance risk — must be zero) — "
+                "see 45_annex2_config_alignment_review.")
+        nd_divergent = int(nd_sum.get("divergent", 0))
+        if nd_divergent > 0:
+            warnings.append(
+                f"{nd_divergent} Annex 2 code(s) with ND sets divergent from the workbook "
+                "require manual review (not auto-fixed) — see "
+                "45_annex2_config_alignment_review.")
         # The Annex 2 universe is known but not fully configured — never READY.
         if status in (READY, NEEDS_CONFIRMATION) and (missing_from_28a > 0 or pending_rule > 0):
             status = NEEDS_CONFIGURATION
@@ -328,14 +405,27 @@ def _write_summary_md(path: Path, s: Dict[str, Any]) -> None:
     if s.get("target_contract_id") == "esma_annex_2":
         md += [
             "## ESMA Annex 2 field universe", "",
-            f"- Total Annex 2 target universe: {s.get('annex2_authoritative_field_count', 0)}",
+            f"- Authoritative Annex 2 universe (workbook): {s.get('annex2_authoritative_field_count', 0)}",
+            f"- Registry mapped: {s.get('annex2_registry_mapped_count', 0)}",
+            f"- Registry gaps: {s.get('annex2_registry_gap_count', 0)}",
             f"- Fields covered in 28a: {s.get('annex2_coverage_field_count', 0)}",
             f"- Fields with full regime rules: {s.get('annex2_regime_rule_count', 0)}",
             f"- Config-validation rows: {s.get('annex2_config_validation_count', 0)}",
             f"- Deferred / pending reconciliation: {s.get('annex2_deferred_field_count', 0)}",
             f"- Pending regime rule (config gap): {s.get('annex2_pending_regime_rule_count', 0)}",
+            f"- Active phantom deferred fields: {s.get('annex2_active_phantom_deferred_count', 0)}",
             f"- Missing from 28a: {s.get('annex2_missing_from_28a_count', 0)}",
             f"- Deliverable (rule + coverage): {s.get('annex2_deliverable_field_count', 0)}", "",
+            "## ESMA Annex 2 ND eligibility & alignment", "",
+            f"- ND broader than workbook (compliance risk): {s.get('annex2_nd_regime_broader_count', 0)}",
+            f"- ND divergent (manual review): {s.get('annex2_nd_divergent_count', 0)}",
+            f"- ND stricter than workbook (policy): {s.get('annex2_nd_regime_stricter_count', 0)}",
+            f"- ND matches workbook: {s.get('annex2_nd_match_count', 0)}",
+            f"- Tightened to workbook: {s.get('annex2_alignment_tightened_count', 0)}",
+            f"- Phantom deferred removed: {s.get('annex2_alignment_phantom_removed_count', 0)}",
+            f"- Registry mappings added: {s.get('annex2_alignment_registry_added_count', 0)}",
+            f"- Asset-default conflicts: {s.get('annex2_asset_default_conflict_count', 0)}",
+            f"- Items requiring manual review: {s.get('annex2_alignment_manual_review_count', 0)}", "",
             "## ESMA Annex 2 coverage", "",
             f"- Annex 2 fields in 28a: {s.get('annex2_field_count', 0)}",
             f"- Source mapped: {s.get('annex2_source_mapped_count', 0)}",
@@ -393,6 +483,10 @@ _AUDIT_CATALOG = [
     ("41_onboarding_legacy_file_audit.json", "artefact", "keep_core", "Legacy-file audit (this command)."),
     ("42_annex2_config_validation.csv", "artefact", "keep_core", "ESMA Annex 2 regime/asset config validation (Annex 2 mode only)."),
     ("43_annex2_field_universe_reconciliation.csv", "artefact", "keep_core", "ESMA Annex 2 field-universe reconciliation (Annex 2 mode only)."),
+    ("44_annex2_nd_eligibility_reconciliation.csv", "artefact", "keep_core", "ESMA Annex 2 ND-eligibility reconciliation: regime nd_allowed vs workbook (Annex 2 mode only)."),
+    ("45_annex2_config_alignment_review.csv", "artefact", "keep_core", "ESMA Annex 2 config-alignment review: actions taken + manual-review items (Annex 2 mode only)."),
+    ("46_annex2_enum_coverage_reconciliation.csv", "artefact", "keep_core", "ESMA Annex 2 enum-coverage reconciliation: regime enum_map vs workbook allowed codes (Annex 2 mode only)."),
+    ("47_annex2_semantic_mapping_reconciliation.csv", "artefact", "keep_core", "ESMA Annex 2 semantic-mapping reconciliation: regime source field vs workbook field per code (Annex 2 mode only)."),
     # --- source-column legacy decision artefacts RETAINED FOR AUDIT ---
     ("33_mapping_review_queue.csv", "artefact", "keep_legacy_audit", "Source-column review queue; retained as audit detail, no longer the primary gate."),
     ("34_mapping_review_decisions.yaml", "artefact", "keep_legacy_audit", "Source-column decision template; superseded by 34_target_first_decisions.yaml; kept for audit."),
@@ -626,7 +720,14 @@ def _print_console(s: Dict[str, Any]) -> None:
               f"(28a coverage: {s.get('annex2_coverage_field_count', 0)}, "
               f"full regime rules: {s.get('annex2_regime_rule_count', 0)}, "
               f"deferred/pending: {s.get('annex2_deferred_field_count', 0)})")
+        print(f"Annex 2 registry mapped: {s.get('annex2_registry_mapped_count', 0)} "
+              f"(gaps: {s.get('annex2_registry_gap_count', 0)})")
         print(f"Annex 2 codes missing from 28a: {s.get('annex2_missing_from_28a_count', 0)}")
+        print(f"Annex 2 active phantom deferred: {s.get('annex2_active_phantom_deferred_count', 0)}")
+        print(f"Annex 2 ND broader (compliance risk): {s.get('annex2_nd_regime_broader_count', 0)} · "
+              f"divergent (review): {s.get('annex2_nd_divergent_count', 0)} · "
+              f"stricter (policy): {s.get('annex2_nd_regime_stricter_count', 0)}")
+        print(f"Annex 2 asset-default conflicts: {s.get('annex2_asset_default_conflict_count', 0)}")
         print(f"Annex 2 invalid asset defaults surfaced: {s.get('annex2_invalid_default_count', 0)}")
     print("")
     print(f"Target fields: {s['target_fields_count']}")

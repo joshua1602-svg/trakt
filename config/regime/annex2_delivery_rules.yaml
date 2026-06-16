@@ -6,8 +6,16 @@ reconciliation_scope:
     Semantic-alignment pass. Hard-fail enforcement is intentionally limited to
     reconciled Annex 2 codes that are confirmed in workbook/XSD and present in
     current Gate 4 output.
+  # ACTIVE deferred list — runtime. Every entry must exist in the authoritative
+  # workbook universe (config/regime/annex2_field_universe.yaml).
   deferred_fields:
     - RREC22
+  # AUDIT-ONLY, NOT loaded at runtime. These codes were previously listed as
+  # deferred but do NOT exist in the authoritative Annex 2 workbook universe
+  # (phantom). Retained here only as an audit trail; they are excluded from 28a
+  # coverage and from runtime deferral. Do not move these back into
+  # deferred_fields unless the workbook universe is shown to contain them.
+  audit_only_non_universe_fields:
     - RREC24
     - RREC25
     - RREC26
@@ -31,7 +39,9 @@ field_rules:
     projected_source_field: unique_identifier
     mandatory: true
     enforce_presence: true
-    nd_allowed: [ND1, ND2, ND3]
+    # Workbook: ND1-4 NO, ND5 NO — no ND value permitted. Tightened from
+    # [ND1, ND2, ND3] which was broader than the authoritative ESMA envelope.
+    nd_allowed: []
     validators:
       regex: "^[A-Z0-9]{18}[0-9]{2}N\\d{4}\\d{2}$"
 
@@ -41,7 +51,8 @@ field_rules:
     projected_source_field: original_underlying_exposure_identifier
     mandatory: true
     enforce_presence: true
-    nd_allowed: [ND5]
+    # Workbook: ND1-4 NO, ND5 NO — no ND value permitted. Tightened from [ND5].
+    nd_allowed: []
     validators:
       regex: "^[A-Za-z0-9._\\-/]{1,64}$"
 
@@ -51,7 +62,8 @@ field_rules:
     projected_source_field: data_cut_off_date
     mandatory: true
     enforce_presence: true
-    nd_allowed: [ND5]
+    # Workbook: ND1-4 NO, ND5 NO — no ND value permitted. Tightened from [ND5].
+    nd_allowed: []
     validators:
       regex: "^\\d{4}-\\d{2}-\\d{2}$"
 
@@ -81,7 +93,8 @@ field_rules:
     projected_source_field: account_status
     mandatory: false
     enforce_presence: false
-    nd_allowed: [ND5]
+    # Workbook: ND1-4 NO, ND5 NO — no ND value permitted. Tightened from [ND5].
+    nd_allowed: []
     transform:
       enum_map:
         Active: PERF
@@ -101,6 +114,11 @@ field_rules:
     nd_allowed: [ND5]
     transform:
       enum_map:
+        # Plain-English ERM back-book default: a fixed-for-life rate maps to the
+        # ESMA "fixed rate for life" code FXRL (resolves the asset-default
+        # conflict on interest_rate_type=Fixed without using OTHR).
+        Fixed: FXRL
+        fixed: FXRL
         FXRL: FXRL
         FLIF: FLIF
         DISC: DISC
@@ -364,7 +382,8 @@ field_rules:
     projected_source_field: originator_legal_entity_identifier
     mandatory: false
     enforce_presence: false
-    nd_allowed: [ND5]
+    # Workbook: ND1-4 NO, ND5 NO — no ND value permitted. Tightened from [ND5].
+    nd_allowed: []
     transform:
       enum_map:
         213800ABCDE123456701N202501: 213800ABCDE123456701
@@ -423,6 +442,15 @@ field_rules:
     default_value: ND1
     validators:
       regex: "^[A-Z0-9_]{1,12}$"
+    transform:
+      # Allowed enum codes per the authoritative Annex 2 workbook (RREL19).
+      enum_map:
+        SCRT: SCRT
+        SCNF: SCNF
+        VRFD: VRFD
+        NVRF: NVRF
+        SCRG: SCRG
+        OTHR: OTHR
 
   RREL22:
     esma_code: RREL22
@@ -596,6 +624,39 @@ field_rules:
     default_value: ND5
     validators:
       regex: "^[A-Za-z0-9._\\-/]{1,32}$"
+    transform:
+      # Allowed enum codes per the authoritative Annex 2 workbook (RREL56).
+      enum_map:
+        MAAA: MAAA
+        FUSW: FUSW
+        LIBI: LIBI
+        LIBO: LIBO
+        SWAP: SWAP
+        TREA: TREA
+        EURI: EURI
+        PFAN: PFAN
+        EONA: EONA
+        EONS: EONS
+        EUUS: EUUS
+        EUCH: EUCH
+        TIBO: TIBO
+        ISDA: ISDA
+        GCFR: GCFR
+        STBO: STBO
+        BBSW: BBSW
+        JIBA: JIBA
+        BUBO: BUBO
+        CDOR: CDOR
+        CIBO: CIBO
+        MOSP: MOSP
+        NIBO: NIBO
+        PRBO: PRBO
+        TLBO: TLBO
+        WIBO: WIBO
+        BOER: BOER
+        ECBR: ECBR
+        LDOR: LDOR
+        OTHR: OTHR
 
   RREL57:
     esma_code: RREL57
@@ -608,6 +669,22 @@ field_rules:
     default_value: ND5
     validators:
       regex: "^[A-Za-z0-9._\\-/]{1,32}$"
+    transform:
+      # Allowed enum codes per the authoritative Annex 2 workbook (RREL57).
+      enum_map:
+        OVNG: OVNG
+        INDA: INDA
+        DAIL: DAIL
+        WEEK: WEEK
+        TOWK: TOWK
+        MNTH: MNTH
+        TOMN: TOMN
+        QUTR: QUTR
+        FOMN: FOMN
+        SEMI: SEMI
+        YEAR: YEAR
+        ONDE: ONDE
+        OTHR: OTHR
 
   RREL58:
     esma_code: RREL58
@@ -693,6 +770,17 @@ field_rules:
     nd_allowed: [ND5]
     default_allowed: true
     default_value: ND5
+    transform:
+      # Allowed enum codes per the authoritative Annex 2 workbook (RREC10).
+      enum_map:
+        EPCA: EPCA
+        EPCB: EPCB
+        EPCC: EPCC
+        EPCD: EPCD
+        EPCE: EPCE
+        EPCF: EPCF
+        EPCG: EPCG
+        OTHR: OTHR
 
   RREC11:
     esma_code: RREC11
@@ -738,6 +826,18 @@ field_rules:
     nd_allowed: [ND1, ND2, ND3]
     default_allowed: true
     default_value: ND1
+    transform:
+      # Allowed enum codes per the authoritative Annex 2 workbook (RREC18).
+      enum_map:
+        FIEI: FIEI
+        FOEI: FOEI
+        DRVB: DRVB
+        AUVM: AUVM
+        IDXD: IDXD
+        DKTP: DKTP
+        MAEA: MAEA
+        TXAT: TXAT
+        OTHR: OTHR
 
   RREC19:
     esma_code: RREC19
