@@ -167,6 +167,8 @@ def build_workflow_summary(
     cfgval_sum = cfgval.get("summary", {}) or {}
     recon = _read_json(project_dir / "43_annex2_field_universe_reconciliation.json") or {}
     recon_sum = recon.get("summary", {}) or {}
+    nd_recon = _read_json(project_dir / "44_annex2_nd_eligibility_reconciliation.json") or {}
+    nd_sum = nd_recon.get("summary", {}) or {}
     app = _read_json(project_dir / "35_target_first_decision_application_log.json")
     app_sum = (app or {}).get("summary", {}) or {}
     advu = _read_json(project_dir / "36_target_first_llm_usage_summary.json")
@@ -286,7 +288,21 @@ def build_workflow_summary(
             "annex2_config_validation_summary": _p("42_annex2_config_validation_summary.md"),
             "annex2_field_universe_reconciliation_summary": _p(
                 "43_annex2_field_universe_reconciliation_summary.md"),
+            # ND-eligibility reconciliation (regime nd_allowed vs workbook).
+            "annex2_nd_match_count": int(nd_sum.get("match", 0)),
+            "annex2_nd_regime_stricter_count": int(nd_sum.get("regime_stricter", 0)),
+            "annex2_nd_regime_broader_count": int(nd_sum.get("regime_broader", 0)),
+            "annex2_nd_divergent_count": int(nd_sum.get("divergent", 0)),
+            "annex2_nd_compliance_risk_count": int(nd_sum.get("nd_compliance_risk_count", 0)),
+            "annex2_nd_eligibility_reconciliation_summary": _p(
+                "44_annex2_nd_eligibility_reconciliation_summary.md"),
         })
+        nd_risk = int(nd_sum.get("nd_compliance_risk_count", 0))
+        if nd_risk > 0:
+            warnings.append(
+                f"{nd_risk} Annex 2 code(s) where the regime nd_allowed set diverges from "
+                "the authoritative workbook ND eligibility (regime_broader / divergent) — "
+                "see 44_annex2_nd_eligibility_reconciliation.")
         # The Annex 2 universe is known but not fully configured — never READY.
         if status in (READY, NEEDS_CONFIRMATION) and (missing_from_28a > 0 or pending_rule > 0):
             status = NEEDS_CONFIGURATION
@@ -393,6 +409,7 @@ _AUDIT_CATALOG = [
     ("41_onboarding_legacy_file_audit.json", "artefact", "keep_core", "Legacy-file audit (this command)."),
     ("42_annex2_config_validation.csv", "artefact", "keep_core", "ESMA Annex 2 regime/asset config validation (Annex 2 mode only)."),
     ("43_annex2_field_universe_reconciliation.csv", "artefact", "keep_core", "ESMA Annex 2 field-universe reconciliation (Annex 2 mode only)."),
+    ("44_annex2_nd_eligibility_reconciliation.csv", "artefact", "keep_core", "ESMA Annex 2 ND-eligibility reconciliation: regime nd_allowed vs workbook (Annex 2 mode only)."),
     # --- source-column legacy decision artefacts RETAINED FOR AUDIT ---
     ("33_mapping_review_queue.csv", "artefact", "keep_legacy_audit", "Source-column review queue; retained as audit detail, no longer the primary gate."),
     ("34_mapping_review_decisions.yaml", "artefact", "keep_legacy_audit", "Source-column decision template; superseded by 34_target_first_decisions.yaml; kept for audit."),

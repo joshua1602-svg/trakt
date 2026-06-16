@@ -227,6 +227,9 @@ def _load_target_first_artifacts(project_dir: Path, output_root: Path | None = N
     recon = _find_artifact(project_dir, output_root,
                            "43_annex2_field_universe_reconciliation.json")
     tf["field_universe"] = _load_json(recon) if recon else None
+    nd = _find_artifact(project_dir, output_root,
+                        "44_annex2_nd_eligibility_reconciliation.json")
+    tf["nd_eligibility"] = _load_json(nd) if nd else None
     _derive_summaries(tf)
     return tf
 
@@ -352,7 +355,32 @@ def _annex2_universe_html(tf: dict) -> str:
     for w in (fu.get("warnings") or []):
         warn_html += f'<p class="meta">⚠ {_esc(w)}</p>'
     return ('<h4 class="chart-title">Annex 2 field universe reconciliation</h4>'
-            + note + warn_html + _table(["Item", "Value"], rows))
+            + note + warn_html + _table(["Item", "Value"], rows)
+            + _annex2_nd_eligibility_html(tf))
+
+
+def _annex2_nd_eligibility_html(tf: dict) -> str:
+    """ND-eligibility reconciliation (44): regime nd_allowed vs workbook."""
+    nd = tf.get("nd_eligibility")
+    if not nd:
+        return ""
+    s = nd.get("summary", {}) or {}
+    risk = int(s.get("nd_compliance_risk_count", 0))
+    rows = [
+        ["Match", _esc(s.get("match", 0))],
+        ["Regime stricter than workbook", _esc(s.get("regime_stricter", 0))],
+        ["Regime broader than workbook (risk)", _esc(s.get("regime_broader", 0))],
+        ["Divergent ND sets", _esc(s.get("divergent", 0))],
+    ]
+    note = ('<div class="callout warn">' + _esc(risk) +
+            " Annex 2 code(s) where the regime ND policy diverges from the "
+            "authoritative workbook ND eligibility — see "
+            "<code>44_annex2_nd_eligibility_reconciliation.csv</code>.</div>"
+            ) if risk else (
+            '<div class="callout pass">Regime ND policy is within the workbook ND '
+            "eligibility for all compared codes.</div>")
+    return ('<h4 class="chart-title">Annex 2 ND-eligibility reconciliation</h4>'
+            + note + _table(["Item", "Value"], rows))
 
 
 def _gate3_summary_html(tf: dict) -> str:

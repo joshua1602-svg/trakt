@@ -322,6 +322,60 @@ class TestAnnex2FieldUniverse(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------- #
+# ND-eligibility reconciliation (44): regime nd_allowed vs workbook eligibility
+# --------------------------------------------------------------------------- #
+class TestAnnex2NdEligibility(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.out = Path(tempfile.mkdtemp(prefix="annex2_nd_"))
+        cls.summary = _run_annex2(cls.out)
+        cls.nd = json.loads(
+            (cls.out / "44_annex2_nd_eligibility_reconciliation.json").read_text())
+
+    def test_44_artefacts_written(self):
+        for name in ("44_annex2_nd_eligibility_reconciliation.csv",
+                     "44_annex2_nd_eligibility_reconciliation.json",
+                     "44_annex2_nd_eligibility_reconciliation_summary.md"):
+            self.assertTrue((self.out / name).exists(), name)
+
+    def test_nd_reconciliation_unit(self):
+        rows = tcov.build_annex2_nd_eligibility_reconciliation()
+        by = {r["esma_code"]: r for r in rows}
+        # RREL40: regime restricts to [ND5] but the workbook allows ND1-ND5 too,
+        # so the regime is STRICTER than the authoritative eligibility.
+        self.assertEqual(by["RREL40"]["nd_eligibility_status"], "regime_stricter")
+        # Statuses are drawn from the documented vocabulary.
+        allowed = {"match", "regime_stricter", "regime_broader", "divergent",
+                   "no_regime_rule", "not_in_workbook"}
+        for r in rows:
+            self.assertIn(r["nd_eligibility_status"], allowed)
+
+    def test_compliance_risk_surfaced_not_silent(self):
+        s = self.nd["summary"]
+        # regime_broader = regime permits ND the workbook forbids (a real risk).
+        self.assertGreater(s["regime_broader"], 0)
+        self.assertEqual(s["nd_compliance_risk_count"],
+                         s["regime_broader"] + s["divergent"])
+        # Surfaced in the 40 summary + warnings, never silently applied.
+        self.assertEqual(self.summary["annex2_nd_regime_broader_count"],
+                         s["regime_broader"])
+        self.assertTrue(any("ND eligibility" in w for w in self.summary["warnings"]))
+
+    def test_regime_validation_behaviour_unchanged(self):
+        # 42 config validation still uses the regime nd_allowed (RREL40 -> [ND5]),
+        # i.e. the reconciliation is report-only and does NOT widen regime rules.
+        val = json.loads(
+            (self.out / "42_annex2_config_validation.json").read_text())
+        rrel40 = next(r for r in val["rows"] if r["esma_code"] == "RREL40")
+        self.assertEqual(rrel40["regime_nd_allowed"], "ND5")
+        self.assertEqual(rrel40["validation_status"], tcov.VS_INVALID)
+
+    def test_review_pack_shows_nd_reconciliation(self):
+        html = (self.out / "08_onboarding_review_pack.html").read_text()
+        self.assertIn("Annex 2 ND-eligibility reconciliation", html)
+
+
+# --------------------------------------------------------------------------- #
 # 8 — MI workflow remains unchanged
 # --------------------------------------------------------------------------- #
 class TestMiUnchanged(unittest.TestCase):

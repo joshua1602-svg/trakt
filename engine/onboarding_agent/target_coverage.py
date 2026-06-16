@@ -894,6 +894,152 @@ def write_annex2_field_universe_reconciliation(
 
 
 # ---------------------------------------------------------------------------
+# Annex 2 ND-eligibility reconciliation (44) — regime nd_allowed vs workbook
+# ---------------------------------------------------------------------------
+
+_ANNEX2_ND_COLUMNS = [
+    "esma_code", "field_family", "has_regime_rule", "in_workbook",
+    "regime_nd_allowed", "workbook_nd1_4_allowed", "workbook_nd5_allowed",
+    "workbook_nd_allowed", "nd_eligibility_status", "message",
+]
+
+
+def build_annex2_nd_eligibility_reconciliation(
+    regime_config_path: Optional[str | Path] = None,
+    universe_path: Optional[str | Path] = None,
+) -> List[Dict[str, Any]]:
+    """Compare each regime rule's ``nd_allowed`` set against the workbook's
+    authoritative ND1-4 / ND5 eligibility. Report-only — never mutates the
+    regime validation behaviour.
+
+    Statuses:
+      match            - regime nd_allowed equals the workbook ND eligibility
+      regime_stricter  - regime forbids ND value(s) the workbook permits
+      regime_broader   - regime permits ND value(s) the workbook FORBIDS (risk)
+      divergent        - sets overlap only partially / are disjoint
+      no_regime_rule   - workbook code with no regime rule to compare
+      not_in_workbook  - regime code absent from the authoritative workbook
+    """
+    cid, csrc, _ruled = load_annex2_target_contract(regime_config_path)
+    try:
+        regime = yaml.safe_load(Path(csrc).read_text(encoding="utf-8")) or {}
+    except Exception:
+        regime = {}
+    field_rules = regime.get("field_rules", {}) or {}
+    workbook, _src = load_annex2_workbook_universe(universe_path)
+
+    all_codes = set(field_rules) | set(workbook)
+    rows: List[Dict[str, Any]] = []
+    for code in sorted(all_codes, key=_code_sort_key):
+        rule = field_rules.get(code)
+        wb = workbook.get(code)
+        in_wb = wb is not None
+        has_rule = rule is not None
+        regime_nd = {str(x).strip().upper() for x in (rule.get("nd_allowed") or [])} if has_rule else set()
+        wb_nd = set(_annex2_nd_allowed_from_workbook(wb or {}))
+        if not in_wb:
+            status = "not_in_workbook"
+            msg = "regime code is absent from the authoritative Annex 2 workbook"
+        elif not has_rule:
+            status = "no_regime_rule"
+            msg = "workbook code has no regime field rule to compare"
+        elif regime_nd == wb_nd:
+            status = "match"
+            msg = "regime nd_allowed matches workbook ND eligibility"
+        elif regime_nd < wb_nd:
+            status = "regime_stricter"
+            msg = ("regime forbids ND value(s) the workbook permits: "
+                   + ", ".join(sorted(wb_nd - regime_nd)))
+        elif regime_nd > wb_nd:
+            status = "regime_broader"
+            msg = ("regime permits ND value(s) the workbook FORBIDS (compliance "
+                   "risk): " + ", ".join(sorted(regime_nd - wb_nd)))
+        else:
+            status = "divergent"
+            msg = (f"regime/workbook ND sets diverge: regime="
+                   f"[{', '.join(sorted(regime_nd))}] workbook=[{', '.join(sorted(wb_nd))}]")
+        rows.append({
+            "esma_code": code,
+            "field_family": _annex2_family(code),
+            "has_regime_rule": has_rule,
+            "in_workbook": in_wb,
+            "regime_nd_allowed": "; ".join(sorted(regime_nd)),
+            "workbook_nd1_4_allowed": bool((wb or {}).get("nd1_4_allowed")),
+            "workbook_nd5_allowed": bool((wb or {}).get("nd5_allowed")),
+            "workbook_nd_allowed": "; ".join(sorted(wb_nd)),
+            "nd_eligibility_status": status,
+            "message": msg,
+        })
+    return rows
+
+
+def annex2_nd_eligibility_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    counts: Dict[str, int] = {}
+    for r in rows:
+        counts[r["nd_eligibility_status"]] = counts.get(r["nd_eligibility_status"], 0) + 1
+    return {
+        "nd_rows_total": len(rows),
+        "match": counts.get("match", 0),
+        "regime_stricter": counts.get("regime_stricter", 0),
+        "regime_broader": counts.get("regime_broader", 0),
+        "divergent": counts.get("divergent", 0),
+        "no_regime_rule": counts.get("no_regime_rule", 0),
+        "not_in_workbook": counts.get("not_in_workbook", 0),
+        # regime_broader + divergent are the compliance-relevant mismatches.
+        "nd_compliance_risk_count": counts.get("regime_broader", 0) + counts.get("divergent", 0),
+        "nd_eligibility_status_counts": counts,
+    }
+
+
+def write_annex2_nd_eligibility_reconciliation(
+    out_dir: str | Path,
+    rows: List[Dict[str, Any]],
+    summary: Dict[str, Any],
+    *,
+    regime_config_source: str = "",
+    universe_source: str = "",
+) -> Dict[str, str]:
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    _write_csv(out / "44_annex2_nd_eligibility_reconciliation.csv", rows,
+               _ANNEX2_ND_COLUMNS)
+    (out / "44_annex2_nd_eligibility_reconciliation.json").write_text(
+        json.dumps({"regime_config_source": regime_config_source,
+                    "universe_source": universe_source,
+                    "summary": summary, "rows": rows}, indent=2, default=str),
+        encoding="utf-8")
+    md = ["# ESMA Annex 2 ND-eligibility reconciliation", "",
+          "Report only — compares each regime rule's `nd_allowed` against the "
+          "authoritative workbook ND1-4 / ND5 eligibility. The regime validation "
+          "behaviour is unchanged.", "",
+          f"- **Codes compared:** {summary['nd_rows_total']}",
+          f"- **Match:** {summary['match']}",
+          f"- **Regime stricter than workbook:** {summary['regime_stricter']}",
+          f"- **Regime broader than workbook (compliance risk):** {summary['regime_broader']}",
+          f"- **Divergent ND sets:** {summary['divergent']}",
+          f"- **Workbook codes without a regime rule:** {summary['no_regime_rule']}", "",
+          "## ND-eligibility status counts", ""]
+    for st, c in sorted(summary["nd_eligibility_status_counts"].items(), key=lambda kv: -kv[1]):
+        md.append(f"- `{st}`: {c}")
+    risk = [r for r in rows if r["nd_eligibility_status"] in ("regime_broader", "divergent")]
+    md += ["", "## Compliance-relevant mismatches (regime_broader / divergent)", ""]
+    if risk:
+        for r in risk:
+            md.append(f"- `{r['esma_code']}` ({r['nd_eligibility_status']}): "
+                      f"regime=[{r['regime_nd_allowed']}] workbook=[{r['workbook_nd_allowed']}] "
+                      f"— {r['message']}")
+    else:
+        md.append("_None._")
+    (out / "44_annex2_nd_eligibility_reconciliation_summary.md").write_text(
+        "\n".join(md) + "\n", encoding="utf-8")
+    return {
+        "csv": str(out / "44_annex2_nd_eligibility_reconciliation.csv"),
+        "json": str(out / "44_annex2_nd_eligibility_reconciliation.json"),
+        "summary_md": str(out / "44_annex2_nd_eligibility_reconciliation_summary.md"),
+    }
+
+
+# ---------------------------------------------------------------------------
 # MI applicability / default overlay (asset/regime-aware, config-driven)
 # ---------------------------------------------------------------------------
 
@@ -1774,6 +1920,17 @@ def run_target_first_coverage(
                           "warnings": universe_warnings, "paths": r_paths,
                           "universe_meta": universe_meta}
         paths.update({f"field_universe_{k}": v for k, v in r_paths.items()})
+
+        # 44 — ND-eligibility reconciliation (regime nd_allowed vs workbook).
+        nd_rows = build_annex2_nd_eligibility_reconciliation(
+            regime_config_path=annex2_config_path)
+        nd_sum = annex2_nd_eligibility_summary(nd_rows)
+        nd_paths = write_annex2_nd_eligibility_reconciliation(
+            out, nd_rows, nd_sum, regime_config_source=csrc,
+            universe_source=universe_meta.get("authoritative_source", ""))
+        field_universe["nd_eligibility"] = {"rows": nd_rows, "summary": nd_sum,
+                                            "paths": nd_paths}
+        paths.update({f"nd_eligibility_{k}": v for k, v in nd_paths.items()})
 
     # (Re)generate the operator-editable 34 template from the resulting 28c —
     # unless we just applied that very file in place (never clobber approvals).
