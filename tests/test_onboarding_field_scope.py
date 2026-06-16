@@ -56,7 +56,9 @@ class TestRegistryKey(unittest.TestCase):
     def test_category_counts(self):
         reg = [f for f, m in _FIELDS.items() if m.get("category") == "regulatory"]
         ana = [f for f, m in _FIELDS.items() if m.get("category") == "analytics"]
-        self.assertEqual(len(reg), 315)
+        # 316 includes collateral_unique_identifier (Annex 2 RREC1), added to
+        # close the fields_registry ESMA_Annex2 mapping gap.
+        self.assertEqual(len(reg), 316)
         self.assertEqual(len(ana), 156)
 
     def test_regulatory_core_field_example(self):

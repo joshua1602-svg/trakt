@@ -728,8 +728,9 @@ _DELIVERABLE_STATUSES = {SOURCE_MAPPED, SOURCE_MAPPED_ALT, DERIVED,
 
 _ANNEX2_RECON_COLUMNS = [
     "esma_code", "field_family", "in_workbook_reconciliation",
-    "in_regime_field_rules", "in_config_validation", "in_28a_coverage",
-    "coverage_status", "reconciliation_status", "message",
+    "in_registry_mapping", "in_regime_field_rules", "in_config_validation",
+    "in_28a_coverage", "coverage_status", "reconciliation_status",
+    "registry_mapping_status", "message",
 ]
 
 
@@ -743,6 +744,7 @@ def build_annex2_field_universe_reconciliation(
     """
     workbook = set(universe_meta.get("workbook_codes", []) or [])
     regime = set(universe_meta.get("regime_rule_codes", []) or [])
+    registry = set(universe_meta.get("registry_codes", []) or [])
     deferred = set(universe_meta.get("deferred_codes", []) or [])
     cov_by: Dict[str, Dict[str, Any]] = {}
     for r in coverage_rows:
@@ -781,15 +783,26 @@ def build_annex2_field_universe_reconciliation(
         else:
             rstatus = "present_everywhere"
             msg = "present in workbook universe, regime rules, validation and 28a"
+        in_registry = code in registry
+        # Registry-mapping coverage: an authoritative workbook code should carry
+        # a fields_registry ESMA_Annex2 mapping; if not, it is a registry gap.
+        if not in_wb:
+            registry_status = "not_in_workbook"
+        elif in_registry:
+            registry_status = "registry_mapped"
+        else:
+            registry_status = "registry_gap"
         rows.append({
             "esma_code": code,
             "field_family": _annex2_family(code),
             "in_workbook_reconciliation": in_wb,
+            "in_registry_mapping": in_registry,
             "in_regime_field_rules": in_regime,
             "in_config_validation": in_val,
             "in_28a_coverage": in_28a,
             "coverage_status": cstatus,
             "reconciliation_status": rstatus,
+            "registry_mapping_status": registry_status,
             "message": msg,
         })
     return rows
@@ -814,6 +827,10 @@ def annex2_reconciliation_summary(
         "known_codes_count": len(universe_meta.get("all_codes", []) or []),
         "workbook_reconciliation_count": len(universe_meta.get("workbook_codes", []) or []),
         "regime_rule_count": len(universe_meta.get("regime_rule_codes", []) or []),
+        "registry_mapped_count": sum(
+            1 for r in rows if r.get("registry_mapping_status") == "registry_mapped"),
+        "registry_gap_count": sum(
+            1 for r in rows if r.get("registry_mapping_status") == "registry_gap"),
         "config_validation_count": sum(1 for r in rows if r["in_config_validation"]),
         "coverage_field_count": len(cov_codes),
         "deferred_field_count": len(universe_meta.get("deferred_codes", []) or []),
@@ -849,6 +866,10 @@ def write_annex2_field_universe_reconciliation(
                    indent=2, default=str), encoding="utf-8")
     md = ["# ESMA Annex 2 field-universe reconciliation", "",
           f"- **Authoritative target universe (workbook):** {summary['authoritative_field_count']}",
+          f"- **Registry-mapped (fields_registry ESMA_Annex2):** "
+          f"{summary.get('registry_mapped_count', 0)}",
+          f"- **Registry gaps (workbook code, no registry mapping):** "
+          f"{summary.get('registry_gap_count', 0)}",
           f"- **Regime field rules:** {summary['regime_rule_count']}",
           f"- **Config-validation rows:** {summary['config_validation_count']}",
           f"- **Present in 28a coverage:** {summary['coverage_field_count']}",
@@ -878,6 +899,14 @@ def write_annex2_field_universe_reconciliation(
             md.append(f"- `{r['esma_code']}` — {r['message']}")
     else:
         md.append("_None._")
+    gaps = [r for r in rows if r.get("registry_mapping_status") == "registry_gap"]
+    md += ["", "## Registry gaps (workbook codes with no fields_registry mapping)", ""]
+    if gaps:
+        for r in gaps:
+            md.append(f"- `{r['esma_code']}` — authoritative workbook code with no "
+                      "ESMA_Annex2 mapping in fields_registry.yaml")
+    else:
+        md.append("_None — every authoritative workbook code is registry-mapped._")
     md += ["", "## Relationship between artefacts", "",
            "- **42 config validation** applies to fields with regime/default "
            "validation metadata (regime field rules).",
@@ -900,7 +929,7 @@ def write_annex2_field_universe_reconciliation(
 _ANNEX2_ND_COLUMNS = [
     "esma_code", "field_family", "has_regime_rule", "in_workbook",
     "regime_nd_allowed", "workbook_nd1_4_allowed", "workbook_nd5_allowed",
-    "workbook_nd_allowed", "nd_eligibility_status", "message",
+    "workbook_nd_allowed", "nd_alignment_status", "message",
 ]
 
 
@@ -967,7 +996,7 @@ def build_annex2_nd_eligibility_reconciliation(
             "workbook_nd1_4_allowed": bool((wb or {}).get("nd1_4_allowed")),
             "workbook_nd5_allowed": bool((wb or {}).get("nd5_allowed")),
             "workbook_nd_allowed": "; ".join(sorted(wb_nd)),
-            "nd_eligibility_status": status,
+            "nd_alignment_status": status,
             "message": msg,
         })
     return rows
@@ -976,7 +1005,7 @@ def build_annex2_nd_eligibility_reconciliation(
 def annex2_nd_eligibility_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     counts: Dict[str, int] = {}
     for r in rows:
-        counts[r["nd_eligibility_status"]] = counts.get(r["nd_eligibility_status"], 0) + 1
+        counts[r["nd_alignment_status"]] = counts.get(r["nd_alignment_status"], 0) + 1
     return {
         "nd_rows_total": len(rows),
         "match": counts.get("match", 0),
@@ -987,7 +1016,7 @@ def annex2_nd_eligibility_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         "not_in_workbook": counts.get("not_in_workbook", 0),
         # regime_broader + divergent are the compliance-relevant mismatches.
         "nd_compliance_risk_count": counts.get("regime_broader", 0) + counts.get("divergent", 0),
-        "nd_eligibility_status_counts": counts,
+        "nd_alignment_status_counts": counts,
     }
 
 
@@ -1019,13 +1048,13 @@ def write_annex2_nd_eligibility_reconciliation(
           f"- **Divergent ND sets:** {summary['divergent']}",
           f"- **Workbook codes without a regime rule:** {summary['no_regime_rule']}", "",
           "## ND-eligibility status counts", ""]
-    for st, c in sorted(summary["nd_eligibility_status_counts"].items(), key=lambda kv: -kv[1]):
+    for st, c in sorted(summary["nd_alignment_status_counts"].items(), key=lambda kv: -kv[1]):
         md.append(f"- `{st}`: {c}")
-    risk = [r for r in rows if r["nd_eligibility_status"] in ("regime_broader", "divergent")]
+    risk = [r for r in rows if r["nd_alignment_status"] in ("regime_broader", "divergent")]
     md += ["", "## Compliance-relevant mismatches (regime_broader / divergent)", ""]
     if risk:
         for r in risk:
-            md.append(f"- `{r['esma_code']}` ({r['nd_eligibility_status']}): "
+            md.append(f"- `{r['esma_code']}` ({r['nd_alignment_status']}): "
                       f"regime=[{r['regime_nd_allowed']}] workbook=[{r['workbook_nd_allowed']}] "
                       f"— {r['message']}")
     else:
@@ -1036,6 +1065,298 @@ def write_annex2_nd_eligibility_reconciliation(
         "csv": str(out / "44_annex2_nd_eligibility_reconciliation.csv"),
         "json": str(out / "44_annex2_nd_eligibility_reconciliation.json"),
         "summary_md": str(out / "44_annex2_nd_eligibility_reconciliation_summary.md"),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Annex 2 config-alignment review (45) — record of alignment actions vs workbook
+# ---------------------------------------------------------------------------
+
+# Audit trail of the alignment actions taken to bring the Annex 2 configs into
+# line with the authoritative workbook universe. Records the BEFORE state so 45
+# can show before/after truthfully; the builder verifies the live config matches
+# the recorded AFTER state (else the row is flagged for manual review).
+_ANNEX2_ALIGNMENT_ACTIONS: Dict[str, Any] = {
+    # regime nd_allowed sets that were broader than the workbook ND envelope and
+    # were tightened to it (compliance-risk fixes). before -> after.
+    "nd_tightened_to_workbook": {
+        "RREL1": {"before": ["ND1", "ND2", "ND3"], "after": []},
+        "RREL2": {"before": ["ND5"], "after": []},
+        "RREL6": {"before": ["ND5"], "after": []},
+        "RREL69": {"before": ["ND5"], "after": []},
+        "RREL83": {"before": ["ND5"], "after": []},
+    },
+    # registry mappings added to close a fields_registry gap.
+    "registry_mapping_added": {
+        "RREC1": {"canonical_field": "collateral_unique_identifier",
+                  "reason": "workbook defines RREC1 as the RREL1 unique identifier "
+                            "echoed into the collateral section"},
+    },
+    # codes removed from the active deferred list because they are not in the
+    # authoritative workbook universe (phantom). Moved to an audit-only list.
+    "phantom_deferred_removed": [
+        "RREC24", "RREC25", "RREC26", "RREC27", "RREC30", "RREC31", "RREC32",
+        "RREC33", "RREC34", "RREC36", "RREC39",
+    ],
+    # asset-default enum maps added so a plain-English ERM default resolves to a
+    # valid ESMA enum code (not OTHR).
+    "asset_enum_map_added": {
+        "RREL42": {"value": "Fixed", "code": "FXRL",
+                   "reason": "ERM fixed-for-life rate -> ESMA FXRL"},
+    },
+}
+
+_ANNEX2_ALIGN_COLUMNS = [
+    "esma_code", "workbook_field_name", "workbook_nd_allowed",
+    "regime_nd_allowed_before", "regime_nd_allowed_after", "alignment_status",
+    "action_taken", "requires_manual_review", "message",
+]
+
+
+def build_annex2_config_alignment_review(
+    regime_config_path: Optional[str | Path] = None,
+    asset_config_path: Optional[str | Path] = None,
+    universe_path: Optional[str | Path] = None,
+    registry_path: Optional[str | Path] = None,
+) -> List[Dict[str, Any]]:
+    """Record every Annex 2 config-alignment action and unresolved review item.
+
+    Combines: the workbook universe, the (post-alignment) regime rules, the
+    registry mapping, the ND reconciliation and the asset-config validation, plus
+    the recorded alignment actions, into one auditable review. Report-only.
+    """
+    cid, csrc, _ruled = load_annex2_target_contract(regime_config_path)
+    try:
+        regime = yaml.safe_load(Path(csrc).read_text(encoding="utf-8")) or {}
+    except Exception:
+        regime = {}
+    field_rules = regime.get("field_rules", {}) or {}
+    workbook, _src = load_annex2_workbook_universe(universe_path)
+    registry = load_annex2_authoritative_universe(registry_path)
+    val_rows, _overlay, _asrc = build_annex2_config_validation(
+        csrc, asset_config_path)
+    invalid_by_code = {r["esma_code"]: r for r in val_rows
+                       if r["validation_status"] == VS_INVALID}
+
+    nd_tightened = _ANNEX2_ALIGNMENT_ACTIONS["nd_tightened_to_workbook"]
+    enum_added = _ANNEX2_ALIGNMENT_ACTIONS["asset_enum_map_added"]
+
+    def _wb_nd(code: str) -> List[str]:
+        return _annex2_nd_allowed_from_workbook(workbook.get(code, {}))
+
+    def _fmt(nd) -> str:
+        return "; ".join(nd)
+
+    rows: List[Dict[str, Any]] = []
+
+    # 1. ND alignment for every regime-ruled workbook code.
+    for code in sorted(set(field_rules) & set(workbook), key=_code_sort_key):
+        wb = workbook.get(code, {})
+        wb_nd = set(_wb_nd(code))
+        after = {str(x).strip().upper()
+                 for x in (field_rules[code].get("nd_allowed") or [])}
+        before = after
+        manual = False
+        if code in nd_tightened:
+            before = {str(x).upper() for x in nd_tightened[code]["before"]}
+            status = "tightened_to_workbook"
+            action = f"nd_allowed {sorted(before)} -> {sorted(after)} (workbook envelope)"
+            msg = "regime ND was broader than the workbook; tightened to ESMA envelope"
+            if after != wb_nd:
+                manual = True
+                msg += " (WARNING: live config does not match workbook — review)"
+        elif after == wb_nd:
+            status = "aligned"
+            action = "none"
+            msg = "regime nd_allowed matches workbook ND eligibility"
+        elif after < wb_nd:
+            status = "left_stricter_by_policy"
+            action = "none (kept stricter)"
+            msg = ("regime is intentionally stricter than the workbook envelope: "
+                   f"workbook permits {sorted(wb_nd - after)} that the regime omits")
+        elif after > wb_nd:
+            status = "divergent_requires_review"
+            action = "none"
+            manual = True
+            msg = ("regime permits ND value(s) the workbook FORBIDS: "
+                   f"{sorted(after - wb_nd)} (compliance risk — review)")
+        else:
+            status = "divergent_requires_review"
+            action = "none"
+            manual = True
+            msg = (f"regime/workbook ND sets diverge: regime={sorted(after)} "
+                   f"workbook={sorted(wb_nd)} — manual review")
+        rows.append({
+            "esma_code": code,
+            "workbook_field_name": wb.get("field_name", ""),
+            "workbook_nd_allowed": _fmt(sorted(wb_nd)),
+            "regime_nd_allowed_before": _fmt(sorted(before)),
+            "regime_nd_allowed_after": _fmt(sorted(after)),
+            "alignment_status": status,
+            "action_taken": action,
+            "requires_manual_review": manual,
+            "message": msg,
+        })
+
+    # 2. Registry mapping additions / remaining gaps for workbook codes.
+    for code, info in _ANNEX2_ALIGNMENT_ACTIONS["registry_mapping_added"].items():
+        wb = workbook.get(code, {})
+        mapped = code in registry
+        rows.append({
+            "esma_code": code,
+            "workbook_field_name": wb.get("field_name", ""),
+            "workbook_nd_allowed": _fmt(_wb_nd(code)),
+            "regime_nd_allowed_before": "",
+            "regime_nd_allowed_after": "",
+            "alignment_status": "registry_mapping_added" if mapped else "registry_gap",
+            "action_taken": (f"added fields_registry mapping -> {info['canonical_field']}"
+                             if mapped else "registry mapping still missing"),
+            "requires_manual_review": not mapped,
+            "message": (info["reason"] if mapped
+                        else "authoritative workbook code has no registry mapping"),
+        })
+    # Any other workbook code missing from the registry is a surfaced gap.
+    for code in sorted(set(workbook) - set(registry), key=_code_sort_key):
+        if code in _ANNEX2_ALIGNMENT_ACTIONS["registry_mapping_added"]:
+            continue
+        wb = workbook.get(code, {})
+        rows.append({
+            "esma_code": code,
+            "workbook_field_name": wb.get("field_name", ""),
+            "workbook_nd_allowed": _fmt(_wb_nd(code)),
+            "regime_nd_allowed_before": "",
+            "regime_nd_allowed_after": "",
+            "alignment_status": "registry_gap",
+            "action_taken": "none",
+            "requires_manual_review": True,
+            "message": "authoritative workbook code has no fields_registry ESMA_Annex2 mapping",
+        })
+
+    # 3. Phantom deferred codes removed from the active runtime list.
+    active_deferred = set(regime.get("reconciliation_scope", {})
+                          .get("deferred_fields", []) or [])
+    for code in _ANNEX2_ALIGNMENT_ACTIONS["phantom_deferred_removed"]:
+        still_active = code in active_deferred
+        rows.append({
+            "esma_code": code,
+            "workbook_field_name": workbook.get(code, {}).get("field_name", "(not in workbook)"),
+            "workbook_nd_allowed": "",
+            "regime_nd_allowed_before": "deferred",
+            "regime_nd_allowed_after": ("deferred (STILL ACTIVE)" if still_active
+                                        else "removed (audit-only)"),
+            "alignment_status": "phantom_deferred_removed",
+            "action_taken": ("moved out of active deferred_fields to audit-only"
+                             if not still_active else "NOT removed — review"),
+            "requires_manual_review": still_active,
+            "message": ("code is not in the authoritative workbook universe; removed "
+                        "from active runtime deferral" if not still_active
+                        else "phantom code still active in deferred_fields"),
+        })
+
+    # 4. Asset-default conflicts: resolved via enum map, or still unresolved.
+    for code, info in enum_added.items():
+        wb = workbook.get(code, {})
+        resolved = code not in invalid_by_code
+        rows.append({
+            "esma_code": code,
+            "workbook_field_name": wb.get("field_name", ""),
+            "workbook_nd_allowed": _fmt(_wb_nd(code)),
+            "regime_nd_allowed_before": "",
+            "regime_nd_allowed_after": "",
+            "alignment_status": "aligned" if resolved else "asset_default_conflict",
+            "action_taken": (f"added enum map '{info['value']}' -> {info['code']} "
+                             f"({info['reason']})"),
+            "requires_manual_review": not resolved,
+            "message": ("asset default now resolves to a valid ESMA enum"
+                        if resolved else "enum map added but asset default still invalid"),
+        })
+    for code, r in sorted(invalid_by_code.items(), key=lambda kv: _code_sort_key(kv[0])):
+        if code in enum_added:
+            continue
+        wb = workbook.get(code, {})
+        rows.append({
+            "esma_code": code,
+            "workbook_field_name": wb.get("field_name", ""),
+            "workbook_nd_allowed": _fmt(_wb_nd(code)),
+            "regime_nd_allowed_before": r.get("regime_nd_allowed", ""),
+            "regime_nd_allowed_after": r.get("regime_nd_allowed", ""),
+            "alignment_status": "asset_default_conflict",
+            "action_taken": "none — invalid asset default surfaced, not applied",
+            "requires_manual_review": True,
+            "message": (f"asset default '{r.get('asset_default_value', '')}' is invalid "
+                        f"against the active regime rule: {r.get('message', '')}"),
+        })
+    return rows
+
+
+def annex2_config_alignment_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    counts: Dict[str, int] = {}
+    for r in rows:
+        counts[r["alignment_status"]] = counts.get(r["alignment_status"], 0) + 1
+    return {
+        "alignment_rows_total": len(rows),
+        "aligned": counts.get("aligned", 0),
+        "tightened_to_workbook": counts.get("tightened_to_workbook", 0),
+        "left_stricter_by_policy": counts.get("left_stricter_by_policy", 0),
+        "divergent_requires_review": counts.get("divergent_requires_review", 0),
+        "registry_mapping_added": counts.get("registry_mapping_added", 0),
+        "registry_gap": counts.get("registry_gap", 0),
+        "phantom_deferred_removed": counts.get("phantom_deferred_removed", 0),
+        "asset_default_conflict": counts.get("asset_default_conflict", 0),
+        "requires_manual_review_count": sum(1 for r in rows if r["requires_manual_review"]),
+        "alignment_status_counts": counts,
+    }
+
+
+def write_annex2_config_alignment_review(
+    out_dir: str | Path,
+    rows: List[Dict[str, Any]],
+    summary: Dict[str, Any],
+    *,
+    regime_config_source: str = "",
+    registry_source: str = "",
+    asset_config_source: str = "",
+) -> Dict[str, str]:
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    _write_csv(out / "45_annex2_config_alignment_review.csv", rows,
+               _ANNEX2_ALIGN_COLUMNS)
+    (out / "45_annex2_config_alignment_review.json").write_text(
+        json.dumps({"regime_config_source": regime_config_source,
+                    "registry_source": registry_source,
+                    "asset_config_source": asset_config_source,
+                    "summary": summary, "rows": rows}, indent=2, default=str),
+        encoding="utf-8")
+    md = ["# ESMA Annex 2 config-alignment review", "",
+          "Record of every config-alignment action taken to align with the "
+          "authoritative workbook universe, plus unresolved review items. "
+          "Report only — regime validation behaviour is unchanged.", "",
+          f"- **Aligned:** {summary['aligned']}",
+          f"- **Tightened to workbook (compliance-risk fixes):** {summary['tightened_to_workbook']}",
+          f"- **Left stricter by policy:** {summary['left_stricter_by_policy']}",
+          f"- **Divergent (manual review):** {summary['divergent_requires_review']}",
+          f"- **Registry mappings added:** {summary['registry_mapping_added']}",
+          f"- **Registry gaps remaining:** {summary['registry_gap']}",
+          f"- **Phantom deferred removed:** {summary['phantom_deferred_removed']}",
+          f"- **Asset-default conflicts:** {summary['asset_default_conflict']}",
+          f"- **Requires manual review:** {summary['requires_manual_review_count']}", ""]
+    review = [r for r in rows if r["requires_manual_review"]]
+    md += ["## Items requiring manual review", ""]
+    if review:
+        for r in review:
+            md.append(f"- `{r['esma_code']}` ({r['alignment_status']}): {r['message']}")
+    else:
+        md.append("_None._")
+    md += ["", "## Actions taken", ""]
+    for r in rows:
+        if r["action_taken"] not in ("none", "none (kept stricter)"):
+            md.append(f"- `{r['esma_code']}` ({r['alignment_status']}): {r['action_taken']}")
+    (out / "45_annex2_config_alignment_review_summary.md").write_text(
+        "\n".join(md) + "\n", encoding="utf-8")
+    return {
+        "csv": str(out / "45_annex2_config_alignment_review.csv"),
+        "json": str(out / "45_annex2_config_alignment_review.json"),
+        "summary_md": str(out / "45_annex2_config_alignment_review_summary.md"),
     }
 
 
@@ -1931,6 +2252,20 @@ def run_target_first_coverage(
         field_universe["nd_eligibility"] = {"rows": nd_rows, "summary": nd_sum,
                                             "paths": nd_paths}
         paths.update({f"nd_eligibility_{k}": v for k, v in nd_paths.items()})
+
+        # 45 — config-alignment review (actions taken + manual-review items).
+        align_rows = build_annex2_config_alignment_review(
+            regime_config_path=annex2_config_path,
+            asset_config_path=asset_config_path,
+            registry_path=registry_path)
+        align_sum = annex2_config_alignment_summary(align_rows)
+        align_paths = write_annex2_config_alignment_review(
+            out, align_rows, align_sum, regime_config_source=csrc,
+            registry_source=str(registry_path or ""),
+            asset_config_source=str(asset_config_path or ""))
+        field_universe["config_alignment"] = {"rows": align_rows, "summary": align_sum,
+                                              "paths": align_paths}
+        paths.update({f"config_alignment_{k}": v for k, v in align_paths.items()})
 
     # (Re)generate the operator-editable 34 template from the resulting 28c —
     # unless we just applied that very file in place (never clobber approvals).

@@ -230,6 +230,9 @@ def _load_target_first_artifacts(project_dir: Path, output_root: Path | None = N
     nd = _find_artifact(project_dir, output_root,
                         "44_annex2_nd_eligibility_reconciliation.json")
     tf["nd_eligibility"] = _load_json(nd) if nd else None
+    ca = _find_artifact(project_dir, output_root,
+                        "45_annex2_config_alignment_review.json")
+    tf["config_alignment"] = _load_json(ca) if ca else None
     _derive_summaries(tf)
     return tf
 
@@ -331,12 +334,14 @@ def _annex2_universe_html(tf: dict) -> str:
     missing = int(s.get("missing_from_28a_count", 0))
     pending = int(s.get("missing_from_regime_rules_count", 0))
     rows = [
-        ["Authoritative Annex 2 fields", _esc(s.get("authoritative_field_count", 0))],
-        ["Present in workbook registry", _esc(s.get("workbook_reconciliation_count", 0))],
+        ["Authoritative Annex 2 fields (workbook)", _esc(s.get("authoritative_field_count", 0))],
+        ["Registry mapped", _esc(s.get("registry_mapped_count", 0))],
+        ["Registry gaps", _esc(s.get("registry_gap_count", 0))],
         ["Present in regime rules", _esc(s.get("regime_rule_count", 0))],
         ["Present in 28a coverage", _esc(s.get("coverage_field_count", 0))],
         ["Deferred / pending reconciliation", _esc(s.get("deferred_field_count", 0))],
         ["Pending regime rule (config gap)", _esc(pending)],
+        ["Active phantom deferred fields", _esc(s.get("not_in_authoritative_universe_count", 0))],
         ["Missing from 28a", _esc(missing)],
         ["Deliverable (rule + coverage)", _esc(s.get("deliverable_field_count", 0))],
     ]
@@ -356,7 +361,33 @@ def _annex2_universe_html(tf: dict) -> str:
         warn_html += f'<p class="meta">⚠ {_esc(w)}</p>'
     return ('<h4 class="chart-title">Annex 2 field universe reconciliation</h4>'
             + note + warn_html + _table(["Item", "Value"], rows)
-            + _annex2_nd_eligibility_html(tf))
+            + _annex2_nd_eligibility_html(tf)
+            + _annex2_config_alignment_html(tf))
+
+
+def _annex2_config_alignment_html(tf: dict) -> str:
+    """Config-alignment review (45): actions taken + manual-review items."""
+    ca = tf.get("config_alignment")
+    if not ca:
+        return ""
+    s = ca.get("summary", {}) or {}
+    manual = int(s.get("requires_manual_review_count", 0))
+    rows = [
+        ["Tightened to workbook (compliance fixes)", _esc(s.get("tightened_to_workbook", 0))],
+        ["Registry mappings added", _esc(s.get("registry_mapping_added", 0))],
+        ["Phantom deferred removed", _esc(s.get("phantom_deferred_removed", 0))],
+        ["Left stricter by policy", _esc(s.get("left_stricter_by_policy", 0))],
+        ["Divergent (manual review)", _esc(s.get("divergent_requires_review", 0))],
+        ["Asset-default conflicts", _esc(s.get("asset_default_conflict", 0))],
+        ["Items requiring manual review", _esc(manual)],
+    ]
+    note = (f'<div class="callout warn">{manual} Annex 2 alignment item(s) require manual '
+            "review — see <code>45_annex2_config_alignment_review.csv</code>.</div>"
+            if manual else
+            '<div class="callout pass">All Annex 2 config-alignment actions resolved; '
+            "no items require manual review.</div>")
+    return ('<h4 class="chart-title">Annex 2 config-alignment review</h4>'
+            + note + _table(["Item", "Value"], rows))
 
 
 def _annex2_nd_eligibility_html(tf: dict) -> str:

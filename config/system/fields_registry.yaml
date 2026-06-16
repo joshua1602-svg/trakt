@@ -5294,6 +5294,24 @@ fields:
         priority: Mandatory
     layer: core
     core_canonical: false
+  collateral_unique_identifier:
+    # Annex 2 RREC1 ("Unique Identifier", Collateral information section). The
+    # ESMA template defines it as "report the same unique identifier here as the
+    # one entered into field RREL1", so it carries the RREL1 value into the
+    # collateral records. Mapped explicitly to close the registry gap.
+    allowed_values: null
+    category: regulatory
+    format: string
+    portfolio_type: common
+    synonyms:
+      - unique_identifier
+      - loan_policy_number
+    regime_mapping:
+      ESMA_Annex2:
+        code: RREC1
+        priority: Mandatory
+    layer: core
+    core_canonical: false
   unscheduled_principal_collections:
     allowed_values: null
     category: regulatory
