@@ -236,6 +236,30 @@ class TestAnnex2FieldUniverse(unittest.TestCase):
         for code in ("RREL3", "RREL5", "RREL7"):
             self.assertIn(code, auth)
 
+    def test_workbook_universe_is_authoritative_107(self):
+        wb, src = tcov.load_annex2_workbook_universe()
+        # The workbook-derived universe is the authoritative ESMA Annex 2 set.
+        self.assertEqual(len(wb), 107)
+        self.assertTrue(src.endswith("annex2_field_universe.yaml"))
+        # RREC1 is in the workbook but absent from the fields_registry mapping.
+        self.assertIn("RREC1", wb)
+        self.assertIn("nd5_allowed", wb["RREL1"])
+        self.assertEqual(self.recon["summary"]["authoritative_field_count"], 107)
+
+    def test_rrec1_present_in_28a(self):
+        cov_codes = {r["target_field"] for r in self.cov["rows"]}
+        self.assertIn("RREC1", cov_codes)
+
+    def test_phantom_deferred_codes_flagged_not_in_universe(self):
+        # Regime deferred_fields codes that are NOT in the authoritative workbook
+        # universe are flagged (config-quality), not silently added to 28a.
+        phantom = {r["esma_code"] for r in self.recon["rows"]
+                   if r["reconciliation_status"] == "not_in_authoritative_universe"}
+        self.assertTrue(phantom)
+        cov_codes = {r["target_field"] for r in self.cov["rows"]}
+        for code in phantom:
+            self.assertNotIn(code, cov_codes)
+
     def test_28a_equals_authoritative_universe_count(self):
         recon_sum = self.recon["summary"]
         self.assertEqual(len(self.cov["rows"]),

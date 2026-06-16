@@ -297,12 +297,12 @@ def load_annex2_target_contract(
 def load_annex2_authoritative_universe(
     registry_path: Optional[str | Path] = None,
 ) -> Dict[str, Dict[str, Any]]:
-    """Return the authoritative (workbook-derived) Annex 2 code universe.
+    """Return the canonical-field map for Annex 2 codes from ``fields_registry``.
 
     Reads ``fields_registry.yaml`` and extracts every canonical field carrying a
-    ``regime_mapping.ESMA_Annex2.code`` — the complete workbook-derived Annex 2
-    field set. Returns ``{esma_code: {canonical_field, priority, synonyms}}``.
-    Empty when the registry has no Annex 2 mappings (caller then warns).
+    ``regime_mapping.ESMA_Annex2.code``. Used to resolve a source-matchable
+    canonical field name per ESMA code. Returns
+    ``{esma_code: {canonical_field, priority, synonyms}}``.
     """
     if not registry_path:
         registry_path = _REPO_ROOT / "config" / "system" / "fields_registry.yaml"
@@ -326,16 +326,58 @@ def load_annex2_authoritative_universe(
     return out
 
 
+# Workbook-derived authoritative Annex 2 field universe (preferred source).
+_ANNEX2_UNIVERSE_DEFAULT = _REPO_ROOT / "config" / "regime" / "annex2_field_universe.yaml"
+
+
+def load_annex2_workbook_universe(
+    universe_path: Optional[str | Path] = None,
+) -> Tuple[Dict[str, Dict[str, Any]], str]:
+    """Load the authoritative workbook-derived Annex 2 field universe.
+
+    This is the COMPLETE ESMA Annex 2 field set (every field code in the
+    template workbook), derived by ``scripts/build_annex2_universe.py``. Returns
+    ``({esma_code: {field_name, section, content, nd1_4_allowed, nd5_allowed,
+    format}}, source_path)``. Empty when the config is absent (caller falls back
+    to the registry mapping and warns).
+    """
+    path = Path(universe_path) if universe_path else _ANNEX2_UNIVERSE_DEFAULT
+    if not path.exists():
+        return {}, str(path)
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return {}, str(path)
+    return dict(data.get("fields", {}) or {}), str(path)
+
+
+def _annex2_nd_allowed_from_workbook(meta: Dict[str, Any]) -> List[str]:
+    nd: List[str] = []
+    if meta.get("nd1_4_allowed"):
+        nd += ["ND1", "ND2", "ND3", "ND4"]
+    if meta.get("nd5_allowed"):
+        nd += ["ND5"]
+    return nd
+
+
 def build_annex2_full_contract(
     annex2_config_path: Optional[str | Path] = None,
     registry_path: Optional[str | Path] = None,
+    universe_path: Optional[str | Path] = None,
 ) -> Tuple[str, str, List[Dict[str, Any]], Dict[str, Any]]:
-    """Build the FULL Annex 2 target contract: every code in the authoritative
-    universe (workbook registry ∪ regime field_rules ∪ deferred_fields).
+    """Build the FULL Annex 2 target contract over the authoritative universe.
 
-    Fields with a full regime rule keep their rich rule. Authoritative codes
-    without a regime rule are included as ``pending_regime_rule`` (or ``deferred``
-    when listed in ``reconciliation_scope.deferred_fields``) — never dropped.
+    Authoritative universe source preference:
+      1. the workbook-derived field universe (``annex2_field_universe.yaml``);
+      2. otherwise the ``fields_registry`` ESMA_Annex2 mapping ∪ regime rules.
+
+    Codes with a full regime rule keep their rich rule. Authoritative codes
+    without one are included as ``pending_regime_rule`` (or ``deferred`` when in
+    ``reconciliation_scope.deferred_fields``), enriched with workbook metadata
+    and the registry canonical field (so they can still be source-mapped).
+    Codes declared deferred in the regime config that are NOT in the
+    authoritative universe are reported in 43 as ``not_in_authoritative_universe``
+    and are not added to 28a.
 
     Returns ``(contract_id, contract_source, target_fields, universe_meta)``.
     """
@@ -346,49 +388,80 @@ def build_annex2_full_contract(
     except Exception:
         regime = {}
     deferred = set(regime.get("reconciliation_scope", {}).get("deferred_fields", []) or [])
-    workbook = load_annex2_authoritative_universe(registry_path)
-    workbook_codes = set(workbook.keys())
 
-    all_codes = set(ruled_by_code) | workbook_codes | deferred
+    workbook, workbook_src = load_annex2_workbook_universe(universe_path)
+    registry = load_annex2_authoritative_universe(registry_path)
+
+    warnings: List[str] = []
+    if workbook:
+        authoritative = set(workbook)            # the 107-code workbook universe
+        authoritative_source = workbook_src
+    else:
+        authoritative = set(registry) | set(ruled_by_code)
+        authoritative_source = str(registry_path) if registry_path else ""
+        warnings.append(
+            "workbook-derived Annex 2 universe (annex2_field_universe.yaml) not "
+            "found — falling back to the fields_registry mapping, which may be "
+            "incomplete relative to the ESMA template.")
+    if registry and not (set(ruled_by_code) <= set(registry) | set(workbook)):
+        warnings.append("some regime field_rules are absent from the authoritative "
+                        "Annex 2 universe.")
+
+    # Contract codes = authoritative universe ∪ implemented regime rules.
+    contract_codes = authoritative | set(ruled_by_code)
     rows: List[Dict[str, Any]] = list(ruled)
-    for code in sorted(all_codes - set(ruled_by_code), key=_code_sort_key):
-        meta = workbook.get(code, {})
-        canon = meta.get("canonical_field", "")
+    for code in sorted(contract_codes - set(ruled_by_code), key=_code_sort_key):
+        wb = workbook.get(code, {})
+        reg = registry.get(code, {})
+        canon = reg.get("canonical_field", "")
         is_deferred = code in deferred
-        required = str(meta.get("priority", "")).strip().lower() == "mandatory"
+        nd_allowed = _annex2_nd_allowed_from_workbook(wb)
+        priority = str(reg.get("priority", "")).strip().lower()
+        # Mandatory when the registry says so, or when the workbook permits no ND
+        # value at all (strictly required); informational only (never blocking).
+        required = (priority == "mandatory"
+                    or (bool(wb) and not wb.get("nd1_4_allowed")
+                        and not wb.get("nd5_allowed")))
         rows.append({
             "target_field": code,
             "esma_code": code,
             "projected_source_field": canon,
             "target_domain": _annex2_domain(code),
-            "target_label": canon or code,
+            "target_label": wb.get("field_name", "") or canon or code,
             "required_status": "mandatory" if required else "optional",
             "enforce_presence": False,
             "applicability_status": ("deferred_reconciliation" if is_deferred
                                      else "applicable"),
             "match_field": canon,
-            "synonyms": [s for s in ([canon] + list(meta.get("synonyms", []) or [])) if s],
+            "synonyms": [s for s in ([canon] + list(reg.get("synonyms", []) or [])) if s],
             "derived": False,
             "derivation_rule": "",
             "default_rule": "",
             "default_value": "",
             "default_rule_source": "",
             "default_reason": "",
-            "nd_allowed": [],
+            "nd_allowed": nd_allowed,
             "configured_value_source": "",
-            # Universe completeness flags (drive pending/deferred classification).
             "pending_regime_rule": (not is_deferred),
             "deferred_reconciliation": is_deferred,
-            "in_workbook_universe": code in workbook_codes,
+            "in_workbook_universe": code in authoritative,
+            "workbook_format": wb.get("format", ""),
         })
 
+    # 43 considers every code we know about, incl. phantom deferred codes that
+    # are NOT in the authoritative universe (a config-quality finding).
+    all_codes = authoritative | set(ruled_by_code) | set(registry) | deferred
     universe_meta = {
-        "workbook_codes": sorted(workbook_codes, key=_code_sort_key),
+        "workbook_codes": sorted(authoritative, key=_code_sort_key),
         "regime_rule_codes": sorted(ruled_by_code.keys(), key=_code_sort_key),
+        "registry_codes": sorted(registry.keys(), key=_code_sort_key),
         "deferred_codes": sorted(deferred, key=_code_sort_key),
         "all_codes": sorted(all_codes, key=_code_sort_key),
-        "registry_has_annex2": bool(workbook_codes),
+        "registry_has_annex2": bool(registry),
+        "workbook_universe_present": bool(workbook),
         "registry_source": str(registry_path) if registry_path else "",
+        "authoritative_source": authoritative_source,
+        "warnings": warnings,
     }
     return cid, csrc, rows, universe_meta
 
@@ -688,16 +761,16 @@ def build_annex2_field_universe_reconciliation(
         in_val = code in validation_codes
         in_28a = code in cov_by
         cstatus = cov_by.get(code, {}).get("coverage_status", "")
-        if not in_28a:
+        if not in_wb:
+            rstatus = "not_in_authoritative_universe"
+            msg = ("declared in regime/registry config but NOT in the authoritative "
+                   "Annex 2 workbook universe (config-quality issue)")
+        elif not in_28a:
             rstatus = "missing_from_28a"
             msg = "authoritative Annex 2 code is missing from 28a target coverage"
         elif code in deferred:
             rstatus = "deferred_in_regime"
-            msg = ("explicitly deferred for reconciliation"
-                   + ("" if in_wb else " (not present in the workbook registry)"))
-        elif not in_wb:
-            rstatus = "not_in_authoritative_universe"
-            msg = "present in regime/coverage but not in the workbook registry"
+            msg = "explicitly deferred for reconciliation"
         elif not in_regime:
             rstatus = "missing_from_regime_rules"
             msg = ("in the authoritative universe but has no full regime field "
@@ -707,7 +780,7 @@ def build_annex2_field_universe_reconciliation(
             msg = "regime rule present but no config-validation row"
         else:
             rstatus = "present_everywhere"
-            msg = "present in workbook registry, regime rules, validation and 28a"
+            msg = "present in workbook universe, regime rules, validation and 28a"
         rows.append({
             "esma_code": code,
             "field_family": _annex2_family(code),
@@ -736,7 +809,9 @@ def annex2_reconciliation_summary(
     cov_codes = {r.get("esma_code") or r.get("target_field") for r in coverage_rows}
     cov_codes.discard(None)
     return {
-        "authoritative_field_count": len(universe_meta.get("all_codes", []) or []),
+        # The authoritative universe is the workbook field set (or registry fallback).
+        "authoritative_field_count": len(universe_meta.get("workbook_codes", []) or []),
+        "known_codes_count": len(universe_meta.get("all_codes", []) or []),
         "workbook_reconciliation_count": len(universe_meta.get("workbook_codes", []) or []),
         "regime_rule_count": len(universe_meta.get("regime_rule_codes", []) or []),
         "config_validation_count": sum(1 for r in rows if r["in_config_validation"]),
@@ -744,7 +819,10 @@ def annex2_reconciliation_summary(
         "deferred_field_count": len(universe_meta.get("deferred_codes", []) or []),
         "missing_from_28a_count": rstatus_counts.get("missing_from_28a", 0),
         "missing_from_regime_rules_count": rstatus_counts.get("missing_from_regime_rules", 0),
+        "not_in_authoritative_universe_count": rstatus_counts.get(
+            "not_in_authoritative_universe", 0),
         "deliverable_field_count": deliverable,
+        "workbook_universe_present": bool(universe_meta.get("workbook_universe_present")),
         "registry_has_annex2": bool(universe_meta.get("registry_has_annex2")),
         "reconciliation_status_counts": rstatus_counts,
     }
@@ -770,13 +848,14 @@ def write_annex2_field_universe_reconciliation(
                     "warnings": warnings, "summary": summary, "rows": rows},
                    indent=2, default=str), encoding="utf-8")
     md = ["# ESMA Annex 2 field-universe reconciliation", "",
-          f"- **Authoritative target universe:** {summary['authoritative_field_count']}",
-          f"- **Workbook registry codes:** {summary['workbook_reconciliation_count']}",
+          f"- **Authoritative target universe (workbook):** {summary['authoritative_field_count']}",
           f"- **Regime field rules:** {summary['regime_rule_count']}",
           f"- **Config-validation rows:** {summary['config_validation_count']}",
           f"- **Present in 28a coverage:** {summary['coverage_field_count']}",
           f"- **Deferred / pending reconciliation:** {summary['deferred_field_count']}",
           f"- **Missing from 28a:** {summary['missing_from_28a_count']}",
+          f"- **Declared but not in authoritative universe:** "
+          f"{summary.get('not_in_authoritative_universe_count', 0)}",
           f"- **Deliverable (rule + coverage):** {summary['deliverable_field_count']}", ""]
     if warnings:
         md += ["## Warnings", ""] + [f"- {w}" for w in warnings] + [""]
@@ -791,6 +870,14 @@ def write_annex2_field_universe_reconciliation(
             md.append(f"- `{r['esma_code']}` — {r['message']}")
     else:
         md.append("_None — 28a covers the full authoritative universe._")
+    phantom = [r for r in rows
+               if r["reconciliation_status"] == "not_in_authoritative_universe"]
+    md += ["", "## Codes declared in config but not in the authoritative universe", ""]
+    if phantom:
+        for r in phantom:
+            md.append(f"- `{r['esma_code']}` — {r['message']}")
+    else:
+        md.append("_None._")
     md += ["", "## Relationship between artefacts", "",
            "- **42 config validation** applies to fields with regime/default "
            "validation metadata (regime field rules).",
@@ -1601,10 +1688,7 @@ def run_target_first_coverage(
     if target_contract_kind(mode, context) == "esma_annex_2":
         cid, csrc, target_fields, universe_meta = build_annex2_full_contract(
             annex2_config_path=annex2_config_path, registry_path=registry_path)
-        if not universe_meta.get("registry_has_annex2"):
-            universe_warnings.append(
-                "authoritative Annex 2 registry not found / has no ESMA_Annex2 "
-                "mappings — the regime config alone may be incomplete.")
+        universe_warnings = list(universe_meta.get("warnings", []) or [])
     else:
         cid, csrc, target_fields = load_target_contract(
             mode, context, mi_registry_path=mi_registry_path,

@@ -1,0 +1,1544 @@
+regime: ESMA_Annex2
+source: annex2_template_workbook.xlsx
+generated_by: scripts/build_annex2_universe.py
+note: Authoritative workbook-derived ESMA Annex 2 field universe. One entry per Annex
+  2 field code. Do not edit by hand — regenerate from the template workbook.
+field_count: 107
+fields:
+  RREL1:
+    field_name: Unique Identifier
+    section: Underlying exposures information section
+    content: The unique identifier assigned by the reporting entity in accordance
+      with Article 11(1) of Delegated Regulation (EU) …/… [include number of the disclosure
+      RTS].
+    nd1_4_allowed: false
+    nd5_allowed: false
+    format: '{ALPHANUM-28}'
+  RREL2:
+    field_name: Original Underlying Exposure Identifier
+    section: Underlying exposures information section
+    content: Unique underlying exposure identifier. The identifier must be different
+      from any external identification number, to ensure anonymity of the obligor.
+      The reporting entity must not amend this unique identifier.
+    nd1_4_allowed: false
+    nd5_allowed: false
+    format: '{ALPHANUM-1000}'
+  RREL3:
+    field_name: New Underlying Exposure Identifier
+    section: Underlying exposures information section
+    content: If the original identifier in field RREL2 cannot be maintained in this
+      field enter the new identifier here. If there has been no change in the identifier,
+      enter the same identifier as in RREL2. The reporting entity must not amend this
+      unique identifier.
+    nd1_4_allowed: false
+    nd5_allowed: false
+    format: '{ALPHANUM-1000}'
+  RREL4:
+    field_name: Original Obligor Identifier
+    section: Underlying exposures information section
+    content: Original unique obligor identifier. The identifier must be different
+      from any external identification number, in order to ensure anonymity of the
+      obligor. The reporting entity must not amend this unique identifier.
+    nd1_4_allowed: false
+    nd5_allowed: false
+    format: '{ALPHANUM-1000}'
+  RREL5:
+    field_name: New Obligor Identifier
+    section: Underlying exposures information section
+    content: If the original identifier in field RREL4 cannot be maintained in this
+      field enter the new identifier here. If there has been no change in the identifier,
+      enter the same identifier as in RREL4. The reporting entity must not amend this
+      unique identifier.
+    nd1_4_allowed: false
+    nd5_allowed: false
+    format: '{ALPHANUM-1000}'
+  RREL6:
+    field_name: Data Cut-Off Date
+    section: Underlying exposures information section
+    content: The data cut-off date for this data submission.
+    nd1_4_allowed: false
+    nd5_allowed: false
+    format: '{DATEFORMAT}'
+  RREL7:
+    field_name: Pool Addition Date
+    section: Underlying exposures information section
+    content: 'The date that the underlying exposure was transferred to the SSPE. For
+      all underlying exposures in the pool as at the cut-off date in the first report
+      submitted to the securitisation repository, if this information is not available
+      enter the later of: (i) the closing date of the securitisation, and (ii) the
+      origination date of the underlying exposure.'
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{DATEFORMAT}'
+  RREL8:
+    field_name: Date Of Repurchase
+    section: Underlying exposures information section
+    content: Date on which the underlying exposure was repurchased from the pool.
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{DATEFORMAT}'
+  RREL9:
+    field_name: Redemption Date
+    section: Underlying exposures information section
+    content: Date on which account redeemed or (for defaulted underlying exposures)
+      the date that the recovery process was completed.
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{DATEFORMAT}'
+  RREL10:
+    field_name: Resident
+    section: Underlying exposures information section
+    content: Is the primary obligor a resident of the country in which the collateral
+      and underlying exposure reside?
+    nd1_4_allowed: true
+    nd5_allowed: false
+    format: '{Y/N}'
+  RREL11:
+    field_name: Geographic Region - Obligor
+    section: Underlying exposures information section
+    content: The geographic region (NUTS3 classification) where the obligor is located.
+      Where no NUTS3 classification has been produced by Eurostat (e.g. a non-EU jurisdiction),
+      enter the two-digit country code in {COUNTRYCODE_2} format followed by 'ZZZ'.
+    nd1_4_allowed: true
+    nd5_allowed: false
+    format: '{NUTS}'
+  RREL12:
+    field_name: Geographic Region Classification
+    section: Underlying exposures information section
+    content: Enter the year of the NUTS3 classification used for the Geographic Region
+      fields, e.g. 2013 for NUTS3 2013. All geographic region fields must use the
+      same classification consistently for each underlying exposure and across all
+      underlying exposures in the data submission. For example, reporting using NUTS3
+      2006 for some geographic fields relating to a given underlying exposure and
+      reporting using NUTS3 2013 for other fields relating to the same exposure is
+      not allowed. In the same way, reporting geographic region fields using NUTS3
+      2006 for some underlying exposures and reporting geographic region fields using
+      NUTS3 2013 for other underlying exposures in the same data submission is not
+      allowed.
+    nd1_4_allowed: true
+    nd5_allowed: false
+    format: '{YEAR}'
+  RREL13:
+    field_name: Employment Status
+    section: Underlying exposures information section
+    content: 'Employment status of the primary obligor:
+
+
+      Employed - Private Sector (EMRS)
+
+      Employed - Public Sector (EMBL)
+
+      Employed - Sector Unknown (EMUK)
+
+      Unemployed (UNEM)
+
+      Self-employed (SFEM)
+
+      No Employment, Obligor is Legal Entity (NOEM)
+
+      Student (STNT)
+
+      Pensioner (PNNR)
+
+      Other (OTHR)'
+    nd1_4_allowed: true
+    nd5_allowed: false
+    format: '{LIST}'
+  RREL14:
+    field_name: Credit Impaired Obligor
+    section: Underlying exposures information section
+    content: "Confirm that, pursuant to Article 20(11) of Regulation (EU) 2017/2402,\
+      \ at the time that this underlying exposure was selected for transfer to the\
+      \ SSPE, the exposure was neither in default within the meaning of Article 178(1)\
+      \ of Regulation (EU) No 575/2013 nor constituted an exposure to a credit-impaired\
+      \ debtor or guarantor, who, to the best of the originator’s or original lender’s\
+      \ knowledge:\n(a) has been declared insolvent or had a court grant his creditors\
+      \ a final non-appealable right of enforcement or material damages as a result\
+      \ of a missed payment within three years prior to the date of origination or\
+      \ has undergone a debt restructuring process with regard to his non-performing\
+      \ exposures within three years prior to the date of transfer or assignment of\
+      \ the underlying exposures to the SSPE, except if:\n (i) a restructured underlying\
+      \ exposure has not presented new arrears since the date of the restructuring,\
+      \ which must have taken place at least one year prior to the date of transfer\
+      \ or assignment of the underlying exposures to the SSPE; and\n (ii) the information\
+      \ provided by the originator, sponsor and SSPE in accordance with points (a)\
+      \ and (e)(i) of the first subparagraph of Article 7(1) explicitly sets out the\
+      \ proportion of restructured underlying exposures, the time and details of the\
+      \ restructuring as well as their performance since the date of the restructuring;\n\
+      (b) was, at the time of origination, where applicable, on a public credit registry\
+      \ of persons with adverse credit history or, where there is no such public credit\
+      \ registry, another credit registry that is available to the originator or original\
+      \ lender; or\n(c) has a credit assessment or a credit score indicating that\
+      \ the risk of contractually agreed payments not being made is significantly\
+      \ higher than for comparable exposures held by the originator which are not\
+      \ securitised.\n\nRestructuring refers to any changes made to the contractual\
+      \ terms of the underlying exposure agreement due to forbearance, including payment\
+      \ holidays, arrears capitalisation, change of interest rate basis or margins,\
+      \ fees, penalties, maturity and/or other generally-accepted measures of restructuring\
+      \ due to forbearance."
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{Y/N}'
+  RREL15:
+    field_name: Customer Type
+    section: Underlying exposures information section
+    content: 'Customer type at origination:
+
+
+      New customer and not an employee/affiliated with the originator''s group (CNEO)
+
+      New customer and an employee/affiliated with the originator''s group (CEMO)
+
+      New customer and employee/affiliation not recorded (CNRO)
+
+      Existing customer and not an employee/affiliated with the originator''s group
+      (ENEO)
+
+      Existing customer and an employee/affiliated with the originator''s group (EEMO)
+
+      Existing customer and employee/affiliation not recorded (ENRO)
+
+      Other (OTHR)'
+    nd1_4_allowed: true
+    nd5_allowed: false
+    format: '{LIST}'
+  RREL16:
+    field_name: Primary Income
+    section: Underlying exposures information section
+    content: 'Primary obligor annual income used to underwrite the underlying exposure
+      at the time of origination. Where the primary obligor is a legal person/entity,
+      enter that obligor’s annual revenue.
+
+
+      Include the currency in which the amount is denominated, using {CURRENCYCODE_3}
+      format.'
+    nd1_4_allowed: true
+    nd5_allowed: false
+    format: '{MONETARY}'
+  RREL17:
+    field_name: Primary Income Type
+    section: Underlying exposures information section
+    content: 'Indicate what income in RREL16 is displayed:
+
+
+      Gross annual income (GRAN)
+
+      Net annual income (net of tax and social security) (NITS)
+
+      Net annual income (net of tax only) (NITX)
+
+      Net annual income (net of social security only) (NTIN)
+
+      Estimated net annual income (net of tax and social security) (ENIS)
+
+      Estimated net annual income (net of tax only) (EITX)
+
+      Estimated net annual income (net of social security only) (EISS)
+
+      Disposable Income (DSPL)
+
+      Borrower is legal entity (CORP)
+
+      Other (OTHR)'
+    nd1_4_allowed: true
+    nd5_allowed: false
+    format: '{LIST}'
+  RREL18:
+    field_name: Primary Income Currency
+    section: Underlying exposures information section
+    content: Currency in which the primary obligor's income or revenue is paid.
+    nd1_4_allowed: true
+    nd5_allowed: false
+    format: '{CURRENCYCODE_3}'
+  RREL19:
+    field_name: Primary Income Verification
+    section: Underlying exposures information section
+    content: 'Primary Income Verification:
+
+
+      Self-certified no Checks (SCRT)
+
+      Self-certified with Affordability Confirmation (SCNF)
+
+      Verified (VRFD)
+
+      Non-Verified Income or Fast Track (NVRF)
+
+      Credit Bureau Information or Scoring (SCRG)
+
+      Other (OTHR)'
+    nd1_4_allowed: true
+    nd5_allowed: false
+    format: '{LIST}'
+  RREL20:
+    field_name: Secondary Income
+    section: Underlying exposures information section
+    content: 'Secondary obligor annual income used to underwrite the underlying exposure
+      at the time of origination. Where the secondary obligor is a legal person/entity,
+      enter that obligor''s annual revenue. When there are more than two obligors
+      in this underlying exposure, indicate total annual combined income across all
+      obligors in this field.
+
+
+      Include the currency in which the amount is denominated, using {CURRENCYCODE_3}
+      format.'
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{MONETARY}'
+  RREL21:
+    field_name: Secondary Income Verification
+    section: Underlying exposures information section
+    content: 'Income verification for secondary income:
+
+
+      Self-certified no Checks (SCRT)
+
+      Self-certified with Affordability Confirmation (SCNF)
+
+      Verified (VRFD)
+
+      Non-Verified Income or Fast Track (NVRF)
+
+      Credit Bureau Information or Scoring (SCRG)
+
+      Other (OTHR)'
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{LIST}'
+  RREL22:
+    field_name: Special Scheme
+    section: Underlying exposures information section
+    content: If the underlying exposure is governed by any special public sector arrangement,
+      enter the full name (without abbreviations) of the arrangement here.
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{ALPHANUM-10000}'
+  RREL23:
+    field_name: Origination Date
+    section: Underlying exposures information section
+    content: Date of original underlying exposure advance.
+    nd1_4_allowed: true
+    nd5_allowed: false
+    format: '{DATEFORMAT}'
+  RREL24:
+    field_name: Maturity Date
+    section: Underlying exposures information section
+    content: The date of maturity of the underlying exposure or expiry of the lease.
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{DATEFORMAT}'
+  RREL25:
+    field_name: Original Term
+    section: Underlying exposures information section
+    content: Original contractual term (number of months) at the origination date.
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{INTEGER-9999}'
+  RREL26:
+    field_name: Origination Channel
+    section: Underlying exposures information section
+    content: 'Origination channel of the underlying exposure:
+
+
+      Office or Branch Network (BRAN)
+
+      Central or Direct (DRCT)
+
+      Broker (BROK)
+
+      Internet (WEBI)
+
+      Package (TPAC)
+
+      Third Party Channel but Underwriting Performed Entirely by the Originator (TPTC)
+
+      Other (OTHR)'
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{LIST}'
+  RREL27:
+    field_name: Purpose
+    section: Underlying exposures information section
+    content: 'The reason for the obligor taking out the loan:
+
+
+      Purchase (PURC)
+
+      Remortgage (RMRT)
+
+      Renovation (RENV)
+
+      Equity Release (EQRE)
+
+      Construction (CNST)
+
+      Debt Consolidation (DCON)
+
+      Remortgage with Equity Release (RMEQ)
+
+      Business Funding (BSFN)
+
+      Combination Mortgage (CMRT)
+
+      Investment Mortgage (IMRT)
+
+      Right to Buy (RGBY)
+
+      Government Sponsored Loan (GSPL)
+
+      Other (OTHR)'
+    nd1_4_allowed: true
+    nd5_allowed: false
+    format: '{LIST}'
+  RREL28:
+    field_name: Currency Denomination
+    section: Underlying exposures information section
+    content: The underlying exposure currency denomination.
+    nd1_4_allowed: false
+    nd5_allowed: false
+    format: '{CURRENCYCODE_3}'
+  RREL29:
+    field_name: Original Principal Balance
+    section: Underlying exposures information section
+    content: "Original underlying exposure balance (inclusive of fees). \nThis is\
+      \ referring to the balance of the underlying exposure at the underlying exposure\
+      \ origination date, not the date of the underlying exposure’s sale to the SSPE\
+      \ or the closing date of the securitisation.\n\nInclude the currency in which\
+      \ the amount is denominated, using {CURRENCYCODE_3} format."
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{MONETARY}'
+  RREL30:
+    field_name: Current Principal Balance
+    section: Underlying exposures information section
+    content: 'Amount of underlying exposure outstanding as of the data cut-off date.
+      This includes any amounts that are secured by the mortgage and will be classed
+      as principal in the securitisation. For example, if fees have been added to
+      the underlying exposure balance and are part of the principal in the securitisation
+      these are to be added. It excludes any interest arrears or penalty amounts.
+
+      Current balance includes the principal arrears. However, savings amount is to
+      be deducted if a subparticipation exists. (i.e. underlying exposure balance
+      = underlying exposure +/- subparticipation; +/- 0 if no subparticipation).
+
+
+      Include the currency in which the amount is denominated, using {CURRENCYCODE_3}
+      format.'
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{MONETARY}'
+  RREL31:
+    field_name: Prior Principal Balances
+    section: Underlying exposures information section
+    content: 'Total balances ranking prior to this underlying exposure (including
+      those held with other lenders). If there are no prior balances, enter 0. 
+
+
+      Include the currency in which the amount is denominated, using {CURRENCYCODE_3}
+      format.'
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{MONETARY}'
+  RREL32:
+    field_name: Pari Passu Underlying Exposures
+    section: Underlying exposures information section
+    content: 'Total value of underlying exposures to this obligor ranking pari passu
+      with this underlying exposure (regardless of whether or not they are included
+      in this pool). If there are no balances ranking pari passu, enter 0. 
+
+
+      Include the currency in which the amount is denominated, using {CURRENCYCODE_3}
+      format.'
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{MONETARY}'
+  RREL33:
+    field_name: Total Credit Limit
+    section: Underlying exposures information section
+    content: 'For underlying exposures with flexible re-draw facilities (including
+      revolving characteristics) or where the maximum underlying exposure amount hasn’t
+      been withdrawn in full – the maximum underlying exposure amount that could potentially
+      be outstanding.
+
+      This field is only to be populated for underlying exposures that have flexible
+      or further drawing characteristics. 
+
+      This is not intended to capture instances where the obligor may renegotiate
+      an increased underlying exposure balance but rather where there is currently
+      the contractual ability for the obligor to do this and for the lender to provide
+      the additional funding.
+
+
+      Include the currency in which the amount is denominated, using {CURRENCYCODE_3}
+      format.'
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{MONETARY}'
+  RREL34:
+    field_name: Purchase Price
+    section: Underlying exposures information section
+    content: Enter the price, relative to par, at which the underlying exposure was
+      purchased by the SSPE. Enter 100 if no discounting was applied.
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{PERCENTAGE}'
+  RREL35:
+    field_name: Amortisation Type
+    section: Underlying exposures information section
+    content: 'Type of amortisation of the underlying exposure including principal
+      and interest.
+
+
+      French - i.e. Amortisation in which the total amount — principal plus interest
+      — repaid in each instalment is the same. (FRXX)
+
+      German - i.e. Amortisation in which the first instalment is interest-only and
+      the remaining instalments are constant, including capital amortisation and interest.
+      (DEXX)
+
+      Fixed amortisation schedule - i.e. Amortisation in which the principal amount
+      repaid in each instalment is the same. (FIXE)
+
+      Bullet - i.e. Amortisation in which the full principal amount is repaid in the
+      last instalment. (BLLT)
+
+      Other (OTHR)'
+    nd1_4_allowed: true
+    nd5_allowed: false
+    format: '{LIST}'
+  RREL36:
+    field_name: Principal Grace Period End Date
+    section: Underlying exposures information section
+    content: If applicable as at the data cut-off date, indicate the principal grace
+      period end date.
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{DATEFORMAT}'
+  RREL37:
+    field_name: Scheduled Principal Payment Frequency
+    section: Underlying exposures information section
+    content: 'Frequency of principal payments due, i.e. period between payments:
+
+
+      Monthly (MNTH)
+
+      Quarterly (QUTR)
+
+      Semi Annual (SEMI)
+
+      Annual (YEAR)
+
+      Other (OTHR)'
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{LIST}'
+  RREL38:
+    field_name: Scheduled Interest Payment Frequency
+    section: Underlying exposures information section
+    content: 'Frequency of interest payments due, i.e. period between payments:
+
+
+      Monthly (MNTH)
+
+      Quarterly (QUTR)
+
+      Semi Annual (SEMI)
+
+      Annual (YEAR)
+
+      Other (OTHR)'
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{LIST}'
+  RREL39:
+    field_name: Payment Due
+    section: Underlying exposures information section
+    content: 'This is the next contractual payment due by the obligor according to
+      the payment frequency of the underlying exposure.
+
+
+      Include the currency in which the amount is denominated, using {CURRENCYCODE_3}
+      format.'
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{MONETARY}'
+  RREL40:
+    field_name: Debt To Income Ratio
+    section: Underlying exposures information section
+    content: 'Debt defined as the amount of underlying exposure outstanding as of
+      data cut-off date, this includes any amounts that are secured by the mortgage
+      and will be classed as principal in the securitisation. For example if fees
+      have been added to the underlying exposure balance and are part of the principal
+      in the securitisation these are to be added. Excluding any interest arrears
+      or penalty amounts.
+
+      Income defined as combined income, sum of primary and secondary income fields
+      (field numbers RREL16 and RREL20) and any other income.'
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{PERCENTAGE}'
+  RREL41:
+    field_name: Balloon Amount
+    section: Underlying exposures information section
+    content: 'Total amount of (securitised) principal repayment to be paid at the
+      maturity date of the underlying exposure.
+
+
+      Include the currency in which the amount is denominated, using {CURRENCYCODE_3}
+      format.'
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{MONETARY}'
+  RREL42:
+    field_name: Interest Rate Type
+    section: Underlying exposures information section
+    content: 'Interest rate type:
+
+
+      Floating rate underlying exposure (for life) (FLIF)
+
+      Floating rate underlying exposure linked to one index that will revert to another
+      index in the future (FINX)
+
+      Fixed rate underlying exposure (for life) (FXRL)
+
+      Fixed with future periodic resets (FXPR)
+
+      Fixed rate underlying exposure with compulsory future switch to floating (FLCF)
+
+      Floating rate underlying exposure with floor (FLFL)
+
+      Floating rate underlying exposure with cap (CAPP)
+
+      Floating rate underlying exposure with both floor and cap (FLCA)
+
+      Discount (DISC)
+
+      Switch Optionality (SWIC)
+
+      Obligor Swapped (OBLS)
+
+      Modular (MODE)
+
+      Other (OTHR)'
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{LIST}'
+  RREL43:
+    field_name: Current Interest Rate
+    section: Underlying exposures information section
+    content: Gross rate per annum used to calculate the current period scheduled interest
+      on the securitised underlying exposure. Rates calculated on a period-by-period
+      basis must be annualised.
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{PERCENTAGE}'
+  RREL44:
+    field_name: Current Interest Rate Index
+    section: Underlying exposures information section
+    content: "The base reference interest index currently applicable (the reference\
+      \ rate off which the interest rate is set):\n\nMuniAAA (MAAA)\nFutureSWAP (FUSW)\n\
+      LIBID (LIBI)\nLIBOR (LIBO)\nSWAP (SWAP)\nTreasury (TREA)\nEuribor (EURI)\nPfandbriefe\
+      \ (PFAN)\nEONIA (EONA)\nEONIASwaps (EONS)\nEURODOLLAR (EUUS)\nEuroSwiss (EUCH)\n\
+      TIBOR (TIBO)\nISDAFIX (ISDA)\nGCFRepo (GCFR)\nSTIBOR (STBO)\nBBSW (BBSW)\nJIBAR\
+      \ (JIBA)\nBUBOR (BUBO)\nCDOR (CDOR)\nCIBOR (CIBO)\nMOSPRIM (MOSP)\nNIBOR (NIBO)\n\
+      PRIBOR (PRBO)\nTELBOR (TLBO)\nWIBOR (WIBO)\nBank of England Base Rate (BOER)\n\
+      European Central Bank Base Rate (ECBR) \nLender's Own Rate (LDOR)\nOther (OTHR)"
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{LIST}'
+  RREL45:
+    field_name: Current Interest Rate Index Tenor
+    section: Underlying exposures information section
+    content: 'Tenor of the current interest rate index:
+
+
+      Overnight (OVNG)
+
+      IntraDay (INDA)
+
+      1 day (DAIL)
+
+      1 week (WEEK)
+
+      2 week (TOWK)
+
+      1 month (MNTH)
+
+      2 month (TOMN)
+
+      3 month (QUTR)
+
+      4 month (FOMN)
+
+      6 month (SEMI)
+
+      12 month (YEAR)
+
+      On Demand (ONDE)
+
+      Other (OTHR)'
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{LIST}'
+  RREL46:
+    field_name: Current Interest Rate Margin
+    section: Underlying exposures information section
+    content: Current interest rate margin of the floating-rate underlying exposure
+      over (or under, in which case input as a negative) the index rate.
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{PERCENTAGE}'
+  RREL47:
+    field_name: Interest Rate Reset Interval
+    section: Underlying exposures information section
+    content: Number of months between each interest rate reset date on the underlying
+      exposure.
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{INTEGER-9999}'
+  RREL48:
+    field_name: Interest Rate Cap
+    section: Underlying exposures information section
+    content: Maximum rate that the obligor must pay on a floating rate underlying
+      exposure as required under the terms of the underlying exposure agreement.
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{PERCENTAGE}'
+  RREL49:
+    field_name: Interest Rate Floor
+    section: Underlying exposures information section
+    content: Minimum rate that the obligor must pay on a floating rate underlying
+      exposure as required under the terms of the underlying exposure agreement.
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{PERCENTAGE}'
+  RREL50:
+    field_name: Revision Margin 1
+    section: Underlying exposures information section
+    content: 'The margin for the underlying exposure at the 1st revision date. This
+      refers only to contractual changes in the margin (e.g. from +50bps to +100bps)
+      or the underlying index (e.g. from 3M EUIBOR to 1M EURIBOR) used for the interest
+      calculation. This field does not refer to the date that the index is reset periodically
+      (e.g. resetting 1M EURIBOR each month). 
+
+
+      The full revised margin must be entered in this field, not the change in the
+      margin.'
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{PERCENTAGE}'
+  RREL51:
+    field_name: Interest Revision Date 1
+    section: Underlying exposures information section
+    content: Date interest rate next changes (e.g. discount margin changes, fixed
+      period ends, underlying exposure re-fixed etc. this is not the next LIBOR/EURIBOR/index
+      reset date).
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{DATEFORMAT}'
+  RREL52:
+    field_name: Revision Margin 2
+    section: Underlying exposures information section
+    content: 'The margin for the underlying exposure at the 2nd revision date. This
+      refers only to contractual changes in the margin (e.g. from +50bps to +100bps)
+      or the underlying index (e.g. from 3M EUIBOR to 1M EURIBOR) used for the interest
+      calculation. This field does not refer to the date that the index is reset periodically
+      (e.g. resetting 1M EURIBOR each month). 
+
+
+      The full revised margin must be entered in this field, not the change in the
+      margin.'
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{PERCENTAGE}'
+  RREL53:
+    field_name: Interest Revision Date 2
+    section: Underlying exposures information section
+    content: Date of 2nd interest rate change (e.g. discount margin changes, fixed
+      period ends, underlying exposure re-fixed etc. this is not the next LIBOR/EURIBOR/index
+      reset date).
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{DATEFORMAT}'
+  RREL54:
+    field_name: Revision Margin 3
+    section: Underlying exposures information section
+    content: 'The margin for the underlying exposure at the 3rd revision date. This
+      refers only to contractual changes in the margin (e.g. from +50bps to +100bps)
+      or the underlying index (e.g. from 3M EUIBOR to 1M EURIBOR) used for the interest
+      calculation. This field does not refer to the date that the index is reset periodically
+      (e.g. resetting 1M EURIBOR each month). 
+
+
+      The full revised margin must be entered in this field, not the change in the
+      margin.'
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{PERCENTAGE}'
+  RREL55:
+    field_name: Interest Revision Date 3
+    section: Underlying exposures information section
+    content: Date of 3rd interest rate change (e.g. discount margin changes, fixed
+      period ends, underlying exposure re-fixed etc. this is not the next LIBOR/EURIBOR/index
+      reset date).
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{DATEFORMAT}'
+  RREL56:
+    field_name: Revised Interest Rate Index
+    section: Underlying exposures information section
+    content: "Next interest rate index.\n\nMuniAAA (MAAA)\nFutureSWAP (FUSW)\nLIBID\
+      \ (LIBI)\nLIBOR (LIBO)\nSWAP (SWAP)\nTreasury (TREA)\nEuribor (EURI)\nPfandbriefe\
+      \ (PFAN)\nEONIA (EONA)\nEONIASwaps (EONS)\nEURODOLLAR (EUUS)\nEuroSwiss (EUCH)\n\
+      TIBOR (TIBO)\nISDAFIX (ISDA)\nGCFRepo (GCFR)\nSTIBOR (STBO)\nBBSW (BBSW)\nJIBAR\
+      \ (JIBA)\nBUBOR (BUBO)\nCDOR (CDOR)\nCIBOR (CIBO)\nMOSPRIM (MOSP)\nNIBOR (NIBO)\n\
+      PRIBOR (PRBO)\nTELBOR (TLBO)\nWIBOR (WIBO)\nBank of England Base Rate (BOER)\n\
+      European Central Bank Base Rate (ECBR) \nLender's Own Rate (LDOR)\nOther (OTHR)"
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{LIST}'
+  RREL57:
+    field_name: Revised Interest Rate Index Tenor
+    section: Underlying exposures information section
+    content: 'Tenor of the next interest rate index:
+
+
+      Overnight (OVNG)
+
+      IntraDay (INDA)
+
+      1 day (DAIL)
+
+      1 week (WEEK)
+
+      2 week (TOWK)
+
+      1 month (MNTH)
+
+      2 month (TOMN)
+
+      3 month (QUTR)
+
+      4 month (FOMN)
+
+      6 month (SEMI)
+
+      12 month (YEAR)
+
+      On Demand (ONDE)
+
+      Other (OTHR)'
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{LIST}'
+  RREL58:
+    field_name: Number Of Payments Before Securitisation
+    section: Underlying exposures information section
+    content: Enter the number of payments made prior to the exposure being transferred
+      to the securitisation.
+    nd1_4_allowed: true
+    nd5_allowed: false
+    format: '{INTEGER-9999}'
+  RREL59:
+    field_name: Percentage Of Prepayments Allowed Per Year
+    section: Underlying exposures information section
+    content: Percentage amount of pre-payments allowed under the product per year.
+      This is for underlying exposures that allow a certain threshold of pre-payments
+      (i.e. 10%) before charges are incurred.
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{PERCENTAGE}'
+  RREL60:
+    field_name: Prepayment Lock-Out End Date
+    section: Underlying exposures information section
+    content: The date after which the lender allows prepayment of the underlying exposure.
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{DATEFORMAT}'
+  RREL61:
+    field_name: Prepayment Fee
+    section: Underlying exposures information section
+    content: 'Amount collected from the obligor as the fee/penalty due for making
+      prepayments as required under the terms of the underlying exposure agreement.
+      This is not intended to include any amounts paid as a "break cost" to make up
+      interest payments up to the underlying exposure Payment Date. This includes
+      amounts collected that have not been securitised.
+
+
+      Include the currency in which the amount is denominated, using {CURRENCYCODE_3}
+      format.'
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{MONETARY}'
+  RREL62:
+    field_name: Prepayment Fee End Date
+    section: Underlying exposures information section
+    content: The date after which the lender allows prepayment of the underlying exposure
+      without requirement for a prepayment fee to be paid.
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{DATEFORMAT}'
+  RREL63:
+    field_name: Prepayment Date
+    section: Underlying exposures information section
+    content: The latest date on which an unscheduled principal payment was received.
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{DATEFORMAT}'
+  RREL64:
+    field_name: Cumulative Prepayments
+    section: Underlying exposures information section
+    content: 'Total prepayments collected as at the data cut-off date (prepayments
+      defined as unscheduled principal payment) since the underlying exposure origination
+      date.
+
+
+      Include the currency in which the amount is denominated, using {CURRENCYCODE_3}
+      format.'
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{MONETARY}'
+  RREL65:
+    field_name: Date Of Restructuring
+    section: Underlying exposures information section
+    content: 'Enter the date at which the underlying exposure has been restructured.
+      Restructuring refers to any changes made to the contractual terms of the underlying
+      exposure agreement due to forbearance, including payment holidays, arrears capitalisation,
+      change of interest rate basis or margins, fees, penalties, maturity and/or other
+      generally-accepted measures of restructuring due to forbearance.
+
+
+      In the event of multiple dates, all dates must be provided in accordance with
+      the XML schema.'
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{DATEFORMAT}'
+  RREL66:
+    field_name: Date Last In Arrears
+    section: Underlying exposures information section
+    content: Date the underlying exposure was last in arrears.
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{DATEFORMAT}'
+  RREL67:
+    field_name: Arrears Balance
+    section: Underlying exposures information section
+    content: "Current balance of arrears, which is defined as:\n\nTotal payments due\
+      \ to date\nPLUS any amounts capitalised \nPLUS any fees applied to the account\n\
+      LESS total payments received to date.\n\nIf no arrears then enter 0.\n\nInclude\
+      \ the currency in which the amount is denominated, using {CURRENCYCODE_3} format."
+    nd1_4_allowed: false
+    nd5_allowed: false
+    format: '{MONETARY}'
+  RREL68:
+    field_name: Number Of Days In Arrears
+    section: Underlying exposures information section
+    content: Number of days this underlying exposure is in arrears (either interest
+      or principal and, if different, the higher number of the two) as at the data
+      cut-off date.
+    nd1_4_allowed: false
+    nd5_allowed: false
+    format: '{INTEGER-9999}'
+  RREL69:
+    field_name: Account Status
+    section: Underlying exposures information section
+    content: 'Current status of the underlying exposure that has been securitised:
+
+
+      Performing (PERF)
+
+      Restructured - No Arrears (RNAR)
+
+      Restructured - Arrears (RARR)
+
+      Defaulted according to Article 178 of Regulation (EU) No 575/2013 (DFLT)
+
+      Not defaulted according to Article 178 of Regulation (EU) No 575/2013 but classified
+      as defaulted due to another definition of default being met (NDFT)
+
+      Defaulted both according to Article 178 of Regulation (EU) No 575/2013 and according
+      to another definition of default being met (DTCR)
+
+      Defaulted only under another definition of default being met (DADB)
+
+      Arrears (ARRE)
+
+      Repurchased by Seller – Breach of Representations and Warranties (REBR)
+
+      Repurchased by Seller – Defaulted (REDF)
+
+      Repurchased by Seller – Restructured (RERE)
+
+      Repurchased by Seller – Special Servicing (RESS)
+
+      Repurchased by Seller – Other Reason (REOT)
+
+      Redeemed (RDMD)
+
+      Other (OTHR)
+
+
+      Restructuring refers to any changes made to the contractual terms of the underlying
+      exposure agreement due to forbearance, including payment holidays, arrears capitalisation,
+      change of interest rate basis or margins, fees, penalties, maturity, and/or
+      other generally-accepted measures of restructuring due to forbearance.'
+    nd1_4_allowed: false
+    nd5_allowed: false
+    format: '{LIST}'
+  RREL70:
+    field_name: Reason for Default or Foreclosure
+    section: Underlying exposures information section
+    content: 'If the underlying exposure is in default as per Article 178 of Regulation
+      (EU) No 575/2013, select the appropriate reason:
+
+
+      In default because the debtor is unlikely to pay, in accordance with Article
+      178 of Regulation (EU) No 575/2013. (UPXX)
+
+      In default because any debt is more than 90/180 days past due, in accordance
+      with Article 178 of Regulation (EU) No 575/2013. (PDXX)
+
+      In default both because it is considered that the debtor is unlikely to pay
+      and because any debt is more than 90/180 days past due, in accordance with Article
+      178 of Regulation (EU) No 575/2013. (UPPD)'
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{LIST}'
+  RREL71:
+    field_name: Default Amount
+    section: Underlying exposures information section
+    content: 'Total gross default amount before the application of sale proceeds and
+      recoveries. If not in default, enter 0.
+
+
+      Include the currency in which the amount is denominated, using {CURRENCYCODE_3}
+      format.'
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{MONETARY}'
+  RREL72:
+    field_name: Default Date
+    section: Underlying exposures information section
+    content: The date of default.
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{DATEFORMAT}'
+  RREL73:
+    field_name: Allocated Losses
+    section: Underlying exposures information section
+    content: 'The allocated losses to date, net of fees, accrued interest etc. after
+      application of sale proceeds (excluding prepayment charge if subordinate to
+      principal recoveries). Show any gain on sale as a negative number. Should reflect
+      most recent situation as at the data cut-off date, i.e. as recoveries are collected
+      and the work out process progresses.
+
+
+      Include the currency in which the amount is denominated, using {CURRENCYCODE_3}
+      format.'
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{MONETARY}'
+  RREL74:
+    field_name: Cumulative Recoveries
+    section: Underlying exposures information section
+    content: 'Total recoveries (regardless of their source) on the (defaulted/charged-off/etc.)
+      debt, net of costs. Include all sources of recoveries here, not just proceeds
+      from the disposal of any collateral. 
+
+
+      Include the currency in which the amount is denominated, using {CURRENCYCODE_3}
+      format.'
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{MONETARY}'
+  RREL75:
+    field_name: Litigation
+    section: Underlying exposures information section
+    content: Flag to indicate litigation proceedings underway (if account has recovered
+      and is no longer being actively litigated this is to be re-set to N).
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{Y/N}'
+  RREL76:
+    field_name: Recourse
+    section: Underlying exposures information section
+    content: Is there recourse (full or limited) to the obligor's assets beyond the
+      proceeds of any collateral for this underlying exposure?
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{Y/N}'
+  RREL77:
+    field_name: Deposit Amount
+    section: Underlying exposures information section
+    content: 'The sum of all obligor amounts held by the originator or seller that
+      are potentially off-settable against the underlying exposure balance, excluding
+      the benefit of any national deposit compensation scheme. To prevent double-counting,
+      this is to be capped at the lower of (1) the deposit amount, and (2) the maximum
+      potential off-settable amount at the obligor-level (i.e. not underlying exposure-level)
+      within the pool.
+
+      Use the same currency denomination as that used for this underlying exposure.
+
+      If an obligor has more than one underlying exposure outstanding in the pool,
+      then this field is to be completed for each underlying exposure, and it is up
+      to the discretion of the reporting entity to decide to allocate the deposit
+      amount across each of the underlying exposure, subject to the above-mentioned
+      cap and so long as the total entries for this field across the multiple underlying
+      exposures adds up to the accurate amount. For example, if Obligor A has deposit
+      balance of €100, and two underlying exposures outstanding in the pool of: underlying
+      exposure 1 €60 and underlying exposure 2 €75. This field could be completed
+      as either underlying exposure 1 - €60 and underlying exposure 2 - €40, or underlying
+      exposure 1 - €25 and underlying exposure 2 €75 (i.e. the relative entries for
+      this field in each underlying exposure is capped at €60 for underlying exposure
+      1 and at €75 for underlying exposure 2 and the sum of the values across underlying
+      exposure 1 and underlying exposure 2 must equal €100).
+
+
+      Include the currency in which the amount is denominated, using {CURRENCYCODE_3}
+      format.'
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{MONETARY}'
+  RREL78:
+    field_name: Insurance Or Investment Provider
+    section: Underlying exposures information section
+    content: Name of the insurance or investment provider (i.e. for life insurance
+      or investment underlying exposures).
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{ALPHANUM-1000}'
+  RREL79:
+    field_name: Original Lender Name
+    section: Underlying exposures information section
+    content: Give the full legal name of the original lender. The name entered must
+      match the name associated with the LEI in the Global Legal Entity Foundation
+      (GLEIF) database.
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{ALPHANUM-100}'
+  RREL80:
+    field_name: Original Lender Legal Entity Identifier
+    section: Underlying exposures information section
+    content: 'Provide the Legal Entity Identifier (as specified in the Global Legal
+      Entity Foundation (GLEIF) database) of the original lender.
+
+
+      Where no Legal Entity Identifier is available, enter ND5.'
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{LEI}'
+  RREL81:
+    field_name: Original Lender Establishment Country
+    section: Underlying exposures information section
+    content: Country where the original lender is established.
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{COUNTRYCODE_2}'
+  RREL82:
+    field_name: Originator Name
+    section: Underlying exposures information section
+    content: Give the full legal name of the underlying exposure originator. The name
+      entered must match the name associated with the LEI in the Global Legal Entity
+      Foundation (GLEIF) database.
+    nd1_4_allowed: false
+    nd5_allowed: false
+    format: '{ALPHANUM-100}'
+  RREL83:
+    field_name: Originator Legal Entity Identifier
+    section: Underlying exposures information section
+    content: Provide the Legal Entity Identifier (as specified in the Global Legal
+      Entity Foundation (GLEIF) database) of the underlying exposure originator.
+    nd1_4_allowed: false
+    nd5_allowed: false
+    format: '{LEI}'
+  RREL84:
+    field_name: Originator Establishment Country
+    section: Underlying exposures information section
+    content: Country where the underlying exposure originator is established.
+    nd1_4_allowed: false
+    nd5_allowed: false
+    format: '{COUNTRYCODE_2}'
+  RREC1:
+    field_name: Unique Identifier
+    section: Collateral information section
+    content: Report the same unique identifier here as the one entered into field
+      RREL1.
+    nd1_4_allowed: false
+    nd5_allowed: false
+    format: '{ALPHANUM-28}'
+  RREC2:
+    field_name: Underlying Exposure Identifier
+    section: Collateral information section
+    content: Unique identifier for each underlying exposure. This must match field
+      RREL3.
+    nd1_4_allowed: false
+    nd5_allowed: false
+    format: '{ALPHANUM-1000}'
+  RREC3:
+    field_name: Original Collateral Identifier
+    section: Collateral information section
+    content: The original unique identifier assigned to the collateral. The identifier
+      must be different from any external identification number, in order to ensure
+      anonymity of the obligor. The reporting entity must not amend this unique identifier.
+    nd1_4_allowed: false
+    nd5_allowed: false
+    format: '{ALPHANUM-1000}'
+  RREC4:
+    field_name: New Collateral Identifier
+    section: Collateral information section
+    content: If the original identifier in field RREC2 cannot be maintained in this
+      field enter the new identifier here. The identifier must be different from any
+      external identification number, in order to ensure anonymity of the obligor.
+      If there has been no change in the identifier, enter the same identifier as
+      in RREC2. The reporting entity must not amend this unique identifier.
+    nd1_4_allowed: false
+    nd5_allowed: false
+    format: '{ALPHANUM-1000}'
+  RREC5:
+    field_name: Collateral Type
+    section: Collateral information section
+    content: 'The primary (in terms of value) type of asset securing the debt. Where
+      there is a guarantee backed by physical or financial collateral, look through
+      the guarantee to any collateral that may be supporting that guarantee.
+
+
+      Automobile (CARX)
+
+      Industrial Vehicle (INDV)
+
+      Commercial Truck (CMTR)
+
+      Rail Vehicle (RALV)
+
+      Nautical Commercial Vehicle (NACM)
+
+      Nautical Leisure Vehicle (NALV)
+
+      Aeroplane (AERO)
+
+      Machine Tool (MCHT)
+
+      Industrial Equipment (INDE)
+
+      Office Equipment (OFEQ)
+
+      IT Equipment (ITEQ)
+
+      Medical Equipment (MDEQ)
+
+      Energy Related Equipment (ENEQ)
+
+      Commercial Building (CBLD)
+
+      Residential Building (RBLD)
+
+      Industrial Building (IBLD)
+
+      Other Vehicle (OTHV)
+
+      Other Equipment (OTHE)
+
+      Other Real Estate (OTRE)
+
+      Other goods or inventory (OTGI)
+
+      Securities (SECU)
+
+      Guarantee (GUAR)
+
+      Other Financial Asset (OTFA)
+
+      Mixed Categories Due to Security Over All Assets of the Obligor (MIXD)
+
+      Other (OTHR)'
+    nd1_4_allowed: false
+    nd5_allowed: false
+    format: '{LIST}'
+  RREC6:
+    field_name: Geographic Region - Collateral
+    section: Collateral information section
+    content: The geographic region (NUTS3 classification) where the physical collateral
+      is located. Where no NUTS3 classification has been produced by Eurostat (e.g.
+      a non-EU jurisdiction), enter the two-digit country code in {COUNTRYCODE_2}
+      format followed by 'ZZZ'.
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{NUTS}'
+  RREC7:
+    field_name: Occupancy Type
+    section: Collateral information section
+    content: 'Type of property occupancy:
+
+
+      Owner Occupied i.e. owned by a private household with the purpose of providing
+      shelter to its owner (FOWN)
+
+      Partially Owner Occupied (A property which is partly rented) (POWN)
+
+      Non-Owner Occupied or Buy-To-Let (TLET)
+
+      Holiday or Second Home (HOLD)
+
+      Other (OTHR)
+
+
+      If the collateral being reported is not property collateral, enter ND5.'
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{LIST}'
+  RREC8:
+    field_name: Lien
+    section: Collateral information section
+    content: 'Highest lien position held by the originator in relation to the collateral.
+
+
+      If the collateral being reported is not property collateral, enter ND5.'
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{INTEGER-9999}'
+  RREC9:
+    field_name: Property Type
+    section: Collateral information section
+    content: 'Property type:
+
+
+      Residential (House, detached or semi-detached) (RHOS)
+
+      Residential (Flat or Apartment) (RFLT)
+
+      Residential (Bungalow) (RBGL)
+
+      Residential (Terraced House) (RTHS)
+
+      Multifamily House (properties with more than four units securing one underlying
+      exposure) (MULF)
+
+      Partial Commercial use (property is used as a residence as well as for commercial
+      use where less than 50% of its value derived from commercial use, e.g. doctor’s
+      surgery and house) (PCMM)
+
+      Commercial or Business Use (BIZZ)
+
+      Land Only (LAND)
+
+      Other (OTHR)
+
+
+      If the collateral being reported is not property collateral, enter ND5.'
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{LIST}'
+  RREC10:
+    field_name: Energy Performance Certificate Value
+    section: Collateral information section
+    content: 'The energy performance certificate value of the collateral at the time
+      of origination:
+
+
+      A (EPCA)
+
+      B (EPCB)
+
+      C (EPCC)
+
+      D (EPCD)
+
+      E (EPCE)
+
+      F (EPCF)
+
+      G (EPCG)
+
+      Other (OTHR)'
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{LIST}'
+  RREC11:
+    field_name: Energy Performance Certificate Provider Name
+    section: Collateral information section
+    content: Enter the full legal name of the energy performance certificate provider.
+      The name entered must match the name associated with the LEI in the Global Legal
+      Entity Foundation (GLEIF) database.
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{ALPHANUM-100}'
+  RREC12:
+    field_name: Current Loan-To-Value
+    section: Collateral information section
+    content: "Current loan to Value ratio (LTV). For non-first lien loans this is\
+      \ the combined or total LTV. Where the current loan balance is negative, enter\
+      \ 0. \n\nIf the collateral being reported is not property collateral, enter\
+      \ ND5."
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{PERCENTAGE}'
+  RREC13:
+    field_name: Current Valuation Amount
+    section: Collateral information section
+    content: 'The most recent valuation of the collateral as assessed by an independent
+      external or internal appraiser. If such assessment is not available, the current
+      value of the collateral can be estimated using a real estate value index sufficiently
+      granular with respect to geographical location and type of collateral; if such
+      real estate value index is also not available, a real estate price index sufficiently
+      granular with respect to geographical location and type of collateral can be
+      used after application of a suitably chosen mark-down to account for the depreciation
+      of the collateral.
+
+
+      If the collateral being reported is not property collateral, enter the most
+      recent valuation of the collateral as assessed by an independent external or
+      internal appraiser or, if not available, by the originator.
+
+
+      If the collateral being reported is a guarantee, enter the amount of underlying
+      exposure guaranteed by this collateral item to the benefit of the originator.
+
+
+      Include the currency in which the amount is denominated, using {CURRENCYCODE_3}
+      format.'
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{MONETARY}'
+  RREC14:
+    field_name: Current Valuation Method
+    section: Collateral information section
+    content: 'The method of calculating the most recent value of the collateral, as
+      provided in RREC13:
+
+
+      Full, internal and external inspection (FIEI)
+
+      Full, only external inspection (FOEI)
+
+      Drive-by (DRVB)
+
+      Automated Value Model (AUVM)
+
+      Indexed (IDXD)
+
+      Desktop (DKTP)
+
+      Managing Agent or Estate Agent (MAEA)
+
+      Tax Authority (TXAT)
+
+      Other (OTHR)'
+    nd1_4_allowed: true
+    nd5_allowed: false
+    format: '{LIST}'
+  RREC15:
+    field_name: Current Valuation Date
+    section: Collateral information section
+    content: The date of the most recent valuation, as provided in RREC13.
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{DATEFORMAT}'
+  RREC16:
+    field_name: Original Loan-To-Value
+    section: Collateral information section
+    content: 'Originator’s original underwritten loan To Value ratio (LTV). For non-first
+      lien loans this is the combined or total LTV.
+
+
+      If the collateral being reported is not property collateral, enter ND5.'
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{PERCENTAGE}'
+  RREC17:
+    field_name: Original Valuation Amount
+    section: Collateral information section
+    content: "The original valuation of the collateral used when the underlying exposure\
+      \ was originated (i.e. before securitisation). \n\nInclude the currency in which\
+      \ the amount is denominated, using {CURRENCYCODE_3} format."
+    nd1_4_allowed: true
+    nd5_allowed: false
+    format: '{MONETARY}'
+  RREC18:
+    field_name: Original Valuation Method
+    section: Collateral information section
+    content: 'The method of calculating the value of the collateral at the time of
+      underlying exposure origination, as provided in RREC17:
+
+
+      Full, internal and external inspection (FIEI)
+
+      Full, only external inspection (FOEI)
+
+      Drive-by (DRVB)
+
+      Automated Valuation Model (AUVM)
+
+      Indexed (IDXD)
+
+      Desktop (DKTP)
+
+      Managing Agent / Estate Agent (MAEA)
+
+      Tax Authority (TXAT)
+
+      Other (OTHR)'
+    nd1_4_allowed: true
+    nd5_allowed: false
+    format: '{LIST}'
+  RREC19:
+    field_name: Original Valuation Date
+    section: Collateral information section
+    content: The date of original valuation of the collateral, as provided in RREC17.
+    nd1_4_allowed: true
+    nd5_allowed: false
+    format: '{DATEFORMAT}'
+  RREC20:
+    field_name: Date Of Sale
+    section: Collateral information section
+    content: The date of sale of the foreclosed collateral.
+    nd1_4_allowed: true
+    nd5_allowed: true
+    format: '{DATEFORMAT}'
+  RREC21:
+    field_name: Sale Price
+    section: Collateral information section
+    content: 'Price achieved on sale of collateral in case of foreclosure.
+
+
+      Include the currency in which the amount is denominated, using {CURRENCYCODE_3}
+      format.'
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{MONETARY}'
+  RREC22:
+    field_name: Collateral Currency
+    section: Collateral information section
+    content: This is the currency in which the valuation amount provided in RREC13
+      is denominated.
+    nd1_4_allowed: false
+    nd5_allowed: true
+    format: '{CURRENCYCODE_3}'
+  RREC23:
+    field_name: Guarantor Type
+    section: Collateral information section
+    content: 'Guarantor Type:
+
+
+      No Guarantor (NGUA)
+
+      Individual - Family Relation (FAML)
+
+      Individual - Other (IOTH)
+
+      Government (GOVE)
+
+      Bank (BANK)
+
+      Insurance Product (INSU)
+
+      Nationale Hypotheek Garantie Guarantee Scheme (NHGX)
+
+      Fonds de Garantie de l''Accession Sociale (FGAS)
+
+      Caution (CATN)
+
+      Other (OTHR)'
+    nd1_4_allowed: true
+    nd5_allowed: false
+    format: '{LIST}'
