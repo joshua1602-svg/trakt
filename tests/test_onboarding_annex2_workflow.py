@@ -644,5 +644,37 @@ class TestAnnex2LlmAdvisorOptional(unittest.TestCase):
                          dec_no["summary"]["human_decision_rows_total"])
 
 
+# --------------------------------------------------------------------------- #
+# Onboarding completeness is config-driven, NOT XML/XSD-driven.
+# XML/XSD validation is the final schema-validity check at delivery (gate 5);
+# it is not the source of truth for onboarding completeness.
+# --------------------------------------------------------------------------- #
+class TestAnnex2CompletenessIsConfigDriven(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.out = Path(tempfile.mkdtemp(prefix="annex2_complete_"))
+        cls.summary = _run_annex2(cls.out)
+        cls.recon = json.loads(
+            (cls.out / "43_annex2_field_universe_reconciliation.json").read_text())["summary"]
+
+    def test_completeness_governed_by_workbook_universe_and_config(self):
+        # The workbook universe + config reconciliation determine completeness:
+        # the universe is fully known (107) and mapped, but not fully configured,
+        # so the run is NEEDS_CONFIGURATION — independent of any schema check.
+        self.assertEqual(self.recon["authoritative_field_count"], 107)
+        self.assertEqual(self.recon["registry_gap_count"], 0)
+        self.assertGreater(self.recon["missing_from_regime_rules_count"], 0)
+        self.assertEqual(self.summary["status"], "NEEDS_CONFIGURATION")
+
+    def test_onboarding_does_not_emit_or_gate_on_xsd(self):
+        # Onboarding produces no XSD/schema-validation artefact and never reports
+        # a schema verdict as a completeness signal (that lives in gate 5).
+        names = [p.name.lower() for p in self.out.iterdir()]
+        self.assertFalse(any(".xsd" in n or "xsd_valid" in n for n in names),
+                         f"unexpected schema artefact in onboarding output: {names}")
+        for key in self.summary:
+            self.assertNotIn("xsd", key.lower())
+
+
 if __name__ == "__main__":
     unittest.main()
