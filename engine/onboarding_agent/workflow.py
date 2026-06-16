@@ -173,6 +173,8 @@ def build_workflow_summary(
     align_sum = align.get("summary", {}) or {}
     enumc = _read_json(project_dir / "46_annex2_enum_coverage_reconciliation.json") or {}
     enum_sum = enumc.get("summary", {}) or {}
+    semm = _read_json(project_dir / "47_annex2_semantic_mapping_reconciliation.json") or {}
+    sem_sum = semm.get("summary", {}) or {}
     app = _read_json(project_dir / "35_target_first_decision_application_log.json")
     app_sum = (app or {}).get("summary", {}) or {}
     advu = _read_json(project_dir / "36_target_first_llm_usage_summary.json")
@@ -326,7 +328,18 @@ def build_workflow_summary(
             "annex2_enum_no_rule_count": int(enum_sum.get("no_regime_rule", 0)),
             "annex2_enum_coverage_reconciliation_summary": _p(
                 "46_annex2_enum_coverage_reconciliation_summary.md"),
+            # Semantic-mapping reconciliation (47).
+            "annex2_semantic_aligned_count": int(sem_sum.get("aligned", 0)),
+            "annex2_semantic_mismatch_count": int(sem_sum.get("semantic_mismatch", 0)),
+            "annex2_semantic_mapping_reconciliation_summary": _p(
+                "47_annex2_semantic_mapping_reconciliation_summary.md"),
         })
+        sem_mismatch = int(sem_sum.get("semantic_mismatch", 0))
+        if sem_mismatch > 0:
+            warnings.append(
+                f"{sem_mismatch} Annex 2 regime rule(s) map a source field that does not match "
+                "the workbook field for that code (suspected code↔field mismap) — manual "
+                "review required; see 47_annex2_semantic_mapping_reconciliation.")
         enum_outside = int(enum_sum.get("targets_outside_workbook", 0))
         if enum_outside > 0:
             warnings.append(
@@ -473,6 +486,7 @@ _AUDIT_CATALOG = [
     ("44_annex2_nd_eligibility_reconciliation.csv", "artefact", "keep_core", "ESMA Annex 2 ND-eligibility reconciliation: regime nd_allowed vs workbook (Annex 2 mode only)."),
     ("45_annex2_config_alignment_review.csv", "artefact", "keep_core", "ESMA Annex 2 config-alignment review: actions taken + manual-review items (Annex 2 mode only)."),
     ("46_annex2_enum_coverage_reconciliation.csv", "artefact", "keep_core", "ESMA Annex 2 enum-coverage reconciliation: regime enum_map vs workbook allowed codes (Annex 2 mode only)."),
+    ("47_annex2_semantic_mapping_reconciliation.csv", "artefact", "keep_core", "ESMA Annex 2 semantic-mapping reconciliation: regime source field vs workbook field per code (Annex 2 mode only)."),
     # --- source-column legacy decision artefacts RETAINED FOR AUDIT ---
     ("33_mapping_review_queue.csv", "artefact", "keep_legacy_audit", "Source-column review queue; retained as audit detail, no longer the primary gate."),
     ("34_mapping_review_decisions.yaml", "artefact", "keep_legacy_audit", "Source-column decision template; superseded by 34_target_first_decisions.yaml; kept for audit."),

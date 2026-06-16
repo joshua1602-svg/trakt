@@ -461,6 +461,51 @@ class TestAnnex2EnumCoverage(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------- #
+# Semantic-mapping reconciliation (47): regime source field vs workbook field
+# --------------------------------------------------------------------------- #
+class TestAnnex2SemanticMapping(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.out = Path(tempfile.mkdtemp(prefix="annex2_sem_"))
+        cls.summary = _run_annex2(cls.out)
+        cls.sem = json.loads(
+            (cls.out / "47_annex2_semantic_mapping_reconciliation.json").read_text())
+        cls.by = {r["esma_code"]: r for r in cls.sem["rows"]}
+
+    def test_47_artefacts_written(self):
+        for name in ("47_annex2_semantic_mapping_reconciliation.csv",
+                     "47_annex2_semantic_mapping_reconciliation.json",
+                     "47_annex2_semantic_mapping_reconciliation_summary.md"):
+            self.assertTrue((self.out / name).exists(), name)
+
+    def test_all_68_ruled_codes_checked(self):
+        self.assertEqual(self.sem["summary"]["semantic_rows_total"], 68)
+
+    def test_known_mismatches_flagged(self):
+        for code in ("RREL13", "RREL17", "RREL70", "RREC23"):
+            self.assertEqual(self.by[code]["semantic_status"], "semantic_mismatch")
+            self.assertTrue(self.by[code]["requires_manual_review"])
+        self.assertGreater(self.sem["summary"]["semantic_mismatch"], 0)
+        self.assertEqual(self.summary["annex2_semantic_mismatch_count"],
+                         self.sem["summary"]["semantic_mismatch"])
+        self.assertTrue(any("code↔field mismap" in w for w in self.summary["warnings"]))
+
+    def test_correctly_mapped_codes_aligned(self):
+        for code in ("RREL1", "RREL2", "RREL16", "RREL40"):
+            self.assertEqual(self.by[code]["semantic_status"], "aligned")
+
+    def test_report_only_rules_unchanged(self):
+        # 47 must NOT rewrite any rule: RREL70's (mismapped) source is untouched.
+        import yaml as _y
+        fr = _y.safe_load(open("config/regime/annex2_delivery_rules.yaml"))["field_rules"]
+        self.assertEqual(fr["RREL70"]["projected_source_field"], "interest_only_period")
+
+    def test_review_pack_shows_semantic_reconciliation(self):
+        html = (self.out / "08_onboarding_review_pack.html").read_text()
+        self.assertIn("Annex 2 semantic-mapping reconciliation", html)
+
+
+# --------------------------------------------------------------------------- #
 # Config-alignment review (45): actions taken + manual-review items
 # --------------------------------------------------------------------------- #
 class TestAnnex2ConfigAlignment(unittest.TestCase):
@@ -556,7 +601,8 @@ class TestMiUnchanged(unittest.TestCase):
                      "43_annex2_field_universe_reconciliation.csv",
                      "44_annex2_nd_eligibility_reconciliation.csv",
                      "45_annex2_config_alignment_review.csv",
-                     "46_annex2_enum_coverage_reconciliation.csv"):
+                     "46_annex2_enum_coverage_reconciliation.csv",
+                     "47_annex2_semantic_mapping_reconciliation.csv"):
             self.assertFalse((self.out / name).exists(), name)
         self.assertNotIn("annex2_field_count", self.summary)
         self.assertNotIn("annex2_authoritative_field_count", self.summary)

@@ -236,6 +236,9 @@ def _load_target_first_artifacts(project_dir: Path, output_root: Path | None = N
     ec = _find_artifact(project_dir, output_root,
                         "46_annex2_enum_coverage_reconciliation.json")
     tf["enum_coverage"] = _load_json(ec) if ec else None
+    sm = _find_artifact(project_dir, output_root,
+                        "47_annex2_semantic_mapping_reconciliation.json")
+    tf["semantic_mapping"] = _load_json(sm) if sm else None
     _derive_summaries(tf)
     return tf
 
@@ -366,7 +369,32 @@ def _annex2_universe_html(tf: dict) -> str:
             + note + warn_html + _table(["Item", "Value"], rows)
             + _annex2_nd_eligibility_html(tf)
             + _annex2_config_alignment_html(tf)
-            + _annex2_enum_coverage_html(tf))
+            + _annex2_enum_coverage_html(tf)
+            + _annex2_semantic_mapping_html(tf))
+
+
+def _annex2_semantic_mapping_html(tf: dict) -> str:
+    """Semantic-mapping reconciliation (47): regime source vs workbook field."""
+    sm = tf.get("semantic_mapping")
+    if not sm:
+        return ""
+    s = sm.get("summary", {}) or {}
+    mism = int(s.get("semantic_mismatch", 0))
+    rows = [
+        ["Ruled codes checked", _esc(s.get("semantic_rows_total", 0))],
+        ["Source matches workbook field", _esc(s.get("aligned", 0))],
+        ["Suspected code↔field mismap (review)", _esc(mism)],
+    ]
+    if mism:
+        note = ('<div class="callout warn">' + _esc(mism) +
+                " Annex 2 regime rule(s) map a source field that does not match the "
+                "workbook field for that code — manual mapping review required; see "
+                "<code>47_annex2_semantic_mapping_reconciliation.csv</code>.</div>")
+    else:
+        note = ('<div class="callout pass">Every regime rule maps the workbook field '
+                "for its code.</div>")
+    return ('<h4 class="chart-title">Annex 2 semantic-mapping reconciliation</h4>'
+            + note + _table(["Item", "Value"], rows))
 
 
 def _annex2_enum_coverage_html(tf: dict) -> str:

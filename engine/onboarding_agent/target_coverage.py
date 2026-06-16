@@ -1560,6 +1560,130 @@ def write_annex2_enum_coverage_reconciliation(
 
 
 # ---------------------------------------------------------------------------
+# Annex 2 semantic-mapping reconciliation (47) — regime source field vs workbook
+# ---------------------------------------------------------------------------
+
+_ANNEX2_SEMANTIC_COLUMNS = [
+    "esma_code", "workbook_field_name", "registry_canonical_field",
+    "regime_source_field", "regime_workbook_semantic", "token_overlap",
+    "semantic_status", "requires_manual_review", "message",
+]
+
+# Below this token-overlap between the regime source field and the workbook
+# field name (via the registry canonical), the rule likely targets a different
+# field than the code denotes.
+_ANNEX2_SEMANTIC_THRESHOLD = 0.34
+
+
+def build_annex2_semantic_mapping_reconciliation(
+    regime_config_path: Optional[str | Path] = None,
+    universe_path: Optional[str | Path] = None,
+    registry_path: Optional[str | Path] = None,
+) -> List[Dict[str, Any]]:
+    """Check, for every regime-ruled Annex 2 code, whether the rule's
+    ``projected_source_field`` actually corresponds to the workbook field for
+    that code (via the verified registry canonical field). Report-only — does
+    NOT change any rule; flags suspected code↔field mismaps for manual review.
+    """
+    cid, csrc, _ruled = load_annex2_target_contract(regime_config_path)
+    try:
+        regime = yaml.safe_load(Path(csrc).read_text(encoding="utf-8")) or {}
+    except Exception:
+        regime = {}
+    field_rules = regime.get("field_rules", {}) or {}
+    workbook, _src = load_annex2_workbook_universe(universe_path)
+    registry = load_annex2_authoritative_universe(registry_path)
+
+    rows: List[Dict[str, Any]] = []
+    for code in sorted(set(field_rules) & set(workbook), key=_code_sort_key):
+        wb = workbook[code]
+        canon = registry.get(code, {}).get("canonical_field", "")
+        rule = field_rules[code]
+        psf = str(rule.get("projected_source_field", ""))
+        sem = str(rule.get("workbook_semantic", ""))
+        if canon and psf:
+            ct, pt = _tokens(canon), _tokens(psf)
+            overlap = len(ct & pt) / max(1, len(ct | pt))
+        else:
+            overlap = 1.0
+        aligned = overlap >= _ANNEX2_SEMANTIC_THRESHOLD
+        status = "aligned" if aligned else "semantic_mismatch"
+        msg = ("regime source field matches the workbook field" if aligned else
+               f"regime maps source '{psf}' to {code}, but the workbook field for "
+               f"{code} is '{wb.get('field_name','')}' (registry canonical "
+               f"'{canon}') — verify the code↔field mapping")
+        rows.append({
+            "esma_code": code,
+            "workbook_field_name": wb.get("field_name", ""),
+            "registry_canonical_field": canon,
+            "regime_source_field": psf,
+            "regime_workbook_semantic": sem,
+            "token_overlap": round(overlap, 2),
+            "semantic_status": status,
+            "requires_manual_review": not aligned,
+            "message": msg,
+        })
+    return rows
+
+
+def annex2_semantic_mapping_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    counts: Dict[str, int] = {}
+    for r in rows:
+        counts[r["semantic_status"]] = counts.get(r["semantic_status"], 0) + 1
+    return {
+        "semantic_rows_total": len(rows),
+        "aligned": counts.get("aligned", 0),
+        "semantic_mismatch": counts.get("semantic_mismatch", 0),
+        "requires_manual_review_count": sum(1 for r in rows if r["requires_manual_review"]),
+        "semantic_status_counts": counts,
+    }
+
+
+def write_annex2_semantic_mapping_reconciliation(
+    out_dir: str | Path,
+    rows: List[Dict[str, Any]],
+    summary: Dict[str, Any],
+    *,
+    regime_config_source: str = "",
+    registry_source: str = "",
+) -> Dict[str, str]:
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    _write_csv(out / "47_annex2_semantic_mapping_reconciliation.csv", rows,
+               _ANNEX2_SEMANTIC_COLUMNS)
+    (out / "47_annex2_semantic_mapping_reconciliation.json").write_text(
+        json.dumps({"regime_config_source": regime_config_source,
+                    "registry_source": registry_source,
+                    "summary": summary, "rows": rows}, indent=2, default=str),
+        encoding="utf-8")
+    md = ["# ESMA Annex 2 semantic-mapping reconciliation", "",
+          "Checks whether each regime rule's source field matches the workbook "
+          "field for that code (via the verified registry canonical name). "
+          "Report only — no rules were changed. Mismatches likely indicate the "
+          "regime config was authored against a different Annex 2 code layout and "
+          "need a human mapping review.", "",
+          f"- **Ruled codes checked:** {summary['semantic_rows_total']}",
+          f"- **Aligned:** {summary['aligned']}",
+          f"- **Semantic mismatch (manual review):** {summary['semantic_mismatch']}", "",
+          "## Codes whose regime source does not match the workbook field", ""]
+    mism = [r for r in rows if r["semantic_status"] == "semantic_mismatch"]
+    if mism:
+        for r in mism:
+            md.append(f"- `{r['esma_code']}` workbook='{r['workbook_field_name']}' "
+                      f"but regime source='{r['regime_source_field']}' "
+                      f"(semantic '{r['regime_workbook_semantic']}')")
+    else:
+        md.append("_None — every regime rule maps the workbook's field for its code._")
+    (out / "47_annex2_semantic_mapping_reconciliation_summary.md").write_text(
+        "\n".join(md) + "\n", encoding="utf-8")
+    return {
+        "csv": str(out / "47_annex2_semantic_mapping_reconciliation.csv"),
+        "json": str(out / "47_annex2_semantic_mapping_reconciliation.json"),
+        "summary_md": str(out / "47_annex2_semantic_mapping_reconciliation_summary.md"),
+    }
+
+
+# ---------------------------------------------------------------------------
 # MI applicability / default overlay (asset/regime-aware, config-driven)
 # ---------------------------------------------------------------------------
 
@@ -2476,6 +2600,17 @@ def run_target_first_coverage(
         field_universe["enum_coverage"] = {"rows": enum_rows, "summary": enum_sum,
                                            "paths": enum_paths}
         paths.update({f"enum_coverage_{k}": v for k, v in enum_paths.items()})
+
+        # 47 — semantic-mapping reconciliation (regime source field vs workbook).
+        sem_rows = build_annex2_semantic_mapping_reconciliation(
+            regime_config_path=annex2_config_path, registry_path=registry_path)
+        sem_sum = annex2_semantic_mapping_summary(sem_rows)
+        sem_paths = write_annex2_semantic_mapping_reconciliation(
+            out, sem_rows, sem_sum, regime_config_source=csrc,
+            registry_source=str(registry_path or ""))
+        field_universe["semantic_mapping"] = {"rows": sem_rows, "summary": sem_sum,
+                                              "paths": sem_paths}
+        paths.update({f"semantic_mapping_{k}": v for k, v in sem_paths.items()})
 
     # (Re)generate the operator-editable 34 template from the resulting 28c —
     # unless we just applied that very file in place (never clobber approvals).
