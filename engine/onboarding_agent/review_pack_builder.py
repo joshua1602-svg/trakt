@@ -233,6 +233,9 @@ def _load_target_first_artifacts(project_dir: Path, output_root: Path | None = N
     ca = _find_artifact(project_dir, output_root,
                         "45_annex2_config_alignment_review.json")
     tf["config_alignment"] = _load_json(ca) if ca else None
+    ec = _find_artifact(project_dir, output_root,
+                        "46_annex2_enum_coverage_reconciliation.json")
+    tf["enum_coverage"] = _load_json(ec) if ec else None
     _derive_summaries(tf)
     return tf
 
@@ -362,7 +365,35 @@ def _annex2_universe_html(tf: dict) -> str:
     return ('<h4 class="chart-title">Annex 2 field universe reconciliation</h4>'
             + note + warn_html + _table(["Item", "Value"], rows)
             + _annex2_nd_eligibility_html(tf)
-            + _annex2_config_alignment_html(tf))
+            + _annex2_config_alignment_html(tf)
+            + _annex2_enum_coverage_html(tf))
+
+
+def _annex2_enum_coverage_html(tf: dict) -> str:
+    """Enum-coverage reconciliation (46): regime enum_map vs workbook codes."""
+    ec = tf.get("enum_coverage")
+    if not ec:
+        return ""
+    s = ec.get("summary", {}) or {}
+    outside = int(s.get("targets_outside_workbook", 0))
+    semantic = int(s.get("semantic_mismatch", 0))
+    rows = [
+        ["Constrained to workbook codes", _esc(s.get("constrained_within_workbook", 0))],
+        ["Unconstrained (no enum_map)", _esc(s.get("unconstrained_no_enum_map", 0))],
+        ["Targets outside workbook (risk)", _esc(outside)],
+        ["Semantic mismatch (mapping review)", _esc(semantic)],
+        ["No regime rule yet", _esc(s.get("no_regime_rule", 0))],
+    ]
+    if outside or semantic:
+        note = ('<div class="callout warn">' + _esc(outside + semantic) +
+                " Annex 2 {LIST} field(s) need enum review (targets outside workbook "
+                "or source/field mismatch) — see "
+                "<code>46_annex2_enum_coverage_reconciliation.csv</code>.</div>")
+    else:
+        note = ('<div class="callout pass">All constrained enum maps are within the '
+                "workbook's allowed codes; no enum values exceed ESMA.</div>")
+    return ('<h4 class="chart-title">Annex 2 enum-coverage reconciliation</h4>'
+            + note + _table(["Item", "Value"], rows))
 
 
 def _annex2_config_alignment_html(tf: dict) -> str:

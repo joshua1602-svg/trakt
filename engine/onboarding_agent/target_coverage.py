@@ -1104,6 +1104,11 @@ _ANNEX2_ALIGNMENT_ACTIONS: Dict[str, Any] = {
         "RREL42": {"value": "Fixed", "code": "FXRL",
                    "reason": "ERM fixed-for-life rate -> ESMA FXRL"},
     },
+    # {LIST} fields constrained to the workbook's allowed enum codes (identity
+    # maps derived from the authoritative template). Semantic mapping verified.
+    "enum_constrained_from_workbook": {
+        "RREL19": 6, "RREL56": 30, "RREL57": 13, "RREC10": 8, "RREC18": 9,
+    },
 }
 
 _ANNEX2_ALIGN_COLUMNS = [
@@ -1286,6 +1291,25 @@ def build_annex2_config_alignment_review(
             "message": (f"asset default '{r.get('asset_default_value', '')}' is invalid "
                         f"against the active regime rule: {r.get('message', '')}"),
         })
+
+    # 5. {LIST} fields constrained to the workbook's allowed enum codes.
+    for code, n in _ANNEX2_ALIGNMENT_ACTIONS["enum_constrained_from_workbook"].items():
+        wb = workbook.get(code, {})
+        emap = ((field_rules.get(code, {}).get("transform") or {}).get("enum_map")) or {}
+        applied = bool(emap)
+        rows.append({
+            "esma_code": code,
+            "workbook_field_name": wb.get("field_name", ""),
+            "workbook_nd_allowed": _fmt(_wb_nd(code)),
+            "regime_nd_allowed_before": "",
+            "regime_nd_allowed_after": "",
+            "alignment_status": "enum_constrained_to_workbook" if applied else "registry_gap",
+            "action_taken": (f"added enum_map of {n} workbook allowed codes"
+                             if applied else "enum_map missing — review"),
+            "requires_manual_review": not applied,
+            "message": ("enum values constrained to the workbook's allowed set"
+                        if applied else "expected enum_map not present"),
+        })
     return rows
 
 
@@ -1303,6 +1327,7 @@ def annex2_config_alignment_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any
         "registry_gap": counts.get("registry_gap", 0),
         "phantom_deferred_removed": counts.get("phantom_deferred_removed", 0),
         "asset_default_conflict": counts.get("asset_default_conflict", 0),
+        "enum_constrained_to_workbook": counts.get("enum_constrained_to_workbook", 0),
         "requires_manual_review_count": sum(1 for r in rows if r["requires_manual_review"]),
         "alignment_status_counts": counts,
     }
@@ -1357,6 +1382,180 @@ def write_annex2_config_alignment_review(
         "csv": str(out / "45_annex2_config_alignment_review.csv"),
         "json": str(out / "45_annex2_config_alignment_review.json"),
         "summary_md": str(out / "45_annex2_config_alignment_review_summary.md"),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Annex 2 enum-coverage reconciliation (46) — regime enum_map vs workbook codes
+# ---------------------------------------------------------------------------
+
+_ANNEX2_ENUM_COLUMNS = [
+    "esma_code", "workbook_field_name", "regime_source_field", "has_regime_rule",
+    "has_enum_map", "workbook_allowed_count", "workbook_allowed_codes",
+    "regime_enum_targets", "targets_outside_workbook", "regime_semantic_aligned",
+    "enum_coverage_status", "requires_manual_review", "message",
+]
+
+
+def _annex2_workbook_enum_codes(content: str) -> List[str]:
+    """Parse the allowed enum codes from a workbook field's content prose.
+
+    Codes appear parenthesised, e.g. ``Employed - Private Sector (EMRS)``. Only
+    3-4 char upper tokens are treated as codes, to avoid catching regulatory
+    citations such as ``(EU)``.
+    """
+    seen: List[str] = []
+    for m in re.findall(r'\(([A-Z]{3,4}\d?)\)', content or ""):
+        if m not in seen:
+            seen.append(m)
+    return seen
+
+
+def _tokens(s: str) -> set:
+    return set(re.findall(r'[a-z0-9]+', (s or "").lower()))
+
+
+def build_annex2_enum_coverage_reconciliation(
+    regime_config_path: Optional[str | Path] = None,
+    universe_path: Optional[str | Path] = None,
+    registry_path: Optional[str | Path] = None,
+) -> List[Dict[str, Any]]:
+    """Reconcile regime ``enum_map`` coverage against the workbook's allowed
+    enum codes for every ``{LIST}`` Annex 2 field. Report-only.
+
+    Statuses:
+      constrained_within_workbook  - enum_map present, all targets are workbook codes
+      targets_outside_workbook     - enum_map maps to code(s) the workbook forbids
+      unconstrained_no_enum_map    - regime rule present but no enum_map (backlog)
+      semantic_mismatch            - regime rule's source field does not match the
+                                     workbook field for this code (enum not trusted)
+      no_regime_rule               - {LIST} field with no regime rule yet
+    """
+    cid, csrc, _ruled = load_annex2_target_contract(regime_config_path)
+    try:
+        regime = yaml.safe_load(Path(csrc).read_text(encoding="utf-8")) or {}
+    except Exception:
+        regime = {}
+    field_rules = regime.get("field_rules", {}) or {}
+    workbook, _src = load_annex2_workbook_universe(universe_path)
+    registry = load_annex2_authoritative_universe(registry_path)
+
+    rows: List[Dict[str, Any]] = []
+    list_codes = [c for c, m in workbook.items()
+                  if str(m.get("format", "")).strip().upper() == "{LIST}"]
+    for code in sorted(list_codes, key=_code_sort_key):
+        wb = workbook[code]
+        allowed = _annex2_workbook_enum_codes(wb.get("content", ""))
+        rule = field_rules.get(code)
+        has_rule = rule is not None
+        emap = ((rule.get("transform") or {}).get("enum_map") if has_rule else None) or {}
+        targets = sorted(set(emap.values()))
+        outside = sorted(set(targets) - set(allowed)) if allowed else []
+        # Semantic check: regime source field vs the registry canonical field for
+        # this code (registry canonical == workbook field name, verified).
+        canon = registry.get(code, {}).get("canonical_field", "")
+        psf = str(rule.get("projected_source_field", "")) if has_rule else ""
+        if canon and psf:
+            ov = _tokens(canon) & _tokens(psf)
+            sem_aligned = len(ov) / max(1, len(_tokens(canon) | _tokens(psf))) >= 0.34
+        else:
+            sem_aligned = True
+        manual = False
+        if not has_rule:
+            status = "no_regime_rule"; manual = True
+            msg = "workbook {LIST} field has no regime rule yet (enum backlog)"
+        elif not sem_aligned:
+            status = "semantic_mismatch"; manual = True
+            msg = (f"regime rule source '{psf}' does not match the workbook field "
+                   f"'{wb.get('field_name','')}' (registry canonical '{canon}') — "
+                   "enum not constrained pending mapping review")
+        elif outside:
+            status = "targets_outside_workbook"; manual = True
+            msg = f"enum_map targets not in the workbook allowed set: {outside}"
+        elif emap:
+            status = "constrained_within_workbook"
+            msg = "enum_map constrains values to the workbook's allowed codes"
+        else:
+            status = "unconstrained_no_enum_map"; manual = True
+            msg = "regime rule present but enum values are not constrained to the workbook set"
+        rows.append({
+            "esma_code": code,
+            "workbook_field_name": wb.get("field_name", ""),
+            "regime_source_field": psf,
+            "has_regime_rule": has_rule,
+            "has_enum_map": bool(emap),
+            "workbook_allowed_count": len(allowed),
+            "workbook_allowed_codes": "; ".join(allowed),
+            "regime_enum_targets": "; ".join(targets),
+            "targets_outside_workbook": "; ".join(outside),
+            "regime_semantic_aligned": sem_aligned,
+            "enum_coverage_status": status,
+            "requires_manual_review": manual,
+            "message": msg,
+        })
+    return rows
+
+
+def annex2_enum_coverage_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    counts: Dict[str, int] = {}
+    for r in rows:
+        counts[r["enum_coverage_status"]] = counts.get(r["enum_coverage_status"], 0) + 1
+    return {
+        "enum_rows_total": len(rows),
+        "constrained_within_workbook": counts.get("constrained_within_workbook", 0),
+        "unconstrained_no_enum_map": counts.get("unconstrained_no_enum_map", 0),
+        "targets_outside_workbook": counts.get("targets_outside_workbook", 0),
+        "semantic_mismatch": counts.get("semantic_mismatch", 0),
+        "no_regime_rule": counts.get("no_regime_rule", 0),
+        "requires_manual_review_count": sum(1 for r in rows if r["requires_manual_review"]),
+        "enum_coverage_status_counts": counts,
+    }
+
+
+def write_annex2_enum_coverage_reconciliation(
+    out_dir: str | Path,
+    rows: List[Dict[str, Any]],
+    summary: Dict[str, Any],
+    *,
+    regime_config_source: str = "",
+    universe_source: str = "",
+) -> Dict[str, str]:
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    _write_csv(out / "46_annex2_enum_coverage_reconciliation.csv", rows,
+               _ANNEX2_ENUM_COLUMNS)
+    (out / "46_annex2_enum_coverage_reconciliation.json").write_text(
+        json.dumps({"regime_config_source": regime_config_source,
+                    "universe_source": universe_source,
+                    "summary": summary, "rows": rows}, indent=2, default=str),
+        encoding="utf-8")
+    md = ["# ESMA Annex 2 enum-coverage reconciliation", "",
+          "Compares each regime rule's `enum_map` against the authoritative "
+          "workbook's allowed enum codes for every `{LIST}` field. Report only — "
+          "no regime values were widened.", "",
+          f"- **`{{LIST}}` fields:** {summary['enum_rows_total']}",
+          f"- **Constrained to workbook codes:** {summary['constrained_within_workbook']}",
+          f"- **Unconstrained (no enum_map, backlog):** {summary['unconstrained_no_enum_map']}",
+          f"- **Targets outside workbook (risk):** {summary['targets_outside_workbook']}",
+          f"- **Semantic mismatch (mapping review):** {summary['semantic_mismatch']}",
+          f"- **No regime rule yet:** {summary['no_regime_rule']}", "",
+          "## Status counts", ""]
+    for st, c in sorted(summary["enum_coverage_status_counts"].items(), key=lambda kv: -kv[1]):
+        md.append(f"- `{st}`: {c}")
+    review = [r for r in rows if r["requires_manual_review"]]
+    md += ["", "## Fields requiring manual review", ""]
+    if review:
+        for r in review:
+            md.append(f"- `{r['esma_code']}` {r['workbook_field_name']} "
+                      f"({r['enum_coverage_status']}): {r['message']}")
+    else:
+        md.append("_None._")
+    (out / "46_annex2_enum_coverage_reconciliation_summary.md").write_text(
+        "\n".join(md) + "\n", encoding="utf-8")
+    return {
+        "csv": str(out / "46_annex2_enum_coverage_reconciliation.csv"),
+        "json": str(out / "46_annex2_enum_coverage_reconciliation.json"),
+        "summary_md": str(out / "46_annex2_enum_coverage_reconciliation_summary.md"),
     }
 
 
@@ -2266,6 +2465,17 @@ def run_target_first_coverage(
         field_universe["config_alignment"] = {"rows": align_rows, "summary": align_sum,
                                               "paths": align_paths}
         paths.update({f"config_alignment_{k}": v for k, v in align_paths.items()})
+
+        # 46 — enum-coverage reconciliation (regime enum_map vs workbook codes).
+        enum_rows = build_annex2_enum_coverage_reconciliation(
+            regime_config_path=annex2_config_path, registry_path=registry_path)
+        enum_sum = annex2_enum_coverage_summary(enum_rows)
+        enum_paths = write_annex2_enum_coverage_reconciliation(
+            out, enum_rows, enum_sum, regime_config_source=csrc,
+            universe_source=universe_meta.get("authoritative_source", ""))
+        field_universe["enum_coverage"] = {"rows": enum_rows, "summary": enum_sum,
+                                           "paths": enum_paths}
+        paths.update({f"enum_coverage_{k}": v for k, v in enum_paths.items()})
 
     # (Re)generate the operator-editable 34 template from the resulting 28c —
     # unless we just applied that very file in place (never clobber approvals).

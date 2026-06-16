@@ -171,6 +171,8 @@ def build_workflow_summary(
     nd_sum = nd_recon.get("summary", {}) or {}
     align = _read_json(project_dir / "45_annex2_config_alignment_review.json") or {}
     align_sum = align.get("summary", {}) or {}
+    enumc = _read_json(project_dir / "46_annex2_enum_coverage_reconciliation.json") or {}
+    enum_sum = enumc.get("summary", {}) or {}
     app = _read_json(project_dir / "35_target_first_decision_application_log.json")
     app_sum = (app or {}).get("summary", {}) or {}
     advu = _read_json(project_dir / "36_target_first_llm_usage_summary.json")
@@ -315,7 +317,27 @@ def build_workflow_summary(
                 align_sum.get("requires_manual_review_count", 0)),
             "annex2_config_alignment_review_summary": _p(
                 "45_annex2_config_alignment_review_summary.md"),
+            # Enum-coverage reconciliation (46).
+            "annex2_enum_constrained_count": int(enum_sum.get("constrained_within_workbook", 0)),
+            "annex2_enum_unconstrained_count": int(enum_sum.get("unconstrained_no_enum_map", 0)),
+            "annex2_enum_targets_outside_workbook_count": int(
+                enum_sum.get("targets_outside_workbook", 0)),
+            "annex2_enum_semantic_mismatch_count": int(enum_sum.get("semantic_mismatch", 0)),
+            "annex2_enum_no_rule_count": int(enum_sum.get("no_regime_rule", 0)),
+            "annex2_enum_coverage_reconciliation_summary": _p(
+                "46_annex2_enum_coverage_reconciliation_summary.md"),
         })
+        enum_outside = int(enum_sum.get("targets_outside_workbook", 0))
+        if enum_outside > 0:
+            warnings.append(
+                f"{enum_outside} Annex 2 {{LIST}} field(s) map to enum codes the workbook FORBIDS "
+                "(must be zero) — see 46_annex2_enum_coverage_reconciliation.")
+        enum_semantic = int(enum_sum.get("semantic_mismatch", 0))
+        if enum_semantic > 0:
+            warnings.append(
+                f"{enum_semantic} Annex 2 {{LIST}} field(s) have a regime rule whose source "
+                "field does not match the workbook field — enum left unconstrained pending "
+                "mapping review; see 46_annex2_enum_coverage_reconciliation.")
         # regime_broader (regime permits ND the workbook FORBIDS) must be zero.
         nd_broader = int(nd_sum.get("regime_broader", 0))
         if nd_broader > 0:
@@ -450,6 +472,7 @@ _AUDIT_CATALOG = [
     ("43_annex2_field_universe_reconciliation.csv", "artefact", "keep_core", "ESMA Annex 2 field-universe reconciliation (Annex 2 mode only)."),
     ("44_annex2_nd_eligibility_reconciliation.csv", "artefact", "keep_core", "ESMA Annex 2 ND-eligibility reconciliation: regime nd_allowed vs workbook (Annex 2 mode only)."),
     ("45_annex2_config_alignment_review.csv", "artefact", "keep_core", "ESMA Annex 2 config-alignment review: actions taken + manual-review items (Annex 2 mode only)."),
+    ("46_annex2_enum_coverage_reconciliation.csv", "artefact", "keep_core", "ESMA Annex 2 enum-coverage reconciliation: regime enum_map vs workbook allowed codes (Annex 2 mode only)."),
     # --- source-column legacy decision artefacts RETAINED FOR AUDIT ---
     ("33_mapping_review_queue.csv", "artefact", "keep_legacy_audit", "Source-column review queue; retained as audit detail, no longer the primary gate."),
     ("34_mapping_review_decisions.yaml", "artefact", "keep_legacy_audit", "Source-column decision template; superseded by 34_target_first_decisions.yaml; kept for audit."),

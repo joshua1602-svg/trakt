@@ -404,6 +404,63 @@ class TestAnnex2NdEligibility(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------- #
+# Enum-coverage reconciliation (46): regime enum_map vs workbook allowed codes
+# --------------------------------------------------------------------------- #
+class TestAnnex2EnumCoverage(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.out = Path(tempfile.mkdtemp(prefix="annex2_enum_"))
+        cls.summary = _run_annex2(cls.out)
+        cls.enum = json.loads(
+            (cls.out / "46_annex2_enum_coverage_reconciliation.json").read_text())
+        cls.by = {r["esma_code"]: r for r in cls.enum["rows"]}
+
+    def test_46_artefacts_written(self):
+        for name in ("46_annex2_enum_coverage_reconciliation.csv",
+                     "46_annex2_enum_coverage_reconciliation.json",
+                     "46_annex2_enum_coverage_reconciliation_summary.md"):
+            self.assertTrue((self.out / name).exists(), name)
+
+    def test_no_enum_exceeds_workbook(self):
+        # No regime enum_map may map to a code the workbook forbids.
+        self.assertEqual(self.enum["summary"]["targets_outside_workbook"], 0)
+        self.assertEqual(self.summary["annex2_enum_targets_outside_workbook_count"], 0)
+
+    def test_added_enum_maps_are_within_workbook(self):
+        import yaml as _y
+        wb = tcov.load_annex2_workbook_universe()[0]
+        fr = _y.safe_load(open("config/regime/annex2_delivery_rules.yaml"))["field_rules"]
+        for code in ("RREL19", "RREL56", "RREL57", "RREC10", "RREC18"):
+            allowed = set(tcov._annex2_workbook_enum_codes(wb[code]["content"]))
+            targets = set(fr[code]["transform"]["enum_map"].values())
+            self.assertTrue(targets, code)
+            self.assertTrue(targets <= allowed, f"{code}: {targets - allowed} outside workbook")
+            self.assertEqual(self.by[code]["enum_coverage_status"],
+                             "constrained_within_workbook")
+
+    def test_semantic_mismatch_surfaced_not_constrained(self):
+        # Codes whose regime rule points at the wrong field (vs the workbook) are
+        # surfaced for review and NOT silently enum-constrained.
+        for code in ("RREL17", "RREL70", "RREC23"):
+            self.assertEqual(self.by[code]["enum_coverage_status"], "semantic_mismatch")
+            self.assertTrue(self.by[code]["requires_manual_review"])
+        self.assertGreater(self.enum["summary"]["semantic_mismatch"], 0)
+        self.assertTrue(any("source field does not match" in w
+                            for w in self.summary["warnings"]))
+
+    def test_45_records_enum_constraint_actions(self):
+        align = json.loads(
+            (self.out / "45_annex2_config_alignment_review.json").read_text())
+        constrained = [r for r in align["rows"]
+                       if r["alignment_status"] == "enum_constrained_to_workbook"]
+        self.assertEqual(len(constrained), 5)
+
+    def test_review_pack_shows_enum_reconciliation(self):
+        html = (self.out / "08_onboarding_review_pack.html").read_text()
+        self.assertIn("Annex 2 enum-coverage reconciliation", html)
+
+
+# --------------------------------------------------------------------------- #
 # Config-alignment review (45): actions taken + manual-review items
 # --------------------------------------------------------------------------- #
 class TestAnnex2ConfigAlignment(unittest.TestCase):
@@ -498,7 +555,8 @@ class TestMiUnchanged(unittest.TestCase):
         for name in ("42_annex2_config_validation.csv",
                      "43_annex2_field_universe_reconciliation.csv",
                      "44_annex2_nd_eligibility_reconciliation.csv",
-                     "45_annex2_config_alignment_review.csv"):
+                     "45_annex2_config_alignment_review.csv",
+                     "46_annex2_enum_coverage_reconciliation.csv"):
             self.assertFalse((self.out / name).exists(), name)
         self.assertNotIn("annex2_field_count", self.summary)
         self.assertNotIn("annex2_authoritative_field_count", self.summary)

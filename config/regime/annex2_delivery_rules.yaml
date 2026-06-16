@@ -442,6 +442,15 @@ field_rules:
     default_value: ND1
     validators:
       regex: "^[A-Z0-9_]{1,12}$"
+    transform:
+      # Allowed enum codes per the authoritative Annex 2 workbook (RREL19).
+      enum_map:
+        SCRT: SCRT
+        SCNF: SCNF
+        VRFD: VRFD
+        NVRF: NVRF
+        SCRG: SCRG
+        OTHR: OTHR
 
   RREL22:
     esma_code: RREL22
@@ -615,6 +624,39 @@ field_rules:
     default_value: ND5
     validators:
       regex: "^[A-Za-z0-9._\\-/]{1,32}$"
+    transform:
+      # Allowed enum codes per the authoritative Annex 2 workbook (RREL56).
+      enum_map:
+        MAAA: MAAA
+        FUSW: FUSW
+        LIBI: LIBI
+        LIBO: LIBO
+        SWAP: SWAP
+        TREA: TREA
+        EURI: EURI
+        PFAN: PFAN
+        EONA: EONA
+        EONS: EONS
+        EUUS: EUUS
+        EUCH: EUCH
+        TIBO: TIBO
+        ISDA: ISDA
+        GCFR: GCFR
+        STBO: STBO
+        BBSW: BBSW
+        JIBA: JIBA
+        BUBO: BUBO
+        CDOR: CDOR
+        CIBO: CIBO
+        MOSP: MOSP
+        NIBO: NIBO
+        PRBO: PRBO
+        TLBO: TLBO
+        WIBO: WIBO
+        BOER: BOER
+        ECBR: ECBR
+        LDOR: LDOR
+        OTHR: OTHR
 
   RREL57:
     esma_code: RREL57
@@ -627,6 +669,22 @@ field_rules:
     default_value: ND5
     validators:
       regex: "^[A-Za-z0-9._\\-/]{1,32}$"
+    transform:
+      # Allowed enum codes per the authoritative Annex 2 workbook (RREL57).
+      enum_map:
+        OVNG: OVNG
+        INDA: INDA
+        DAIL: DAIL
+        WEEK: WEEK
+        TOWK: TOWK
+        MNTH: MNTH
+        TOMN: TOMN
+        QUTR: QUTR
+        FOMN: FOMN
+        SEMI: SEMI
+        YEAR: YEAR
+        ONDE: ONDE
+        OTHR: OTHR
 
   RREL58:
     esma_code: RREL58
@@ -712,6 +770,17 @@ field_rules:
     nd_allowed: [ND5]
     default_allowed: true
     default_value: ND5
+    transform:
+      # Allowed enum codes per the authoritative Annex 2 workbook (RREC10).
+      enum_map:
+        EPCA: EPCA
+        EPCB: EPCB
+        EPCC: EPCC
+        EPCD: EPCD
+        EPCE: EPCE
+        EPCF: EPCF
+        EPCG: EPCG
+        OTHR: OTHR
 
   RREC11:
     esma_code: RREC11
@@ -757,6 +826,18 @@ field_rules:
     nd_allowed: [ND1, ND2, ND3]
     default_allowed: true
     default_value: ND1
+    transform:
+      # Allowed enum codes per the authoritative Annex 2 workbook (RREC18).
+      enum_map:
+        FIEI: FIEI
+        FOEI: FOEI
+        DRVB: DRVB
+        AUVM: AUVM
+        IDXD: IDXD
+        DKTP: DKTP
+        MAEA: MAEA
+        TXAT: TXAT
+        OTHR: OTHR
 
   RREC19:
     esma_code: RREC19
