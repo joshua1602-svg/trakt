@@ -333,6 +333,7 @@ def run_llm_assisted_mapping(
         resolved_rows=res["resolved"], output_dir=out_dir,
         annex2_config_path=regime_config_path,
         asset_config_path=asset_config_path,
+        registry_path=registry_path,
         client_id=client_id, run_id=run_id,
         decisions_path=target_first_decisions_path)
 

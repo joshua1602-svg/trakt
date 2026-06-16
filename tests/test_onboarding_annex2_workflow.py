@@ -172,11 +172,12 @@ class TestAnnex2Workflow(unittest.TestCase):
         self.assertEqual(s["annex2_field_count"], len(self.cov["rows"]))
         self.assertGreaterEqual(s["annex2_invalid_default_count"], 1)
 
-    def test_40_status_derives_from_28c(self):
-        nblock = self.dec["summary"]["blocking_decisions"]
-        ntotal = self.dec["summary"]["human_decision_rows_total"]
-        self.assertEqual(self.summary["status"],
-                         wf.derive_status(ntotal, nblock, False))
+    def test_40_status_not_ready_when_universe_incomplete(self):
+        # With pending_regime_rule codes in the authoritative universe, the
+        # Annex 2 run must NOT be READY (config completeness gap).
+        self.assertNotEqual(self.summary["status"], wf.READY)
+        self.assertEqual(self.summary["status"], wf.NEEDS_CONFIGURATION)
+        self.assertGreater(self.summary["annex2_pending_regime_rule_count"], 0)
 
     def test_explicitly_defaulted_fields_not_in_28c(self):
         # A field that is explicitly ND/value defaulted with no confirmation must
@@ -215,6 +216,88 @@ class TestAnnex2Workflow(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------- #
+# Field-universe completeness (28a == authoritative universe; 43 reconciliation)
+# --------------------------------------------------------------------------- #
+class TestAnnex2FieldUniverse(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.out = Path(tempfile.mkdtemp(prefix="annex2_univ_"))
+        cls.summary = _run_annex2(cls.out)
+        cls.cov = json.loads(
+            (cls.out / "28a_target_coverage_matrix.json").read_text())
+        cls.recon = json.loads(
+            (cls.out / "43_annex2_field_universe_reconciliation.json").read_text())
+
+    def test_universe_loader_unit(self):
+        auth = tcov.load_annex2_authoritative_universe(REGISTRY)
+        # Workbook registry carries the full Annex 2 code set (> the 68 regime
+        # rules), e.g. RREL3 / RREL5 / RREL7 are present but unruled.
+        self.assertGreater(len(auth), 68)
+        for code in ("RREL3", "RREL5", "RREL7"):
+            self.assertIn(code, auth)
+
+    def test_28a_equals_authoritative_universe_count(self):
+        recon_sum = self.recon["summary"]
+        self.assertEqual(len(self.cov["rows"]),
+                         recon_sum["authoritative_field_count"])
+        self.assertEqual(self.summary["annex2_coverage_field_count"],
+                         self.summary["annex2_authoritative_field_count"])
+
+    def test_no_authoritative_code_missing_from_28a(self):
+        self.assertEqual(self.recon["summary"]["missing_from_28a_count"], 0)
+        missing = [r for r in self.recon["rows"]
+                   if r["reconciliation_status"] == "missing_from_28a"]
+        self.assertEqual(missing, [])
+        # Every regime field rule and every workbook code is represented in 28a.
+        cov_codes = {r["target_field"] for r in self.cov["rows"]}
+        for r in self.recon["rows"]:
+            if r["in_regime_field_rules"] or r["in_workbook_reconciliation"]:
+                self.assertIn(r["esma_code"], cov_codes)
+
+    def test_43_artefacts_written(self):
+        for name in ("43_annex2_field_universe_reconciliation.csv",
+                     "43_annex2_field_universe_reconciliation.json",
+                     "43_annex2_field_universe_reconciliation_summary.md"):
+            self.assertTrue((self.out / name).exists(), name)
+
+    def test_deferred_fields_present_as_deferred(self):
+        cov_by = {r["target_field"]: r for r in self.cov["rows"]}
+        # RREC22 is a deferred reconciliation code: present in 28a, not dropped.
+        self.assertIn("RREC22", cov_by)
+        deferred_codes = [r["esma_code"] for r in self.recon["rows"]
+                          if r["reconciliation_status"] == "deferred_in_regime"]
+        self.assertGreater(len(deferred_codes), 0)
+        # Deferred codes either carry deferred applicability or are source-mapped,
+        # never silently omitted.
+        for code in deferred_codes:
+            self.assertIn(code, cov_by)
+
+    def test_pending_codes_appear_as_pending_regime_rule(self):
+        cov_by = {r["target_field"]: r for r in self.cov["rows"]}
+        pending = [r["esma_code"] for r in self.recon["rows"]
+                   if r["reconciliation_status"] == "missing_from_regime_rules"]
+        self.assertGreater(len(pending), 0)
+        # At least some pending (unruled, no source) carry the pending status.
+        statuses = {cov_by[c]["coverage_status"] for c in pending if c in cov_by}
+        self.assertIn(tcov.PENDING_REGIME_RULE, statuses)
+
+    def test_40_reports_universe_counts(self):
+        s = self.summary
+        for k in ("annex2_authoritative_field_count", "annex2_coverage_field_count",
+                  "annex2_regime_rule_count", "annex2_config_validation_count",
+                  "annex2_missing_from_28a_count", "annex2_deferred_field_count",
+                  "annex2_deliverable_field_count"):
+            self.assertIn(k, s)
+        self.assertEqual(s["annex2_regime_rule_count"], 68)
+        self.assertGreater(s["annex2_authoritative_field_count"], 68)
+
+    def test_review_pack_shows_universe_reconciliation(self):
+        html = (self.out / "08_onboarding_review_pack.html").read_text()
+        self.assertIn("Annex 2 field universe reconciliation", html)
+        self.assertIn("Authoritative Annex 2 fields", html)
+
+
+# --------------------------------------------------------------------------- #
 # 8 — MI workflow remains unchanged
 # --------------------------------------------------------------------------- #
 class TestMiUnchanged(unittest.TestCase):
@@ -233,9 +316,16 @@ class TestMiUnchanged(unittest.TestCase):
 
     def test_mi_has_no_annex2_artefacts_or_summary(self):
         self.assertFalse((self.out / "42_annex2_config_validation.csv").exists())
+        self.assertFalse(
+            (self.out / "43_annex2_field_universe_reconciliation.csv").exists())
         self.assertNotIn("annex2_field_count", self.summary)
+        self.assertNotIn("annex2_authoritative_field_count", self.summary)
         self.assertEqual(self.summary.get("target_contract_id"),
                          "mi_semantics_field_registry")
+
+    def test_mi_field_count_unchanged(self):
+        cov = json.loads((self.out / "28a_target_coverage_matrix.json").read_text())
+        self.assertEqual(cov["summary"]["target_fields_total"], 72)
 
 
 # --------------------------------------------------------------------------- #

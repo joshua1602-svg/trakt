@@ -73,6 +73,11 @@ NOT_APPLICABLE = "not_applicable"
 MISSING_REQUIRED = "missing_required"
 NEEDS_CONFIRMATION = "needs_confirmation"
 OPTIONAL_FOR_MI = "optional_for_mi"
+# An authoritative Annex 2 code that is in the target universe but has no full
+# regime field rule yet (config completeness gap, not a data gap).
+PENDING_REGIME_RULE = "pending_regime_rule"
+# An Annex 2 code that is explicitly deferred for reconciliation.
+DEFERRED = "deferred"
 
 # Overlay coverage statuses that are valid as `coverage_status_if_no_source`.
 _OVERLAY_STATUSES = {NOT_APPLICABLE, OPTIONAL_FOR_MI, NEEDS_CONFIRMATION,
@@ -215,6 +220,23 @@ def _annex2_domain(code: str) -> str:
     return "annex2"
 
 
+def _annex2_family(code: str) -> str:
+    code = str(code or "").upper()
+    if code.startswith("RREC"):
+        return "RREC"
+    if code.startswith("RREL"):
+        return "RREL"
+    return "other"
+
+
+def _code_sort_key(code: str) -> Tuple[str, int, str]:
+    """Sort ESMA codes by family then numeric suffix (RREL2 < RREL10)."""
+    m = re.match(r"^([A-Za-z]+)(\d+)$", str(code or ""))
+    if m:
+        return (m.group(1), int(m.group(2)), "")
+    return (str(code or ""), 1 << 30, str(code or ""))
+
+
 def load_annex2_target_contract(
     config_path: Optional[str | Path] = None,
 ) -> Tuple[str, str, List[Dict[str, Any]]]:
@@ -266,6 +288,109 @@ def load_annex2_target_contract(
             "configured_value_source": configured,
         })
     return "esma_annex_2", str(path), rows
+
+
+# ---------------------------------------------------------------------------
+# Authoritative Annex 2 target universe (workbook-derived registry + regime)
+# ---------------------------------------------------------------------------
+
+def load_annex2_authoritative_universe(
+    registry_path: Optional[str | Path] = None,
+) -> Dict[str, Dict[str, Any]]:
+    """Return the authoritative (workbook-derived) Annex 2 code universe.
+
+    Reads ``fields_registry.yaml`` and extracts every canonical field carrying a
+    ``regime_mapping.ESMA_Annex2.code`` — the complete workbook-derived Annex 2
+    field set. Returns ``{esma_code: {canonical_field, priority, synonyms}}``.
+    Empty when the registry has no Annex 2 mappings (caller then warns).
+    """
+    if not registry_path:
+        registry_path = _REPO_ROOT / "config" / "system" / "fields_registry.yaml"
+    path = Path(registry_path)
+    if not path.exists():
+        return {}
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return {}
+    out: Dict[str, Dict[str, Any]] = {}
+    for fname, meta in (data.get("fields", {}) or {}).items():
+        rm = ((meta or {}).get("regime_mapping", {}) or {}).get("ESMA_Annex2", {}) or {}
+        code = rm.get("code")
+        if code and code not in out:
+            out[code] = {
+                "canonical_field": fname,
+                "priority": str(rm.get("priority", "") or ""),
+                "synonyms": list(meta.get("synonyms", []) or []),
+            }
+    return out
+
+
+def build_annex2_full_contract(
+    annex2_config_path: Optional[str | Path] = None,
+    registry_path: Optional[str | Path] = None,
+) -> Tuple[str, str, List[Dict[str, Any]], Dict[str, Any]]:
+    """Build the FULL Annex 2 target contract: every code in the authoritative
+    universe (workbook registry ∪ regime field_rules ∪ deferred_fields).
+
+    Fields with a full regime rule keep their rich rule. Authoritative codes
+    without a regime rule are included as ``pending_regime_rule`` (or ``deferred``
+    when listed in ``reconciliation_scope.deferred_fields``) — never dropped.
+
+    Returns ``(contract_id, contract_source, target_fields, universe_meta)``.
+    """
+    cid, csrc, ruled = load_annex2_target_contract(annex2_config_path)
+    ruled_by_code = {r["target_field"]: r for r in ruled}
+    try:
+        regime = yaml.safe_load(Path(csrc).read_text(encoding="utf-8")) or {}
+    except Exception:
+        regime = {}
+    deferred = set(regime.get("reconciliation_scope", {}).get("deferred_fields", []) or [])
+    workbook = load_annex2_authoritative_universe(registry_path)
+    workbook_codes = set(workbook.keys())
+
+    all_codes = set(ruled_by_code) | workbook_codes | deferred
+    rows: List[Dict[str, Any]] = list(ruled)
+    for code in sorted(all_codes - set(ruled_by_code), key=_code_sort_key):
+        meta = workbook.get(code, {})
+        canon = meta.get("canonical_field", "")
+        is_deferred = code in deferred
+        required = str(meta.get("priority", "")).strip().lower() == "mandatory"
+        rows.append({
+            "target_field": code,
+            "esma_code": code,
+            "projected_source_field": canon,
+            "target_domain": _annex2_domain(code),
+            "target_label": canon or code,
+            "required_status": "mandatory" if required else "optional",
+            "enforce_presence": False,
+            "applicability_status": ("deferred_reconciliation" if is_deferred
+                                     else "applicable"),
+            "match_field": canon,
+            "synonyms": [s for s in ([canon] + list(meta.get("synonyms", []) or [])) if s],
+            "derived": False,
+            "derivation_rule": "",
+            "default_rule": "",
+            "default_value": "",
+            "default_rule_source": "",
+            "default_reason": "",
+            "nd_allowed": [],
+            "configured_value_source": "",
+            # Universe completeness flags (drive pending/deferred classification).
+            "pending_regime_rule": (not is_deferred),
+            "deferred_reconciliation": is_deferred,
+            "in_workbook_universe": code in workbook_codes,
+        })
+
+    universe_meta = {
+        "workbook_codes": sorted(workbook_codes, key=_code_sort_key),
+        "regime_rule_codes": sorted(ruled_by_code.keys(), key=_code_sort_key),
+        "deferred_codes": sorted(deferred, key=_code_sort_key),
+        "all_codes": sorted(all_codes, key=_code_sort_key),
+        "registry_has_annex2": bool(workbook_codes),
+        "registry_source": str(registry_path) if registry_path else "",
+    }
+    return cid, csrc, rows, universe_meta
 
 
 # ---------------------------------------------------------------------------
@@ -521,6 +646,167 @@ def write_annex2_config_validation(
 
 
 # ---------------------------------------------------------------------------
+# Annex 2 field-universe reconciliation (43)
+# ---------------------------------------------------------------------------
+
+# Coverage statuses that count as genuinely deliverable Annex 2 output.
+_DELIVERABLE_STATUSES = {SOURCE_MAPPED, SOURCE_MAPPED_ALT, DERIVED,
+                         CONFIGURED_STATIC, DEFAULTED_VALUE, DEFAULTED_ND}
+
+_ANNEX2_RECON_COLUMNS = [
+    "esma_code", "field_family", "in_workbook_reconciliation",
+    "in_regime_field_rules", "in_config_validation", "in_28a_coverage",
+    "coverage_status", "reconciliation_status", "message",
+]
+
+
+def build_annex2_field_universe_reconciliation(
+    universe_meta: Dict[str, Any],
+    coverage_rows: List[Dict[str, Any]],
+    config_validation_rows: Optional[List[Dict[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
+    """Reconcile the Annex 2 code universes: workbook registry vs regime rules vs
+    config validation vs 28a coverage. One row per known ESMA code.
+    """
+    workbook = set(universe_meta.get("workbook_codes", []) or [])
+    regime = set(universe_meta.get("regime_rule_codes", []) or [])
+    deferred = set(universe_meta.get("deferred_codes", []) or [])
+    cov_by: Dict[str, Dict[str, Any]] = {}
+    for r in coverage_rows:
+        code = r.get("esma_code") or r.get("target_field")
+        if code:
+            cov_by[code] = r
+    validation_codes = {r.get("esma_code") for r in (config_validation_rows or [])
+                        if r.get("esma_code")}
+
+    all_codes = (set(universe_meta.get("all_codes", []) or [])
+                 | set(cov_by) | validation_codes)
+    rows: List[Dict[str, Any]] = []
+    for code in sorted(all_codes, key=_code_sort_key):
+        in_wb = code in workbook
+        in_regime = code in regime
+        in_val = code in validation_codes
+        in_28a = code in cov_by
+        cstatus = cov_by.get(code, {}).get("coverage_status", "")
+        if not in_28a:
+            rstatus = "missing_from_28a"
+            msg = "authoritative Annex 2 code is missing from 28a target coverage"
+        elif code in deferred:
+            rstatus = "deferred_in_regime"
+            msg = ("explicitly deferred for reconciliation"
+                   + ("" if in_wb else " (not present in the workbook registry)"))
+        elif not in_wb:
+            rstatus = "not_in_authoritative_universe"
+            msg = "present in regime/coverage but not in the workbook registry"
+        elif not in_regime:
+            rstatus = "missing_from_regime_rules"
+            msg = ("in the authoritative universe but has no full regime field "
+                   "rule yet (pending configuration)")
+        elif not in_val:
+            rstatus = "missing_from_validation"
+            msg = "regime rule present but no config-validation row"
+        else:
+            rstatus = "present_everywhere"
+            msg = "present in workbook registry, regime rules, validation and 28a"
+        rows.append({
+            "esma_code": code,
+            "field_family": _annex2_family(code),
+            "in_workbook_reconciliation": in_wb,
+            "in_regime_field_rules": in_regime,
+            "in_config_validation": in_val,
+            "in_28a_coverage": in_28a,
+            "coverage_status": cstatus,
+            "reconciliation_status": rstatus,
+            "message": msg,
+        })
+    return rows
+
+
+def annex2_reconciliation_summary(
+    rows: List[Dict[str, Any]],
+    universe_meta: Dict[str, Any],
+    coverage_rows: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    rstatus_counts: Dict[str, int] = {}
+    for r in rows:
+        rstatus_counts[r["reconciliation_status"]] = (
+            rstatus_counts.get(r["reconciliation_status"], 0) + 1)
+    deliverable = sum(1 for r in coverage_rows
+                      if r.get("coverage_status") in _DELIVERABLE_STATUSES)
+    cov_codes = {r.get("esma_code") or r.get("target_field") for r in coverage_rows}
+    cov_codes.discard(None)
+    return {
+        "authoritative_field_count": len(universe_meta.get("all_codes", []) or []),
+        "workbook_reconciliation_count": len(universe_meta.get("workbook_codes", []) or []),
+        "regime_rule_count": len(universe_meta.get("regime_rule_codes", []) or []),
+        "config_validation_count": sum(1 for r in rows if r["in_config_validation"]),
+        "coverage_field_count": len(cov_codes),
+        "deferred_field_count": len(universe_meta.get("deferred_codes", []) or []),
+        "missing_from_28a_count": rstatus_counts.get("missing_from_28a", 0),
+        "missing_from_regime_rules_count": rstatus_counts.get("missing_from_regime_rules", 0),
+        "deliverable_field_count": deliverable,
+        "registry_has_annex2": bool(universe_meta.get("registry_has_annex2")),
+        "reconciliation_status_counts": rstatus_counts,
+    }
+
+
+def write_annex2_field_universe_reconciliation(
+    out_dir: str | Path,
+    rows: List[Dict[str, Any]],
+    summary: Dict[str, Any],
+    *,
+    registry_source: str = "",
+    regime_config_source: str = "",
+    warnings: Optional[List[str]] = None,
+) -> Dict[str, str]:
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    warnings = warnings or []
+    _write_csv(out / "43_annex2_field_universe_reconciliation.csv", rows,
+               _ANNEX2_RECON_COLUMNS)
+    (out / "43_annex2_field_universe_reconciliation.json").write_text(
+        json.dumps({"registry_source": registry_source,
+                    "regime_config_source": regime_config_source,
+                    "warnings": warnings, "summary": summary, "rows": rows},
+                   indent=2, default=str), encoding="utf-8")
+    md = ["# ESMA Annex 2 field-universe reconciliation", "",
+          f"- **Authoritative target universe:** {summary['authoritative_field_count']}",
+          f"- **Workbook registry codes:** {summary['workbook_reconciliation_count']}",
+          f"- **Regime field rules:** {summary['regime_rule_count']}",
+          f"- **Config-validation rows:** {summary['config_validation_count']}",
+          f"- **Present in 28a coverage:** {summary['coverage_field_count']}",
+          f"- **Deferred / pending reconciliation:** {summary['deferred_field_count']}",
+          f"- **Missing from 28a:** {summary['missing_from_28a_count']}",
+          f"- **Deliverable (rule + coverage):** {summary['deliverable_field_count']}", ""]
+    if warnings:
+        md += ["## Warnings", ""] + [f"- {w}" for w in warnings] + [""]
+    md += ["## Reconciliation status counts", ""]
+    for st, c in sorted(summary["reconciliation_status_counts"].items(),
+                        key=lambda kv: -kv[1]):
+        md.append(f"- `{st}`: {c}")
+    missing = [r for r in rows if r["reconciliation_status"] == "missing_from_28a"]
+    md += ["", "## Codes missing from 28a (must be zero)", ""]
+    if missing:
+        for r in missing:
+            md.append(f"- `{r['esma_code']}` — {r['message']}")
+    else:
+        md.append("_None — 28a covers the full authoritative universe._")
+    md += ["", "## Relationship between artefacts", "",
+           "- **42 config validation** applies to fields with regime/default "
+           "validation metadata (regime field rules).",
+           "- **28a coverage** applies to the FULL authoritative target universe; "
+           "codes without a full regime rule appear as `pending_regime_rule` / "
+           "`deferred`, never dropped.", ""]
+    (out / "43_annex2_field_universe_reconciliation_summary.md").write_text(
+        "\n".join(md) + "\n", encoding="utf-8")
+    return {
+        "csv": str(out / "43_annex2_field_universe_reconciliation.csv"),
+        "json": str(out / "43_annex2_field_universe_reconciliation.json"),
+        "summary_md": str(out / "43_annex2_field_universe_reconciliation_summary.md"),
+    }
+
+
+# ---------------------------------------------------------------------------
 # MI applicability / default overlay (asset/regime-aware, config-driven)
 # ---------------------------------------------------------------------------
 
@@ -744,6 +1030,16 @@ def _classify(
             status, coverage_basis = DEFAULTED_VALUE, "regime_default_value"
     elif has_config:
         status, coverage_basis = CONFIGURED_STATIC, "configured_transform"
+    elif tf.get("deferred_reconciliation"):
+        # Authoritative code explicitly deferred for reconciliation — included in
+        # 28a (never dropped), not a blocking data gap.
+        status, coverage_basis = DEFERRED, "deferred_reconciliation"
+    elif tf.get("pending_regime_rule"):
+        # In the authoritative Annex 2 universe but no full regime rule yet — a
+        # config-completeness gap; surfaced, never silently dropped or blocked.
+        status, coverage_basis = PENDING_REGIME_RULE, "no_regime_rule"
+        decision_reason = ("authoritative Annex 2 code has no full regime field "
+                           "rule yet (pending configuration)")
     elif not applicable:
         status, coverage_basis = NOT_APPLICABLE, "not_applicable"
     elif required:
@@ -1096,6 +1392,8 @@ def coverage_summary(coverage_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         "needs_confirmation_fields": status_counts.get(NEEDS_CONFIRMATION, 0),
         "not_applicable_fields": status_counts.get(NOT_APPLICABLE, 0),
         "optional_for_mi_fields": status_counts.get(OPTIONAL_FOR_MI, 0),
+        "pending_regime_rule_fields": status_counts.get(PENDING_REGIME_RULE, 0),
+        "deferred_fields": status_counts.get(DEFERRED, 0),
     }
 
 
@@ -1281,6 +1579,7 @@ def run_target_first_coverage(
     annex2_config_path: Optional[str | Path] = None,
     mi_overlay_path: Optional[str | Path] = None,
     asset_config_path: Optional[str | Path] = None,
+    registry_path: Optional[str | Path] = None,
     client_id: str = "",
     run_id: str = "",
     decisions_path: Optional[str | Path] = None,
@@ -1295,9 +1594,21 @@ def run_target_first_coverage(
     """
     from . import target_first_decisions as tfd
 
-    cid, csrc, target_fields = load_target_contract(
-        mode, context, mi_registry_path=mi_registry_path,
-        annex2_config_path=annex2_config_path)
+    # Annex 2 loads the FULL authoritative target universe (workbook registry ∪
+    # regime field_rules ∪ deferred); MI keeps the MI semantics registry.
+    universe_meta: Optional[Dict[str, Any]] = None
+    universe_warnings: List[str] = []
+    if target_contract_kind(mode, context) == "esma_annex_2":
+        cid, csrc, target_fields, universe_meta = build_annex2_full_contract(
+            annex2_config_path=annex2_config_path, registry_path=registry_path)
+        if not universe_meta.get("registry_has_annex2"):
+            universe_warnings.append(
+                "authoritative Annex 2 registry not found / has no ESMA_Annex2 "
+                "mappings — the regime config alone may be incomplete.")
+    else:
+        cid, csrc, target_fields = load_target_contract(
+            mode, context, mi_registry_path=mi_registry_path,
+            annex2_config_path=annex2_config_path)
 
     # --- LAYER 2: asset-class config (Annex 2 only) ---
     # Validate the ERM asset defaults against the regime envelope, apply the
@@ -1362,6 +1673,24 @@ def run_target_first_coverage(
         config_validation["paths"] = v_paths
         paths.update({f"config_validation_{k}": v for k, v in v_paths.items()})
 
+    # 43 — Annex 2 field-universe reconciliation (workbook vs regime vs
+    # validation vs 28a coverage). Written only for the Annex 2 target contract.
+    field_universe: Optional[Dict[str, Any]] = None
+    if universe_meta is not None:
+        recon_rows = build_annex2_field_universe_reconciliation(
+            universe_meta, coverage_rows,
+            (config_validation or {}).get("rows", []))
+        recon_sum = annex2_reconciliation_summary(
+            recon_rows, universe_meta, coverage_rows)
+        r_paths = write_annex2_field_universe_reconciliation(
+            out, recon_rows, recon_sum,
+            registry_source=universe_meta.get("registry_source", ""),
+            regime_config_source=csrc, warnings=universe_warnings)
+        field_universe = {"rows": recon_rows, "summary": recon_sum,
+                          "warnings": universe_warnings, "paths": r_paths,
+                          "universe_meta": universe_meta}
+        paths.update({f"field_universe_{k}": v for k, v in r_paths.items()})
+
     # (Re)generate the operator-editable 34 template from the resulting 28c —
     # unless we just applied that very file in place (never clobber approvals).
     template = tfd.build_decision_template(decision_rows, mode, client_id=client_id,
@@ -1376,6 +1705,7 @@ def run_target_first_coverage(
         "overlay_applied": bool(overlay),
         "overlay_fields": sorted(overlay.keys()),
         "config_validation": config_validation,
+        "field_universe": field_universe,
         "coverage": coverage_rows,
         "residual": residual_rows,
         "decision_queue": decision_rows,

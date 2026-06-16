@@ -83,15 +83,17 @@ def _domain_status_badge(status: str) -> str:
 _COV_BADGE = {
     "source_mapped": "b-ok", "source_mapped_with_alternatives": "b-ok",
     "derived": "b-info", "configured_static": "b-info", "defaulted": "b-info",
-    "defaulted_ND": "b-info", "not_applicable": "b-info",
+    "defaulted_ND": "b-info", "defaulted_value": "b-info", "not_applicable": "b-info",
+    "deferred": "b-warn", "pending_regime_rule": "b-warn",
     "needs_confirmation": "b-warn", "optional_for_mi": "b-warn",
     "missing_required": "b-block",
 }
 
 # Render order for the coverage matrix: blocking first, then by "settledness".
-_COV_ORDER = ["missing_required", "needs_confirmation", "source_mapped_with_alternatives",
-              "optional_for_mi", "source_mapped", "derived", "configured_static",
-              "defaulted", "defaulted_ND", "not_applicable"]
+_COV_ORDER = ["missing_required", "pending_regime_rule", "needs_confirmation",
+              "source_mapped_with_alternatives", "deferred", "optional_for_mi",
+              "source_mapped", "derived", "configured_static",
+              "defaulted", "defaulted_value", "defaulted_ND", "not_applicable"]
 
 
 def _cov_badge(status: str) -> str:
@@ -222,6 +224,9 @@ def _load_target_first_artifacts(project_dir: Path, output_root: Path | None = N
     cfgval = _find_artifact(project_dir, output_root,
                             "42_annex2_config_validation.json")
     tf["config_validation"] = _load_json(cfgval) if cfgval else None
+    recon = _find_artifact(project_dir, output_root,
+                           "43_annex2_field_universe_reconciliation.json")
+    tf["field_universe"] = _load_json(recon) if recon else None
     _derive_summaries(tf)
     return tf
 
@@ -310,7 +315,44 @@ def _annex2_executive_html(tf: dict) -> str:
             'workflow with two config layers: the ESMA regime rules and the ERM asset '
             'defaults. Asset defaults are validated against the regime envelope '
             '(see <code>42_annex2_config_validation.csv</code>).</p>'
-            + _table(["Item", "Value"], rows))
+            + _table(["Item", "Value"], rows)
+            + _annex2_universe_html(tf))
+
+
+def _annex2_universe_html(tf: dict) -> str:
+    """Annex 2 field-universe reconciliation (43) — completeness of the universe."""
+    fu = tf.get("field_universe")
+    if not fu:
+        return ""
+    s = fu.get("summary", {}) or {}
+    missing = int(s.get("missing_from_28a_count", 0))
+    pending = int(s.get("missing_from_regime_rules_count", 0))
+    rows = [
+        ["Authoritative Annex 2 fields", _esc(s.get("authoritative_field_count", 0))],
+        ["Present in workbook registry", _esc(s.get("workbook_reconciliation_count", 0))],
+        ["Present in regime rules", _esc(s.get("regime_rule_count", 0))],
+        ["Present in 28a coverage", _esc(s.get("coverage_field_count", 0))],
+        ["Deferred / pending reconciliation", _esc(s.get("deferred_field_count", 0))],
+        ["Pending regime rule (config gap)", _esc(pending)],
+        ["Missing from 28a", _esc(missing)],
+        ["Deliverable (rule + coverage)", _esc(s.get("deliverable_field_count", 0))],
+    ]
+    if missing:
+        note = (f'<div class="callout block">{missing} authoritative Annex 2 code(s) '
+                "are MISSING from 28a — the target universe is not fully loaded.</div>")
+    elif pending:
+        note = (f'<div class="callout warn">{pending} Annex 2 code(s) are in the '
+                "authoritative universe but have no full regime rule yet "
+                "(<code>pending_regime_rule</code>) — regime config is incomplete "
+                "relative to the workbook universe.</div>")
+    else:
+        note = ('<div class="callout pass">28a covers the full authoritative Annex 2 '
+                "universe with full regime rules.</div>")
+    warn_html = ""
+    for w in (fu.get("warnings") or []):
+        warn_html += f'<p class="meta">⚠ {_esc(w)}</p>'
+    return ('<h4 class="chart-title">Annex 2 field universe reconciliation</h4>'
+            + note + warn_html + _table(["Item", "Value"], rows))
 
 
 def _gate3_summary_html(tf: dict) -> str:
@@ -917,12 +959,24 @@ def build_review_pack(project: OnboardingProject, out_path: Path,
                 f"No blocking target decisions. {tf_n_nonblock} non-blocking confirmation"
                 f"{'s' if tf_n_nonblock != 1 else ''} remain — see Gate 4.</div>")
         else:
-            _ready_label = ("READY FOR ANNEX 2 DELIVERY" if _is_annex2(tf)
-                            else "READY FOR MI HANDOFF")
-            tf_status_badge = f'<span class="badge b-ok">{_ready_label}</span>'
-            exec_status_html = (
-                f'<div class="callout pass"><strong>Status: {_ready_label}.</strong> '
-                "No outstanding target decisions — target coverage is complete.</div>")
+            _fu_sum = (tf.get("field_universe") or {}).get("summary", {}) or {}
+            _univ_gap = (int(_fu_sum.get("missing_from_28a_count", 0))
+                         + int(_fu_sum.get("missing_from_regime_rules_count", 0)))
+            if _is_annex2(tf) and _univ_gap > 0:
+                # No 28c decisions, but the Annex 2 universe is not fully configured.
+                tf_status_badge = '<span class="badge b-warn">NEEDS CONFIGURATION</span>'
+                exec_status_html = (
+                    '<div class="callout warn"><strong>Status: NEEDS CONFIGURATION.</strong> '
+                    "No outstanding Gate 4 decisions, but the Annex 2 target universe is not "
+                    f"fully configured ({_univ_gap} code(s) pending a regime rule / missing "
+                    "from 28a) — see the Annex 2 field universe reconciliation.</div>")
+            else:
+                _ready_label = ("READY FOR ANNEX 2 DELIVERY" if _is_annex2(tf)
+                                else "READY FOR MI HANDOFF")
+                tf_status_badge = f'<span class="badge b-ok">{_ready_label}</span>'
+                exec_status_html = (
+                    f'<div class="callout pass"><strong>Status: {_ready_label}.</strong> '
+                    "No outstanding target decisions — target coverage is complete.</div>")
         # Override the hero badge so it cannot show a stale legacy blocker count.
         status_badge = tf_status_badge
     else:

@@ -46,6 +46,9 @@ from engine.onboarding_agent.mode_policy import VALID_MODES  # noqa: E402
 # Workflow status vocabulary (target-first state only — never legacy gaps).
 READY = "READY"
 NEEDS_CONFIRMATION = "NEEDS_CONFIRMATION"
+# Annex 2: the target universe is known but not fully configured (codes pending a
+# regime rule, or missing from 28a). Never READY in this state.
+NEEDS_CONFIGURATION = "NEEDS_CONFIGURATION"
 BLOCKED = "BLOCKED"
 FAILED = "FAILED"
 
@@ -99,6 +102,11 @@ def _next_action(stage: str, status: str, advisor_enabled: bool) -> str:
         return ("Resolve the remaining BLOCKING Gate 4 decisions (provide a source, "
                 "configure a value, or mark not applicable) in a copy of "
                 "34_target_first_decisions.yaml and rerun with --target-first-decisions.")
+    if status == NEEDS_CONFIGURATION:
+        return ("The Annex 2 target universe is loaded but not fully configured — some "
+                "codes are pending a regime field rule (or missing from 28a). Complete the "
+                "regime config (config/regime/annex2_delivery_rules.yaml) against the "
+                "workbook universe; see 43_annex2_field_universe_reconciliation.")
     if status == READY:
         return ("All Gate 4 decisions are resolved — the pack is ready for MI handoff / "
                 "promotion.")
@@ -157,6 +165,8 @@ def build_workflow_summary(
     dec_sum = dec.get("summary", {}) or {}
     cfgval = _read_json(project_dir / "42_annex2_config_validation.json") or {}
     cfgval_sum = cfgval.get("summary", {}) or {}
+    recon = _read_json(project_dir / "43_annex2_field_universe_reconciliation.json") or {}
+    recon_sum = recon.get("summary", {}) or {}
     app = _read_json(project_dir / "35_target_first_decision_application_log.json")
     app_sum = (app or {}).get("summary", {}) or {}
     advu = _read_json(project_dir / "36_target_first_llm_usage_summary.json")
@@ -239,7 +249,29 @@ def build_workflow_summary(
     summary["asset_config_path"] = asset_config_path or cfgval.get("asset_config_source", "")
     if target_contract_id == "esma_annex_2":
         dtc = dec_sum.get("decision_type_counts", {}) or {}
+        missing_from_28a = int(recon_sum.get("missing_from_28a_count", 0))
+        # Codes in the authoritative universe with no full regime rule yet — a
+        # config-completeness gap regardless of whether a source was matched.
+        pending_rule = int(recon_sum.get("missing_from_regime_rules_count",
+                                         cov_sum.get("pending_regime_rule_fields", 0)))
+        # Subset with neither a regime rule nor a source (genuinely uncovered).
+        pending_uncovered = int(cov_sum.get("pending_regime_rule_fields", 0))
         summary.update({
+            # Total authoritative target universe (workbook ∪ regime ∪ deferred).
+            "annex2_authoritative_field_count": int(
+                recon_sum.get("authoritative_field_count",
+                              cov_sum.get("target_fields_total", 0))),
+            "annex2_coverage_field_count": int(
+                recon_sum.get("coverage_field_count",
+                              cov_sum.get("target_fields_total", 0))),
+            "annex2_regime_rule_count": int(recon_sum.get("regime_rule_count", 0)),
+            "annex2_config_validation_count": int(recon_sum.get("config_validation_count", 0)),
+            "annex2_missing_from_28a_count": missing_from_28a,
+            "annex2_deferred_field_count": int(recon_sum.get("deferred_field_count", 0)),
+            "annex2_pending_regime_rule_count": pending_rule,
+            "annex2_pending_uncovered_count": pending_uncovered,
+            "annex2_deliverable_field_count": int(recon_sum.get("deliverable_field_count", 0)),
+            # Back-compat: 28a field count (now the full universe).
             "annex2_field_count": int(cov_sum.get("target_fields_total", 0)),
             "annex2_source_mapped_count": int(cov_sum.get("source_mapped_fields", 0)),
             "annex2_derived_count": int(cov_sum.get("derived_fields", 0)),
@@ -252,7 +284,22 @@ def build_workflow_summary(
                 cfgval_sum.get("invalid_default_not_allowed",
                                dtc.get("invalid_default_value", 0))),
             "annex2_config_validation_summary": _p("42_annex2_config_validation_summary.md"),
+            "annex2_field_universe_reconciliation_summary": _p(
+                "43_annex2_field_universe_reconciliation_summary.md"),
         })
+        # The Annex 2 universe is known but not fully configured — never READY.
+        if status in (READY, NEEDS_CONFIRMATION) and (missing_from_28a > 0 or pending_rule > 0):
+            status = NEEDS_CONFIGURATION
+            summary["status"] = status
+            if missing_from_28a > 0:
+                warnings.append(
+                    f"{missing_from_28a} authoritative Annex 2 code(s) missing from 28a "
+                    "coverage — see 43_annex2_field_universe_reconciliation.")
+            if pending_rule > 0:
+                warnings.append(
+                    f"{pending_rule} Annex 2 code(s) in the authoritative universe have no "
+                    "full regime field rule yet (pending_regime_rule) — regime config is "
+                    "incomplete relative to the workbook universe.")
 
     summary["next_operator_action"] = _next_action(stage, status, advisor_enabled)
     return summary
@@ -280,8 +327,17 @@ def _write_summary_md(path: Path, s: Dict[str, Any]) -> None:
         md.append("")
     if s.get("target_contract_id") == "esma_annex_2":
         md += [
+            "## ESMA Annex 2 field universe", "",
+            f"- Total Annex 2 target universe: {s.get('annex2_authoritative_field_count', 0)}",
+            f"- Fields covered in 28a: {s.get('annex2_coverage_field_count', 0)}",
+            f"- Fields with full regime rules: {s.get('annex2_regime_rule_count', 0)}",
+            f"- Config-validation rows: {s.get('annex2_config_validation_count', 0)}",
+            f"- Deferred / pending reconciliation: {s.get('annex2_deferred_field_count', 0)}",
+            f"- Pending regime rule (config gap): {s.get('annex2_pending_regime_rule_count', 0)}",
+            f"- Missing from 28a: {s.get('annex2_missing_from_28a_count', 0)}",
+            f"- Deliverable (rule + coverage): {s.get('annex2_deliverable_field_count', 0)}", "",
             "## ESMA Annex 2 coverage", "",
-            f"- Annex 2 fields: {s.get('annex2_field_count', 0)}",
+            f"- Annex 2 fields in 28a: {s.get('annex2_field_count', 0)}",
             f"- Source mapped: {s.get('annex2_source_mapped_count', 0)}",
             f"- Derived: {s.get('annex2_derived_count', 0)}",
             f"- ND defaulted: {s.get('annex2_defaulted_nd_count', 0)}",
@@ -336,6 +392,7 @@ _AUDIT_CATALOG = [
     ("40_operator_workflow_summary.json", "artefact", "keep_core", "Operator workflow summary (this command)."),
     ("41_onboarding_legacy_file_audit.json", "artefact", "keep_core", "Legacy-file audit (this command)."),
     ("42_annex2_config_validation.csv", "artefact", "keep_core", "ESMA Annex 2 regime/asset config validation (Annex 2 mode only)."),
+    ("43_annex2_field_universe_reconciliation.csv", "artefact", "keep_core", "ESMA Annex 2 field-universe reconciliation (Annex 2 mode only)."),
     # --- source-column legacy decision artefacts RETAINED FOR AUDIT ---
     ("33_mapping_review_queue.csv", "artefact", "keep_legacy_audit", "Source-column review queue; retained as audit detail, no longer the primary gate."),
     ("34_mapping_review_decisions.yaml", "artefact", "keep_legacy_audit", "Source-column decision template; superseded by 34_target_first_decisions.yaml; kept for audit."),
@@ -565,6 +622,11 @@ def _print_console(s: Dict[str, Any]) -> None:
     if s.get("target_contract_id") == "esma_annex_2":
         print(f"Regime config: {s.get('regime_config_path', '')}")
         print(f"Asset config: {s.get('asset_config_path', '')}")
+        print(f"Annex 2 target universe: {s.get('annex2_authoritative_field_count', 0)} "
+              f"(28a coverage: {s.get('annex2_coverage_field_count', 0)}, "
+              f"full regime rules: {s.get('annex2_regime_rule_count', 0)}, "
+              f"deferred/pending: {s.get('annex2_deferred_field_count', 0)})")
+        print(f"Annex 2 codes missing from 28a: {s.get('annex2_missing_from_28a_count', 0)}")
         print(f"Annex 2 invalid asset defaults surfaced: {s.get('annex2_invalid_default_count', 0)}")
     print("")
     print(f"Target fields: {s['target_fields_count']}")
