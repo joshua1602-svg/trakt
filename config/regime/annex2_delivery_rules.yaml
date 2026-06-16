@@ -135,15 +135,22 @@ field_rules:
 
   RREL13:
     esma_code: RREL13
-    workbook_semantic: Prps/Cd
-    projected_source_field: purpose
+    # workbook_semantic: TBC (ESMA XML path for "Employment Status"); prior 'Prps/Cd' was a mismapping
+    projected_source_field: employment_status
     mandatory: false
     enforce_presence: false
-    nd_allowed: [ND5]
+    nd_allowed: [ND1, ND2, ND3, ND4]
     transform:
+      # Allowed enum codes per the authoritative Annex 2 workbook (RREL13).
       enum_map:
-        manual: OTHR
-        MANUAL: OTHR
+        EMRS: EMRS
+        EMBL: EMBL
+        EMUK: EMUK
+        UNEM: UNEM
+        SFEM: SFEM
+        NOEM: NOEM
+        STNT: STNT
+        PNNR: PNNR
         OTHR: OTHR
 
   RREL27:
@@ -263,18 +270,18 @@ field_rules:
 
   RREL10:
     esma_code: RREL10
-    workbook_semantic: Dflt/Fct
-    projected_source_field: default
+    # workbook_semantic: TBC (ESMA XML path for "Resident"); prior 'Dflt/Fct' was a mismapping
+    projected_source_field: resident
     mandatory: false
     enforce_presence: false
-    nd_allowed: [ND5]
+    nd_allowed: [ND1, ND2, ND3, ND4]
     transform:
       boolean: xsd_lowercase_true_false
 
   RREL14:
     esma_code: RREL14
-    workbook_semantic: Ltgtn/Fct
-    projected_source_field: litigation
+    # workbook_semantic: TBC (ESMA XML path for "Credit Impaired Obligor"); prior 'Ltgtn/Fct' was a mismapping
+    projected_source_field: credit_impaired_obligor
     mandatory: false
     enforce_presence: false
     nd_allowed: [ND5]
@@ -283,8 +290,8 @@ field_rules:
 
   RREL75:
     esma_code: RREL75
-    workbook_semantic: CrdtImprdOblgr/Fct
-    projected_source_field: credit_impaired_obligor
+    # workbook_semantic: TBC (ESMA XML path for "Litigation"); prior 'CrdtImprdOblgr/Fct' was a mismapping
+    projected_source_field: litigation
     mandatory: false
     enforce_presence: false
     nd_allowed: [ND5]
@@ -293,20 +300,26 @@ field_rules:
 
   RREL26:
     esma_code: RREL26
-    workbook_semantic: DstrbtnChnnl/Cd
-    projected_source_field: distribution_channel
+    # workbook_semantic: TBC (ESMA XML path for "Origination Channel"); prior 'DstrbtnChnnl/Cd' was a mismapping
+    projected_source_field: origination_channel
     mandatory: false
     enforce_presence: false
-    nd_allowed: [ND5]
+    nd_allowed: [ND1, ND2, ND3, ND4, ND5]
     transform:
+      # Allowed enum codes per the authoritative Annex 2 workbook (RREL26);
+      # source-value synonyms (Direct/IFA/Broker) retained.
       enum_map:
         Direct: DRCT
         direct: DRCT
         IFA: BROK
         Broker: BROK
         broker: BROK
+        BRAN: BRAN
         DRCT: DRCT
         BROK: BROK
+        WEBI: WEBI
+        TPAC: TPAC
+        TPTC: TPTC
         OTHR: OTHR
 
   RREC7:
@@ -423,13 +436,26 @@ field_rules:
 
   RREL17:
     esma_code: RREL17
-    workbook_semantic: ScndryOblgrIncm/IncmVal
-    projected_source_field: secondary_income
+    # workbook_semantic: TBC (ESMA XML path for "Primary Income Type"); prior 'ScndryOblgrIncm/IncmVal' was a mismapping
+    projected_source_field: primary_income_type
     mandatory: true
     enforce_presence: true
     nd_allowed: [ND1, ND2, ND3, ND4]
     default_allowed: true
     default_value: ND1
+    transform:
+      # Allowed enum codes per the authoritative Annex 2 workbook (RREL17).
+      enum_map:
+        GRAN: GRAN
+        NITS: NITS
+        NITX: NITX
+        NTIN: NTIN
+        ENIS: ENIS
+        EITX: EITX
+        EISS: EISS
+        DSPL: DSPL
+        CORP: CORP
+        OTHR: OTHR
 
   RREL19:
     esma_code: RREL19
@@ -885,11 +911,11 @@ field_rules:
 
   RREL64:
     esma_code: RREL64
-    workbook_semantic: PrpymtAmt/Val/Amt
-    projected_source_field: prepayment_amount
+    # workbook_semantic: TBC (ESMA XML path for "Cumulative Prepayments"); prior 'PrpymtAmt/Val/Amt' was a mismapping
+    projected_source_field: cumulative_prepayments
     mandatory: true
     enforce_presence: true
-    nd_allowed: [ND5]
+    nd_allowed: [ND1, ND2, ND3, ND4, ND5]
     default_allowed: true
     default_value: ND5
 
@@ -905,88 +931,104 @@ field_rules:
 
   RREL66:
     esma_code: RREL66
-    workbook_semantic: RepurchAmt/Val/Amt
-    projected_source_field: repurchase_amount
+    # workbook_semantic: TBC (ESMA XML path for "Date Last In Arrears"); prior 'RepurchAmt/Val/Amt' was a mismapping
+    projected_source_field: date_last_in_arrears
     mandatory: true
     enforce_presence: true
-    nd_allowed: [ND5]
+    nd_allowed: [ND1, ND2, ND3, ND4, ND5]
     default_allowed: true
     default_value: ND5
+    validators:
+      regex: "^\\d{4}-\\d{2}-\\d{2}$"
 
   RREL70:
     esma_code: RREL70
-    workbook_semantic: IntOnlyPrd/Val
-    projected_source_field: interest_only_period
+    # workbook_semantic: TBC (ESMA XML path for "Reason for Default or Foreclosure"); prior 'IntOnlyPrd/Val' was a mismapping
+    projected_source_field: reason_for_default_or_foreclosure
     mandatory: true
     enforce_presence: true
-    nd_allowed: [ND5]
+    nd_allowed: [ND1, ND2, ND3, ND4, ND5]
     default_allowed: true
     default_value: ND5
+    transform:
+      # Allowed enum codes per the authoritative Annex 2 workbook (RREL70).
+      enum_map:
+        UPXX: UPXX
+        PDXX: PDXX
+        UPPD: UPPD
 
   RREL72:
     esma_code: RREL72
-    workbook_semantic: BallnPymt/Val
-    projected_source_field: balloon_payment
+    # workbook_semantic: TBC (ESMA XML path for "Default Date"); prior 'BallnPymt/Val' was a mismapping
+    projected_source_field: default_date
     mandatory: true
     enforce_presence: true
     nd_allowed: [ND5]
     default_allowed: true
     default_value: ND5
+    validators:
+      regex: "^\\d{4}-\\d{2}-\\d{2}$"
 
   RREL76:
     esma_code: RREL76
-    workbook_semantic: FrbrncRcncpt/Fct
-    projected_source_field: forbearance_reconcept
+    # workbook_semantic: TBC (ESMA XML path for "Recourse"); prior 'FrbrncRcncpt/Fct' was a mismapping
+    projected_source_field: recourse
     mandatory: true
     enforce_presence: true
-    nd_allowed: [ND5]
+    nd_allowed: [ND1, ND2, ND3, ND4, ND5]
     default_allowed: true
     default_value: ND5
+    transform:
+      boolean: xsd_lowercase_true_false
 
   RREL78:
     esma_code: RREL78
-    workbook_semantic: Dflt/Fct
-    projected_source_field: default_flag
+    # workbook_semantic: TBC (ESMA XML path for "Insurance Or Investment Provider"); prior 'Dflt/Fct' was a mismapping
+    projected_source_field: insurance_or_investment_provider
     mandatory: true
     enforce_presence: true
-    nd_allowed: [ND5]
+    nd_allowed: [ND1, ND2, ND3, ND4, ND5]
     default_allowed: true
     default_value: ND5
 
   RREL79:
     esma_code: RREL79
-    workbook_semantic: DfltDt/Dt
-    projected_source_field: date_in_default
+    # workbook_semantic: TBC (ESMA XML path for "Original Lender Name"); prior 'DfltDt/Dt' was a mismapping
+    projected_source_field: original_lender_name
     mandatory: true
     enforce_presence: true
-    nd_allowed: [ND5]
+    nd_allowed: [ND1, ND2, ND3, ND4, ND5]
     default_allowed: true
     default_value: ND5
 
   RREL80:
     esma_code: RREL80
-    workbook_semantic: DfltAmt/Val/Amt
-    projected_source_field: default_amount
+    # workbook_semantic: TBC (ESMA XML path for "Original Lender Legal Entity Identifier"); prior 'DfltAmt/Val/Amt' was a mismapping
+    projected_source_field: original_lender_legal_entity_identifier
     mandatory: true
     enforce_presence: true
-    nd_allowed: [ND5]
+    nd_allowed: [ND1, ND2, ND3, ND4, ND5]
     default_allowed: true
     default_value: ND5
+    validators:
+      regex: "^[A-Z0-9]{20}$"
 
   RREL81:
     esma_code: RREL81
-    workbook_semantic: DfltRslt/Fct
-    projected_source_field: default_result_flag
+    # workbook_semantic: TBC (ESMA XML path for "Original Lender Establishment Country"); prior 'DfltRslt/Fct' was a mismapping
+    projected_source_field: original_lender_establishment_country
     mandatory: true
     enforce_presence: true
-    nd_allowed: [ND5]
+    nd_allowed: [ND1, ND2, ND3, ND4, ND5]
     default_allowed: true
     default_value: ND5
+    validators:
+      regex: "^[A-Z]{2}$"
 
   RREC21:
     esma_code: RREC21
-    workbook_semantic: FrstVlwtnPrvdrNm/Nm
-    projected_source_field: first_valuation_provider_name
+    # workbook_semantic: TBC (ESMA XML path for "Sale Price"); prior 'FrstVlwtnPrvdrNm/Nm' was a mismapping
+    projected_source_field: sale_price
     mandatory: true
     enforce_presence: true
     nd_allowed: [ND5]
@@ -995,10 +1037,23 @@ field_rules:
 
   RREC23:
     esma_code: RREC23
-    workbook_semantic: VlwtnDtOfSale/Dt
-    projected_source_field: valuation_date_of_sale
+    # workbook_semantic: TBC (ESMA XML path for "Guarantor Type"); prior 'VlwtnDtOfSale/Dt' was a mismapping
+    projected_source_field: guarantor_type
     mandatory: true
     enforce_presence: true
-    nd_allowed: [ND1, ND2, ND3]
+    nd_allowed: [ND1, ND2, ND3, ND4]
     default_allowed: true
     default_value: ND1
+    transform:
+      # Allowed enum codes per the authoritative Annex 2 workbook (RREC23).
+      enum_map:
+        NGUA: NGUA
+        FAML: FAML
+        IOTH: IOTH
+        GOVE: GOVE
+        BANK: BANK
+        INSU: INSU
+        NHGX: NHGX
+        FGAS: FGAS
+        CATN: CATN
+        OTHR: OTHR
