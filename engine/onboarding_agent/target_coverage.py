@@ -65,6 +65,10 @@ DERIVED = "derived"
 CONFIGURED_STATIC = "configured_static"
 DEFAULTED = "defaulted"
 DEFAULTED_ND = "defaulted_ND"
+# Explicit non-ND regulatory value applied from the regime contract (e.g. RREC8
+# lien = "1"). Distinct from configured_static (transaction/client/transform
+# value) and from defaulted_ND (an explicit ND code).
+DEFAULTED_VALUE = "defaulted_value"
 NOT_APPLICABLE = "not_applicable"
 MISSING_REQUIRED = "missing_required"
 NEEDS_CONFIRMATION = "needs_confirmation"
@@ -72,7 +76,16 @@ OPTIONAL_FOR_MI = "optional_for_mi"
 
 # Overlay coverage statuses that are valid as `coverage_status_if_no_source`.
 _OVERLAY_STATUSES = {NOT_APPLICABLE, OPTIONAL_FOR_MI, NEEDS_CONFIRMATION,
-                     CONFIGURED_STATIC, DEFAULTED, DERIVED, DEFAULTED_ND}
+                     CONFIGURED_STATIC, DEFAULTED, DERIVED, DEFAULTED_ND,
+                     DEFAULTED_VALUE}
+
+# --- Annex 2 config-validation statuses (42 artefact) ---
+VS_VALID = "valid"
+VS_MISSING_NOT_REQ = "missing_asset_default_but_not_required"
+VS_MISSING_REQ = "missing_asset_default_and_required"
+VS_INVALID = "invalid_default_not_allowed"
+VS_UNKNOWN = "unknown_asset_field_mapping"
+VS_NA = "not_applicable"
 
 # --- residual classes ---
 R_DUP_ALT = "duplicate_or_alternative_source"
@@ -92,6 +105,14 @@ D_CONFIG = "config_value_required"
 D_ND = "nd_default_confirmation"
 D_EXTENSION = "reporting_extension_candidate"
 D_PARSE = "parse_or_header_blocker"
+# An asset-config default that is NOT allowed by the regime field rule (e.g. an
+# ND code outside nd_allowed). Surfaced as a non-blocking confirmation when a
+# valid regime fallback exists; never silently applied.
+D_INVALID_DEFAULT = "invalid_default_value"
+
+# Default asset-class config layer for ESMA Annex 2 (UK Equity Release).
+_ASSET_CONFIG_DEFAULT = _REPO_ROOT / "config" / "asset" / "product_defaults_ERM.yaml"
+_ANNEX2_REGIME_DEFAULT = _REPO_ROOT / "config" / "regime" / "annex2_delivery_rules.yaml"
 
 
 # ---------------------------------------------------------------------------
@@ -163,9 +184,12 @@ def load_mi_target_contract(
         derived = bool(entry.get("derived"))
         rows.append({
             "target_field": name,
+            "esma_code": "",
+            "projected_source_field": "",
             "target_domain": _mi_domain(entry),
             "target_label": entry.get("business_name", "") or entry.get("display_name", name),
             "required_status": "required" if tier == "core" else "optional",
+            "enforce_presence": False,
             "applicability_status": "applicable",
             "match_field": entry.get("canonical_field", name),
             "synonyms": list(entry.get("synonyms", []) or []),
@@ -174,6 +198,8 @@ def load_mi_target_contract(
                                 if derived and entry.get("derived_from") else ""),
             "default_rule": "",
             "default_value": "",
+            "default_rule_source": "",
+            "default_reason": "",
             "nd_allowed": [],
             "configured_value_source": "",
         })
@@ -218,9 +244,12 @@ def load_annex2_target_contract(
             configured = "boolean_transform"
         rows.append({
             "target_field": code,
+            "esma_code": code,
+            "projected_source_field": rule.get("projected_source_field", ""),
             "target_domain": _annex2_domain(code),
             "target_label": rule.get("workbook_semantic", "") or code,
             "required_status": "mandatory" if rule.get("mandatory") else "optional",
+            "enforce_presence": bool(rule.get("enforce_presence")),
             "applicability_status": "deferred_reconciliation" if code in deferred else "applicable",
             "match_field": rule.get("projected_source_field", ""),
             "synonyms": [s for s in (rule.get("projected_source_field", ""),
@@ -229,10 +258,266 @@ def load_annex2_target_contract(
             "derivation_rule": (f"{derive.get('type')}" if derive else ""),
             "default_rule": (f"default_value={default_value}" if default_value else ""),
             "default_value": default_value,
+            # The regime contract is the default source until an asset-config
+            # layer overrides it (see apply_asset_overlay).
+            "default_rule_source": ("regime_config" if default_value else ""),
+            "default_reason": ("ESMA Annex 2 regime default" if default_value else ""),
             "nd_allowed": nd_allowed,
             "configured_value_source": configured,
         })
     return "esma_annex_2", str(path), rows
+
+
+# ---------------------------------------------------------------------------
+# Asset-class config layer (LAYER 2) + regime/asset config validation (42)
+# ---------------------------------------------------------------------------
+
+def _validate_value_against_rule(value: Any, rule: Dict[str, Any]) -> Tuple[bool, str]:
+    """Validate a chosen default value against a regime field rule.
+
+    The regime rule defines the *allowed envelope* (nd_allowed / enum map /
+    validator regex). An asset-config chosen default must fall inside it.
+    """
+    v = str(value or "").strip()
+    if not v:
+        return False, "empty value"
+    nd_allowed = [str(x).strip().upper() for x in (rule.get("nd_allowed") or [])]
+    if _is_nd(v):
+        if v.upper() in nd_allowed:
+            return True, f"ND value {v} within nd_allowed {nd_allowed or '[]'}"
+        return False, f"ND value {v} not in regime nd_allowed {nd_allowed or '[]'}"
+    transform = rule.get("transform", {}) or {}
+    enum_map = transform.get("enum_map")
+    if isinstance(enum_map, dict) and enum_map:
+        keys = {str(k) for k in enum_map.keys()} | {str(x) for x in enum_map.values()}
+        if v in keys:
+            return True, "value present in regime enum map"
+        return False, f"value '{v}' not present in regime enum map"
+    validators = rule.get("validators", {}) or {}
+    rx = validators.get("regex")
+    if rx:
+        try:
+            if re.match(rx, v):
+                return True, "value matches regime validator regex"
+            return False, f"value '{v}' fails regime validator regex"
+        except re.error:
+            return True, "regime validator regex could not be compiled — accepted"
+    return True, "no regime constraint on non-ND value — accepted"
+
+
+def load_asset_defaults(
+    asset_config_path: Optional[str | Path] = None,
+) -> Tuple[Dict[str, Tuple[str, str, str]], str]:
+    """Load the asset-class default layer (``product_defaults_ERM.yaml``).
+
+    Returns ``({normalized_field: (original_field, value, section)}, source_path)``
+    where ``section`` is ``defaults`` (static) or ``nd_defaults`` (ND choices).
+    """
+    path = Path(asset_config_path) if asset_config_path else _ASSET_CONFIG_DEFAULT
+    if not path.exists():
+        return {}, str(path)
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    out: Dict[str, Tuple[str, str, str]] = {}
+    for section in ("defaults", "nd_defaults"):
+        for name, value in (data.get(section, {}) or {}).items():
+            norm = _norm_field(name)
+            if norm and norm not in out:
+                out[norm] = (str(name), str(value), section)
+    return out, str(path)
+
+
+def build_annex2_config_validation(
+    regime_config_path: str | Path,
+    asset_config_path: Optional[str | Path] = None,
+) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]], str]:
+    """Cross-check the asset-config chosen defaults against the regime envelope.
+
+    Returns ``(validation_rows, asset_overlay, asset_config_source)``. The overlay
+    is keyed by ESMA code and records, per field, the value to apply (only when
+    valid), its source layer and the validation outcome — it never silently
+    applies an invalid default.
+    """
+    regime = yaml.safe_load(Path(regime_config_path).read_text(encoding="utf-8")) or {}
+    field_rules = regime.get("field_rules", {}) or {}
+    deferred = set(regime.get("reconciliation_scope", {}).get("deferred_fields", []) or [])
+    asset_defaults, asset_src = load_asset_defaults(asset_config_path)
+
+    # Reverse index: normalized projected_source_field -> esma_code.
+    proj_to_code: Dict[str, str] = {}
+    for code, rule in field_rules.items():
+        psf = _norm_field(rule.get("projected_source_field", ""))
+        if psf and psf not in proj_to_code:
+            proj_to_code[psf] = code
+
+    rows: List[Dict[str, Any]] = []
+    overlay: Dict[str, Dict[str, Any]] = {}
+    consumed: set = set()
+
+    for code, rule in field_rules.items():
+        psf = _norm_field(rule.get("projected_source_field", ""))
+        nd_allowed = list(rule.get("nd_allowed", []) or [])
+        default_allowed = bool(rule.get("default_allowed"))
+        default_value = rule.get("default_value", "") if default_allowed else ""
+        mandatory = bool(rule.get("mandatory")) or bool(rule.get("enforce_presence"))
+        asset_entry = asset_defaults.get(psf)
+        if asset_entry:
+            consumed.add(psf)
+            _orig, asset_val, asset_section = asset_entry
+        else:
+            asset_val, asset_section = "", ""
+
+        if code in deferred:
+            status, msg = VS_NA, "deferred reconciliation field — not enforced in this pass"
+        elif asset_entry:
+            ok, why = _validate_value_against_rule(asset_val, rule)
+            if ok:
+                status, msg = VS_VALID, why
+                overlay[code] = {
+                    "default_value": asset_val, "default_rule_source": "asset_config",
+                    "asset_default_value": asset_val, "asset_default_source": asset_section,
+                    "validation_status": status, "valid": True, "message": why}
+            else:
+                status, msg = VS_INVALID, why
+                overlay[code] = {
+                    "default_value": default_value,
+                    "default_rule_source": ("regime_config" if default_value else ""),
+                    "asset_default_value": asset_val, "asset_default_source": asset_section,
+                    "validation_status": status, "valid": False, "message": why}
+        elif mandatory and not default_allowed:
+            status, msg = VS_MISSING_REQ, ("mandatory/enforce_presence field with no asset "
+                                           "default and no regime default")
+        else:
+            status = VS_MISSING_NOT_REQ
+            msg = ("regime default present" if default_allowed
+                   else "field not mandatory; no asset default supplied")
+
+        rows.append({
+            "esma_code": code,
+            "projected_source_field": rule.get("projected_source_field", ""),
+            "regime_nd_allowed": "; ".join(nd_allowed),
+            "regime_default_allowed": default_allowed,
+            "regime_default_value": default_value,
+            "asset_default_value": asset_val,
+            "asset_default_source": asset_section,
+            "validation_status": status,
+            "message": msg,
+        })
+
+    # Asset defaults that do not map to any Annex 2 ESMA code.
+    for norm, (orig, val, section) in sorted(asset_defaults.items()):
+        if norm in consumed:
+            continue
+        rows.append({
+            "esma_code": "",
+            "projected_source_field": orig,
+            "regime_nd_allowed": "",
+            "regime_default_allowed": "",
+            "regime_default_value": "",
+            "asset_default_value": val,
+            "asset_default_source": section,
+            "validation_status": VS_UNKNOWN,
+            "message": "asset default field does not map to any Annex 2 ESMA code",
+        })
+    return rows, overlay, asset_src
+
+
+def apply_asset_overlay(target_fields: List[Dict[str, Any]],
+                        overlay: Dict[str, Dict[str, Any]]) -> None:
+    """Merge the validated asset-config overlay into the regime target fields.
+
+    Valid asset defaults override the regime default (the asset-specific chosen
+    value); invalid asset defaults are NOT applied — the regime default is kept
+    and the field is flagged so a non-blocking Gate 4 confirmation is raised.
+    """
+    by_code = {tf.get("target_field"): tf for tf in target_fields}
+    for code, ov in overlay.items():
+        tf = by_code.get(code)
+        if tf is None:
+            continue
+        tf["asset_default_value"] = ov.get("asset_default_value", "")
+        tf["asset_default_source"] = ov.get("asset_default_source", "")
+        tf["config_validation_status"] = ov.get("validation_status", "")
+        tf["config_validation_message"] = ov.get("message", "")
+        if ov.get("valid") and str(ov.get("default_value", "")).strip():
+            tf["default_value"] = ov["default_value"]
+            tf["default_rule"] = f"default_value={ov['default_value']}"
+            tf["default_rule_source"] = "asset_config"
+            tf["default_reason"] = ov.get("message", "")
+        else:
+            # Invalid asset default — keep the regime default, flag for review.
+            tf["asset_default_invalid"] = True
+            if not tf.get("default_rule_source"):
+                tf["default_rule_source"] = ov.get("default_rule_source", "")
+            tf["default_reason"] = ov.get("message", "")
+
+
+def annex2_validation_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    counts: Dict[str, int] = {}
+    for r in rows:
+        counts[r["validation_status"]] = counts.get(r["validation_status"], 0) + 1
+    return {
+        "annex2_config_rows_total": len(rows),
+        "valid": counts.get(VS_VALID, 0),
+        "invalid_default_not_allowed": counts.get(VS_INVALID, 0),
+        "missing_asset_default_and_required": counts.get(VS_MISSING_REQ, 0),
+        "missing_asset_default_but_not_required": counts.get(VS_MISSING_NOT_REQ, 0),
+        "unknown_asset_field_mapping": counts.get(VS_UNKNOWN, 0),
+        "not_applicable": counts.get(VS_NA, 0),
+        "validation_status_counts": counts,
+    }
+
+
+_ANNEX2_VALIDATION_COLUMNS = [
+    "esma_code", "projected_source_field", "regime_nd_allowed",
+    "regime_default_allowed", "regime_default_value", "asset_default_value",
+    "asset_default_source", "validation_status", "message",
+]
+
+
+def write_annex2_config_validation(
+    out_dir: str | Path,
+    rows: List[Dict[str, Any]],
+    *,
+    regime_config_source: str = "",
+    asset_config_source: str = "",
+) -> Dict[str, str]:
+    """Write the 42 Annex 2 config-validation artefacts (csv / json / md)."""
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    summary = annex2_validation_summary(rows)
+    _write_csv(out / "42_annex2_config_validation.csv", rows, _ANNEX2_VALIDATION_COLUMNS)
+    (out / "42_annex2_config_validation.json").write_text(
+        json.dumps({"regime_config_source": regime_config_source,
+                    "asset_config_source": asset_config_source,
+                    "summary": summary, "rows": rows}, indent=2, default=str),
+        encoding="utf-8")
+    md = ["# ESMA Annex 2 config validation", "",
+          f"- **Regime config:** `{regime_config_source}`",
+          f"- **Asset config:** `{asset_config_source}`",
+          f"- **Fields checked:** {summary['annex2_config_rows_total']}",
+          f"- **Valid:** {summary['valid']}",
+          f"- **Invalid (default not allowed):** {summary['invalid_default_not_allowed']}",
+          f"- **Missing required:** {summary['missing_asset_default_and_required']}",
+          f"- **Unknown asset field mapping:** {summary['unknown_asset_field_mapping']}", "",
+          "## Validation status counts", ""]
+    for st, c in sorted(summary["validation_status_counts"].items(), key=lambda kv: -kv[1]):
+        md.append(f"- `{st}`: {c}")
+    invalid = [r for r in rows if r["validation_status"] == VS_INVALID]
+    md += ["", "## Invalid / conflicting defaults (surfaced, not applied)", ""]
+    if invalid:
+        for r in invalid:
+            md.append(f"- `{r['esma_code']}` ({r['projected_source_field']}): "
+                      f"asset='{r['asset_default_value']}' vs regime nd_allowed="
+                      f"[{r['regime_nd_allowed']}] — {r['message']}")
+    else:
+        md.append("_None._")
+    (out / "42_annex2_config_validation_summary.md").write_text(
+        "\n".join(md) + "\n", encoding="utf-8")
+    return {
+        "csv": str(out / "42_annex2_config_validation.csv"),
+        "json": str(out / "42_annex2_config_validation.json"),
+        "summary_md": str(out / "42_annex2_config_validation_summary.md"),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -449,7 +734,14 @@ def _classify(
     elif nd_default:
         status, coverage_basis = DEFAULTED_ND, "nd_default_rule"
     elif has_default:
-        status, coverage_basis = CONFIGURED_STATIC, "configured_static_value"
+        # Explicit non-ND regulatory value (e.g. RREC8 lien = "1"): the default
+        # carries a concrete regulatory value, distinct from a configured/static
+        # transform value.
+        src = tf.get("default_rule_source", "")
+        if src == "asset_config":
+            status, coverage_basis = CONFIGURED_STATIC, "asset_config_static_value"
+        else:
+            status, coverage_basis = DEFAULTED_VALUE, "regime_default_value"
     elif has_config:
         status, coverage_basis = CONFIGURED_STATIC, "configured_transform"
     elif not applicable:
@@ -464,6 +756,20 @@ def _classify(
             f"column, a derivation/default, or confirm an ND code.")
     else:
         status, coverage_basis = NEEDS_CONFIRMATION, "no_source_optional"
+
+    # Asset-config default that conflicts with the regime envelope: surface a
+    # non-blocking confirmation for mandatory fields (a valid regime default is
+    # kept). Never silently apply the invalid asset default.
+    if (not cands and tf.get("asset_default_invalid")
+            and tf.get("config_validation_status") == VS_INVALID and required):
+        requires_decision = True
+        decision_reason = (tf.get("config_validation_message", "")
+                           or "asset-config default not allowed by the regime rule")
+        operator_question = (
+            f"Asset default '{tf.get('asset_default_value', '')}' for "
+            f"'{tf['target_field']}' is not allowed by the regime rule "
+            f"(nd_allowed={tf.get('nd_allowed', [])}). Confirm the regime default "
+            f"'{tf.get('default_value', '')}' or supply a valid value.")
 
     return {
         "coverage_status": status,
@@ -512,23 +818,31 @@ def build_target_coverage(
         ov = cls.get("overrides", {})
         primary = cands[0] if cands else {}
         alts = cands[1:]
-        nd_applied = (cls["coverage_status"] == DEFAULTED_ND
+        status = cls["coverage_status"]
+        nd_applied = (status == DEFAULTED_ND
                       or (not cands and _is_nd(tf.get("default_value"))))
+        # The value actually placed into the target field when there is no source.
+        selected_value = ""
+        if not cands and status in (DEFAULTED_ND, DEFAULTED_VALUE, CONFIGURED_STATIC):
+            selected_value = tf.get("default_value", "")
         rows.append({
             "mode": mode,
             "target_contract_id": target_contract_id,
             "target_contract_source": target_contract_source,
             "target_field": tf["target_field"],
+            "esma_code": tf.get("esma_code", ""),
+            "projected_source_field": tf.get("projected_source_field", "") or tf.get("match_field", ""),
             "target_domain": tf["target_domain"],
             "target_label": tf["target_label"],
             "required_status": tf["required_status"],
             "applicability_status": ov.get("applicability_status", tf["applicability_status"]),
-            "coverage_status": cls["coverage_status"],
+            "coverage_status": status,
             "coverage_basis": cls["coverage_basis"],
             "selected_source_file": primary.get("source_file", ""),
             "selected_source_sheet": primary.get("source_sheet", ""),
             "selected_source_column": primary.get("source_column", ""),
             "selected_source_confidence": primary.get("confidence", ""),
+            "selected_value": selected_value,
             "alternative_source_candidates": "; ".join(
                 f"{c['source_file']}::{c['source_sheet']}::{c['source_column']} "
                 f"({c['confidence']})" for c in alts),
@@ -537,9 +851,15 @@ def build_target_coverage(
             "value_compatibility_status": cls["value_compatibility_status"],
             "derivation_rule": ov.get("derivation_rule", tf.get("derivation_rule", "")),
             "default_rule": ov.get("default_rule", tf.get("default_rule", "")),
+            "default_value": tf.get("default_value", ""),
+            "default_rule_source": tf.get("default_rule_source", ""),
+            "default_reason": tf.get("default_reason", ""),
+            "nd_allowed": "; ".join(tf.get("nd_allowed", [])),
             "nd_rule_applied": ("; ".join(tf.get("nd_allowed", [])) if nd_applied else ""),
             "configured_value_source": ov.get("configured_value_source",
                                               tf.get("configured_value_source", "")),
+            "config_validation_status": tf.get("config_validation_status", ""),
+            "config_validation_message": tf.get("config_validation_message", ""),
             "requires_user_decision": cls["requires_user_decision"],
             "blocking": cls["blocking"],
             "decision_reason": cls["decision_reason"],
@@ -655,7 +975,7 @@ def build_human_decision_queue(
 
     def _add(decision_type, priority, target_field, source_file, source_column,
              issue, recommendation, options, blocking, operator_question,
-             evidence_summary):
+             evidence_summary, esma_code=""):
         nonlocal seq
         seq += 1
         decisions.append({
@@ -665,6 +985,7 @@ def build_human_decision_queue(
             "mode": mode,
             "target_contract_id": coverage_rows[0]["target_contract_id"] if coverage_rows else "",
             "target_field": target_field,
+            "esma_code": esma_code,
             "source_file": source_file,
             "source_column": source_column,
             "issue": issue,
@@ -677,6 +998,8 @@ def build_human_decision_queue(
 
     for cov in coverage_rows:
         status = cov["coverage_status"]
+        ecode = cov.get("esma_code", "")
+        invalid_default = cov.get("config_validation_status") == VS_INVALID
         if status == MISSING_REQUIRED:
             _add(D_MISSING, "high", cov["target_field"], "", "",
                  cov["decision_reason"] or "required target field unmapped",
@@ -684,7 +1007,7 @@ def build_human_decision_queue(
                  ["map_source_column", "set_derivation_or_default", "confirm_ND_code",
                   "mark_not_applicable"],
                  True, cov["operator_question"],
-                 f"required={cov['required_status']}; domain={cov['target_domain']}")
+                 f"required={cov['required_status']}; domain={cov['target_domain']}", ecode)
         elif status == SOURCE_MAPPED_ALT and cov["requires_user_decision"]:
             dtype = (D_VALUE if cov["value_compatibility_status"] == "value_compatibility_conflict"
                      else (D_PRIORITY if "confidence" in cov["decision_reason"] else D_CONFLICT))
@@ -695,14 +1018,28 @@ def build_human_decision_queue(
                  f"(or choose an alternative).",
                  ["confirm_selected", "choose_alternative", "merge_or_reconcile"],
                  False, cov["operator_question"],
-                 cov["overlap_evidence"] + "; alts: " + cov["alternative_source_candidates"])
+                 cov["overlap_evidence"] + "; alts: " + cov["alternative_source_candidates"], ecode)
+        elif cov["requires_user_decision"] and invalid_default:
+            # Asset-config default outside the regime envelope: non-blocking
+            # confirmation (a valid regime fallback is kept), unless the field is
+            # also a hard blocker (no valid fallback).
+            _add(D_INVALID_DEFAULT, "high" if cov["blocking"] else "medium",
+                 cov["target_field"], cov["selected_source_file"],
+                 cov["selected_source_column"],
+                 cov["decision_reason"] or "asset default not allowed by regime rule",
+                 "Confirm the regime default, or supply a value within the allowed envelope.",
+                 ["confirm_default_or_nd", "configure_static_value", "mark_not_applicable"],
+                 bool(cov["blocking"]), cov["operator_question"],
+                 f"asset_default={cov.get('asset_default_value','')}; "
+                 f"nd_allowed={cov.get('nd_allowed','')}; regime_default={cov.get('default_value','')}",
+                 ecode)
         elif cov["requires_user_decision"] and cov["blocking"]:
             _add(D_CONFIG, "high", cov["target_field"], cov["selected_source_file"],
                  cov["selected_source_column"], cov["decision_reason"],
                  "Supply the required config / static value.",
                  ["set_config_value", "confirm_ND_code", "mark_not_applicable"],
                  True, cov["operator_question"],
-                 f"status={status}; basis={cov['coverage_basis']}")
+                 f"status={status}; basis={cov['coverage_basis']}", ecode)
         elif cov["requires_user_decision"]:
             # Non-blocking operator confirmation requested by the overlay/config.
             dtype = D_ND if status == DEFAULTED_ND else D_CONFIG
@@ -711,7 +1048,7 @@ def build_human_decision_queue(
                  "Confirm the configured / default / ND value.",
                  ["confirm_value", "provide_source", "mark_not_applicable"],
                  False, cov["operator_question"],
-                 f"status={status}; basis={cov['coverage_basis']}")
+                 f"status={status}; basis={cov['coverage_basis']}", ecode)
 
     # Residuals: only escalate genuinely-blocking ones (suppressed otherwise).
     for r in residual_rows:
@@ -744,12 +1081,17 @@ def coverage_summary(coverage_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     derived_config_defaulted = (status_counts.get(DERIVED, 0)
                                 + status_counts.get(CONFIGURED_STATIC, 0)
                                 + status_counts.get(DEFAULTED, 0)
+                                + status_counts.get(DEFAULTED_VALUE, 0)
                                 + status_counts.get(DEFAULTED_ND, 0))
     return {
         "target_fields_total": len(coverage_rows),
         "coverage_status_counts": status_counts,
         "source_mapped_fields": source_mapped,
         "derived_config_defaulted_fields": derived_config_defaulted,
+        "derived_fields": status_counts.get(DERIVED, 0),
+        "defaulted_nd_fields": status_counts.get(DEFAULTED_ND, 0),
+        "defaulted_value_fields": status_counts.get(DEFAULTED_VALUE, 0),
+        "configured_static_fields": status_counts.get(CONFIGURED_STATIC, 0),
         "missing_required_fields": status_counts.get(MISSING_REQUIRED, 0),
         "needs_confirmation_fields": status_counts.get(NEEDS_CONFIRMATION, 0),
         "not_applicable_fields": status_counts.get(NOT_APPLICABLE, 0),
@@ -783,11 +1125,14 @@ def decision_summary(decision_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 _COVERAGE_COLUMNS = [
     "mode", "target_contract_id", "target_contract_source", "target_field",
+    "esma_code", "projected_source_field",
     "target_domain", "target_label", "required_status", "applicability_status",
     "coverage_status", "coverage_basis", "selected_source_file",
     "selected_source_sheet", "selected_source_column", "selected_source_confidence",
-    "alternative_source_candidates", "overlap_evidence", "value_compatibility_status",
-    "derivation_rule", "default_rule", "nd_rule_applied", "configured_value_source",
+    "selected_value", "alternative_source_candidates", "overlap_evidence",
+    "value_compatibility_status", "derivation_rule", "default_rule", "default_value",
+    "default_rule_source", "default_reason", "nd_allowed", "nd_rule_applied",
+    "configured_value_source", "config_validation_status", "config_validation_message",
     "requires_user_decision", "blocking", "decision_reason", "operator_question",
 ]
 
@@ -800,8 +1145,8 @@ _RESIDUAL_COLUMNS = [
 
 _DECISION_COLUMNS = [
     "decision_id", "decision_type", "priority", "mode", "target_contract_id",
-    "target_field", "source_file", "source_column", "issue", "recommendation",
-    "options", "blocking", "operator_question", "evidence_summary",
+    "target_field", "esma_code", "source_file", "source_column", "issue",
+    "recommendation", "options", "blocking", "operator_question", "evidence_summary",
 ]
 
 
@@ -935,6 +1280,7 @@ def run_target_first_coverage(
     mi_registry_path: Optional[str | Path] = None,
     annex2_config_path: Optional[str | Path] = None,
     mi_overlay_path: Optional[str | Path] = None,
+    asset_config_path: Optional[str | Path] = None,
     client_id: str = "",
     run_id: str = "",
     decisions_path: Optional[str | Path] = None,
@@ -952,6 +1298,25 @@ def run_target_first_coverage(
     cid, csrc, target_fields = load_target_contract(
         mode, context, mi_registry_path=mi_registry_path,
         annex2_config_path=annex2_config_path)
+
+    # --- LAYER 2: asset-class config (Annex 2 only) ---
+    # Validate the ERM asset defaults against the regime envelope, apply the
+    # valid ones (asset-chosen defaults override regime defaults) and surface
+    # any conflict — never silently apply an invalid default.
+    config_validation: Optional[Dict[str, Any]] = None
+    if cid == "esma_annex_2":
+        asset_path = Path(asset_config_path) if asset_config_path else _ASSET_CONFIG_DEFAULT
+        if Path(asset_path).exists():
+            val_rows, asset_overlay, asset_src = build_annex2_config_validation(
+                csrc, asset_path)
+            apply_asset_overlay(target_fields, asset_overlay)
+            config_validation = {
+                "rows": val_rows,
+                "summary": annex2_validation_summary(val_rows),
+                "regime_config_source": csrc,
+                "asset_config_source": asset_src,
+            }
+
     overlay = load_mi_applicability_overlay(mode, context, overlay_path=mi_overlay_path)
     coverage_rows, matched_by_key = build_target_coverage(
         mode, context, cid, csrc, target_fields, evidence_rows, resolved_rows,
@@ -987,6 +1352,16 @@ def run_target_first_coverage(
     paths = write_artifacts(output_dir, coverage_rows, residual_rows, decision_rows,
                             cid, csrc, mode)
 
+    # 42 — Annex 2 regime/asset config validation (config-driven, source
+    # independent). Written only for the Annex 2 target contract.
+    if config_validation is not None:
+        v_paths = write_annex2_config_validation(
+            out, config_validation["rows"],
+            regime_config_source=config_validation["regime_config_source"],
+            asset_config_source=config_validation["asset_config_source"])
+        config_validation["paths"] = v_paths
+        paths.update({f"config_validation_{k}": v for k, v in v_paths.items()})
+
     # (Re)generate the operator-editable 34 template from the resulting 28c —
     # unless we just applied that very file in place (never clobber approvals).
     template = tfd.build_decision_template(decision_rows, mode, client_id=client_id,
@@ -1000,6 +1375,7 @@ def run_target_first_coverage(
         "target_contract_kind": target_contract_kind(mode, context),
         "overlay_applied": bool(overlay),
         "overlay_fields": sorted(overlay.keys()),
+        "config_validation": config_validation,
         "coverage": coverage_rows,
         "residual": residual_rows,
         "decision_queue": decision_rows,

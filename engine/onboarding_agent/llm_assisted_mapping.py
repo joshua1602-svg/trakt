@@ -86,6 +86,9 @@ def run_llm_assisted_mapping(
     llm_target_advisor_callable: Optional[Callable[[str], str]] = None,
     llm_target_advisor_max_calls: int = 1,
     llm_target_advisor_model: str = "",
+    target_contract: str = "",
+    regime_config_path: Optional[str] = None,
+    asset_config_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run the full controlled mapping workbench pipeline and write artefacts.
 
@@ -328,6 +331,8 @@ def run_llm_assisted_mapping(
     target_first = tcov.run_target_first_coverage(
         mode=policy.name, context=context, evidence_rows=evidence_rows,
         resolved_rows=res["resolved"], output_dir=out_dir,
+        annex2_config_path=regime_config_path,
+        asset_config_path=asset_config_path,
         client_id=client_id, run_id=run_id,
         decisions_path=target_first_decisions_path)
 

@@ -136,6 +136,9 @@ def run_onboarding(
     enable_llm_target_advisor: bool = False,
     llm_target_advisor_callable=None,
     llm_target_advisor_model: str = "",
+    target_contract: str = "",
+    regime_config_path: str = "",
+    asset_config_path: str = "",
 ) -> OnboardingProject:
     in_dir = Path(input_dir)
     out_dir = Path(output_dir)
@@ -397,6 +400,9 @@ def run_onboarding(
                 llm_target_advisor_callable=llm_target_advisor_callable,
                 llm_target_advisor_max_calls=(llm_max_calls or 1),
                 llm_target_advisor_model=llm_target_advisor_model,
+                target_contract=target_contract,
+                regime_config_path=(regime_config_path or None),
+                asset_config_path=(asset_config_path or None),
             )
             ru = mr.get("resolver_usage", {})
             project.mapping_review_summary = {
@@ -430,6 +436,9 @@ def run_onboarding(
             "36_target_first_llm_recommendations_summary.md",
             "36_target_first_llm_raw_response.json",
             "36_target_first_llm_usage_summary.json",
+            "42_annex2_config_validation.csv",
+            "42_annex2_config_validation.json",
+            "42_annex2_config_validation_summary.md",
             "31_llm_mapping_resolver.csv", "31_llm_mapping_resolver.json",
             "31_llm_mapping_resolver_summary.md", "31_llm_usage_summary.json",
             "31_llm_resolver_usage_summary.json", "31_llm_field_raw_response.json",
