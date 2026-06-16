@@ -438,15 +438,14 @@ class TestAnnex2EnumCoverage(unittest.TestCase):
             self.assertEqual(self.by[code]["enum_coverage_status"],
                              "constrained_within_workbook")
 
-    def test_semantic_mismatch_surfaced_not_constrained(self):
-        # Codes whose regime rule points at the wrong field (vs the workbook) are
-        # surfaced for review and NOT silently enum-constrained.
+    def test_previously_mismatched_list_fields_now_constrained(self):
+        # After the mapping corrections, these {LIST} fields are constrained to
+        # the workbook's allowed codes (no longer semantic_mismatch).
         for code in ("RREL17", "RREL70", "RREC23"):
-            self.assertEqual(self.by[code]["enum_coverage_status"], "semantic_mismatch")
-            self.assertTrue(self.by[code]["requires_manual_review"])
-        self.assertGreater(self.enum["summary"]["semantic_mismatch"], 0)
-        self.assertTrue(any("source field does not match" in w
-                            for w in self.summary["warnings"]))
+            self.assertEqual(self.by[code]["enum_coverage_status"],
+                             "constrained_within_workbook")
+        self.assertEqual(self.enum["summary"]["semantic_mismatch"], 0)
+        self.assertEqual(self.enum["summary"]["unconstrained_no_enum_map"], 0)
 
     def test_45_records_enum_constraint_actions(self):
         align = json.loads(
@@ -481,24 +480,23 @@ class TestAnnex2SemanticMapping(unittest.TestCase):
     def test_all_68_ruled_codes_checked(self):
         self.assertEqual(self.sem["summary"]["semantic_rows_total"], 68)
 
-    def test_known_mismatches_flagged(self):
+    def test_all_mappings_now_aligned(self):
+        # After the mapping corrections, the previously mismapped codes align.
         for code in ("RREL13", "RREL17", "RREL70", "RREC23"):
-            self.assertEqual(self.by[code]["semantic_status"], "semantic_mismatch")
-            self.assertTrue(self.by[code]["requires_manual_review"])
-        self.assertGreater(self.sem["summary"]["semantic_mismatch"], 0)
-        self.assertEqual(self.summary["annex2_semantic_mismatch_count"],
-                         self.sem["summary"]["semantic_mismatch"])
-        self.assertTrue(any("code↔field mismap" in w for w in self.summary["warnings"]))
+            self.assertEqual(self.by[code]["semantic_status"], "aligned")
+        self.assertEqual(self.sem["summary"]["semantic_mismatch"], 0)
+        self.assertEqual(self.summary["annex2_semantic_mismatch_count"], 0)
 
     def test_correctly_mapped_codes_aligned(self):
         for code in ("RREL1", "RREL2", "RREL16", "RREL40"):
             self.assertEqual(self.by[code]["semantic_status"], "aligned")
 
-    def test_report_only_rules_unchanged(self):
-        # 47 must NOT rewrite any rule: RREL70's (mismapped) source is untouched.
+    def test_47_reads_corrected_rules_from_disk(self):
+        # 47 is report-only; it reflects the corrected rules now on disk.
         import yaml as _y
         fr = _y.safe_load(open("config/regime/annex2_delivery_rules.yaml"))["field_rules"]
-        self.assertEqual(fr["RREL70"]["projected_source_field"], "interest_only_period")
+        self.assertEqual(fr["RREL70"]["projected_source_field"],
+                         "reason_for_default_or_foreclosure")
 
     def test_review_pack_shows_semantic_reconciliation(self):
         html = (self.out / "08_onboarding_review_pack.html").read_text()
@@ -531,19 +529,20 @@ class TestAnnex2MappingProposals(unittest.TestCase):
         self.assertEqual(set(self.by), mismatches)
         self.assertEqual(self.prop["summary"]["proposal_rows_total"], len(mismatches))
 
-    def test_proposed_source_is_registry_canonical_workbook_field(self):
-        # Spot-check the proposed source matches the workbook-aligned field.
-        self.assertEqual(self.by["RREL70"]["proposed_source"],
-                         "reason_for_default_or_foreclosure")
-        self.assertEqual(self.by["RREL14"]["proposed_source"], "credit_impaired_obligor")
-        self.assertEqual(self.by["RREC21"]["proposed_source"], "sale_price")
+    def test_no_proposals_remaining_after_corrections(self):
+        # With the corrections applied, there are no mismatches left, so the
+        # proposals artefact is empty.
+        self.assertEqual(self.prop["summary"]["proposal_rows_total"], 0)
+        self.assertEqual(self.by, {})
 
-    def test_proposed_nd_matches_workbook_and_flags_divergence(self):
-        # RREL10/RREL13 currently allow ND5 but the workbook forbids it -> the
-        # proposal resets nd_allowed to ND1-ND4 and marks it divergent.
-        for code in ("RREL10", "RREL13"):
-            self.assertEqual(self.by[code]["proposed_nd_allowed"], "ND1; ND2; ND3; ND4")
-            self.assertEqual(self.by[code]["nd_status"], "divergent")
+    def test_regime_rules_now_carry_corrected_sources(self):
+        import yaml as _y
+        fr = _y.safe_load(open("config/regime/annex2_delivery_rules.yaml"))["field_rules"]
+        self.assertEqual(fr["RREL70"]["projected_source_field"],
+                         "reason_for_default_or_foreclosure")
+        self.assertEqual(fr["RREL14"]["projected_source_field"], "credit_impaired_obligor")
+        self.assertEqual(fr["RREC21"]["projected_source_field"], "sale_price")
+        self.assertEqual(fr["RREL10"]["nd_allowed"], ["ND1", "ND2", "ND3", "ND4"])
 
     def test_mechanics_split_and_report_only(self):
         s = self.prop["summary"]
@@ -552,12 +551,6 @@ class TestAnnex2MappingProposals(unittest.TestCase):
                          + s["needs_mechanics_review"], s["proposal_rows_total"])
         self.assertTrue(all(r["requires_manual_review"] for r in self.prop["rows"]))
         self.assertTrue(all(r["xml_output_changes"] == "yes" for r in self.prop["rows"]))
-
-    def test_proposals_did_not_mutate_regime_rules(self):
-        import yaml as _y
-        fr = _y.safe_load(open("config/regime/annex2_delivery_rules.yaml"))["field_rules"]
-        # report-only: the mismapped source is untouched on disk.
-        self.assertEqual(fr["RREL70"]["projected_source_field"], "interest_only_period")
 
     def test_review_pack_shows_mapping_proposals(self):
         html = (self.out / "08_onboarding_review_pack.html").read_text()
