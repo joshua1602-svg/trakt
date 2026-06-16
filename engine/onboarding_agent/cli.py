@@ -326,6 +326,20 @@ def run_promote(args) -> int:
     except Exception:
         pass
 
+    # Build the governed canonical onboarding handoff package (24–27) for the
+    # Transformation & Validation Agent. Additive; reuses the central tape just
+    # built above and never re-canonicalises it.
+    handoff = None
+    try:
+        from engine.onboarding_agent import onboarding_handoff
+        from engine.onboarding_agent.review_pack_builder import refresh_review_pack_handoff
+        handoff = onboarding_handoff.build_handoff_package(
+            project_dir, Path(run_paths.output_root), client_id=client_id,
+            client_name=client_name, run_id=run_id, mode=mode, registry=args.registry)
+        refresh_review_pack_handoff(project_dir, Path(run_paths.output_root))
+    except Exception as exc:
+        print(f"[promote] onboarding handoff package not generated: {exc}")
+
     print("=" * 64)
     print("Onboarding promotion (DRY-RUN — no Gates, no Azure upload)")
     print(f"Mode: {mode} · storage_backend: {run_paths.storage_backend}")
@@ -338,6 +352,13 @@ def run_promote(args) -> int:
     print("Manifests:")
     for k in ("promotion_plan_path", "handoff_manifest_path", "readiness_path", "pipeline_trigger_path"):
         print(f"  - {plan[k]}")
+    if handoff:
+        m = handoff["manifest"]
+        print("Onboarding handoff package (→ transformation_validation):")
+        print(f"  - {handoff['manifest_json_path']}")
+        print(f"  - ready_for_transformation_validation: "
+              f"{m.get('ready_for_transformation_validation')}")
+        print(f"  - ready_for_xml_delivery: {m.get('ready_for_xml_delivery')}")
     print("=" * 64)
     return 0
 

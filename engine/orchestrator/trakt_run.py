@@ -909,6 +909,43 @@ def write_manifest(args, ctx: dict, gate45: Optional[dict], out_dir: Path, run_s
 # Main
 # ---------------------------------------------------------------------------
 
+def _guard_not_onboarding_central_tape(input_path: Path, force: bool = False) -> None:
+    """Refuse to run raw Gate 1 on the Onboarding Agent's central lender tape.
+
+    ``output/central/18_central_lender_tape.csv`` is a governed canonical
+    onboarding HANDOFF artefact — not raw client input. Re-running raw Gate 1
+    canonicalisation on it reruns mapping and fails before product/ND defaults,
+    validation and projection can be applied. The correct consumer is the
+    Transformation & Validation Agent via the onboarding handoff package. See
+    due_diligence/ONBOARDING_HANDOFF_CONTRACT.md.
+    """
+    if force:
+        return
+    name = input_path.name.lower()
+    parent = input_path.parent.name.lower()
+    looks_like_central = (
+        name == "18_central_lender_tape.csv"
+        or (name.startswith("18_central") and name.endswith(".csv"))
+        or (parent == "central" and name.startswith("18_"))
+    )
+    if looks_like_central:
+        raise SystemExit(
+            "[trakt_run] Refusing to run raw Gate 1 on what looks like the "
+            "Onboarding Agent central lender tape:\n"
+            f"    {input_path}\n\n"
+            "This file is a governed CANONICAL ONBOARDING HANDOFF artefact, not raw "
+            "client input. Running raw Gate 1 canonicalisation on it reruns mapping "
+            "and fails before product/ND defaults, validation and projection can be "
+            "applied.\n\n"
+            "Consume the onboarding handoff package "
+            "(output/handoff/24_onboarding_handoff_manifest.json) via the "
+            "Transformation & Validation Agent instead. See "
+            "due_diligence/ONBOARDING_HANDOFF_CONTRACT.md.\n\n"
+            "If you really do have a raw client tape that happens to share this "
+            "name, rerun with --force-central-tape-input."
+        )
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         description="trakt — multi-mode pipeline orchestrator",
@@ -930,6 +967,11 @@ examples:
                      help="Pipeline mode: mi | annex12 | regulatory")
     ap.add_argument("--input", required=True,
                      help="Input loan tape CSV/XLSX")
+    ap.add_argument("--force-central-tape-input", dest="force_central_tape_input",
+                     action="store_true",
+                     help="Override the guard that refuses the Onboarding Agent central "
+                          "lender tape (18_central_lender_tape.csv) as raw Gate 1 input. "
+                          "Only use for a genuinely raw tape that shares the name.")
 
     # Common config
     ap.add_argument("--portfolio-type", default="equity_release")
@@ -1017,6 +1059,7 @@ examples:
     input_path = Path(args.input)
     if not input_path.exists():
         raise FileNotFoundError(f"Input file not found: {input_path}")
+    _guard_not_onboarding_central_tape(input_path, getattr(args, "force_central_tape_input", False))
 
     out_dir = Path(args.out_dir)
     val_dir = Path(args.validation_out_dir)

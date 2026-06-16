@@ -889,6 +889,86 @@ def _promotion_section_html(output_root: Path) -> str:
     )
 
 
+_HANDOFF_MARKER = "<!--ONBOARDING_HANDOFF_SECTION-->"
+
+_HANDOFF_WARNING = (
+    "The central lender tape is a canonical onboarding handoff artefact. It is "
+    "not raw source input and not an XML-ready regulatory delivery tape. "
+    "Downstream agents must consume this through the Transformation &amp; "
+    "Validation handoff path.")
+
+
+def _handoff_section_html(output_root: Path) -> str:
+    """Onboarding → Transformation &amp; Validation handoff status (24–27)."""
+    import json as _json
+
+    handoff = Path(output_root) / "handoff"
+    manifest = handoff / "24_onboarding_handoff_manifest.json"
+    if not manifest.exists():
+        return (f'<div class="callout warn"><strong>{_HANDOFF_WARNING}</strong></div>'
+                '<p class="meta">Onboarding handoff package not yet generated for this '
+                'run (Annex 2 / regulatory mode only).</p>')
+
+    try:
+        m = _json.loads(manifest.read_text(encoding="utf-8"))
+    except Exception:
+        m = {}
+
+    def yn(v) -> str:
+        return "yes" if v else "no"
+
+    head_rows = [
+        ["Handoff type", m.get("handoff_type", "")],
+        ["Next agent", m.get("next_agent", "")],
+        ["Central tape path", m.get("central_tape_path", "")],
+        ["Not raw source", yn(m.get("not_raw_source"))],
+        ["Not XML ready", yn(m.get("not_xml_ready"))],
+        ["Do not rerun Gate 1 on central tape",
+         yn(m.get("do_not_rerun_gate1_on_central_tape"))],
+    ]
+    readiness_rows = [
+        ["Ready for transformation & validation",
+         yn(m.get("ready_for_transformation_validation"))],
+        ["Ready for projection", yn(m.get("ready_for_projection"))],
+        ["Ready for XML delivery", yn(m.get("ready_for_xml_delivery"))],
+    ]
+    classified_rows = [
+        ["Operator decisions pending", m.get("operator_decision_pending_count", 0)],
+        ["Blocking decisions", m.get("blocking_decision_count", 0)],
+        ["Downstream defaults required", m.get("downstream_default_required_count", 0)],
+        ["ND defaults", m.get("defaulted_nd_count", 0)],
+        ["Pending regime rules", m.get("pending_regime_rule_count", 0)],
+        ["Semantic derivations required", m.get("semantic_derivation_required_count", 0)],
+        ["Source absent fields", m.get("source_absent_count", 0)],
+    ]
+    return (
+        f'<div class="callout warn"><strong>{_HANDOFF_WARNING}</strong></div>'
+        + _table(["Item", "Value"], [[_esc(a), _esc(b)] for a, b in head_rows])
+        + '<h4 class="chart-title">Handoff readiness (separate from XML readiness)</h4>'
+        + _table(["Readiness", "Value"], [[_esc(a), _esc(b)] for a, b in readiness_rows])
+        + '<h4 class="chart-title">Classified for the next agent</h4>'
+        + _table(["Item", "Count"], [[_esc(a), _esc(b)] for a, b in classified_rows])
+    )
+
+
+def refresh_review_pack_handoff(project_dir: Path, output_root: Path | None = None) -> None:
+    """Re-inject the Onboarding Handoff section into an existing review pack."""
+    import re
+
+    project_dir = Path(project_dir)
+    pack = project_dir / "08_onboarding_review_pack.html"
+    if not pack.exists():
+        return
+    if output_root is None:
+        output_root = project_dir / "output"
+    section = _handoff_section_html(Path(output_root))
+    text = pack.read_text(encoding="utf-8")
+    text = re.sub(r"<!--HANDOFF_START-->.*?<!--HANDOFF_END-->",
+                  f"<!--HANDOFF_START-->{section}<!--HANDOFF_END-->",
+                  text, flags=re.DOTALL)
+    pack.write_text(text, encoding="utf-8")
+
+
 def build_review_pack(project: OnboardingProject, out_path: Path,
                       output_root: Path | None = None) -> Path:
     s = project.to_summary_dict()
@@ -1316,6 +1396,13 @@ def build_review_pack(project: OnboardingProject, out_path: Path,
     <h4 class="chart-title">Central tapes &amp; Azure-ready handoff (dry-run)</h4>
     <span id="promotion"></span><!--PROMO_START-->{_PROMOTION_MARKER}<!--PROMO_END-->
   </div>
+
+  <div class="card" id="onboarding-handoff"><h2>5b. Onboarding handoff (→ Transformation &amp; Validation)</h2>
+    <p class="meta">Governed canonical onboarding package — the next valid consumer is the
+      Transformation &amp; Validation Agent. Downstream agents must not re-run raw Gate 1
+      source canonicalisation on the central tape.</p>
+    <span id="onboarding-handoff-status"></span><!--HANDOFF_START-->{_HANDOFF_MARKER}<!--HANDOFF_END-->
+  </div>
   {appendix}
   {_APPROVAL_MARKER}
 </div></body></html>"""
@@ -1326,6 +1413,7 @@ def build_review_pack(project: OnboardingProject, out_path: Path,
     # If approved artefacts already exist in this output dir, fold them in.
     doc = doc.replace(_APPROVAL_MARKER, build_approval_section_html(out_path.parent))
     doc = doc.replace(_PROMOTION_MARKER, _promotion_section_html(Path(output_root)))
+    doc = doc.replace(_HANDOFF_MARKER, _handoff_section_html(Path(output_root)))
     out_path.write_text(doc, encoding="utf-8")
     return out_path
 
