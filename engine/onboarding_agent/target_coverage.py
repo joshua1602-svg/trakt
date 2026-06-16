@@ -1684,6 +1684,180 @@ def write_annex2_semantic_mapping_reconciliation(
 
 
 # ---------------------------------------------------------------------------
+# Annex 2 mapping-correction proposals (48) — proposed source/ND/mechanics fixes
+# ---------------------------------------------------------------------------
+
+_ANNEX2_PROPOSAL_COLUMNS = [
+    "esma_code", "workbook_field_name", "format", "current_source",
+    "proposed_source", "current_transform", "current_validator",
+    "current_default", "current_nd_allowed", "proposed_nd_allowed", "nd_status",
+    "proposed_rule_mechanics", "current_mechanics_fit", "xml_output_changes",
+    "requires_manual_review",
+]
+
+
+def _annex2_proposed_mechanics(fmt: str, transform: Any, validators: Any,
+                               enum_codes: List[str]) -> Tuple[str, str]:
+    """Return (proposed_rule_mechanics, current_mechanics_fit) for a corrected
+    field, given the workbook FORMAT and the current rule transform/validator."""
+    f = (fmt or "").strip().upper()
+    tr = transform or {}
+    has_bool = isinstance(tr, dict) and "boolean" in tr
+    has_enum = isinstance(tr, dict) and "enum_map" in tr
+    has_regex = isinstance(validators, dict) and "regex" in validators
+    if f == "{Y/N}":
+        if has_bool:
+            return ("boolean transform (already present)", "fits")
+        return ("add boolean: xsd_lowercase_true_false", "needs_changes")
+    if f == "{LIST}":
+        codes = ", ".join(enum_codes) if enum_codes else "(workbook codes)"
+        if has_enum:
+            return (f"align enum_map to workbook codes: {codes}", "needs_review")
+        return (f"add enum_map for workbook codes: {codes}", "needs_changes")
+    if f == "{DATEFORMAT}":
+        return ("add ISO-8601 date format/validator", "needs_changes")
+    if f == "{LEI}":
+        if has_regex:
+            return ("LEI validator (present — confirm ^[A-Z0-9]{20}$)", "needs_review")
+        return ("add LEI validator ^[A-Z0-9]{20}$", "needs_changes")
+    if f == "{COUNTRYCODE_2}":
+        if has_regex:
+            return ("country-code validator (present — confirm ISO-3166 alpha-2)", "needs_review")
+        return ("add ISO-3166 alpha-2 validator ^[A-Z]{2}$", "needs_changes")
+    if f == "{MONETARY}":
+        return ("numeric monetary value (no transform)", "fits")
+    if f.startswith("{ALPHANUM"):
+        return ("free-text string (no transform)", "fits")
+    return ("(format-specific handling)", "needs_review")
+
+
+def build_annex2_mapping_correction_proposals(
+    regime_config_path: Optional[str | Path] = None,
+    universe_path: Optional[str | Path] = None,
+    registry_path: Optional[str | Path] = None,
+) -> List[Dict[str, Any]]:
+    """Proposed corrections for every regime rule whose source field does not
+    match the workbook field for its code (the semantic_mismatch set from 47).
+
+    For each, proposes the workbook-aligned source (registry canonical field),
+    the workbook ND envelope, and the format-specific rule mechanics. Report
+    only — applies nothing; every row requires manual approval.
+    """
+    sem_rows = build_annex2_semantic_mapping_reconciliation(
+        regime_config_path, universe_path, registry_path)
+    mismatched = {r["esma_code"] for r in sem_rows
+                  if r["semantic_status"] == "semantic_mismatch"}
+
+    cid, csrc, _ruled = load_annex2_target_contract(regime_config_path)
+    try:
+        regime = yaml.safe_load(Path(csrc).read_text(encoding="utf-8")) or {}
+    except Exception:
+        regime = {}
+    field_rules = regime.get("field_rules", {}) or {}
+    workbook, _src = load_annex2_workbook_universe(universe_path)
+    registry = load_annex2_authoritative_universe(registry_path)
+
+    rows: List[Dict[str, Any]] = []
+    for code in sorted(mismatched, key=_code_sort_key):
+        wb = workbook.get(code, {})
+        rule = field_rules.get(code, {})
+        fmt = wb.get("format", "")
+        canon = registry.get(code, {}).get("canonical_field", "")
+        cur_nd = [str(x).upper() for x in (rule.get("nd_allowed") or [])]
+        prop_nd = _annex2_nd_allowed_from_workbook(wb)
+        if set(cur_nd) == set(prop_nd):
+            nd_status = "matches"
+        elif set(cur_nd) <= set(prop_nd):
+            nd_status = "regime_stricter"
+        elif set(prop_nd) <= set(cur_nd):
+            nd_status = "regime_broader"
+        else:
+            nd_status = "divergent"
+        enum_codes = (_annex2_workbook_enum_codes(wb.get("content", ""))
+                      if str(fmt).strip().upper() == "{LIST}" else [])
+        mech, fit = _annex2_proposed_mechanics(
+            fmt, rule.get("transform"), rule.get("validators"), enum_codes)
+        rows.append({
+            "esma_code": code,
+            "workbook_field_name": wb.get("field_name", ""),
+            "format": fmt,
+            "current_source": str(rule.get("projected_source_field", "")),
+            "proposed_source": canon,
+            "current_transform": json.dumps(rule.get("transform")) if rule.get("transform") else "",
+            "current_validator": json.dumps(rule.get("validators")) if rule.get("validators") else "",
+            "current_default": str(rule.get("default_value", "")),
+            "current_nd_allowed": "; ".join(cur_nd),
+            "proposed_nd_allowed": "; ".join(prop_nd),
+            "nd_status": nd_status,
+            "proposed_rule_mechanics": mech,
+            "current_mechanics_fit": fit,
+            "xml_output_changes": "yes",
+            "requires_manual_review": True,
+        })
+    return rows
+
+
+def annex2_mapping_correction_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    fit = {}
+    nd = {}
+    for r in rows:
+        fit[r["current_mechanics_fit"]] = fit.get(r["current_mechanics_fit"], 0) + 1
+        nd[r["nd_status"]] = nd.get(r["nd_status"], 0) + 1
+    return {
+        "proposal_rows_total": len(rows),
+        "re_point_source_only": fit.get("fits", 0),
+        "needs_rule_mechanics_changes": fit.get("needs_changes", 0),
+        "needs_mechanics_review": fit.get("needs_review", 0),
+        "nd_status_counts": nd,
+        "mechanics_fit_counts": fit,
+    }
+
+
+def write_annex2_mapping_correction_proposals(
+    out_dir: str | Path,
+    rows: List[Dict[str, Any]],
+    summary: Dict[str, Any],
+    *,
+    regime_config_source: str = "",
+    registry_source: str = "",
+) -> Dict[str, str]:
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    _write_csv(out / "48_annex2_mapping_correction_proposals.csv", rows,
+               _ANNEX2_PROPOSAL_COLUMNS)
+    (out / "48_annex2_mapping_correction_proposals.json").write_text(
+        json.dumps({"regime_config_source": regime_config_source,
+                    "registry_source": registry_source,
+                    "summary": summary, "rows": rows}, indent=2, default=str),
+        encoding="utf-8")
+    md = ["# ESMA Annex 2 mapping-correction proposals", "",
+          "Proposed (NOT applied) corrections for regime rules whose source field "
+          "does not match the workbook field for their code (the 47 mismatch set). "
+          "Each proposes the workbook-aligned source (registry canonical), the "
+          "workbook ND envelope, and the format-specific mechanics. Every row "
+          "requires manual approval.", "",
+          f"- **Proposals:** {summary['proposal_rows_total']}",
+          f"- **Re-point source only (mechanics already fit):** {summary['re_point_source_only']}",
+          f"- **Need rule-mechanics changes:** {summary['needs_rule_mechanics_changes']}",
+          f"- **Need mechanics review:** {summary['needs_mechanics_review']}", "",
+          "## Proposals", ""]
+    for r in rows:
+        md.append(
+            f"- `{r['esma_code']}` {r['workbook_field_name']} {r['format']}: "
+            f"source `{r['current_source']}` -> `{r['proposed_source']}`; "
+            f"nd_allowed `{r['current_nd_allowed']}` -> `{r['proposed_nd_allowed']}` "
+            f"({r['nd_status']}); mechanics: {r['proposed_rule_mechanics']} "
+            f"[{r['current_mechanics_fit']}]")
+    (out / "48_annex2_mapping_correction_proposals_summary.md").write_text(
+        "\n".join(md) + "\n", encoding="utf-8")
+    return {
+        "csv": str(out / "48_annex2_mapping_correction_proposals.csv"),
+        "json": str(out / "48_annex2_mapping_correction_proposals.json"),
+        "summary_md": str(out / "48_annex2_mapping_correction_proposals_summary.md"),
+    }
+
+
+# ---------------------------------------------------------------------------
 # MI applicability / default overlay (asset/regime-aware, config-driven)
 # ---------------------------------------------------------------------------
 
@@ -2611,6 +2785,17 @@ def run_target_first_coverage(
         field_universe["semantic_mapping"] = {"rows": sem_rows, "summary": sem_sum,
                                               "paths": sem_paths}
         paths.update({f"semantic_mapping_{k}": v for k, v in sem_paths.items()})
+
+        # 48 — mapping-correction proposals (report-only; nothing applied).
+        prop_rows = build_annex2_mapping_correction_proposals(
+            regime_config_path=annex2_config_path, registry_path=registry_path)
+        prop_sum = annex2_mapping_correction_summary(prop_rows)
+        prop_paths = write_annex2_mapping_correction_proposals(
+            out, prop_rows, prop_sum, regime_config_source=csrc,
+            registry_source=str(registry_path or ""))
+        field_universe["mapping_proposals"] = {"rows": prop_rows, "summary": prop_sum,
+                                               "paths": prop_paths}
+        paths.update({f"mapping_proposals_{k}": v for k, v in prop_paths.items()})
 
     # (Re)generate the operator-editable 34 template from the resulting 28c —
     # unless we just applied that very file in place (never clobber approvals).

@@ -175,6 +175,8 @@ def build_workflow_summary(
     enum_sum = enumc.get("summary", {}) or {}
     semm = _read_json(project_dir / "47_annex2_semantic_mapping_reconciliation.json") or {}
     sem_sum = semm.get("summary", {}) or {}
+    prop = _read_json(project_dir / "48_annex2_mapping_correction_proposals.json") or {}
+    prop_sum = prop.get("summary", {}) or {}
     app = _read_json(project_dir / "35_target_first_decision_application_log.json")
     app_sum = (app or {}).get("summary", {}) or {}
     advu = _read_json(project_dir / "36_target_first_llm_usage_summary.json")
@@ -333,6 +335,13 @@ def build_workflow_summary(
             "annex2_semantic_mismatch_count": int(sem_sum.get("semantic_mismatch", 0)),
             "annex2_semantic_mapping_reconciliation_summary": _p(
                 "47_annex2_semantic_mapping_reconciliation_summary.md"),
+            # Mapping-correction proposals (48) — report-only.
+            "annex2_mapping_proposals_total": int(prop_sum.get("proposal_rows_total", 0)),
+            "annex2_mapping_proposals_repoint_only": int(prop_sum.get("re_point_source_only", 0)),
+            "annex2_mapping_proposals_need_mechanics": int(
+                prop_sum.get("needs_rule_mechanics_changes", 0)),
+            "annex2_mapping_correction_proposals_summary": _p(
+                "48_annex2_mapping_correction_proposals_summary.md"),
         })
         sem_mismatch = int(sem_sum.get("semantic_mismatch", 0))
         if sem_mismatch > 0:
@@ -487,6 +496,7 @@ _AUDIT_CATALOG = [
     ("45_annex2_config_alignment_review.csv", "artefact", "keep_core", "ESMA Annex 2 config-alignment review: actions taken + manual-review items (Annex 2 mode only)."),
     ("46_annex2_enum_coverage_reconciliation.csv", "artefact", "keep_core", "ESMA Annex 2 enum-coverage reconciliation: regime enum_map vs workbook allowed codes (Annex 2 mode only)."),
     ("47_annex2_semantic_mapping_reconciliation.csv", "artefact", "keep_core", "ESMA Annex 2 semantic-mapping reconciliation: regime source field vs workbook field per code (Annex 2 mode only)."),
+    ("48_annex2_mapping_correction_proposals.csv", "artefact", "keep_core", "ESMA Annex 2 mapping-correction proposals: proposed source/ND/mechanics fixes for mismapped codes, report-only (Annex 2 mode only)."),
     # --- source-column legacy decision artefacts RETAINED FOR AUDIT ---
     ("33_mapping_review_queue.csv", "artefact", "keep_legacy_audit", "Source-column review queue; retained as audit detail, no longer the primary gate."),
     ("34_mapping_review_decisions.yaml", "artefact", "keep_legacy_audit", "Source-column decision template; superseded by 34_target_first_decisions.yaml; kept for audit."),

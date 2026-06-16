@@ -239,6 +239,9 @@ def _load_target_first_artifacts(project_dir: Path, output_root: Path | None = N
     sm = _find_artifact(project_dir, output_root,
                         "47_annex2_semantic_mapping_reconciliation.json")
     tf["semantic_mapping"] = _load_json(sm) if sm else None
+    mp = _find_artifact(project_dir, output_root,
+                        "48_annex2_mapping_correction_proposals.json")
+    tf["mapping_proposals"] = _load_json(mp) if mp else None
     _derive_summaries(tf)
     return tf
 
@@ -370,7 +373,31 @@ def _annex2_universe_html(tf: dict) -> str:
             + _annex2_nd_eligibility_html(tf)
             + _annex2_config_alignment_html(tf)
             + _annex2_enum_coverage_html(tf)
-            + _annex2_semantic_mapping_html(tf))
+            + _annex2_semantic_mapping_html(tf)
+            + _annex2_mapping_proposals_html(tf))
+
+
+def _annex2_mapping_proposals_html(tf: dict) -> str:
+    """Mapping-correction proposals (48): proposed source/ND/mechanics fixes."""
+    mp = tf.get("mapping_proposals")
+    if not mp:
+        return ""
+    s = mp.get("summary", {}) or {}
+    total = int(s.get("proposal_rows_total", 0))
+    rows = [
+        ["Proposed corrections", _esc(total)],
+        ["Re-point source only", _esc(s.get("re_point_source_only", 0))],
+        ["Need rule-mechanics changes", _esc(s.get("needs_rule_mechanics_changes", 0))],
+        ["Need mechanics review", _esc(s.get("needs_mechanics_review", 0))],
+    ]
+    note = ('<div class="callout warn">' + _esc(total) +
+            " proposed Annex 2 mapping correction(s) await manual approval "
+            "(report-only, nothing applied) — see "
+            "<code>48_annex2_mapping_correction_proposals.csv</code>.</div>"
+            if total else
+            '<div class="callout pass">No mapping corrections proposed.</div>')
+    return ('<h4 class="chart-title">Annex 2 mapping-correction proposals</h4>'
+            + note + _table(["Item", "Value"], rows))
 
 
 def _annex2_semantic_mapping_html(tf: dict) -> str:
