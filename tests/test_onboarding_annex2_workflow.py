@@ -123,15 +123,48 @@ class TestConfigValidationUnit(unittest.TestCase):
         self.assertEqual(self.by_code["RREL16"]["validation_status"], tcov.VS_VALID)
         self.assertEqual(self.overlay["RREL16"]["default_rule_source"], "asset_config")
 
-    def test_invalid_asset_default_not_applied(self):
-        # debt_to_income_ratio (RREL40) asset default ND1 is NOT in nd_allowed
-        # [ND5] -> invalid, surfaced, and the regime default is kept.
+    def test_reconciled_asset_default_valid(self):
+        # debt_to_income_ratio (RREL40) is intentionally reconciled to ND5, which
+        # IS within the regime nd_allowed [ND5] -> valid (no longer a conflict).
         row = self.by_code["RREL40"]
-        self.assertEqual(row["validation_status"], tcov.VS_INVALID)
-        self.assertEqual(row["asset_default_value"], "ND1")
-        # The overlay does NOT apply the invalid value.
-        self.assertFalse(self.overlay["RREL40"].get("valid"))
-        self.assertNotEqual(self.overlay["RREL40"].get("default_value"), "ND1")
+        self.assertEqual(row["validation_status"], tcov.VS_VALID)
+        self.assertEqual(row["asset_default_value"], "ND5")
+
+    def test_invalid_asset_default_surfaced_synthetic(self):
+        # Option B: a SYNTHETIC fixture that deliberately sets DTI = ND1 while the
+        # regime only allows ND5 must surface invalid_default_not_allowed and must
+        # NOT apply the invalid value. (We do not reintroduce the conflict into the
+        # real product config just to test this behaviour.)
+        import tempfile
+        import textwrap
+        from pathlib import Path
+        d = Path(tempfile.mkdtemp(prefix="annex2_invalid_"))
+        regime = d / "regime.yaml"
+        regime.write_text(textwrap.dedent("""\
+            regime: ESMA_Annex2
+            field_rules:
+              RREL40:
+                esma_code: RREL40
+                projected_source_field: debt_to_income_ratio
+                mandatory: true
+                enforce_presence: true
+                nd_allowed: [ND5]
+                default_allowed: true
+                default_value: ND5
+        """), encoding="utf-8")
+        asset = d / "asset.yaml"
+        asset.write_text(textwrap.dedent("""\
+            asset_class: equity_release
+            defaults: {}
+            nd_defaults:
+              debt_to_income_ratio: ND1
+        """), encoding="utf-8")
+        rows, overlay, _ = tcov.build_annex2_config_validation(str(regime), str(asset))
+        by = {r["esma_code"]: r for r in rows if r["esma_code"]}
+        self.assertEqual(by["RREL40"]["validation_status"], tcov.VS_INVALID)
+        self.assertEqual(by["RREL40"]["asset_default_value"], "ND1")
+        self.assertFalse(overlay["RREL40"].get("valid"))
+        self.assertNotEqual(overlay["RREL40"].get("default_value"), "ND1")
 
     def test_unknown_and_missing_statuses_present(self):
         statuses = {r["validation_status"] for r in self.rows}
@@ -193,7 +226,9 @@ class TestAnnex2Workflow(unittest.TestCase):
         inv = [d for d in self.dec["rows"]
                if d["decision_type"] == tcov.D_INVALID_DEFAULT]
         self.assertTrue(inv)
-        self.assertIn("RREL40", {d["target_field"] for d in inv})
+        # RREL40 (DTI) is now reconciled to a valid ND5; the remaining real-config
+        # invalid asset default is RREL35 (amortisation_type = "Bullet").
+        self.assertIn("RREL35", {d["target_field"] for d in inv})
         for d in inv:
             self.assertFalse(d["blocking"])  # regime fallback exists -> non-blocking
 
@@ -608,13 +643,14 @@ class TestAnnex2ConfigAlignment(unittest.TestCase):
         self.assertTrue(ok)
 
     def test_remaining_asset_conflicts_require_manual_review(self):
-        # Bullet amortisation and DTI=ND1 are NOT auto-resolved (no obvious/safe
-        # enum map; regime stricter by policy) — surfaced as conflicts.
+        # Bullet amortisation is NOT auto-resolved (no obvious/safe enum map) and is
+        # surfaced as a conflict. DTI (RREL40) is now reconciled to a valid ND5 and
+        # is NO LONGER a conflict.
         conflicts = [r for r in self.align["rows"]
                      if r["alignment_status"] == "asset_default_conflict"]
         codes = {r["esma_code"] for r in conflicts}
         self.assertIn("RREL35", codes)  # amortisation_type = Bullet
-        self.assertIn("RREL40", codes)  # debt_to_income_ratio = ND1
+        self.assertNotIn("RREL40", codes)  # debt_to_income_ratio reconciled to ND5
         for r in conflicts:
             self.assertTrue(r["requires_manual_review"])
 
@@ -623,7 +659,8 @@ class TestAnnex2ConfigAlignment(unittest.TestCase):
         self.assertEqual(s["annex2_alignment_tightened_count"], 5)
         self.assertEqual(s["annex2_alignment_phantom_removed_count"], 11)
         self.assertEqual(s["annex2_alignment_registry_added_count"], 1)
-        self.assertEqual(s["annex2_asset_default_conflict_count"], 2)
+        # RREL40 (DTI) reconciled to a valid ND5 -> only RREL35 (Bullet) remains.
+        self.assertEqual(s["annex2_asset_default_conflict_count"], 1)
         self.assertGreater(s["annex2_alignment_manual_review_count"], 0)
 
     def test_review_pack_shows_alignment_review(self):

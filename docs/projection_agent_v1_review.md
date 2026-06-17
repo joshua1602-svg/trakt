@@ -231,6 +231,19 @@ contradictory:
   source (e.g. RREC17) was being resolved by projecting ND1;
 * `projection_rule_required` → carried as a projection blocker.
 
+**Target-frame consistency.** The projected target frame (`51_*`) also honours
+the disposition: for any field whose onboarding disposition is
+`operator_review_required`, `source_mapped_with_review`,
+`config_mapping_required`, `asset_policy_required`,
+`formal_identifier_policy_required`, `client_onboarding_required` or
+`client_policy_required`, the frame cell is left **blank** with
+`projection_status = blocked_operator_or_config_dependency` (or
+`blocked_client_onboarding_dependency`) — it is **not** filled with a generic
+ND/default. This keeps `51_projected_annex2_target_frame.csv` aligned with
+`56_projection_blocker_resolution.csv` (previously the frame could show
+`projected_value = ND1 / projected_nd_default` while the resolution carried the
+field as an unresolved operator dependency).
+
 The `56_projection_blocker_resolution.csv` carries an `onboarding_disposition`
 column so the resolution is explicit and traceable.
 
