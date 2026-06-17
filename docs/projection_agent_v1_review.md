@@ -208,19 +208,26 @@ does **not** solve it.
 
 `ready_for_xml_delivery` is **always `false`** in this PR.
 
-</invoke>
-
 
 ## Consuming the Onboarding target-field disposition
 
 The Projection Agent reads the disposition propagated through the transformation
 field contract (`32_*`, `field_disposition`) and **executes** it
-(`projection_status_for_disposition`). In particular a field marked
-`client_onboarding_required` is carried as a
-`blocked_client_onboarding_dependency` in `56_projection_blocker_resolution.*`
-(issue type `client_onboarding_dependency_unresolved`, owner `client_onboarding`)
-— it is never rediscovered as a generic source-mapping gap. `source_supplied`
-projects the source value, `nd_policy_selected` projects the selected ND, and
-`projection_rule_required` is carried as a projection blocker.
+(`projection_status_for_disposition`), so downstream instructions are never
+contradictory:
+
+* `source_supplied` → project the source value;
+* `nd_policy_selected` → project the selected ND;
+* `client_onboarding_required` / `formal_identifier_policy_required` → carried as a
+  `blocked_client_onboarding_dependency` in `56_projection_blocker_resolution.*`
+  (issue type `client_onboarding_dependency_unresolved`, owner `client_onboarding`)
+  — never rediscovered as a generic source-mapping gap;
+* `config_mapping_required` / `asset_policy_required` → carried as a config
+  dependency (`blocked_operator_or_config_dependency`), **not** an
+  `unresolved_source_mapping` (which was the contradictory output before this fix);
+* `projection_rule_required` → carried as a projection blocker.
+
+The `56_projection_blocker_resolution.csv` carries an `onboarding_disposition`
+column so the resolution is explicit and traceable.
 
 See `docs/target_contract_completion_checklist.md`.

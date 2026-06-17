@@ -57,8 +57,10 @@ D_DERIVATION = "derivation_configured"
 D_CALCULATION = "calculation_configured"
 D_PROJECTION_RULE_REQUIRED = "projection_rule_required"
 D_CLIENT_ONBOARDING_REQUIRED = "client_onboarding_required"
+D_FORMAL_IDENTIFIER_POLICY_REQUIRED = "formal_identifier_policy_required"
 D_OPERATOR_REVIEW_REQUIRED = "operator_review_required"
 D_CONFIG_MAPPING_REQUIRED = "config_mapping_required"
+D_ASSET_POLICY_REQUIRED = "asset_policy_required"
 D_NOT_APPLICABLE = "not_applicable"
 D_UNRESOLVED_GAP = "unresolved_gap"
 
@@ -66,11 +68,14 @@ DISPOSITIONS = (
     D_SOURCE_SUPPLIED, D_SOURCE_MAPPED_REVIEW, D_ASSET_DEFAULT,
     D_CLIENT_POLICY_DEFAULT, D_CONFIGURED_STATIC, D_ND_POLICY_SELECTED,
     D_DERIVATION, D_CALCULATION, D_PROJECTION_RULE_REQUIRED,
-    D_CLIENT_ONBOARDING_REQUIRED, D_OPERATOR_REVIEW_REQUIRED,
-    D_CONFIG_MAPPING_REQUIRED, D_NOT_APPLICABLE, D_UNRESOLVED_GAP,
+    D_CLIENT_ONBOARDING_REQUIRED, D_FORMAL_IDENTIFIER_POLICY_REQUIRED,
+    D_OPERATOR_REVIEW_REQUIRED, D_CONFIG_MAPPING_REQUIRED,
+    D_ASSET_POLICY_REQUIRED, D_NOT_APPLICABLE, D_UNRESOLVED_GAP,
 )
 
 # A disposition is "completed" (does not block downstream) if it is one of these.
+# NB: a *candidate* source/default found is NOT completion — only an approved,
+# projectable source or a deliberately selected policy/default counts here.
 _COMPLETED = {
     D_SOURCE_SUPPLIED, D_ASSET_DEFAULT, D_CLIENT_POLICY_DEFAULT,
     D_CONFIGURED_STATIC, D_ND_POLICY_SELECTED, D_DERIVATION, D_CALCULATION,
@@ -101,7 +106,8 @@ CHECKLIST_COLUMNS = [
     "derivation_rule", "calculation_rule", "applicability_status",
     "field_disposition", "disposition_source", "disposition_confidence",
     "requires_client_input", "requires_operator_review", "requires_config",
-    "requires_projection_rule", "requires_derivation",
+    "requires_projection_rule", "requires_derivation", "requires_enum_mapping",
+    "requires_formal_identifier_policy", "requires_asset_policy",
     "blocking_for_onboarding_handoff", "blocking_for_transformation",
     "blocking_for_validation", "blocking_for_projection",
     "recommended_action", "owner", "notes",
@@ -262,93 +268,91 @@ def load_target_contract_configs(
 # ND / default selection (ND allowed vs ND selected)
 # --------------------------------------------------------------------------- #
 
-def _select_default(
-    canonical: str,
-    nd_allowed: List[str],
-    *,
-    client_pol: Dict[str, Any],
-    asset_defaults: Dict[str, Any],
-    asset_nd_defaults: Dict[str, Any],
-    asset_policy: Dict[str, Any],
-    registry_applicability: Dict[str, Any],
-    asset_class: str,
-    regime_default_value: str,
+def _consider_value(value: Any, source: str, nd_allowed: List[str],
+                    conflicts: List[str]) -> Optional[Tuple[str, str, str, str]]:
+    """Validate one candidate ND/default value against the merged ND envelope.
+
+    Returns ``(disposition, value, source, note)`` or ``None``. An ND value that
+    is not in ``nd_allowed`` is recorded as a conflict (never silently used).
+    """
+    val = _to_str(value)
+    if not val:
+        return None
+    if _is_nd(val):
+        if not nd_allowed or val.upper() in nd_allowed:
+            return (D_ND_POLICY_SELECTED, val.upper(), source,
+                    f"ND policy {val.upper()} selected by {source}")
+        conflicts.append(f"{source}:{val.upper()} not in nd_allowed {nd_allowed}")
+        return None
+    disp = {"client_policy": D_CLIENT_POLICY_DEFAULT,
+            "asset_config": D_ASSET_DEFAULT}.get(source, D_CONFIGURED_STATIC)
+    return (disp, val, source, f"default {val} selected by {source}")
+
+
+def _select_deliberate(
+    canonical: str, nd_allowed: List[str], *,
+    client_pol: Dict[str, Any], asset_policy: Dict[str, Any],
+    registry_applicability: Dict[str, Any], asset_class: str,
+    conflicts: List[str],
 ) -> Optional[Tuple[str, str, str, str]]:
-    """Resolve whether a *policy* has actually selected an ND/default value.
-
-    Returns ``(disposition, value, disposition_source, note)`` or ``None`` if no
-    layer selected a value. ``nd_allowed`` being non-empty does NOT count — only
-    an explicit selection by a config/policy layer does.
-
-    Layer precedence: client policy → asset policy/defaults → registry asset
-    applicability → regime configured default.
+    """A **deliberate** policy selection — the lender/product has explicitly
+    declared the treatment (``reporting_policy`` blocks + registry asset
+    applicability). This overrides source ambiguity: a field the product design
+    does not capture (DTI, lifetime-mortgage maturity) is ND-selected by policy,
+    not an operator mystery.
     """
     nd_allowed = [x.upper() for x in (nd_allowed or [])]
-    conflicts: List[str] = []
 
-    def _consider(value: str, source: str, *, is_policy_nd: bool) -> Optional[Tuple[str, str, str, str]]:
-        val = _to_str(value)
-        if not val:
-            return None
-        if _is_nd(val):
-            if not nd_allowed or val.upper() in nd_allowed:
-                return (D_ND_POLICY_SELECTED, val.upper(), source,
-                        f"ND policy {val.upper()} selected by {source}")
-            conflicts.append(f"{source}:{val.upper()} not in nd_allowed {nd_allowed}")
-            return None
-        # non-ND configured value.
-        disp = {
-            "client_policy": D_CLIENT_POLICY_DEFAULT,
-            "asset_config": D_ASSET_DEFAULT,
-        }.get(source, D_CONFIGURED_STATIC)
-        return (disp, val, source, f"default {val} selected by {source}")
-
-    # 1) client policy layer (reporting_policy.nd_policy / defaults).
+    # client reporting_policy (highest authority).
     cp_nd = (client_pol.get("nd_policy") or {})
     cp_def = (client_pol.get("defaults") or {})
-    for table, src in ((cp_nd, "client_policy"), (cp_def, "client_policy")):
+    for table in (cp_nd, cp_def):
         if canonical in table:
-            r = _consider(table[canonical], src, is_policy_nd=True)
+            r = _consider_value(table[canonical], "client_policy", nd_allowed, conflicts)
             if r:
                 return r
 
-    # 2) asset config (explicit defaults / nd_defaults) + asset reporting_policy.
+    # asset reporting_policy.
     ap_nd = (asset_policy.get("nd_policy") or {})
-    if canonical in ap_nd:
-        r = _consider(ap_nd[canonical], "asset_config", is_policy_nd=True)
+    ap_def = (asset_policy.get("defaults") or {})
+    for table in (ap_nd, ap_def):
+        if canonical in table:
+            r = _consider_value(table[canonical], "asset_config", nd_allowed, conflicts)
+            if r:
+                return r
+
+    # registry asset-specific applicability (e.g. maturity_date.equity_release.nd_default).
+    appl = (registry_applicability or {}).get(asset_class) or {}
+    if appl.get("nd_default"):
+        r = _consider_value(appl["nd_default"], "asset_applicability", nd_allowed, conflicts)
         if r:
-            return r
+            note = r[3] + (f" — {appl['reason']}" if appl.get("reason") else "")
+            return (r[0], r[1], r[2], note)
+    return None
+
+
+def _select_fallback_default(
+    canonical: str, nd_allowed: List[str], *,
+    asset_defaults: Dict[str, Any], asset_nd_defaults: Dict[str, Any],
+    regime_default_value: str, conflicts: List[str],
+) -> Optional[Tuple[str, str, str, str]]:
+    """A **fallback** configured default — generic asset defaults / nd_defaults /
+    regime ``default_value``. Used only when there is no source to materialise.
+    """
+    nd_allowed = [x.upper() for x in (nd_allowed or [])]
     if canonical in (asset_nd_defaults or {}):
-        r = _consider(asset_nd_defaults[canonical], "asset_config", is_policy_nd=True)
+        r = _consider_value(asset_nd_defaults[canonical], "asset_config", nd_allowed, conflicts)
         if r:
             return r
     if canonical in (asset_defaults or {}):
-        r = _consider(asset_defaults[canonical], "asset_config", is_policy_nd=False)
+        r = _consider_value(asset_defaults[canonical], "asset_config", nd_allowed, conflicts)
         if r:
             return r
-
-    # 3) registry asset-specific applicability (e.g. maturity_date.equity_release.nd_default).
-    appl = (registry_applicability or {}).get(asset_class) or {}
-    if appl.get("nd_default"):
-        r = _consider(appl["nd_default"], "asset_applicability", is_policy_nd=True)
-        if r:
-            note = r[3]
-            if appl.get("reason"):
-                note = f"{note} — {appl['reason']}"
-            return (r[0], r[1], r[2], note)
-
-    # 4) regime configured default (a config-level selection, generic envelope).
     if regime_default_value:
-        r = _consider(regime_default_value, "regime_config", is_policy_nd=True)
+        r = _consider_value(regime_default_value, "regime_config", nd_allowed, conflicts)
         if r:
-            note = r[3]
-            if conflicts:
-                note = f"{note}; overrides {', '.join(conflicts)}"
+            note = r[3] + (f"; overrides {', '.join(conflicts)}" if conflicts else "")
             return (r[0], r[1], r[2], note)
-
-    if conflicts:
-        return (D_CONFIG_MAPPING_REQUIRED, "", "config_conflict",
-                "selected ND/default outside regime envelope: " + "; ".join(conflicts))
     return None
 
 
@@ -384,7 +388,9 @@ def decide_disposition(
     applicability_status: str,
     mandatory: bool,
     formal_client_field: bool,
+    formal_approved: bool,
     not_applicable_field: bool,
+    has_regime_rule: bool,
     client_pol: Dict[str, Any],
     asset_defaults: Dict[str, Any],
     asset_nd_defaults: Dict[str, Any],
@@ -394,15 +400,30 @@ def decide_disposition(
 ) -> Dict[str, Any]:
     """Return the single disposition + secondary flags for one target field.
 
-    Pure and deterministic. See module docstring for the design rules.
+    Pure and deterministic. Priority order (a *candidate* source/default is NOT
+    completion):
+
+      0. not_applicable
+      1. formal regulatory identifier without approved policy → client onboarding
+      2. deliberate client/asset policy selected (overrides source ambiguity)
+      3. approved, complete, projectable source → source_supplied
+         (enum-incomplete → config_mapping_required; no regime rule → projection_rule_required)
+      4. derivation configured
+      5. fallback configured default / ND (only when no clean source)
+      6. ambiguous / unconfirmed source → operator_review / source_mapped_with_review
+      7. deferred / pending → projection_rule_required
+      8. ND allowed but no policy selected → asset_policy_required
+      9. nothing → unresolved_gap
     """
     cov = _to_str(coverage_status).lower()
     appl = _to_str(applicability_status).lower()
+    nd_allowed = [x.upper() for x in (nd_allowed or [])]
 
     def result(disposition: str, *, source: str, owner: str, action: str,
                confidence: float = 0.0, note: str = "", value: str = "",
                req_client=False, req_op=False, req_cfg=False,
-               req_proj=False, req_deriv=False,
+               req_proj=False, req_deriv=False, req_enum=False,
+               req_formal=False, req_asset_policy=False,
                b_tx=False, b_val=False, b_proj=False) -> Dict[str, Any]:
         return {
             "field_disposition": disposition,
@@ -414,6 +435,9 @@ def decide_disposition(
             "requires_config": req_cfg,
             "requires_projection_rule": req_proj,
             "requires_derivation": req_deriv,
+            "requires_enum_mapping": req_enum,
+            "requires_formal_identifier_policy": req_formal,
+            "requires_asset_policy": req_asset_policy,
             "blocking_for_onboarding_handoff": False,
             "blocking_for_transformation": b_tx,
             "blocking_for_validation": b_val,
@@ -423,6 +447,8 @@ def decide_disposition(
             "notes": note,
         }
 
+    conflicts: List[str] = []
+
     # 0) Not applicable for this asset class / contract.
     if not_applicable_field or appl in ("not_applicable", "na", "not_required_na"):
         return result(D_NOT_APPLICABLE, source="applicability_config",
@@ -430,46 +456,49 @@ def decide_disposition(
                       action="exclude from delivery (not applicable for this asset)",
                       note="field marked not applicable for this asset class")
 
-    source_present = cov in _SOURCE_MAPPED or (
-        cov not in _ABSENT and cov not in _PENDING_RULE
-        and selected_source_confidence > 0)
-
-    # 1) Formal client-onboarding identifiers that are not confidently sourced.
-    if formal_client_field and not (
-            cov in _SOURCE_MAPPED and selected_source_confidence >= 0.9
-            and not requires_user_decision):
-        return result(D_CLIENT_ONBOARDING_REQUIRED, source="formal_onboarding_policy",
-                      owner=OWN_CLIENT, confidence=0.0, req_client=True,
+    # 1) Formal regulatory identifier (RREL1/RREL2 etc.). An ordinary loan/account/
+    #    policy ID does NOT satisfy it unless an explicit policy approves the source.
+    if formal_client_field and not formal_approved:
+        return result(D_FORMAL_IDENTIFIER_POLICY_REQUIRED, source="formal_identifier_policy",
+                      owner=OWN_CLIENT, confidence=0.0, req_client=True, req_formal=True,
                       b_val=True, b_proj=True,
-                      action="request formal regulatory exposure identifiers from client",
-                      note="formal onboarding field not present / not inferable from ordinary loan IDs")
+                      action="request/approve formal regulatory identifier policy "
+                             "(ordinary loan/account/policy IDs are not sufficient)",
+                      note="formal regulatory identifier not satisfied by ordinary source IDs "
+                           "and no explicit approval policy exists")
 
-    # 2) Confidently source-mapped.
-    if cov in _SOURCE_MAPPED:
-        if is_enum_field and enum_complete is False:
+    # 2) Deliberate client/asset policy selection — overrides source ambiguity.
+    deliberate = _select_deliberate(
+        canonical, nd_allowed, client_pol=client_pol, asset_policy=asset_policy,
+        registry_applicability=registry_applicability, asset_class=asset_class,
+        conflicts=conflicts)
+    if deliberate is not None:
+        disposition, value, source, note = deliberate
+        return result(disposition, source=source, owner=OWN_TRANSFORMATION,
+                      confidence=1.0, value=value,
+                      action=f"materialise/project selected policy value '{value}'",
+                      note=note)
+
+    confident_source = cov in _SOURCE_MAPPED and not requires_user_decision
+
+    # 3) Approved, complete, projectable source.
+    if confident_source:
+        if is_enum_field and enum_complete is not True:
             return result(D_CONFIG_MAPPING_REQUIRED, source="enum_mapping",
                           owner=OWN_CONFIG, confidence=selected_source_confidence,
-                          req_cfg=True, b_proj=True,
-                          action="complete the enum/code mapping for this field",
-                          note="source values present but enum mapping incomplete")
-        if requires_user_decision:
-            return result(D_SOURCE_MAPPED_REVIEW, source="source_match",
-                          owner=OWN_OPERATOR, confidence=selected_source_confidence,
-                          req_op=True,
-                          action="confirm the selected source mapping",
-                          note="source mapped but flagged for operator confirmation")
+                          req_cfg=True, req_enum=True, b_proj=True,
+                          action="complete/confirm the ESMA enum mapping before projection",
+                          note="source present but ESMA enum mapping not confirmed complete")
+        if not has_regime_rule:
+            return result(D_PROJECTION_RULE_REQUIRED, source="source_match",
+                          owner=OWN_PROJECTION, confidence=selected_source_confidence,
+                          req_proj=True, b_proj=True,
+                          action="implement the projection rule so the source can be projected",
+                          note="source present but no projection rule maps it to the target field")
         return result(D_SOURCE_SUPPLIED, source="source_match",
                       owner=OWN_TRANSFORMATION, confidence=selected_source_confidence,
                       action="materialise the mapped source value",
-                      note="confident source mapping")
-
-    # 3) Multiple plausible sources / mapping ambiguity.
-    if cov in _SOURCE_MAPPED_ALT or requires_user_decision:
-        return result(D_OPERATOR_REVIEW_REQUIRED, source="source_ambiguity",
-                      owner=OWN_OPERATOR, confidence=selected_source_confidence,
-                      req_op=True, b_proj=bool(mandatory),
-                      action="operator to choose between candidate source columns",
-                      note="multiple plausible source columns / ambiguous mapping")
+                      note="approved, projectable source mapping")
 
     # 4) Derivation configured.
     if has_derivation or cov in _DERIVED:
@@ -478,25 +507,48 @@ def decide_disposition(
                       action="apply the configured derivation rule",
                       note="derivation rule configured for this field")
 
-    # 5) Source absent → resolve a configured ND/default policy.
-    sel = _select_default(
-        canonical, nd_allowed, client_pol=client_pol, asset_defaults=asset_defaults,
-        asset_nd_defaults=asset_nd_defaults, asset_policy=asset_policy,
-        registry_applicability=registry_applicability, asset_class=asset_class,
-        regime_default_value=regime_default_value)
-    if sel is not None:
-        disposition, value, source, note = sel
-        if disposition == D_CONFIG_MAPPING_REQUIRED:
-            return result(D_CONFIG_MAPPING_REQUIRED, source=source, owner=OWN_CONFIG,
-                          req_cfg=True, b_proj=True,
-                          action="align the selected ND/default with the regime envelope",
-                          note=note)
-        owner = OWN_TRANSFORMATION
-        return result(disposition, source=source, owner=owner, confidence=1.0,
-                      value=value,
+    # 5) A real (but ambiguous / unconfirmed) SOURCE candidate. Checked BEFORE the
+    #    generic fallback default: never silently ND-default over real source data.
+    if cov in _SOURCE_MAPPED_ALT:
+        return result(D_OPERATOR_REVIEW_REQUIRED, source="source_ambiguity",
+                      owner=OWN_OPERATOR, confidence=selected_source_confidence,
+                      req_op=True, b_proj=bool(mandatory),
+                      action="operator to choose between candidate source columns",
+                      note="multiple plausible source columns / ambiguous mapping")
+    if cov in _SOURCE_MAPPED and requires_user_decision:
+        return result(D_SOURCE_MAPPED_REVIEW, source="source_match",
+                      owner=OWN_OPERATOR, confidence=selected_source_confidence,
+                      req_op=True,
+                      action="confirm the selected source mapping before projection",
+                      note="single source mapped but flagged for operator confirmation")
+
+    # 6) Fallback configured default / ND (no usable source to materialise).
+    fallback = _select_fallback_default(
+        canonical, nd_allowed, asset_defaults=asset_defaults,
+        asset_nd_defaults=asset_nd_defaults, regime_default_value=regime_default_value,
+        conflicts=conflicts)
+    if fallback is not None:
+        disposition, value, source, note = fallback
+        return result(disposition, source=source, owner=OWN_TRANSFORMATION,
+                      confidence=1.0, value=value,
                       action=f"materialise configured value '{value}'", note=note)
 
-    # 6) Projection-only rule still pending.
+    # 6b) A non-source operator decision still pending.
+    if requires_user_decision:
+        return result(D_OPERATOR_REVIEW_REQUIRED, source="source_ambiguity",
+                      owner=OWN_OPERATOR, confidence=selected_source_confidence,
+                      req_op=True, b_proj=bool(mandatory),
+                      action="operator to confirm the field treatment",
+                      note="unconfirmed mapping / pending operator decision")
+
+    # 7) An ND/default selection that conflicts with the regime envelope.
+    if conflicts:
+        return result(D_CONFIG_MAPPING_REQUIRED, source="config_conflict",
+                      owner=OWN_CONFIG, req_cfg=True, b_proj=True,
+                      action="align the selected ND/default with the allowed ND envelope",
+                      note="selected ND/default outside allowed envelope: " + "; ".join(conflicts))
+
+    # 8) Projection-only rule still pending.
     if is_deferred or cov in _PENDING_RULE:
         return result(D_PROJECTION_RULE_REQUIRED, source="regime_rule",
                       owner=OWN_PROJECTION, confidence=0.0, req_proj=True,
@@ -504,10 +556,11 @@ def decide_disposition(
                       action="implement or defer the projection rule for this field",
                       note="no source/default; deferred to a projection rule")
 
-    # 7) ND allowed but NO policy selected, or a genuine gap.
+    # 9) ND allowed but NO policy selected — needs an asset/client policy decision.
     if nd_allowed:
-        return result(D_UNRESOLVED_GAP, source="policy_gap", owner=OWN_CONFIG,
-                      req_cfg=True, b_val=bool(mandatory), b_proj=bool(mandatory),
+        return result(D_ASSET_POLICY_REQUIRED, source="policy_gap", owner=OWN_CONFIG,
+                      req_cfg=True, req_asset_policy=True,
+                      b_val=bool(mandatory), b_proj=bool(mandatory),
                       action="configure/client-confirm an ND/default reporting policy",
                       note="ND is permitted by the regulator but no policy has selected one")
 
@@ -558,6 +611,12 @@ def build_completion_checklist(
     not_applicable_set = {_norm(x) for x in (
         list(asset_policy.get("not_applicable", []) or [])
         + list(client_pol.get("not_applicable", []) or []))}
+    # Canonical fields whose ordinary source column is explicitly APPROVED to
+    # satisfy a formal regulatory identifier (otherwise client onboarding is
+    # required even when an ID-like column exists).
+    formal_approved_set = {_norm(x) for x in (
+        list(asset_policy.get("formal_identifier_source_approved", []) or [])
+        + list(client_pol.get("formal_identifier_source_approved", []) or []))}
 
     universe_fields = (field_universe or {}).get("fields") or {}
     # spine = union of universe codes and any regime/registry codes (defensive).
@@ -577,10 +636,16 @@ def build_completion_checklist(
                      or _to_str(cov.get("canonical_field")))
         canon_norm = _norm(canonical)
 
-        # ND envelope: prefer the regime projection rule, else the workbook universe.
-        nd_allowed = rule.get("nd_allowed") or _as_list(cov.get("nd_allowed"))
-        if not nd_allowed:
-            nd_allowed = _nd_from_universe(wb)
+        # ND envelope = UNION of the authoritative workbook universe permission
+        # and the regime projection rule. The universe is authoritative for what
+        # ND values are *allowed* (e.g. RREL40 permits ND1-ND5); the regime rule
+        # may narrow the projection set, but must not shrink what onboarding may
+        # legitimately ND-select. (Diagnosis: regime nd_allowed alone was too
+        # narrow — RREL40 showed only [ND5].)
+        nd_allowed = sorted(set(
+            [x.upper() for x in (rule.get("nd_allowed") or [])]
+            + _nd_from_universe(wb)
+            + _as_list(cov.get("nd_allowed"))))
         default_allowed = bool(rule.get("default_allowed")) or _truthy(cov.get("regime_default_allowed"))
         regime_default_value = _to_str(rule.get("default_value")) or _to_str(cov.get("regime_default_value"))
 
@@ -620,7 +685,10 @@ def build_completion_checklist(
             blocking_decision=_truthy(cov.get("blocking")),
             selected_source_confidence=sel_conf, applicability_status=appl_status,
             mandatory=mandatory, formal_client_field=formal,
-            not_applicable_field=not_applicable, client_pol=client_pol,
+            formal_approved=(canon_norm in formal_approved_set),
+            not_applicable_field=not_applicable,
+            has_regime_rule=bool(rule),
+            client_pol=client_pol,
             asset_defaults=asset_defaults, asset_nd_defaults=asset_nd_defaults,
             asset_policy=asset_policy,
             registry_applicability=reg.get("applicability") or {},
@@ -693,7 +761,9 @@ _DISPOSITION_TO_REVIEW = {
     D_OPERATOR_REVIEW_REQUIRED: RB_OPERATOR,
     D_SOURCE_MAPPED_REVIEW: RB_OPERATOR,
     D_CLIENT_ONBOARDING_REQUIRED: RB_CLIENT_INPUT,
+    D_FORMAL_IDENTIFIER_POLICY_REQUIRED: RB_CLIENT_INPUT,
     D_CONFIG_MAPPING_REQUIRED: RB_CONFIG,
+    D_ASSET_POLICY_REQUIRED: RB_ASSET_POLICY,
     D_PROJECTION_RULE_REQUIRED: RB_PROJECTION_RULE,
 }
 
@@ -841,8 +911,10 @@ def transformation_action_for_disposition(disposition: str) -> str:
         D_CALCULATION: "apply_calculation_rule",
         D_PROJECTION_RULE_REQUIRED: "carry_forward_for_projection",
         D_CLIENT_ONBOARDING_REQUIRED: "carry_forward_client_input_required",
+        D_FORMAL_IDENTIFIER_POLICY_REQUIRED: "carry_forward_client_input_required",
         D_OPERATOR_REVIEW_REQUIRED: "carry_forward_operator_decision",
         D_CONFIG_MAPPING_REQUIRED: "carry_forward_config_required",
+        D_ASSET_POLICY_REQUIRED: "carry_forward_config_required",
         D_NOT_APPLICABLE: "skip_not_applicable",
         D_UNRESOLVED_GAP: "carry_forward_unresolved_gap",
     }.get(disposition, "carry_forward_unresolved_gap")
@@ -866,8 +938,10 @@ def validation_classification_for_disposition(disposition: str) -> str:
         D_CALCULATION: "validation_pass",
         D_PROJECTION_RULE_REQUIRED: "projection_required",
         D_CLIENT_ONBOARDING_REQUIRED: "client_onboarding_required",
+        D_FORMAL_IDENTIFIER_POLICY_REQUIRED: "client_onboarding_required",
         D_OPERATOR_REVIEW_REQUIRED: "operator_required",
         D_CONFIG_MAPPING_REQUIRED: "config_required",
+        D_ASSET_POLICY_REQUIRED: "config_required",
         D_NOT_APPLICABLE: "acceptable_downstream_gap",
         D_UNRESOLVED_GAP: "config_required",
     }.get(disposition, "config_required")
@@ -886,8 +960,10 @@ def projection_status_for_disposition(disposition: str) -> str:
         D_CALCULATION: "projected_from_transformed",
         D_PROJECTION_RULE_REQUIRED: "projection_rule_required",
         D_CLIENT_ONBOARDING_REQUIRED: "blocked_client_onboarding_dependency",
+        D_FORMAL_IDENTIFIER_POLICY_REQUIRED: "blocked_client_onboarding_dependency",
         D_OPERATOR_REVIEW_REQUIRED: "blocked_operator_or_config_dependency",
         D_CONFIG_MAPPING_REQUIRED: "blocked_operator_or_config_dependency",
+        D_ASSET_POLICY_REQUIRED: "blocked_operator_or_config_dependency",
         D_NOT_APPLICABLE: "not_applicable",
         D_UNRESOLVED_GAP: "unresolved_source_mapping",
     }.get(disposition, "unresolved_source_mapping")

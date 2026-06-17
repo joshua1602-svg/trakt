@@ -34,7 +34,7 @@ nd_defaults:
   primary_income_verification: ND1        # RREL19
   secondary_income: ND1                   # RREL20
   secondary_income_verification: ND1      # RREL21
-  debt_to_income_ratio: ND1               # RREL40
+  debt_to_income_ratio: ND5               # RREL40 — DTI not captured for ERM (see reporting_policy.nd_policy)
 
   # --- 5. The "Not Applicable" Safety Net (ND2) ---
   # These fields exist in ESMA but are irrelevant for ERM

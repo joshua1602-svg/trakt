@@ -93,23 +93,41 @@ class TestChecklistCompleteness(unittest.TestCase):
         self.assertEqual(r["configured_default_value"], "ND5")
         self.assertFalse(r["blocking_for_projection"])
 
-    def test_rrel1_rrel2_client_onboarding_required(self):
+    def test_rrel1_rrel2_formal_identifier_policy_required(self):
+        # Formal regulatory identifiers are NOT satisfied by ordinary loan IDs
+        # unless an explicit approval policy exists.
         for code in ("RREL1", "RREL2"):
             r = self.by[code]
-            self.assertEqual(r["field_disposition"], tcc.D_CLIENT_ONBOARDING_REQUIRED)
+            self.assertEqual(r["field_disposition"], tcc.D_FORMAL_IDENTIFIER_POLICY_REQUIRED)
             self.assertTrue(r["requires_client_input"])
+            self.assertTrue(r["requires_formal_identifier_policy"])
             self.assertTrue(r["blocking_for_validation"])
             self.assertTrue(r["blocking_for_projection"])
             self.assertEqual(r["owner"], tcc.OWN_CLIENT)
 
+    def test_formal_identifier_source_approved_allows_source(self):
+        # With an explicit approval policy, the ordinary source column IS accepted.
+        cfgs = _real_configs()
+        asset_cfg = dict(cfgs["asset_cfg"])
+        rp = dict(asset_cfg.get("reporting_policy", {}))
+        rp["formal_identifier_source_approved"] = ["unique_identifier"]
+        asset_cfg["reporting_policy"] = rp
+        cov = {"RREL1": {"esma_code": "RREL1", "coverage_status": "source_mapped",
+                         "selected_source_confidence": 0.95}}
+        rows = _checklist(asset_cfg=asset_cfg, coverage_by_code=cov)
+        r = {x["esma_code"]: x for x in rows}["RREL1"]
+        self.assertEqual(r["field_disposition"], tcc.D_SOURCE_SUPPLIED)
+
     def test_nd_allowed_is_not_nd_selected(self):
         # RREC9 / RREL27 permit ND but, with no source and no selected policy in
-        # this fixture, must NOT be treated as completed-by-ND.
+        # this fixture, must NOT be completed-by-ND — they need an asset/client
+        # policy decision (ND allowed != ND selected).
         for code in ("RREC9", "RREL27"):
             r = self.by[code]
             self.assertTrue(r["nd_allowed"])              # ND permitted
             self.assertNotEqual(r["field_disposition"], tcc.D_ND_POLICY_SELECTED)
-            self.assertEqual(r["field_disposition"], tcc.D_UNRESOLVED_GAP)
+            self.assertEqual(r["field_disposition"], tcc.D_ASSET_POLICY_REQUIRED)
+            self.assertTrue(r["requires_asset_policy"])
 
 
 # --------------------------------------------------------------------------- #
@@ -128,14 +146,15 @@ class TestAssetSpecificity(unittest.TestCase):
             asset_class="residential_mortgage")}["RREL40"]
         self.assertEqual(bare["disposition_source"], "regime_config")
 
-    def test_field_without_any_selection_is_unresolved(self):
+    def test_field_without_any_selection_needs_asset_policy(self):
         # RREL27 permits ND but has no regime default and no asset/client policy
-        # here -> genuine config gap, never silently ND.
+        # here -> needs an asset/client policy decision, never silently ND.
         rows = _checklist(asset_cfg={"defaults": {}, "nd_defaults": {}},
                           asset_class="residential_mortgage")
         r = {x["esma_code"]: x for x in rows}["RREL27"]
-        self.assertEqual(r["field_disposition"], tcc.D_UNRESOLVED_GAP)
+        self.assertEqual(r["field_disposition"], tcc.D_ASSET_POLICY_REQUIRED)
         self.assertTrue(r["requires_config"])
+        self.assertTrue(r["requires_asset_policy"])
 
     def test_rrel24_not_generically_nd5_for_non_erm(self):
         rows = _checklist(asset_cfg={"defaults": {}, "nd_defaults": {}},
@@ -143,6 +162,38 @@ class TestAssetSpecificity(unittest.TestCase):
         r = {x["esma_code"]: x for x in rows}["RREL24"]
         self.assertNotEqual(r["configured_default_value"], "ND5")
         self.assertNotEqual(r["field_disposition"], tcc.D_ND_POLICY_SELECTED)
+
+    def test_rrel40_not_operator_review_when_policy_says_not_captured(self):
+        # Even if the coverage flags an ambiguity, a deliberate asset ND policy
+        # (DTI not captured) must win — never an operator mapping mystery.
+        cov = {"RREL40": {"esma_code": "RREL40", "coverage_status": "defaulted_ND",
+                          "selected_value_sample": "ND5", "asset_default_value": "ND1",
+                          "requires_user_decision": True, "blocking": True}}
+        r = {x["esma_code"]: x for x in _checklist(coverage_by_code=cov)}["RREL40"]
+        self.assertEqual(r["field_disposition"], tcc.D_ND_POLICY_SELECTED)
+        self.assertFalse(r["requires_operator_review"])
+        self.assertFalse(r["blocking_for_projection"])
+
+    def test_rrel40_traditional_uses_source_not_nd5(self):
+        # A traditional lender that captures DTI -> use the source, not ND5.
+        cov = {"RREL40": {"esma_code": "RREL40", "coverage_status": "source_mapped",
+                          "selected_source_confidence": 0.95,
+                          "selected_source_column": "DTI"}}
+        rows = _checklist(asset_cfg={"defaults": {}, "nd_defaults": {}},
+                          asset_class="residential_mortgage", coverage_by_code=cov)
+        r = {x["esma_code"]: x for x in rows}["RREL40"]
+        self.assertEqual(r["field_disposition"], tcc.D_SOURCE_SUPPLIED)
+        self.assertNotEqual(r["configured_default_value"], "ND5")
+
+    def test_source_candidate_alone_is_not_source_supplied(self):
+        # An enum field mapped to a source column, with no confirmation that the
+        # ESMA enum mapping is complete, is NOT source_supplied.
+        cov = {"RREL27": {"esma_code": "RREL27", "coverage_status": "source_mapped",
+                          "selected_source_confidence": 0.9}}  # no enum_coverage_status
+        r = {x["esma_code"]: x for x in _checklist(coverage_by_code=cov)}["RREL27"]
+        self.assertNotEqual(r["field_disposition"], tcc.D_SOURCE_SUPPLIED)
+        self.assertEqual(r["field_disposition"], tcc.D_CONFIG_MAPPING_REQUIRED)
+        self.assertTrue(r["requires_enum_mapping"])
 
     def test_client_policy_overrides_to_nd_policy(self):
         # A client policy can select an allowed ND even when the asset config is bare.
@@ -314,14 +365,16 @@ class TestHandoffIntegration(unittest.TestCase):
         self.assertTrue((project_dir / "29_target_contract_completion_checklist.csv").exists())
         self.assertTrue((project_dir / "29a_target_contract_review_bench.csv").exists())
         disp = completion["disposition_by_code"]
-        self.assertEqual(disp["RREL1"]["field_disposition"], tcc.D_CLIENT_ONBOARDING_REQUIRED)
+        self.assertEqual(disp["RREL1"]["field_disposition"],
+                         tcc.D_FORMAL_IDENTIFIER_POLICY_REQUIRED)
         self.assertEqual(disp["RREC9"]["field_disposition"], tcc.D_SOURCE_SUPPLIED)
 
         # the disposition columns are carried onto a handoff field-contract row.
         contract = [{"esma_code": "RREL1", "target_field": "RREL1",
                      "canonical_field": "unique_identifier"}]
         oh._apply_dispositions_to_contract(contract, disp)
-        self.assertEqual(contract[0]["field_disposition"], tcc.D_CLIENT_ONBOARDING_REQUIRED)
+        self.assertEqual(contract[0]["field_disposition"],
+                         tcc.D_FORMAL_IDENTIFIER_POLICY_REQUIRED)
         self.assertTrue(contract[0]["requires_client_input"])
 
     def test_build_is_robust_to_bad_config(self):
@@ -371,6 +424,31 @@ class TestProjectionExecutesDisposition(unittest.TestCase):
         self.assertEqual(iss["downstream_owner"], "client_onboarding")
         # still no XML / XML readiness.
         self.assertFalse(result["manifest"]["ready_for_xml_delivery"])
+
+    def test_config_mapping_disposition_is_config_not_source_gap(self):
+        # A config_mapping_required field must NOT be reported as an
+        # unresolved_source_mapping — that was the contradictory output.
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import test_projection_agent_workflow as tp
+        from engine.projection_agent import projection_agent as pa
+
+        root = Path(tempfile.mkdtemp(prefix="tcc_cfg_"))
+        mpath = tp._write_validation_package(root)
+        tx = root / "output" / "transformation" / "32_transformation_field_contract.csv"
+        with open(tx, "w", newline="", encoding="utf-8") as fh:
+            w = csv.DictWriter(fh, fieldnames=[
+                "esma_code", "canonical_field", "field_disposition"])
+            w.writeheader()
+            w.writerow({"esma_code": "RREC7", "canonical_field": "occupancy",
+                        "field_disposition": "config_mapping_required"})
+        result = pa.build_projection_package(mpath)
+        out = Path(result["projection_dir"])
+        resolution = json.loads(
+            (out / "56_projection_blocker_resolution.json").read_text())["rows"]
+        r = next(x for x in resolution if x["canonical_field"] == "occupancy")
+        self.assertEqual(r["onboarding_disposition"], "config_mapping_required")
+        self.assertEqual(r["projection_status"], pa.ST_BLOCKED_OP_CONFIG)
+        self.assertNotEqual(r["projection_status"], pa.ST_UNRESOLVED_SOURCE)
 
 
 if __name__ == "__main__":
