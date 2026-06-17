@@ -168,7 +168,27 @@ class TestClassifySubtypes(unittest.TestCase):
         rows = self._classify_one(iss, df)
         self.assertEqual(rows[0]["projection_blocker_subtype"], pbd.PB_OP_CONFIG_DEP)
 
-    def test_op_dep_via_peer_issue(self):
+    def test_op_dep_via_peer_issue_when_not_nd_eligible(self):
+        # A peer operator issue only drives PB_OP_CONFIG_DEP when the field is
+        # NOT materialised and NOT ND/default eligible (otherwise the more
+        # actionable subtype wins and the dependency shows in evidence columns).
+        proj_iss = _mk_issue(
+            issue_id="VAL-0001", canonical="originator_name",
+            esma="RREL82", classification="projection_required",
+            blocking_for_projection=True)
+        op_iss = _mk_issue(
+            issue_id="VAL-0002", canonical="originator_name",
+            esma="RREL82", classification="operator_required",
+            issue_type="operator_decision_pending", blocking_for_projection=True)
+        df = _mk_df(loan_identifier=["LN1", "LN2"])  # field absent, not ND-eligible
+        rows = pbd.classify_projection_blockers([proj_iss, op_iss], df, [], {})
+        by_id = {r["issue_id"]: r for r in rows}
+        self.assertEqual(by_id["VAL-0001"]["projection_blocker_subtype"], pbd.PB_OP_CONFIG_DEP)
+        self.assertTrue(by_id["VAL-0001"]["operator_dependency_present"])
+
+    def test_peer_dep_does_not_mask_materialisation(self):
+        # Requirement 5: a peer operator/config dependency must NOT mask clear
+        # materialisation/ND eligibility — the dependency is surfaced as evidence.
         proj_iss = _mk_issue(
             issue_id="VAL-0001", canonical="customer_type",
             classification="projection_required", blocking_for_projection=True)
@@ -179,9 +199,8 @@ class TestClassifySubtypes(unittest.TestCase):
         df = _mk_df(customer_type=["Individual", "Corporate"])
         rows = pbd.classify_projection_blockers([proj_iss, op_iss], df, [], {})
         by_id = {r["issue_id"]: r for r in rows}
-        # The projection_required issue becomes operator_or_config_dependency
-        # because a peer op issue exists for the same field.
-        self.assertEqual(by_id["VAL-0001"]["projection_blocker_subtype"], pbd.PB_OP_CONFIG_DEP)
+        self.assertEqual(by_id["VAL-0001"]["projection_blocker_subtype"], pbd.PB_MATERIALISED)
+        self.assertTrue(by_id["VAL-0001"]["operator_dependency_present"])
 
     # --- non-blocking issues excluded --------------------------------------
 
@@ -467,12 +486,15 @@ class TestAllSixSubtypes(unittest.TestCase):
         self.assertEqual(r["projection_blocker_subtype"], pbd.PB_OP_CONFIG_DEP)
 
     def test_operator_or_config_via_peer(self):
-        proj = _mk_issue("V006", "customer_type", classification="projection_required",
-                         blocking_for_projection=True)
-        peer_op = _mk_issue("V007", "customer_type", classification="operator_required",
+        # Peer dependency drives PB_OP_CONFIG_DEP only when the field is neither
+        # materialised nor ND/default eligible (absent + no ND envelope).
+        proj = _mk_issue("V006", "originator_name", esma="RREL82",
+                         classification="projection_required", blocking_for_projection=True)
+        peer_op = _mk_issue("V007", "originator_name", esma="RREL82",
+                            classification="operator_required",
                             issue_type="operator_decision_pending", blocking_for_projection=True)
         all_issues = [proj, peer_op]
-        rows = pbd.classify_projection_blockers(all_issues, _mk_df(customer_type=["Ind"]), [], {})
+        rows = pbd.classify_projection_blockers(all_issues, _mk_df(loan_identifier=["LN1"]), [], {})
         by_id = {r["issue_id"]: r for r in rows}
         self.assertEqual(by_id["V006"]["projection_blocker_subtype"], pbd.PB_OP_CONFIG_DEP)
 
@@ -488,6 +510,229 @@ class TestAllSixSubtypes(unittest.TestCase):
             # fallback for cases that bypass all other branches).
             st = rows[0]["projection_blocker_subtype"]
             self.assertIn(st, pbd.SUBTYPES)
+
+
+# --------------------------------------------------------------------------- #
+# Runtime ND/default visibility from universe + asset config (remediation)
+# --------------------------------------------------------------------------- #
+
+class TestNDVisibilityFromUniverseAndAsset(unittest.TestCase):
+    """RREL15/RREL24 ND eligibility must be visible even without a field_rules entry."""
+
+    # Workbook ND envelope keyed by ESMA code (as load_field_universe returns).
+    UNIVERSE = {
+        "RREL15": {"nd_allowed": ["ND1", "ND2", "ND3", "ND4"],
+                   "nd1_4_allowed": True, "nd5_allowed": False},
+        "RREL24": {"nd_allowed": ["ND5"], "nd1_4_allowed": False, "nd5_allowed": True},
+    }
+
+    def test_rrel15_nd_eligibility_visible_via_universe(self):
+        iss = _mk_issue("V1", "customer_type", esma="RREL15",
+                        classification="projection_required", blocking_for_projection=True)
+        # absent from tape, empty regime_index (not in field_rules), no asset default
+        rows = pbd.classify_projection_blockers(
+            [iss], _mk_df(loan_identifier=["LN1"]), [], {},
+            field_universe=self.UNIVERSE)
+        r = rows[0]
+        self.assertEqual(r["projection_blocker_subtype"], pbd.PB_ND_OR_DEFAULT)
+        self.assertTrue(r["nd_or_default_allowed"])
+        self.assertTrue(r["nd_default_possible"])
+        self.assertEqual(r["nd_or_default_source"], "field_universe")
+
+    def test_rrel15_no_invented_default_without_asset_config(self):
+        iss = _mk_issue("V1", "customer_type", esma="RREL15",
+                        classification="projection_required", blocking_for_projection=True)
+        rows = pbd.classify_projection_blockers(
+            [iss], _mk_df(loan_identifier=["LN1"]), [], {},
+            field_universe=self.UNIVERSE)
+        # ND-eligible but no concrete asset default configured -> asset_default_possible False
+        self.assertFalse(rows[0]["asset_default_possible"])
+
+    def test_rrel24_nd_eligibility_visible_via_universe(self):
+        iss = _mk_issue("V2", "maturity_date", esma="RREL24",
+                        classification="projection_required", blocking_for_projection=True)
+        rows = pbd.classify_projection_blockers(
+            [iss], _mk_df(loan_identifier=["LN1"]), [], {},
+            field_universe=self.UNIVERSE)
+        r = rows[0]
+        self.assertEqual(r["projection_blocker_subtype"], pbd.PB_ND_OR_DEFAULT)
+        self.assertTrue(r["nd_default_possible"])
+
+    def test_asset_default_source_attribution(self):
+        iss = _mk_issue("V2", "maturity_date", esma="RREL24",
+                        classification="projection_required", blocking_for_projection=True)
+        rows = pbd.classify_projection_blockers(
+            [iss], _mk_df(loan_identifier=["LN1"]), [], {},
+            field_universe={},  # no universe; eligibility must come from asset config
+            asset_nd_defaults={"maturity_date": "ND5"})
+        r = rows[0]
+        self.assertTrue(r["asset_default_possible"])
+        self.assertEqual(r["nd_or_default_source"], "asset_config")
+
+    def test_eligibility_source_from_tx_contract(self):
+        iss = _mk_issue("V3", "some_field", esma="RREL99",
+                        classification="projection_required", blocking_for_projection=True)
+        tx_contract = [{"canonical_field": "some_field", "default_value": "ND5"}]
+        rows = pbd.classify_projection_blockers(
+            [iss], _mk_df(loan_identifier=["LN1"]), tx_contract, {})
+        self.assertEqual(rows[0]["nd_or_default_source"], "transformation_contract")
+
+
+# --------------------------------------------------------------------------- #
+# build_regime_index universe merge
+# --------------------------------------------------------------------------- #
+
+class TestRegimeIndexUniverseMerge(unittest.TestCase):
+    def test_universe_only_code_synthesised(self):
+        from engine.validation_agent import rules_adapter as ra
+        universe = {"RREL24": {"nd_allowed": ["ND5"], "nd1_4_allowed": False,
+                               "nd5_allowed": True}}
+        idx = ra.build_regime_index(
+            {"field_rules": {}}, field_universe=universe,
+            code_to_canonical={"RREL24": "maturity_date"})
+        self.assertIn("maturity_date", idx)
+        self.assertEqual(idx["maturity_date"]["nd_allowed"], ["ND5"])
+        self.assertEqual(idx["maturity_date"]["nd_source"], "field_universe")
+        self.assertEqual(idx["maturity_date"]["rule_source"], "field_universe")
+
+    def test_field_rules_wins_over_universe(self):
+        from engine.validation_agent import rules_adapter as ra
+        regime = {"field_rules": {"RREL40": {
+            "projected_source_field": "debt_to_income_ratio",
+            "nd_allowed": ["ND5"], "default_allowed": True}}}
+        universe = {"RREL40": {"nd_allowed": ["ND1", "ND2"], "nd1_4_allowed": True,
+                               "nd5_allowed": False}}
+        idx = ra.build_regime_index(
+            regime, field_universe=universe,
+            code_to_canonical={"RREL40": "debt_to_income_ratio"})
+        # field_rules nd_allowed is preserved (not overwritten by universe)
+        self.assertEqual(idx["debt_to_income_ratio"]["nd_allowed"], ["ND5"])
+        self.assertEqual(idx["debt_to_income_ratio"]["nd_source"], "field_rules")
+
+    def test_universe_backfills_empty_field_rule(self):
+        from engine.validation_agent import rules_adapter as ra
+        regime = {"field_rules": {"RREL24": {
+            "projected_source_field": "maturity_date", "nd_allowed": []}}}
+        universe = {"RREL24": {"nd_allowed": ["ND5"], "nd1_4_allowed": False,
+                               "nd5_allowed": True}}
+        idx = ra.build_regime_index(
+            regime, field_universe=universe,
+            code_to_canonical={"RREL24": "maturity_date"})
+        self.assertEqual(idx["maturity_date"]["nd_allowed"], ["ND5"])
+        self.assertEqual(idx["maturity_date"]["nd_source"], "field_universe")
+
+
+# --------------------------------------------------------------------------- #
+# Transformation: ERM asset-config materialisation of maturity_date = ND5
+# --------------------------------------------------------------------------- #
+
+def _write_handoff_with_pending_field(
+    root: Path, *, canonical: str, esma: str, asset_config: str
+) -> Path:
+    """Handoff where `canonical` is pending_regime_rule and absent from the tape."""
+    output = root / "output"
+    handoff = output / "handoff"
+    central = output / "central"
+    handoff.mkdir(parents=True, exist_ok=True)
+    central.mkdir(parents=True, exist_ok=True)
+
+    with open(central / "18_central_lender_tape.csv", "w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["unique_identifier", "loan_identifier", "current_principal_balance"])
+        w.writerow(["LN0001", "LN0001", "1000"])
+        w.writerow(["LN0002", "LN0002", "2000"])
+
+    contract = [
+        {"target_field": "RREL1", "esma_code": "RREL1",
+         "canonical_field": "unique_identifier", "domain": "loan",
+         "coverage_status": "source_mapped", "selected_source_file": "raw.csv",
+         "selected_source_column": "Id", "selected_value_sample": "",
+         "handoff_classification": "source_mapped",
+         "downstream_owner": "transformation_validation", "notes": "",
+         "blocking_decision": False},
+        {"target_field": esma, "esma_code": esma,
+         "canonical_field": canonical, "domain": "loan",
+         "coverage_status": "pending_regime_rule", "selected_source_file": "",
+         "selected_source_column": "", "selected_value_sample": "",
+         "handoff_classification": "pending_regime_rule",
+         "downstream_owner": "projection", "notes": "no full regime rule",
+         "blocking_decision": False},
+    ]
+    cols = list(contract[0].keys())
+    with open(handoff / "26_onboarding_handoff_field_contract.csv", "w",
+              newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=cols)
+        w.writeheader()
+        for r in contract:
+            w.writerow(r)
+    (handoff / "26_onboarding_handoff_field_contract.json").write_text(
+        json.dumps({"target_contract_id": "esma_annex_2", "rows": contract}),
+        encoding="utf-8")
+    (handoff / "27_onboarding_handoff_lineage.json").write_text(
+        json.dumps({"rows": []}), encoding="utf-8")
+
+    manifest = {
+        "client_id": "client_001", "run_id": "run_mat",
+        "target_contract_id": "esma_annex_2",
+        "handoff_type": "canonical_onboarding_package",
+        "next_agent": "transformation_validation",
+        "not_raw_source": True, "do_not_rerun_gate1_on_central_tape": True,
+        "central_tape_path": "central/18_central_lender_tape.csv",
+        "blocking_decision_count": 0,
+        "asset_config_path": asset_config, "regime_config_path": REGIME,
+        "registry_path": REGISTRY,
+        "ready_for_transformation_validation": True,
+    }
+    mpath = handoff / "24_onboarding_handoff_manifest.json"
+    mpath.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return mpath
+
+
+class TestERMMaturityMaterialisation(unittest.TestCase):
+    def test_erm_materialises_maturity_date_nd5(self):
+        root = Path(tempfile.mkdtemp(prefix="mat_erm_"))
+        mpath = _write_handoff_with_pending_field(
+            root, canonical="maturity_date", esma="RREL24", asset_config=ASSET)
+        ta.build_transformation_package(mpath)
+        out = root / "output" / "transformation"
+        df = pd.read_csv(out / "31_transformed_canonical_tape.csv", dtype=str)
+        self.assertIn("maturity_date", df.columns)
+        self.assertEqual(df["maturity_date"].tolist(), ["ND5", "ND5"])
+        contract = json.loads(
+            (out / "32_transformation_field_contract.json").read_text())["rows"]
+        mrow = [r for r in contract if r["canonical_field"] == "maturity_date"][0]
+        self.assertEqual(mrow["transformation_status"], ta.TS_ND_DEFAULT)
+        self.assertFalse(mrow["blocking_for_projection"])
+        self.assertIn("asset_config", mrow["value_source"])
+        # lineage records the asset-config origin
+        lin = json.loads((out / "34_transformation_lineage.json").read_text())
+        mlin = [r for r in lin["transformation_lineage"]
+                if r["transformed_field"] == "maturity_date"][0]
+        self.assertIn("asset_config", mlin["default_source"])
+
+    def test_traditional_asset_does_not_default_maturity_date(self):
+        # A traditional asset config WITHOUT maturity_date must not get ND5.
+        root = Path(tempfile.mkdtemp(prefix="mat_trad_"))
+        trad_cfg = root / "product_defaults_TRAD.yaml"
+        trad_cfg.write_text(
+            "defaults:\n  exposure_currency_denomination: GBP\n"
+            "nd_defaults:\n  primary_income: ND1\n", encoding="utf-8")
+        mpath = _write_handoff_with_pending_field(
+            root, canonical="maturity_date", esma="RREL24",
+            asset_config=str(trad_cfg))
+        ta.build_transformation_package(mpath)
+        out = root / "output" / "transformation"
+        df = pd.read_csv(out / "31_transformed_canonical_tape.csv", dtype=str)
+        # maturity_date must NOT be blindly defaulted to ND5
+        if "maturity_date" in df.columns:
+            vals = [v for v in df["maturity_date"].tolist() if str(v) not in ("nan", "")]
+            self.assertNotIn("ND5", vals)
+        contract = json.loads(
+            (out / "32_transformation_field_contract.json").read_text())["rows"]
+        mrow = [r for r in contract if r["canonical_field"] == "maturity_date"][0]
+        # remains a projection blocker (pending), not silently defaulted
+        self.assertEqual(mrow["transformation_status"], ta.TS_PENDING_PROJECTION)
+        self.assertTrue(mrow["blocking_for_projection"])
 
 
 if __name__ == "__main__":

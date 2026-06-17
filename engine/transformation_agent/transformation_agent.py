@@ -496,6 +496,39 @@ def _materialise_run_context(
             "value": iso, "run_context": True, "source": source}
 
 
+def _materialise_asset_override(
+    df: pd.DataFrame,
+    tf: str,
+    canonical: str,
+    asset_defaults: Dict[str, Any],
+    asset_nd_defaults: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """Materialise an ASSET-config default into a field the handoff did not own.
+
+    Only fires when the asset config explicitly defines a value for ``canonical``
+    (``defaults`` or ``nd_defaults``). Fills blanks only; never overwrites an
+    existing source value. Returns ``None`` when the asset config has nothing for
+    this field, so non-ERM / traditional configs are completely unaffected.
+    """
+    if canonical in asset_defaults and not _is_blank(asset_defaults[canonical]):
+        value = str(asset_defaults[canonical]).strip()
+        source, is_nd = "asset_config_default", False
+    elif canonical in asset_nd_defaults and not _is_blank(asset_nd_defaults[canonical]):
+        value = str(asset_nd_defaults[canonical]).strip()
+        source, is_nd = "asset_config_nd_default", True
+    else:
+        return None  # asset config does not define this field — leave as-is
+
+    if canonical not in df.columns:
+        df[canonical] = pd.NA
+    col = df[canonical].astype("string")
+    blank_mask = col.isna() | (col.str.strip() == "") | (col.str.strip() == "<NA>")
+    if blank_mask.any():
+        df.loc[blank_mask, canonical] = value
+    return {"value_source": source, "materialised": True, "value": value,
+            "asset_override": True, "nd": is_nd}
+
+
 def _materialise_fields(
     df: pd.DataFrame,
     contract_rows: List[Dict[str, Any]],
@@ -529,7 +562,21 @@ def _materialise_fields(
             oh.HC_DEFAULT_DOWNSTREAM, oh.HC_ND_DEFAULT_DOWNSTREAM,
             oh.HC_CONFIGURED_STATIC,
         )
-        if not materialise or not canonical:
+        if not materialise:
+            # Asset-config-driven override: a field that the handoff left as
+            # pending_regime_rule / source_absent can still be materialised when
+            # the ASSET config explicitly defines a default/ND default for it
+            # (e.g. ERM product_defaults_ERM.yaml: maturity_date: ND5). This is
+            # strictly asset-specific — traditional asset configs that do not
+            # define the field are untouched, so they keep sourcing/validating it
+            # normally. Generic regime defaults are NOT used here.
+            if canonical and cls in (oh.HC_PENDING_REGIME_RULE, oh.HC_SOURCE_ABSENT):
+                res = _materialise_asset_override(
+                    df, tf, canonical, asset_defaults, asset_nd_defaults)
+                if res is not None:
+                    results[tf] = res
+            continue
+        if not canonical:
             continue
 
         value, source = _resolve_value(
@@ -658,6 +705,41 @@ def _finalise_contract(
         note = row.get("notes", "")
 
         res = field_results.get(tf, {})
+
+        # Asset-config override: the handoff left this field as
+        # pending_regime_rule / source_absent, but the ASSET config explicitly
+        # materialised a default/ND default for it (e.g. ERM maturity_date=ND5).
+        # The materialised value means it is no longer a missing-materialisation
+        # projection blocker. This is asset-specific by construction.
+        if res.get("asset_override") and res.get("materialised"):
+            status = TS_ND_DEFAULT if res.get("nd") else TS_DEFAULT
+            value_source = res.get("value_source", "")
+            owner = OWN_VALIDATION
+            note = (note + " | asset-config default materialised "
+                    f"({value_source})").strip(" |")
+            counts[status] = counts.get(status, 0) + 1
+            out.append({
+                "target_contract_id": row.get("target_contract_id", ""),
+                "esma_code": esma_code,
+                "target_field": tf,
+                "canonical_field": canonical,
+                "domain": row.get("domain", ""),
+                "coverage_status": row.get("coverage_status", ""),
+                "handoff_classification": cls,
+                "handoff_downstream_owner": handoff_owner,
+                "transformation_status": status,
+                "transformed_value_sample": _col_sample(df, canonical),
+                "value_source": value_source,
+                "type_cast": type_cast,
+                "enum_map_used": enum_map_used,
+                "parse_rule": parse_rule,
+                "issue_id": "",
+                "blocking_for_validation": False,
+                "blocking_for_projection": False,
+                "downstream_owner": owner,
+                "notes": note,
+            })
+            continue
 
         if cls == oh.HC_SEMANTIC_DERIVATION_REQUIRED or (
                 canonical and oh.is_semantic_derivation(canonical, row.get("selected_source_column", ""))):

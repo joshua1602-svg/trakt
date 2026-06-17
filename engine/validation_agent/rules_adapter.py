@@ -63,21 +63,105 @@ def load_enum_lib(config_dir: str = "") -> Dict[str, Any]:
         return {}
 
 
-def build_regime_index(regime_cfg: Optional[dict]) -> Dict[str, Dict[str, Any]]:
-    """Index regime field rules by canonical field name (projected_source_field)."""
+def _nd_from_universe_meta(meta: Dict[str, Any]) -> List[str]:
+    """Translate workbook ND flags (nd1_4_allowed / nd5_allowed) to ND codes."""
+    nd: List[str] = []
+    if meta.get("nd1_4_allowed"):
+        nd += ["ND1", "ND2", "ND3", "ND4"]
+    if meta.get("nd5_allowed"):
+        nd += ["ND5"]
+    return nd
+
+
+def load_field_universe(universe_path: str) -> Dict[str, Dict[str, Any]]:
+    """Load the authoritative Annex 2 workbook universe, keyed by ESMA code.
+
+    Returns ``{code: {field_name, nd1_4_allowed, nd5_allowed, nd_allowed, ...}}``.
+    The ND envelope here (``nd1_4_allowed`` / ``nd5_allowed``) is the authoritative
+    regulatory source and is used as fallback metadata when a code has no full
+    runtime rule in ``annex2_delivery_rules.yaml → field_rules``.
+    """
+    try:
+        import yaml
+        raw = yaml.safe_load(Path(universe_path).read_text(encoding="utf-8")) or {}
+    except Exception:
+        return {}
+    fields = raw.get("fields", raw) if isinstance(raw, dict) else {}
+    out: Dict[str, Dict[str, Any]] = {}
+    for code, meta in (fields or {}).items():
+        meta = meta or {}
+        out[str(code)] = {
+            "field_name": meta.get("field_name", ""),
+            "nd1_4_allowed": bool(meta.get("nd1_4_allowed")),
+            "nd5_allowed": bool(meta.get("nd5_allowed")),
+            "nd_allowed": _nd_from_universe_meta(meta),
+            "format": meta.get("format", ""),
+        }
+    return out
+
+
+def build_regime_index(
+    regime_cfg: Optional[dict],
+    *,
+    field_universe: Optional[Dict[str, Dict[str, Any]]] = None,
+    code_to_canonical: Optional[Dict[str, str]] = None,
+) -> Dict[str, Dict[str, Any]]:
+    """Index regime field rules by canonical field name (projected_source_field).
+
+    ``field_rules`` from ``annex2_delivery_rules.yaml`` are the **active runtime
+    rules**. When ``field_universe`` (+ a ``code_to_canonical`` map) is supplied,
+    the authoritative workbook ND envelope is merged in two ways:
+
+      * for codes that already have a runtime rule, an empty ``nd_allowed`` is
+        backfilled from the workbook ND flags (the rule still wins where set);
+      * for codes that have **no** runtime rule at all (e.g. RREL15, RREL24),
+        a fallback entry is synthesised so ND/default eligibility is visible at
+        runtime without hand-authoring a full rule.
+
+    ``nd_source`` records where the ND envelope came from (``field_rules`` or
+    ``field_universe``) for diagnostic evidence.
+    """
+    field_universe = field_universe or {}
+    code_to_canonical = code_to_canonical or {}
+
     out: Dict[str, Dict[str, Any]] = {}
     for code, rule in ((regime_cfg or {}).get("field_rules", {}) or {}).items():
         rule = rule or {}
         canonical = rule.get("projected_source_field", "")
         if canonical:
+            nd_allowed = rule.get("nd_allowed", []) or []
+            nd_source = "field_rules"
+            wb = field_universe.get(str(code), {})
+            if not nd_allowed and wb.get("nd_allowed"):
+                nd_allowed = wb["nd_allowed"]
+                nd_source = "field_universe"
             out[canonical] = {
                 "esma_code": code,
                 "mandatory": bool(rule.get("mandatory", False)),
                 "enforce_presence": bool(rule.get("enforce_presence", False)),
-                "nd_allowed": rule.get("nd_allowed", []) or [],
+                "nd_allowed": nd_allowed,
                 "default_allowed": bool(rule.get("default_allowed", False)),
                 "regex": (rule.get("validators", {}) or {}).get("regex", ""),
+                "nd_source": nd_source,
+                "rule_source": "field_rules",
             }
+
+    # Fallback: synthesise entries for workbook codes with no runtime rule so the
+    # ND envelope is visible to validation/diagnostics. field_rules always wins.
+    for code, wb in field_universe.items():
+        canonical = code_to_canonical.get(str(code), "")
+        if not canonical or canonical in out:
+            continue
+        out[canonical] = {
+            "esma_code": code,
+            "mandatory": False,
+            "enforce_presence": False,
+            "nd_allowed": wb.get("nd_allowed", []) or [],
+            "default_allowed": False,
+            "regex": "",
+            "nd_source": "field_universe",
+            "rule_source": "field_universe",
+        }
     return out
 
 
