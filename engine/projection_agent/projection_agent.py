@@ -107,6 +107,21 @@ _DISP_CONFIG = {DISP_CONFIG_MAPPING, DISP_ASSET_POLICY}
 # — it is carried as an operator dependency until the operator confirms.
 _DISP_OPERATOR = {DISP_OPERATOR_REVIEW, DISP_SOURCE_MAPPED_REVIEW}
 
+# Onboarding dispositions for which the TARGET FRAME must NOT be filled with a
+# generic ND/default (or an unconfirmed source value). The field is carried as
+# unresolved per its disposition instead of being silently defaulted.
+DISP_CLIENT_POLICY_REQUIRED = "client_policy_required"
+_DISP_SUPPRESS_FRAME_DEFAULT = (
+    _DISP_CLIENT | _DISP_CONFIG | _DISP_OPERATOR | {DISP_CLIENT_POLICY_REQUIRED}
+)
+
+
+def _frame_status_for_disposition(disposition: str) -> str:
+    """Map a suppressed onboarding disposition to a blocked target-frame status."""
+    if disposition in _DISP_CLIENT:
+        return ST_BLOCKED_CLIENT
+    return ST_BLOCKED_OP_CONFIG
+
 _FRAME_COLUMNS = [
     "row_id", "loan_identifier", "record_group", "esma_code", "canonical_field",
     "projected_value", "projected_value_type", "value_source", "projection_status",
@@ -455,8 +470,11 @@ def build_projection_package(
     ordered_codes = g4.order_esma_codes(list(proj_index.keys()), record_order)
 
     # 5) build the projected Annex 2 target frame (one row per loan x field).
+    #    Honour the onboarding disposition so a field flagged for operator/config/
+    #    client review is NOT filled with a generic ND/default.
     frame_rows, field_summary, field_problems = _build_target_frame(
-        df, proj_index, ordered_codes, asset_defaults, asset_nd_defaults)
+        df, proj_index, ordered_codes, asset_defaults, asset_nd_defaults,
+        disposition_by_field=disposition_by_field)
 
     # 6) build the blocker-resolution report from 46 + the field summary.
     resolution_rows, issues = _resolve_blockers(
@@ -510,8 +528,16 @@ def _build_target_frame(
     ordered_codes: List[str],
     asset_defaults: Dict[str, Any],
     asset_nd_defaults: Dict[str, Any],
+    disposition_by_field: Optional[Dict[str, str]] = None,
 ):
-    """Return (frame_rows, field_summary, field_problems)."""
+    """Return (frame_rows, field_summary, field_problems).
+
+    Honours the onboarding disposition: for fields the onboarding agent flagged as
+    operator/config/client-policy/formal-identifier unresolved, the target frame is
+    NOT populated with a generic ND/default (or an unconfirmed source value) — the
+    cell is carried as a blocked dependency instead.
+    """
+    disposition_by_field = disposition_by_field or {}
     frame_rows: List[Dict[str, Any]] = []
     # field_summary[esma_code] = aggregate counts + representative sample/status.
     field_summary: Dict[str, Dict[str, Any]] = {}
@@ -538,7 +564,21 @@ def _build_target_frame(
             rule = proj_index[code]
             canonical = rule["canonical_field"]
             raw = df.at[idx, canonical] if canonical in df.columns else ""
-            cell = _project_cell(raw, rule, asset_defaults, asset_nd_defaults)
+            disposition = (disposition_by_field.get(canonical)
+                           or disposition_by_field.get(code) or "")
+            if disposition in _DISP_SUPPRESS_FRAME_DEFAULT:
+                # Do NOT default/project — carry as a blocked dependency per the
+                # onboarding disposition (e.g. RREC17 operator_review must not be
+                # silently filled with ND1).
+                cell = {
+                    "projected_value": "", "projected_value_type": "blocked",
+                    "value_source": "onboarding_disposition",
+                    "projection_status": _frame_status_for_disposition(disposition),
+                    "nd_applied": False, "default_applied": False,
+                    "blocking_for_delivery": True, "problem": None,
+                }
+            else:
+                cell = _project_cell(raw, rule, asset_defaults, asset_nd_defaults)
 
             rid += 1
             frame_rows.append({

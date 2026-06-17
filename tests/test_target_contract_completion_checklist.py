@@ -518,6 +518,59 @@ class TestProjectionExecutesDisposition(unittest.TestCase):
         self.assertFalse(r["resolved"])  # NOT auto-resolved via ND
         self.assertEqual(r["projection_status"], pa.ST_BLOCKED_OP_CONFIG)
 
+    def test_target_frame_not_nd_defaulted_under_operator_review(self):
+        # The RREC17 bug: the blocker resolution correctly carried the field as an
+        # operator dependency, but the projected TARGET FRAME still filled ND1.
+        # The frame must now be blank/blocked, aligned with 56_resolution.
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import test_projection_agent_workflow as tp
+        from engine.projection_agent import projection_agent as pa
+
+        root = Path(tempfile.mkdtemp(prefix="tcc_frame_"))
+        mpath = tp._write_validation_package(root)
+        tx = root / "output" / "transformation" / "32_transformation_field_contract.csv"
+        with open(tx, "w", newline="", encoding="utf-8") as fh:
+            w = csv.DictWriter(fh, fieldnames=["esma_code", "canonical_field", "field_disposition"])
+            w.writeheader()
+            # primary_income (RREL16) has an asset ND default that WOULD be filled.
+            w.writerow({"esma_code": "RREL16", "canonical_field": "primary_income",
+                        "field_disposition": "operator_review_required"})
+        result = pa.build_projection_package(mpath)
+        out = Path(result["projection_dir"])
+        frame = json.loads(
+            (out / "51_projected_annex2_target_frame.json").read_text())["rows"]
+        cells = [c for c in frame if c["esma_code"] == "RREL16"]
+        self.assertTrue(cells)
+        for c in cells:
+            self.assertEqual(c["projected_value"], "")          # NOT ND1
+            self.assertFalse(c["nd_applied"])
+            self.assertFalse(c["default_applied"])
+            self.assertEqual(c["projection_status"], pa.ST_BLOCKED_OP_CONFIG)
+        # frame status aligns with the blocker resolution.
+        resolution = json.loads(
+            (out / "56_projection_blocker_resolution.json").read_text())["rows"]
+        r = next(x for x in resolution if x["validation_issue_id"] == "VAL-0002")
+        self.assertEqual(r["projection_status"], cells[0]["projection_status"])
+        # conservative readiness preserved.
+        self.assertFalse(result["manifest"]["ready_for_delivery_normalisation"])
+        self.assertFalse(result["manifest"]["ready_for_xml_delivery"])
+
+    def test_frame_default_still_applied_without_suppressing_disposition(self):
+        # Sanity: a field WITHOUT a suppressing disposition still gets its ND/default.
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import test_projection_agent_workflow as tp
+        from engine.projection_agent import projection_agent as pa
+
+        root = Path(tempfile.mkdtemp(prefix="tcc_frame_ok_"))
+        mpath = tp._write_validation_package(root)
+        result = pa.build_projection_package(mpath)  # no disposition on 32
+        out = Path(result["projection_dir"])
+        frame = json.loads(
+            (out / "51_projected_annex2_target_frame.json").read_text())["rows"]
+        cells = [c for c in frame if c["esma_code"] == "RREL16"]
+        self.assertTrue(any(c["projected_value"] == "ND1" and c["nd_applied"]
+                            for c in cells))
+
 
 if __name__ == "__main__":
     unittest.main()
