@@ -91,9 +91,15 @@ IT_LEGACY = "legacy_projector_incompatible"
 IT_DELIVERY_DEFERRED = "delivery_structure_deferred"
 IT_CLIENT_ONBOARDING = "client_onboarding_dependency_unresolved"
 
-# Onboarding disposition (carried via the transformation contract) for a field
-# that must be obtained during formal client onboarding.
+# Onboarding dispositions (carried via the transformation contract) that the
+# Projection Agent must execute coherently rather than rediscovering as generic
+# source-mapping gaps.
 DISP_CLIENT_ONBOARDING = "client_onboarding_required"
+DISP_FORMAL_IDENTIFIER = "formal_identifier_policy_required"
+DISP_CONFIG_MAPPING = "config_mapping_required"
+DISP_ASSET_POLICY = "asset_policy_required"
+_DISP_CLIENT = {DISP_CLIENT_ONBOARDING, DISP_FORMAL_IDENTIFIER}
+_DISP_CONFIG = {DISP_CONFIG_MAPPING, DISP_ASSET_POLICY}
 
 _FRAME_COLUMNS = [
     "row_id", "loan_identifier", "record_group", "esma_code", "canonical_field",
@@ -667,21 +673,37 @@ def _resolve_blockers(
         remaining_issue_id = ""
         notes = ""
 
-        # EXECUTE the onboarding disposition first: a field the onboarding agent
-        # marked client_onboarding_required is carried as a client/onboarding
-        # blocker, never rediscovered as a generic source-mapping gap.
-        if onboarding_disposition == DISP_CLIENT_ONBOARDING:
+        # EXECUTE the onboarding disposition first so downstream instructions are
+        # never contradictory: a field marked client_onboarding/formal-identifier
+        # is carried as a client dependency; a config_mapping/asset_policy field is
+        # carried as a config dependency — never rediscovered as a source gap.
+        if onboarding_disposition in _DISP_CLIENT:
             action = "carry forward client/onboarding dependency (per onboarding disposition)"
             status = ST_BLOCKED_CLIENT
             remaining_issue_id = _new_issue(
                 esma_code=esma, canonical=canonical, record_group=record_group,
                 issue_type=IT_CLIENT_ONBOARDING, status=ST_BLOCKED_CLIENT,
                 severity="warn", blocking_delivery=True,
-                action="request the formal identifier/value from the client, then re-project",
+                action="request/approve the formal identifier/value from the client, then re-project",
                 owner="client_onboarding",
-                desc=f"{canonical or esma} marked client_onboarding_required by the onboarding disposition",
+                desc=f"{canonical or esma} requires client onboarding per the onboarding disposition "
+                     f"({onboarding_disposition})",
                 source_issue_id=val_issue_id)
-            notes = "executed onboarding disposition: client_onboarding_required"
+            notes = f"executed onboarding disposition: {onboarding_disposition}"
+
+        elif onboarding_disposition in _DISP_CONFIG:
+            action = "carry forward config dependency (per onboarding disposition)"
+            status = ST_BLOCKED_OP_CONFIG
+            remaining_issue_id = _new_issue(
+                esma_code=esma, canonical=canonical, record_group=record_group,
+                issue_type=IT_CONFIG, status=ST_BLOCKED_OP_CONFIG,
+                severity="warn", blocking_delivery=True,
+                action="complete the enum/config mapping or asset/client policy, then re-project",
+                owner=OWN_CONFIG,
+                desc=f"{canonical or esma} requires config/policy per the onboarding disposition "
+                     f"({onboarding_disposition}) — not a source-mapping gap",
+                source_issue_id=val_issue_id)
+            notes = f"executed onboarding disposition: {onboarding_disposition}"
 
         elif subtype == PB_OP_CONFIG_DEP:
             # never resolved by the projection agent — carried forward.

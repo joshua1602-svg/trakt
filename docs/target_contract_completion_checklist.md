@@ -45,12 +45,56 @@ Module: `engine/onboarding_agent/target_contract_completion.py`.
 `client_policy_default_supplied`, `configured_static_supplied`,
 `nd_policy_selected`, `derivation_configured`, `calculation_configured`,
 `projection_rule_required`, `client_onboarding_required`,
-`operator_review_required`, `config_mapping_required`, `not_applicable`,
+`formal_identifier_policy_required`, `operator_review_required`,
+`config_mapping_required`, `asset_policy_required`, `not_applicable`,
 `unresolved_gap`.
 
 Each row also carries secondary flags: `requires_client_input`,
 `requires_operator_review`, `requires_config`, `requires_projection_rule`,
-`requires_derivation`, and `blocking_for_{onboarding_handoff,transformation,validation,projection}`.
+`requires_derivation`, `requires_enum_mapping`,
+`requires_formal_identifier_policy`, `requires_asset_policy`, and
+`blocking_for_{onboarding_handoff,transformation,validation,projection}`.
+
+## Candidate found ≠ approved field treatment complete
+
+The classifier separates these concepts and never confuses a *candidate* for a
+*completed* treatment:
+
+```text
+source_candidate_found → source_selected → source_approved_for_target_field
+                       → source_projectable → field_disposition_complete
+```
+
+A field is only `source_supplied` when the source is **selected, approved for
+that ESMA field, sufficiently mapped/normalised, and not dependent on an
+unresolved enum/config/projection rule**. Otherwise a more accurate disposition
+is used: `source_mapped_with_review`, `config_mapping_required` (enum/projection
+mapping incomplete), `projection_rule_required` (no rule maps the source yet),
+`operator_review_required` (multiple plausible columns),
+`formal_identifier_policy_required` / `client_onboarding_required`,
+`asset_policy_required`, or `unresolved_gap`.
+
+## Classifier priority order
+
+```text
+0. not_applicable
+1. formal regulatory identifier without approved policy → formal_identifier_policy_required
+2. deliberate client/asset policy selected (reporting_policy / registry applicability)
+   — OVERRIDES source ambiguity (a field the product does not capture is ND-selected)
+3. approved, complete, projectable source → source_supplied
+   (enum incomplete → config_mapping_required; no regime rule → projection_rule_required)
+4. derivation configured → derivation_configured
+5. fallback configured default / ND (asset defaults / nd_defaults / regime default_value)
+6. ambiguous (source_mapped_alt) → operator_review_required;
+   single source flagged → source_mapped_with_review
+7. selected ND/default outside the allowed envelope → config_mapping_required
+8. deferred / pending → projection_rule_required
+9. ND allowed but no policy selected → asset_policy_required   (ND allowed ≠ ND selected)
+10. nothing → unresolved_gap
+```
+
+`source ambiguity` never overrides a deliberate asset/client policy that says the
+field is not captured and should be ND-selected.
 
 ## ND allowed ≠ ND selected
 
@@ -63,7 +107,16 @@ A field is **not** completed merely because ND is allowed. It is completed only
 when a policy layer (client → asset → registry asset-applicability → regime
 configured default) has actually *selected* a valid ND/default, or it is
 explicitly deferred to projection with a known rule. Otherwise it is an
-`unresolved_gap` and goes to the review bench — it does **not** silently ND.
+`asset_policy_required` item that goes to the review bench — it does **not**
+silently ND.
+
+**ND permission is taken from the authoritative field universe, merged with the
+regime envelope.** The `nd_allowed` shown on the checklist is the union of the
+workbook universe permission and the regime projection rule. (Diagnosis: the
+regime `annex2_delivery_rules.yaml` had narrowed RREL40 to `[ND5]`, which was
+narrower than the authoritative universe — RREL40 permits ND1–ND5 — and caused a
+spurious "ND1 not in nd_allowed [ND5]" conflict. The union fixes this without
+hard-coding.)
 
 ## Asset policy vs client policy vs generic regime
 
@@ -87,9 +140,12 @@ The asset `reporting_policy:` block added to `product_defaults_ERM.yaml`:
 
 ```yaml
 reporting_policy:
-  formal_client_onboarding_required:        # not expected in an ordinary loan tape
-    - unique_identifier                      # RREL1
+  formal_client_onboarding_required:         # not expected in an ordinary loan tape
+    - unique_identifier                       # RREL1
     - original_underlying_exposure_identifier # RREL2
+  # ordinary source columns explicitly APPROVED to satisfy a formal identifier
+  # (otherwise a formal identifier stays client_onboarding-required):
+  formal_identifier_source_approved: []
   nd_policy:                                 # ND SELECTED for this asset class
     debt_to_income_ratio: ND5                # RREL40 — DTI not captured for ERM
     maturity_date: ND5                       # RREL24 — lifetime mortgage, no term
@@ -100,33 +156,56 @@ reporting_policy:
 
 ### RREL40 `debt_to_income_ratio`
 For this equity-release lender, borrower income / DTI is not captured and is not a
-relevant metric. RREL40 permits ND and is a percentage field.
+relevant metric. RREL40 permits ND (ND1–ND5 per the universe) and is a percentage
+field.
 
-* ERM (asset `nd_policy: ND5`) → `nd_policy_selected`, `disposition_source = asset_config`, not blocking.
-* No asset policy, but the regime configures `default_value: ND5` → `nd_policy_selected`, `disposition_source = regime_config`.
-* A field with **no** selection at any layer → `unresolved_gap`, `requires_config = true`, surfaced on the review bench.
+* ERM (asset `reporting_policy.nd_policy: ND5`) → `nd_policy_selected`,
+  `disposition_source = asset_config`, `requires_operator_review = false`,
+  `blocking_for_projection = false`. This holds **even when the coverage matrix
+  flags an ambiguity** — the deliberate "not captured" policy wins, so RREL40 is
+  never an operator mapping mystery.
+* Traditional lender that **captures** DTI → `source_supplied` (use the source,
+  not ND5).
+* No source and **no** asset/client policy (and no regime default) →
+  `asset_policy_required`, `requires_asset_policy = true`, surfaced on the review
+  bench.
 
 It is **not** hard-coded to ND5: the value comes from the asset/client/regime
-config, and the source layer is recorded.
+config, and the deciding layer is recorded in `disposition_source`.
 
 ### RREL24 `maturity_date`
 * ERM / lifetime mortgage → `nd_policy_selected` (`ND5`) via the asset policy / registry `applicability.equity_release`.
 * Traditional amortising asset (no policy) → `source_supplied` / `derivation_configured` / `unresolved_gap` depending on source/config — **never** generically ND5.
 
 ### RREL1 / RREL2 (formal identifiers)
-Not present in uploaded files and not inferable from ordinary loan IDs →
-`client_onboarding_required`, `requires_client_input = true`,
-`blocking_for_validation = true`, `blocking_for_projection = true`,
-`owner = client_onboarding`. Recommended action: request the formal regulatory
-exposure identifiers from the client.
+Formal regulatory identifiers are **not** satisfied by ordinary loan / account /
+policy IDs merely because such a column exists. By default →
+`formal_identifier_policy_required`, `requires_client_input = true`,
+`requires_formal_identifier_policy = true`, `blocking_for_validation = true`,
+`blocking_for_projection = true`, `owner = client_onboarding`. Recommended action:
+request/approve a formal regulatory identifier policy.
 
-### RREC9 `property_type` / RREL27 `purpose`
-* source present + enum mapping complete → `source_supplied`;
-* multiple plausible source columns → `operator_review_required`;
-* source values present but enum mapping incomplete → `config_mapping_required`
-  (a **config** blocker, never misclassified as a data failure);
-* no source and a selected ND/default policy → `nd_policy_selected`; otherwise
-  `operator_review_required` / `unresolved_gap`.
+Only when an explicit approval exists (asset/client
+`reporting_policy.formal_identifier_source_approved: [unique_identifier, …]`) is
+`source_supplied` accepted for the ordinary column.
+
+### RREL27 `purpose`
+The source exists (e.g. `Remortgage`) but the ESMA enum mapping is not confirmed
+complete, so the value is not yet safely projectable → `config_mapping_required`,
+`requires_config = true`, `requires_enum_mapping = true`, `owner = config_policy`.
+It is **not** marked `source_supplied` until the value is both selected and
+safely projectable (enum/projection mapping present). An enum/LIST field that is
+source-mapped is only `source_supplied` when the coverage confirms the enum
+mapping is complete.
+
+### RREC9 `property_type`
+* source present + enum mapping confirmed complete → `source_supplied`;
+* multiple plausible source columns → `operator_review_required`
+  (`disposition_source = source_ambiguity`);
+* source present but enum mapping not confirmed → `config_mapping_required`.
+
+The same `operator_review_required` outcome is expected for RREL43, RREC13 and
+RREC17 when multiple plausible rate/valuation columns remain.
 
 ## Review bench
 
