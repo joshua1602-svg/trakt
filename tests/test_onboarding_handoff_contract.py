@@ -257,6 +257,29 @@ class TestHandoffWorkflow(unittest.TestCase):
         self.assertFalse(s["ready_for_xml_delivery"])
         self.assertTrue(Path(s["onboarding_handoff_manifest_json"]).exists())
 
+    def test_summary_carries_lifecycle_messaging(self):
+        s = self.summary
+        self.assertTrue(s["handoff_created"])
+        self.assertTrue(s["handoff_manifest_path"].endswith(
+            "24_onboarding_handoff_manifest.json"))
+        self.assertEqual(s["next_agent"], "transformation_validation")
+        # Onboarding next action reflects readiness, not "continue until XML".
+        self.assertIn("ready for Transformation & Validation",
+                      s["next_operator_action"])
+        self.assertIn("output/handoff/24_onboarding_handoff_manifest.json",
+                      s["next_operator_action"])
+        self.assertNotIn("Complete the regime config", s["onboarding_next_action"])
+        # The old config message is retained only as the downstream action.
+        self.assertIn("Complete the regime config", s["downstream_next_action"])
+
+    def test_summary_md_separates_readiness_levels(self):
+        md = (self.out / "40_operator_workflow_summary.md").read_text()
+        self.assertIn("## Onboarding handoff", md)
+        self.assertIn("READY for Transformation & Validation", md)
+        self.assertIn("Projection readiness: NOT READY", md)
+        self.assertIn("XML delivery readiness: NOT READY", md)
+        self.assertIn("## Downstream / projection next action", md)
+
     def test_review_pack_shows_handoff_section(self):
         html = (self.out / "08_onboarding_review_pack.html").read_text()
         self.assertIn("Onboarding handoff", html)

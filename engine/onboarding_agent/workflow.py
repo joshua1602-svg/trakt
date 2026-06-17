@@ -122,6 +122,67 @@ def _next_action(stage: str, status: str, advisor_enabled: bool) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Lifecycle-aware handoff messaging (messaging only — no logic change)
+# ---------------------------------------------------------------------------
+
+# Suggested human-readable readiness statements.
+HANDOFF_READY_MSG = "Onboarding handoff: READY for Transformation & Validation."
+HANDOFF_NOT_READY_MSG = (
+    "Onboarding handoff: NOT READY — resolve blocking decisions / registry gaps "
+    "before handing off to Transformation & Validation.")
+PROJECTION_NOT_READY_MSG = (
+    "Projection readiness: NOT READY — pending regime/projection rules remain.")
+PROJECTION_READY_MSG = "Projection readiness: READY."
+XML_NOT_READY_MSG = (
+    "XML delivery readiness: NOT READY — Transformation/Validation and Projection "
+    "have not yet produced an XML-ready target frame.")
+XML_READY_MSG = "XML delivery readiness: READY."
+
+
+def _handoff_next_actions(
+    *,
+    ready_tv: bool,
+    ready_proj: bool,
+    ready_xml: bool,
+    manifest_path: str,
+    contract_path: str,
+    base_action: str,
+) -> Dict[str, str]:
+    """Lifecycle-aware next-action wording for a run that produced a handoff.
+
+    ``base_action`` is the existing (onboarding-centric) ``next_operator_action``;
+    it is retained as the *downstream/projection* action — never as the primary
+    Onboarding next step once the handoff is ready.
+    """
+    if ready_tv:
+        onboarding_next = HANDOFF_READY_MSG
+        downstream_next = (
+            base_action if (not ready_proj and base_action) else (
+                "Projection is ready." if ready_proj else
+                "Complete the downstream regime/projection rules and materialise "
+                "downstream defaults; see 43_annex2_field_universe_reconciliation."))
+        primary = (
+            "Onboarding handoff is ready for Transformation & Validation. "
+            "Projection/XML delivery is not yet ready: pending regime/projection "
+            "rules, downstream defaults, or unresolved derivations remain. "
+            f"The next agent should consume {manifest_path} and {contract_path}."
+        ) if not (ready_proj and ready_xml) else (
+            "Onboarding handoff is ready for Transformation & Validation. "
+            f"The next agent should consume {manifest_path} and {contract_path}.")
+    else:
+        # Handoff not ready: the onboarding-centric action remains primary.
+        onboarding_next = HANDOFF_NOT_READY_MSG
+        downstream_next = base_action
+        primary = base_action
+    return {
+        "onboarding_next_action": onboarding_next,
+        "downstream_next_action": downstream_next,
+        "next_operator_action": primary,
+    }
+
+
+
+# ---------------------------------------------------------------------------
 # Summary assembly (reads existing artefacts — never mutates them)
 # ---------------------------------------------------------------------------
 
@@ -464,6 +525,28 @@ def _write_summary_md(path: Path, s: Dict[str, Any]) -> None:
         f"- Decisions reviewed: {s['llm_target_advisor_rows']}",
         f"- Decisions advised: {s['llm_target_advisor_advised_count']}",
         f"- Estimated cost: £{s['llm_target_advisor_estimated_cost_gbp']}", "",
+    ]
+    if s.get("handoff_created"):
+        ready_tv = bool(s.get("ready_for_transformation_validation"))
+        ready_proj = bool(s.get("ready_for_projection"))
+        ready_xml = bool(s.get("ready_for_xml_delivery"))
+        md += [
+            "## Onboarding handoff", "",
+            (HANDOFF_READY_MSG if ready_tv else HANDOFF_NOT_READY_MSG),
+            "",
+            (PROJECTION_READY_MSG if ready_proj else PROJECTION_NOT_READY_MSG),
+            (XML_READY_MSG if ready_xml else XML_NOT_READY_MSG), "",
+            f"- next_agent: {s.get('next_agent', 'transformation_validation')}",
+            f"- handoff_manifest_path: {s.get('handoff_manifest_path', '')}",
+            f"- ready_for_transformation_validation: {ready_tv}",
+            f"- ready_for_projection: {ready_proj}",
+            f"- ready_for_xml_delivery: {ready_xml}", "",
+            "## Onboarding next action", "",
+            s.get("onboarding_next_action", ""), "",
+            "## Downstream / projection next action", "",
+            s.get("downstream_next_action", ""), "",
+        ]
+    md += [
         "## Next operator action", "",
         s["next_operator_action"], "",
     ]
@@ -685,9 +768,22 @@ def run_operator_workflow(
                     m.get("ready_for_transformation_validation", False))
                 summary["ready_for_projection"] = bool(m.get("ready_for_projection", False))
                 summary["ready_for_xml_delivery"] = bool(m.get("ready_for_xml_delivery", False))
-                # Re-write the 40 summary so it carries the handoff references.
+                # Lifecycle-aware messaging (messaging only — no logic change).
+                summary["handoff_created"] = True
+                summary["handoff_manifest_path"] = handoff["manifest_json_path"]
+                summary["next_agent"] = m.get("next_agent", "transformation_validation")
+                summary.update(_handoff_next_actions(
+                    ready_tv=summary["ready_for_transformation_validation"],
+                    ready_proj=summary["ready_for_projection"],
+                    ready_xml=summary["ready_for_xml_delivery"],
+                    manifest_path="output/handoff/24_onboarding_handoff_manifest.json",
+                    contract_path="output/handoff/26_onboarding_handoff_field_contract.csv",
+                    base_action=summary.get("next_operator_action", "")))
+                # Re-write the 40 summary (json + md) so it carries the handoff
+                # references and lifecycle-aware next actions.
                 (pdir / "40_operator_workflow_summary.json").write_text(
                     json.dumps(summary, indent=2, default=str), encoding="utf-8")
+                _write_summary_md(pdir / "40_operator_workflow_summary.md", summary)
                 # Inject the handoff section into the static review pack.
                 try:
                     from engine.onboarding_agent.review_pack_builder import (
@@ -801,6 +897,18 @@ def _print_console(s: Dict[str, Any]) -> None:
     print("Review pack:")
     print(f"  {s['review_pack_html'] or '—'}")
     print("")
+    if s.get("handoff_created"):
+        ready_tv = bool(s.get("ready_for_transformation_validation"))
+        ready_proj = bool(s.get("ready_for_projection"))
+        ready_xml = bool(s.get("ready_for_xml_delivery"))
+        print("Handoff lifecycle:")
+        print(f"  {HANDOFF_READY_MSG if ready_tv else HANDOFF_NOT_READY_MSG}")
+        print(f"  {PROJECTION_READY_MSG if ready_proj else PROJECTION_NOT_READY_MSG}")
+        print(f"  {XML_READY_MSG if ready_xml else XML_NOT_READY_MSG}")
+        print("")
+        print("Downstream / projection action:")
+        print(f"  {s.get('downstream_next_action', '')}")
+        print("")
     print("Next action:")
     print(f"  {s['next_operator_action']}")
     print(line)
