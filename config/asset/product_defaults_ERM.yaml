@@ -3,6 +3,10 @@
 # Universal defaults for UK Equity Release Mortgages.
 # These apply to ALL clients unless specifically overridden in Layer 3.
 
+# Asset class key — used to select the asset-specific registry applicability
+# layer (e.g. fields_registry maturity_date.applicability.equity_release).
+asset_class: equity_release
+
 defaults:
   # --- 1. Core Product Structure ---
   amortisation_type: Bullet           # ERMs roll up; they do not amortise
@@ -45,3 +49,27 @@ nd_defaults:
   # Safe defaults for optional fields likely missing from older tapes
   energy_performance_certificate_value: ND5
   syndicated_portion: ND5
+
+# --------------------------------------------------------------------------- #
+# ASSET REPORTING POLICY LAYER (consumed by the Onboarding target-field
+# disposition / completion checklist). This is the ASSET-specific policy — it is
+# NOT generic Annex 2 regime logic and must not be hard-coded into the engine.
+# A client/lender policy file (e.g. config/client/client_001_reporting_policy.yaml)
+# may override these with the same structure under `reporting_policy:`.
+# --------------------------------------------------------------------------- #
+reporting_policy:
+  # Formal regulatory identifiers that are NOT expected in an ordinary loan tape
+  # and must be obtained during formal client onboarding (canonical field names).
+  formal_client_onboarding_required:
+    - unique_identifier                        # RREL1 ScrtstnIdr
+    - original_underlying_exposure_identifier  # RREL2 OrgnlUndrlygXpsrIdr
+
+  # ND/default reporting policy explicitly SELECTED for this asset class. These
+  # express "ND selected", not merely "ND allowed". For UK equity release the
+  # borrower income / DTI is not captured and is not a relevant metric.
+  nd_policy:
+    debt_to_income_ratio: ND5                  # RREL40 — DTI not captured for ERM
+    maturity_date: ND5                         # RREL24 — lifetime mortgage, no fixed term
+
+  # Fields explicitly not applicable to this asset class (excluded from delivery).
+  not_applicable: []

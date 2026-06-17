@@ -43,6 +43,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import yaml
 
 from engine.onboarding_agent import target_coverage as tcov
+from engine.onboarding_agent import target_contract_completion as tcc
 
 # --------------------------------------------------------------------------- #
 # Handoff vocabulary
@@ -87,7 +88,14 @@ _FIELD_CONTRACT_COLUMNS = [
     "selected_confidence", "selected_value_sample", "alternative_sources",
     "decision_id", "decision_status", "blocking_decision", "lineage_status",
     "handoff_status", "handoff_classification", "next_agent_action",
-    "downstream_owner", "notes",
+    "downstream_owner",
+    # Target-field disposition carried from the Onboarding completion checklist
+    # (29_*). Downstream agents EXECUTE these dispositions; they do not rediscover
+    # them. Empty when no checklist row exists for the field.
+    "field_disposition", "disposition_source", "requires_client_input",
+    "requires_operator_review", "requires_config", "requires_projection_rule",
+    "requires_derivation", "blocking_for_validation", "blocking_for_projection",
+    "notes",
 ]
 
 
@@ -356,6 +364,85 @@ def build_field_contract(
             "notes": row.get("decision_reason", "") or row.get("default_reason", ""),
         })
     return contract
+
+
+def _apply_dispositions_to_contract(
+    contract: List[Dict[str, Any]],
+    disposition_by_code: Dict[str, Dict[str, Any]],
+) -> None:
+    """Carry the onboarding disposition columns onto the handoff field contract.
+
+    Additive: fields without a checklist row keep empty disposition columns and
+    their existing classification is untouched.
+    """
+    keys = ("field_disposition", "disposition_source", "requires_client_input",
+            "requires_operator_review", "requires_config", "requires_projection_rule",
+            "requires_derivation", "blocking_for_validation", "blocking_for_projection")
+    for c in contract:
+        disp = disposition_by_code.get(c.get("esma_code", "")) or \
+            disposition_by_code.get(c.get("target_field", ""))
+        if not disp:
+            continue
+        for k in keys:
+            c[k] = disp.get(k, "")
+
+
+def _build_completion_checklist(
+    project_dir: Path,
+    coverage_rows: List[Dict[str, Any]],
+    *,
+    contract_id: str,
+    client_id: str,
+    run_id: str,
+    registry: str,
+    regime_config_path: str,
+    asset_config_path: str,
+) -> Dict[str, Any]:
+    """Build + write the 29_* completion checklist and 29a_* review bench.
+
+    Returns ``{checklist_rows, review_rows, disposition_by_code, paths, summary}``.
+    Never raises — a config/load failure yields an empty checklist so the handoff
+    remains additive and robust.
+    """
+    empty = {"checklist_rows": [], "review_rows": [], "disposition_by_code": {},
+             "paths": {}, "summary": {}}
+    try:
+        repo_root = Path(__file__).resolve().parents[2]
+        regime_path = regime_config_path or str(repo_root / "config" / "regime" / "annex2_delivery_rules.yaml")
+        asset_path = asset_config_path or str(repo_root / "config" / "asset" / "product_defaults_ERM.yaml")
+        registry_path = registry or str(repo_root / "config" / "system" / "fields_registry.yaml")
+        if registry_path and not Path(registry_path).is_absolute() and not Path(registry_path).exists():
+            registry_path = str(repo_root / registry_path)
+        universe_path = str(tcov._ANNEX2_UNIVERSE_DEFAULT)
+
+        cfgs = tcc.load_target_contract_configs(
+            regime_config_path=regime_path, field_universe_path=universe_path,
+            registry_path=registry_path, asset_config_path=asset_path)
+        asset_cfg = cfgs["asset_cfg"]
+        asset_class = str(asset_cfg.get("asset_class", "") or "equity_release")
+
+        coverage_by_code = {}
+        for row in coverage_rows:
+            code = row.get("esma_code", "")
+            if code and code not in coverage_by_code:
+                coverage_by_code[code] = row
+
+        checklist_rows = tcc.build_completion_checklist(
+            contract_id=contract_id or "ESMA_Annex2",
+            field_universe=cfgs["field_universe"], registry_fields=cfgs["registry_fields"],
+            regime_index=cfgs["regime_index"], asset_cfg=asset_cfg,
+            asset_class=asset_class, coverage_by_code=coverage_by_code,
+            client_policy=cfgs["client_policy"])
+        review_rows = tcc.build_review_bench(checklist_rows)
+        paths = tcc.write_checklist_artefacts(
+            project_dir, checklist_rows, review_rows,
+            contract_id=contract_id, client_id=client_id, run_id=run_id)
+        disposition_by_code = {r["esma_code"]: r for r in checklist_rows if r.get("esma_code")}
+        return {"checklist_rows": checklist_rows, "review_rows": review_rows,
+                "disposition_by_code": disposition_by_code, "paths": paths,
+                "summary": paths.get("summary", {})}
+    except Exception:
+        return empty
 
 
 def build_lineage(coverage_rows: List[Dict[str, Any]],
@@ -631,6 +718,14 @@ def build_handoff_package(
     # --- field contract + lineage ---
     contract = build_field_contract(coverage_rows, decisions_by_field, applied_fields)
     contract_by_field = {c["target_field"]: c for c in contract}
+
+    # --- target contract completion checklist / disposition layer (29 / 29a) ---
+    # Onboarding owns target-field disposition; downstream agents execute it.
+    completion = _build_completion_checklist(
+        project_dir, coverage_rows, contract_id=contract_id,
+        client_id=client_id, run_id=run_id, registry=registry,
+        regime_config_path=regime_config_path, asset_config_path=asset_config_path)
+    _apply_dispositions_to_contract(contract, completion["disposition_by_code"])
     lineage = build_lineage(coverage_rows, contract_by_field, decisions_by_field, llm_by_field)
 
     # --- run / source context fields (portfolio-level, e.g. data_cut_off_date) --
@@ -706,6 +801,11 @@ def build_handoff_package(
 
         # Onboarding artefact references the next agent should read.
         "target_coverage_matrix_path": _p(project_dir, "28a_target_coverage_matrix.csv"),
+        "target_contract_completion_checklist_path": _p(
+            project_dir, "29_target_contract_completion_checklist.csv"),
+        "target_contract_review_bench_path": _p(
+            project_dir, "29a_target_contract_review_bench.csv"),
+        "target_contract_completion_summary": completion.get("summary", {}),
         "decision_queue_path": _p(project_dir, "28c_human_decision_queue.csv"),
         "approved_decisions_path": (decisions_supplied_file
                                     or _p(project_dir, "34_target_first_decisions.yaml")),
@@ -792,6 +892,10 @@ def build_handoff_package(
         "field_contract_json_path": str(contract_json),
         "lineage_path": str(lineage_path),
         "handoff_dir": str(handoff_dir),
+        "completion_checklist_csv_path": completion.get("paths", {}).get("checklist_csv_path", ""),
+        "completion_checklist_json_path": completion.get("paths", {}).get("checklist_json_path", ""),
+        "review_bench_csv_path": completion.get("paths", {}).get("review_bench_csv_path", ""),
+        "target_contract_completion_summary": completion.get("summary", {}),
     }
 
 
