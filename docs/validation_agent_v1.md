@@ -104,7 +104,13 @@ Value-level checks add new issue types: `missing_required_value`, `invalid_type`
 A blank in a **mandatory** field is a blocking `validation_failure` only when the
 field permits **no** ND/default (e.g. an identifier). Where the regime allows an
 ND value or default, a blank is a downstream config gap (blocks projection, not
-validation).
+validation). A mandatory field with no ND/default permitted that is **entirely
+absent** from the tape is also a blocking failure.
+
+Run/source context fields (e.g. `data_cut_off_date` / RREL6) are extracted by
+Onboarding and materialised by Transformation into every row; Validation only
+checks presence + ISO format and never fills the value. See
+[`run_context_fields.md`](run_context_fields.md).
 
 ## Checks performed
 

@@ -668,6 +668,8 @@ def run_operator_workflow(
     target_contract: str = "",
     regime_config: str = "",
     asset_config: str = "",
+    reporting_date: str = "",
+    override_reporting_date: bool = False,
 ) -> Dict[str, Any]:
     """Run the managed-service operator workflow; returns the 40 summary dict."""
     client_id = client_id or client_name.lower().replace(" ", "_")
@@ -754,7 +756,9 @@ def run_operator_workflow(
                 run_id=run_id, mode=mode, registry=registry, aliases_dir=aliases_dir,
                 regime_config_path=(regime_config if is_annex2 else ""),
                 asset_config_path=(asset_config if is_annex2 else ""),
-                decisions_supplied_file=(target_first_decisions or ""))
+                decisions_supplied_file=(target_first_decisions or ""),
+                reporting_date=reporting_date,
+                override_reporting_date=override_reporting_date)
             if handoff:
                 m = handoff["manifest"]
                 summary["onboarding_handoff_manifest_json"] = handoff["manifest_json_path"]
@@ -848,6 +852,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--asset-config", default="",
                    help="asset-class defaults config (default: "
                         "config/asset/product_defaults_ERM.yaml for Annex 2 mode).")
+    p.add_argument("--reporting-date", default="",
+                   help="OPTIONAL fallback reporting cut-off date (YYYY-MM-DD). "
+                        "Source-derived data_cut_off_date is preferred; this is used "
+                        "only when none is found in the source pack/config.")
+    p.add_argument("--override-reporting-date", action="store_true",
+                   help="force --reporting-date to win even when a source-derived "
+                        "data_cut_off_date exists (recorded as cli_override).")
     return p
 
 
@@ -926,7 +937,8 @@ def main(argv=None) -> int:
         llm_max_cost_gbp=args.llm_max_cost_gbp, llm_max_calls=args.llm_max_calls,
         llm_max_items_per_call=args.llm_max_items_per_call,
         target_contract=args.target_contract, regime_config=args.regime_config,
-        asset_config=args.asset_config)
+        asset_config=args.asset_config, reporting_date=args.reporting_date,
+        override_reporting_date=args.override_reporting_date)
     _print_console(summary)
     return 0 if summary["status"] != FAILED else 2
 

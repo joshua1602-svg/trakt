@@ -60,6 +60,8 @@ TS_COPIED = "copied"
 TS_DEFAULT = "default_materialised"
 TS_ND_DEFAULT = "nd_default_materialised"
 TS_CONFIGURED_STATIC = "configured_static_materialised"
+TS_SOURCE_CONTEXT = "source_context_materialised"
+TS_RUN_CONTEXT = "run_context_materialised"
 TS_ENUM_NORMALIZED = "enum_normalized"
 TS_TYPE_NORMALIZED = "type_normalized"
 TS_DERIVED = "derived"
@@ -460,6 +462,40 @@ def build_transformation_package(
 # Field materialisation
 # --------------------------------------------------------------------------- #
 
+def _materialise_run_context(
+    df: pd.DataFrame, tf: str, canonical: str, esma_code: str,
+    contract_value: Any, cls: str, issues: _IssueLog,
+) -> Dict[str, Any]:
+    """Materialise a portfolio-level run/source context value into every row.
+
+    The value is normalised to ISO ``YYYY-MM-DD``; an unparseable value is a
+    controlled date_parse_failed issue (Validation will then fail), never guessed.
+    """
+    from engine.onboarding_agent import run_context as rc
+
+    raw = "" if _is_blank(contract_value) else str(contract_value).strip()
+    iso = rc.normalize_to_iso(raw) if raw else None
+    source = ("source_context" if cls == oh.HC_SOURCE_CONTEXT_MAPPED else "run_context")
+
+    if not iso:
+        # No usable context value — surface, never fabricate.
+        issue_id = issues.add(
+            severity="warning", field=tf, canonical_field=canonical, esma_code=esma_code,
+            issue_type=IT_SOURCE_ABSENT,
+            description="run/source context value missing or not ISO-parseable",
+            blocking_for_validation=False, blocking_for_projection=True,
+            recommended_action="supply a valid reporting cut-off date in source/config",
+            downstream_owner=OWN_TRANSFORMATION)
+        return {"value_source": "", "materialised": False, "value": "",
+                "issue_id": issue_id, "absent": True, "run_context": True, "source": source}
+
+    if canonical not in df.columns:
+        df[canonical] = pd.NA
+    df[canonical] = iso  # one portfolio-level value for every row
+    return {"value_source": f"handoff_{source}", "materialised": True,
+            "value": iso, "run_context": True, "source": source}
+
+
 def _materialise_fields(
     df: pd.DataFrame,
     contract_rows: List[Dict[str, Any]],
@@ -481,6 +517,13 @@ def _materialise_fields(
         esma_code = row.get("esma_code", "")
         cls = row.get("handoff_classification", "")
         contract_value = row.get("selected_value_sample", "")
+
+        # Portfolio-level run/source context fields (e.g. data_cut_off_date) are a
+        # single value for the WHOLE tape — materialise into every row.
+        if cls in (oh.HC_SOURCE_CONTEXT_MAPPED, oh.HC_RUN_CONTEXT_MAPPED) and canonical:
+            results[tf] = _materialise_run_context(
+                df, tf, canonical, esma_code, contract_value, cls, issues)
+            continue
 
         materialise = cls in (
             oh.HC_DEFAULT_DOWNSTREAM, oh.HC_ND_DEFAULT_DOWNSTREAM,
@@ -669,6 +712,19 @@ def _finalise_contract(
         elif cls == oh.HC_NOT_APPLICABLE:
             status = TS_NOT_APPLICABLE
             owner = OWN_VALIDATION
+
+        elif cls in (oh.HC_SOURCE_CONTEXT_MAPPED, oh.HC_RUN_CONTEXT_MAPPED):
+            value_source = res.get("value_source", "")
+            if res.get("materialised"):
+                status = (TS_SOURCE_CONTEXT if cls == oh.HC_SOURCE_CONTEXT_MAPPED
+                          else TS_RUN_CONTEXT)
+                owner = OWN_VALIDATION
+                parse_rule = "iso_date"
+            else:
+                status = TS_SOURCE_ABSENT
+                owner = OWN_TRANSFORMATION
+                b_proj = True
+                issue_id = res.get("issue_id", "")
 
         elif cls == oh.HC_CONFIGURED_STATIC:
             value_source = res.get("value_source", "")

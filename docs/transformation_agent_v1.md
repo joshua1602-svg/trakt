@@ -95,10 +95,19 @@ takes the dedicated **30–35** block (no conflict with onboarding numbering):
 ## Transformation status vocabulary
 
 `transformed`, `copied`, `default_materialised`, `nd_default_materialised`,
-`configured_static_materialised`, `enum_normalized`, `type_normalized`,
+`configured_static_materialised`, `source_context_materialised`,
+`run_context_materialised`, `enum_normalized`, `type_normalized`,
 `derived`, `pending_projection_rule`, `source_absent`,
 `semantic_derivation_required`, `operator_decision_pending`,
 `validation_required`, `not_applicable`, `failed_transformation`.
+
+## Run / source context fields
+
+Portfolio-level fields such as `data_cut_off_date` (RREL6) are resolved by the
+Onboarding Agent and carried in the handoff as `source_context_mapped` /
+`run_context_mapped`. The Transformation Agent materialises the single value into
+**every row** (ISO `YYYY-MM-DD`), with status `source_context_materialised` /
+`run_context_materialised`. See [`run_context_fields.md`](run_context_fields.md).
 
 ## Tests
 

@@ -68,6 +68,11 @@ HC_TRANSFORMATION_REQUIRED = "transformation_required"
 HC_PROJECTION_REQUIRED = "projection_required"
 HC_DELIVERY_REQUIRED = "delivery_required"
 HC_NOT_APPLICABLE = "not_applicable"
+# Portfolio-level run / source context fields (one value for the whole tape,
+# e.g. data_cut_off_date / RREL6) resolved from the source pack rather than a
+# per-loan source column or a static config default.
+HC_SOURCE_CONTEXT_MAPPED = "source_context_mapped"
+HC_RUN_CONTEXT_MAPPED = "run_context_mapped"
 
 # Controlled downstream_owner values.
 OWN_ONBOARDING = "onboarding"
@@ -400,7 +405,8 @@ def _counts(contract: List[Dict[str, Any]]) -> Dict[str, int]:
         by_cls[c["handoff_classification"]] = by_cls.get(c["handoff_classification"], 0) + 1
         by_owner[c["downstream_owner"]] = by_owner.get(c["downstream_owner"], 0) + 1
     g = by_cls.get
-    source_mapped = g(HC_SOURCE_MAPPED, 0) + g(HC_APPROVED_DECISION_APPLIED, 0)
+    source_mapped = (g(HC_SOURCE_MAPPED, 0) + g(HC_APPROVED_DECISION_APPLIED, 0)
+                     + g(HC_SOURCE_CONTEXT_MAPPED, 0) + g(HC_RUN_CONTEXT_MAPPED, 0))
     default_required = g(HC_DEFAULT_DOWNSTREAM, 0) + g(HC_ND_DEFAULT_DOWNSTREAM, 0)
     transformation_required = (g(HC_TRANSFORMATION_REQUIRED, 0)
                                + g(HC_CONFIGURED_STATIC, 0)
@@ -477,6 +483,92 @@ def compute_readiness(
 # Main entry point
 # --------------------------------------------------------------------------- #
 
+# --------------------------------------------------------------------------- #
+# Run / source context fields (portfolio-level, e.g. data_cut_off_date)
+# --------------------------------------------------------------------------- #
+
+# Canonical fields treated as portfolio-level run/source context (one value for
+# the whole tape) rather than per-loan source columns.
+_RUN_CONTEXT_FIELDS = ("data_cut_off_date",)
+
+
+def _resolve_run_context(
+    project_dir: Path, output_root: Path, central_path: str, *,
+    asset_config_path: str = "", regime_config_path: str = "",
+    reporting_date: str = "", override_reporting_date: bool = False,
+) -> Dict[str, Any]:
+    """Resolve portfolio-level context fields (currently data_cut_off_date)."""
+    try:
+        from engine.onboarding_agent import run_context as rc
+        return rc.extract_data_cut_off_date(
+            project_dir, central_path,
+            asset_config_path=asset_config_path,
+            regime_config_path=regime_config_path,
+            cli_reporting_date=reporting_date,
+            override_reporting_date=override_reporting_date)
+    except Exception as exc:  # never break the handoff on context extraction
+        return {"value": "", "source": "", "source_file": "", "source_location": "",
+                "confidence": 0.0, "candidates": [], "conflict": False,
+                "conflict_detail": f"extraction_error: {exc}", "missing": True}
+
+
+def _apply_run_context_to_contract(
+    contract: List[Dict[str, Any]],
+    lineage: List[Dict[str, Any]],
+    run_context: Dict[str, Any],
+) -> bool:
+    """Stamp the resolved run-context date onto the data_cut_off_date contract row.
+
+    Returns True when the context is in conflict (a blocking operator item).
+    """
+    value = run_context.get("value", "")
+    source = run_context.get("source", "")
+    conflict = bool(run_context.get("conflict"))
+    rows = [c for c in contract if c.get("canonical_field") in _RUN_CONTEXT_FIELDS]
+    for c in rows:
+        if conflict:
+            c["handoff_classification"] = HC_OPERATOR_DECISION_PENDING
+            c["downstream_owner"] = OWN_OPERATOR
+            c["handoff_status"] = "blocking"
+            c["next_agent_action"] = "resolve_conflicting_run_context_date"
+            c["blocking_decision"] = True
+            c["notes"] = (run_context.get("conflict_detail", "")
+                          or "conflicting run-context date candidates")
+            continue
+        if not value:
+            # Missing — leave the row's coverage-based classification so Validation
+            # can still fail later; record the gap in notes.
+            c["notes"] = (c.get("notes", "")
+                          or "run-context date not found in source pack/config")
+            continue
+        cls = (HC_SOURCE_CONTEXT_MAPPED if source in ("source_column",)
+               else HC_RUN_CONTEXT_MAPPED)
+        c["handoff_classification"] = cls
+        c["downstream_owner"] = OWN_TRANSFORMATION
+        c["handoff_status"] = "resolved"
+        c["next_agent_action"] = "materialise_run_context_value"
+        c["selected_value_sample"] = value
+        c["lineage_status"] = "source_context_linked"
+        c["notes"] = (f"portfolio-level {source} "
+                      f"({run_context.get('source_location', '')})")
+        # extend lineage with explicit context evidence
+        lineage.append({
+            "target_field": c.get("target_field", ""),
+            "esma_code": c.get("esma_code", ""),
+            "canonical_field": c.get("canonical_field", ""),
+            "source_file": run_context.get("source_file", ""),
+            "source_column": run_context.get("source_location", ""),
+            "mapping_confidence": run_context.get("confidence", ""),
+            "classification": cls,
+            "downstream_owner": OWN_TRANSFORMATION,
+            "operator_decision_id": "",
+            "operator_decision_status": "",
+            "llm_recommendation_id": "",
+            "lineage_note": f"run_context_resolved value={value} source={source}",
+        })
+    return conflict
+
+
 def build_handoff_package(
     project_dir: str | Path,
     output_root: str | Path | None = None,
@@ -490,6 +582,8 @@ def build_handoff_package(
     regime_config_path: str = "",
     asset_config_path: str = "",
     decisions_supplied_file: str = "",
+    reporting_date: str = "",
+    override_reporting_date: bool = False,
 ) -> Optional[Dict[str, Any]]:
     """Build the governed canonical onboarding handoff package (24–27).
 
@@ -538,10 +632,22 @@ def build_handoff_package(
     contract = build_field_contract(coverage_rows, decisions_by_field, applied_fields)
     contract_by_field = {c["target_field"]: c for c in contract}
     lineage = build_lineage(coverage_rows, contract_by_field, decisions_by_field, llm_by_field)
+
+    # --- run / source context fields (portfolio-level, e.g. data_cut_off_date) --
+    run_context = _resolve_run_context(
+        project_dir, output_root, central["path"],
+        asset_config_path=asset_config_path, regime_config_path=regime_config_path,
+        reporting_date=reporting_date, override_reporting_date=override_reporting_date)
+    context_conflict = _apply_run_context_to_contract(contract, lineage, run_context)
+
     counts = _counts(contract)
 
     blocking_decision_count = int(dec_sum.get("blocking_decisions",
                                               sum(1 for d in decision_rows if d.get("blocking"))))
+    # A conflicting (non-silently resolvable) run-context date is a blocking
+    # operator item — surfaced, never auto-picked.
+    if context_conflict:
+        blocking_decision_count += 1
     non_blocking_decision_count = max(0, len(decision_rows) - blocking_decision_count)
 
     readiness = compute_readiness(
@@ -583,6 +689,20 @@ def build_handoff_package(
         "central_tape_path": _rel(central["path"], output_root),
         "central_tape_row_count": central["row_count"],
         "central_tape_field_count": central["field_count"],
+
+        # Portfolio-level run / source context fields (e.g. data_cut_off_date).
+        "run_context_fields": list(_RUN_CONTEXT_FIELDS),
+        "source_context_fields": (["data_cut_off_date"]
+                                  if run_context.get("source") in ("source_column",)
+                                  else []),
+        "data_cut_off_date": run_context.get("value", ""),
+        "data_cut_off_date_source": run_context.get("source", ""),
+        "data_cut_off_date_source_file": run_context.get("source_file", ""),
+        "data_cut_off_date_source_column_or_location": run_context.get("source_location", ""),
+        "data_cut_off_date_confidence": run_context.get("confidence", 0.0),
+        "data_cut_off_date_conflict": bool(run_context.get("conflict", False)),
+        "data_cut_off_date_missing": bool(run_context.get("missing", False)),
+        "data_cut_off_date_candidates": run_context.get("candidates", []),
 
         # Onboarding artefact references the next agent should read.
         "target_coverage_matrix_path": _p(project_dir, "28a_target_coverage_matrix.csv"),
