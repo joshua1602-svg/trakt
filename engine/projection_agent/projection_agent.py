@@ -466,6 +466,30 @@ def build_projection_package(
     asset_defaults = (asset_cfg.get("defaults") or {}) if isinstance(asset_cfg, dict) else {}
     asset_nd_defaults = (asset_cfg.get("nd_defaults") or {}) if isinstance(asset_cfg, dict) else {}
 
+    # 4b) Supplement the regime field set with target fields that are present in
+    #     the transformation contract (32) but lack a full regime field_rules entry
+    #     (e.g. RREL24 maturity_date, mapped only via the registry). Include them so
+    #     an approved/materialised value is not silently dropped from the target
+    #     frame. We only add a code that has a canonical field and either a
+    #     materialised value in the transformed tape or an onboarding disposition.
+    for r in tx_contract_rows:
+        code = _to_str(r.get("esma_code"))
+        canonical = _to_str(r.get("canonical_field"))
+        if not code or code in proj_index or not canonical:
+            continue
+        has_value = canonical in df.columns and df[canonical].map(
+            lambda v: _to_str(v) != "").any()
+        if not (has_value or disposition_by_field.get(canonical)
+                or disposition_by_field.get(code)):
+            continue
+        proj_index[code] = {
+            "esma_code": code, "canonical_field": canonical,
+            "mandatory": False, "enforce_presence": False, "nd_allowed": [],
+            "default_allowed": False, "default_value": "",
+            "enum_map": {}, "geography_map": {}, "boolean": "", "regex": "",
+            "precision": {}, "deferred": False, "supplementary": True,
+        }
+
     record_order = g4.load_record_order(esma_code_order_path)
     ordered_codes = g4.order_esma_codes(list(proj_index.keys()), record_order)
 

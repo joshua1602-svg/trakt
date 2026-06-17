@@ -244,6 +244,18 @@ ND/default. This keeps `51_projected_annex2_target_frame.csv` aligned with
 `projected_value = ND1 / projected_nd_default` while the resolution carried the
 field as an unresolved operator dependency).
 
+**Supplementary target fields.** The projection field set is built from the
+regime `field_rules`, but some target fields are mapped only via the
+fields-registry and have no full `field_rules` entry yet (e.g. RREL24
+`maturity_date`, which Transformation materialises as the ERM asset default ND5).
+The Projection Agent now supplements its target field set with any code present
+on the transformation field contract (`32_*`) that has a canonical field and
+either a materialised value in the transformed tape or an onboarding disposition.
+This keeps such fields from silently disappearing from
+`51_projected_annex2_target_frame.csv`; RREL24 appears with
+`projected_value = ND5`, `projection_status = projected_from_transformed`,
+`record_group = RREL`.
+
 The `56_projection_blocker_resolution.csv` carries an `onboarding_disposition`
 column so the resolution is explicit and traceable.
 
