@@ -182,11 +182,29 @@ def build_registry_index(registry_fields: Dict[str, Any], contract_id: str) -> D
 
     Reads the per-field ``regime_mapping.<contract>.code`` plus ``format`` /
     ``allowed_values`` and the **asset-specific** ``applicability`` block.
+
+    The registry keys the regime mapping as ``ESMA_Annex2`` while the onboarding
+    pipeline addresses the same contract as ``esma_annex_2`` (the 28a/handoff id).
+    We therefore match the requested ``contract_id`` against each registry key by
+    a normalised form so a fields-registry-only code (e.g. RREL24 maturity_date,
+    which has no entry in the regime ``field_rules``) is still resolved.
     """
+    def _alnum(s: str) -> str:
+        return "".join(ch.lower() for ch in str(s or "") if ch.isalnum())
+
+    want = _alnum(contract_id)
     out: Dict[str, Dict[str, Any]] = {}
     for canonical, meta in (registry_fields or {}).items():
         meta = meta or {}
-        rm = (meta.get("regime_mapping") or {}).get(contract_id) or {}
+        regime_mapping = meta.get("regime_mapping") or {}
+        rm = regime_mapping.get(contract_id)
+        if rm is None:
+            # fall back to an alphanumeric match (ESMA_Annex2 <-> esma_annex_2).
+            for key, val in regime_mapping.items():
+                if _alnum(key) == want:
+                    rm = val
+                    break
+        rm = rm or {}
         code = _to_str(rm.get("code"))
         if not code:
             continue

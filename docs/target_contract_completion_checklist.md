@@ -192,6 +192,14 @@ config, and the deciding layer is recorded in `disposition_source`.
   `projection_rule_required`.
 * Traditional amortising asset (no policy) → `source_supplied` / `derivation_configured` / `asset_policy_required` depending on source/config — **never** generically ND5.
 
+> **Contract-id alias.** RREL24 is mapped to `maturity_date` only via the
+> fields-registry `regime_mapping` (it has no `field_rules` entry). The registry
+> keys that mapping as `ESMA_Annex2` while the onboarding pipeline addresses the
+> contract as `esma_annex_2` (the 28a/handoff id). `build_registry_index` matches
+> the two by an alphanumeric-normalised comparison, otherwise a registry-only code
+> like RREL24 would lose its canonical mapping and be misclassified as
+> `projection_rule_required`.
+
 ### RREC17 `original_valuation_amount` (and RREL43 / RREC13)
 A secured-property valuation/rate field with **real but ambiguous** source
 candidates (`source_mapped_with_alternatives`) stays `operator_review_required`

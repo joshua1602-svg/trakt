@@ -174,6 +174,34 @@ class TestAssetSpecificity(unittest.TestCase):
         self.assertFalse(r["requires_projection_rule"])
         self.assertFalse(r["blocking_for_projection"])
 
+    def test_rrel24_resolved_with_pipeline_contract_id_alias(self):
+        # The real pipeline addresses the contract as "esma_annex_2" while the
+        # registry keys it "ESMA_Annex2". RREL24 is mapped ONLY via the registry
+        # (no field_rules entry), so the contract-id alias must still resolve it —
+        # otherwise it falls back to projection_rule_required (the real-run bug).
+        cfgs = _real_configs()
+        rows = tcc.build_completion_checklist(
+            contract_id="esma_annex_2",
+            field_universe=cfgs["field_universe"], registry_fields=cfgs["registry_fields"],
+            regime_index=cfgs["regime_index"], asset_cfg=cfgs["asset_cfg"],
+            asset_class="equity_release",
+            coverage_by_code={"RREL24": {"esma_code": "RREL24",
+                                         "coverage_status": "pending_regime_rule"}},
+            client_policy={})
+        r = {x["esma_code"]: x for x in rows}["RREL24"]
+        self.assertEqual(r["canonical_field"], "maturity_date")
+        self.assertEqual(r["field_disposition"], tcc.D_ND_POLICY_SELECTED)
+        self.assertEqual(r["disposition_source"], "asset_config")
+        self.assertEqual(r["configured_default_value"], "ND5")
+        self.assertFalse(r["blocking_for_projection"])
+
+    def test_registry_index_matches_contract_id_alias(self):
+        cfgs = _real_configs()
+        for cid in ("ESMA_Annex2", "esma_annex_2", "ESMA_ANNEX2"):
+            idx = tcc.build_registry_index(cfgs["registry_fields"], cid)
+            self.assertIn("RREL24", idx, cid)
+            self.assertEqual(idx["RREL24"]["canonical_field"], "maturity_date")
+
     def test_generic_regime_default_does_not_override_source_ambiguity(self):
         # RREC17 has a regime ND1 default AND ambiguous valuation sources. The
         # ambiguous source must win (operator review), never blind ND1.
@@ -552,6 +580,44 @@ class TestProjectionExecutesDisposition(unittest.TestCase):
         r = next(x for x in resolution if x["validation_issue_id"] == "VAL-0002")
         self.assertEqual(r["projection_status"], cells[0]["projection_status"])
         # conservative readiness preserved.
+        self.assertFalse(result["manifest"]["ready_for_delivery_normalisation"])
+        self.assertFalse(result["manifest"]["ready_for_xml_delivery"])
+
+    def test_supplementary_field_included_in_target_frame(self):
+        # RREL24 maturity_date has no full regime field_rules entry, but
+        # Transformation materialised ND5 and carried it on the 32 contract.
+        # Projection must still include it in the target frame (it was missing).
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import test_projection_agent_workflow as tp
+        from engine.projection_agent import projection_agent as pa
+
+        root = Path(tempfile.mkdtemp(prefix="tcc_supp_"))
+        mpath = tp._write_validation_package(root)
+        # add a materialised maturity_date column to the transformed tape.
+        tape = root / "output" / "transformation" / "31_transformed_canonical_tape.csv"
+        rows = list(csv.reader(open(tape, encoding="utf-8")))
+        rows[0].append("maturity_date")
+        for r in rows[1:]:
+            r.append("ND5")
+        with open(tape, "w", newline="", encoding="utf-8") as fh:
+            csv.writer(fh).writerows(rows)
+        # RREL24 on the 32 contract (no regime field_rules entry).
+        tx = root / "output" / "transformation" / "32_transformation_field_contract.csv"
+        with open(tx, "w", newline="", encoding="utf-8") as fh:
+            w = csv.DictWriter(fh, fieldnames=["esma_code", "canonical_field", "field_disposition"])
+            w.writeheader()
+            w.writerow({"esma_code": "RREL24", "canonical_field": "maturity_date",
+                        "field_disposition": "nd_policy_selected"})
+        result = pa.build_projection_package(mpath)
+        out = Path(result["projection_dir"])
+        frame = json.loads(
+            (out / "51_projected_annex2_target_frame.json").read_text())["rows"]
+        cells = [c for c in frame if c["esma_code"] == "RREL24"]
+        self.assertTrue(cells, "RREL24 missing from the target frame")
+        for c in cells:
+            self.assertEqual(c["projected_value"], "ND5")
+            self.assertEqual(c["projection_status"], pa.ST_FROM_TRANSFORMED)
+            self.assertEqual(c["record_group"], "RREL")
         self.assertFalse(result["manifest"]["ready_for_delivery_normalisation"])
         self.assertFalse(result["manifest"]["ready_for_xml_delivery"])
 
