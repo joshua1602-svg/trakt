@@ -84,17 +84,27 @@ mapping incomplete), `projection_rule_required` (no rule maps the source yet),
 3. approved, complete, projectable source → source_supplied
    (enum incomplete → config_mapping_required; no regime rule → projection_rule_required)
 4. derivation configured → derivation_configured
-5. fallback configured default / ND (asset defaults / nd_defaults / regime default_value)
-6. ambiguous (source_mapped_alt) → operator_review_required;
-   single source flagged → source_mapped_with_review
+5. REAL but ambiguous source candidate → operator_review_required
+   (source_mapped_with_alternatives); single source flagged → source_mapped_with_review.
+   Checked BEFORE the generic fallback so a blind ND/default never overrides real
+   ambiguous source data (e.g. valuation/rate fields).
+6. fallback configured default / ND (asset defaults / nd_defaults / regime default_value)
+   — only when there is no usable source. Also overrides a `pending_regime_rule`
+   coverage status (e.g. ERM maturity_date = ND5 from asset config).
 7. selected ND/default outside the allowed envelope → config_mapping_required
 8. deferred / pending → projection_rule_required
 9. ND allowed but no policy selected → asset_policy_required   (ND allowed ≠ ND selected)
 10. nothing → unresolved_gap
 ```
 
-`source ambiguity` never overrides a deliberate asset/client policy that says the
-field is not captured and should be ND-selected.
+Two distinctions are load-bearing:
+
+* **deliberate asset/client policy** (a `reporting_policy` selection or registry
+  applicability) *can* override an ambiguous source — a field the product design
+  does not capture (ERM DTI) is ND-selected, never an operator mystery;
+* a **generic regime/asset ND/default** must *not* override a real but ambiguous
+  source candidate — valuation/rate fields with `source_mapped_with_alternatives`
+  stay `operator_review_required` rather than being blindly ND-defaulted.
 
 ## ND allowed ≠ ND selected
 
@@ -174,8 +184,21 @@ It is **not** hard-coded to ND5: the value comes from the asset/client/regime
 config, and the deciding layer is recorded in `disposition_source`.
 
 ### RREL24 `maturity_date`
-* ERM / lifetime mortgage → `nd_policy_selected` (`ND5`) via the asset policy / registry `applicability.equity_release`.
-* Traditional amortising asset (no policy) → `source_supplied` / `derivation_configured` / `unresolved_gap` depending on source/config — **never** generically ND5.
+* ERM / lifetime mortgage → `nd_policy_selected` (`ND5`) via the asset policy /
+  registry `applicability.equity_release`. This explicit asset-config selection
+  **overrides a `pending_regime_rule` coverage status** (RREL24 is not in the
+  regime delivery rules), so the checklist now agrees with what Transformation
+  materialises (`nd_default_materialised` ND5) instead of contradicting it with
+  `projection_rule_required`.
+* Traditional amortising asset (no policy) → `source_supplied` / `derivation_configured` / `asset_policy_required` depending on source/config — **never** generically ND5.
+
+### RREC17 `original_valuation_amount` (and RREL43 / RREC13)
+A secured-property valuation/rate field with **real but ambiguous** source
+candidates (`source_mapped_with_alternatives`) stays `operator_review_required`
+(`disposition_source = source_ambiguity`). A blind regime ND default (RREC17 has
+`default_value: ND1`) does **not** override it — Projection therefore carries it
+as an operator dependency rather than resolving it by applying ND1. Only an
+explicit asset/client `reporting_policy.nd_policy` for that field would ND-select it.
 
 ### RREL1 / RREL2 (formal identifiers)
 Formal regulatory identifiers are **not** satisfied by ordinary loan / account /

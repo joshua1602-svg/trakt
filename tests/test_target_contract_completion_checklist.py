@@ -163,6 +163,47 @@ class TestAssetSpecificity(unittest.TestCase):
         self.assertNotEqual(r["configured_default_value"], "ND5")
         self.assertNotEqual(r["field_disposition"], tcc.D_ND_POLICY_SELECTED)
 
+    def test_rrel24_asset_config_nd5_beats_pending_regime_rule(self):
+        # ERM maturity_date has an explicit asset-config ND5; it must win over a
+        # pending_regime_rule coverage status (the bug: projection_rule_required).
+        cov = {"RREL24": {"esma_code": "RREL24", "coverage_status": "pending_regime_rule"}}
+        r = {x["esma_code"]: x for x in _checklist(coverage_by_code=cov)}["RREL24"]
+        self.assertEqual(r["field_disposition"], tcc.D_ND_POLICY_SELECTED)
+        self.assertEqual(r["disposition_source"], "asset_config")
+        self.assertEqual(r["configured_default_value"], "ND5")
+        self.assertFalse(r["requires_projection_rule"])
+        self.assertFalse(r["blocking_for_projection"])
+
+    def test_generic_regime_default_does_not_override_source_ambiguity(self):
+        # RREC17 has a regime ND1 default AND ambiguous valuation sources. The
+        # ambiguous source must win (operator review), never blind ND1.
+        cov = {"RREC17": {"esma_code": "RREC17",
+                          "coverage_status": "source_mapped_with_alternatives",
+                          "selected_source_column": "Original Valuation",
+                          "requires_user_decision": True}}
+        r = {x["esma_code"]: x for x in _checklist(coverage_by_code=cov)}["RREC17"]
+        self.assertEqual(r["field_disposition"], tcc.D_OPERATOR_REVIEW_REQUIRED)
+        self.assertEqual(r["disposition_source"], "source_ambiguity")
+        self.assertTrue(r["requires_operator_review"])
+        self.assertNotEqual(r["configured_default_value"], "ND1")
+
+    def test_explicit_asset_policy_overrides_source_ambiguity(self):
+        # If the asset/client policy explicitly says the field is unavailable and
+        # should be ND, that deliberate policy DOES override an ambiguous source.
+        cfgs = _real_configs()
+        asset_cfg = dict(cfgs["asset_cfg"])
+        rp = dict(asset_cfg.get("reporting_policy", {}))
+        rp["nd_policy"] = dict(rp.get("nd_policy", {}))
+        rp["nd_policy"]["original_valuation_amount"] = "ND1"
+        asset_cfg["reporting_policy"] = rp
+        cov = {"RREC17": {"esma_code": "RREC17",
+                          "coverage_status": "source_mapped_with_alternatives",
+                          "requires_user_decision": True}}
+        r = {x["esma_code"]: x for x in _checklist(
+            asset_cfg=asset_cfg, coverage_by_code=cov)}["RREC17"]
+        self.assertEqual(r["field_disposition"], tcc.D_ND_POLICY_SELECTED)
+        self.assertEqual(r["disposition_source"], "asset_config")
+
     def test_rrel40_not_operator_review_when_policy_says_not_captured(self):
         # Even if the coverage flags an ambiguity, a deliberate asset ND policy
         # (DTI not captured) must win — never an operator mapping mystery.
@@ -449,6 +490,33 @@ class TestProjectionExecutesDisposition(unittest.TestCase):
         self.assertEqual(r["onboarding_disposition"], "config_mapping_required")
         self.assertEqual(r["projection_status"], pa.ST_BLOCKED_OP_CONFIG)
         self.assertNotEqual(r["projection_status"], pa.ST_UNRESOLVED_SOURCE)
+
+    def test_operator_review_not_auto_resolved_by_nd_default(self):
+        # A field flagged operator_review by onboarding must NOT be resolved by
+        # applying a blind ND/default (the RREC17 risk) — it stays an operator
+        # dependency. VAL-0002 (primary_income / RREL16) would normally resolve
+        # via ND; the operator_review disposition must prevent that.
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import test_projection_agent_workflow as tp
+        from engine.projection_agent import projection_agent as pa
+
+        root = Path(tempfile.mkdtemp(prefix="tcc_oprev_"))
+        mpath = tp._write_validation_package(root)
+        tx = root / "output" / "transformation" / "32_transformation_field_contract.csv"
+        with open(tx, "w", newline="", encoding="utf-8") as fh:
+            w = csv.DictWriter(fh, fieldnames=[
+                "esma_code", "canonical_field", "field_disposition"])
+            w.writeheader()
+            w.writerow({"esma_code": "RREL16", "canonical_field": "primary_income",
+                        "field_disposition": "operator_review_required"})
+        result = pa.build_projection_package(mpath)
+        out = Path(result["projection_dir"])
+        resolution = json.loads(
+            (out / "56_projection_blocker_resolution.json").read_text())["rows"]
+        r = next(x for x in resolution if x["validation_issue_id"] == "VAL-0002")
+        self.assertEqual(r["onboarding_disposition"], "operator_review_required")
+        self.assertFalse(r["resolved"])  # NOT auto-resolved via ND
+        self.assertEqual(r["projection_status"], pa.ST_BLOCKED_OP_CONFIG)
 
 
 if __name__ == "__main__":
