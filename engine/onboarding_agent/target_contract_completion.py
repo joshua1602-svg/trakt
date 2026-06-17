@@ -362,7 +362,12 @@ def _select_fallback_default(
 
 # Source coverage statuses (mirrors target_coverage vocabulary, defensively).
 _SOURCE_MAPPED = {"source_mapped", "mapped", "source_linked"}
-_SOURCE_MAPPED_ALT = {"source_mapped_alt", "source_mapped_alternative"}
+# NB: the authoritative target_coverage constant is
+# ``SOURCE_MAPPED_ALT = "source_mapped_with_alternatives"`` — a real but AMBIGUOUS
+# source candidate. (Aliases kept for robustness.) A blind regime/asset ND default
+# must never override this; it routes to operator_review_required.
+_SOURCE_MAPPED_ALT = {"source_mapped_with_alternatives", "source_mapped_alt",
+                      "source_mapped_alternative"}
 _DERIVED = {"derived"}
 _PENDING_RULE = {"pending_regime_rule", "deferred", "projection_required"}
 _ABSENT = {"source_absent", "missing", "unmapped", "missing_required",

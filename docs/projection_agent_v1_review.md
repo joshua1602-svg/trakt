@@ -225,6 +225,10 @@ contradictory:
 * `config_mapping_required` / `asset_policy_required` → carried as a config
   dependency (`blocked_operator_or_config_dependency`), **not** an
   `unresolved_source_mapping` (which was the contradictory output before this fix);
+* `operator_review_required` / `source_mapped_with_review` → carried as an
+  operator dependency and **never auto-resolved by applying a blind ND/default**.
+  This prevents the risky case where a valuation/rate field with an ambiguous
+  source (e.g. RREC17) was being resolved by projecting ND1;
 * `projection_rule_required` → carried as a projection blocker.
 
 The `56_projection_blocker_resolution.csv` carries an `onboarding_disposition`

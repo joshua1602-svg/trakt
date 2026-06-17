@@ -98,8 +98,14 @@ DISP_CLIENT_ONBOARDING = "client_onboarding_required"
 DISP_FORMAL_IDENTIFIER = "formal_identifier_policy_required"
 DISP_CONFIG_MAPPING = "config_mapping_required"
 DISP_ASSET_POLICY = "asset_policy_required"
+DISP_OPERATOR_REVIEW = "operator_review_required"
+DISP_SOURCE_MAPPED_REVIEW = "source_mapped_with_review"
 _DISP_CLIENT = {DISP_CLIENT_ONBOARDING, DISP_FORMAL_IDENTIFIER}
 _DISP_CONFIG = {DISP_CONFIG_MAPPING, DISP_ASSET_POLICY}
+# A field the onboarding agent flagged for operator review (e.g. an ambiguous
+# valuation/rate source) must NOT be auto-resolved by applying a blind ND/default
+# — it is carried as an operator dependency until the operator confirms.
+_DISP_OPERATOR = {DISP_OPERATOR_REVIEW, DISP_SOURCE_MAPPED_REVIEW}
 
 _FRAME_COLUMNS = [
     "row_id", "loan_identifier", "record_group", "esma_code", "canonical_field",
@@ -702,6 +708,23 @@ def _resolve_blockers(
                 owner=OWN_CONFIG,
                 desc=f"{canonical or esma} requires config/policy per the onboarding disposition "
                      f"({onboarding_disposition}) — not a source-mapping gap",
+                source_issue_id=val_issue_id)
+            notes = f"executed onboarding disposition: {onboarding_disposition}"
+
+        elif onboarding_disposition in _DISP_OPERATOR:
+            # Operator must confirm an ambiguous source — do NOT silently apply a
+            # blind ND/default (e.g. valuation/rate fields). Carried, not resolved.
+            action = "carry forward operator decision (per onboarding disposition)"
+            status = ST_BLOCKED_OP_CONFIG
+            remaining_issue_id = _new_issue(
+                esma_code=esma, canonical=canonical, record_group=record_group,
+                issue_type=IT_OPERATOR, status=ST_BLOCKED_OP_CONFIG,
+                severity="warn", blocking_delivery=True,
+                action="operator to confirm the source/treatment, then re-project "
+                       "(do not apply a blind ND/default over a real source candidate)",
+                owner=OWN_OPERATOR,
+                desc=f"{canonical or esma} flagged operator_review by the onboarding disposition "
+                     f"— ambiguous source must not be auto-ND-defaulted",
                 source_issue_id=val_issue_id)
             notes = f"executed onboarding disposition: {onboarding_disposition}"
 
