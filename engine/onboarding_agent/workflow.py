@@ -659,6 +659,46 @@ def run_operator_workflow(
         json.dumps(summary, indent=2, default=str), encoding="utf-8")
     _write_summary_md(pdir / "40_operator_workflow_summary.md", summary)
 
+    # --- Onboarding → Transformation & Validation handoff package (24–27) ---
+    # Governed canonical handoff. Additive; never mutates existing outputs and
+    # never re-canonicalises the generic central tape. Built for the Annex 2
+    # (regulatory) target contract; skipped on failed runs (no 28a).
+    if not run_error and is_annex2:
+        try:
+            from engine.onboarding_agent import onboarding_handoff
+            handoff = onboarding_handoff.build_handoff_package(
+                pdir, oroot, client_id=client_id, client_name=client_name,
+                run_id=run_id, mode=mode, registry=registry, aliases_dir=aliases_dir,
+                regime_config_path=(regime_config if is_annex2 else ""),
+                asset_config_path=(asset_config if is_annex2 else ""),
+                decisions_supplied_file=(target_first_decisions or ""))
+            if handoff:
+                m = handoff["manifest"]
+                summary["onboarding_handoff_manifest_json"] = handoff["manifest_json_path"]
+                summary["onboarding_handoff_readiness_json"] = handoff["readiness_json_path"]
+                summary["onboarding_handoff_field_contract_csv"] = (
+                    handoff["field_contract_csv_path"])
+                summary["onboarding_handoff_lineage_json"] = handoff["lineage_path"]
+                summary["onboarding_handoff_type"] = m.get("handoff_type", "")
+                summary["onboarding_handoff_next_agent"] = m.get("next_agent", "")
+                summary["ready_for_transformation_validation"] = bool(
+                    m.get("ready_for_transformation_validation", False))
+                summary["ready_for_projection"] = bool(m.get("ready_for_projection", False))
+                summary["ready_for_xml_delivery"] = bool(m.get("ready_for_xml_delivery", False))
+                # Re-write the 40 summary so it carries the handoff references.
+                (pdir / "40_operator_workflow_summary.json").write_text(
+                    json.dumps(summary, indent=2, default=str), encoding="utf-8")
+                # Inject the handoff section into the static review pack.
+                try:
+                    from engine.onboarding_agent.review_pack_builder import (
+                        refresh_review_pack_handoff)
+                    refresh_review_pack_handoff(pdir, oroot)
+                except Exception:
+                    pass
+        except Exception as exc:  # never break the workflow on handoff issues
+            summary.setdefault("warnings", []).append(
+                f"onboarding handoff package not generated: {type(exc).__name__}: {exc}")
+
     audit = build_legacy_audit(pdir)
     (pdir / "41_onboarding_legacy_file_audit.json").write_text(
         json.dumps(audit, indent=2, default=str), encoding="utf-8")
