@@ -220,6 +220,7 @@ class TestHandoffWorkflow(unittest.TestCase):
             oh.HC_PENDING_REGIME_RULE, oh.HC_SOURCE_ABSENT, oh.HC_ALIAS_MISMATCH,
             oh.HC_SEMANTIC_DERIVATION_REQUIRED, oh.HC_TRANSFORMATION_REQUIRED,
             oh.HC_PROJECTION_REQUIRED, oh.HC_DELIVERY_REQUIRED, oh.HC_NOT_APPLICABLE,
+            oh.HC_SOURCE_CONTEXT_MAPPED, oh.HC_RUN_CONTEXT_MAPPED,
         }
         allowed_owner = {oh.OWN_ONBOARDING, oh.OWN_TRANSFORMATION, oh.OWN_PROJECTION,
                          oh.OWN_DELIVERY, oh.OWN_OPERATOR}

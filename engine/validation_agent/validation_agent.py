@@ -326,17 +326,31 @@ def build_validation_package(
     # 5/6) value-level + cross-field validation -------------------------------
     results: List[Dict[str, Any]] = []
     uncontrolled_error = ""
+    seen_mandatory_absent: set = set()
     try:
         for crow in tx_contract:
             canonical = (crow.get("canonical_field") or "").strip()
-            if not canonical or canonical not in df.columns:
+            if not canonical:
                 continue
             esma = crow.get("esma_code", "")
+            rule = regime_index.get(canonical, {})
+            mandatory = bool(rule.get("mandatory") and rule.get("enforce_presence"))
+            if canonical not in df.columns:
+                # A mandatory field that permits no ND/default but is entirely
+                # absent from the tape is a true validation failure (surfaced,
+                # never filled here).
+                defaultable = bool(rule.get("default_allowed")) or bool(rule.get("nd_allowed"))
+                if mandatory and not defaultable and canonical not in seen_mandatory_absent:
+                    seen_mandatory_absent.add(canonical)
+                    results.append(ra._result(
+                        f"VR-{canonical}-presence", canonical, canonical, esma,
+                        "presence", "fail", "error", 0, int(row_count), 0,
+                        ["<column absent>"], True, True,
+                        notes="mandatory field absent from transformed tape"))
+                continue
             meta = registry_fields.get(canonical, {}) or {}
             fmt = str(meta.get("format", "")).lower()
             enum_name = meta.get("allowed_values", "") or ""
-            rule = regime_index.get(canonical, {})
-            mandatory = bool(rule.get("mandatory") and rule.get("enforce_presence"))
             results.extend(ra.validate_field(
                 df, canonical, fmt, esma_code=esma, regime_rule=rule,
                 enum_name=enum_name, enum_lib=enum_lib, mandatory=mandatory))
