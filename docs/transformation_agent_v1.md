@@ -101,6 +101,35 @@ takes the dedicated **30–35** block (no conflict with onboarding numbering):
 `semantic_derivation_required`, `operator_decision_pending`,
 `validation_required`, `not_applicable`, `failed_transformation`.
 
+## Asset-config-driven defaults for product-specific fields
+
+Some Annex 2 codes have **no full runtime rule** in `annex2_delivery_rules.yaml →
+field_rules` yet (so the Onboarding handoff classifies them `pending_regime_rule`),
+but the **asset config** legitimately defines a product-specific default for them.
+The canonical example is UK Equity Release / Lifetime Mortgages, where
+`product_defaults_ERM.yaml` sets `maturity_date: ND5` (RREL24) because these loans
+have no contractual maturity in the traditional sense.
+
+When a field is left `pending_regime_rule` / `source_absent` by the handoff **and**
+the asset config explicitly defines a `defaults` / `nd_defaults` value for it, the
+Transformation Agent materialises that value into every blank/absent row:
+
+- status becomes `nd_default_materialised` (or `default_materialised`);
+- `value_source` is `asset_config_nd_default` / `asset_config_default`, recorded in
+  `34_transformation_lineage.json` as the origin;
+- the field stops being a missing-materialisation projection blocker.
+
+This is **asset-specific by construction**: it only fires when *that asset's*
+config defines the value. ND/default eligibility (the regulatory envelope) is
+sourced from `annex2_field_universe.yaml` (`nd1_4_allowed` / `nd5_allowed`), the
+asset config, the transformation contract, or `field_rules` — **never from generic
+regime logic that hard-codes a product behaviour**. Existing source values are
+never overwritten, so a traditional amortising portfolio that supplies a real
+`maturity_date` keeps it, and a traditional asset config that does **not** define
+`maturity_date: ND5` leaves the field to be sourced/derived/validated normally
+(it remains a `pending_projection_rule` blocker rather than being silently
+defaulted to ND5).
+
 ## Run / source context fields
 
 Portfolio-level fields such as `data_cut_off_date` (RREL6) are resolved by the

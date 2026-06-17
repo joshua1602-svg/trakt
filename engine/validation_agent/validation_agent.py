@@ -119,6 +119,21 @@ def _truthy(v: Any) -> bool:
     return str(v).strip().lower() in ("true", "1", "yes", "y")
 
 
+def _build_code_to_canonical(registry_fields: Dict[str, Any]) -> Dict[str, str]:
+    """Map ESMA Annex 2 code -> canonical field name from the registry.
+
+    Used to attach the workbook universe ND envelope (keyed by code) back to
+    canonical field names so it can be merged into the regime index.
+    """
+    out: Dict[str, str] = {}
+    for canonical, meta in (registry_fields or {}).items():
+        rm = (meta or {}).get("regime_mapping", {}) or {}
+        code = ((rm.get("ESMA_Annex2", {}) or {}).get("code", "") or "").strip()
+        if code and code not in out:
+            out[code] = canonical
+    return out
+
+
 def _is_blank(v: Any) -> bool:
     if v is None:
         return True
@@ -303,6 +318,10 @@ def build_validation_package(
     asset_config_path = asset_config_path or tx_manifest.get("asset_config_path", "") or str(
         repo_root / "config" / "asset" / "product_defaults_ERM.yaml")
     enum_config_dir = enum_config_dir or str(repo_root / "config" / "system")
+    field_universe_path = tx_manifest.get("field_universe_path", "") or str(
+        repo_root / "config" / "regime" / "annex2_field_universe.yaml")
+    if field_universe_path and not Path(field_universe_path).is_absolute() and not Path(field_universe_path).exists():
+        field_universe_path = str(repo_root / field_universe_path)
 
     # 2) load transformed canonical tape (NO source discovery / fuzzy mapping)
     if not paths["transformed_tape"].exists():
@@ -322,7 +341,18 @@ def build_validation_package(
     registry_fields = ra.load_registry_fields(registry_path)
     enum_lib = ra.load_enum_lib(enum_config_dir)
     regime_cfg = _read_yaml(Path(regime_config_path)) or {}
-    regime_index = ra.build_regime_index(regime_cfg)
+
+    # Authoritative workbook universe (ND envelope) + asset config defaults.
+    # These give the runtime regime index / diagnostic visibility into ND/default
+    # eligibility for codes that lack a full hand-authored field_rules entry
+    # (e.g. RREL15 customer_type, RREL24 maturity_date).
+    field_universe = ra.load_field_universe(field_universe_path)
+    code_to_canonical = _build_code_to_canonical(registry_fields)
+    asset_cfg = _read_yaml(Path(asset_config_path)) or {}
+    asset_defaults = asset_cfg.get("defaults", {}) or {}
+    asset_nd_defaults = asset_cfg.get("nd_defaults", {}) or {}
+    regime_index = ra.build_regime_index(
+        regime_cfg, field_universe=field_universe, code_to_canonical=code_to_canonical)
 
     # 5/6) value-level + cross-field validation -------------------------------
     results: List[Dict[str, Any]] = []
@@ -464,10 +494,13 @@ def build_validation_package(
         target_contract_id=target_contract_id, row_count=row_count,
         field_count=field_count, uncontrolled_error=uncontrolled_error,
         tx_contract=tx_contract, regime_index=regime_index,
+        field_universe=field_universe, asset_defaults=asset_defaults,
+        asset_nd_defaults=asset_nd_defaults,
         config_paths={
             "registry_path": registry_path,
             "regime_config_path": regime_config_path,
             "asset_config_path": asset_config_path,
+            "field_universe_path": field_universe_path,
         })
 
 
@@ -546,6 +579,8 @@ def _write_artefacts(
     run_id: str, target_contract_id: str, row_count: int, field_count: int,
     uncontrolled_error: str, config_paths: Dict[str, str],
     tx_contract: List[Dict[str, Any]], regime_index: Dict[str, Any],
+    field_universe: Dict[str, Any], asset_defaults: Dict[str, Any],
+    asset_nd_defaults: Dict[str, Any],
 ) -> Dict[str, Any]:
 
     # 41 — validation results (csv + json)
@@ -632,7 +667,9 @@ def _write_artefacts(
 
     # 46 — projection blocker diagnostics (csv + json + md)
     blocker_rows = pbd.classify_projection_blockers(
-        issues, df, tx_contract, regime_index)
+        issues, df, tx_contract, regime_index,
+        field_universe=field_universe, asset_defaults=asset_defaults,
+        asset_nd_defaults=asset_nd_defaults)
     blocker_result = pbd.write_blocker_diagnostics(
         out_dir, blocker_rows,
         client_id=client_id, run_id=run_id, target_contract_id=target_contract_id)
