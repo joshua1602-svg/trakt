@@ -169,3 +169,17 @@ overridden with `--registry`, `--regime-config`, `--asset-config`,
 ```bash
 pytest tests/test_validation_agent_workflow.py -q
 ```
+
+
+## Consuming the Onboarding target-field disposition
+
+The Validation Agent classifies carried-forward items using the onboarding
+disposition where present (`validation_classification_for_disposition`), so it
+does not misclassify governed dispositions:
+
+- `config_mapping_required` → **config** blocker, never a data failure;
+- `client_onboarding_required` (and missing) → validation blocker owned by `client_onboarding`;
+- `nd_policy_selected` (materialised) → validate the ND is allowed;
+- `not_applicable` → acceptable downstream gap.
+
+See `docs/target_contract_completion_checklist.md` ("ND allowed ≠ ND selected").

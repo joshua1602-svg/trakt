@@ -70,6 +70,7 @@ ST_BLOCKED_OP_CONFIG = "blocked_operator_or_config_dependency"
 ST_UNRESOLVED_NOT_MATERIALISED = "unresolved_not_materialised"
 ST_UNRESOLVED_ND = "invalid_nd_for_field"
 ST_CARRIED_BLANK = "not_projected_blank"
+ST_BLOCKED_CLIENT = "blocked_client_onboarding_dependency"
 
 # downstream owners.
 OWN_PROJECTION = "projection"
@@ -88,6 +89,11 @@ IT_INVALID_VALUE = "invalid_projected_value"
 IT_FIELD_UNIVERSE = "field_universe_missing"
 IT_LEGACY = "legacy_projector_incompatible"
 IT_DELIVERY_DEFERRED = "delivery_structure_deferred"
+IT_CLIENT_ONBOARDING = "client_onboarding_dependency_unresolved"
+
+# Onboarding disposition (carried via the transformation contract) for a field
+# that must be obtained during formal client onboarding.
+DISP_CLIENT_ONBOARDING = "client_onboarding_required"
 
 _FRAME_COLUMNS = [
     "row_id", "loan_identifier", "record_group", "esma_code", "canonical_field",
@@ -111,8 +117,8 @@ _ISSUE_COLUMNS = [
 
 _RESOLUTION_COLUMNS = [
     "validation_issue_id", "esma_code", "canonical_field", "diagnostic_subtype",
-    "projection_action", "projection_status", "resolved", "resolution_source",
-    "projected_value_sample", "remaining_issue_id", "notes",
+    "onboarding_disposition", "projection_action", "projection_status", "resolved",
+    "resolution_source", "projected_value_sample", "remaining_issue_id", "notes",
 ]
 
 
@@ -411,6 +417,21 @@ def build_projection_package(
     val_issues = _read_csv_rows(paths["validation_issues"])
     blocker_rows = _read_csv_rows(paths["blocker_diagnostics"])
 
+    # Onboarding target-field dispositions, carried through the transformation
+    # field contract (32). The Projection Agent EXECUTES these dispositions —
+    # e.g. a client_onboarding_required field is carried as a client/onboarding
+    # blocker, not rediscovered as a generic source-mapping gap.
+    tx_contract_rows = _read_csv_rows(paths["tx_contract"])
+    disposition_by_field: Dict[str, str] = {}
+    for r in tx_contract_rows:
+        disp = _to_str(r.get("field_disposition"))
+        if not disp:
+            continue
+        for key in (r.get("canonical_field"), r.get("esma_code")):
+            key = _to_str(key)
+            if key and key not in disposition_by_field:
+                disposition_by_field[key] = disp
+
     # 4) regime / asset / ordering config.
     regime_cfg = g4.load_regime_rules(regime_config_path)
     proj_index = g4.build_projection_index(regime_cfg)
@@ -427,7 +448,8 @@ def build_projection_package(
 
     # 6) build the blocker-resolution report from 46 + the field summary.
     resolution_rows, issues = _resolve_blockers(
-        blocker_rows, field_summary, field_problems, proj_index)
+        blocker_rows, field_summary, field_problems, proj_index,
+        disposition_by_field=disposition_by_field)
 
     # 7) readiness.
     counts = _count(frame_rows, issues, resolution_rows)
@@ -578,6 +600,8 @@ def _resolve_blockers(
     field_summary: Dict[str, Dict[str, Any]],
     field_problems: Dict[str, Dict[str, Any]],
     proj_index: Dict[str, Dict[str, Any]],
+    *,
+    disposition_by_field: Optional[Dict[str, str]] = None,
 ):
     """Map each 46_projection_blocker diagnostic into a resolution row, and emit
     the surviving projection issues (55).
@@ -613,12 +637,16 @@ def _resolve_blockers(
         })
         return iid
 
+    disposition_by_field = disposition_by_field or {}
+
     for b in blocker_rows:
         subtype = b.get("projection_blocker_subtype", "")
         canonical = b.get("canonical_field", "")
         esma = b.get("esma_code", "")
         classification = b.get("validation_classification", "")
         val_issue_id = b.get("issue_id", "")
+        onboarding_disposition = (disposition_by_field.get(canonical)
+                                  or disposition_by_field.get(esma) or "")
 
         # locate the field projection outcome.
         summary = field_summary.get(esma) if esma in field_summary else by_canonical.get(canonical)
@@ -639,7 +667,23 @@ def _resolve_blockers(
         remaining_issue_id = ""
         notes = ""
 
-        if subtype == PB_OP_CONFIG_DEP:
+        # EXECUTE the onboarding disposition first: a field the onboarding agent
+        # marked client_onboarding_required is carried as a client/onboarding
+        # blocker, never rediscovered as a generic source-mapping gap.
+        if onboarding_disposition == DISP_CLIENT_ONBOARDING:
+            action = "carry forward client/onboarding dependency (per onboarding disposition)"
+            status = ST_BLOCKED_CLIENT
+            remaining_issue_id = _new_issue(
+                esma_code=esma, canonical=canonical, record_group=record_group,
+                issue_type=IT_CLIENT_ONBOARDING, status=ST_BLOCKED_CLIENT,
+                severity="warn", blocking_delivery=True,
+                action="request the formal identifier/value from the client, then re-project",
+                owner="client_onboarding",
+                desc=f"{canonical or esma} marked client_onboarding_required by the onboarding disposition",
+                source_issue_id=val_issue_id)
+            notes = "executed onboarding disposition: client_onboarding_required"
+
+        elif subtype == PB_OP_CONFIG_DEP:
             # never resolved by the projection agent — carried forward.
             action = "carry forward operator/config dependency (not resolvable at projection)"
             status = ST_BLOCKED_OP_CONFIG
@@ -755,6 +799,7 @@ def _resolve_blockers(
             "esma_code": esma,
             "canonical_field": canonical,
             "diagnostic_subtype": subtype,
+            "onboarding_disposition": onboarding_disposition,
             "projection_action": action,
             "projection_status": status,
             "resolved": resolved,

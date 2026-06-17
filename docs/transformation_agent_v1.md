@@ -143,3 +143,20 @@ Onboarding Agent and carried in the handoff as `source_context_mapped` /
 ```bash
 pytest tests/test_transformation_agent_workflow.py -q
 ```
+
+
+## Consuming the Onboarding target-field disposition
+
+Onboarding now owns the per-field **disposition** (see
+`docs/target_contract_completion_checklist.md`). The Transformation Agent
+**executes** it rather than rediscovering each field's treatment. The disposition
+is carried on the handoff field contract (`26_*`) and propagated into
+`32_transformation_field_contract.csv` via the `field_disposition`,
+`disposition_source` and `disposition_action` columns
+(`transformation_action_for_disposition`):
+
+- `asset_default_supplied` / `configured_static_supplied` → materialise the configured value;
+- `nd_policy_selected` → materialise the selected (allowed) ND;
+- `derivation_configured` → apply the derivation rule;
+- `client_onboarding_required` → do **not** source-map/default; carry forward as client input required;
+- `projection_rule_required` → carry forward for projection.

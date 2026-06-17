@@ -39,6 +39,13 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 import yaml
 
+from engine.onboarding_agent import target_contract_completion as _tcc
+
+
+def _disposition_action(disposition: str) -> str:
+    """Map an onboarding disposition to the Transformation execution action."""
+    return _tcc.transformation_action_for_disposition(disposition)
+
 from engine.onboarding_agent import onboarding_handoff as oh
 from engine.transformation_agent import gate2_adapter as g2
 
@@ -102,6 +109,9 @@ _ISSUE_COLUMNS = [
 _CONTRACT_COLUMNS = [
     "target_contract_id", "esma_code", "target_field", "canonical_field", "domain",
     "coverage_status", "handoff_classification", "handoff_downstream_owner",
+    # Onboarding target-field disposition carried from 26/29 — Transformation
+    # EXECUTES the disposition rather than rediscovering the field treatment.
+    "field_disposition", "disposition_source", "disposition_action",
     "transformation_status", "transformed_value_sample", "value_source",
     "type_cast", "enum_map_used", "parse_rule", "issue_id",
     "blocking_for_validation", "blocking_for_projection", "downstream_owner", "notes",
@@ -913,6 +923,11 @@ def _finalise_contract(
             "coverage_status": row.get("coverage_status", ""),
             "handoff_classification": cls,
             "handoff_downstream_owner": handoff_owner,
+            "field_disposition": row.get("field_disposition", ""),
+            "disposition_source": row.get("disposition_source", ""),
+            "disposition_action": (
+                _disposition_action(row.get("field_disposition", ""))
+                if row.get("field_disposition") else ""),
             "transformation_status": status,
             "transformed_value_sample": _col_sample(df, canonical),
             "value_source": value_source,

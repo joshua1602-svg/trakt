@@ -209,3 +209,18 @@ does **not** solve it.
 `ready_for_xml_delivery` is **always `false`** in this PR.
 
 </invoke>
+
+
+## Consuming the Onboarding target-field disposition
+
+The Projection Agent reads the disposition propagated through the transformation
+field contract (`32_*`, `field_disposition`) and **executes** it
+(`projection_status_for_disposition`). In particular a field marked
+`client_onboarding_required` is carried as a
+`blocked_client_onboarding_dependency` in `56_projection_blocker_resolution.*`
+(issue type `client_onboarding_dependency_unresolved`, owner `client_onboarding`)
+— it is never rediscovered as a generic source-mapping gap. `source_supplied`
+projects the source value, `nd_policy_selected` projects the selected ND, and
+`projection_rule_required` is carried as a projection blocker.
+
+See `docs/target_contract_completion_checklist.md`.
