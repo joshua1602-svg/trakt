@@ -32,6 +32,7 @@ import pandas as pd
 import yaml
 
 from engine.validation_agent import rules_adapter as ra
+from engine.validation_agent import projection_blocker_diagnostics as pbd
 
 # --------------------------------------------------------------------------- #
 # Identity / vocabulary
@@ -462,6 +463,7 @@ def build_validation_package(
         paths=paths, client_id=client_id, run_id=run_id,
         target_contract_id=target_contract_id, row_count=row_count,
         field_count=field_count, uncontrolled_error=uncontrolled_error,
+        tx_contract=tx_contract, regime_index=regime_index,
         config_paths={
             "registry_path": registry_path,
             "regime_config_path": regime_config_path,
@@ -543,6 +545,7 @@ def _write_artefacts(
     tx_manifest: dict, manifest_path: Path, paths: Dict[str, Path], client_id: str,
     run_id: str, target_contract_id: str, row_count: int, field_count: int,
     uncontrolled_error: str, config_paths: Dict[str, str],
+    tx_contract: List[Dict[str, Any]], regime_index: Dict[str, Any],
 ) -> Dict[str, Any]:
 
     # 41 — validation results (csv + json)
@@ -627,6 +630,19 @@ def _write_artefacts(
         client_id, run_id, target_contract_id, row_count, field_count,
         results, counts, readiness, next_agent), encoding="utf-8")
 
+    # 46 — projection blocker diagnostics (csv + json + md)
+    blocker_rows = pbd.classify_projection_blockers(
+        issues, df, tx_contract, regime_index)
+    blocker_result = pbd.write_blocker_diagnostics(
+        out_dir, blocker_rows,
+        client_id=client_id, run_id=run_id, target_contract_id=target_contract_id)
+    blocker_subtype_counts = blocker_result["projection_blocker_subtype_counts"]
+    blocker_count = blocker_result["projection_blocker_count"]
+
+    # Append diagnostic section to 42_validation_readiness.md
+    with open(readiness_md, "a", encoding="utf-8") as fh:
+        fh.write(_blocker_section_md(blocker_rows, blocker_subtype_counts, blocker_count))
+
     # 40 — validation manifest (json + yaml)
     manifest_json = out_dir / "40_validation_manifest.json"
     manifest_yaml = out_dir / "40_validation_manifest.yaml"
@@ -656,6 +672,7 @@ def _write_artefacts(
         "output_validation_readiness_path": str(readiness_json),
         "output_validation_lineage_path": str(lineage_path),
         "output_validation_summary_path": str(summary_md),
+        "output_blocker_diagnostics_path": blocker_result["diagnostic_csv_path"],
 
         # counts
         "row_count": row_count, "field_count": field_count,
@@ -672,6 +689,10 @@ def _write_artefacts(
         "issue_count": counts["issue_count"],
         "issue_type_counts": issue_type_counts,
         "validation_classification_counts": counts["classification_counts"],
+
+        # projection blocker diagnostics
+        "projection_blocker_diagnostic_count": blocker_count,
+        "projection_blocker_subtype_counts": blocker_subtype_counts,
 
         # readiness
         **readiness,
@@ -694,6 +715,11 @@ def _write_artefacts(
         "issues_json_path": str(issues_json),
         "lineage_path": str(lineage_path),
         "summary_md_path": str(summary_md),
+        "blocker_diagnostics_csv_path": blocker_result["diagnostic_csv_path"],
+        "blocker_diagnostics_json_path": blocker_result["diagnostic_json_path"],
+        "blocker_diagnostics_md_path": blocker_result["diagnostic_md_path"],
+        "projection_blocker_count": blocker_count,
+        "projection_blocker_subtype_counts": blocker_subtype_counts,
     }
 
 
@@ -786,4 +812,27 @@ def _summary_md(client_id, run_id, target_contract_id, row_count, field_count,
     else:
         lines.append("- none")
     lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+def _blocker_section_md(
+    blocker_rows: List[Dict[str, Any]],
+    counts: Dict[str, int],
+    total: int,
+) -> str:
+    """Return a markdown section appended to 42_validation_readiness.md."""
+    lines = [
+        "", "## Projection blocker diagnostics", "",
+        f"Total projection blockers classified: **{total}**", "",
+        "| Subtype | Count |",
+        "| --- | --- |",
+    ]
+    for st in pbd.SUBTYPES:
+        n = counts.get(st, 0)
+        if n:
+            lines.append(f"| `{st}` | {n} |")
+    if not any(counts.get(st, 0) for st in pbd.SUBTYPES):
+        lines.append("| _(none)_ | 0 |")
+    lines += ["",
+              "_See `46_projection_blocker_diagnostics.md` for field-level detail._", ""]
     return "\n".join(lines) + "\n"
