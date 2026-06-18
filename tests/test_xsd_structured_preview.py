@@ -191,5 +191,85 @@ def _iter_with_parent(root):
             yield child, parent
 
 
+def _scrtstn_rpt_child_order(xml_text):
+    root = ET.fromstring(xml_text)
+    rpt = root.find(
+        f"{NS}ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/{NS}NewCrrctn/{NS}ScrtstnRpt")
+    return [c.tag.replace(NS, "") for c in list(rpt)] if rpt is not None else []
+
+
+class TestHeaderOrdering(unittest.TestCase):
+    """The fix: report-header sequence (ScrtstnIdr, CutOffDt) must precede the
+    first UndrlygXpsrRcrd, matching the XSD Securitisation1 sequence."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.root = Path(tempfile.mkdtemp(prefix="xsd_hdr_"))
+        cls.out, cls.res = _run(cls.root, enabled=True)
+        cls.sp = cls.out / "preview" / "xsd_structured_preview"
+        cls.xml_text = (cls.sp / "105_xsd_structured_preview.xml").read_text()
+        cls.order = _scrtstn_rpt_child_order(cls.xml_text)
+        cls.validation = json.loads(
+            (cls.sp / "107_xsd_structured_preview_xsd_validation.json").read_text())
+
+    def test_scrtstnidr_before_undrlygxpsrrcrd(self):
+        self.assertIn("ScrtstnIdr", self.order)
+        self.assertIn("UndrlygXpsrRcrd", self.order)
+        self.assertLess(self.order.index("ScrtstnIdr"),
+                        self.order.index("UndrlygXpsrRcrd"))
+
+    def test_cutoffdt_in_header_after_scrtstnidr_before_records(self):
+        self.assertIn("CutOffDt", self.order)
+        self.assertLess(self.order.index("ScrtstnIdr"), self.order.index("CutOffDt"))
+        self.assertLess(self.order.index("CutOffDt"), self.order.index("UndrlygXpsrRcrd"))
+
+    def test_records_only_after_header(self):
+        # the first child of ScrtstnRpt must be ScrtstnIdr (not a loan record).
+        self.assertEqual(self.order[0], "ScrtstnIdr")
+        self.assertEqual(self.order[1], "CutOffDt")
+
+    def test_scrtstnidr_value_matches_xsd_pattern(self):
+        import re
+        root = ET.fromstring(self.xml_text)
+        idr = root.find(f".//{NS}ScrtstnIdr")
+        self.assertIsNotNone(idr)
+        self.assertRegex(idr.text, r"^[A-Z0-9]{18}[0-9]{2}[N]{1}[0-9]{4}[0-9]{2}$")
+
+    def test_previous_header_error_gone(self):
+        self.assertTrue(self.validation["top_level_header_ordering_ok"])
+        for e in self.validation["validation_errors"]:
+            self.assertFalse("UndrlygXpsrRcrd" in e and "ScrtstnIdr" in e and "Expected" in e,
+                             f"old header error still present: {e}")
+
+    def test_collateral_still_nested_under_loan(self):
+        root = ET.fromstring(self.xml_text)
+        for prfrmg in root.iter(f"{NS}PrfrmgLn"):
+            if prfrmg.find(f"{NS}Coll") is not None:
+                break
+        else:
+            self.fail("Coll must remain nested under PrfrmgLn")
+
+    def test_watermark_is_comment_not_polluting_validation(self):
+        # watermark is present as a comment and validation still parsed/attempted.
+        self.assertIn("<!-- XSD-STRUCTURED NON-PRODUCTION PREVIEW", self.xml_text)
+        self.assertTrue(self.validation["xsd_validation_attempted"])
+        # no validation error references the watermark / meta comment text.
+        for e in self.validation["validation_errors"]:
+            self.assertNotIn("XSD-STRUCTURED", e)
+            self.assertNotIn("ProductionXmlStatus", e)
+
+    def test_remaining_errors_recorded_honestly(self):
+        # deeper record-level sequence gaps are acceptable but must be reported.
+        if not self.validation["xsd_validation_passed"]:
+            self.assertTrue(self.validation["validation_errors"])
+            self.assertTrue(self.validation["known_limitations"])
+
+    def test_production_gates_unchanged(self):
+        manifest = json.loads((self.out / "60_delivery_manifest.json").read_text())
+        self.assertFalse(manifest["xml_generation_allowed"])
+        self.assertFalse(manifest["ready_for_xml_delivery"])
+        self.assertFalse(manifest["xml_generated"])
+
+
 if __name__ == "__main__":
     unittest.main()

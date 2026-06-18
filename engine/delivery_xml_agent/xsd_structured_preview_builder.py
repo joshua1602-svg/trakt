@@ -186,10 +186,16 @@ def build_tree(
     watermark: str,
     meta: Dict[str, str],
     xsd_path: Optional[str],
+    header_values: Optional[Dict[str, str]] = None,
 ) -> Tuple[ET.Element, Dict[str, Any]]:
     """Build the nested ESMA tree. ``emit_fields`` carry esma_code, xml_path,
     record_group, value_mode, value_source, sequence_order. ``loans`` is an
-    ordered list of (loan_id, {esma_code: value}). Returns (root, stats)."""
+    ordered list of (loan_id, {esma_code: value}). ``header_values`` supplies the
+    report-level (one-per-report) values keyed by esma_code; these MANDATORY
+    header elements are emitted FIRST, in XSD sequence order, BEFORE any
+    UndrlygXpsrRcrd — so the top-level Securitisation1 sequence is valid.
+    Returns (root, stats)."""
+    header_values = header_values or {}
     resolver = XsdResolver(xsd_path)
     ET.register_namespace("", NS)
     ET.register_namespace("xsi", XSI)
@@ -202,7 +208,7 @@ def build_tree(
     record.sort(key=_seq_key)
 
     stats = {"records_emitted": 0, "fields_emitted": 0, "placeholder_fields": 0,
-             "nodata_wrappers": 0, "rrec_fields_nested": 0}
+             "nodata_wrappers": 0, "rrec_fields_nested": 0, "header_fields": 0}
 
     def _count(field, value):
         stats["fields_emitted"] += 1
@@ -213,15 +219,21 @@ def build_tree(
         if field.get("record_group") == "RREC":
             stats["rrec_fields_nested"] += 1
 
-    # report-header singletons (one per report) — value from the first loan that has it.
+    # MANDATORY report-header singletons FIRST, in XSD sequence order. The value
+    # is the report-level header value (real or a pattern-valid preview
+    # placeholder); records are NEVER emitted before these exist.
     for f in header:
-        val = next((vals.get(f["esma_code"], "") for _lid, vals in loans
-                    if vals.get(f["esma_code"], "")), "")
+        val = header_values.get(f["esma_code"], "")
+        if val == "":
+            # fall back to any per-loan value if a report value was not supplied.
+            val = next((vals.get(f["esma_code"], "") for _lid, vals in loans
+                        if vals.get(f["esma_code"], "")), "")
         if val == "":
             continue
         leaf = _build_chain(root, f["xml_path"].split("/")[1:])  # after 'Document'
         _place_value(leaf, f, val, resolver)
         _count(f, val)
+        stats["header_fields"] += 1
 
     # locate the report-parent chain (up to and incl. ScrtstnRpt) for record nodes.
     report_parts = None
@@ -294,8 +306,13 @@ def validate_against_xsd(xml_text: str, xsd_path: Optional[str]) -> Dict[str, An
         "xsd_validation_passed": False,
         "xsd_path": xsd_path or "",
         "validation_errors": [],
+        # True once the report/header sequence is correct (ScrtstnIdr, CutOffDt
+        # before UndrlygXpsrRcrd) — i.e. the old top-level error is gone.
+        "top_level_header_ordering_ok": False,
+        "remaining_error_categories": [],
         "known_limitations": known_limitations,
-        "note": "Structure-proof preview; XSD validity is NOT claimed.",
+        "note": "Structure-proof preview; XSD validity is NOT claimed. Remaining "
+                "errors are deeper record-level sequence/type gaps, reported honestly.",
     }
     if not xsd_path or not Path(xsd_path).exists():
         report["validation_errors"] = ["XSD not available for validation"]
@@ -311,8 +328,21 @@ def validate_against_xsd(xml_text: str, xsd_path: Optional[str]) -> Dict[str, An
         report["xsd_validation_attempted"] = True
         passed = bool(schema.validate(doc))
         report["xsd_validation_passed"] = passed
-        report["validation_errors"] = [
-            f"line {e.line}: {e.message}" for e in schema.error_log][:50]
+        all_errors = [f"line {e.line}: {e.message}" for e in schema.error_log]
+        report["validation_errors"] = all_errors[:50]
+        # the previous top-level error: UndrlygXpsrRcrd before the mandatory
+        # header ScrtstnIdr. It is fixed when no such error remains.
+        header_err = any(("UndrlygXpsrRcrd" in e and "ScrtstnIdr" in e and "Expected" in e)
+                         for e in all_errors)
+        report["top_level_header_ordering_ok"] = passed or not header_err
+        cats = []
+        if any("UndrlygXpsrId" in e or "OblgrIdr" in e or "UndrlygXpsrIdr" in e for e in all_errors):
+            cats.append("exposure_identification_sequence")
+        if any("ActvtyDtDtls" in e or "UndrlygXpsrDtls" in e for e in all_errors):
+            cats.append("loan_common_data_sequence")
+        if any("CollIdr" in e or "CollCmonData" in e for e in all_errors):
+            cats.append("collateral_sequence")
+        report["remaining_error_categories"] = cats
     except Exception as exc:
         report["xsd_validation_attempted"] = True
         report["validation_errors"] = [f"{type(exc).__name__}: {exc}"]

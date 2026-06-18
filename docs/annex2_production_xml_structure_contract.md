@@ -56,6 +56,18 @@ Document  (xmlns="urn:esma:xsd:DRAFT1auth.099.001.04")
 Namespace: `urn:esma:xsd:DRAFT1auth.099.001.04`; `elementFormDefault="qualified"`;
 `schemaLocation` pairs the namespace with the XSD file.
 
+**Mandatory header ordering (important for any emitter).** `ScrtstnRpt` is XSD
+type `Securitisation1`, a strict sequence: `ScrtstnIdr` (1..1) → `CutOffDt`
+(1..1) → `UndrlygXpsrRcrd` (1..*). Both header elements are **mandatory and must
+precede the first `UndrlygXpsrRcrd`**; emitting a loan record first is invalid
+(`UndrlygXpsrRcrd: not expected. Expected ScrtstnIdr`). `ScrtstnIdr` is further
+constrained by the pattern `[A-Z0-9]{18}[0-9]{2}[N]{1}[0-9]{4}[0-9]{2}` (27
+chars), so any placeholder must satisfy it. The non-production XSD-structured
+preview therefore always emits these two header elements (real value where
+available, else a pattern-valid, clearly-labelled preview placeholder) before the
+records. This is a structural requirement only — it does **not** change
+production gates or claim production readiness.
+
 ## Q2 — Where RREL (exposure) fields sit
 
 RREL splits across **three** XML levels:

@@ -62,6 +62,21 @@ preview_modes:
     allow_fabricated_economic_values: false
     production_xsd_claim_allowed: false
     max_records: 5
+    # Mandatory report/header elements that the XSD requires UNDER ScrtstnRpt,
+    # IN THIS ORDER, BEFORE any UndrlygXpsrRcrd (XSD type Securitisation1:
+    # ScrtstnIdr, CutOffDt, UndrlygXpsrRcrd+). The preview always emits these so
+    # the top-level sequence is valid. A real delivery-valid value is used where
+    # available; otherwise a preview-only, schema-pattern-valid placeholder is
+    # used and clearly labelled (value_source = preview_only_placeholder) in the
+    # lineage/assumption artefacts. These placeholders are NOT real identifiers.
+    mandatory_report_header:
+      - esma_code: RREL1
+        xsd_element: ScrtstnIdr
+        # matches XSD pattern [A-Z0-9]{18}[0-9]{2}[N]{1}[0-9]{4}[0-9]{2} (27 chars)
+        preview_placeholder: "PREVIEW0000000000000N202401"
+      - esma_code: RREL6
+        xsd_element: CutOffDt
+        preview_placeholder: "2024-12-31"
 
 # --------------------------------------------------------------------- #
 # Production guardrails — asserted by the evaluator. The preview path must

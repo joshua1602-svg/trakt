@@ -546,6 +546,13 @@ def evaluate_xsd_structured_preview(
     accepted = {c for c, f in pm_by_code.items()
                 if f.get("builder_acceptance_status") in ACCEPTED_FOR_BUILDER}
 
+    # Mandatory report/header elements (XSD Securitisation1 sequence). These are
+    # handled separately and ALWAYS emitted (real value or a pattern-valid
+    # preview placeholder), in order, before any record — so the top-level
+    # sequence is valid (ScrtstnIdr, CutOffDt, then UndrlygXpsrRcrd).
+    header_cfg = mode_cfg.get("mandatory_report_header") or []
+    header_codes = [h.get("esma_code") for h in header_cfg if h.get("esma_code")]
+
     emit_fields: List[Dict[str, Any]] = []
     applications: List[Dict[str, Any]] = []
     placeholder_codes: List[str] = []
@@ -555,6 +562,8 @@ def evaluate_xsd_structured_preview(
 
     for row in code_rows:
         code = row["esma_code"]
+        if code in header_codes:
+            continue  # mandatory header handled separately, below.
         disp, reason = _client_disposition(row, policy)
         pm = pm_by_code.get(code, {})
         ba = pm.get("builder_acceptance_status", "absent")
@@ -613,6 +622,46 @@ def evaluate_xsd_structured_preview(
             loans_map[lid][code] = _to_str(r.get("delivery_value"))
     loans = [(lid, loans_map[lid]) for lid in loans_order]
 
+    # --- mandatory report-header fields: ALWAYS emitted, in XSD order, BEFORE
+    # records, so the top-level Securitisation1 sequence is valid. Real value
+    # where deliverable; otherwise a pattern-valid, clearly-labelled preview
+    # placeholder. ---
+    header_fields: List[Dict[str, Any]] = []
+    header_values: Dict[str, str] = {}
+    header_placeholder_codes: List[str] = []
+    for h in header_cfg:
+        code = h.get("esma_code")
+        pm = pm_by_code.get(code, {})
+        ba = pm.get("builder_acceptance_status", "absent")
+        if code not in accepted or not pm.get("xml_path"):
+            rejected_or_manual_skipped.append(code)
+            applications.append({
+                "esma_code": code, "record_group": "RREL",
+                "disposition": "mandatory_header_path_not_accepted",
+                "builder_acceptance_status": ba, "xml_path": pm.get("xml_path") or "",
+                "value_source": "", "reason": "mandatory header path is not builder-accepted"})
+            continue
+        real = _deliverable_value(frame_rows, code)
+        if real:
+            val, src = real, SRC_REAL
+        else:
+            val, src = str(h.get("preview_placeholder", "")), SRC_PLACEHOLDER
+            header_placeholder_codes.append(code)
+        header_values[code] = val
+        header_fields.append({
+            "esma_code": code, "record_group": "RREL", "xml_path": pm.get("xml_path"),
+            "value_mode": pm.get("value_mode"), "nd_wrapper_path": pm.get("nd_wrapper_path"),
+            "sequence_order": pm.get("sequence_order"), "value_source": src,
+            "mandatory_header": True})
+        applications.append({
+            "esma_code": code, "record_group": "RREL",
+            "disposition": "mandatory_header_real" if src == SRC_REAL else "mandatory_header_placeholder",
+            "builder_acceptance_status": ba, "xml_path": pm.get("xml_path") or "",
+            "value_source": src,
+            "reason": "mandatory report-header element emitted (in XSD order) before records"})
+    # header fields lead; the builder also places them first by construction.
+    emit_fields = header_fields + emit_fields
+
     rrec_emitted = [f["esma_code"] for f in emit_fields if f["record_group"] == "RREC"]
     rrec_all_nested = all("/Coll" in (f.get("xml_path") or "")
                           for f in emit_fields if f["record_group"] == "RREC")
@@ -649,11 +698,23 @@ def evaluate_xsd_structured_preview(
         "rejected_or_manual_skipped": sorted(set(rejected_or_manual_skipped)),
         "rrec_emitted_codes": sorted(set(rrec_emitted)),
         "rrec_all_nested_under_coll": rrec_all_nested,
+        "header_field_codes": [f["esma_code"] for f in header_fields],
+        "header_placeholder_codes": sorted(set(header_placeholder_codes)),
+        "header_values": header_values,
         "applications": applications,
         "emit_fields": emit_fields,
         "loans": loans,
         "loan_count_available": len(loans),
     }
+
+
+def _deliverable_value(frame_rows: List[Dict[str, Any]], code: str) -> str:
+    """First delivery-valid (deliverable, non-blank) value for a code, if any."""
+    for r in frame_rows:
+        if (r.get("esma_code") == code and r.get("delivery_status") == "deliverable"
+                and _to_str(r.get("delivery_value"))):
+            return _to_str(r.get("delivery_value"))
+    return ""
 
 
 # --------------------------------------------------------------------------- #
@@ -1270,10 +1331,11 @@ def _emit_xsd_structured_preview(
     emit_fields = verdict["emit_fields"]
     loans = verdict["loans"][:max_records]
 
-    # build the nested tree + serialise.
+    # build the nested tree + serialise (mandatory header emitted first, in order).
     root, stats = xsb.build_tree(
         emit_fields=emit_fields, loans=verdict["loans"], max_records=max_records,
-        watermark=watermark, meta=meta, xsd_path=xsd_path)
+        watermark=watermark, meta=meta, xsd_path=xsd_path,
+        header_values=verdict.get("header_values", {}))
     xml_text = xsb.serialize(root, watermark=watermark, meta=meta)
     (out / "105_xsd_structured_preview.xml").write_text(xml_text, encoding="utf-8")
 

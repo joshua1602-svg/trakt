@@ -75,16 +75,31 @@ xml_contract:
     xml_path: "Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt"
     type: Securitisation1
     cardinality: one_per_report
+    # The XSD type Securitisation1 is a sequence in EXACTLY this order. The two
+    # header elements are MANDATORY (minOccurs=1) and MUST precede the first
+    # UndrlygXpsrRcrd. Emitting UndrlygXpsrRcrd before ScrtstnIdr is invalid
+    # ("UndrlygXpsrRcrd: not expected. Expected ScrtstnIdr").
+    report_sequence:
+      - { element: ScrtstnIdr, esma_code: RREL1, min: 1, max: 1 }
+      - { element: CutOffDt,   esma_code: RREL6, min: 1, max: 1 }
+      - { element: UndrlygXpsrRcrd, min: 1, max: unbounded }
+    mandatory_before_records: [ScrtstnIdr, CutOffDt]
     fields:
       - esma_code: RREL1
         role: securitisation_identifier
         xml_path: ".../ScrtstnRpt/ScrtstnIdr"
         xsd_type: SecuritisationIdentifier
+        mandatory: true
+        must_precede: UndrlygXpsrRcrd
+        # XSD pattern: [A-Z0-9]{18}[0-9]{2}[N]{1}[0-9]{4}[0-9]{2} (27 chars).
+        xsd_pattern: "[A-Z0-9]{18,18}[0-9]{2,2}[N]{1,1}[0-9]{4,4}[0-9]{2,2}"
         status: resolved
       - esma_code: RREL6
         role: data_cut_off_date
         xml_path: ".../ScrtstnRpt/CutOffDt"
         xsd_type: ISODate
+        mandatory: true
+        must_precede: UndrlygXpsrRcrd
         status: resolved
 
   # ------------------------------------------------------------------ #
