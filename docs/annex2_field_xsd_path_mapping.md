@@ -61,24 +61,27 @@ carries an explicit `mapping_status` and `evidence_source`.
 
 ## What is inferred
 
-- **High confidence (5):** `RREL3/4/5` (exposure identifiers under
-  `UndrlygXpsrId`) and `RREC3/4` (collateral `CollIdr/OrgnlIdr` / `NewIdr`).
-  These appear in the sample and the field labels disambiguate them, but they
-  are **not** delivery-rules-proven — so they remain inferred (a deliberate
-  downgrade from the earlier "confirmed" claim in the structure contract).
-- **Low confidence (18):** fuzzy/ambiguous XSD candidates that need manual
-  confirmation (e.g. `RREL35` → candidate `AmtstnTp`).
+- **High confidence (89):** sample-evidenced identifiers (`RREL3/4/5`,
+  `RREC3/4`) **plus** the fields corroborated by the **ESMA mapping workbook**,
+  re-validated against the XSD tree (see *Legacy Gate 5 comparison* below). These
+  are strong candidates but are conservatively **not** promoted to `confirmed`.
+- **Low confidence (0):** the earlier fuzzy/ambiguous candidates were either
+  corroborated by the workbook (→ high) or left unresolved.
 
 ## What is unresolved
 
-72 fields are unresolved: the `workbook_semantic` is TBC/mismapped (or uses a
-naming the XSD does not share) and no close XSD element was found automatically.
-These need a manual ESMA-code ↔ XSD-element crosswalk.
+7 fields are unresolved: `RREC1`, `RREC2` (rejected multi-code-cell pollution —
+the workbook would place them outside `Coll`), plus `RREC22`, `RREL18`, `RREL28`,
+`RREL67`, `RREL83` (no clean XSD-valid workbook element path). These need a manual
+ESMA-code ↔ XSD-element crosswalk.
 
 ## Why production XML still cannot be generated
 
-- Only **11 / 107** fields are confirmed; **96** carry a production-blocking
-  mapping gap.
+- Only **11 / 107** fields are `confirmed`; **96** still carry a
+  production-blocking mapping gap. The workbook raised confidence for ~89 fields
+  but, conservatively, workbook+XSD corroboration is **not** treated as
+  production-grade `confirmed` on its own (see below), so the production-blocking
+  count is unchanged.
 - The vendored XSD is the ESMA **DRAFT** (`DRAFT1auth…`); the final schema must
   be confirmed.
 - `NoDataOptn` wrapper handling, asset-class/performing choice selection, and
@@ -103,15 +106,51 @@ elements by the XSD sequence. The builder must **refuse** any field whose
 `mapping_status` is not `confirmed` (and `blocks_production_xml = true`) until it
 is resolved — so the map drives a hard gate, not a guess.
 
+## Legacy Gate 5 comparison
+
+The repo's older Gate 5 builder (`engine/gate_5_delivery/xml_builder_annex2.py`)
+is reviewed in `docs/legacy_gate5_annex2_xml_builder_review.md`, and reconciled
+per-code in `output/config_review/legacy_gate5_vs_xsd_path_map.csv`. Key outcomes:
+
+**Which old logic can be reused.** The legacy builder reads the ESMA mapping
+**workbook** (`PATH` column = full XSD path per RTS code). That crosswalk is the
+valuable asset: **every** RREL/RREC workbook path re-validates against the actual
+XSD tree (104/104). Its NoDataOptn routing and ordered tree-construction concepts
+are also reusable.
+
+**Which old logic must be retired.** All silent fill: ND5 default injection
+(`_ensure_scndry_oblgr_incm_defaults`, `_ensure_hstrcl_colltn_nd_defaults`) and
+value fabrication (`_coerce_record_value_for_branch`, e.g. `RREL12 → "2026"`);
+the wide one-row-per-loan input shape; singleton, **non-repeating** `Coll`; and
+reliance on workbook ordering or multi-code-cell paths without XSD validation.
+
+**Whether any mappings were upgraded.** Yes — **89** fields previously
+low-confidence/unresolved were upgraded to `inferred_high_confidence`
+(`evidence_source = workbook+xsd_validated`) because the workbook path
+**re-validated against the XSD**. They are deliberately **not** promoted to
+`confirmed`: the workbook is corroborating evidence, not sole proof (rule: legacy
+cannot be authoritative alone), and the XSD is still the DRAFT.
+
+**New conflicts discovered.** Multi-code-cell pollution: `RREC1 → ScrtstnIdr`
+(report header) and `RREC2 → NewUndrlygXpsrIdr` (exposure id). The XSD wins —
+these collateral codes must stay nested under `Coll`, so both were **rejected**
+and left `unresolved` rather than flattened. (`legacy_path_conflicts_with_xsd`.)
+
+**What still blocks production XML.** The 96 non-`confirmed` fields, the DRAFT
+(not final) XSD, asset-class/performing choice selection, value↔NoDataOptn
+wiring, XSD-sequence ordering, and resolving the 7 unresolved + 2 polluted codes.
+The workbook **reduces the unknown gap** (unresolved 72 → 7) but does **not**
+reduce the production-blocking count on its own.
+
 ## Summary
 
 ```
 Total fields:                     107
 Confirmed mappings:               11
-High-confidence inferred:         5
-Low-confidence inferred:          18
-Unresolved:                       72
-Conflicts:                        1
+High-confidence inferred:         89   (all workbook+XSD-validated)
+Low-confidence inferred:          0
+Unresolved:                       7
+Conflicts:                        0
 Production-blocking mapping gaps: 96
 ```
 

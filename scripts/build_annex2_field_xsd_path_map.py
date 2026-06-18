@@ -32,18 +32,29 @@ from __future__ import annotations
 import csv
 import difflib
 import re
+import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import yaml
 
 _REPO = Path(__file__).resolve().parents[1]
+if str(_REPO) not in sys.path:
+    sys.path.insert(0, str(_REPO))
 _XSD = _REPO / "DRAFT1auth.099.001.04_1.3.0.xsd"
 _SAMPLE = _REPO / "DRAFT1auth.099.001.04_non-ABCP Underlying Exposure Report.xml"
 _UNIVERSE = _REPO / "config" / "regime" / "annex2_field_universe.yaml"
 _RULES = _REPO / "config" / "regime" / "annex2_delivery_rules.yaml"
 _YAML_OUT = _REPO / "config" / "delivery" / "annex2_field_xsd_path_map.yaml"
 _CSV_OUT = _REPO / "output" / "config_review" / "annex2_field_xsd_path_map.csv"
+
+# ESMA mapping workbook (the auth.099 message workbook). Its PATH column carries
+# the full XSD path per RTS field code — an authoritative crosswalk also used by
+# the legacy Gate 5 builder. Used here ONLY as corroborating evidence: every path
+# is re-validated against the actual XSD tree, and RREC paths must stay nested
+# under Coll (so multi-code-cell pollution like RREC1->ScrtstnIdr is rejected).
+_WORKBOOK = _REPO / "DRAFT1auth.099.001.04_non-ABCP Underlying Exposure Report_Version_1.3.1.xlsx"
+_WB_SHEET = "DRAFT1auth.099.001.04"
 
 _XS = "{http://www.w3.org/2001/XMLSchema}"
 
@@ -132,6 +143,144 @@ class XsdWalker:
         # container -> recurse into each child
         for (cn, ct, cmn, cmx) in kids:
             self.walk(cn, ct, full, level, cmn, cmx, depth + 1)
+
+
+def xsd_path_validator():
+    """Return a function ``valid(path)`` that walks the XSD type graph from
+    ``Document`` and returns True iff every '/'-segment is a real child element."""
+    complex_types, _ = _load_xsd()
+    root = ET.parse(_XSD).getroot()
+    top = {e.get("name"): e.get("type") for e in root.findall(f"{_XS}element")}
+
+    def kids(type_name):
+        out = {}
+        ce = complex_types.get(type_name)
+        if ce is None:
+            return out
+        for n, t, _mn, _mx in _content_children(ce):
+            out[n] = t
+        return out
+
+    def valid(path):
+        parts = [p for p in str(path).strip("/").split("/") if p]
+        if not parts or parts[0] != "Document":
+            return False
+        tname = top.get("Document")
+        for seg in parts[1:]:
+            kmap = kids(tname)
+            if seg not in kmap:
+                return False
+            tname = kmap[seg]
+        return True
+
+    return valid
+
+
+# Generic value/leaf tags whose presence means the parent is the reportable element.
+_WB_VALUE_TAGS = _VALUE_TAGS | {"NoData", "Sgn"}
+
+
+def load_workbook_paths():
+    """Return ``{esma_code: {xml_path, value_mode, nd_wrapper_path}}`` for RREL/RREC
+    codes, derived from the ESMA mapping workbook and re-validated against the XSD.
+
+    Conservative + safe:
+      * only the residential / performing (RRE, PRF) branch is read;
+      * '/Cxl/' (cancellation) rows are dropped;
+      * the element-level row (leaf tag == a domain element, not Cd/Val/NoDataOptn)
+        is chosen as the mapping target;
+      * the element path MUST validate against the actual XSD tree;
+      * RREC codes whose element path is NOT nested under '/Coll/' are REJECTED
+        (rejects multi-code-cell pollution e.g. RREC1->ScrtstnIdr).
+
+    Returns ``{}`` (graceful) if the workbook or pandas is unavailable.
+    """
+    try:
+        from engine.gate_5_delivery.xml_builder_annex2 import load_mapping_specs
+    except Exception:
+        return {}
+    if not _WORKBOOK.exists():
+        return {}
+    try:
+        specs = load_mapping_specs(str(_WORKBOOK), _WB_SHEET, "PRF")
+    except Exception:
+        return {}
+
+    valid = xsd_path_validator()
+    out = {}
+    for code, slist in specs.items():
+        if code[:4] not in ("RREL", "RREC"):
+            continue
+        clean = [s for s in slist if "Cxl" not in s.path.strip("/").split("/")]
+        if not clean:
+            continue
+        # element-level rows (leaf tag is a domain element, not a generic value tag)
+        elem_rows = [s for s in clean
+                     if s.path.strip("/").split("/")[-1] == s.tag and s.tag not in _WB_VALUE_TAGS]
+        elem_rows.sort(key=lambda s: len(s.path.strip("/").split("/")))
+        if not elem_rows:
+            continue
+        path = elem_rows[0].path
+        # normalise leading slash form to match the path map (no leading slash).
+        path = path.strip("/")
+        if not valid(path):
+            continue
+        # RREC must stay nested under Coll (never flat/header).
+        parts = path.split("/")
+        if code.startswith("RREC") and "Coll" not in parts:
+            continue
+        has_nd = any("NoDataOptn" in s.path.split("/") for s in clean)
+        nd_wrapper = f"{path}/NoDataOptn/NoData" if (has_nd and valid(f"{path}/NoDataOptn/NoData")) else None
+        out[code] = {
+            "xml_path": path,
+            "value_mode": "value_or_nodata" if nd_wrapper else "value",
+            "nd_wrapper_path": nd_wrapper,
+            "xsd_element": parts[-1],
+        }
+    return out
+
+
+def _level_for_path(path):
+    parts = path.split("/")
+    if "Coll" in parts:
+        return "collateral"
+    if len(parts) >= 2 and parts[-2] == "ScrtstnRpt":
+        return "header"
+    return "exposure"
+
+
+def _apply_workbook_evidence(rows_by_code, workbook_paths):
+    """Upgrade non-confirmed fields to inferred_high_confidence where the ESMA
+    workbook gives an XSD-validated path. Never promotes to ``confirmed`` (the
+    workbook corroborates but is not treated as sole proof) and never clears the
+    production-blocking flag — production behaviour is unchanged."""
+    upgraded = 0
+    for code, wb in workbook_paths.items():
+        r = rows_by_code.get(code)
+        if r is None or r["mapping_status"] == CONFIRMED:
+            continue
+        level = _level_for_path(wb["xml_path"])
+        if code.startswith("RREC") and level != "collateral":
+            continue  # never flatten a collateral field
+        r.update({
+            "xml_level": level,
+            "xml_path": wb["xml_path"],
+            "xsd_element": wb["xsd_element"],
+            "cardinality": ("one_per_report" if level == "header"
+                            else "one_per_collateral" if level == "collateral"
+                            else "one_per_loan"),
+            "value_mode": wb["value_mode"],
+            "nd_wrapper_path": wb["nd_wrapper_path"],
+            "mapping_status": HIGH,
+            "evidence_source": "workbook+xsd_validated",
+            "owner": "manual_review",
+            "blocks_production_xml": True,
+            "evidence_note": ("ESMA mapping workbook path, re-validated against the XSD tree "
+                              "(residential/performing branch). High-confidence corroboration — "
+                              "NOT promoted to confirmed pending final-XSD sign-off."),
+        })
+        upgraded += 1
+    return upgraded
 
 
 def build_xsd_index():
@@ -368,6 +517,11 @@ def build_rows():
             xsd_index, all_xsd_names, sample_names)
 
     apply_overrides(rows_by_code, xsd_index, sample_names)
+    _flag_path_collisions(rows_by_code)
+    # Legacy Gate 5 workbook reconciliation: corroborate paths from the ESMA
+    # mapping workbook, re-validated against the XSD (high-confidence, not
+    # confirmed; never clears the production-blocking flag).
+    _apply_workbook_evidence(rows_by_code, load_workbook_paths())
     _flag_path_collisions(rows_by_code)
     rows = [rows_by_code[c] for c in sorted(rows_by_code, key=sort_key)]
     return rows, xsd_index

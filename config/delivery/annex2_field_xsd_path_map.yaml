@@ -11,10 +11,10 @@ field_xsd_path_map:
   summary:
     total_fields: 107
     confirmed: 11
-    inferred_high_confidence: 5
-    inferred_low_confidence: 18
-    unresolved: 72
-    conflict: 1
+    inferred_high_confidence: 89
+    inferred_low_confidence: 0
+    unresolved: 7
+    conflict: 0
     production_blocking_mapping_gaps: 96
   production_guardrails:
     do_not_generate_production_xml: true
@@ -69,9 +69,9 @@ field_xsd_path_map:
     value_mode: value
     nd_wrapper_path: null
     mapping_status: inferred_high_confidence
-    evidence_source: sample_xml
-    evidence_note: "Coll/CollIdr/OrgnlIdr present in sample; field-label disambiguation only \u2014 not\
-      \ delivery_rules-proven"
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREC4
@@ -86,77 +86,77 @@ field_xsd_path_map:
     value_mode: value
     nd_wrapper_path: null
     mapping_status: inferred_high_confidence
-    evidence_source: sample_xml
-    evidence_note: "Coll/CollIdr/NewIdr present in sample; field-label disambiguation only \u2014 not\
-      \ delivery_rules-proven"
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREC5
     canonical_field: collateral_type
     record_group: RREC
     xml_level: collateral
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/CmonData/CollTp
+    xsd_element: CollTp
     xsd_type: null
     cardinality: one_per_collateral
     sequence_order: null
-    value_mode: unknown
+    value_mode: value
     nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREC6
     canonical_field: geographic_region_collateral
     record_group: RREC
     xml_level: collateral
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/CmonData/TrtrlUnitClssfctn
+    xsd_element: TrtrlUnitClssfctn
     xsd_type: null
     cardinality: one_per_collateral
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: workbook_semantic 'GeogrgphclRgnColltrl/Cd' uses workbook (non-XSD) naming with no
-      close XSD element in the residential branch; needs manual XSD review; universe allows ND -> expect
-      NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/CmonData/TrtrlUnitClssfctn/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREC7
     canonical_field: occupancy
     record_group: RREC
     xml_level: collateral
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/OccpncyTp
+    xsd_element: OccpncyTp
     xsd_type: null
     cardinality: one_per_collateral
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: workbook_semantic 'Occupancy/Cd' uses workbook (non-XSD) naming with no close XSD element
-      in the residential branch; needs manual XSD review; universe allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/OccpncyTp/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREC8
     canonical_field: lien
     record_group: RREC
     xml_level: collateral
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/CmonData/LienVal
+    xsd_element: LienVal
     xsd_type: null
     cardinality: one_per_collateral
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: inferred_low_confidence
-    evidence_source: delivery_rules
-    evidence_note: leaf 'Lien' exists in the XSD but not in the residential performing branch (different
-      asset class / sub-branch); needs review; universe allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/CmonData/LienVal/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREC9
@@ -186,10 +186,10 @@ field_xsd_path_map:
     sequence_order: 91
     value_mode: value_or_nodata
     nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/NrgyPrfrmncCertVal/NoDataOptn/NoData
-    mapping_status: inferred_low_confidence
-    evidence_source: delivery_rules
-    evidence_note: "workbook_semantic 'EnrgyPrfrmncCrtfctVal/Val' uses non-XSD naming; closest XSD element\
-      \ 'NrgyPrfrmncCertVal' is a CANDIDATE only \u2014 needs manual confirmation"
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREC11
@@ -203,79 +203,78 @@ field_xsd_path_map:
     sequence_order: 92
     value_mode: value_or_nodata
     nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/NrgyPrfrmncCertPrvdrNm/NoDataOptn/NoData
-    mapping_status: inferred_low_confidence
-    evidence_source: delivery_rules
-    evidence_note: "workbook_semantic 'EnrgyPrfrmncCrtfctPrvdrNm/Nm' uses non-XSD naming; closest XSD\
-      \ element 'NrgyPrfrmncCertPrvdrNm' is a CANDIDATE only \u2014 needs manual confirmation"
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREC12
     canonical_field: current_loan_to_value
     record_group: RREC
     xml_level: collateral
-    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/InfAtOrgtn/LnToVal
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/CurInf/LnToVal
     xsd_element: LnToVal
     xsd_type: PercentageRate3Choice
     cardinality: one_per_collateral
     sequence_order: 93
     value_mode: value_or_nodata
-    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/InfAtOrgtn/LnToVal/NoDataOptn/NoData
-    mapping_status: inferred_low_confidence
-    evidence_source: xsd
-    evidence_note: 'leaf ''LnToVal'' is ambiguous: 2 XSD locations (InfAtOrgtn, CurInf ...)'
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/CurInf/LnToVal/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREC13
     canonical_field: current_valuation_amount
     record_group: RREC
     xml_level: collateral
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/CurInf/ValtnAmt
+    xsd_element: ValtnAmt
     xsd_type: null
     cardinality: one_per_collateral
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/CurInf/ValtnAmt/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREC14
     canonical_field: current_valuation_method
     record_group: RREC
     xml_level: collateral
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/CurInf/ValtnMtd
+    xsd_element: ValtnMtd
     xsd_type: null
     cardinality: one_per_collateral
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: workbook_semantic 'CrntVlwtnMthd/Cd' uses workbook (non-XSD) naming with no close XSD
-      element in the residential branch; needs manual XSD review; universe allows ND -> expect NoDataOptn
-      wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/CurInf/ValtnMtd/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREC15
     canonical_field: current_valuation_date
     record_group: RREC
     xml_level: collateral
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/CurInf/ValtnDt
+    xsd_element: ValtnDt
     xsd_type: null
     cardinality: one_per_collateral
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: workbook_semantic 'CrntVlwtnDt/Dt' uses workbook (non-XSD) naming with no close XSD
-      element in the residential branch; needs manual XSD review; universe allows ND -> expect NoDataOptn
-      wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/CurInf/ValtnDt/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREC16
@@ -289,100 +288,97 @@ field_xsd_path_map:
     sequence_order: 93
     value_mode: value_or_nodata
     nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/InfAtOrgtn/LnToVal/NoDataOptn/NoData
-    mapping_status: conflict
-    evidence_source: xsd
-    evidence_note: "path collision: resolves to the same element as RREC12 (Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/InfAtOrgtn/LnToVal);\
-      \ at most one code can map here \u2014 needs review"
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREC17
     canonical_field: original_valuation_amount
     record_group: RREC
     xml_level: collateral
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/InfAtOrgtn/ValtnAmt
+    xsd_element: ValtnAmt
     xsd_type: null
     cardinality: one_per_collateral
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: workbook_semantic 'OrgnlVlwtnAmt/Val/Amt' uses workbook (non-XSD) naming with no close
-      XSD element in the residential branch; needs manual XSD review; universe allows ND -> expect NoDataOptn
-      wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/InfAtOrgtn/ValtnAmt/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREC18
     canonical_field: original_valuation_method
     record_group: RREC
     xml_level: collateral
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/InfAtOrgtn/ValtnMtd
+    xsd_element: ValtnMtd
     xsd_type: null
     cardinality: one_per_collateral
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: workbook_semantic 'OrgnlVlwtnMthd/Val' uses workbook (non-XSD) naming with no close
-      XSD element in the residential branch; needs manual XSD review; universe allows ND -> expect NoDataOptn
-      wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/InfAtOrgtn/ValtnMtd/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREC19
     canonical_field: original_valuation_date
     record_group: RREC
     xml_level: collateral
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/InfAtOrgtn/ValtnDt
+    xsd_element: ValtnDt
     xsd_type: null
     cardinality: one_per_collateral
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: workbook_semantic 'OrgnlVlwtnDt/Dt' uses workbook (non-XSD) naming with no close XSD
-      element in the residential branch; needs manual XSD review; universe allows ND -> expect NoDataOptn
-      wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/InfAtOrgtn/ValtnDt/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREC20
     canonical_field: date_of_sale
     record_group: RREC
     xml_level: collateral
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Nfrcmnt/SaleDt
+    xsd_element: SaleDt
     xsd_type: null
     cardinality: one_per_collateral
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: workbook_semantic 'DtOfSale/Dt' uses workbook (non-XSD) naming with no close XSD element
-      in the residential branch; needs manual XSD review; universe allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Nfrcmnt/SaleDt/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREC21
     canonical_field: sale_price
     record_group: RREC
     xml_level: collateral
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Nfrcmnt/SalePric
+    xsd_element: SalePric
     xsd_type: null
     cardinality: one_per_collateral
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Nfrcmnt/SalePric/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREC22
     canonical_field: collateral_currency
     record_group: RREC
@@ -404,19 +400,19 @@ field_xsd_path_map:
     canonical_field: guarantor_type
     record_group: RREC
     xml_level: collateral
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/GuarntrTp
+    xsd_element: GuarntrTp
     xsd_type: null
     cardinality: one_per_collateral
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/GuarntrTp/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL1
     canonical_field: unique_identifier
     record_group: RREL
@@ -462,9 +458,9 @@ field_xsd_path_map:
     value_mode: value
     nd_wrapper_path: null
     mapping_status: inferred_high_confidence
-    evidence_source: sample_xml
-    evidence_note: present in sample under UndrlygXpsrId as NewUndrlygXpsrIdr; field-label match strong
-      but not delivery_rules-proven
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL4
@@ -479,9 +475,9 @@ field_xsd_path_map:
     value_mode: value
     nd_wrapper_path: null
     mapping_status: inferred_high_confidence
-    evidence_source: sample_xml
-    evidence_note: present in sample under UndrlygXpsrId as OrgnlOblgrIdr; field-label match strong but
-      not delivery_rules-proven
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL5
@@ -496,9 +492,9 @@ field_xsd_path_map:
     value_mode: value
     nd_wrapper_path: null
     mapping_status: inferred_high_confidence
-    evidence_source: sample_xml
-    evidence_note: present in sample under UndrlygXpsrId as NewOblgrIdr; field-label match strong but
-      not delivery_rules-proven
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL6
@@ -521,191 +517,189 @@ field_xsd_path_map:
     canonical_field: pool_addition_date
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/ActvtyDtDtls/PoolAddtnDt
+    xsd_element: PoolAddtnDt
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/ActvtyDtDtls/PoolAddtnDt/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL8
     canonical_field: date_of_repurchase
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/ActvtyDtDtls/RpDt
+    xsd_element: RpDt
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/ActvtyDtDtls/RpDt/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL9
     canonical_field: redemption_date
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/GnlAttrbts/RedDt
+    xsd_element: RedDt
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: workbook_semantic 'RdmptnDt/Dt' uses workbook (non-XSD) naming with no close XSD element
-      in the residential branch; needs manual XSD review; universe allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/GnlAttrbts/RedDt/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL10
     canonical_field: resident
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/Resdt
+    xsd_element: Resdt
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/Resdt/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL11
     canonical_field: geographic_region_obligor
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/TrtrlUnit/Clssfctn
+    xsd_element: Clssfctn
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: workbook_semantic 'GeogrgphclRgnOblgr/Cd' uses workbook (non-XSD) naming with no close
-      XSD element in the residential branch; needs manual XSD review; universe allows ND -> expect NoDataOptn
-      wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/TrtrlUnit/Clssfctn/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL12
     canonical_field: geographic_region_classification
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/TrtrlUnit/ClssfctnYr
+    xsd_element: ClssfctnYr
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: workbook_semantic 'GeogrgphclRgnOblgrYr/Cd' uses workbook (non-XSD) naming with no
-      close XSD element in the residential branch; needs manual XSD review; universe allows ND -> expect
-      NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/TrtrlUnit/ClssfctnYr/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL13
     canonical_field: employment_status
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/AddtlCmonData/MplyntSts
+    xsd_element: MplyntSts
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/AddtlCmonData/MplyntSts/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL14
     canonical_field: credit_impaired_obligor
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/AddtlCmonData/CdtImprdOblgr
+    xsd_element: CdtImprdOblgr
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/AddtlCmonData/CdtImprdOblgr/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL15
     canonical_field: customer_type
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/CstmrTp
+    xsd_element: CstmrTp
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/CstmrTp/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL16
     canonical_field: primary_income
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/FinDtls/PmryOblgrIncm/IncmVal
+    xsd_element: IncmVal
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: inferred_low_confidence
-    evidence_source: delivery_rules
-    evidence_note: leaf 'PmryOblgrIncm' exists in the XSD but not in the residential performing branch
-      (different asset class / sub-branch); needs review; universe allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/FinDtls/PmryOblgrIncm/IncmVal/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL17
     canonical_field: primary_income_type
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/FinDtls/PmryOblgrIncm/Tp
+    xsd_element: Tp
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/FinDtls/PmryOblgrIncm/Tp/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL18
     canonical_field: primary_income_currency
     record_group: RREL
@@ -727,53 +721,53 @@ field_xsd_path_map:
     canonical_field: primary_income_verification
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/FinDtls/PmryOblgrIncm/Vrfctn
+    xsd_element: Vrfctn
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: inferred_low_confidence
-    evidence_source: delivery_rules
-    evidence_note: leaf 'PmryOblgrIncm' exists in the XSD but not in the residential performing branch
-      (different asset class / sub-branch); needs review; universe allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/FinDtls/PmryOblgrIncm/Vrfctn/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL20
     canonical_field: secondary_income
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/FinDtls/ScndryOblgrIncm/IncmVal
+    xsd_element: IncmVal
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/FinDtls/ScndryOblgrIncm/IncmVal/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL21
     canonical_field: secondary_income_verification
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/FinDtls/ScndryOblgrIncm/Vrfctn
+    xsd_element: Vrfctn
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/FinDtls/ScndryOblgrIncm/Vrfctn/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL22
     canonical_field: special_scheme
     record_group: RREL
@@ -794,36 +788,36 @@ field_xsd_path_map:
     canonical_field: origination_date
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IssncAndMtrtyDtls/OrgtnDt
+    xsd_element: OrgtnDt
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IssncAndMtrtyDtls/OrgtnDt/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL24
     canonical_field: maturity_date
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IssncAndMtrtyDtls/MtrtyDt
+    xsd_element: MtrtyDt
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IssncAndMtrtyDtls/MtrtyDt/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL25
     canonical_field: original_term
     record_group: RREL
@@ -844,34 +838,34 @@ field_xsd_path_map:
     canonical_field: origination_channel
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/OrgtnChanl
+    xsd_element: OrgtnChanl
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/OrgtnChanl/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL27
     canonical_field: purpose
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/Purp
+    xsd_element: Purp
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: workbook_semantic 'Prps/Cd' uses workbook (non-XSD) naming with no close XSD element
-      in the residential branch; needs manual XSD review; universe allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/Purp/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL28
@@ -894,36 +888,36 @@ field_xsd_path_map:
     canonical_field: original_principal_balance
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/BalDtls/OrgnlPrncplBal
+    xsd_element: OrgnlPrncplBal
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/BalDtls/OrgnlPrncplBal/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL30
     canonical_field: current_principal_balance
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/BalDtls/CurPrncplBal
+    xsd_element: CurPrncplBal
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/BalDtls/CurPrncplBal/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL31
     canonical_field: prior_principal_balances
     record_group: RREL
@@ -960,36 +954,36 @@ field_xsd_path_map:
     canonical_field: total_credit_limit
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/BalDtls/TtlCdtLmt
+    xsd_element: TtlCdtLmt
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/BalDtls/TtlCdtLmt/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL34
     canonical_field: purchase_price
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/BalDtls/PurchsPric
+    xsd_element: PurchsPric
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/BalDtls/PurchsPric/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL35
     canonical_field: amortisation_type
     record_group: RREL
@@ -1001,82 +995,80 @@ field_xsd_path_map:
     sequence_order: 35
     value_mode: value_or_nodata
     nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/RpmtDtls/AmtstnTp/NoDataOptn/NoData
-    mapping_status: inferred_low_confidence
-    evidence_source: delivery_rules
-    evidence_note: "workbook_semantic 'AmrtstnType/Cd' uses non-XSD naming; closest XSD element 'AmtstnTp'\
-      \ is a CANDIDATE only \u2014 needs manual confirmation"
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL36
     canonical_field: principal_grace_period_end_date
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/RpmtDtls/CmonData/GracePrdEndDt
+    xsd_element: GracePrdEndDt
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/RpmtDtls/CmonData/GracePrdEndDt/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL37
     canonical_field: scheduled_principal_payment_frequency
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/RpmtDtls/CmonData/SchdldPmtFrqcy
+    xsd_element: SchdldPmtFrqcy
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: workbook_semantic 'SchdlPrncplPmntFrqnc/Cd' uses workbook (non-XSD) naming with no
-      close XSD element in the residential branch; needs manual XSD review; universe allows ND -> expect
-      NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/RpmtDtls/CmonData/SchdldPmtFrqcy/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL38
     canonical_field: scheduled_interest_payment_frequency
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/RpmtDtls/CmonData/IntrstPmtFrqcy
+    xsd_element: IntrstPmtFrqcy
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: workbook_semantic 'SchdlIntrstPmntFrqnc/Cd' uses workbook (non-XSD) naming with no
-      close XSD element in the residential branch; needs manual XSD review; universe allows ND -> expect
-      NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/RpmtDtls/CmonData/IntrstPmtFrqcy/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL39
     canonical_field: payment_due
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/PmtDtls/PmtDue
+    xsd_element: PmtDue
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/PmtDtls/PmtDue/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL40
     canonical_field: debt_to_income_ratio
     record_group: RREL
@@ -1113,273 +1105,272 @@ field_xsd_path_map:
     canonical_field: interest_rate_type
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/Tp
+    xsd_element: Tp
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: workbook_semantic 'IntrstRateType/Cd' uses workbook (non-XSD) naming with no close
-      XSD element in the residential branch; needs manual XSD review; universe allows ND -> expect NoDataOptn
-      wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/Tp/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL43
     canonical_field: current_interest_rate
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/CmonData/CurRate
+    xsd_element: CurRate
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/CmonData/CurRate/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL44
     canonical_field: current_interest_rate_index
     record_group: RREL
     xml_level: exposure
-    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/RvisdIntrstRateIndx
-    xsd_element: RvisdIntrstRateIndx
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/CmonData/CurIndx
+    xsd_element: CurIndx
     xsd_type: InterestRateIndex1Choice
     cardinality: one_per_loan
     sequence_order: 51
     value_mode: value_or_nodata
-    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/RvisdIntrstRateIndx/NoDataOptn/NoData
-    mapping_status: inferred_low_confidence
-    evidence_source: delivery_rules
-    evidence_note: "workbook_semantic 'IntrstRateIndx/Cd' uses non-XSD naming; closest XSD element 'RvisdIntrstRateIndx'\
-      \ is a CANDIDATE only \u2014 needs manual confirmation"
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/CmonData/CurIndx/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL45
     canonical_field: current_interest_rate_index_tenor
     record_group: RREL
     xml_level: exposure
-    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/RvisdIntrstRateIndxTnor
-    xsd_element: RvisdIntrstRateIndxTnor
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/CmonData/CurTnor
+    xsd_element: CurTnor
     xsd_type: InterestRateIndexTenor1Choice
     cardinality: one_per_loan
     sequence_order: 52
     value_mode: value_or_nodata
-    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/RvisdIntrstRateIndxTnor/NoDataOptn/NoData
-    mapping_status: inferred_low_confidence
-    evidence_source: delivery_rules
-    evidence_note: "workbook_semantic 'IntrstRateIndxTenor/Cd' uses non-XSD naming; closest XSD element\
-      \ 'RvisdIntrstRateIndxTnor' is a CANDIDATE only \u2014 needs manual confirmation"
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/CmonData/CurTnor/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL46
     canonical_field: current_interest_rate_margin
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/CurIntrstRateMrgn
+    xsd_element: CurIntrstRateMrgn
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/CurIntrstRateMrgn/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL47
     canonical_field: interest_rate_reset_interval
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/AddtlCmonData/RstIntrvl
+    xsd_element: RstIntrvl
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/AddtlCmonData/RstIntrvl/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL48
     canonical_field: interest_rate_cap
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/AddtlCmonData/Cap
+    xsd_element: Cap
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/AddtlCmonData/Cap/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL49
     canonical_field: interest_rate_floor
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/AddtlCmonData/Flr
+    xsd_element: Flr
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/AddtlCmonData/Flr/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL50
     canonical_field: revision_margin_1
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/FrstRvsnData/Mrgn
+    xsd_element: Mrgn
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: inferred_low_confidence
-    evidence_source: delivery_rules
-    evidence_note: leaf 'FrstRvsnData' exists in the XSD but not in the residential performing branch
-      (different asset class / sub-branch); needs review; universe allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/FrstRvsnData/Mrgn/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL51
     canonical_field: interest_revision_date_1
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/FrstRvsnData/IntrstRvsnDt
+    xsd_element: IntrstRvsnDt
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: inferred_low_confidence
-    evidence_source: delivery_rules
-    evidence_note: leaf 'FrstRvsnData' exists in the XSD but not in the residential performing branch
-      (different asset class / sub-branch); needs review; universe allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/FrstRvsnData/IntrstRvsnDt/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL52
     canonical_field: revision_margin_2
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/ScndRvsnData/Mrgn
+    xsd_element: Mrgn
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: inferred_low_confidence
-    evidence_source: delivery_rules
-    evidence_note: leaf 'ScndRvsnData' exists in the XSD but not in the residential performing branch
-      (different asset class / sub-branch); needs review; universe allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/ScndRvsnData/Mrgn/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL53
     canonical_field: interest_revision_date_2
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/ScndRvsnData/IntrstRvsnDt
+    xsd_element: IntrstRvsnDt
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: inferred_low_confidence
-    evidence_source: delivery_rules
-    evidence_note: leaf 'ScndRvsnData' exists in the XSD but not in the residential performing branch
-      (different asset class / sub-branch); needs review; universe allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/ScndRvsnData/IntrstRvsnDt/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL54
     canonical_field: revision_margin_3
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/ThrdRvsnData/Mrgn
+    xsd_element: Mrgn
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: inferred_low_confidence
-    evidence_source: delivery_rules
-    evidence_note: leaf 'ThrdRvsnData' exists in the XSD but not in the residential performing branch
-      (different asset class / sub-branch); needs review; universe allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/ThrdRvsnData/Mrgn/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL55
     canonical_field: interest_revision_date_3
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/ThrdRvsnData/IntrstRvsnDt
+    xsd_element: IntrstRvsnDt
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: inferred_low_confidence
-    evidence_source: delivery_rules
-    evidence_note: leaf 'ThrdRvsnData' exists in the XSD but not in the residential performing branch
-      (different asset class / sub-branch); needs review; universe allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/ThrdRvsnData/IntrstRvsnDt/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL56
     canonical_field: revised_interest_rate_index
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/RvisdIntrstRateIndx
+    xsd_element: RvisdIntrstRateIndx
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: inferred_low_confidence
-    evidence_source: delivery_rules
-    evidence_note: leaf 'ThrdRvsnData' exists in the XSD but not in the residential performing branch
-      (different asset class / sub-branch); needs review; universe allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/RvisdIntrstRateIndx/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL57
     canonical_field: revised_interest_rate_index_tenor
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/RvisdIntrstRateIndxTnor
+    xsd_element: RvisdIntrstRateIndxTnor
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: inferred_low_confidence
-    evidence_source: delivery_rules
-    evidence_note: leaf 'ThrdRvsnData' exists in the XSD but not in the residential performing branch
-      (different asset class / sub-branch); needs review; universe allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/RvisdIntrstRateIndxTnor/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL58
@@ -1393,151 +1384,148 @@ field_xsd_path_map:
     sequence_order: 60
     value_mode: value_or_nodata
     nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/PmtDtls/NbOfPmtsBfrScrtstn/NoDataOptn/NoData
-    mapping_status: inferred_low_confidence
-    evidence_source: delivery_rules
-    evidence_note: "workbook_semantic 'NbPmntsBfrScrtstn/Nb' uses non-XSD naming; closest XSD element\
-      \ 'NbOfPmtsBfrScrtstn' is a CANDIDATE only \u2014 needs manual confirmation"
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL59
     canonical_field: percentage_of_prepayments_allowed_per_year
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/PrepmtDtls/PrepmtCmonData/AllwdPerYr
+    xsd_element: AllwdPerYr
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: workbook_semantic 'PctgPrpymntsAllwdPerYr/Rate' uses workbook (non-XSD) naming with
-      no close XSD element in the residential branch; needs manual XSD review; universe allows ND -> expect
-      NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/PrepmtDtls/PrepmtCmonData/AllwdPerYr/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL60
     canonical_field: prepayment_lock_out_end_date
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/PrepmtDtls/LckOutEndDt
+    xsd_element: LckOutEndDt
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: workbook_semantic 'PrpymtLckOutEndDt/Dt' uses workbook (non-XSD) naming with no close
-      XSD element in the residential branch; needs manual XSD review; universe allows ND -> expect NoDataOptn
-      wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/PrepmtDtls/LckOutEndDt/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL61
     canonical_field: prepayment_fee
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/PrepmtDtls/PrepmtCmonData/Fee
+    xsd_element: Fee
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/PrepmtDtls/PrepmtCmonData/Fee/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL62
     canonical_field: prepayment_fee_end_date
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/PrepmtDtls/PrepmtCmonData/FeeEndDt
+    xsd_element: FeeEndDt
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: workbook_semantic 'PrpymtFeeEndDt/Dt' uses workbook (non-XSD) naming with no close
-      XSD element in the residential branch; needs manual XSD review; universe allows ND -> expect NoDataOptn
-      wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/PrepmtDtls/PrepmtCmonData/FeeEndDt/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL63
     canonical_field: prepayment_date
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/PrepmtDtls/PrepmtCmonData/LatstDt
+    xsd_element: LatstDt
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: workbook_semantic 'PrpymtDt/Dt' uses workbook (non-XSD) naming with no close XSD element
-      in the residential branch; needs manual XSD review; universe allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/PrepmtDtls/PrepmtCmonData/LatstDt/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL64
     canonical_field: cumulative_prepayments
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/PrepmtDtls/PrepmtCmonData/CmltvAmt
+    xsd_element: CmltvAmt
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/PrepmtDtls/PrepmtCmonData/CmltvAmt/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL65
     canonical_field: date_of_repurchase
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/GnlAttrbts/RstrgDt
+    xsd_element: RstrgDt
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: workbook_semantic 'RepurchDt/Dt' uses workbook (non-XSD) naming with no close XSD element
-      in the residential branch; needs manual XSD review; universe allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/GnlAttrbts/RstrgDt/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
   - esma_code: RREL66
     canonical_field: date_last_in_arrears
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/ArrearsDtls/DtLastInArrears
+    xsd_element: DtLastInArrears
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/ArrearsDtls/DtLastInArrears/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL67
     canonical_field: arrears_balance
     record_group: RREL
@@ -1558,18 +1546,19 @@ field_xsd_path_map:
     canonical_field: number_of_days_in_arrears
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/ArrearsDtls/NbOfDaysInArrears
+    xsd_element: NbOfDaysInArrears
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
-    value_mode: unknown
+    value_mode: value
     nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL69
     canonical_field: account_status
     record_group: RREL
@@ -1590,222 +1579,223 @@ field_xsd_path_map:
     canonical_field: reason_for_default_or_foreclosure
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/DfltDtls/CmonData/DfltOrFrclsrRsn
+    xsd_element: DfltOrFrclsrRsn
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/DfltDtls/CmonData/DfltOrFrclsrRsn/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL71
     canonical_field: default_amount
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/DfltDtls/CmonData/GrssDflt
+    xsd_element: GrssDflt
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/DfltDtls/CmonData/GrssDflt/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL72
     canonical_field: default_date
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/DfltDtls/CmonData/DtOfDflt
+    xsd_element: DtOfDflt
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/DfltDtls/CmonData/DtOfDflt/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL73
     canonical_field: allocated_losses
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/DfltDtls/RcvrsData/AllctdLoss
+    xsd_element: AllctdLoss
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/DfltDtls/RcvrsData/AllctdLoss/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL74
     canonical_field: cumulative_recoveries
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/DfltDtls/RcvrsData/CmltvRcvrs
+    xsd_element: CmltvRcvrs
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/DfltDtls/RcvrsData/CmltvRcvrs/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL75
     canonical_field: litigation
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/DfltDtls/Ltgtn
+    xsd_element: Ltgtn
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/DfltDtls/Ltgtn/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL76
     canonical_field: recourse
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/RskDtls/Rcrs
+    xsd_element: Rcrs
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/RskDtls/Rcrs/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL77
     canonical_field: deposit_amount
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/RskDtls/Dpst
+    xsd_element: Dpst
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/RskDtls/Dpst/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL78
     canonical_field: insurance_or_investment_provider
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/RskDtls/InsrncOrInvstmtPrvdr
+    xsd_element: InsrncOrInvstmtPrvdr
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/RskDtls/InsrncOrInvstmtPrvdr/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL79
     canonical_field: original_lender_name
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/OrgnlLndr/Nm
+    xsd_element: Nm
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/OrgnlLndr/Nm/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL80
     canonical_field: original_lender_legal_entity_identifier
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/OrgnlLndr/LEICd
+    xsd_element: LEICd
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/OrgnlLndr/LEICd/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL81
     canonical_field: original_lender_establishment_country
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/OrgnlLndr/CtryOfDmcl
+    xsd_element: CtryOfDmcl
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
     value_mode: value_or_nodata
-    nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review; universe
-      allows ND -> expect NoDataOptn wrapper
+    nd_wrapper_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/OrgnlLndr/CtryOfDmcl/NoDataOptn/NoData
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL82
     canonical_field: originator_name
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/Orgtr/Nm
+    xsd_element: Nm
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
-    value_mode: unknown
+    value_mode: value
     nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
   - esma_code: RREL83
     canonical_field: originator_legal_entity_identifier
     record_group: RREL
@@ -1827,15 +1817,16 @@ field_xsd_path_map:
     canonical_field: originator_establishment_country
     record_group: RREL
     xml_level: exposure
-    xml_path: null
-    xsd_element: null
+    xml_path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/Orgtr/CtryOfDmcl
+    xsd_element: CtryOfDmcl
     xsd_type: null
     cardinality: one_per_loan
     sequence_order: null
-    value_mode: unknown
+    value_mode: value
     nd_wrapper_path: null
-    mapping_status: unresolved
-    evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review
+    mapping_status: inferred_high_confidence
+    evidence_source: workbook+xsd_validated
+    evidence_note: "ESMA mapping workbook path, re-validated against the XSD tree (residential/performing\
+      \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
-    owner: config_policy
+    owner: manual_review
