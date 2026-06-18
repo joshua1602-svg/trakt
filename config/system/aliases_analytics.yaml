@@ -524,9 +524,11 @@ ifrs9_stage:
   aliases:
   - IFRS9 stage
   - IFRS 9 stage
-  - stage
+  - IFRS stage
   - impairment stage
   - credit impairment stage
+  # NB: bare "stage" is intentionally NOT an alias — too ambiguous in Trakt
+  # (pipeline stage / internal risk stage / arrears / collection / deal stage).
 probability_of_default:
   aliases:
   - PD
@@ -549,11 +551,13 @@ loss_given_default:
   - LGD
   - loss given default
   - lgd estimate
-  - recovery assumption
-  - recovery rate
   - loss severity
   - bank internal lgd estimate  # legacy bank_internal_loss_given_default_lgd_estimate -> loss_given_default
   - internal lgd estimate
+  # NB: "recovery rate" is intentionally NOT an alias — it is the inverse
+  # concept (LGD = 1 - recovery rate) and requires transformation, not a
+  # direct map. The flat analytics alias schema has no transformation flag,
+  # so it is excluded rather than silently mapped.
 lgd_bucket:
   aliases:
   - LGD bucket
