@@ -267,12 +267,18 @@ def _project_cell(
     rule: Dict[str, Any],
     asset_defaults: Dict[str, Any],
     asset_nd_defaults: Dict[str, Any],
+    asset_enum_overrides: Optional[Dict[str, Dict[str, str]]] = None,
 ) -> Dict[str, Any]:
     """Project a single (loan, field) cell into an Annex 2 value, conservatively.
 
     Never invents a value: ND/defaults are applied only where explicitly allowed
     by the regime rule or configured in the asset config; enum values are mapped
     only via the rule's explicit ``enum_map`` / ``geography_map``.
+
+    An explicit, configured asset/client enum override (``asset_enum_overrides``)
+    may translate a source label to the ESMA code this asset class must report
+    (e.g. ERM ``amortisation_type`` ``Bullet`` -> ``OTHR``) BEFORE the generic
+    regime enum_map. This is config-driven; no enum value is hard-coded here.
     """
     canonical = rule["canonical_field"]
     nd_allowed = rule["nd_allowed"]
@@ -286,10 +292,13 @@ def _project_cell(
 
     # (1) materialised value present in the transformed tape.
     if v != "":
-        pv, vtype, mapped = g4.apply_safe_transform(v, rule)
+        overridden, applied = g4.apply_asset_enum_override(
+            canonical, v, asset_enum_overrides)
+        pv, vtype, mapped = g4.apply_safe_transform(overridden, rule)
         res.update(
             projected_value=pv, projected_value_type=vtype,
-            value_source=("enum_map" if mapped else "transformed_tape"),
+            value_source=("asset_policy" if applied
+                          else ("enum_map" if mapped else "transformed_tape")),
             projection_status=ST_FROM_TRANSFORMED,
         )
         if vtype == "unmapped_enum":
@@ -325,12 +334,12 @@ def _project_cell(
             return res
         # A non-ND value sitting under nd_defaults — treat it as a static default.
         return _apply_static_default(res, _to_str(asset_nd_defaults[canonical]),
-                                     rule, "asset_default")
+                                     rule, "asset_default", asset_enum_overrides)
 
     # 2b) asset config static defaults (e.g. exposure_currency_denomination: GBP).
     if canonical in asset_defaults:
         return _apply_static_default(res, _to_str(asset_defaults[canonical]),
-                                     rule, "asset_default")
+                                     rule, "asset_default", asset_enum_overrides)
 
     # 2c) regime rule default.
     if rule["default_allowed"] and rule["default_value"]:
@@ -351,7 +360,8 @@ def _project_cell(
                         "desc": f"regime default_value {dv} not in nd_allowed {nd_allowed}",
                     })
             return res
-        return _apply_static_default(res, dv, rule, "regime_default")
+        return _apply_static_default(res, dv, rule, "regime_default",
+                                     asset_enum_overrides)
 
     # (3) nothing materialised and no allowed ND/default.
     if rule["mandatory"] and rule["enforce_presence"]:
@@ -370,10 +380,20 @@ def _project_cell(
 
 
 def _apply_static_default(
-    res: Dict[str, Any], default_val: str, rule: Dict[str, Any], source: str
+    res: Dict[str, Any], default_val: str, rule: Dict[str, Any], source: str,
+    asset_enum_overrides: Optional[Dict[str, Dict[str, str]]] = None,
 ) -> Dict[str, Any]:
-    """Apply a non-ND configured default value through the safe transform."""
-    pv, vtype, _ = g4.apply_safe_transform(default_val, rule)
+    """Apply a non-ND configured default value through the safe transform.
+
+    An explicit asset/client enum override is applied first (config-driven), so a
+    configured asset default such as ERM ``amortisation_type: Bullet`` is reported
+    as the policy code (``OTHR``) rather than the generic ``BLLT``.
+    """
+    overridden, applied = g4.apply_asset_enum_override(
+        rule["canonical_field"], default_val, asset_enum_overrides)
+    pv, vtype, _ = g4.apply_safe_transform(overridden, rule)
+    if applied and vtype != "unmapped_enum":
+        source = "asset_policy"
     if vtype == "unmapped_enum":
         res.update(
             projection_status=ST_UNRESOLVED_SOURCE, blocking_for_delivery=True,
@@ -465,6 +485,9 @@ def build_projection_package(
     asset_cfg = _read_yaml(Path(asset_config_path)) or {}
     asset_defaults = (asset_cfg.get("defaults") or {}) if isinstance(asset_cfg, dict) else {}
     asset_nd_defaults = (asset_cfg.get("nd_defaults") or {}) if isinstance(asset_cfg, dict) else {}
+    # Asset/client enum overrides (e.g. ERM amortisation_type Bullet -> OTHR).
+    # Config-driven; applied ahead of the generic regime enum_map at projection.
+    asset_enum_overrides = g4.load_asset_enum_overrides(asset_cfg)
 
     # 4b) Supplement the regime field set with target fields that are present in
     #     the transformation contract (32) but lack a full regime field_rules entry
@@ -498,7 +521,8 @@ def build_projection_package(
     #    client review is NOT filled with a generic ND/default.
     frame_rows, field_summary, field_problems = _build_target_frame(
         df, proj_index, ordered_codes, asset_defaults, asset_nd_defaults,
-        disposition_by_field=disposition_by_field)
+        disposition_by_field=disposition_by_field,
+        asset_enum_overrides=asset_enum_overrides)
 
     # 6) build the blocker-resolution report from 46 + the field summary.
     resolution_rows, issues = _resolve_blockers(
@@ -553,6 +577,7 @@ def _build_target_frame(
     asset_defaults: Dict[str, Any],
     asset_nd_defaults: Dict[str, Any],
     disposition_by_field: Optional[Dict[str, str]] = None,
+    asset_enum_overrides: Optional[Dict[str, Dict[str, str]]] = None,
 ):
     """Return (frame_rows, field_summary, field_problems).
 
@@ -602,7 +627,8 @@ def _build_target_frame(
                     "blocking_for_delivery": True, "problem": None,
                 }
             else:
-                cell = _project_cell(raw, rule, asset_defaults, asset_nd_defaults)
+                cell = _project_cell(raw, rule, asset_defaults, asset_nd_defaults,
+                                     asset_enum_overrides)
 
             rid += 1
             frame_rows.append({

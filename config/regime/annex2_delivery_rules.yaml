@@ -251,12 +251,30 @@ field_rules:
     projected_source_field: amortisation_type
     mandatory: false
     enforce_presence: false
-    nd_allowed: [ND5]
+    # Workbook RREL35: ND1-4 allowed, ND5 NOT allowed. Corrected from the prior
+    # [ND5], which both narrowed the enum list and accepted a forbidden ND value
+    # (see docs/rrel35_amortisation_type_remediation.md).
+    nd_allowed: [ND1, ND2, ND3, ND4]
     transform:
       enum_map:
+        # Authoritative Annex 2 amortisation-type code list (workbook RREL35).
+        # These are the GENERIC ESMA meanings. Asset/client policy may override a
+        # source label to a different code (see config/asset/product_defaults_ERM.yaml
+        # reporting_policy.enum_overrides). Do NOT narrow this generic list.
+        French: FRXX
+        German: DEXX
+        Fixed amortisation schedule: FIXE
+        Bullet: BLLT
+        Other: OTHR
+        # ESMA code passthroughs (idempotent — a value already in code form stays).
+        FRXX: FRXX
+        DEXX: DEXX
+        FIXE: FIXE
+        BLLT: BLLT
+        OTHR: OTHR
+        # Generic internal source synonyms valid across asset classes.
         Interest roll-up: OTHR
         interest roll-up: OTHR
-        OTHR: OTHR
 
   RREC14:
     esma_code: RREC14

@@ -49,6 +49,8 @@ __all__ = [
     "record_group_for_code",
     "apply_safe_transform",
     "is_nd_value",
+    "load_asset_enum_overrides",
+    "apply_asset_enum_override",
 ]
 
 
@@ -181,6 +183,46 @@ def _to_str(value: Any) -> str:
     if s.lower() in ("nan", "<na>"):
         return ""
     return s
+
+
+def load_asset_enum_overrides(asset_cfg: Optional[dict]) -> Dict[str, Dict[str, str]]:
+    """Read ``reporting_policy.enum_overrides`` from the asset config.
+
+    Returns ``{canonical_field: {source_label_lower: target_code}}`` (keys
+    lower-cased for case-insensitive matching). Non-raising: returns ``{}`` if
+    absent or malformed. This is the **asset/client policy** layer that may
+    override the generic regime ``enum_map`` for a specific asset class — it is
+    declared in config, never hard-coded in Python.
+    """
+    cfg = asset_cfg or {}
+    policy = cfg.get("reporting_policy") if isinstance(cfg.get("reporting_policy"), dict) else {}
+    raw = policy.get("enum_overrides") if isinstance(policy.get("enum_overrides"), dict) else {}
+    out: Dict[str, Dict[str, str]] = {}
+    for canonical, mapping in raw.items():
+        if not isinstance(mapping, dict):
+            continue
+        out[str(canonical)] = {str(k).strip().lower(): str(v) for k, v in mapping.items()}
+    return out
+
+
+def apply_asset_enum_override(
+    canonical_field: str, value: str, overrides: Optional[Dict[str, Dict[str, str]]]
+) -> Tuple[str, bool]:
+    """Apply an asset/client enum override to a source value, if one is declared.
+
+    Returns ``(maybe_overridden_value, applied)``. Matching is case-insensitive on
+    the source label. When no override applies the value is returned unchanged.
+    """
+    v = _to_str(value)
+    if v == "" or not overrides:
+        return v, False
+    field_map = overrides.get(str(canonical_field)) or {}
+    if not field_map:
+        return v, False
+    target = field_map.get(v.lower())
+    if target is None:
+        return v, False
+    return str(target), True
 
 
 def apply_safe_transform(value: str, rule: Dict[str, Any]) -> Tuple[str, str, bool]:
