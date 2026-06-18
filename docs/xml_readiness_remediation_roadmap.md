@@ -8,16 +8,14 @@ Onboarding → Transformation → Validation → Projection → Delivery/XML Age
                                                           ^^^^^^^^^^^^^^^^^^^^^  current stage
 ```
 
-> **Source of this roadmap.** It is derived from (a) the **confirmed pre-XML
-> state** of run `run_pre_xml_final_check_3` as recorded in the task brief, and
-> (b) the Delivery/XML Agent v1 blocker taxonomy
-> (`engine/delivery_xml_agent/remediation.py`). The field/category lists below
-> should be **reconciled against the actual `63_delivery_issues.csv`** once the
-> agent has been run in Codespaces against the real projection manifest (see
-> "How to regenerate the issue list" at the foot of this doc). No production XML
-> is generated.
+> **Source of this roadmap.** It is derived from (a) the Delivery/XML Agent v1
+> blocker taxonomy (`engine/delivery_xml_agent/remediation.py`) and (b) the
+> **actual `63_delivery_issues.csv`** produced by running the agent in Codespaces
+> against the real `run_pre_xml_final_check_3` projection manifest. The per-group
+> field-code lists below are **reconciled to that real run** (see "Reconciled
+> figures" below). No production XML is generated.
 
-Delivery/XML Agent v1 verdict on the current run (expected):
+Delivery/XML Agent v1 verdict on the real run (`run_pre_xml_final_check_3`):
 
 ```
 delivery_xml_ran               = true
@@ -27,6 +25,37 @@ xml_generated                  = false
 ready_for_xml_delivery         = false
 next_agent                     = operator_config_projection_remediation
 ```
+
+### Reconciled figures (run_pre_xml_final_check_3)
+
+Delivery-normalised frame: **163,282 rows** (matches the projected target frame).
+
+| Delivery status | Rows |
+| --- | --- |
+| deliverable | 83,930 |
+| blocked | 47,306 |
+| delivery_invalid (format/enum) | 1,526 |
+| not_required_blank | 30,520 |
+| **total** | **163,282** |
+
+Delivery issues: **34** across 31 blocked ESMA codes (+ 1 format-invalid code,
++ structural + template-order). Issue mix by blocker type:
+
+| Blocker type | Issues | Remediation group |
+| --- | --- | --- |
+| `client_onboarding_dependency` | 2 | 1 |
+| `operator_or_config_dependency` | 7 | 2 |
+| `config_dependency` | 11 | 3 |
+| `source_mapping_unresolved` | 10 | 4 |
+| `delivery_format_invalid` | 1 | 4 |
+| `nd_default_rule_missing` | 1 | 5 |
+| `delivery_structure_deferred` | 1 | 6 |
+| `template_order_incomplete` | 1 | 7 |
+
+> One ESMA code accounts for all **1,526** `delivery_invalid` rows (every record
+> for that field fails the regime regex/enum check). Identify it from the
+> `delivery_blocker_type = delivery_format_invalid` row in `63_delivery_issues.csv`
+> and fix the projected value / format rule (group 4).
 
 ---
 
@@ -40,12 +69,14 @@ clearing **all delivery-blocking rows and the required structural gates**:
 
 1. **Client onboarding** — formal identifier policy for **RREL1 / RREL2**
    (these also satisfy the *required header/report metadata* gate).
-2. **Operator review** — valuation / property / rate source ambiguity for
-   **RREC9, RREC13, RREC17, RREL43**.
-3. **Config mapping** — purpose enum mapping for **RREL27**.
-4. **Source / projection mapping** — any remaining `source_mapping_unresolved`.
-5. **ND / default policy** — any `nd_default_rule_missing` for a *mandatory* field
-   that has no allowed/selected ND/default.
+2. **Operator review** — valuation / property / rate source ambiguity
+   (**7 codes** incl. RREC9, RREC13, RREC17, RREL43 — see group 2).
+3. **Config mapping** — controlled enum/config mappings (**11 codes** incl.
+   RREL27 purpose — see group 3).
+4. **Source / projection mapping** — `source_mapping_unresolved` (**10 codes**)
+   + the 1 `delivery_format_invalid` code (1,526 rows).
+5. **ND / default policy** — `nd_default_rule_missing` (**RREL82**) for a
+   *mandatory* field with no allowed/selected ND/default.
 6. **Template / order** — add every required code missing from
    `esma_code_order.yaml::Record` so XML ordering is deterministic.
 
@@ -114,9 +145,9 @@ appear as `delivery_status = deliverable` in `62_delivery_normalised_frame.csv`.
 
 | | |
 | --- | --- |
-| **Field codes** | RREC9, RREC13, RREC17, RREL43 |
+| **Field codes** | RREC1, RREC9, RREC13, RREC17, RREL9, RREL43, RREL69 (7 codes on the real run) |
 | **Current blocker type** | `operator_or_config_dependency` (frame status `blocked_operator_or_config_dependency`) |
-| **Business meaning** | RREC9 property type; RREC13 current valuation; RREC17 original valuation; RREL43 current interest rate. Source ambiguity remains — multiple candidate source columns, none confirmed. |
+| **Business meaning** | RREC9 property type; RREC13 current valuation; RREC17 original valuation; RREL43 current interest rate; plus RREC1, RREL9, RREL69 surfaced on the real run with the same operator-review source ambiguity. Multiple candidate source columns, none confirmed. |
 | **Recommended owner** | Operator |
 | **Recommended action** | Operator confirms the authoritative source field per code; never auto-ND/default an ambiguous valuation/rate. Once confirmed, re-run Projection. |
 | **Needed before XML preview?** | **Yes** (mandatory fields; block `no_blocked_target_frame_rows`) |
@@ -126,9 +157,9 @@ appear as `delivery_status = deliverable` in `62_delivery_normalised_frame.csv`.
 
 | | |
 | --- | --- |
-| **Field codes** | RREL27 |
+| **Field codes** | RREC7, RREC14, RREC16, RREL10, RREL11, RREL14, RREL26, RREL27, RREL44, RREL45, RREL75 (11 codes on the real run) |
 | **Current blocker type** | `config_dependency` (frame status `blocked_operator_or_config_dependency`, projection disposition `config_mapping_required`) |
-| **Business meaning** | Loan **purpose** — needs a controlled enum mapping from the source value set to the ESMA code list. |
+| **Business meaning** | Controlled enum / config mappings from source values to ESMA codes — e.g. RREL27 loan **purpose**. The real run surfaced 11 such config-mapping fields. |
 | **Recommended owner** | Config / rules |
 | **Recommended action** | Add the purpose enum mapping (`transform.enum_map`) in `annex2_delivery_rules.yaml`; re-run Projection. |
 | **Needed before XML preview?** | **Yes** |
@@ -138,9 +169,9 @@ appear as `delivery_status = deliverable` in `62_delivery_normalised_frame.csv`.
 
 | | |
 | --- | --- |
-| **Field codes** | any remaining `source_mapping_unresolved` (reconcile from `63_*`; e.g. occupancy/related-field derivations) + any `delivery_format_invalid` |
+| **Field codes** | `source_mapping_unresolved` (10): RREC2, RREC3, RREC4, RREC5, RREL3, RREL4, RREL5, RREL35, RREL67, RREL68, RREL84 — plus 1 `delivery_format_invalid` code (1,526 rows; identify from `63_*`) |
 | **Current blocker type** | `source_mapping_unresolved` (and `delivery_format_invalid` for malformed values) |
-| **Business meaning** | Target field has related source data but no confirmed projection rule, or a projected value fails the regime regex/enum format check. |
+| **Business meaning** | Target field has related source data but no confirmed projection rule (notably the RREL3/RREL4/RREL5 new/original identifier chain), or a projected value fails the regime regex/enum format check. |
 | **Recommended owner** | Projection / Transformation |
 | **Recommended action** | Add the explicit projection/source-mapping rule (never guess); fix values that fail `validators.regex` / `enum_map`. |
 | **Needed before XML preview?** | **Yes** |
@@ -150,7 +181,7 @@ appear as `delivery_status = deliverable` in `62_delivery_normalised_frame.csv`.
 
 | | |
 | --- | --- |
-| **Field codes** | any `nd_default_rule_missing` (mandatory field, blank, no allowed/selected ND/default). RREL24 / RREL40 are **already resolved** to ND5 and are *not* in this group. |
+| **Field codes** | RREL82 (1 on the real run). RREL24 / RREL40 are **already resolved** to ND5 (`projected_from_transformed`, deliverable) and are *not* in this group. |
 | **Current blocker type** | `nd_default_rule_missing` |
 | **Business meaning** | A mandatory field is absent and there is no *allowed* ND or configured default to fall back to. |
 | **Recommended owner** | Config / policy |
@@ -174,9 +205,9 @@ appear as `delivery_status = deliverable` in `62_delivery_normalised_frame.csv`.
 
 | | |
 | --- | --- |
-| **Field codes** | mandatory frame codes absent from `esma_code_order.yaml::Record` (reconcile from `60_delivery_manifest.json::missing_required_order_code_count`) |
+| **Field codes** | 20 required codes absent from `esma_code_order.yaml::Record` on the real run: RREC5, RREC21, RREC23, RREL4, RREL6, RREL62, RREL63, RREL64, RREL65, RREL66, RREL67, RREL68, RREL70, RREL72, RREL76, RREL78, RREL79, RREL80, RREL81, RREL82 |
 | **Current blocker type** | `template_order_incomplete` |
-| **Business meaning** | XSD requires strict `<xs:sequence>` order. `Record` lists 77 of the 107 universe codes; required codes missing from the order cannot be placed deterministically. |
+| **Business meaning** | XSD requires strict `<xs:sequence>` order. `Record` lists 77 of the 107 universe codes; the 20 required codes above are missing from the order and cannot be placed deterministically. (Some, e.g. RREL4/RREL67/RREL68/RREL82/RREC5, are *also* blocked upstream — fixing the order is independent of fixing their values.) |
 | **Recommended owner** | Delivery / config |
 | **Recommended action** | Add the missing **required** codes to `esma_code_order.yaml::Record` (full 107-code completion can follow before production). |
 | **Needed before XML preview?** | **Yes** (gated by `template_code_order_complete`) |
