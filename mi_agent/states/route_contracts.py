@@ -13,7 +13,13 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
-from .models import UNSUPPORTED_STATE_FOR_ROUTE, WARNING, make_issue
+from .models import (
+    UNAVAILABLE_TEMPORAL_MODE,
+    UNSUPPORTED_STATE_FOR_ROUTE,
+    UNSUPPORTED_TEMPORAL_STATE,
+    WARNING,
+    make_issue,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ROUTES_DIR = REPO_ROOT / "config" / "routes"
@@ -70,3 +76,36 @@ def validate_state_for_route(state_name: str, route: str,
         f"state {state_name!r} (canonical {canonical!r}) is not allowed for "
         f"route {route!r}; allowed: {allowed}",
         field=state_name, route=route, allowed_states=allowed)
+
+
+def allowed_temporal_modes(route: str,
+                           routes_dir: Optional[Path] = None) -> List[str]:
+    contract = load_route_contract(route, routes_dir=routes_dir)
+    return list(contract.get("temporal_modes") or [])
+
+
+def validate_temporal_request(state_name: str, route: str, mode: str,
+                              routes_dir: Optional[Path] = None
+                              ) -> Optional[Dict[str, Any]]:
+    """Return an issue if *route* may not run temporal *mode* on *state_name*.
+
+    Checks both that the state is allowed on the route (as a temporal MI state)
+    and that the temporal mode (``compare`` / ``trend`` / ...) is in the route's
+    ``temporal_modes``. Returns ``None`` when the request is permitted.
+    """
+    canonical = canonical_state(state_name)
+    allowed = allowed_states(route, routes_dir=routes_dir)
+    if canonical not in allowed:
+        return make_issue(
+            UNSUPPORTED_TEMPORAL_STATE, WARNING,
+            f"state {state_name!r} (canonical {canonical!r}) is not a temporal "
+            f"MI state for route {route!r}; allowed: {allowed}",
+            field=state_name, route=route, allowed_states=allowed)
+    modes = allowed_temporal_modes(route, routes_dir=routes_dir)
+    if mode not in modes:
+        return make_issue(
+            UNAVAILABLE_TEMPORAL_MODE, WARNING,
+            f"temporal mode {mode!r} is not allowed for route {route!r}; "
+            f"allowed modes: {modes}",
+            field=mode, route=route, temporal_modes=modes)
+    return None

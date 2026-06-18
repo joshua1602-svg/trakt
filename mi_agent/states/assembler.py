@@ -218,6 +218,7 @@ def total_forecast_funded(
     forecast_balance_col: str = FORECAST_BALANCE_COL,
     forecast_prob_col: str = FORECAST_PROB_COL,
     include_unforecastable: bool = True,
+    stage_probabilities: Optional[Dict[str, float]] = None,
     routes_dir: Optional[Path] = None,
 ) -> StateResult:
     """Funded book + expected-converted pipeline.
@@ -225,15 +226,22 @@ def total_forecast_funded(
     The expected funded balance for a pipeline row is, in priority order:
       1. ``forecast_funded_balance`` where populated;
       2. ``current_outstanding_balance`` x ``forecast_funding_probability``
-         where both are present.
+         where both are present;
+      3. ``current_outstanding_balance`` x a config ``stage_probabilities``
+         lookup on ``pipeline_stage`` (Phase 4) — recorded as
+         ``forecast_probability_from_config``.
     Probabilities are never invented. Pipeline rows with no usable forecast are
     flagged (``missing_forecast_probability``) and, by default, retained with a
     null ``forecast_contribution`` (set ``include_unforecastable=False`` to drop
     them from the forecast component).
 
     The output frame tags each row with ``state_component`` (``funded`` /
-    ``forecast_pipeline``) and a numeric ``forecast_contribution``.
+    ``forecast_pipeline``), a numeric ``forecast_contribution`` and a
+    ``forecast_source`` (``explicit_balance`` / ``row_probability`` /
+    ``config_stage_probability`` / ``none``).
     """
+    stage_probs = {str(k).strip().lower(): float(v)
+                   for k, v in (stage_probabilities or {}).items()}
     block = _route_block("total_forecast_funded", route, routes_dir)
     if block:
         return StateResult("total_forecast_funded", pd.DataFrame(), [block],
@@ -262,6 +270,7 @@ def total_forecast_funded(
 
     funded = frame[funded_mask].copy()
     funded["state_component"] = "funded"
+    funded["forecast_source"] = "funded"
     funded["forecast_contribution"] = (
         pd.to_numeric(funded[balance_col], errors="coerce")
         if has_balance else pd.NA)
@@ -271,6 +280,7 @@ def total_forecast_funded(
 
     # Expected funded balance for the pipeline component.
     contribution = pd.Series(pd.NA, index=pipeline.index, dtype="object")
+    source_col = pd.Series("none", index=pipeline.index, dtype="object")
     have_fc_balance = (forecast_balance_col in pipeline.columns)
     fc_balance = (pd.to_numeric(pipeline[forecast_balance_col], errors="coerce")
                   if have_fc_balance else None)
@@ -279,24 +289,44 @@ def total_forecast_funded(
             if have_prob else None)
     bal = (pd.to_numeric(pipeline[balance_col], errors="coerce")
            if has_balance else None)
+    have_stage = pipeline_stage_col in pipeline.columns
 
     n_unforecastable = 0
+    n_from_config = 0
     for idx in pipeline.index:
         if have_fc_balance and pd.notna(fc_balance.loc[idx]):
             contribution.loc[idx] = float(fc_balance.loc[idx])
+            source_col.loc[idx] = "explicit_balance"
         elif (have_prob and bal is not None and pd.notna(prob.loc[idx])
               and pd.notna(bal.loc[idx])):
             contribution.loc[idx] = float(bal.loc[idx]) * float(prob.loc[idx])
+            source_col.loc[idx] = "row_probability"
+        elif (stage_probs and have_stage and bal is not None
+              and pd.notna(bal.loc[idx])
+              and str(pipeline.loc[idx, pipeline_stage_col]).strip().lower()
+              in stage_probs):
+            cfg_p = stage_probs[str(pipeline.loc[idx, pipeline_stage_col])
+                                .strip().lower()]
+            contribution.loc[idx] = float(bal.loc[idx]) * cfg_p
+            source_col.loc[idx] = "config_stage_probability"
+            n_from_config += 1
         else:
             n_unforecastable += 1  # left as NA
     pipeline["forecast_contribution"] = contribution
+    pipeline["forecast_source"] = source_col
 
+    if n_from_config:
+        issues.append(make_issue(
+            M.FORECAST_PROBABILITY_FROM_CONFIG, M.INFO,
+            f"{n_from_config} pipeline row(s) used a config "
+            f"stage->probability mapping (no row-level probability)",
+            field=pipeline_stage_col, count=n_from_config))
     if n_unforecastable:
         issues.append(make_issue(
             M.MISSING_FORECAST_PROBABILITY, M.WARNING,
-            f"{n_unforecastable} pipeline row(s) lack both "
-            f"{forecast_balance_col!r} and a usable "
-            f"{forecast_prob_col!r}+{balance_col!r}; "
+            f"{n_unforecastable} pipeline row(s) lack {forecast_balance_col!r}, "
+            f"a usable {forecast_prob_col!r}+{balance_col!r}, and a config "
+            f"stage probability; "
             + ("retained with null forecast contribution"
                if include_unforecastable else "excluded from forecast"),
             field=forecast_prob_col, count=n_unforecastable))

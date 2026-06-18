@@ -24,14 +24,18 @@ from .assembler import (
     total_funded,
     total_pipeline,
 )
+from .forecast import load_stage_probabilities
 from .models import StateResult, make_issue
 from .route_contracts import (
     allowed_states,
+    allowed_temporal_modes,
     canonical_state,
     is_state_allowed,
     validate_state_for_route,
+    validate_temporal_request,
 )
 from .selectors import SnapshotSelector
+from .temporal import TemporalResult, assemble_temporal, compare, trend
 
 __all__ = [
     "assemble_state",
@@ -49,4 +53,12 @@ __all__ = [
     "is_state_allowed",
     "allowed_states",
     "canonical_state",
+    # Phase 4 — temporal
+    "compare",
+    "trend",
+    "assemble_temporal",
+    "TemporalResult",
+    "allowed_temporal_modes",
+    "validate_temporal_request",
+    "load_stage_probabilities",
 ]
