@@ -1,0 +1,243 @@
+# =============================================================================
+# xml_preview_policy.yaml
+# =============================================================================
+# Explicit, NON-PRODUCTION XML preview policy layer for the Delivery/XML Agent.
+#
+# This config does NOT enable production XML and does NOT alter the production
+# delivery gates. It defines a SEPARATE preview gate
+# (xml_preview_allowed / xml_preview_generated / ready_for_xml_preview) that may,
+# only when explicitly enabled, render a watermarked, non-reportable preview of
+# the Annex 2 XML shape from the deliverable subset plus clearly-labelled
+# placeholders/exclusions.
+#
+# Field-level treatments below are derived from the authoritative remediation
+# matrix (the SOURCE OF TRUTH):
+#   output/config_review/minimum_xml_preview_remediation_matrix.csv
+#   (regenerate via: python scripts/build_minimum_xml_preview_matrix.py)
+# See docs/xml_preview_policy_spec.md for the full specification.
+# =============================================================================
+
+preview_policy:
+  enabled: false                 # DISABLED by default — nothing is emitted.
+  mode: non_production_preview
+  watermark: "NON-PRODUCTION PREVIEW - NOT FOR REGULATORY SUBMISSION"
+  spec: docs/xml_preview_policy_spec.md
+  matrix_source: output/config_review/minimum_xml_preview_remediation_matrix.csv
+
+  allow_synthetic_placeholders: true
+  allow_preview_exclusions: true
+  allow_silent_defaults: false   # never quietly populate a blank.
+  allow_nd_without_policy: false # ND only where explicitly allowed AND selected.
+  preserve_production_gates: true
+
+  # The preview gate is SEPARATE from production. The preview evaluator may set
+  # only these flags; it must never read or write the production flags.
+  preview_gate_flags:
+    - xml_preview_allowed
+    - xml_preview_generated
+    - ready_for_xml_preview
+  production_gate_flags_unchanged:
+    - xml_generation_allowed
+    - ready_for_xml_delivery
+    - xml_generated
+
+  # ---------------------------------------------------------------------------
+  # Synthetic placeholders (PREVIEW/DEMO ONLY, NON-REPORTABLE).
+  # No-ND identifier / static-reference fields that must carry *something* for the
+  # tree to anchor/validate. Values are prefixed and watermarked; they are never
+  # promoted into any production output. Source: matrix
+  # recommended_preview_treatment == synthetic_placeholder_for_demo_only.
+  # ---------------------------------------------------------------------------
+  placeholder_policy:
+    prefix: "PREVIEW_ONLY_"
+    label: synthetic_placeholder_for_demo_only
+    non_reportable: true
+    fields:
+      RREL1:
+        canonical_field: unique_identifier
+        business_group: client_onboarding
+        owner: client_onboarding
+        reason: "Securitisation identifier (ScrtstnIdr) + report anchor; no ND allowed. Production requires the formal client identifier policy via onboarding."
+      RREL2:
+        canonical_field: original_underlying_exposure_identifier
+        business_group: client_onboarding
+        owner: client_onboarding
+        reason: "Formal regulatory identifier; no ND allowed. Production requires client onboarding."
+      RREC1:
+        canonical_field: unique_identifier
+        business_group: operator_review
+        owner: operator
+        reason: "Collateral record unique identifier (no ND); needed to anchor a collateral record. Operator confirms the real id for production."
+      RREC2:
+        canonical_field: underlying_exposure_identifier
+        business_group: source_projection
+        owner: projection
+        reason: "Underlying-exposure identifier on the collateral record (no ND); production needs the confirmed projection/source mapping."
+      RREC3:
+        canonical_field: original_collateral_identifier
+        business_group: source_projection
+        owner: projection
+        reason: "Original collateral identifier (no ND); production needs the source mapping."
+      RREC4:
+        canonical_field: new_collateral_identifier
+        business_group: source_projection
+        owner: projection
+        reason: "New collateral identifier (no ND); production needs the source mapping."
+      RREL3:
+        canonical_field: new_underlying_exposure_identifier
+        business_group: source_projection
+        owner: projection
+        reason: "New underlying-exposure identifier (no ND); production needs the source mapping."
+      RREL4:
+        canonical_field: original_obligor_identifier
+        business_group: source_projection
+        owner: projection
+        reason: "Original obligor identifier (no ND); production needs the source mapping. Also missing from esma_code_order."
+      RREL5:
+        canonical_field: new_obligor_identifier
+        business_group: source_projection
+        owner: projection
+        reason: "New obligor identifier (no ND); production needs the source mapping."
+      RREL82:
+        canonical_field: originator_name
+        business_group: onboarding_static_reference   # NOT nd_default.
+        owner: client_onboarding / onboarding_agent
+        reason: "Originator name is static client/originator reference data captured during the Onboarding Agent step. ND is NOT allowed and must not be used; production must_resolve via onboarding/config."
+
+  # ---------------------------------------------------------------------------
+  # Preview exclusions (OMITTED from a minimal preview — never fabricated).
+  # Source: matrix recommended_preview_treatment == preview_exclusion.
+  # Operator-ambiguous fields are excluded (no fabricated valuations/rates);
+  # optional/deferred template-order fields are excluded from the minimal preview.
+  # ---------------------------------------------------------------------------
+  exclusion_policy:
+    label: preview_exclusion
+    fields:
+      RREC13:
+        canonical_field: current_valuation_amount
+        business_group: operator_review
+        reason: "Current valuation source ambiguity; do not fabricate a valuation. Operator decision for production."
+      RREC17:
+        canonical_field: original_valuation_amount
+        business_group: operator_review
+        reason: "Original valuation source ambiguity; do not fabricate. Operator decision for production (not ND5-eligible)."
+      RREC9:
+        canonical_field: property_type
+        business_group: operator_review
+        reason: "Property type source ambiguity; requires operator decision. ND5-eligible but not policy-selected, so not ND'd."
+      RREL43:
+        canonical_field: current_interest_rate
+        business_group: operator_review
+        reason: "Current interest rate source ambiguity; requires operator decision."
+      RREL9:
+        canonical_field: redemption_date
+        business_group: operator_review
+        reason: "Redemption date; optional/ND5-eligible. Excluded from minimal preview; operator confirms for production."
+      RREC21:
+        canonical_field: sale_price
+        business_group: template_order
+        reason: "Optional/deferred field; excluded from a minimal preview. Complete esma_code_order for production."
+      RREC23:
+        canonical_field: guarantor_type
+        business_group: template_order
+        reason: "Optional/deferred field; excluded from a minimal preview."
+      RREL62:
+        canonical_field: prepayment_fee_end_date
+        business_group: template_order
+        reason: "Optional/deferred performance field; excluded from a minimal preview."
+      RREL63:
+        canonical_field: prepayment_date
+        business_group: template_order
+        reason: "Optional/deferred performance field; excluded from a minimal preview."
+      RREL64:
+        canonical_field: cumulative_prepayments
+        business_group: template_order
+        reason: "Optional/deferred performance field; excluded from a minimal preview."
+      RREL65:
+        canonical_field: date_of_restructuring
+        business_group: template_order
+        reason: "Optional/deferred performance field; excluded from a minimal preview."
+      RREL66:
+        canonical_field: date_last_in_arrears
+        business_group: template_order
+        reason: "Optional/deferred performance field; excluded from a minimal preview."
+      RREL70:
+        canonical_field: reason_for_default_or_foreclosure
+        business_group: template_order
+        reason: "Optional/deferred performance field; excluded from a minimal preview."
+      RREL72:
+        canonical_field: default_date
+        business_group: template_order
+        reason: "Optional/deferred performance field; excluded from a minimal preview."
+      RREL76:
+        canonical_field: recourse
+        business_group: template_order
+        reason: "Configured (N) for ERM but order-incomplete; excluded from minimal preview unless ordered."
+      RREL78:
+        canonical_field: insurance_or_investment_provider
+        business_group: template_order
+        reason: "Optional/deferred field; excluded from a minimal preview."
+      RREL79:
+        canonical_field: original_lender_name
+        business_group: template_order
+        reason: "Optional/deferred field; excluded from a minimal preview."
+      RREL80:
+        canonical_field: original_lender_legal_entity_identifier
+        business_group: template_order
+        reason: "Optional/deferred field; excluded from a minimal preview."
+      RREL81:
+        canonical_field: original_lender_establishment_country
+        business_group: template_order
+        reason: "Optional/deferred field; excluded from a minimal preview."
+
+  # ---------------------------------------------------------------------------
+  # Still blocks the PREVIEW (must be resolved first — no placeholder/exclusion).
+  # Source: matrix recommended_preview_treatment == must_resolve.
+  # These are deterministic config, structure, ordering or mandatory no-ND values.
+  # ---------------------------------------------------------------------------
+  must_resolve_before_preview:
+    config_mapping:        # deterministic enum/config (the RREL35 pattern).
+      - RREC7
+      - RREC14
+      - RREC16
+      - RREL10
+      - RREL11
+      - RREL14
+      - RREL26
+      - RREL27
+      - RREL44
+      - RREL45
+      - RREL75
+    source_projection:     # confirmed source/projection mapping (no fabrication).
+      - RREC5
+      - RREL67
+      - RREL68
+      - RREL84
+    operator_mandatory_no_nd:
+      - RREL69             # account status (LIST, no ND).
+    delivery_structure:
+      - record_structure   # minimal flat preview shape must be designed first.
+    template_order_required:
+      - RREL6              # data cut-off date — required header metadata.
+
+  # ---------------------------------------------------------------------------
+  # Hard guardrails — the preview layer must never touch production readiness.
+  # ---------------------------------------------------------------------------
+  production_guardrails:
+    never_set_xml_generation_allowed: true
+    never_set_ready_for_xml_delivery: true
+    never_set_xml_generated: true
+    preview_output_must_be_separate: true
+    preview_output_dir: output/delivery_xml/preview
+    do_not_promote_placeholders_to_production: true
+    do_not_use_nd_without_policy: true
+    do_not_fabricate_valuation_or_source: true
+
+  # ---------------------------------------------------------------------------
+  # Resolved examples — documented, NOT part of preview placeholder/exclusion.
+  # ---------------------------------------------------------------------------
+  resolved_examples:
+    RREL35:
+      canonical_field: amortisation_type
+      resolution: "source/internal Bullet -> ERM asset policy OTHR -> delivery-valid"
+      note: "Resolved via authoritative regime code list + config-driven ERM override. NOT a preview placeholder/exclusion."

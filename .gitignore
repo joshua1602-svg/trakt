@@ -27,6 +27,10 @@ data/input/*
 *.xls
 *.xml
 
+# Intentional, version-controlled config-review artefacts (committed on purpose).
+!output/config_review/
+!output/config_review/*.csv
+
 # Generated JSON (but NOT configs / schemas)
 run_manifest.json
 *lineage*.json
