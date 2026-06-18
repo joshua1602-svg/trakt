@@ -2,8 +2,11 @@
 
 **Status:** Implemented (config/data only). Adds the generic, asset-class-neutral
 canonical risk fields and analytics aliases required by the target MI risk
-monitor and M&A diligence risk views, per the Phase 0 scope in
-[`docs/mi_mna_target_architecture_and_build_plan.md`](./mi_mna_target_architecture_and_build_plan.md).
+monitor and M&A diligence risk views, per the Phase 0 scope of the target
+architecture and build plan. (That target architecture document —
+`docs/mi_mna_target_architecture_and_build_plan.md` — is tracked separately and
+will be merged in a separate PR; it is intentionally not included in this
+Phase 0-only PR.)
 
 **Date:** 2026-06-18
 
