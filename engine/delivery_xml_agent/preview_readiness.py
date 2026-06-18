@@ -637,17 +637,18 @@ def evaluate_xsd_structured_preview(
         if (not code or code in header_codes or code in emit_codes
                 or code not in accepted or not pm.get("xml_path")):
             continue
+        val = str(s.get("preview_placeholder", ""))
         field = {
             "esma_code": code, "record_group": pm.get("record_group", ""),
             "xml_path": pm.get("xml_path"), "value_mode": pm.get("value_mode"),
             "nd_wrapper_path": pm.get("nd_wrapper_path"),
             "sequence_order": pm.get("sequence_order"),
             "value_source": SRC_PLACEHOLDER, "structural_placeholder": True,
+            "placeholder_value": val,
         }
         emit_fields.append(field)
         emit_codes[code] = field
         structural_placeholder_codes.append(code)
-        val = str(s.get("preview_placeholder", ""))
         for lid in loans_order:
             loans_map[lid][code] = val
         applications.append({
@@ -1421,16 +1422,24 @@ def _emit_xsd_structured_preview(
         if f.get("value_source") != SRC_PLACEHOLDER:
             continue
         code = f["esma_code"]
+        is_structural = code in struct_codes or f.get("structural_placeholder")
+        is_nodata = is_structural and str(f.get("placeholder_value", "")).upper().startswith("ND")
         if code in header_codes:
             kind = "mandatory_report_header_placeholder"
-        elif code in struct_codes or f.get("structural_placeholder"):
+        elif is_nodata:
+            kind = "mandatory_structural_nodata_placeholder"  # NoDataOptn — no value invented
+        elif is_structural:
             kind = "mandatory_structural_sibling_placeholder"
         else:
             kind = "identifier_preview_placeholder"
+        detail = ("preview-only NoData (NoDataOptn) structural placeholder — asserts NO "
+                  "real data; never a fabricated value/amount/date"
+                  if is_nodata else
+                  "preview-only placeholder placed at an accepted ESMA path; "
+                  "NOT a real/production value")
         assumption_rows.append({
             "esma_code": code, "xml_path": f.get("xml_path", ""), "assumption_kind": kind,
-            "assumption": "preview-only placeholder placed at an accepted ESMA path; "
-                          "NOT a real/production value"})
+            "assumption": detail})
     _write_csv(out / "102_xsd_structured_preview_assumptions.csv",
                ["esma_code", "xml_path", "assumption_kind", "assumption"], assumption_rows)
 

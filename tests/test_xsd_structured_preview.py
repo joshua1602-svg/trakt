@@ -366,5 +366,103 @@ class TestRecordSequenceOrdering(unittest.TestCase):
         self.assertFalse(any(self.res["flags"]["production_flags_unchanged"].values()))
 
 
+class TestDeeperRecordSequence(unittest.TestCase):
+    """Fix the deeper errors: obligor details, valuation details, collateral Dtls
+    ordering — using non-economic structural placeholders / NoData, never
+    fabricated economic values."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.root = Path(tempfile.mkdtemp(prefix="xsd_deep_"))
+        cls.out, cls.res = _run(cls.root, enabled=True)
+        cls.sp = cls.out / "preview" / "xsd_structured_preview"
+        cls.xml_text = (cls.sp / "105_xsd_structured_preview.xml").read_text()
+        cls.xml = ET.fromstring(cls.xml_text)
+        cls.verdict = cls.res["xsd_structured_preview_verdict"]
+        cls.validation = json.loads(
+            (cls.sp / "107_xsd_structured_preview_xsd_validation.json").read_text())
+
+    def test_obligor_identifiers_complete_and_ordered(self):
+        uid = _first(self.xml, "UndrlygXpsrId")
+        tags = _child_local_tags(uid)
+        self.assertEqual(tags, ["NewUndrlygXpsrIdr", "OrgnlUndrlygXpsrIdr",
+                                "NewOblgrIdr", "OrgnlOblgrIdr"])
+
+    def test_oblgrdtls_before_underlying_dtls(self):
+        cmon = _first(self.xml, "UndrlygXpsrCmonData")
+        tags = _child_local_tags(cmon)
+        self.assertIn("OblgrDtls", tags)
+        self.assertIn("UndrlygXpsrDtls", tags)
+        self.assertLess(tags.index("ActvtyDtDtls"), tags.index("OblgrDtls"))
+        self.assertLess(tags.index("OblgrDtls"), tags.index("UndrlygXpsrDtls"))
+
+    def test_valtn_present_after_dtls_in_collcmondata(self):
+        cc = _first(self.xml, "CollCmonData")
+        tags = _child_local_tags(cc)
+        self.assertIn("Dtls", tags)
+        self.assertIn("Valtn", tags)
+        self.assertLess(tags.index("Dtls"), tags.index("Valtn"))
+
+    def test_collateral_dtls_cmondata_first(self):
+        dtls = _first(self.xml, "Dtls")
+        tags = _child_local_tags(dtls)
+        self.assertEqual(tags[0], "CmonData")
+        # PrprtyTp (real RREC9) still present, after CmonData.
+        self.assertIn("PrprtyTp", tags)
+        self.assertLess(tags.index("CmonData"), tags.index("PrprtyTp"))
+
+    def test_no_economic_values_fabricated(self):
+        # valuation AMOUNTS and income values are NOT emitted with invented numbers.
+        self.assertNotIn("ValtnAmt", self.xml_text)
+        self.assertNotIn("IncmVal", self.xml_text)
+        self.assertNotIn("PmryOblgrIncm", self.xml_text)
+        # RREC13/RREC17 (ValtnAmt) and RREL16 (income) are not among emitted codes.
+        for econ in ("RREC13", "RREC17", "RREL16"):
+            self.assertNotIn(econ, self.verdict["emit_field_codes"], econ)
+
+    def test_nodata_placeholders_valid_and_recorded(self):
+        import csv as _csv
+        rows = {r["esma_code"]: r for r in _csv.DictReader(
+            open(self.sp / "102_xsd_structured_preview_assumptions.csv"))}
+        # the structural NoData placeholders are recorded with the nodata kind.
+        for c in ("RREL10", "RREC6", "RREC8", "RREC16", "RREC12"):
+            self.assertIn(c, rows, c)
+            self.assertEqual(rows[c]["assumption_kind"],
+                             "mandatory_structural_nodata_placeholder", c)
+        # every emitted NoData value is a valid ND code for its field (no enum
+        # facet violation like "ND5 not in {ND1,ND2,ND3}").
+        nd_enum_errs = [e for e in self.validation["validation_errors"]
+                        if "NoData" in e and "enumeration" in e]
+        self.assertEqual(nd_enum_errs, [])
+
+    def test_obligor_id_placeholders_recorded(self):
+        self.assertIn("RREL4", self.verdict["structural_placeholder_codes"])
+        self.assertIn("RREL5", self.verdict["structural_placeholder_codes"])
+        lineage = json.loads((self.sp / "101_xsd_structured_preview_lineage.json").read_text())
+        self.assertIn("RREL5", lineage["structural_placeholder_codes"])
+
+    def test_record_sequence_fixes_reported(self):
+        fixes = self.validation["record_sequence_fixes"]
+        self.assertTrue(fixes["obligor_identifiers_complete"])
+        self.assertTrue(fixes["oblgr_dtls_before_undrlyg_dtls"])
+        self.assertTrue(fixes["valtn_present_in_collcmondata"])
+        self.assertTrue(fixes["dtls_cmondata_first"])
+
+    def test_collateral_still_nested_and_gates_false(self):
+        for prfrmg in self.xml.iter(f"{NS}PrfrmgLn"):
+            if prfrmg.find(f"{NS}Coll") is not None:
+                break
+        else:
+            self.fail("Coll must remain nested under PrfrmgLn")
+        manifest = json.loads((self.out / "60_delivery_manifest.json").read_text())
+        self.assertFalse(any([manifest["xml_generation_allowed"],
+                              manifest["ready_for_xml_delivery"], manifest["xml_generated"]]))
+
+    def test_remaining_errors_reported_honestly(self):
+        if not self.validation["xsd_validation_passed"]:
+            self.assertTrue(self.validation["validation_errors"])
+            self.assertTrue(self.validation["known_limitations"])
+
+
 if __name__ == "__main__":
     unittest.main()

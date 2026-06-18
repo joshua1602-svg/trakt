@@ -96,6 +96,32 @@ preview_modes:
         preview_placeholder: "PREVIEW_ONLY_RREC3"
       - esma_code: RREC4      # CollIdr/NewIdr (Max1000Text)
         preview_placeholder: "PREVIEW_ONLY_RREC4"
+      # Obligor identifiers: UndrlygXpsrId also requires NewOblgrIdr and
+      # OrgnlOblgrIdr (Max1000Text). Preview-only identifier placeholders.
+      - esma_code: RREL5      # NewOblgrIdr (Max1000Text)
+        preview_placeholder: "PREVIEW_ONLY_RREL5"
+      - esma_code: RREL4      # OrgnlOblgrIdr (Max1000Text)
+        preview_placeholder: "PREVIEW_ONLY_RREL4"
+      # Container-leading mandatory children, emitted with NoDataOptn (ND5) so
+      # the OblgrDtls, Coll Dtls/CmonData and Valtn containers exist in the
+      # correct XSD position WITHOUT fabricating any real value. NoData asserts
+      # "no data" (never an invented amount/date/enum) and is recorded as a
+      # preview-only structural placeholder in assumptions/lineage.
+      #   OblgrDtls (before UndrlygXpsrDtls): Resdt
+      - esma_code: RREL10     # OblgrDtls/Resdt (YesNoIndicator1Choice)
+        preview_placeholder: "ND5"
+      #   Coll Dtls/CmonData (before PrprtyTp): TrtrlUnitClssfctn, LienVal
+      - esma_code: RREC6      # Dtls/CmonData/TrtrlUnitClssfctn
+        preview_placeholder: "ND5"
+      - esma_code: RREC8      # Dtls/CmonData/LienVal
+        preview_placeholder: "ND5"
+      #   Valtn (after Dtls in CollCmonData): InfAtOrgtn/LnToVal and CurInf/LnToVal
+      #   (LnToVal is the first child of each valuation sub-group). NoData only —
+      #   valuation AMOUNTS/DATES are NOT emitted (no fabricated economic values).
+      - esma_code: RREC16     # Valtn/InfAtOrgtn/LnToVal
+        preview_placeholder: "ND5"
+      - esma_code: RREC12     # Valtn/CurInf/LnToVal
+        preview_placeholder: "ND5"
 
 # --------------------------------------------------------------------- #
 # Production guardrails — asserted by the evaluator. The preview path must

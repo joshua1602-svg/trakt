@@ -144,11 +144,23 @@ ESMA-path construction — the opposite of the flat preview above — and:
   mandatory **leading record siblings** (`NewUndrlygXpsrIdr` before
   `OrgnlUndrlygXpsrIdr`; `ActvtyDtDtls`/`PoolAddtnDt`,`RpDt` before
   `UndrlygXpsrDtls`; `CollIdr`/`OrgnlIdr`,`NewIdr` before `CollCmonData` —
-  `structural_mandatory_codes`). When absent from the data these use accepted
-  path-map codes filled with **preview-only, type/pattern-valid placeholders**,
-  recorded in `101_..._lineage.json` and `102_..._assumptions.csv`
-  (`assumption_kind = mandatory_structural_sibling_placeholder`). They are never
-  production values;
+  `structural_mandatory_codes`). It also fills the next required sub-containers:
+  the obligor identifiers (`NewOblgrIdr`,`OrgnlOblgrIdr`), `OblgrDtls` (via
+  `Resdt`), collateral `Dtls/CmonData` (via `TrtrlUnitClssfctn`,`LienVal`) and
+  `Valtn` (via `InfAtOrgtn`/`CurInf` `LnToVal`). When absent from the data these
+  use accepted path-map codes filled with **preview-only placeholders**, recorded
+  in `101_..._lineage.json` and `102_..._assumptions.csv`. Two kinds:
+  - identifier fields → `type/pattern-valid` text placeholders
+    (`assumption_kind = mandatory_structural_sibling_placeholder`);
+  - non-identifier `value_or_nodata` fields → a **`NoDataOptn` (ND)** placeholder
+    valid for that field's ND subset (the builder picks an allowed code per
+    field; `assumption_kind = mandatory_structural_nodata_placeholder`). NoData
+    asserts **no data** — it never invents an amount, date or enum.
+  None of these are production values.
+- **Economic fields are never fabricated.** Valuation amounts (`ValtnAmt`),
+  income values (`IncmVal`/`PmryOblgrIncm`) and similar are NOT emitted with
+  invented numbers; only real deliverable values would be used. Their absence
+  leaves honest deeper "missing ValtnAmt" validation errors, reported as such;
 - defaults to a small sample (`max_records: 5`) — structure proof, not volume;
 - attempts XSD validation and records the result **honestly** in
   `107_xsd_structured_preview_xsd_validation.json` (it is expected to FAIL today —

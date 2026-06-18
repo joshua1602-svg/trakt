@@ -73,11 +73,17 @@ class XsdResolver:
         self._order_cache: Dict[str, List[str]] = {}
         if not xsd_path:
             return
+        self._enums: Dict[str, List[str]] = {}
         try:
             root = ET.parse(xsd_path).getroot()
             self._ct = {c.get("name"): c for c in root.findall(f"{_XS}complexType")}
             tops = {e.get("name"): e.get("type") for e in root.findall(f"{_XS}element")}
             self._doc_type = tops.get("Document")
+            for st in root.findall(f"{_XS}simpleType"):
+                name = st.get("name")
+                vals = [en.get("value") for en in st.iter(f"{_XS}enumeration") if en.get("value")]
+                if name and vals:
+                    self._enums[name] = vals
             self.ok = bool(self._doc_type)
         except Exception:
             self.ok = False
@@ -125,6 +131,19 @@ class XsdResolver:
                 break
         self._cache[path] = result
         return result
+
+    def nodata_codes(self, path: str) -> List[str]:
+        """Allowed ND enumeration values for the element at ``path`` (via its
+        NoDataOptn -> NoData type). Different fields permit different ND subsets
+        (e.g. {ND1,ND2,ND3} vs {ND5} vs {ND4})."""
+        t = self._leaf_type(path)
+        if not t:
+            return []
+        nd_choice = self._children(t).get("NoDataOptn")
+        if not nd_choice:
+            return []
+        nodata_type = self._children(nd_choice).get("NoData")
+        return self._enums.get(nodata_type, []) if nodata_type else []
 
     def child_order(self, path: str) -> List[str]:
         """XSD-declared child element order for the element at ``path`` (i.e. the
@@ -195,7 +214,13 @@ def _place_value(leaf: ET.Element, field: Dict[str, Any], value: str,
     if is_nd(value) and field.get("value_mode") == "value_or_nodata":
         nd = _gc(leaf, "NoDataOptn")
         nod = _gc(nd, "NoData")
-        nod.text = str(value)
+        code = str(value).upper()
+        # different fields allow different ND subsets; for structural placeholders
+        # pick a code the field actually permits (never invents a real value).
+        allowed = resolver.nodata_codes(field["xml_path"])
+        if allowed and code not in allowed:
+            code = allowed[0]
+        nod.text = code
         return
     child = resolver.value_child(field["xml_path"])
     if child:
@@ -354,6 +379,7 @@ def validate_against_xsd(xml_text: str, xsd_path: Optional[str]) -> Dict[str, An
         # True once the report/header sequence is correct (ScrtstnIdr, CutOffDt
         # before UndrlygXpsrRcrd) — i.e. the old top-level error is gone.
         "top_level_header_ordering_ok": False,
+        "record_sequence_fixes": {},
         "remaining_error_categories": [],
         "known_limitations": known_limitations,
         "note": "Structure-proof preview; XSD validity is NOT claimed. Remaining "
@@ -380,6 +406,16 @@ def validate_against_xsd(xml_text: str, xsd_path: Optional[str]) -> Dict[str, An
         header_err = any(("UndrlygXpsrRcrd" in e and "ScrtstnIdr" in e and "Expected" in e)
                          for e in all_errors)
         report["top_level_header_ordering_ok"] = passed or not header_err
+
+        def _gone(*needles):
+            return passed or not any(all(n in e for n in needles) for e in all_errors)
+        # The specific deeper errors targeted by this change (gone == fixed):
+        report["record_sequence_fixes"] = {
+            "obligor_identifiers_complete": _gone("UndrlygXpsrId", "NewOblgrIdr"),
+            "oblgr_dtls_before_undrlyg_dtls": _gone("UndrlygXpsrDtls", "Expected", "OblgrDtls"),
+            "valtn_present_in_collcmondata": _gone("CollCmonData", "Valtn"),
+            "dtls_cmondata_first": _gone("PrprtyTp", "Expected", "CmonData"),
+        }
         cats = []
         if any("UndrlygXpsrId" in e or "OblgrIdr" in e or "UndrlygXpsrIdr" in e for e in all_errors):
             cats.append("exposure_identification_sequence")
