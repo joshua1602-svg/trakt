@@ -394,5 +394,65 @@ class TestAllowXmlPreviewDoesNotBypass(unittest.TestCase):
         self.assertFalse((out / "66_xml_validation_report.json").exists())
 
 
+class TestRealStylePathLayout(unittest.TestCase):
+    """The agent must consume a manifest at the real nested run layout and write
+    artefacts alongside it, under the SAME run output directory."""
+
+    def test_nested_run_layout_consumed(self):
+        root = Path(tempfile.mkdtemp(prefix="da_realpath_"))
+        run_root = root / "onboarding_output" / "client_001" / "run_pre_xml_final_check_3"
+        mpath = _write_projection_package(run_root)
+        # sanity: manifest lives at the expected real-style path.
+        self.assertTrue(str(mpath).endswith(
+            "run_pre_xml_final_check_3/output/projection/50_projection_manifest.json"))
+        result = da.build_delivery_package(mpath, field_universe_path=UNIVERSE)
+        out = run_root / "output" / "delivery_xml"
+        self.assertEqual(Path(result["delivery_dir"]), out)
+        for name in ("60_delivery_manifest.json", "61_delivery_readiness.md",
+                     "62_delivery_normalised_frame.csv", "63_delivery_issues.csv",
+                     "64_delivery_lineage.json"):
+            self.assertTrue((out / name).exists(), name)
+        manifest = json.loads((out / "60_delivery_manifest.json").read_text())
+        self.assertFalse(manifest["xml_generation_allowed"])
+        self.assertEqual(manifest["run_id"], "run_pre_xml_final_check_3")
+
+
+class TestInspectHelperAndGrouping(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.root = Path(tempfile.mkdtemp(prefix="da_inspect_"))
+        mpath = _write_projection_package(cls.root)
+        order = _write_restricted_code_order(cls.root)
+        da.build_delivery_package(
+            mpath, esma_code_order_path=str(order), field_universe_path=UNIVERSE)
+        cls.out = cls.root / "output" / "delivery_xml"
+
+    def test_inspect_summary(self):
+        from scripts.inspect_delivery_xml_readiness import inspect
+        s = inspect(self.out)
+        self.assertTrue(s["exists"])
+        self.assertFalse(s["flags"]["xml_generation_allowed"])
+        self.assertEqual(s["flags"]["next_agent"], "operator_config_projection_remediation")
+        self.assertEqual(s["xml_files"], [])
+        self.assertGreater(s["status_mix"].get("blocked", 0), 0)
+        self.assertGreater(s["status_mix"].get("deliverable", 0), 0)
+
+    def test_inspect_missing_dir(self):
+        from scripts.inspect_delivery_xml_readiness import inspect
+        s = inspect(self.root / "nope")
+        self.assertFalse(s["exists"])
+
+    def test_grouping_on_produced_issues(self):
+        from engine.delivery_xml_agent.remediation import group_delivery_issues
+        issues = json.loads((self.out / "63_delivery_issues.json").read_text())["rows"]
+        g = group_delivery_issues(issues)
+        self.assertIn("RREL2", g["client_onboarding"]["codes"])
+        self.assertIn("RREC17", g["operator_review"]["codes"])
+        self.assertIn("RREL27", g["config_mapping"]["codes"])
+        self.assertIn("RREC7", g["source_projection"]["codes"])
+        self.assertGreater(g["template_order"]["issue_count"], 0)
+        self.assertGreater(g["delivery_structure"]["issue_count"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -23,6 +23,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 DOC = _REPO_ROOT / "docs" / "delivery_xml_agent_v1_review.md"
+ROADMAP = _REPO_ROOT / "docs" / "xml_readiness_remediation_roadmap.md"
 
 
 class TestReviewDoc(unittest.TestCase):
@@ -155,6 +156,89 @@ class TestReadinessGates(unittest.TestCase):
             compute_delivery_readiness, GATE_NAMES)
         r = compute_delivery_readiness(**self._all_good_kwargs())
         self.assertEqual([g["gate"] for g in r["gates"]], GATE_NAMES)
+
+
+class TestRemediationRoadmap(unittest.TestCase):
+    def setUp(self):
+        self.assertTrue(ROADMAP.exists(),
+                        "docs/xml_readiness_remediation_roadmap.md must exist")
+        self.text = ROADMAP.read_text(encoding="utf-8")
+
+    def test_seven_groups_present(self):
+        for title in ("Client onboarding decisions", "Operator decisions",
+                      "Config mapping decisions", "Source / projection mapping gaps",
+                      "ND / default policy gaps", "Delivery structure gaps",
+                      "Template / order gaps"):
+            self.assertIn(title, self.text)
+
+    def test_action_plan_sections_present(self):
+        # A..F plain-English action plan.
+        for letter in "ABCDEF":
+            self.assertRegex(self.text, rf"###\s*{letter}\.")
+
+    def test_per_field_dimensions_present(self):
+        for token in ("Field codes", "Current blocker type", "Business meaning",
+                      "Recommended owner", "Recommended action",
+                      "Needed before XML preview", "Needed before production XML"):
+            self.assertIn(token, self.text)
+
+    def test_known_codes_referenced(self):
+        for code in ("RREL1", "RREL2", "RREC9", "RREC13", "RREC17", "RREL43", "RREL27"):
+            self.assertIn(code, self.text)
+
+    def test_no_production_xml_statement(self):
+        self.assertIn("No production XML", self.text)
+
+
+class TestIssueGrouping(unittest.TestCase):
+    def setUp(self):
+        from engine.delivery_xml_agent import remediation as rem
+        from engine.delivery_xml_agent import delivery_xml_agent as da
+        self.rem = rem
+        self.da = da
+
+    def test_groups_in_stable_order(self):
+        groups = self.rem.group_delivery_issues([])
+        self.assertEqual(
+            list(groups.keys()),
+            ["client_onboarding", "operator_review", "config_mapping",
+             "source_projection", "nd_default", "delivery_structure", "template_order"])
+        # empty groups still present with zero counts.
+        self.assertTrue(all(g["issue_count"] == 0 for g in groups.values()))
+
+    def test_blocker_types_map_to_expected_groups(self):
+        da = self.da
+        issues = [
+            {"delivery_issue_id": "DEL-0001", "delivery_blocker_type": da.BT_CLIENT, "esma_code": "RREL1"},
+            {"delivery_issue_id": "DEL-0002", "delivery_blocker_type": da.BT_OPERATOR_OR_CONFIG, "esma_code": "RREC17"},
+            {"delivery_issue_id": "DEL-0003", "delivery_blocker_type": da.BT_CONFIG, "esma_code": "RREL27"},
+            {"delivery_issue_id": "DEL-0004", "delivery_blocker_type": da.BT_SOURCE_MAPPING, "esma_code": "RREC7"},
+            {"delivery_issue_id": "DEL-0005", "delivery_blocker_type": da.BT_FORMAT, "esma_code": "RREL16"},
+            {"delivery_issue_id": "DEL-0006", "delivery_blocker_type": da.BT_ND_DEFAULT_MISSING, "esma_code": "RREL40"},
+            {"delivery_issue_id": "DEL-0007", "delivery_blocker_type": da.BT_STRUCTURE_DEFERRED, "esma_code": ""},
+            {"delivery_issue_id": "DEL-0008", "delivery_blocker_type": da.BT_TEMPLATE_ORDER, "esma_code": "RREL2,RREL3"},
+        ]
+        g = self.rem.group_delivery_issues(issues)
+        self.assertEqual(g["client_onboarding"]["codes"], ["RREL1"])
+        self.assertEqual(g["operator_review"]["codes"], ["RREC17"])
+        self.assertEqual(g["config_mapping"]["codes"], ["RREL27"])
+        # source/projection absorbs both source-mapping and format-invalid.
+        self.assertEqual(g["source_projection"]["codes"], ["RREC7", "RREL16"])
+        self.assertEqual(g["source_projection"]["issue_count"], 2)
+        self.assertEqual(g["nd_default"]["codes"], ["RREL40"])
+        self.assertEqual(g["delivery_structure"]["issue_count"], 1)
+        # comma-joined template-order codes are split.
+        self.assertEqual(g["template_order"]["codes"], ["RREL2", "RREL3"])
+
+    def test_preview_vs_production_flags(self):
+        g = self.rem.group_delivery_issues([])
+        # delivery_structure is the only group deferred past preview.
+        self.assertFalse(g["delivery_structure"]["needed_before_preview"])
+        self.assertTrue(g["delivery_structure"]["needed_before_production"])
+        for key in ("client_onboarding", "operator_review", "config_mapping",
+                    "source_projection", "nd_default", "template_order"):
+            self.assertTrue(g[key]["needed_before_preview"], key)
+            self.assertTrue(g[key]["needed_before_production"], key)
 
 
 if __name__ == "__main__":
