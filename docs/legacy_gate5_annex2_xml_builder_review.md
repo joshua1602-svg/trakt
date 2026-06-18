@@ -124,3 +124,34 @@ sparse real data would fail validation.
 See `output/config_review/legacy_gate5_vs_xsd_path_map.csv` for the per-code
 comparison and `docs/annex2_field_xsd_path_mapping.md` (Legacy Gate 5 comparison)
 for what was upgraded and what still blocks production.
+
+## Legacy Gate 5: map reused, runtime retired
+
+**Why the workbook PATH column is valuable.** The legacy builder never hard-codes
+paths — it reads them from the ESMA mapping workbook, whose `PATH` column is the
+full XSD path per RTS code. That crosswalk is authoritative and re-validatable:
+every RREL/RREC workbook path validates against the vendored XSD tree. It is the
+single best source for *where each field goes*, so we keep it.
+
+**Why the old Gate 5 runtime is unsafe.** The builder's *behaviour* fabricates and
+silently fills: it injects `ND5` defaults (`ScndryOblgrIncm`, 36-month historical
+collection), coerces values (`RREL12 → "2026"`), assumes a wide one-row-per-loan
+CSV, builds a singleton non-repeating `Coll`, orders by workbook (not XSD)
+sequence, and follows multi-code-cell paths literally. None of that may enter the
+production path.
+
+**What `workbook_xsd_validated` means.** A path that comes from the ESMA workbook
+**and** re-validates against the XSD tree — strong corroboration, but **not**
+sample-confirmed and **not** production-eligible until the path-map review policy
+formally accepts it. It may be implemented in the future builder only *behind a
+structure gate*. See `docs/annex2_path_map_promotion_policy.md`.
+
+**Why production XML remains gated.** Only 11 fields are `confirmed_by_xsd_sample`;
+89 are `workbook_xsd_validated` (pending acceptance); 7 are manual/unresolved/
+conflict. The XSD is still the DRAFT, and — separately — **data readiness** is not
+certified for any field. `production_ready` is `false` for all 107 fields.
+
+**What needs manual acceptance before paths drive production XML.** Final non-DRAFT
+XSD; human sign-off on each code↔element crosswalk; cardinality/`minOccurs`
+reconciliation (esp. repeating `Coll`); value↔`NoDataOptn` confirmation; and a
+full-builder XSD validation pass. Until then: **map reused, runtime retired.**

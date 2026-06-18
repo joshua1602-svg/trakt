@@ -16,6 +16,19 @@ field_xsd_path_map:
     unresolved: 7
     conflict: 0
     production_blocking_mapping_gaps: 96
+  promotion_summary:
+    note: promotion_status is the PATH-readiness axis. It is SEPARATE from data readiness; production_ready
+      requires BOTH and is False for all fields. workbook_xsd_validated paths need formal acceptance before
+      production use (see docs/annex2_path_map_promotion_policy.md).
+    by_promotion_status:
+      confirmed_by_xsd_sample: 11
+      workbook_xsd_validated: 89
+      manual_review_required: 2
+      unresolved: 3
+      conflict: 2
+    path_production_eligible: 11
+    builder_eligible_behind_structure_gate: 100
+    production_ready: 0
   production_guardrails:
     do_not_generate_production_xml: true
     do_not_change_production_gates: true
@@ -38,9 +51,15 @@ field_xsd_path_map:
     nd_wrapper_path: null
     mapping_status: unresolved
     evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review
+    evidence_note: "multi-code-cell pollution: the ESMA workbook maps this collateral code outside Coll;\
+      \ REJECTED (XSD requires nesting under .../PrfrmgLn/Coll) \u2014 do not promote"
     blocks_production_xml: true
     owner: config_policy
+    promotion_status: conflict
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: false
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREC2
     canonical_field: underlying_exposure_identifier
     record_group: RREC
@@ -54,9 +73,15 @@ field_xsd_path_map:
     nd_wrapper_path: null
     mapping_status: unresolved
     evidence_source: manual_review
-    evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review
+    evidence_note: "multi-code-cell pollution: the ESMA workbook maps this collateral code outside Coll;\
+      \ REJECTED (XSD requires nesting under .../PrfrmgLn/Coll) \u2014 do not promote"
     blocks_production_xml: true
     owner: config_policy
+    promotion_status: conflict
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: false
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREC3
     canonical_field: original_collateral_identifier
     record_group: RREC
@@ -74,6 +99,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREC4
     canonical_field: new_collateral_identifier
     record_group: RREC
@@ -91,6 +121,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREC5
     canonical_field: collateral_type
     record_group: RREC
@@ -108,6 +143,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREC6
     canonical_field: geographic_region_collateral
     record_group: RREC
@@ -125,6 +165,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREC7
     canonical_field: occupancy
     record_group: RREC
@@ -142,6 +187,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREC8
     canonical_field: lien
     record_group: RREC
@@ -159,6 +209,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREC9
     canonical_field: property_type
     record_group: RREC
@@ -175,6 +230,11 @@ field_xsd_path_map:
     evidence_note: workbook_semantic 'PrprtyTp/Cd' agrees with XSD path and sample message
     blocks_production_xml: false
     owner: delivery_xml
+    promotion_status: confirmed_by_xsd_sample
+    path_production_eligible: true
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREC10
     canonical_field: energy_performance_certificate_value
     record_group: RREC
@@ -192,6 +252,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREC11
     canonical_field: energy_performance_certificate_provider_name
     record_group: RREC
@@ -209,6 +274,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREC12
     canonical_field: current_loan_to_value
     record_group: RREC
@@ -226,6 +296,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREC13
     canonical_field: current_valuation_amount
     record_group: RREC
@@ -243,6 +318,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREC14
     canonical_field: current_valuation_method
     record_group: RREC
@@ -260,6 +340,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREC15
     canonical_field: current_valuation_date
     record_group: RREC
@@ -277,6 +362,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREC16
     canonical_field: original_loan_to_value
     record_group: RREC
@@ -294,6 +384,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREC17
     canonical_field: original_valuation_amount
     record_group: RREC
@@ -311,6 +406,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREC18
     canonical_field: original_valuation_method
     record_group: RREC
@@ -328,6 +428,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREC19
     canonical_field: original_valuation_date
     record_group: RREC
@@ -345,6 +450,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREC20
     canonical_field: date_of_sale
     record_group: RREC
@@ -362,6 +472,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREC21
     canonical_field: sale_price
     record_group: RREC
@@ -379,6 +494,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREC22
     canonical_field: collateral_currency
     record_group: RREC
@@ -396,6 +516,11 @@ field_xsd_path_map:
       allows ND -> expect NoDataOptn wrapper
     blocks_production_xml: true
     owner: config_policy
+    promotion_status: unresolved
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: false
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREC23
     canonical_field: guarantor_type
     record_group: RREC
@@ -413,6 +538,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL1
     canonical_field: unique_identifier
     record_group: RREL
@@ -430,6 +560,11 @@ field_xsd_path_map:
       match RREL1 content; present in sample. NOTE: report-level, not an exposure identifier.'
     blocks_production_xml: false
     owner: delivery_xml
+    promotion_status: confirmed_by_xsd_sample
+    path_production_eligible: true
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL2
     canonical_field: original_underlying_exposure_identifier
     record_group: RREL
@@ -446,6 +581,11 @@ field_xsd_path_map:
     evidence_note: workbook_semantic 'OrgnlUndrlygXpsrIdr' agrees with XSD path and sample message
     blocks_production_xml: false
     owner: delivery_xml
+    promotion_status: confirmed_by_xsd_sample
+    path_production_eligible: true
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL3
     canonical_field: new_underlying_exposure_identifier
     record_group: RREL
@@ -463,6 +603,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL4
     canonical_field: original_obligor_identifier
     record_group: RREL
@@ -480,6 +625,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL5
     canonical_field: new_obligor_identifier
     record_group: RREL
@@ -497,6 +647,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL6
     canonical_field: data_cut_off_date
     record_group: RREL
@@ -513,6 +668,11 @@ field_xsd_path_map:
     evidence_note: workbook_semantic 'CutOffDt' agrees with XSD path and sample message
     blocks_production_xml: false
     owner: delivery_xml
+    promotion_status: confirmed_by_xsd_sample
+    path_production_eligible: true
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL7
     canonical_field: pool_addition_date
     record_group: RREL
@@ -530,6 +690,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL8
     canonical_field: date_of_repurchase
     record_group: RREL
@@ -547,6 +712,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL9
     canonical_field: redemption_date
     record_group: RREL
@@ -564,6 +734,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL10
     canonical_field: resident
     record_group: RREL
@@ -581,6 +756,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL11
     canonical_field: geographic_region_obligor
     record_group: RREL
@@ -598,6 +778,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL12
     canonical_field: geographic_region_classification
     record_group: RREL
@@ -615,6 +800,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL13
     canonical_field: employment_status
     record_group: RREL
@@ -632,6 +822,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL14
     canonical_field: credit_impaired_obligor
     record_group: RREL
@@ -649,6 +844,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL15
     canonical_field: customer_type
     record_group: RREL
@@ -666,6 +866,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL16
     canonical_field: primary_income
     record_group: RREL
@@ -683,6 +888,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL17
     canonical_field: primary_income_type
     record_group: RREL
@@ -700,6 +910,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL18
     canonical_field: primary_income_currency
     record_group: RREL
@@ -717,6 +932,11 @@ field_xsd_path_map:
       allows ND -> expect NoDataOptn wrapper
     blocks_production_xml: true
     owner: config_policy
+    promotion_status: unresolved
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: false
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL19
     canonical_field: primary_income_verification
     record_group: RREL
@@ -734,6 +954,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL20
     canonical_field: secondary_income
     record_group: RREL
@@ -751,6 +976,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL21
     canonical_field: secondary_income_verification
     record_group: RREL
@@ -768,6 +998,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL22
     canonical_field: special_scheme
     record_group: RREL
@@ -784,6 +1019,11 @@ field_xsd_path_map:
     evidence_note: workbook_semantic 'SpclSchme/Val' agrees with XSD path and sample message
     blocks_production_xml: false
     owner: delivery_xml
+    promotion_status: confirmed_by_xsd_sample
+    path_production_eligible: true
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL23
     canonical_field: origination_date
     record_group: RREL
@@ -801,6 +1041,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL24
     canonical_field: maturity_date
     record_group: RREL
@@ -818,6 +1063,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL25
     canonical_field: original_term
     record_group: RREL
@@ -834,6 +1084,11 @@ field_xsd_path_map:
     evidence_note: workbook_semantic 'OrgnlTerm/Nb' agrees with XSD path and sample message
     blocks_production_xml: false
     owner: delivery_xml
+    promotion_status: confirmed_by_xsd_sample
+    path_production_eligible: true
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL26
     canonical_field: origination_channel
     record_group: RREL
@@ -851,6 +1106,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL27
     canonical_field: purpose
     record_group: RREL
@@ -868,6 +1128,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL28
     canonical_field: currency_denomination
     record_group: RREL
@@ -884,6 +1149,11 @@ field_xsd_path_map:
     evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review
     blocks_production_xml: true
     owner: config_policy
+    promotion_status: unresolved
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: false
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL29
     canonical_field: original_principal_balance
     record_group: RREL
@@ -901,6 +1171,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL30
     canonical_field: current_principal_balance
     record_group: RREL
@@ -918,6 +1193,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL31
     canonical_field: prior_principal_balances
     record_group: RREL
@@ -934,6 +1214,11 @@ field_xsd_path_map:
     evidence_note: workbook_semantic 'PrrPrncplBal/Val/Amt' agrees with XSD path and sample message
     blocks_production_xml: false
     owner: delivery_xml
+    promotion_status: confirmed_by_xsd_sample
+    path_production_eligible: true
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL32
     canonical_field: pari_passu_underlying_exposures
     record_group: RREL
@@ -950,6 +1235,11 @@ field_xsd_path_map:
     evidence_note: workbook_semantic 'PrpssUndrlygXpsr/Val/Amt' agrees with XSD path and sample message
     blocks_production_xml: false
     owner: delivery_xml
+    promotion_status: confirmed_by_xsd_sample
+    path_production_eligible: true
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL33
     canonical_field: total_credit_limit
     record_group: RREL
@@ -967,6 +1257,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL34
     canonical_field: purchase_price
     record_group: RREL
@@ -984,6 +1279,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL35
     canonical_field: amortisation_type
     record_group: RREL
@@ -1001,6 +1301,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL36
     canonical_field: principal_grace_period_end_date
     record_group: RREL
@@ -1018,6 +1323,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL37
     canonical_field: scheduled_principal_payment_frequency
     record_group: RREL
@@ -1035,6 +1345,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL38
     canonical_field: scheduled_interest_payment_frequency
     record_group: RREL
@@ -1052,6 +1367,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL39
     canonical_field: payment_due
     record_group: RREL
@@ -1069,6 +1389,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL40
     canonical_field: debt_to_income_ratio
     record_group: RREL
@@ -1085,6 +1410,11 @@ field_xsd_path_map:
     evidence_note: workbook_semantic 'DebtToIncm/Rate' agrees with XSD path and sample message
     blocks_production_xml: false
     owner: delivery_xml
+    promotion_status: confirmed_by_xsd_sample
+    path_production_eligible: true
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL41
     canonical_field: balloon_amount
     record_group: RREL
@@ -1101,6 +1431,11 @@ field_xsd_path_map:
     evidence_note: workbook_semantic 'BllnAmt/Val/Amt' agrees with XSD path and sample message
     blocks_production_xml: false
     owner: delivery_xml
+    promotion_status: confirmed_by_xsd_sample
+    path_production_eligible: true
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL42
     canonical_field: interest_rate_type
     record_group: RREL
@@ -1118,6 +1453,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL43
     canonical_field: current_interest_rate
     record_group: RREL
@@ -1135,6 +1475,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL44
     canonical_field: current_interest_rate_index
     record_group: RREL
@@ -1152,6 +1497,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL45
     canonical_field: current_interest_rate_index_tenor
     record_group: RREL
@@ -1169,6 +1519,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL46
     canonical_field: current_interest_rate_margin
     record_group: RREL
@@ -1186,6 +1541,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL47
     canonical_field: interest_rate_reset_interval
     record_group: RREL
@@ -1203,6 +1563,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL48
     canonical_field: interest_rate_cap
     record_group: RREL
@@ -1220,6 +1585,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL49
     canonical_field: interest_rate_floor
     record_group: RREL
@@ -1237,6 +1607,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL50
     canonical_field: revision_margin_1
     record_group: RREL
@@ -1254,6 +1629,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL51
     canonical_field: interest_revision_date_1
     record_group: RREL
@@ -1271,6 +1651,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL52
     canonical_field: revision_margin_2
     record_group: RREL
@@ -1288,6 +1673,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL53
     canonical_field: interest_revision_date_2
     record_group: RREL
@@ -1305,6 +1695,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL54
     canonical_field: revision_margin_3
     record_group: RREL
@@ -1322,6 +1717,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL55
     canonical_field: interest_revision_date_3
     record_group: RREL
@@ -1339,6 +1739,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL56
     canonical_field: revised_interest_rate_index
     record_group: RREL
@@ -1356,6 +1761,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL57
     canonical_field: revised_interest_rate_index_tenor
     record_group: RREL
@@ -1373,6 +1783,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL58
     canonical_field: number_of_payments_before_securitisation
     record_group: RREL
@@ -1390,6 +1805,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL59
     canonical_field: percentage_of_prepayments_allowed_per_year
     record_group: RREL
@@ -1407,6 +1827,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL60
     canonical_field: prepayment_lock_out_end_date
     record_group: RREL
@@ -1424,6 +1849,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL61
     canonical_field: prepayment_fee
     record_group: RREL
@@ -1441,6 +1871,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL62
     canonical_field: prepayment_fee_end_date
     record_group: RREL
@@ -1458,6 +1893,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL63
     canonical_field: prepayment_date
     record_group: RREL
@@ -1475,6 +1915,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL64
     canonical_field: cumulative_prepayments
     record_group: RREL
@@ -1492,6 +1937,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL65
     canonical_field: date_of_repurchase
     record_group: RREL
@@ -1509,6 +1959,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL66
     canonical_field: date_last_in_arrears
     record_group: RREL
@@ -1526,6 +1981,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL67
     canonical_field: arrears_balance
     record_group: RREL
@@ -1542,6 +2002,11 @@ field_xsd_path_map:
     evidence_note: no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review
     blocks_production_xml: true
     owner: config_policy
+    promotion_status: manual_review_required
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: false
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL68
     canonical_field: number_of_days_in_arrears
     record_group: RREL
@@ -1559,6 +2024,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL69
     canonical_field: account_status
     record_group: RREL
@@ -1575,6 +2045,11 @@ field_xsd_path_map:
     evidence_note: workbook_semantic 'AcctSts' agrees with XSD path and sample message
     blocks_production_xml: false
     owner: delivery_xml
+    promotion_status: confirmed_by_xsd_sample
+    path_production_eligible: true
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL70
     canonical_field: reason_for_default_or_foreclosure
     record_group: RREL
@@ -1592,6 +2067,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL71
     canonical_field: default_amount
     record_group: RREL
@@ -1609,6 +2089,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL72
     canonical_field: default_date
     record_group: RREL
@@ -1626,6 +2111,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL73
     canonical_field: allocated_losses
     record_group: RREL
@@ -1643,6 +2133,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL74
     canonical_field: cumulative_recoveries
     record_group: RREL
@@ -1660,6 +2155,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL75
     canonical_field: litigation
     record_group: RREL
@@ -1677,6 +2177,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL76
     canonical_field: recourse
     record_group: RREL
@@ -1694,6 +2199,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL77
     canonical_field: deposit_amount
     record_group: RREL
@@ -1711,6 +2221,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL78
     canonical_field: insurance_or_investment_provider
     record_group: RREL
@@ -1728,6 +2243,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL79
     canonical_field: original_lender_name
     record_group: RREL
@@ -1745,6 +2265,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL80
     canonical_field: original_lender_legal_entity_identifier
     record_group: RREL
@@ -1762,6 +2287,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL81
     canonical_field: original_lender_establishment_country
     record_group: RREL
@@ -1779,6 +2309,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL82
     canonical_field: originator_name
     record_group: RREL
@@ -1796,6 +2331,11 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL83
     canonical_field: originator_legal_entity_identifier
     record_group: RREL
@@ -1813,6 +2353,11 @@ field_xsd_path_map:
       element in the residential branch; needs manual XSD review
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: manual_review_required
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: false
+    data_readiness: pending_delivery_certification
+    production_ready: false
   - esma_code: RREL84
     canonical_field: originator_establishment_country
     record_group: RREL
@@ -1830,3 +2375,8 @@ field_xsd_path_map:
       \ branch). High-confidence corroboration \u2014 NOT promoted to confirmed pending final-XSD sign-off."
     blocks_production_xml: true
     owner: manual_review
+    promotion_status: workbook_xsd_validated
+    path_production_eligible: false
+    builder_eligible_behind_structure_gate: true
+    data_readiness: pending_delivery_certification
+    production_ready: false

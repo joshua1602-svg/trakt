@@ -142,16 +142,51 @@ wiring, XSD-sequence ordering, and resolving the 7 unresolved + 2 polluted codes
 The workbook **reduces the unknown gap** (unresolved 72 → 7) but does **not**
 reduce the production-blocking count on its own.
 
+## Legacy Gate 5: map reused, runtime retired
+
+The path map carries a reviewed **`promotion_status`** (a path-readiness axis,
+**separate** from data readiness) so that workbook-derived paths are never
+confused with sample-confirmed ones:
+
+| `promotion_status` | count | path production-eligible? |
+|---|---|---|
+| `confirmed_by_xsd_sample` | 11 | yes (path only) |
+| `workbook_xsd_validated` | 89 | no — needs formal acceptance |
+| `manual_review_required` | 2 | no |
+| `unresolved` | 3 | no |
+| `conflict` | 2 | no |
+
+- **Map reused:** the ESMA workbook `PATH` crosswalk (every RREL/RREC path
+  re-validated against the XSD) is kept as `workbook_xsd_validated` evidence.
+- **Runtime retired:** the legacy builder's ND5 injection, value fabrication,
+  wide one-row-per-loan shape, singleton/flattened `Coll`, and workbook-order
+  sequencing are **not** imported.
+- **Path ≠ data:** `path_production_eligible` (11) is independent of
+  `data_readiness` (pending for all). `production_ready` is **0** for all 107
+  fields. A field can have a production-eligible path and still be data-blocked.
+- See `docs/annex2_path_map_promotion_policy.md` and the per-field
+  `output/config_review/annex2_path_map_promotion_checklist.csv`.
+
 ## Summary
 
 ```
 Total fields:                     107
-Confirmed mappings:               11
-High-confidence inferred:         89   (all workbook+XSD-validated)
-Low-confidence inferred:          0
-Unresolved:                       7
-Conflicts:                        0
-Production-blocking mapping gaps: 96
+mapping_status (evidence axis):
+  Confirmed (xsd+sample):         11
+  High-confidence inferred:       89   (all workbook+XSD-validated)
+  Low-confidence inferred:        0
+  Unresolved:                     7
+  Conflicts:                      0
+promotion_status (path axis):
+  confirmed_by_xsd_sample:        11
+  workbook_xsd_validated:         89
+  manual_review_required:         2
+  unresolved:                     3
+  conflict:                       2
+path_production_eligible:         11
+data_readiness:                   pending for all (separate axis)
+production_ready:                 0    (path AND data required)
+Production-blocking mapping gaps: 96   (PATH axis; only confirmed don't block)
 ```
 
 ## Regenerating

@@ -201,6 +201,26 @@ The fuller taxonomy used across the contract and matrix:
 `missing_field_xml_path`, `missing_cardinality_rule`, `missing_order_rule`,
 `data_dependency`, `resolved_for_data_not_structure`.
 
+## Legacy Gate 5: map reused, runtime retired
+
+Since this contract was written, the per-field XML paths have advanced via the
+ESMA mapping workbook (the crosswalk the legacy Gate 5 builder read at runtime):
+
+- **Map reused.** Every RREL/RREC workbook `PATH` re-validates against this XSD,
+  so the field path map now carries 89 `workbook_xsd_validated` paths in addition
+  to the 11 `confirmed_by_xsd_sample` ones. See
+  `config/delivery/annex2_field_xsd_path_map.yaml`.
+- **Runtime retired.** The legacy builder's silent ND5 injection, value
+  fabrication (`RREL12 → "2026"`), wide one-row-per-loan shape, singleton/
+  flattened `Coll`, and workbook-order sequencing are **not** adopted. RREC stays
+  nested under `Coll`.
+- **Path ≠ data ≠ production.** `workbook_xsd_validated` paths are **not**
+  production-eligible until formally accepted (see
+  `docs/annex2_path_map_promotion_policy.md`), and even a production-eligible path
+  is still gated by **data readiness**. `production_ready` is `false` for all 107
+  fields. The validation steps in Q12 above remain outstanding, so production XML
+  stays blocked.
+
 ## Regenerating the gap matrix
 
 ```

@@ -70,12 +70,22 @@ _VALUE_TAGS = {"Cd", "Dt", "Amt", "Rate", "Nb", "Ind", "Yr", "Lien", "NbOfMnths"
                "NbOfDays", "LEI", "Pctg", "Val", "Max"}
 _NODATA = "NoDataOptn"
 
-# Status vocabulary.
+# Evidence-confidence vocabulary (how the path was derived).
 CONFIRMED = "confirmed"
 HIGH = "inferred_high_confidence"
 LOW = "inferred_low_confidence"
 UNRESOLVED = "unresolved"
 CONFLICT = "conflict"
+
+# Reviewed promotion-status vocabulary (controls production-readiness of the PATH).
+# This is a SEPARATE axis from data readiness — a production-eligible path can
+# still be blocked by missing client/operator/config/source data.
+PS_SAMPLE = "confirmed_by_xsd_sample"      # XSD + sample agree -> path production-eligible
+PS_WORKBOOK = "workbook_xsd_validated"     # ESMA workbook path, XSD-validated; needs formal acceptance
+PS_MANUAL = "manual_review_required"       # workbook touched it but no clean XSD path
+PS_UNRESOLVED = "unresolved"               # no evidence at all
+PS_CONFLICT = "conflict"                   # collision / multi-code-cell pollution — do not promote
+PROMOTION_STATUSES = [PS_SAMPLE, PS_WORKBOOK, PS_MANUAL, PS_UNRESOLVED, PS_CONFLICT]
 
 
 # --------------------------------------------------------------------------- #
@@ -193,24 +203,28 @@ def load_workbook_paths():
       * RREC codes whose element path is NOT nested under '/Coll/' are REJECTED
         (rejects multi-code-cell pollution e.g. RREC1->ScrtstnIdr).
 
-    Returns ``{}`` (graceful) if the workbook or pandas is unavailable.
+    Returns ``({code: {...}}, rejected_pollution_set, workbook_code_set)``;
+    ``({}, set(), set())`` (graceful) if the workbook or pandas is unavailable.
     """
     try:
         from engine.gate_5_delivery.xml_builder_annex2 import load_mapping_specs
     except Exception:
-        return {}
+        return {}, set(), set()
     if not _WORKBOOK.exists():
-        return {}
+        return {}, set(), set()
     try:
         specs = load_mapping_specs(str(_WORKBOOK), _WB_SHEET, "PRF")
     except Exception:
-        return {}
+        return {}, set(), set()
 
     valid = xsd_path_validator()
     out = {}
+    rejected = set()        # RREC codes whose workbook path is NOT under Coll (pollution)
+    wb_codes = set()        # all RREL/RREC codes the workbook (RRE/PRF) touches
     for code, slist in specs.items():
         if code[:4] not in ("RREL", "RREC"):
             continue
+        wb_codes.add(code)
         clean = [s for s in slist if "Cxl" not in s.path.strip("/").split("/")]
         if not clean:
             continue
@@ -228,6 +242,7 @@ def load_workbook_paths():
         # RREC must stay nested under Coll (never flat/header).
         parts = path.split("/")
         if code.startswith("RREC") and "Coll" not in parts:
+            rejected.add(code)   # multi-code-cell pollution — do NOT promote
             continue
         has_nd = any("NoDataOptn" in s.path.split("/") for s in clean)
         nd_wrapper = f"{path}/NoDataOptn/NoData" if (has_nd and valid(f"{path}/NoDataOptn/NoData")) else None
@@ -237,7 +252,7 @@ def load_workbook_paths():
             "nd_wrapper_path": nd_wrapper,
             "xsd_element": parts[-1],
         }
-    return out
+    return out, rejected, wb_codes
 
 
 def _level_for_path(path):
@@ -521,10 +536,51 @@ def build_rows():
     # Legacy Gate 5 workbook reconciliation: corroborate paths from the ESMA
     # mapping workbook, re-validated against the XSD (high-confidence, not
     # confirmed; never clears the production-blocking flag).
-    _apply_workbook_evidence(rows_by_code, load_workbook_paths())
+    accepted, rejected_pollution, wb_codes = load_workbook_paths()
+    _apply_workbook_evidence(rows_by_code, accepted)
     _flag_path_collisions(rows_by_code)
+    # Reviewed promotion layer (separate path-readiness axis; never data readiness).
+    _assign_promotion(rows_by_code, rejected_pollution, wb_codes)
     rows = [rows_by_code[c] for c in sorted(rows_by_code, key=sort_key)]
     return rows, xsd_index
+
+
+def _assign_promotion(rows_by_code, rejected_pollution, wb_codes):
+    """Assign the reviewed ``promotion_status`` (path-readiness axis) and the
+    explicit path-vs-data separation flags. Never marks any field
+    production-ready: ``production_ready`` requires BOTH a production-eligible
+    path AND data readiness, and data readiness is NOT certified by this layer."""
+    for code, r in rows_by_code.items():
+        ms, es = r["mapping_status"], r["evidence_source"]
+        if code in rejected_pollution:
+            ps = PS_CONFLICT
+            r["evidence_note"] = ("multi-code-cell pollution: the ESMA workbook maps this "
+                                  "collateral code outside Coll; REJECTED (XSD requires nesting "
+                                  "under .../PrfrmgLn/Coll) — do not promote")
+        elif ms == CONFIRMED:
+            ps = PS_SAMPLE
+        elif ms == HIGH and es == "workbook+xsd_validated":
+            ps = PS_WORKBOOK
+        elif ms == HIGH:
+            ps = PS_WORKBOOK if r.get("xml_path") else PS_MANUAL
+        elif ms == CONFLICT:
+            ps = PS_CONFLICT
+        elif ms == UNRESOLVED:
+            ps = PS_MANUAL if code in wb_codes else PS_UNRESOLVED
+        else:
+            ps = PS_UNRESOLVED
+
+        # Path-readiness axis (NOT data readiness).
+        path_eligible = (ps == PS_SAMPLE)                  # path production-eligible today
+        builder_eligible = ps in (PS_SAMPLE, PS_WORKBOOK)  # usable by future builder behind a structure gate
+        r["promotion_status"] = ps
+        r["path_production_eligible"] = path_eligible
+        r["builder_eligible_behind_structure_gate"] = builder_eligible
+        # Data-readiness axis — separate; this path layer cannot certify it.
+        r["data_readiness"] = "pending_delivery_certification"
+        # Overall production readiness needs BOTH; always False here (no data certified,
+        # workbook paths still pending formal acceptance, XSD still DRAFT).
+        r["production_ready"] = False
 
 
 def _flag_path_collisions(rows_by_code):
@@ -554,13 +610,16 @@ def _flag_path_collisions(rows_by_code):
 
 _COLUMNS = ["esma_code", "canonical_field", "record_group", "xml_level", "xml_path",
             "xsd_element", "xsd_type", "cardinality", "sequence_order", "value_mode",
-            "nd_wrapper_path", "mapping_status", "evidence_source", "evidence_note",
-            "blocks_production_xml", "owner"]
+            "nd_wrapper_path", "mapping_status", "promotion_status", "evidence_source",
+            "evidence_note", "blocks_production_xml", "path_production_eligible",
+            "builder_eligible_behind_structure_gate", "data_readiness",
+            "production_ready", "owner"]
 
 
 def write_outputs(rows):
     from collections import Counter
     counts = Counter(r["mapping_status"] for r in rows)
+    pcounts = Counter(r["promotion_status"] for r in rows)
     blocking = sum(1 for r in rows if r["blocks_production_xml"])
 
     # YAML — production source of truth.
@@ -583,6 +642,17 @@ def write_outputs(rows):
                 "unresolved": counts.get(UNRESOLVED, 0),
                 "conflict": counts.get(CONFLICT, 0),
                 "production_blocking_mapping_gaps": blocking,
+            },
+            "promotion_summary": {
+                "note": ("promotion_status is the PATH-readiness axis. It is SEPARATE from "
+                         "data readiness; production_ready requires BOTH and is False for all "
+                         "fields. workbook_xsd_validated paths need formal acceptance before "
+                         "production use (see docs/annex2_path_map_promotion_policy.md)."),
+                "by_promotion_status": {ps: pcounts.get(ps, 0) for ps in PROMOTION_STATUSES},
+                "path_production_eligible": sum(1 for r in rows if r["path_production_eligible"]),
+                "builder_eligible_behind_structure_gate":
+                    sum(1 for r in rows if r["builder_eligible_behind_structure_gate"]),
+                "production_ready": sum(1 for r in rows if r["production_ready"]),
             },
             "production_guardrails": {
                 "do_not_generate_production_xml": True,
@@ -620,6 +690,13 @@ def main():
     for st in (CONFIRMED, HIGH, LOW, UNRESOLVED, CONFLICT):
         print(f"  {st}: {counts.get(st, 0)}")
     print(f"  production-blocking mapping gaps: {blocking}")
+    from collections import Counter
+    pc = Counter(r["promotion_status"] for r in rows)
+    print("  promotion_status:")
+    for ps in PROMOTION_STATUSES:
+        print(f"    {ps}: {pc.get(ps, 0)}")
+    print(f"  path_production_eligible: {sum(1 for r in rows if r['path_production_eligible'])}")
+    print(f"  production_ready: {sum(1 for r in rows if r['production_ready'])}")
     return 0
 
 
