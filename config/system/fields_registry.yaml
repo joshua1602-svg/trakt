@@ -5578,3 +5578,164 @@ fields:
     regime_mapping: {}  # Source for IVSS17
     layer: performance
     core_canonical: false
+  # ============================================================
+  # MI / M&A RISK MODEL — Phase 0 canonical risk fields
+  # ------------------------------------------------------------
+  # Generic, asset-class-neutral internal-risk fields powering the
+  # target MI risk monitor (migration / early warning) and the M&A
+  # diligence risk views. These supersede obscure bank/SME-specific
+  # source fields (e.g. bank_internal_rating,
+  # bank_internal_loss_given_default_lgd_estimate,
+  # last_internal_obligor_rating_review), which are retained for source
+  # fidelity and now alias INTO these canonical fields (see
+  # aliases_analytics.yaml). Not core_canonical (risk data is
+  # supplemental and not present on every tape); surfaced to MI/M&A via
+  # the analytics consumers (include_unmapped_analytics: true).
+  # ============================================================
+  internal_risk_grade:  # Generic internal/obligor risk grade (e.g. A-G, 1-10); asset-class neutral.
+    allowed_values: null
+    category: analytics
+    format: list
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  internal_risk_score:  # Numeric internal risk / behavioural / application score.
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  internal_risk_stage:  # Internal monitoring/watchlist stage (lender taxonomy; distinct from IFRS 9).
+    allowed_values: null
+    category: analytics
+    format: list
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  ifrs9_stage:  # IFRS 9 impairment stage (Stage 1 / 2 / 3).
+    allowed_values: null
+    category: analytics
+    format: list
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  probability_of_default:  # PD as a decimal probability (0-1); point-in-time, lifetime or TTC per source.
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  pd_bucket:  # Banded PD for stratification (derived from probability_of_default).
+    allowed_values: null
+    category: analytics
+    format: list
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  loss_given_default:  # LGD as a decimal (0-1). Supersedes bank_internal_loss_given_default_lgd_estimate.
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  lgd_bucket:  # Banded LGD for stratification (derived from loss_given_default).
+    allowed_values: null
+    category: analytics
+    format: list
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  exposure_at_default:  # EAD as a currency amount.
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  ead_bucket:  # Banded EAD for stratification (derived from exposure_at_default).
+    allowed_values: null
+    category: analytics
+    format: list
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  risk_grade_previous:  # Risk grade at the prior reporting period (risk-grade migration input).
+    allowed_values: null
+    category: analytics
+    format: list
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  risk_grade_current:  # Risk grade at the current reporting period (risk-grade migration input).
+    allowed_values: null
+    category: analytics
+    format: list
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  pd_previous:  # PD at the prior reporting period (PD migration input).
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  pd_current:  # PD at the current reporting period (PD migration input).
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  lgd_previous:  # LGD at the prior reporting period (LGD migration input).
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  lgd_current:  # LGD at the current reporting period (LGD migration input).
+    allowed_values: null
+    category: analytics
+    format: decimal
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  ifrs9_stage_previous:  # IFRS 9 stage at the prior reporting period (stage-migration input).
+    allowed_values: null
+    category: analytics
+    format: list
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  ifrs9_stage_current:  # IFRS 9 stage at the current reporting period (stage-migration input).
+    allowed_values: null
+    category: analytics
+    format: list
+    portfolio_type: common
+    layer: performance
+    core_canonical: false
+  rating_review_date:  # Date of last internal rating/credit review. Supersedes last_internal_obligor_rating_review.
+    allowed_values: null
+    category: analytics
+    format: date
+    portfolio_type: common
+    layer: product
+    core_canonical: false
+  risk_model_version:  # Version identifier of the risk/rating model that produced the grade/PD/LGD.
+    allowed_values: null
+    category: analytics
+    format: string
+    portfolio_type: common
+    layer: product
+    core_canonical: false
+  risk_model_source:  # Source/system/provider of the risk model (e.g. internal scorecard, vendor model).
+    allowed_values: null
+    category: analytics
+    format: string
+    portfolio_type: common
+    layer: product
+    core_canonical: false
