@@ -1,0 +1,51 @@
+# =========================================================================
+# Trakt portfolio reference config — EXAMPLE shape (Phase 6 Step 0).
+# =========================================================================
+#
+# Phase 6 minimal config shape. Trakt assigns its OWN portfolio references per
+# client during onboarding, independent of how the source tape labels the
+# portfolio. MI always reports against the Trakt reference (portfolio_id /
+# portfolio_name), never the raw source label.
+#
+# This file is an ILLUSTRATIVE example, not a production client config. It exists
+# so the runtime boundary and tests have a documented shape to read. Full
+# onboarding orchestration that POPULATES these references is out of Phase 6
+# scope.
+#
+# Resolution rules (see mi_agent/portfolio_reference.py + semantic_resolver.py):
+#   "portfolio"          -> Trakt portfolio_id / portfolio_name (this config)
+#   "acquired portfolio" -> acquired_portfolio_id
+#   "SPV"                -> spv_id
+#   If a query says "portfolio" but no portfolio reference is configured for the
+#   client -> structured issue (missing_portfolio_reference_config); NEVER
+#   silently resolved to acquired_portfolio_id.
+
+client_id: clientA
+client_name: Client A Ltd
+client_slug: client_a
+
+# Pattern used to MINT new Trakt portfolio references during onboarding when a
+# source tape has no clean portfolio field. {client_slug}_{sequence:03d}
+# -> client_a_001, client_a_002, ...
+portfolio_reference_pattern: "{client_slug}_{sequence:03d}"
+
+# Trakt portfolio references for this client (the MI portfolio dimension).
+portfolios:
+  - portfolio_id: client_a_001
+    portfolio_name: Client A — Prime Residential
+    source_portfolio_label: "Prime RES"          # optional: raw tape label
+    source_portfolio_field: source_portfolio       # optional: raw tape column
+    spv_id: SPV_A1                                 # optional
+    acquired_portfolio_id: null                    # optional
+  - portfolio_id: client_a_002
+    portfolio_name: Client A — Buy To Let
+    source_portfolio_label: "BTL"
+    source_portfolio_field: source_portfolio
+    spv_id: SPV_A2
+    acquired_portfolio_id: ACQ_2023_01            # acquired book example
+  - portfolio_id: client_a_003
+    portfolio_name: Client A — Bridging
+    source_portfolio_label: null
+    source_portfolio_field: null
+    spv_id: null
+    acquired_portfolio_id: null
