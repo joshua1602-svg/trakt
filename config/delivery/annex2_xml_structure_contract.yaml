@@ -1,0 +1,317 @@
+# =====================================================================
+# annex2_xml_structure_contract.yaml
+# =====================================================================
+# DRAFT production Annex 2 XML structure contract (auth.099.001.04).
+#
+# This is a STRUCTURE CONTRACT / SCOPING artefact. It does NOT generate
+# production XML, does NOT change production gates, and does NOT use preview
+# placeholders to satisfy structure. See:
+#   docs/annex2_production_xml_structure_contract.md
+#
+# Authoritative sources inspected:
+#   * DRAFT1auth.099.001.04_1.3.0.xsd                  (vendored XSD, also at
+#     config/system/DRAFT1auth.099.001.04_1.3.0.xsd)
+#   * "DRAFT1auth.099.001.04_non-ABCP Underlying Exposure Report.xml"
+#     (vendored sample message — residential real estate, performing loan)
+#   * config/regime/annex2_field_universe.yaml         (107 codes)
+#   * config/regime/annex2_delivery_rules.yaml         (workbook_semantic leaves)
+#   * config/system/esma_code_order.yaml               (flat code order — NOT the
+#     nested XSD sequence; explicitly a "starter template, verify before prod")
+#
+# IMPORTANT: the vendored schema is the ESMA *DRAFT* (file prefix "DRAFT1auth",
+# namespace urn:esma:xsd:DRAFT1auth.099.001.04, version 1.3.0). Confirm the
+# final (non-DRAFT) auth.099.001.04 XSD before any production claim.
+# =====================================================================
+
+xml_contract:
+  contract_id: ESMA_Annex2_auth099
+  schema_message: auth.099.001.04
+  schema_version: "1.3.0"
+  production_xsd_mapping_configured: false   # per-field path mapping incomplete
+  namespace_required: true
+  xsd_required: true
+
+  # ------------------------------------------------------------------ #
+  # Schema / namespace — RESOLVED (the XSD + a sample message are vendored).
+  # ------------------------------------------------------------------ #
+  schema:
+    status: present_but_draft
+    xsd_file: "DRAFT1auth.099.001.04_1.3.0.xsd"
+    xsd_file_copy: "config/system/DRAFT1auth.099.001.04_1.3.0.xsd"
+    target_namespace: "urn:esma:xsd:DRAFT1auth.099.001.04"
+    schema_location: "urn:esma:xsd:DRAFT1auth.099.001.04 DRAFT1auth.099.001.04_1.3.0.xsd"
+    element_form_default: qualified
+    sample_message: "DRAFT1auth.099.001.04_non-ABCP Underlying Exposure Report.xml"
+    is_draft: true
+    blocker: >-
+      Schema is the ESMA DRAFT (DRAFT1auth). The final published auth.099.001.04
+      XSD/version must be confirmed before production XML can be claimed.
+
+  # ------------------------------------------------------------------ #
+  # Root + report wrapper — RESOLVED from the XSD/sample.
+  # ------------------------------------------------------------------ #
+  root:
+    tag: Document
+    status: resolved
+    namespace: "urn:esma:xsd:DRAFT1auth.099.001.04"
+    children:
+      - tag: ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt
+        type: SecuritisationNonAssetBackedCommercialPaperUnderlyingExposureReportV01
+        choice:
+          # exactly one of NewCrrctn (submit/append/update) or Cxl (cancel)
+          - tag: NewCrrctn   # SecuritisationCreation2 — the reporting path
+            min: 0
+            max: 1
+          - tag: Cxl         # Cancellation7 — out of scope for data reporting
+            min: 0
+            max: 1
+
+  # ------------------------------------------------------------------ #
+  # Header / report-level section — RESOLVED structurally.
+  # Path: Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt
+  # ------------------------------------------------------------------ #
+  header:
+    status: resolved
+    xml_path: "Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt"
+    type: Securitisation1
+    cardinality: one_per_report
+    # The XSD type Securitisation1 is a sequence in EXACTLY this order. The two
+    # header elements are MANDATORY (minOccurs=1) and MUST precede the first
+    # UndrlygXpsrRcrd. Emitting UndrlygXpsrRcrd before ScrtstnIdr is invalid
+    # ("UndrlygXpsrRcrd: not expected. Expected ScrtstnIdr").
+    report_sequence:
+      - { element: ScrtstnIdr, esma_code: RREL1, min: 1, max: 1 }
+      - { element: CutOffDt,   esma_code: RREL6, min: 1, max: 1 }
+      - { element: UndrlygXpsrRcrd, min: 1, max: unbounded }
+    mandatory_before_records: [ScrtstnIdr, CutOffDt]
+    fields:
+      - esma_code: RREL1
+        role: securitisation_identifier
+        xml_path: ".../ScrtstnRpt/ScrtstnIdr"
+        xsd_type: SecuritisationIdentifier
+        mandatory: true
+        must_precede: UndrlygXpsrRcrd
+        # XSD pattern: [A-Z0-9]{18}[0-9]{2}[N]{1}[0-9]{4}[0-9]{2} (27 chars).
+        xsd_pattern: "[A-Z0-9]{18,18}[0-9]{2,2}[N]{1,1}[0-9]{4,4}[0-9]{2,2}"
+        status: resolved
+      - esma_code: RREL6
+        role: data_cut_off_date
+        xml_path: ".../ScrtstnRpt/CutOffDt"
+        xsd_type: ISODate
+        mandatory: true
+        must_precede: UndrlygXpsrRcrd
+        status: resolved
+
+  # ------------------------------------------------------------------ #
+  # Record groups — the RREL (exposure) vs RREC (collateral) hierarchy.
+  #
+  # CRITICAL FINDING: collateral (Coll) is NOT a sibling of the loan record.
+  # It is NESTED INSIDE the loan, under the asset-class/performing choice
+  # (e.g. ResdtlRealEsttLn/PrfrmgLn), as a sibling of UndrlygXpsrCmonData,
+  # and it repeats (minOccurs varies by asset class, maxOccurs=unbounded).
+  # The current flat preview (Coll as a sibling of the loan) is therefore NOT
+  # production-valid.
+  # ------------------------------------------------------------------ #
+  record_groups:
+    exposure_record:
+      source_record_group: RREL
+      xml_tag: UndrlygXpsrRcrd
+      type: UnderlyingExposureReport1
+      xml_path: ".../ScrtstnRpt/UndrlygXpsrRcrd"
+      cardinality: one_or_more_per_report   # minOccurs=1 maxOccurs=unbounded
+      status: resolved
+      children:
+        - tag: UndrlygXpsrId          # ExposureIdentificationCommonData1
+          role: exposure_identification
+          cardinality: one_per_loan
+          status: resolved
+        - tag: UndrlygXpsrData        # UnderlyingExposure1Choice (asset class)
+          role: asset_class_choice
+          cardinality: one_per_loan
+          status: needs_mapping
+          note: >-
+            Choice of asset class: ResdtlRealEsttLn | ComrclRealEsttLn | CorpLn |
+            AutomblLn | CsmrLn | CdtCardLn | LeasgLn | EstrcLn. Each is in turn a
+            performing/non-performing choice (PrfrmgLn | NonPrfrmgLn). ERM maps to
+            ResdtlRealEsttLn/PrfrmgLn (SecuritisationLoanData2).
+
+    exposure_common_data:
+      xml_tag: UndrlygXpsrCmonData
+      type: ExposureData1                  # residential performing
+      xml_path: ".../ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData"
+      cardinality: one_per_loan
+      status: needs_field_mapping
+      note: >-
+        Holds the loan-level RREL detail (ActvtyDtDtls, OblgrDtls,
+        UndrlygXpsrDtls, BalDtls, RpmtDtls, IntrstRateDtls, RskDtls,
+        PrfrmncDtls, InstnlDtls). Per-field RREL→path mapping is incomplete.
+
+    collateral_record:
+      source_record_group: RREC
+      xml_tag: Coll
+      type: CollateralData22               # residential performing
+      xml_path: ".../ResdtlRealEsttLn/PrfrmgLn/Coll"
+      cardinality: one_or_more_per_loan    # minOccurs=1 maxOccurs=unbounded (residential perf)
+      status: needs_field_mapping
+      note: >-
+        Nested inside the loan (PrfrmgLn), repeating. Children: CollIdr,
+        CollCmonData (Dtls, Valtn, Nfrcmnt). Per-field RREC→path mapping is
+        incomplete; minOccurs differs per asset class (0 or 1).
+
+  # ------------------------------------------------------------------ #
+  # Relationship: one loan/exposure → one-or-more collateral records.
+  # ------------------------------------------------------------------ #
+  exposure_to_collateral_relationship:
+    model: collateral_nested_within_loan
+    one_exposure_record: UndrlygXpsrRcrd
+    has_one: UndrlygXpsrCmonData
+    has_many: Coll
+    cardinality: "1 exposure : 1..* collateral (nested)"
+    status: resolved
+
+  # ------------------------------------------------------------------ #
+  # Field mappings (DRAFT). Only paths confirmed against the XSD + sample are
+  # marked status: resolved. Everything else is null/needs_mapping and is NOT
+  # to be satisfied with a preview placeholder. Full per-code rows (all 107)
+  # are in output/config_review/annex2_xml_structure_gap_matrix.csv.
+  # ------------------------------------------------------------------ #
+  field_mappings:
+    - esma_code: RREL1
+      canonical_field: unique_identifier
+      record_group: RREL
+      xml_level: report_header
+      xml_path: ".../ScrtstnRpt/ScrtstnIdr"
+      cardinality: one_per_report
+      required_for_structure: true
+      production_status: resolved_path_data_dependency
+
+    - esma_code: RREL6
+      canonical_field: data_cut_off_date
+      record_group: RREL
+      xml_level: report_header
+      xml_path: ".../ScrtstnRpt/CutOffDt"
+      cardinality: one_per_report
+      required_for_structure: true
+      production_status: resolved_path_data_dependency
+
+    - esma_code: RREL2
+      canonical_field: original_underlying_exposure_identifier
+      record_group: RREL
+      xml_level: exposure_identification
+      xml_path: ".../UndrlygXpsrRcrd/UndrlygXpsrId/OrgnlUndrlygXpsrIdr"
+      cardinality: one_per_loan
+      required_for_structure: true
+      production_status: client_onboarding_required
+
+    - esma_code: RREL3
+      canonical_field: new_underlying_exposure_identifier
+      record_group: RREL
+      xml_level: exposure_identification
+      xml_path: ".../UndrlygXpsrRcrd/UndrlygXpsrId/NewUndrlygXpsrIdr"
+      cardinality: one_per_loan
+      required_for_structure: true
+      production_status: client_onboarding_required
+
+    - esma_code: RREL4
+      canonical_field: original_obligor_identifier
+      record_group: RREL
+      xml_level: exposure_identification
+      xml_path: ".../UndrlygXpsrRcrd/UndrlygXpsrId/OrgnlOblgrIdr"
+      cardinality: one_per_loan
+      required_for_structure: true
+      production_status: client_onboarding_required
+
+    - esma_code: RREL5
+      canonical_field: new_obligor_identifier
+      record_group: RREL
+      xml_level: exposure_identification
+      xml_path: ".../UndrlygXpsrRcrd/UndrlygXpsrId/NewOblgrIdr"
+      cardinality: one_per_loan
+      required_for_structure: true
+      production_status: client_onboarding_required
+
+    - esma_code: RREC3
+      canonical_field: original_collateral_identifier
+      record_group: RREC
+      xml_level: collateral
+      xml_path: ".../PrfrmgLn/Coll/CollIdr/OrgnlIdr"
+      cardinality: one_per_collateral
+      required_for_structure: true
+      production_status: source_or_client_required
+
+    - esma_code: RREC4
+      canonical_field: new_collateral_identifier
+      record_group: RREC
+      xml_level: collateral
+      xml_path: ".../PrfrmgLn/Coll/CollIdr/NewIdr"
+      cardinality: one_per_collateral
+      required_for_structure: true
+      production_status: source_or_client_required
+
+    - esma_code: RREC1
+      canonical_field: collateral_unique_identifier
+      record_group: RREC
+      xml_level: collateral
+      xml_path: null
+      cardinality: one_per_collateral
+      required_for_structure: true
+      production_status: needs_xml_path
+
+    - esma_code: RREL35
+      canonical_field: amortisation_type
+      record_group: RREL
+      xml_level: exposure
+      xml_path: null               # leaf token 'AmrtstnType/Cd' known; full path TBC
+      cardinality: one_per_loan
+      required_for_structure: true
+      production_status: resolved_for_data_not_structure
+
+  # ------------------------------------------------------------------ #
+  # Ordering rules.
+  # ------------------------------------------------------------------ #
+  ordering:
+    status: needs_mapping
+    authority: xsd_sequence
+    note: >-
+      Element order is fixed by the <xs:sequence> blocks in the XSD, nested per
+      complexType. config/system/esma_code_order.yaml is a FLAT ESMA-code list
+      and a self-described "starter template — verify against official ESMA XSD
+      before production use"; it is NOT the nested XSD order and cannot drive
+      production element ordering on its own.
+
+  # ------------------------------------------------------------------ #
+  # NoData (ND) handling — structural requirement.
+  # ------------------------------------------------------------------ #
+  nodata_handling:
+    status: needs_mapping
+    note: >-
+      ND values are not emitted as plain text. The XSD wraps optional values in a
+      choice of the typed value or a NoDataOptn/NoData element (see sample RpDt,
+      RedDt, etc.). The value↔NoDataOptn wrapper choice must be modelled per
+      field before production XML.
+
+  # ------------------------------------------------------------------ #
+  # Validation steps required before production XML can be claimed.
+  # ------------------------------------------------------------------ #
+  validation_steps_before_production:
+    - confirm_final_non_draft_xsd
+    - complete_per_field_xml_path_mapping_all_107_codes
+    - model_asset_class_and_performing_choice_selection
+    - model_value_vs_nodataoptn_wrappers_per_field
+    - derive_nested_element_order_from_xsd_sequence
+    - validate_emitted_xml_against_xsd      # xmllint / lxml schema validation
+    - resolve_all_data_dependencies         # client/operator/config/source blockers
+    - reconcile_cardinality_min_occurs_per_asset_class
+
+# --------------------------------------------------------------------- #
+# Production guardrails (unchanged — restated for this contract).
+# --------------------------------------------------------------------- #
+production_guardrails:
+  do_not_generate_production_xml: true
+  do_not_modify_production_readiness_flags: true
+  do_not_use_preview_placeholders_for_structure: true
+  do_not_claim_flat_preview_is_production_valid: true
+  production_gates_remain:
+    xml_generation_allowed: false
+    xml_generated: false
+    ready_for_xml_delivery: false
