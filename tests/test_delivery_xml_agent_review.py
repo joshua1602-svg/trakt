@@ -19,6 +19,8 @@ import sys
 import unittest
 from pathlib import Path
 
+import yaml
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
@@ -28,6 +30,8 @@ ROADMAP = _REPO_ROOT / "docs" / "xml_readiness_remediation_roadmap.md"
 PREVIEW_PLAN = _REPO_ROOT / "docs" / "minimum_xml_preview_remediation_plan.md"
 PREVIEW_MATRIX = (_REPO_ROOT / "output" / "config_review"
                   / "minimum_xml_preview_remediation_matrix.csv")
+PREVIEW_POLICY = _REPO_ROOT / "config" / "delivery" / "xml_preview_policy.yaml"
+PREVIEW_SPEC = _REPO_ROOT / "docs" / "xml_preview_policy_spec.md"
 
 
 class TestReviewDoc(unittest.TestCase):
@@ -347,6 +351,87 @@ class TestMinimumXmlPreviewPlan(unittest.TestCase):
         with open(PREVIEW_MATRIX, newline="", encoding="utf-8") as fh:
             header = next(csv.reader(fh))
         self.assertEqual(header, _MATRIX_COLUMNS)
+
+
+class TestXmlPreviewPolicy(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.policy = yaml.safe_load(PREVIEW_POLICY.read_text(encoding="utf-8"))["preview_policy"]
+        rows = list(csv.DictReader(open(PREVIEW_MATRIX, encoding="utf-8")))
+        cls.m_ph = {r["esma_code"] for r in rows
+                    if r["recommended_preview_treatment"] == "synthetic_placeholder_for_demo_only"}
+        cls.m_ex = {r["esma_code"] for r in rows
+                    if r["recommended_preview_treatment"] == "preview_exclusion"}
+        cls.m_mr = {("record_structure" if r["esma_code"] == "(structural)" else r["esma_code"])
+                    for r in rows if r["recommended_preview_treatment"] == "must_resolve"}
+
+    def test_spec_and_config_exist(self):
+        self.assertTrue(PREVIEW_SPEC.exists())
+        self.assertTrue(PREVIEW_POLICY.exists())
+
+    def test_disabled_by_default(self):
+        self.assertFalse(self.policy["enabled"])
+        self.assertEqual(self.policy["mode"], "non_production_preview")
+        self.assertTrue(self.policy["preserve_production_gates"])
+        self.assertFalse(self.policy["allow_silent_defaults"])
+        self.assertFalse(self.policy["allow_nd_without_policy"])
+
+    def test_preview_and_production_flags_are_separate(self):
+        prev = set(self.policy["preview_gate_flags"])
+        prod = set(self.policy["production_gate_flags_unchanged"])
+        self.assertEqual(prev, {"xml_preview_allowed", "xml_preview_generated",
+                                "ready_for_xml_preview"})
+        self.assertEqual(prod, {"xml_generation_allowed", "ready_for_xml_delivery",
+                                "xml_generated"})
+        self.assertFalse(prev & prod)  # disjoint — gates do not collapse.
+
+    def test_production_guardrails(self):
+        g = self.policy["production_guardrails"]
+        self.assertTrue(g["never_set_xml_generation_allowed"])
+        self.assertTrue(g["never_set_ready_for_xml_delivery"])
+        self.assertTrue(g["never_set_xml_generated"])
+        self.assertTrue(g["preview_output_must_be_separate"])
+        self.assertTrue(g["do_not_promote_placeholders_to_production"])
+        self.assertTrue(g["do_not_fabricate_valuation_or_source"])
+
+    def test_field_lists_match_matrix(self):
+        ph = set(self.policy["placeholder_policy"]["fields"])
+        ex = set(self.policy["exclusion_policy"]["fields"])
+        mr = set()
+        for v in self.policy["must_resolve_before_preview"].values():
+            mr.update(v)
+        self.assertEqual(ph, self.m_ph)
+        self.assertEqual(ex, self.m_ex)
+        self.assertEqual(mr, self.m_mr)
+
+    def test_placeholder_prefix_and_non_reportable(self):
+        pp = self.policy["placeholder_policy"]
+        self.assertEqual(pp["prefix"], "PREVIEW_ONLY_")
+        self.assertTrue(pp["non_reportable"])
+
+    def test_rrel82_is_onboarding_static_reference_placeholder(self):
+        f = self.policy["placeholder_policy"]["fields"]["RREL82"]
+        self.assertEqual(f["business_group"], "onboarding_static_reference")
+        self.assertIn("onboarding", f["owner"])
+        self.assertIn("ND is NOT allowed", f["reason"])
+
+    def test_rrel35_resolved_not_in_preview_logic(self):
+        ph = set(self.policy["placeholder_policy"]["fields"])
+        ex = set(self.policy["exclusion_policy"]["fields"])
+        mr = set()
+        for v in self.policy["must_resolve_before_preview"].values():
+            mr.update(v)
+        self.assertNotIn("RREL35", ph | ex | mr)
+        self.assertIn("RREL35", self.policy["resolved_examples"])
+
+    def test_operator_valuations_excluded_not_fabricated(self):
+        ex = self.policy["exclusion_policy"]["fields"]
+        for code in ("RREC13", "RREC17", "RREC9", "RREL43"):
+            self.assertIn(code, ex, code)
+
+    def test_watermark_present(self):
+        self.assertIn("NON-PRODUCTION PREVIEW", self.policy["watermark"])
+        self.assertIn("NON-PRODUCTION PREVIEW", PREVIEW_SPEC.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
