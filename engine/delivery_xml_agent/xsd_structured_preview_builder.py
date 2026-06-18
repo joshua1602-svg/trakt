@@ -359,18 +359,24 @@ def serialize(root: ET.Element, *, watermark: str, meta: Dict[str, str]) -> str:
     return head + body + "\n"
 
 
-def validate_against_xsd(xml_text: str, xsd_path: Optional[str]) -> Dict[str, Any]:
+def validate_against_xsd(xml_text: str, xsd_path: Optional[str],
+                         known_limitations: Optional[List[str]] = None) -> Dict[str, Any]:
     """Attempt XSD validation honestly. Returns a structured, truthful report.
-    Validation is EXPECTED to fail today — see known_limitations."""
-    known_limitations = [
-        "Only builder-accepted fields for a small sample of loans are emitted; "
-        "mandatory ESMA elements/siblings are not all present.",
-        "Leaf value-typing is shallow: values are placed in the immediate value "
-        "child (or as text); deep monetary wrappers (Val/Amt) are not fully modelled.",
-        "Strict XSD xs:sequence ordering of intermediate containers is approximate.",
-        "Asset-class/performing branch is fixed to ResdtlRealEsttLn/PrfrmgLn.",
-        "Schema is the ESMA DRAFT (DRAFT1auth.099.001.04); final schema unconfirmed.",
-    ]
+    For the client-safe preview, validation is EXPECTED to fail (economic fields
+    are not fabricated) — see known_limitations."""
+    if known_limitations is None:
+        known_limitations = [
+            "Only builder-accepted fields for a small sample of loans are emitted; "
+            "mandatory ESMA elements/siblings are not all present.",
+            "Economically meaningful mandatory fields (valuation amounts, balances, "
+            "rates, income, economic dates) are NOT fabricated in client-safe "
+            "preview mode, so XSD validation may fail on missing economic values.",
+            "Leaf value-typing is shallow; deep monetary wrappers (Val/Amt) are "
+            "not fully modelled.",
+            "Strict XSD xs:sequence ordering of intermediate containers is approximate.",
+            "Asset-class/performing branch is fixed to ResdtlRealEsttLn/PrfrmgLn.",
+            "Schema is the ESMA DRAFT (DRAFT1auth.099.001.04); final schema unconfirmed.",
+        ]
     report: Dict[str, Any] = {
         "xsd_validation_attempted": False,
         "xsd_validation_passed": False,
@@ -428,3 +434,281 @@ def validate_against_xsd(xml_text: str, xsd_path: Optional[str]) -> Dict[str, An
         report["xsd_validation_attempted"] = True
         report["validation_errors"] = [f"{type(exc).__name__}: {exc}"]
     return report
+
+
+# --------------------------------------------------------------------------- #
+# Synthetic XSD-structured schema test (ENGINEERING ONLY)
+# --------------------------------------------------------------------------- #
+# A recursive XSD instance generator that builds the FULL mandatory
+# residential-real-estate / performing-loan tree with type-valid DUMMY values,
+# so that full DRAFT-XSD validation can be attempted. Every value is synthetic
+# and labelled ``synthetic_schema_test``. This is never client-facing, never
+# production, and never fabricates values for the client-safe preview.
+
+SYNTHETIC_SOURCE = "synthetic_schema_test"
+
+# Choice branches to prefer (residential performing; submit not cancel).
+_CHOICE_PREFER = ("NewCrrctn", "ResdtlRealEsttLn", "PrfrmgLn")
+# Optional (minOccurs=0) elements that must still be forced so the instance is
+# meaningful (the report wrapper is a sequence of two optional choices).
+_FORCE_INCLUDE = {"NewCrrctn"}
+_SKIP_CHOICE = {"NoDataOptn", "Cxl"}
+
+
+def _class_char(cls: str) -> str:
+    if "A-Z" in cls:
+        return "A"
+    if "a-z" in cls:
+        return "a"
+    if "0-9" in cls:
+        return "0"
+    # strip ranges, take first concrete char.
+    s = cls.replace("\\d", "0").replace("\\w", "A")
+    return s[0] if s else "A"
+
+
+def _first_alternative(p: str) -> str:
+    """Return the first top-level ``|`` alternative of a regex (alternation not
+    inside a character class)."""
+    depth = 0
+    for i, c in enumerate(p):
+        if c == "[":
+            depth += 1
+        elif c == "]":
+            depth = max(0, depth - 1)
+        elif c == "|" and depth == 0:
+            return p[:i]
+    return p
+
+
+def _sample_pattern(p: str) -> str:
+    """Deterministically produce a string matching the simple ESMA regex patterns
+    (character classes + quantifiers + literals; first branch of any alternation)."""
+    p = _first_alternative(p)
+    out: List[str] = []
+    i, n = 0, len(p)
+    while i < n:
+        c = p[i]
+        if c == "[":
+            j = p.find("]", i)
+            if j < 0:
+                break
+            cls = p[i + 1:j]
+            i = j + 1
+            rep = 1
+            if i < n and p[i] == "{":
+                k = p.find("}", i)
+                q = p[i + 1:k]
+                i = k + 1
+                lo = q.split(",")[0]
+                rep = int(lo) if lo.isdigit() else 1
+            elif i < n and p[i] in "?*":
+                i += 1
+                rep = 0
+            elif i < n and p[i] == "+":
+                i += 1
+                rep = 1
+            out.append(_class_char(cls) * rep)
+        elif c == "\\":
+            ch = p[i + 1] if i + 1 < n else ""
+            i += 2
+            out.append("0" if ch == "d" else ("A" if ch in ("w", "S") else ch))
+        elif c in "(){}|^$":
+            i += 1
+        else:
+            lit = c
+            i += 1
+            if i < n and p[i] == "{":
+                k = p.find("}", i)
+                q = p[i + 1:k]
+                i = k + 1
+                lo = q.split(",")[0]
+                rep = int(lo) if lo.isdigit() else 1
+                out.append(lit * rep)
+            else:
+                out.append(lit)
+    return "".join(out) or "SYNTH"
+
+
+class SyntheticXsdGenerator:
+    """Recursive generator of a full mandatory residential-performing instance."""
+
+    def __init__(self, xsd_path: str):
+        self.ok = False
+        self.ct: Dict[str, ET.Element] = {}
+        self.st: Dict[str, ET.Element] = {}
+        self.tops: Dict[str, str] = {}
+        self.catalog: List[Dict[str, Any]] = []
+        self.code_by_path: Dict[str, str] = {}
+        self.xsd_name = Path(xsd_path).name if xsd_path else ""
+        try:
+            root = ET.parse(xsd_path).getroot()
+            self.ct = {c.get("name"): c for c in root.findall(f"{_XS}complexType")}
+            self.st = {s.get("name"): s for s in root.findall(f"{_XS}simpleType")}
+            self.tops = {e.get("name"): e.get("type") for e in root.findall(f"{_XS}element")}
+            self.ok = "Document" in self.tops
+        except Exception:
+            self.ok = False
+
+    # -- value generation -------------------------------------------------- #
+    def _builtin(self, base: str) -> str:
+        b = (base or "").split(":")[-1]
+        if b == "date":
+            return "2024-12-31"
+        if b == "dateTime":
+            return "2024-12-31T00:00:00"
+        if b in ("gYear", "gYearMonth"):
+            return "2024"
+        if b in ("decimal", "double", "float"):
+            return "1"
+        if b in ("integer", "nonNegativeInteger", "positiveInteger", "int", "long",
+                 "short", "byte"):
+            return "1"
+        if b == "boolean":
+            return "true"
+        return "SYNTH"
+
+    def dummy(self, type_name: Optional[str], depth: int = 0) -> Tuple[str, str]:
+        """Return (value, reason) for a simple/leaf type."""
+        if not type_name or depth > 8:
+            return "SYNTH", "fallback"
+        st = self.st.get(type_name)
+        if st is None:
+            return self._builtin(type_name), f"builtin {type_name.split(':')[-1]}"
+        restr = st.find(f"{_XS}restriction")
+        if restr is None:
+            return "SYNTH", "no-restriction fallback"
+        enums = [e.get("value") for e in restr.findall(f"{_XS}enumeration") if e.get("value")]
+        if enums:
+            return enums[0], "enum first value"
+        pat = restr.find(f"{_XS}pattern")
+        if pat is not None and pat.get("value"):
+            return _sample_pattern(pat.get("value")), "pattern sample"
+        base = restr.get("base")
+        if base in self.st:
+            return self.dummy(base, depth + 1)
+        return self._builtin(base), f"builtin base {(base or '').split(':')[-1]}"
+
+    # -- tree construction ------------------------------------------------- #
+    def generate(self, code_by_path: Optional[Dict[str, str]] = None):
+        self.catalog = []
+        self.code_by_path = code_by_path or {}
+        ET.register_namespace("", NS)
+        ET.register_namespace("xsi", XSI)
+        root = ET.Element(_q("Document"),
+                          {f"{{{XSI}}}schemaLocation": f"{NS} {self.xsd_name}"})
+        self._fill_complex(root, self.tops.get("Document"), "Document", 0, [])
+        return root, self.catalog
+
+    def _record(self, path, value, type_name, reason, attrs=None):
+        code = self.code_by_path.get(path) or self.code_by_path.get(path.rsplit("/", 1)[0], "")
+        self.catalog.append({
+            "xml_path": path, "esma_code": code, "value": value,
+            "xsd_type": type_name or "", "value_reason": reason,
+            "source_reason": SYNTHETIC_SOURCE, "source": SYNTHETIC_SOURCE,
+            "attributes": ";".join(f"{k}={v}" for k, v in (attrs or {}).items()),
+        })
+
+    def _fill_complex(self, elem, type_name, path, depth, stack):
+        if depth > 60:
+            return
+        ctype = self.ct.get(type_name)
+        if ctype is None:
+            return
+        sc = ctype.find(f"{_XS}simpleContent")
+        if sc is not None:
+            ext = sc.find(f"{_XS}extension")
+            base = ext.get("base") if ext is not None else None
+            val, reason = self.dummy(base)
+            elem.text = val
+            attrs = {}
+            for attr in (ext.findall(f"{_XS}attribute") if ext is not None else []):
+                if attr.get("use") == "required":
+                    av, _ = self.dummy(attr.get("type"))
+                    elem.set(attr.get("name"), av)
+                    attrs[attr.get("name")] = av
+            self._record(path, val, base, "simpleContent " + reason, attrs)
+            return
+        for child in ctype:
+            tag = child.tag.replace(_XS, "")
+            if tag in ("sequence", "all"):
+                self._walk(child, elem, path, depth, stack)
+            elif tag == "choice":
+                self._walk_choice(child, elem, path, depth, stack)
+
+    def _walk(self, node, parent, path, depth, stack):
+        for child in node:
+            tag = child.tag.replace(_XS, "")
+            if tag in ("sequence", "all"):
+                self._walk(child, parent, path, depth, stack)
+            elif tag == "choice":
+                self._walk_choice(child, parent, path, depth, stack)
+            elif tag == "element":
+                name = child.get("name")
+                if not name:
+                    continue
+                if child.get("minOccurs", "1") == "0" and name not in _FORCE_INCLUDE:
+                    continue
+                self._emit(child, parent, path, depth, stack)
+
+    def _walk_choice(self, choice_node, parent, path, depth, stack):
+        elems = [c for c in choice_node if c.tag.replace(_XS, "") == "element" and c.get("name")]
+        if not elems:
+            # choice of groups/sequences — take the first particle.
+            for c in choice_node:
+                if c.tag.replace(_XS, "") in ("sequence", "choice"):
+                    self._walk(c, parent, path, depth, stack)
+                    return
+            return
+        chosen = None
+        for c in elems:
+            if c.get("name") in _CHOICE_PREFER:
+                chosen = c
+                break
+        if chosen is None:
+            for c in elems:
+                if c.get("name") not in _SKIP_CHOICE:
+                    chosen = c
+                    break
+        chosen = chosen or elems[0]
+        self._emit(chosen, parent, path, depth, stack)
+
+    def _emit(self, el_node, parent, path, depth, stack):
+        name = el_node.get("name")
+        type_name = el_node.get("type")
+        child = ET.SubElement(parent, _q(name))
+        cpath = f"{path}/{name}"
+        if type_name in self.ct:
+            if stack.count(type_name) >= 2:   # recursion guard
+                return
+            self._fill_complex(child, type_name, cpath, depth + 1, stack + [type_name])
+        else:
+            val, reason = self.dummy(type_name)
+            child.text = val
+            self._record(cpath, val, type_name, reason)
+
+
+def build_synthetic_document(xsd_path: str, code_by_path: Optional[Dict[str, str]] = None):
+    """Build a full synthetic residential-performing instance + value catalog."""
+    gen = SyntheticXsdGenerator(xsd_path)
+    if not gen.ok:
+        return None, []
+    return gen.generate(code_by_path)
+
+
+def serialize_synthetic(root: ET.Element, *, watermark: str, meta: Dict[str, str]) -> str:
+    try:
+        ET.indent(root, space="  ")
+    except Exception:
+        pass
+    body = ET.tostring(root, encoding="unicode")
+    meta_lines = " ".join(f"{k}={v!r}" for k, v in meta.items())
+    head = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        f"<!-- {watermark} -->\n"
+        "<!-- ENGINEERING-ONLY SYNTHETIC SCHEMA TEST. NOT CLIENT-FACING. NOT FOR "
+        "REGULATORY USE. Production XML remains blocked; production_ready=false. -->\n"
+        "<!-- every value is synthetic_schema_test (dummy); never a real value. -->\n"
+        f"<!-- meta: {meta_lines} ProductionXmlStatus=BLOCKED -->\n"
+    )
+    return head + body + "\n"

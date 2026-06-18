@@ -123,6 +123,24 @@ preview_modes:
       - esma_code: RREC12     # Valtn/CurInf/LnToVal
         preview_placeholder: "ND5"
 
+  # 4th mode: ENGINEERING-ONLY synthetic schema test. Builds the FULL mandatory
+  # residential-performing ESMA tree with type-valid DUMMY values (including
+  # economic values) to attempt full DRAFT-XSD validation. Never client-facing,
+  # never production. Distinct from xsd_structured_preview, which stays honest
+  # and never fabricates economic values.
+  xsd_structured_synthetic_schema_test:
+    enabled: false
+    output_dir: "preview/xsd_structured_synthetic_schema_test"
+    watermark: "XSD-STRUCTURED SYNTHETIC SCHEMA TEST - ENGINEERING ONLY - NOT FOR CLIENT OR REGULATORY USE"
+    intended_audience: "engineering_schema_validation"
+    use_real_esma_paths: true
+    require_builder_accepted_paths: true
+    allow_synthetic_placeholders: true
+    allow_full_dummy_population: true
+    allow_fabricated_economic_values: true
+    production_xsd_claim_allowed: false
+    max_records: 1
+
 # --------------------------------------------------------------------- #
 # Production guardrails — asserted by the evaluator. The preview path must
 # NEVER do any of the things below.

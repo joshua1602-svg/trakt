@@ -170,11 +170,40 @@ ESMA-path construction — the opposite of the flat preview above — and:
   (artefacts `100..107`, readiness `78..79`); `production_ready` stays false and
   no production gate is changed.
 
+## Fourth mode: `xsd_structured_synthetic_schema_test`
+
+A **separate, engineering-only** mode (disabled by default) that proves the real
+ESMA tree can pass full DRAFT-XSD validation. It is deliberately distinct from
+the client-safe `xsd_structured_preview` — the preview stays honest and never
+fabricates economic values; this mode fabricates dummy values for **everything**
+so the schema itself can be exercised.
+
+- recursively builds the **full mandatory** residential-performing tree directly
+  from the vendored XSD (`Document → … → ScrtstnRpt → UndrlygXpsrRcrd → … →
+  PrfrmgLn → UndrlygXpsrCmonData` + nested `Coll`), choosing residential /
+  performing branches and the value branch of value-or-NoData choices;
+- fills every mandatory leaf with a **type-valid dummy** (patterns, enums, dates,
+  decimals, amounts with required `Ccy`, booleans, integers) via a controlled
+  generator; **every value is labelled `synthetic_schema_test`** with a
+  `value_reason`/`source_reason` in `112_..._values_catalog.csv`;
+- attempts XSD validation and reports it honestly in
+  `116_..._xsd_validation.json` (`xsd_validation_attempted`,
+  `xsd_validation_passed`, `error_count`, `records_generated`,
+  `fields_generated`, `synthetic_values_count`, `validation_errors`,
+  `known_limitations`). Against the vendored DRAFT XSD it currently **passes**;
+- heavily watermarked, engineering-only, never client-facing, never reportable;
+- writes only under `output/delivery_xml/preview/xsd_structured_synthetic_schema_test/`
+  (artefacts `110..116`); `production_ready` stays false; no production gate
+  changes; no production XML.
+
+These dummy values are NEVER used in the client preview or production, and are
+never called real.
+
 ## Inspecting
 
 ```
 python scripts/inspect_delivery_xml_readiness.py <delivery_xml_dir> \
-  --preview --synthetic-schema-test --xsd-structured-preview
+  --preview --synthetic-schema-test --xsd-structured-preview --xsd-structured-synthetic
 ```
 
 prints production XML readiness, client-preview readiness, synthetic

@@ -325,6 +325,53 @@ def _print_xsd_structured_report(p: Dict[str, Any]) -> None:
             print(f"    - {k}")
 
 
+def inspect_xsd_structured_synthetic(delivery_dir: str | Path) -> Dict[str, Any]:
+    """Read-only summary of the engineering-only XSD-structured synthetic schema
+    test (4th mode) under ``<delivery_dir>/preview/``. Never writes."""
+    d = Path(delivery_dir)
+    sp = d / "preview" / "xsd_structured_synthetic_schema_test"
+    xml_file = sp / "114_xsd_structured_synthetic.xml"
+    validation = _read_json(sp / "116_xsd_structured_synthetic_xsd_validation.json")
+    catalog = _read_csv(sp / "112_xsd_structured_synthetic_values_catalog.csv")
+    manifest = _read_json(d / "60_delivery_manifest.json")
+    synth_count = sum(1 for r in catalog if r.get("source") == "synthetic_schema_test")
+    return {
+        "synthetic_dir": str(sp),
+        "exists": (sp / "116_xsd_structured_synthetic_xsd_validation.json").exists(),
+        "xml_generated": xml_file.exists(),
+        "xsd_validation_attempted": validation.get("xsd_validation_attempted"),
+        "xsd_validation_passed": validation.get("xsd_validation_passed"),
+        "error_count": validation.get("error_count"),
+        "validation_errors": validation.get("validation_errors", []),
+        "records_generated": validation.get("records_generated"),
+        "fields_generated": validation.get("fields_generated"),
+        "synthetic_values_count": synth_count or validation.get("synthetic_values_count"),
+        "production_gates_false": not any([
+            manifest.get("xml_generation_allowed"), manifest.get("ready_for_xml_delivery"),
+            manifest.get("xml_generated")]),
+    }
+
+
+def _print_xsd_synthetic_report(p: Dict[str, Any]) -> None:
+    print("\n=== XSD-structured SYNTHETIC schema test (engineering only) ===")
+    if not p["exists"]:
+        print(f"No synthetic schema test at: {p['synthetic_dir']}")
+        print("(enable xsd_structured_synthetic_schema_test in the preview policy)")
+        return
+    print(f"  XML generated                = {p['xml_generated']}")
+    print(f"  XSD validation attempted     = {p['xsd_validation_attempted']}")
+    print(f"  XSD validation passed        = {p['xsd_validation_passed']}")
+    print(f"  error count                  = {p['error_count']}")
+    print(f"  records generated            = {p['records_generated']}")
+    print(f"  fields generated             = {p['fields_generated']}")
+    print(f"  synthetic values             = {p['synthetic_values_count']}")
+    print(f"  production gates remain false = {p['production_gates_false']}")
+    if p["error_count"] and p["validation_errors"]:
+        print("  remaining validation errors (first few):")
+        for e in p["validation_errors"][:5]:
+            print(f"    - {e}")
+
+
 def _print_report(summary: Dict[str, Any]) -> None:
     if not summary["exists"]:
         print(f"No delivery package found at: {summary['delivery_dir']}")
@@ -388,6 +435,9 @@ def main(argv=None) -> int:
     ap.add_argument("--xsd-structured-preview", action="store_true",
                     help="Also report the nested XSD-structured preview readiness "
                     "(78..79 + 100..107) under <delivery_dir>/preview/.")
+    ap.add_argument("--xsd-structured-synthetic", action="store_true",
+                    help="Also report the engineering-only XSD-structured synthetic "
+                    "schema test (110..116) under <delivery_dir>/preview/.")
     args = ap.parse_args(argv)
     summary = inspect(args.delivery_dir)
     _print_report(summary)
@@ -400,6 +450,8 @@ def main(argv=None) -> int:
         _print_preview_report(inspect_preview(args.delivery_dir))
     if args.xsd_structured_preview:
         _print_xsd_structured_report(inspect_xsd_structured_preview(args.delivery_dir))
+    if args.xsd_structured_synthetic:
+        _print_xsd_synthetic_report(inspect_xsd_structured_synthetic(args.delivery_dir))
     return 0
 
 

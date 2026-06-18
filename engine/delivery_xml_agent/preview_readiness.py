@@ -868,11 +868,23 @@ def evaluate_and_emit(
     # ---- emit XSD-structured preview (100..107) only if enabled AND allowed ----
     xsd_generated = False
     xsd_paths: Dict[str, str] = {}
+    resolved_xsd = str(xsd_path) if xsd_path else str(_DEFAULT_XSD)
     if xsd_cfg.get("enabled") and xsd_verdict["allowed"]:
         xsd_paths = _emit_xsd_structured_preview(
-            preview_dir, xsd_cfg, xsd_verdict, meta_common,
-            str(xsd_path) if xsd_path else str(_DEFAULT_XSD))
+            preview_dir, xsd_cfg, xsd_verdict, meta_common, resolved_xsd)
         xsd_generated = True
+
+    # ---- XSD-structured SYNTHETIC schema test (110..116): engineering-only ----
+    synth_xsd_cfg = _mode_cfg(policy, "xsd_structured_synthetic_schema_test")
+    synth_xsd_verdict = evaluate_xsd_structured_synthetic(
+        mode_cfg=synth_xsd_cfg, path_map=path_map, production_flags=production_flags,
+        xsd_path=resolved_xsd)
+    synth_xsd_generated = False
+    synth_xsd_paths: Dict[str, str] = {}
+    if synth_xsd_cfg.get("enabled") and synth_xsd_verdict["allowed"]:
+        synth_xsd_paths = _emit_xsd_structured_synthetic(
+            preview_dir, synth_xsd_cfg, synth_xsd_verdict, meta_common, resolved_xsd, path_map)
+        synth_xsd_generated = True
 
     # New, SEPARATE flags — never the production gates.
     flags = {
@@ -885,6 +897,9 @@ def evaluate_and_emit(
         "xsd_structured_preview_allowed": xsd_verdict["allowed"],
         "ready_for_xsd_structured_preview": xsd_verdict["ready"],
         "xsd_structured_preview_generated": xsd_generated,
+        "xsd_structured_synthetic_allowed": synth_xsd_verdict["allowed"],
+        "ready_for_xsd_structured_synthetic": synth_xsd_verdict["ready"],
+        "xsd_structured_synthetic_generated": synth_xsd_generated,
         # production gates echoed read-only and asserted unchanged.
         "production_flags_unchanged": production_flags,
     }
@@ -894,10 +909,12 @@ def evaluate_and_emit(
         "client_preview_verdict": client_verdict,
         "synthetic_full_coverage_verdict": synth_verdict,
         "xsd_structured_preview_verdict": xsd_verdict,
+        "xsd_structured_synthetic_verdict": synth_xsd_verdict,
         "flags": flags,
         "client_preview_paths": client_paths,
         "synthetic_schema_test_paths": synth_paths,
         "xsd_structured_preview_paths": xsd_paths,
+        "xsd_structured_synthetic_paths": synth_xsd_paths,
     }
 
 
@@ -1501,11 +1518,169 @@ def _xsd_structured_summary_md(verdict, stats, validation) -> str:
         f"- attempted: {validation['xsd_validation_attempted']}",
         f"- passed: {validation['xsd_validation_passed']}",
         "",
-        "This preview is NOT expected to pass production XSD validation yet. "
+        "XSD validation may fail because economically meaningful mandatory fields "
+        "(valuation amounts, balances, rates, income, economic dates) are NOT "
+        "fabricated in client-safe preview mode. To attempt FULL XSD validation "
+        "with dummy values, use the engineering-only "
+        "`xsd_structured_synthetic_schema_test` mode instead.", "",
         "Known limitations:", "",
     ]
     lines += [f"- {k}" for k in validation["known_limitations"]]
     lines += ["",
               "> Production XML remains blocked. production_ready=false for all fields. "
               "No production gate was changed; no production XML was generated.", ""]
+    return "\n".join(lines) + "\n"
+
+
+# --------------------------------------------------------------------------- #
+# XSD-structured SYNTHETIC schema test (4th mode) — engineering only.
+# Full mandatory residential-performing tree, type-valid DUMMY values
+# (incl. economic), aiming for full DRAFT-XSD validation. Never client-facing.
+# --------------------------------------------------------------------------- #
+
+def evaluate_xsd_structured_synthetic(
+    *, mode_cfg: Dict[str, Any], path_map: List[Dict[str, Any]],
+    production_flags: Dict[str, bool], xsd_path: str,
+) -> Dict[str, Any]:
+    enabled = bool(mode_cfg.get("enabled", False))
+    xsd_available = bool(xsd_path and Path(xsd_path).exists())
+    prod_gates_false = not any(production_flags.values())
+    allowed = bool(xsd_available and prod_gates_false)
+    accepted = sum(1 for f in path_map
+                   if f.get("builder_acceptance_status") in ACCEPTED_FOR_BUILDER)
+    reasons = []
+    if not xsd_available:
+        reasons.append("vendored XSD not available for synthesis/validation")
+    if not prod_gates_false:
+        reasons.append("production gates are not false")
+    if allowed:
+        reasons.append("XSD available and gates false; full synthetic tree can be built")
+    return {
+        "mode": "xsd_structured_synthetic_schema_test",
+        "enabled": enabled,
+        "allowed": allowed,
+        "ready": bool(allowed and enabled),
+        "engineering_only": True,
+        "client_facing": False,
+        "reportable": False,
+        "watermark": mode_cfg.get("watermark", ""),
+        "max_records": int(mode_cfg.get("max_records", 1) or 1),
+        "accepted_path_count": accepted,
+        "reasons": reasons,
+    }
+
+
+def _emit_xsd_structured_synthetic(
+    preview_dir: Path, mode_cfg: Dict[str, Any], verdict: Dict[str, Any],
+    meta: Dict[str, str], xsd_path: str, path_map: List[Dict[str, Any]],
+) -> Dict[str, str]:
+    out = preview_dir / "xsd_structured_synthetic_schema_test"
+    out.mkdir(parents=True, exist_ok=True)
+    watermark = mode_cfg.get("watermark", "")
+    max_records = verdict["max_records"]
+
+    # element-level esma_code map (for catalog annotation).
+    code_by_path = {f["xml_path"]: f["esma_code"] for f in path_map if f.get("xml_path")}
+
+    # build one synthetic record document per max_records (default 1).
+    root, catalog = xsb.build_synthetic_document(xsd_path, code_by_path)
+    if root is None:
+        # XSD unavailable — write an honest, empty-ish validation report.
+        report = {"xsd_validation_attempted": False, "xsd_validation_passed": False,
+                  "xsd_path": xsd_path, "validation_errors": ["XSD unavailable for synthesis"],
+                  "error_count": 1, "known_limitations": ["XSD not available"],
+                  "records_generated": 0, "fields_generated": 0, "synthetic_values_count": 0}
+        (out / "116_xsd_structured_synthetic_xsd_validation.json").write_text(
+            json.dumps(report, indent=2), encoding="utf-8")
+        return {"xsd_validation": str(out / "116_xsd_structured_synthetic_xsd_validation.json")}
+
+    xml_text = xsb.serialize_synthetic(root, watermark=watermark, meta=meta)
+    (out / "114_xsd_structured_synthetic.xml").write_text(xml_text, encoding="utf-8")
+
+    # 110 — frame (flattened catalog view).
+    _write_csv(out / "110_xsd_structured_synthetic_frame.csv",
+               ["xml_path", "esma_code", "xsd_type", "value", "value_reason", "source"],
+               [{"xml_path": c["xml_path"], "esma_code": c["esma_code"],
+                 "xsd_type": c["xsd_type"], "value": c["value"],
+                 "value_reason": c["value_reason"], "source": c["source"]} for c in catalog])
+
+    # 112 — synthetic values catalog (every value labelled synthetic_schema_test).
+    _write_csv(out / "112_xsd_structured_synthetic_values_catalog.csv",
+               ["xml_path", "esma_code", "xsd_type", "value", "value_reason",
+                "source_reason", "source", "attributes"], catalog)
+
+    # 111 — lineage.
+    (out / "111_xsd_structured_synthetic_lineage.json").write_text(json.dumps({
+        **meta, "mode": "xsd_structured_synthetic_schema_test", "created_at": _now(),
+        "source_xsd": Path(xsd_path).name, "source_path_map": "annex2_field_xsd_path_map.yaml",
+        "engineering_only": True, "client_facing": False, "reportable": False,
+        "non_production": True, "production_xml_remains_blocked": True,
+        "all_values_synthetic": True, "synthetic_source_label": xsb.SYNTHETIC_SOURCE,
+        "synthetic_values_count": len(catalog),
+    }, indent=2), encoding="utf-8")
+
+    # 113 — watermark.
+    (out / "113_xsd_structured_synthetic_watermark.txt").write_text(
+        watermark + "\nENGINEERING ONLY. Every value is synthetic (dummy), labelled "
+        "synthetic_schema_test. Not client-facing. Not reportable. Production XML "
+        "remains blocked.\n", encoding="utf-8")
+
+    # 116 — XSD validation report (honest), with the requested fields.
+    records = len(list(root.iter(f"{{{xsb.NS}}}{xsb.RECORD_ANCHOR}")))
+    report = xsb.validate_against_xsd(xml_text, xsd_path, known_limitations=[
+        "Engineering-only synthetic instance: ALL values are dummy "
+        "(synthetic_schema_test), including economic values, solely to exercise "
+        "the schema. Never client-facing, never production.",
+        "Asset-class/performing branch fixed to ResdtlRealEsttLn/PrfrmgLn.",
+        "Only mandatory (minOccurs>=1) elements are generated; optional branches "
+        "are omitted.",
+        "Schema is the ESMA DRAFT (DRAFT1auth.099.001.04); final schema unconfirmed.",
+    ])
+    report["error_count"] = len(report.get("validation_errors", []))
+    report["records_generated"] = records
+    report["fields_generated"] = len(catalog)
+    report["synthetic_values_count"] = sum(1 for c in catalog if c["source"] == xsb.SYNTHETIC_SOURCE)
+    (out / "116_xsd_structured_synthetic_xsd_validation.json").write_text(
+        json.dumps(report, indent=2), encoding="utf-8")
+
+    # 115 — summary.
+    (out / "115_xsd_structured_synthetic_summary.md").write_text(
+        _xsd_synthetic_summary_md(report), encoding="utf-8")
+
+    return {k: str(out / v) for k, v in {
+        "frame": "110_xsd_structured_synthetic_frame.csv",
+        "lineage": "111_xsd_structured_synthetic_lineage.json",
+        "values_catalog": "112_xsd_structured_synthetic_values_catalog.csv",
+        "watermark": "113_xsd_structured_synthetic_watermark.txt",
+        "xml": "114_xsd_structured_synthetic.xml",
+        "summary": "115_xsd_structured_synthetic_summary.md",
+        "xsd_validation": "116_xsd_structured_synthetic_xsd_validation.json",
+    }.items()}
+
+
+def _xsd_synthetic_summary_md(report) -> str:
+    lines = [
+        "# XSD-structured synthetic schema test — summary", "",
+        "ENGINEERING-ONLY artefact. It builds the full mandatory residential /"
+        " performing ESMA tree with type-valid DUMMY values (every value is "
+        "`synthetic_schema_test`, including economic values) to attempt full "
+        "DRAFT-XSD validation.", "",
+        "> Never client-facing. Never reportable. Never production. No production "
+        "gate was changed; no production XML was generated.", "",
+        f"- records generated: {report['records_generated']}",
+        f"- fields generated: {report['fields_generated']}",
+        f"- synthetic values: {report['synthetic_values_count']}",
+        "",
+        "## XSD validation (honest)", "",
+        f"- attempted: {report['xsd_validation_attempted']}",
+        f"- passed: {report['xsd_validation_passed']}",
+        f"- error count: {report['error_count']}",
+        "",
+    ]
+    if not report["xsd_validation_passed"]:
+        lines += ["Remaining validation errors (first few):", ""]
+        lines += [f"- {e}" for e in report.get("validation_errors", [])[:8]]
+        lines += [""]
+    lines += ["Known limitations:", ""] + [f"- {k}" for k in report.get("known_limitations", [])]
+    lines += [""]
     return "\n".join(lines) + "\n"
