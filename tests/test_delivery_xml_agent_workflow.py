@@ -67,6 +67,10 @@ _FRAME_SPEC = [
     ("RREL40", "debt_to_income_ratio", "RREL", "unresolved_not_materialised", ["", ""]),
     # blocked — unresolved source mapping.
     ("RREC7", "occupancy", "RREC", "unresolved_source_mapping", ["", ""]),
+    # delivery_invalid — candidate value that fails the regime regex (RREL1
+    # ScrtstnIdr pattern). Exercises the --format-invalid drill-down.
+    ("RREL1", "unique_identifier", "RREL", "projected_from_transformed",
+     ["BAD VALUE", "BAD VALUE"]),
 ]
 
 # 55 projection issues (subset of projection _ISSUE_COLUMNS).
@@ -452,6 +456,17 @@ class TestInspectHelperAndGrouping(unittest.TestCase):
         self.assertIn("RREC7", g["source_projection"]["codes"])
         self.assertGreater(g["template_order"]["issue_count"], 0)
         self.assertGreater(g["delivery_structure"]["issue_count"], 0)
+
+    def test_format_invalid_detail(self):
+        from scripts.inspect_delivery_xml_readiness import format_invalid_detail
+        detail = format_invalid_detail(self.out, regime_config_path=REGIME)
+        # RREL1 'BAD VALUE' fails the ScrtstnIdr regex -> reported with the regex.
+        self.assertIn("RREL1", detail)
+        b = detail["RREL1"]
+        self.assertEqual(b["count"], 2)
+        self.assertGreaterEqual(b["format_fail"], 1)
+        self.assertIn("BAD VALUE", b["samples"])
+        self.assertTrue(b["regex"], "the violated regime regex should be surfaced")
 
 
 if __name__ == "__main__":
