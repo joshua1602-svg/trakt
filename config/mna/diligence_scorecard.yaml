@@ -1,0 +1,64 @@
+# =========================================================================
+# M&A diligence scorecard (config skeleton).
+# =========================================================================
+#
+# Phase 0B CONFIG SKELETON — declaration only. Declares the buyer/acquirer
+# diligence scorecard SHAPE for the future M&A Agent (build-plan Phase 6). The
+# M&A Agent is NOT built in this phase: nothing reads this file yet. The
+# scorecard reuses the existing data-quality exception engine (exception_db.py,
+# ingest_violations.py) as a READ interface — it is not re-implemented here.
+#
+# See:
+#   docs/mi_mna_target_architecture_and_build_plan.md   (§4.2)
+#   config/routes/mna_route.yaml     (exceptions_scorecard: enabled)
+#
+# Thresholds are PLACEHOLDER defaults to be tuned per engagement.
+
+version: 0.1.0
+
+route: mna
+
+# Field-completeness scoring: % of populated values per critical field.
+field_completeness:
+  rag_thresholds:
+    amber: 0.95
+    red: 0.90
+  critical_fields:
+    - current_outstanding_balance
+    - current_loan_to_value
+    - origination_date
+    - geographic_region_obligor
+    - internal_risk_grade
+    - ifrs9_stage
+    - probability_of_default
+    - amortisation_type
+    - acquired_portfolio_id
+
+# Exception-materiality distribution (reads the shared exception engine).
+exception_materiality:
+  source: exception_db          # read-only reuse; not re-implemented
+  severity_weights:
+    critical: 1.0
+    high: 0.6
+    medium: 0.3
+    low: 0.1
+  rag_thresholds:
+    amber: 0.10                  # weighted exception rate
+    red: 0.25
+
+# Buyer concentration limits checked at the point-in-time funded tape.
+concentration_vs_buyer_limits:
+  dimensions:
+    - geographic_region_obligor
+    - internal_risk_grade
+    - pd_bucket
+    - balance_band
+    - acquired_portfolio_id
+  rag_thresholds:
+    amber: 0.80
+    red: 1.00
+
+# Acquired-portfolio segmentation surfaced as a first-class diligence view.
+acquired_portfolio_view:
+  segment_by: acquired_portfolio_id
+  cohort_by: [acquisition_date, origination_date]

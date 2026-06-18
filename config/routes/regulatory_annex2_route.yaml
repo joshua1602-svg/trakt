@@ -1,0 +1,45 @@
+# =========================================================================
+# Regulatory Annex 2 RouteContract — point-in-time, settled contract.
+# =========================================================================
+#
+# Phase 0B SKELETON — REFERENCE ONLY. Regulatory Annex 2 is a settled,
+# point-in-time contract delivered by the existing engine (engine/, gate_*).
+# It is documented here so the route taxonomy is complete and so MI/M&A design
+# can be checked NOT to bleed into the regulatory contract. It MUST NOT drive
+# MI/M&A design and is OUT OF SCOPE for redesign.
+#
+# This file does not change any regulatory behaviour; the Annex 2 delivery path
+# remains owned by config/regime/annex2_*.yaml and the gate pipeline.
+#
+# See:
+#   docs/mi_mna_target_architecture_and_build_plan.md   (§2.1, §8)
+#   config/regime/annex2_delivery_rules.yaml
+#   config/regime/annex2_field_universe.yaml
+
+route_id: regulatory_annex2
+description: >-
+  Point-in-time ESMA Annex 2 regulatory package + XML delivery for a single
+  tape at a single cut-off date. No portfolio states, no MI stratification, no
+  history. Settled contract — owned by the regulatory gate pipeline.
+
+temporality: point_in_time
+requires_history: false
+
+# Regulatory delivery does not use the MI portfolio-state library.
+allowed_states: []
+allowed_segments: []
+
+# Regulatory delivery does not use the MI stratification catalogue. The Annex 2
+# field universe is governed separately by config/regime/.
+allowed_dimensions: []
+
+# Single cut-off date only.
+temporal_modes:
+  - single
+
+# MI/M&A capabilities are all disabled for the regulatory route. Regulatory
+# validation runs through its own dedicated gate path, not the MI exceptions
+# scorecard.
+risk_monitor: disabled
+forecast: disabled
+exceptions_scorecard: disabled

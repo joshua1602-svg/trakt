@@ -1,0 +1,124 @@
+# =========================================================================
+# MI bucket / stratification edge definitions.
+# =========================================================================
+#
+# Phase 0B CONFIG SKELETON — definitions only. This file declares bucket EDGES
+# and scale hints for the future bucketing engine (build-plan Phase 1 shared
+# analytics library, analytics_lib/buckets/). The engine is NOT implemented in
+# this phase: nothing reads this file yet. Edges are seeded from the legacy
+# definitions in analytics/mi_prep.py (reused as a REFERENCE, not imported).
+#
+# Each bucket declares:
+#   source_field   : MI semantic registry key the bucket is derived from
+#   semantic_field : the derived dimension key it materialises to (where one is
+#                    registered in mi_agent/mi_semantics_field_registry.yaml)
+#   scale          : expected input scale (decimal_fraction | percent | absolute
+#                    | months | years) — drives normalisation in the engine
+#   edges          : ordered numeric boundaries (engine builds [lo, hi) bands)
+#   labels         : optional human labels; if omitted the engine derives them
+#   right_closed   : interval closure (default false ⇒ [lo, hi))
+#
+# Do NOT implement the bucketing engine here. Edges may be tuned later.
+
+version: 0.1.0
+
+buckets:
+
+  ltv_bucket:
+    source_field: current_loan_to_value
+    semantic_field: ltv_bucket
+    scale: decimal_fraction          # 0.0-1.0+ ; engine normalises percent inputs
+    edges: [0.0, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90, 1.00]
+    labels:
+      - "<20%"
+      - "20-30%"
+      - "30-40%"
+      - "40-50%"
+      - "50-60%"
+      - "60-70%"
+      - "70-80%"
+      - "80-90%"
+      - "90-100%"
+      - ">=100%"
+
+  borrower_age_bucket:
+    source_field: youngest_borrower_age
+    semantic_field: age_bucket
+    scale: years
+    edges: [0, 55, 60, 65, 70, 75, 80, 85, 200]
+    labels: ["<55", "55-60", "60-65", "65-70", "70-75", "75-80", "80-85", "85+"]
+
+  # Alias for asset classes (e.g. equity release) where the youngest borrower
+  # drives age stratification. Same edges as borrower_age_bucket.
+  youngest_borrower_age_bucket:
+    source_field: youngest_borrower_age
+    semantic_field: age_bucket
+    scale: years
+    edges: [0, 55, 60, 65, 70, 75, 80, 85, 200]
+    labels: ["<55", "55-60", "60-65", "65-70", "70-75", "75-80", "80-85", "85+"]
+
+  interest_rate_bucket:
+    source_field: current_interest_rate
+    semantic_field: interest_rate_bucket   # engine-materialised; see catalogue
+    scale: percent                          # 0-100 ; engine normalises fractions
+    edges: [0.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 100.0]
+    labels: ["<2%", "2-3%", "3-4%", "4-5%", "5-6%", "6-7%", "7-8%", ">=8%"]
+
+  pd_bucket:
+    source_field: probability_of_default
+    semantic_field: pd_bucket
+    scale: decimal_fraction          # PD as 0.0-1.0
+    edges: [0.0, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.10, 0.25, 1.0]
+    labels:
+      - "<0.25%"
+      - "0.25-0.5%"
+      - "0.5-1%"
+      - "1-2.5%"
+      - "2.5-5%"
+      - "5-10%"
+      - "10-25%"
+      - ">=25%"
+
+  lgd_bucket:
+    source_field: loss_given_default
+    semantic_field: lgd_bucket
+    scale: decimal_fraction          # LGD as 0.0-1.0
+    edges: [0.0, 0.10, 0.20, 0.30, 0.40, 0.50, 0.75, 1.0]
+    labels: ["<10%", "10-20%", "20-30%", "30-40%", "40-50%", "50-75%", ">=75%"]
+
+  ead_bucket:
+    source_field: exposure_at_default
+    semantic_field: ead_bucket
+    scale: absolute                  # currency amount
+    edges: [0, 50000, 100000, 150000, 200000, 300000, 500000, 1000000, 1000000000]
+    labels:
+      - "<50k"
+      - "50-100k"
+      - "100-150k"
+      - "150-200k"
+      - "200-300k"
+      - "300-500k"
+      - "500k-1m"
+      - ">=1m"
+
+  balance_band:
+    source_field: current_outstanding_balance
+    semantic_field: ticket_bucket    # legacy "ticket size" band
+    scale: absolute                  # currency amount
+    edges: [0, 50000, 100000, 150000, 200000, 300000, 500000, 1000000, 1000000000]
+    labels:
+      - "<50k"
+      - "50-100k"
+      - "100-150k"
+      - "150-200k"
+      - "200-300k"
+      - "300-500k"
+      - "500k-1m"
+      - ">=1m"
+
+  time_on_book_bucket:
+    source_field: months_on_book
+    semantic_field: time_on_book_bucket    # engine-materialised; see catalogue
+    scale: months
+    edges: [0, 6, 12, 24, 36, 60, 120, 100000]
+    labels: ["0-6m", "6-12m", "1-2y", "2-3y", "3-5y", "5-10y", "10y+"]
