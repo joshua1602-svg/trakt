@@ -2,7 +2,9 @@
 preview_readiness.py
 ====================
 
-Two SEPARATE non-production XML artefact modes for the Delivery/XML Agent.
+Three SEPARATE non-production XML artefact modes for the Delivery/XML Agent
+(client_safe_preview, synthetic_full_coverage_schema_test, and
+xsd_structured_preview). All disabled by default; none ever touches production.
 
 Production XML stays blocked. This module never reads, writes or flips the
 production gates (``xml_generation_allowed`` / ``ready_for_xml_delivery`` /
@@ -61,6 +63,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import yaml
 
 from engine.delivery_xml_agent import gate5_adapter as g5
+from engine.delivery_xml_agent import xsd_structured_preview_builder as xsb
 
 AGENT = "delivery_xml_preview_evaluator"
 AGENT_VERSION = "1.0"
@@ -69,6 +72,12 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_POLICY = _REPO_ROOT / "config" / "delivery" / "xml_preview_policy.yaml"
 _DEFAULT_UNIVERSE = _REPO_ROOT / "config" / "regime" / "annex2_field_universe.yaml"
 _DEFAULT_REGIME = _REPO_ROOT / "config" / "regime" / "annex2_delivery_rules.yaml"
+_DEFAULT_PATH_MAP = _REPO_ROOT / "config" / "delivery" / "annex2_field_xsd_path_map.yaml"
+_DEFAULT_XSD = _REPO_ROOT / "DRAFT1auth.099.001.04_1.3.0.xsd"
+
+# Builder-accepted statuses (from the path acceptance gate) usable by the
+# XSD-structured preview. Everything else is never used for path placement.
+ACCEPTED_FOR_BUILDER = {"sample_confirmed", "accepted_for_builder"}
 
 # Disposition tokens used in the client-preview policy application.
 DISP_REAL = "real_value"
@@ -148,6 +157,13 @@ def _truthy(v: Any) -> bool:
     if isinstance(v, bool):
         return v
     return str(v).strip().lower() in ("true", "1", "yes", "y")
+
+
+def _to_str(v: Any) -> str:
+    if v is None:
+        return ""
+    s = str(v).strip()
+    return "" if s.lower() in ("nan", "<na>", "none") else s
 
 
 # --------------------------------------------------------------------------- #
@@ -503,6 +519,144 @@ def _build_synthetic_xml(
 
 
 # --------------------------------------------------------------------------- #
+# XSD-structured preview (third mode) — uses the real accepted ESMA/XSD paths.
+# --------------------------------------------------------------------------- #
+
+def _load_path_map(path_map_path: str | Path | None) -> List[Dict[str, Any]]:
+    doc = _read_yaml(Path(path_map_path) if path_map_path else _DEFAULT_PATH_MAP)
+    fm = (doc.get("field_xsd_path_map") or {}).get("fields")
+    return fm if isinstance(fm, list) else []
+
+
+def evaluate_xsd_structured_preview(
+    *,
+    code_rows: List[Dict[str, Any]],
+    frame_rows: List[Dict[str, Any]],
+    policy: Dict[str, Any],
+    mode_cfg: Dict[str, Any],
+    path_map: List[Dict[str, Any]],
+    production_flags: Dict[str, bool],
+) -> Dict[str, Any]:
+    """Decide which accepted ESMA/XSD paths the structured preview will place,
+    and assemble the per-loan values. Uses ONLY builder-accepted paths; reuses
+    the client-preview disposition (real / placeholder / exclude / never-fabricate)."""
+    prefix = (policy.get("client_preview_field_policy") or {}).get(
+        "placeholder_prefix", "PREVIEW_ONLY_")
+    pm_by_code = {f["esma_code"]: f for f in path_map}
+    accepted = {c for c, f in pm_by_code.items()
+                if f.get("builder_acceptance_status") in ACCEPTED_FOR_BUILDER}
+
+    emit_fields: List[Dict[str, Any]] = []
+    applications: List[Dict[str, Any]] = []
+    placeholder_codes: List[str] = []
+    excluded_codes: List[str] = []
+    blocked_not_accepted: List[str] = []
+    rejected_or_manual_skipped: List[str] = []
+
+    for row in code_rows:
+        code = row["esma_code"]
+        disp, reason = _client_disposition(row, policy)
+        pm = pm_by_code.get(code, {})
+        ba = pm.get("builder_acceptance_status", "absent")
+        if code not in accepted:
+            # never place a path that is rejected/manual/unresolved/conflict/absent.
+            if disp in (DISP_REAL, DISP_PLACEHOLDER):
+                blocked_not_accepted.append(code)
+                if ba in ("rejected", "needs_manual_review", "conflict", "unresolved"):
+                    rejected_or_manual_skipped.append(code)
+                applications.append({
+                    "esma_code": code, "record_group": row.get("record_group", ""),
+                    "disposition": "excluded_path_not_accepted",
+                    "builder_acceptance_status": ba, "xml_path": pm.get("xml_path") or "",
+                    "value_source": "", "reason": f"path not builder-accepted ({ba})"})
+            continue
+
+        field = {
+            "esma_code": code, "record_group": pm.get("record_group", row.get("record_group", "")),
+            "xml_path": pm.get("xml_path"), "value_mode": pm.get("value_mode"),
+            "nd_wrapper_path": pm.get("nd_wrapper_path"),
+            "sequence_order": pm.get("sequence_order"),
+            "builder_acceptance_status": ba,
+        }
+        if disp == DISP_REAL:
+            field["value_source"] = SRC_REAL
+            emit_fields.append(field)
+        elif disp == DISP_PLACEHOLDER:
+            field["value_source"] = SRC_PLACEHOLDER
+            placeholder_codes.append(code)
+            emit_fields.append(field)
+        else:
+            excluded_codes.append(code)
+        applications.append({
+            "esma_code": code, "record_group": field["record_group"],
+            "disposition": disp, "builder_acceptance_status": ba,
+            "xml_path": field["xml_path"] or "", "value_source": field.get("value_source", ""),
+            "reason": reason})
+
+    # per-loan values for the emitted fields.
+    emit_codes = {f["esma_code"]: f for f in emit_fields}
+    ph_value = {c: f"{prefix}{c}" for c in placeholder_codes}
+    loans_order: List[str] = []
+    loans_map: Dict[str, Dict[str, str]] = {}
+    for r in frame_rows:
+        code = r.get("esma_code", "")
+        if code not in emit_codes:
+            continue
+        lid = _to_str(r.get("loan_identifier"))
+        if lid not in loans_map:
+            loans_map[lid] = {}
+            loans_order.append(lid)
+        f = emit_codes[code]
+        if f["value_source"] == SRC_PLACEHOLDER:
+            loans_map[lid][code] = ph_value[code]
+        elif r.get("delivery_status") == "deliverable" and _to_str(r.get("delivery_value")):
+            loans_map[lid][code] = _to_str(r.get("delivery_value"))
+    loans = [(lid, loans_map[lid]) for lid in loans_order]
+
+    rrec_emitted = [f["esma_code"] for f in emit_fields if f["record_group"] == "RREC"]
+    rrec_all_nested = all("/Coll" in (f.get("xml_path") or "")
+                          for f in emit_fields if f["record_group"] == "RREC")
+    prod_gates_false = not any(production_flags.values())
+
+    enabled = bool(mode_cfg.get("enabled", False))
+    allowed = bool(emit_fields and prod_gates_false and rrec_all_nested
+                   and not rejected_or_manual_skipped)
+    reasons = []
+    if not emit_fields:
+        reasons.append("no builder-accepted, deliverable/placeholder fields to place")
+    if not prod_gates_false:
+        reasons.append("production gates are not false")
+    if not rrec_all_nested:
+        reasons.append("an RREC field path is not nested under Coll")
+    if rejected_or_manual_skipped:
+        reasons.append(f"skipped non-accepted paths: {sorted(set(rejected_or_manual_skipped))[:10]}")
+    if allowed:
+        reasons.append("accepted ESMA/XSD paths available; RREC nested under Coll; gates false")
+
+    return {
+        "mode": "xsd_structured_preview",
+        "enabled": enabled,
+        "allowed": allowed,
+        "ready": bool(allowed and enabled),
+        "watermark": mode_cfg.get("watermark", ""),
+        "max_records": int(mode_cfg.get("max_records", 5) or 5),
+        "reasons": reasons,
+        "accepted_path_count": len(accepted),
+        "emit_field_codes": [f["esma_code"] for f in emit_fields],
+        "placeholder_codes": sorted(set(placeholder_codes)),
+        "excluded_codes": sorted(set(excluded_codes)),
+        "blocked_not_accepted_codes": sorted(set(blocked_not_accepted)),
+        "rejected_or_manual_skipped": sorted(set(rejected_or_manual_skipped)),
+        "rrec_emitted_codes": sorted(set(rrec_emitted)),
+        "rrec_all_nested_under_coll": rrec_all_nested,
+        "applications": applications,
+        "emit_fields": emit_fields,
+        "loans": loans,
+        "loan_count_available": len(loans),
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Public entry point
 # --------------------------------------------------------------------------- #
 
@@ -512,6 +666,8 @@ def evaluate_and_emit(
     policy_path: str | Path | None = None,
     field_universe_path: str | Path | None = None,
     regime_config_path: str | Path | None = None,
+    path_map_path: str | Path | None = None,
+    xsd_path: str | Path | None = None,
 ) -> Dict[str, Any]:
     """Evaluate both non-production preview modes for a delivery package and
     emit the readiness artefacts (70..77). Builds the client preview (80..86)
@@ -561,6 +717,7 @@ def evaluate_and_emit(
 
     client_cfg = _mode_cfg(policy, "client_safe_preview")
     synth_cfg = _mode_cfg(policy, "synthetic_full_coverage_schema_test")
+    xsd_cfg = _mode_cfg(policy, "xsd_structured_preview")
 
     client_verdict = evaluate_client_preview(
         code_rows=code_rows, policy=policy, mode_cfg=client_cfg,
@@ -568,6 +725,10 @@ def evaluate_and_emit(
     synth_verdict = evaluate_synthetic_full_coverage(
         universe=universe, field_rules=field_rules, real_values=real_values,
         policy=policy, mode_cfg=synth_cfg)
+    path_map = _load_path_map(path_map_path)
+    xsd_verdict = evaluate_xsd_structured_preview(
+        code_rows=code_rows, frame_rows=frame_rows, policy=policy, mode_cfg=xsd_cfg,
+        path_map=path_map, production_flags=production_flags)
 
     preview_dir = d / "preview"
     preview_dir.mkdir(parents=True, exist_ok=True)
@@ -586,6 +747,10 @@ def evaluate_and_emit(
     _write_synthetic_readiness_artefacts(
         preview_dir, synth_verdict, production_flags, meta_common)
 
+    # ---- 78..79 XSD-structured preview readiness artefacts ----
+    _write_xsd_structured_readiness_artefacts(
+        preview_dir, xsd_verdict, production_flags, meta_common)
+
     # ---- emit client preview XML (80..86) only if enabled AND allowed ----
     client_generated = False
     client_paths: Dict[str, str] = {}
@@ -603,6 +768,15 @@ def evaluate_and_emit(
             preview_dir, synth_cfg, synth_verdict, policy, meta_common)
         synth_generated = True
 
+    # ---- emit XSD-structured preview (100..107) only if enabled AND allowed ----
+    xsd_generated = False
+    xsd_paths: Dict[str, str] = {}
+    if xsd_cfg.get("enabled") and xsd_verdict["allowed"]:
+        xsd_paths = _emit_xsd_structured_preview(
+            preview_dir, xsd_cfg, xsd_verdict, meta_common,
+            str(xsd_path) if xsd_path else str(_DEFAULT_XSD))
+        xsd_generated = True
+
     # New, SEPARATE flags — never the production gates.
     flags = {
         "xml_preview_allowed": client_verdict["allowed"],
@@ -611,6 +785,9 @@ def evaluate_and_emit(
         "synthetic_schema_test_allowed": synth_verdict["allowed"],
         "ready_for_synthetic_schema_test": synth_verdict["ready"],
         "synthetic_schema_test_generated": synth_generated,
+        "xsd_structured_preview_allowed": xsd_verdict["allowed"],
+        "ready_for_xsd_structured_preview": xsd_verdict["ready"],
+        "xsd_structured_preview_generated": xsd_generated,
         # production gates echoed read-only and asserted unchanged.
         "production_flags_unchanged": production_flags,
     }
@@ -619,9 +796,11 @@ def evaluate_and_emit(
         "preview_dir": str(preview_dir),
         "client_preview_verdict": client_verdict,
         "synthetic_full_coverage_verdict": synth_verdict,
+        "xsd_structured_preview_verdict": xsd_verdict,
         "flags": flags,
         "client_preview_paths": client_paths,
         "synthetic_schema_test_paths": synth_paths,
+        "xsd_structured_preview_paths": xsd_paths,
     }
 
 
@@ -1001,4 +1180,206 @@ def _synthetic_summary_md(verdict) -> str:
         "preview namespace. It is NOT production-XSD-valid. Production XSD "
         "path/cardinality mapping remains a blocker.", "",
     ]
+    return "\n".join(lines) + "\n"
+
+
+# --------------------------------------------------------------------------- #
+# XSD-structured preview readiness artefacts (78..79) + emission (100..107)
+# --------------------------------------------------------------------------- #
+
+def _write_xsd_structured_readiness_artefacts(
+    preview_dir: Path, verdict: Dict[str, Any], production_flags: Dict[str, bool],
+    meta: Dict[str, str],
+) -> None:
+    doc = {
+        "agent": AGENT, "agent_version": AGENT_VERSION, "created_at": _now(),
+        **meta,
+        "mode": "xsd_structured_preview",
+        "enabled": verdict["enabled"],
+        "xsd_structured_preview_allowed": verdict["allowed"],
+        "ready_for_xsd_structured_preview": verdict["ready"],
+        "watermark": verdict["watermark"],
+        "max_records": verdict["max_records"],
+        "reasons": verdict["reasons"],
+        "accepted_path_count": verdict["accepted_path_count"],
+        "emit_field_codes": verdict["emit_field_codes"],
+        "placeholder_codes": verdict["placeholder_codes"],
+        "excluded_codes": verdict["excluded_codes"],
+        "blocked_not_accepted_codes": verdict["blocked_not_accepted_codes"],
+        "rejected_or_manual_skipped": verdict["rejected_or_manual_skipped"],
+        "rrec_emitted_codes": verdict["rrec_emitted_codes"],
+        "rrec_all_nested_under_coll": verdict["rrec_all_nested_under_coll"],
+        "loan_count_available": verdict["loan_count_available"],
+        "uses_only_builder_accepted_paths": True,
+        "production_flags_unchanged": production_flags,
+        "production_xml_remains_blocked": True,
+        "production_xsd_validity_claimed": False,
+    }
+    (preview_dir / "78_xsd_structured_preview_readiness.json").write_text(
+        json.dumps(doc, indent=2, default=str), encoding="utf-8")
+    (preview_dir / "79_xsd_structured_preview_readiness.md").write_text(
+        _xsd_structured_readiness_md(verdict, production_flags, meta), encoding="utf-8")
+
+
+def _xsd_structured_readiness_md(verdict, production_flags, meta) -> str:
+    def yn(v):
+        return "✅ yes" if v else "❌ no"
+    lines = [
+        "# XSD-structured preview readiness", "",
+        f"Client: {meta.get('client_id','')}  ",
+        f"Run: {meta.get('run_id','')}  ",
+        "Mode: **xsd_structured_preview** (non-production; real ESMA/XSD paths)", "",
+        "> Proves nested ESMA-path construction using builder-accepted paths. "
+        "This is NOT production XML and does NOT claim XSD validity.", "",
+        "## Verdict", "",
+        f"- mode enabled: {yn(verdict['enabled'])}",
+        f"- xsd_structured_preview_allowed: {yn(verdict['allowed'])}",
+        f"- ready_for_xsd_structured_preview: {yn(verdict['ready'])}",
+        f"- uses only builder-accepted paths: {yn(True)}",
+        f"- RREC fields nested under Coll: {yn(verdict['rrec_all_nested_under_coll'])}",
+        f"- max records: {verdict['max_records']}",
+        "",
+        "## Production gates (UNCHANGED, read-only)", "",
+        f"- xml_generation_allowed: {yn(production_flags['xml_generation_allowed'])}",
+        f"- ready_for_xml_delivery: {yn(production_flags['ready_for_xml_delivery'])}",
+        f"- xml_generated: {yn(production_flags['xml_generated'])}",
+        "",
+        "## Fields", "",
+        f"- accepted paths available: {verdict['accepted_path_count']}",
+        f"- emitted field codes: {', '.join(verdict['emit_field_codes']) or '(none)'}",
+        f"- placeholder codes: {', '.join(verdict['placeholder_codes']) or '(none)'}",
+        f"- excluded codes: {', '.join(verdict['excluded_codes']) or '(none)'}",
+        f"- skipped non-accepted paths: {', '.join(verdict['rejected_or_manual_skipped']) or '(none)'}",
+        f"- RREC (collateral) codes emitted: {', '.join(verdict['rrec_emitted_codes']) or '(none)'}",
+        "",
+        "## Reasons", "",
+    ]
+    lines += [f"- {r}" for r in verdict["reasons"]]
+    lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+def _emit_xsd_structured_preview(
+    preview_dir: Path, mode_cfg: Dict[str, Any], verdict: Dict[str, Any],
+    meta: Dict[str, str], xsd_path: str,
+) -> Dict[str, str]:
+    out = preview_dir / "xsd_structured_preview"
+    out.mkdir(parents=True, exist_ok=True)
+    watermark = mode_cfg.get("watermark", "")
+    max_records = verdict["max_records"]
+    emit_fields = verdict["emit_fields"]
+    loans = verdict["loans"][:max_records]
+
+    # build the nested tree + serialise.
+    root, stats = xsb.build_tree(
+        emit_fields=emit_fields, loans=verdict["loans"], max_records=max_records,
+        watermark=watermark, meta=meta, xsd_path=xsd_path)
+    xml_text = xsb.serialize(root, watermark=watermark, meta=meta)
+    (out / "105_xsd_structured_preview.xml").write_text(xml_text, encoding="utf-8")
+
+    # 100 — frame (flattened placement view: loan x code -> path + value).
+    frame_rows: List[Dict[str, Any]] = []
+    emit_by_code = {f["esma_code"]: f for f in emit_fields}
+    for loan_id, vals in loans:
+        for code, value in vals.items():
+            f = emit_by_code.get(code, {})
+            frame_rows.append({
+                "loan_identifier": loan_id, "esma_code": code,
+                "record_group": f.get("record_group", ""),
+                "xml_level": "collateral" if f.get("record_group") == "RREC" else "exposure_or_header",
+                "xml_path": f.get("xml_path", ""), "value": value,
+                "value_source": f.get("value_source", ""),
+                "value_mode": f.get("value_mode", ""),
+                "builder_acceptance_status": f.get("builder_acceptance_status", ""),
+                "nested_under_coll": "/Coll" in (f.get("xml_path") or ""),
+            })
+    _write_csv(out / "100_xsd_structured_preview_frame.csv",
+               ["loan_identifier", "esma_code", "record_group", "xml_level", "xml_path",
+                "value", "value_source", "value_mode", "builder_acceptance_status",
+                "nested_under_coll"], frame_rows)
+
+    # 101 — lineage.
+    (out / "101_xsd_structured_preview_lineage.json").write_text(json.dumps({
+        **meta, "mode": "xsd_structured_preview", "created_at": _now(),
+        "source_delivery_frame": "62_delivery_normalised_frame.csv",
+        "source_path_map": "config/delivery/annex2_field_xsd_path_map.yaml",
+        "uses_only_builder_accepted_paths": True,
+        "non_production": True, "production_xml_remains_blocked": True,
+        "emit_field_codes": verdict["emit_field_codes"],
+        "records_emitted": stats["records_emitted"],
+        "fields_emitted": stats["fields_emitted"],
+    }, indent=2), encoding="utf-8")
+
+    # 102 — assumptions (placeholders).
+    _write_csv(out / "102_xsd_structured_preview_assumptions.csv",
+               ["esma_code", "xml_path", "assumption"],
+               [{"esma_code": f["esma_code"], "xml_path": f.get("xml_path", ""),
+                 "assumption": "preview-only placeholder placed at accepted ESMA path"}
+                for f in emit_fields if f.get("value_source") == SRC_PLACEHOLDER])
+
+    # 103 — exclusions (excluded + path-not-accepted).
+    _write_csv(out / "103_xsd_structured_preview_exclusions.csv",
+               ["esma_code", "record_group", "disposition", "builder_acceptance_status", "reason"],
+               [{"esma_code": a["esma_code"], "record_group": a.get("record_group", ""),
+                 "disposition": a["disposition"],
+                 "builder_acceptance_status": a.get("builder_acceptance_status", ""),
+                 "reason": a["reason"]}
+                for a in verdict["applications"]
+                if a["disposition"] in (DISP_EXCLUDED, DISP_MUST_RESOLVE,
+                                        "excluded_path_not_accepted")])
+
+    # 104 — watermark.
+    (out / "104_xsd_structured_preview_watermark.txt").write_text(
+        watermark + "\nNested ESMA/XSD-structured preview. NOT production XML. "
+        "Production gates remain false; XSD validity is not claimed.\n", encoding="utf-8")
+
+    # 107 — honest XSD validation report.
+    validation = xsb.validate_against_xsd(xml_text, xsd_path)
+    validation["records_emitted"] = stats["records_emitted"]
+    validation["fields_emitted"] = stats["fields_emitted"]
+    (out / "107_xsd_structured_preview_xsd_validation.json").write_text(
+        json.dumps(validation, indent=2), encoding="utf-8")
+
+    # 106 — summary.
+    (out / "106_xsd_structured_preview_summary.md").write_text(
+        _xsd_structured_summary_md(verdict, stats, validation), encoding="utf-8")
+
+    return {k: str(out / v) for k, v in {
+        "frame": "100_xsd_structured_preview_frame.csv",
+        "lineage": "101_xsd_structured_preview_lineage.json",
+        "assumptions": "102_xsd_structured_preview_assumptions.csv",
+        "exclusions": "103_xsd_structured_preview_exclusions.csv",
+        "watermark": "104_xsd_structured_preview_watermark.txt",
+        "xml": "105_xsd_structured_preview.xml",
+        "summary": "106_xsd_structured_preview_summary.md",
+        "xsd_validation": "107_xsd_structured_preview_xsd_validation.json",
+    }.items()}
+
+
+def _xsd_structured_summary_md(verdict, stats, validation) -> str:
+    lines = [
+        "# XSD-structured preview — summary", "",
+        "This is a non-production preview built INSIDE the real ESMA Annex 2 XML "
+        "hierarchy using only builder-accepted field-to-XSD paths.", "",
+        "- Document → ScrtstnRpt → UndrlygXpsrRcrd → ResdtlRealEsttLn → PrfrmgLn",
+        "  → UndrlygXpsrCmonData (loan / RREL) and nested Coll (collateral / RREC).", "",
+        f"- records emitted: {stats['records_emitted']}",
+        f"- fields emitted: {stats['fields_emitted']}",
+        f"- placeholder fields: {stats['placeholder_fields']}",
+        f"- NoDataOptn wrappers: {stats['nodata_wrappers']}",
+        f"- RREC (collateral) fields nested under Coll: {stats['rrec_fields_nested']}",
+        f"- excluded codes: {', '.join(verdict['excluded_codes']) or '(none)'}",
+        f"- skipped non-accepted paths: {', '.join(verdict['rejected_or_manual_skipped']) or '(none)'}",
+        "",
+        "## XSD validation (honest)", "",
+        f"- attempted: {validation['xsd_validation_attempted']}",
+        f"- passed: {validation['xsd_validation_passed']}",
+        "",
+        "This preview is NOT expected to pass production XSD validation yet. "
+        "Known limitations:", "",
+    ]
+    lines += [f"- {k}" for k in validation["known_limitations"]]
+    lines += ["",
+              "> Production XML remains blocked. production_ready=false for all fields. "
+              "No production gate was changed; no production XML was generated.", ""]
     return "\n".join(lines) + "\n"

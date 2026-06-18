@@ -126,10 +126,33 @@ mistaken for a submission.
 3. Only then may the production gate (`xml_generation_allowed`,
    `ready_for_xml_delivery`) be revisited — never via the preview path.
 
+## Third mode: `xsd_structured_preview`
+
+A later, non-production mode that places values **inside the real ESMA XSD
+hierarchy** (`Document → ScrtstnRpt → UndrlygXpsrRcrd → ResdtlRealEsttLn →
+PrfrmgLn → UndrlygXpsrCmonData` + nested `Coll`), using **only builder-accepted**
+field-to-XSD paths (see `docs/annex2_path_acceptance_gate.md`). It proves nested
+ESMA-path construction — the opposite of the flat preview above — and:
+
+- uses real deliverable values + approved placeholders only; never fabricates
+  valuation/rate/economic values; excludes non-accepted (`rejected` /
+  `needs_manual_review` / `unresolved` / `conflict`) paths;
+- keeps RREC/collateral nested under `Coll`; emits NoDataOptn wrappers only where
+  the path map says `value_or_nodata` and the value is a genuine ND sentinel;
+- defaults to a small sample (`max_records: 5`) — structure proof, not volume;
+- attempts XSD validation and records the result **honestly** in
+  `107_xsd_structured_preview_xsd_validation.json` (it is expected to FAIL today —
+  incomplete mandatory content, shallow leaf typing, approximate ordering, DRAFT
+  schema — all listed under `known_limitations`);
+- writes only under `output/delivery_xml/preview/xsd_structured_preview/`
+  (artefacts `100..107`, readiness `78..79`); `production_ready` stays false and
+  no production gate is changed.
+
 ## Inspecting
 
 ```
-python scripts/inspect_delivery_xml_readiness.py <delivery_xml_dir> --preview --synthetic-schema-test
+python scripts/inspect_delivery_xml_readiness.py <delivery_xml_dir> \
+  --preview --synthetic-schema-test --xsd-structured-preview
 ```
 
 prints production XML readiness, client-preview readiness, synthetic

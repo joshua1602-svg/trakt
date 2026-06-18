@@ -266,6 +266,65 @@ def _print_preview_report(p: Dict[str, Any]) -> None:
     print("  " + (", ".join(p["remaining_production_blockers"]) or "(none)"))
 
 
+def inspect_xsd_structured_preview(delivery_dir: str | Path) -> Dict[str, Any]:
+    """Read-only summary of the XSD-structured (third) preview mode under
+    ``<delivery_dir>/preview/``. Never writes."""
+    d = Path(delivery_dir)
+    preview = d / "preview"
+    readiness = _read_json(preview / "78_xsd_structured_preview_readiness.json")
+    sp = preview / "xsd_structured_preview"
+    xml_file = sp / "105_xsd_structured_preview.xml"
+    frame = _read_csv(sp / "100_xsd_structured_preview_frame.csv")
+    excl = _read_csv(sp / "103_xsd_structured_preview_exclusions.csv")
+    validation = _read_json(sp / "107_xsd_structured_preview_xsd_validation.json")
+    manifest = _read_json(d / "60_delivery_manifest.json")
+
+    records = sorted({r.get("loan_identifier", "") for r in frame if r.get("loan_identifier")})
+    placeholders = sum(1 for r in frame if r.get("value_source") == "preview_only_placeholder")
+    return {
+        "preview_dir": str(preview),
+        "readiness_exists": (preview / "78_xsd_structured_preview_readiness.json").exists(),
+        "enabled": readiness.get("enabled"),
+        "xsd_structured_preview_allowed": readiness.get("xsd_structured_preview_allowed"),
+        "xml_generated": xml_file.exists(),
+        "xsd_validation_attempted": validation.get("xsd_validation_attempted"),
+        "xsd_validation_passed": validation.get("xsd_validation_passed"),
+        "records_emitted": len(records),
+        "fields_emitted": len(frame),
+        "placeholder_fields": placeholders,
+        "excluded_fields": len(excl),
+        "rrec_all_nested_under_coll": readiness.get("rrec_all_nested_under_coll"),
+        "rejected_or_manual_skipped": readiness.get("rejected_or_manual_skipped", []),
+        "production_gates_false": not any([
+            manifest.get("xml_generation_allowed"), manifest.get("ready_for_xml_delivery"),
+            manifest.get("xml_generated")]),
+        "known_limitations": validation.get("known_limitations", []),
+    }
+
+
+def _print_xsd_structured_report(p: Dict[str, Any]) -> None:
+    print("\n=== XSD-structured (nested) preview readiness ===")
+    if not p["readiness_exists"]:
+        print(f"No XSD-structured preview readiness at: {p['preview_dir']}")
+        return
+    print(f"  mode enabled                  = {p['enabled']}")
+    print(f"  xsd_structured_preview_allowed= {p['xsd_structured_preview_allowed']}")
+    print(f"  XML generated                 = {p['xml_generated']}")
+    print(f"  XSD validation attempted      = {p['xsd_validation_attempted']}")
+    print(f"  XSD validation passed         = {p['xsd_validation_passed']}")
+    print(f"  records emitted               = {p['records_emitted']}")
+    print(f"  fields emitted                = {p['fields_emitted']}")
+    print(f"  placeholder fields            = {p['placeholder_fields']}")
+    print(f"  excluded fields               = {p['excluded_fields']}")
+    print(f"  RREC nested under Coll        = {p['rrec_all_nested_under_coll']}")
+    print(f"  rejected/manual paths skipped = {p['rejected_or_manual_skipped'] or 'none'}")
+    print(f"  production gates remain false = {p['production_gates_false']}")
+    if not p["xsd_validation_passed"] and p["known_limitations"]:
+        print("  known limitations (why XSD validation does not pass yet):")
+        for k in p["known_limitations"]:
+            print(f"    - {k}")
+
+
 def _print_report(summary: Dict[str, Any]) -> None:
     if not summary["exists"]:
         print(f"No delivery package found at: {summary['delivery_dir']}")
@@ -326,6 +385,9 @@ def main(argv=None) -> int:
     ap.add_argument("--synthetic-schema-test", action="store_true",
                     help="Also report the engineering-only synthetic full-coverage "
                     "schema-test readiness (75..77) under <delivery_dir>/preview/.")
+    ap.add_argument("--xsd-structured-preview", action="store_true",
+                    help="Also report the nested XSD-structured preview readiness "
+                    "(78..79 + 100..107) under <delivery_dir>/preview/.")
     args = ap.parse_args(argv)
     summary = inspect(args.delivery_dir)
     _print_report(summary)
@@ -336,6 +398,8 @@ def main(argv=None) -> int:
             max_samples=args.samples))
     if args.preview or args.synthetic_schema_test:
         _print_preview_report(inspect_preview(args.delivery_dir))
+    if args.xsd_structured_preview:
+        _print_xsd_structured_report(inspect_xsd_structured_preview(args.delivery_dir))
     return 0
 
 

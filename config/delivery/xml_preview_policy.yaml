@@ -46,6 +46,23 @@ preview_modes:
     allow_fabricated_economic_values: true
     intended_audience: "engineering_schema_test"
 
+  # 3rd mode: a NON-PRODUCTION preview built INSIDE the real ESMA XSD hierarchy
+  # using only builder-accepted field-to-XSD paths (see docs/annex2_path_acceptance_gate.md).
+  # Proves nested ESMA-path construction; does NOT claim production XSD validity.
+  xsd_structured_preview:
+    enabled: false
+    output_dir: "preview/xsd_structured_preview"
+    watermark: "XSD-STRUCTURED NON-PRODUCTION PREVIEW - NOT FOR REGULATORY SUBMISSION"
+    intended_audience: "internal_structure_validation"
+    use_real_esma_paths: true
+    require_builder_accepted_paths: true
+    allow_synthetic_placeholders: true
+    allow_preview_exclusions: true
+    allow_full_dummy_population: false
+    allow_fabricated_economic_values: false
+    production_xsd_claim_allowed: false
+    max_records: 5
+
 # --------------------------------------------------------------------- #
 # Production guardrails — asserted by the evaluator. The preview path must
 # NEVER do any of the things below.
