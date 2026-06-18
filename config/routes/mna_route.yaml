@@ -1,0 +1,73 @@
+# =========================================================================
+# M&A / due-diligence RouteContract — point-in-time, funded-only.
+# =========================================================================
+#
+# Phase 0B SKELETON — declaration only. The M&A route is the narrow,
+# point-in-time sibling of the MI route: one funded tape, no recurring feed,
+# no pipeline/forecast, no time-series migration. It reuses the shared
+# analytics library by contract but is bounded to a buyer/acquirer context.
+# NO M&A Agent is built in this phase.
+#
+# See:
+#   docs/mi_mna_target_architecture_and_build_plan.md   (§4, §8)
+#   docs/phase0b_mi_mna_semantic_route_foundations.md
+
+route_id: mna
+description: >-
+  Point-in-time M&A diligence route over a single funded portfolio tape.
+  Funded stratifications, cohorts by origination / acquisition / risk grade /
+  PD / balance band, acquired-portfolio segmentation, and a buyer diligence
+  scorecard. Excludes pipeline, forecast-funded and recurring-history machinery
+  by contract.
+
+temporality: point_in_time
+# May optionally READ a snapshot store if historical performance tapes are
+# supplied, but does NOT depend on a recurring feed.
+requires_history: false
+
+# Funded + cohort states only (no pipeline / forecast-funded).
+allowed_states:
+  - total_funded
+  - cohort_by_date
+  - cohort_by_acquired_portfolio
+  - cohort_by_portfolio
+
+allowed_segments:
+  - portfolio
+  - acquired_portfolio
+
+# Funded stratification subset (no pipeline_stage / funded_status / forecast_*).
+allowed_dimensions:
+  - ltv_bucket
+  - original_ltv_bucket
+  - age_bucket
+  - geographic_region_obligor
+  - geographic_region_collateral
+  - interest_rate_bucket
+  - erm_product_type
+  - amortisation_type
+  - origination_channel
+  - broker_channel
+  - internal_risk_grade
+  - internal_risk_stage
+  - ifrs9_stage
+  - pd_bucket
+  - lgd_bucket
+  - ead_bucket
+  - interest_rate_type
+  - account_status
+  - arrears_bucket
+  - borrower_structure
+  - balance_band
+  - vintage_year
+  - acquired_portfolio_id
+
+# Point-in-time ⇒ single snapshot only.
+temporal_modes:
+  - single
+
+# Route capabilities. Risk-grade/PD MIGRATION over time is excluded (needs ≥2
+# recurring snapshots); a point-in-time grade/PD distribution is still allowed.
+risk_monitor: disabled
+forecast: disabled
+exceptions_scorecard: enabled

@@ -1,0 +1,60 @@
+# =========================================================================
+# MI risk monitor — early-warning rules (config skeleton).
+# =========================================================================
+#
+# Phase 0B CONFIG SKELETON — declaration only. Declares the early-warning rule
+# SHAPES the MI risk monitor will evaluate over the snapshot/history layer
+# (build-plan Phase 5). The risk monitor is NOT built in this phase: nothing
+# reads this file yet, no MI states or migration logic exist.
+#
+# See:
+#   docs/mi_mna_target_architecture_and_build_plan.md   (§3.5)
+#   config/routes/mi_route.yaml      (risk_monitor: enabled)
+#
+# Thresholds below are PLACEHOLDER defaults to be tuned per client; client
+# concentration limits will live in a separate config/client/ file.
+
+version: 0.1.0
+
+enabled: true
+
+# RAG thresholds for concentration limit usage (share of limit consumed).
+limit_usage_thresholds:
+  amber: 0.80
+  red: 1.00
+
+# Group-share concentration capabilities (evaluate against limits).
+concentration:
+  funded:
+    state: total_funded
+    dimensions: [geographic_region_obligor, internal_risk_grade, pd_bucket, balance_band]
+  forecast:
+    state: total_forecast_funded
+    dimensions: [geographic_region_obligor, internal_risk_grade, pd_bucket]
+  # Current-vs-forecast movement = forecast_share - funded_share per group.
+  movement:
+    compare: [total_funded, total_forecast_funded]
+
+# Risk migration between two snapshots (transition matrices on a stable loan_id).
+migration:
+  pairs:
+    - field: internal_risk_grade
+      previous: risk_grade_previous
+      current: risk_grade_current
+    - field: ifrs9_stage
+      previous: ifrs9_stage_previous
+      current: ifrs9_stage_current
+    - field: pd_bucket
+      previous: pd_previous
+      current: pd_current
+
+# Per-loan deterioration / improvement flags between snapshots.
+deterioration_flags:
+  risk_grade_notches: 1          # >= N notches worse ⇒ deterioration
+  pd_relative_increase: 0.25     # >= 25% relative PD increase ⇒ deterioration
+  arrears_days_increase: 30      # >= N more days past due ⇒ deterioration
+
+# Concentration movement (early warning) across >=N snapshots.
+trajectory:
+  min_snapshots: 3
+  approaching_limit_at: 0.90     # group share trending towards >=90% of limit

@@ -1,0 +1,149 @@
+# =========================================================================
+# MI stratification catalogue — dimension -> semantic field -> bucket rule.
+# =========================================================================
+#
+# Phase 0B CONFIG SKELETON — declaration only. Maps each target MI/M&A
+# stratification dimension to a semantic field key and a bucket rule, plus the
+# states and asset classes it applies to. The stratification engine is NOT
+# built in this phase: nothing reads this file yet (build-plan Phase 1).
+#
+# See:
+#   docs/mi_mna_target_architecture_and_build_plan.md   (§3.4)
+#   config/mi/buckets.yaml            (bucket edges)
+#   mi_agent/mi_semantics_field_registry.yaml  (semantic_field keys)
+#
+# Each dimension declares:
+#   semantic_field : MI semantic registry key
+#   bucket         : config/mi/buckets.yaml key, or "categorical" for enums/labels
+#   applies_to_states : state-library keys this dimension is valid for
+#   asset_classes  : "*" (any) or a list (e.g. equity_release-only dimensions)
+
+version: 0.1.0
+
+dimensions:
+
+  ltv_bucket:
+    semantic_field: current_loan_to_value
+    bucket: ltv_bucket
+    applies_to_states: [total_funded, total_forecast_funded, cohort_by_date]
+    asset_classes: "*"
+
+  borrower_age:
+    semantic_field: youngest_borrower_age
+    bucket: borrower_age_bucket
+    applies_to_states: [total_funded, cohort_by_date]
+    asset_classes: "*"
+
+  youngest_borrower_age:
+    semantic_field: youngest_borrower_age
+    bucket: youngest_borrower_age_bucket
+    applies_to_states: [total_funded, cohort_by_date]
+    asset_classes: [equity_release]
+
+  geographic_region:
+    semantic_field: geographic_region_obligor
+    bucket: categorical
+    applies_to_states: [total_funded, total_forecast_funded, cohort_by_date]
+    asset_classes: "*"
+
+  interest_rate_bucket:
+    semantic_field: current_interest_rate
+    bucket: interest_rate_bucket
+    applies_to_states: [total_funded, cohort_by_date]
+    asset_classes: "*"
+
+  product_type:
+    semantic_field: erm_product_type
+    bucket: categorical
+    applies_to_states: [total_funded, total_pipeline, cohort_by_date]
+    asset_classes: "*"
+
+  amortisation_type:
+    semantic_field: amortisation_type
+    bucket: categorical
+    applies_to_states: [total_funded, cohort_by_date]
+    asset_classes: "*"
+
+  origination_channel:
+    semantic_field: origination_channel
+    bucket: categorical
+    applies_to_states: [total_funded, cohort_by_date]
+    asset_classes: "*"
+
+  broker_channel:
+    semantic_field: broker_channel
+    bucket: categorical
+    applies_to_states: [total_funded, total_pipeline, cohort_by_date]
+    asset_classes: "*"
+
+  internal_risk_stage:
+    semantic_field: internal_risk_stage
+    bucket: categorical
+    applies_to_states: [total_funded, cohort_by_date]
+    asset_classes: "*"
+
+  ifrs9_stage:
+    semantic_field: ifrs9_stage
+    bucket: categorical
+    applies_to_states: [total_funded, cohort_by_date]
+    asset_classes: "*"
+
+  internal_risk_grade:
+    semantic_field: internal_risk_grade
+    bucket: categorical
+    applies_to_states: [total_funded, cohort_by_date]
+    asset_classes: "*"
+
+  pd_bucket:
+    semantic_field: probability_of_default
+    bucket: pd_bucket
+    applies_to_states: [total_funded, cohort_by_date]
+    asset_classes: "*"
+
+  lgd_bucket:
+    semantic_field: loss_given_default
+    bucket: lgd_bucket
+    applies_to_states: [total_funded, cohort_by_date]
+    asset_classes: "*"
+
+  ead_bucket:
+    semantic_field: exposure_at_default
+    bucket: ead_bucket
+    applies_to_states: [total_funded, cohort_by_date]
+    asset_classes: "*"
+
+  interest_rate_type:
+    semantic_field: interest_rate_type
+    bucket: categorical
+    applies_to_states: [total_funded, cohort_by_date]
+    asset_classes: "*"
+
+  arrears_status:
+    semantic_field: account_status
+    bucket: categorical
+    applies_to_states: [total_funded, cohort_by_date]
+    asset_classes: "*"
+
+  pipeline_stage:
+    semantic_field: pipeline_stage
+    bucket: categorical
+    applies_to_states: [total_pipeline, total_forecast_funded]
+    asset_classes: "*"
+
+  borrower_structure:
+    semantic_field: number_of_borrowers
+    bucket: categorical            # single vs joint band; see borrower_structure
+    applies_to_states: [total_funded, cohort_by_date]
+    asset_classes: "*"
+
+  time_on_book:
+    semantic_field: months_on_book
+    bucket: time_on_book_bucket
+    applies_to_states: [total_funded, cohort_by_date]
+    asset_classes: "*"
+
+  balance_band:
+    semantic_field: current_outstanding_balance
+    bucket: balance_band
+    applies_to_states: [total_funded, total_pipeline, cohort_by_date]
+    asset_classes: "*"

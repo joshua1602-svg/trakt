@@ -1,0 +1,87 @@
+# =========================================================================
+# Combined Regulatory + MI RouteContract — composite delivery.
+# =========================================================================
+#
+# Phase 0B SKELETON — declaration only. Some client uploads must produce BOTH
+# a point-in-time regulatory package AND recurring MI from the same tape. This
+# composite route documents that combination: the regulatory package is still
+# produced by the settled Annex 2 path, while MI views are produced by the
+# recurring MI route. The two sub-routes keep their own contracts; this file
+# only records that they are run together and that the MI side governs the
+# (super-set) temporal / state / dimension envelope.
+#
+# Composition does NOT relax the regulatory contract: Annex 2 remains
+# point-in-time and is never driven by MI design (see regulatory_annex2_route).
+#
+# See:
+#   docs/mi_mna_target_architecture_and_build_plan.md   (§2, §8)
+#   config/routes/mi_route.yaml
+#   config/routes/regulatory_annex2_route.yaml
+
+route_id: regulatory_and_mi
+description: >-
+  Composite route running the settled point-in-time Annex 2 regulatory delivery
+  and the recurring MI route from the same upload. The regulatory sub-route is
+  unchanged; the MI sub-route governs states, stratification and temporal modes.
+
+# Sub-routes this composite delegates to (each keeps its own contract).
+composes:
+  - regulatory_annex2
+  - mi
+
+# Recurring because the MI side requires snapshot history; the regulatory side
+# is still evaluated point-in-time within each snapshot.
+temporality: recurring
+requires_history: true
+
+# Envelope is the MI super-set (the regulatory sub-route uses none of these).
+allowed_states:
+  - total_pipeline
+  - total_funded
+  - total_forecast_funded
+  - cohort_by_date
+  - cohort_by_portfolio
+  - cohort_by_spv
+  - cohort_by_acquired_portfolio
+
+allowed_segments:
+  - portfolio
+  - spv
+  - acquired_portfolio
+
+allowed_dimensions:
+  - ltv_bucket
+  - original_ltv_bucket
+  - age_bucket
+  - geographic_region_obligor
+  - geographic_region_collateral
+  - interest_rate_bucket
+  - erm_product_type
+  - amortisation_type
+  - origination_channel
+  - broker_channel
+  - internal_risk_grade
+  - internal_risk_stage
+  - ifrs9_stage
+  - pd_bucket
+  - lgd_bucket
+  - ead_bucket
+  - interest_rate_type
+  - account_status
+  - arrears_bucket
+  - pipeline_stage
+  - funded_status
+  - borrower_structure
+  - time_on_book_bucket
+  - vintage_year
+  - balance_band
+
+temporal_modes:
+  - single
+  - compare
+  - trend
+
+# MI capabilities apply; the regulatory sub-route runs its own validation path.
+risk_monitor: enabled
+forecast: enabled
+exceptions_scorecard: optional

@@ -1,0 +1,85 @@
+# =========================================================================
+# MI portfolio-state library — declarative state definitions.
+# =========================================================================
+#
+# Phase 0B CONFIG SKELETON — declaration only. Declares the portfolio STATES
+# the MI route will assemble from the snapshot/history layer (build-plan
+# Phase 3-4). The state assembler is NOT built in this phase: nothing reads
+# this file yet. Each state is a deterministic function
+# (SnapshotSelector, filters) -> frame.
+#
+# See:
+#   docs/mi_mna_target_architecture_and_build_plan.md   (§3.3)
+#   config/routes/mi_route.yaml  (allowed_states)
+#
+# Each state declares:
+#   description       : plain-English meaning
+#   temporality       : point_in_time | recurring
+#   snapshot_inputs   : which snapshot(s) the state needs
+#   segment_by        : optional segmentation key (portfolio | spv | acquired_portfolio)
+#   requires_fields   : MI semantic registry keys the assembly depends on
+#   routes            : routes permitted to assemble this state
+
+version: 0.1.0
+
+states:
+
+  total_pipeline:
+    description: All in-pipeline loans by stage at a snapshot.
+    temporality: point_in_time
+    snapshot_inputs: [latest_or_selected_pipeline]
+    requires_fields: [pipeline_stage, funded_status, current_outstanding_balance]
+    routes: [mi]
+
+  total_funded:
+    description: Funded book at a snapshot (v1 default — the loaded frame).
+    temporality: point_in_time
+    snapshot_inputs: [latest_or_selected_funded]
+    requires_fields: [funded_status, current_outstanding_balance]
+    routes: [mi, mna]
+
+  total_forecast_funded:
+    description: >-
+      total_funded + Sum(pipeline balance x expected conversion probability).
+    temporality: point_in_time
+    snapshot_inputs: [latest_or_selected_funded, latest_or_selected_pipeline]
+    requires_fields:
+      - funded_status
+      - pipeline_stage
+      - forecast_funding_probability
+      - forecast_funded_balance
+      - current_outstanding_balance
+    config: config/client/pipeline_expected_funding.yaml
+    routes: [mi]
+
+  cohort_by_date:
+    description: Funded book grouped by origination/vintage cohort, optionally MOB-tracked.
+    temporality: recurring
+    snapshot_inputs: [one_or_many]
+    segment_by: null
+    requires_fields: [origination_date, vintage_year, months_on_book]
+    routes: [mi, mna]
+
+  cohort_by_portfolio:
+    description: Cohort states segmented by portfolio_id.
+    temporality: recurring
+    snapshot_inputs: [one_or_many]
+    segment_by: portfolio
+    requires_fields: [portfolio_id, origination_date]
+    routes: [mi, mna]
+
+  cohort_by_spv:
+    description: Cohort states segmented by spv_id.
+    temporality: recurring
+    snapshot_inputs: [one_or_many]
+    segment_by: spv
+    requires_fields: [spv_id, spv_transfer_date]
+    routes: [mi]
+
+  cohort_by_acquired_portfolio:
+    description: Cohort states segmented by acquired_portfolio_id (MI & M&A).
+    temporality: recurring
+    snapshot_inputs: [one_or_many]
+    segment_by: acquired_portfolio
+    requires_fields: [acquired_portfolio_id, acquisition_date]
+    routes: [mi, mna]

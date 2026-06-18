@@ -4,7 +4,7 @@
 # Do NOT edit by hand without also updating the build script (CURATION),
 # or your changes will be overwritten on the next regeneration.
 metadata:
-  generated_at: '2026-06-12T22:22:27.769979+00:00'
+  generated_at: '2026-06-18T19:54:29.418676+00:00'
   source_registry: /home/user/trakt/config/system/fields_registry.yaml
   selection_approach: curated MI-first allowlist (see CURATION in build script)
   selection_rules:
@@ -13,15 +13,21 @@ metadata:
     buckets and duplicate borrower-2/guarantor fields
   - derived bucket dimensions (age_bucket, ltv_bucket, ticket_bucket, vintage_year, …) added as first-class
     semantic fields
+  - 'Phase 0B: MI/M&A risk-model fields (internal_risk_grade, ifrs9_stage, probability_of_default, loss_given_default,
+    exposure_at_default, …) curated from the canonical registry'
+  - 'Phase 0B: segmentation/snapshot/state dimensions (portfolio_id, spv_id, acquired_portfolio_id, reporting_date,
+    cut_off_date, pipeline_stage, funded_status, months_on_book, …) added as VIRTUAL semantic dimensions
+    (not loan-level canonical fields)'
   mi_tiers:
   - core
   - extended
-  field_count: 72
-  core_field_count: 46
-  extended_field_count: 26
-  derived_field_count: 10
+  field_count: 99
+  core_field_count: 67
+  extended_field_count: 32
+  derived_field_count: 14
+  virtual_field_count: 15
   missing_curated_fields: []
-  version: 0.2.2
+  version: 0.3.0
   default_weight_field: current_outstanding_balance
   cleanup_notes:
   - numeric axis roles enabled
@@ -30,6 +36,8 @@ metadata:
   - YAML aliases disabled
   - core-tier preference added to parser
   - derived bucket semantic fields added
+  - MI/M&A risk-model fields curated (Phase 0B)
+  - segmentation/snapshot/state virtual dimensions added (Phase 0B)
 fields:
   account_status:
     canonical_field: account_status
@@ -60,6 +68,65 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+  acquired_portfolio_id:
+    canonical_field: acquired_portfolio_id
+    mi_tier: core
+    business_name: Acquired Portfolio
+    display_name: Acquired Portfolio ID
+    business_description: Acquired-portfolio segmentation key for M&A / acquired-book cohorts (snapshot/state
+      layer).
+    description: ''
+    synonyms:
+    - acquired portfolio
+    - acquired portfolio id
+    - acquisition portfolio
+    source_criteria:
+    - segmentation_key
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    virtual: true
+  acquisition_date:
+    canonical_field: acquisition_date
+    mi_tier: core
+    business_name: Acquisition Date
+    display_name: Acquisition Date
+    business_description: Date the loan/portfolio was acquired (cohorting; snapshot/state layer).
+    description: ''
+    synonyms:
+    - acquisition date
+    - date acquired
+    - purchase date
+    source_criteria:
+    - snapshot_metadata
+    role: date
+    format: date
+    chartable: true
+    allowed_aggregations:
+    - count
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - filter
+    - cohort
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    virtual: true
   age_bucket:
     canonical_field: age_bucket
     mi_tier: core
@@ -123,6 +190,38 @@ fields:
     - filter
     - color
     default_chart_role: y
+    weight_field: null
+    bucket_field: null
+    notes: ''
+  amortisation_type:
+    canonical_field: amortisation_type
+    mi_tier: core
+    business_name: Amortisation Type
+    display_name: Amortisation Type
+    business_description: Loan amortisation / repayment profile (e.g. interest-only, repayment, bullet).
+    description: ''
+    synonyms:
+    - amortisation type
+    - amortization type
+    - repayment type
+    - repayment method
+    - amortisation profile
+    - interest only or repayment
+    source_criteria:
+    - core_canonical
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
     weight_field: null
     bucket_field: null
     notes: ''
@@ -251,6 +350,39 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+  borrower_structure:
+    canonical_field: borrower_structure
+    mi_tier: core
+    business_name: Borrower Structure
+    display_name: Borrower Structure
+    business_description: Single vs joint borrower band (derived from number_of_borrowers).
+    description: ''
+    synonyms:
+    - borrower structure
+    - single or joint
+    - sole or joint
+    - joint borrower
+    - single borrower
+    source_criteria:
+    - derived_bucket
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    derived: true
+    derived_from: number_of_borrowers
   broker_channel:
     canonical_field: broker_channel
     mi_tier: core
@@ -633,6 +765,36 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+  cut_off_date:
+    canonical_field: cut_off_date
+    mi_tier: core
+    business_name: Cut-off Date
+    display_name: Cut Off Date
+    business_description: Data cut-off the figures reflect (snapshot header; may differ from reporting
+      date).
+    description: ''
+    synonyms:
+    - cut off date
+    - cutoff date
+    - data cut off date
+    - data cut-off
+    source_criteria:
+    - snapshot_metadata
+    role: date
+    format: date
+    chartable: true
+    allowed_aggregations:
+    - count
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - filter
+    - cohort
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    virtual: true
   date_last_in_arrears:
     canonical_field: date_last_in_arrears
     mi_tier: extended
@@ -775,6 +937,38 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+  ead_bucket:
+    canonical_field: ead_bucket
+    mi_tier: core
+    business_name: EAD Bucket
+    display_name: Ead Bucket
+    business_description: Banded EAD for stratification (derived from exposure_at_default).
+    description: ''
+    synonyms:
+    - ead bucket
+    - ead band
+    - ead range
+    - exposure at default band
+    source_criteria:
+    - derived_bucket
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    derived: true
+    derived_from: exposure_at_default
   early_repayment_charge:
     canonical_field: early_repayment_charge
     mi_tier: extended
@@ -921,6 +1115,166 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+  exposure_at_default:
+    canonical_field: exposure_at_default
+    mi_tier: core
+    business_name: EAD
+    display_name: Exposure At Default
+    business_description: Exposure at default (currency amount).
+    description: ''
+    synonyms:
+    - ead
+    - exposure at default
+    - default exposure
+    - exposure amount
+    source_criteria:
+    - layer:performance
+    role: metric
+    format: currency
+    chartable: true
+    allowed_aggregations:
+    - sum
+    - avg
+    - median
+    default_aggregation: sum
+    allowed_chart_roles:
+    - y
+    - size
+    - x
+    - bucket
+    - filter
+    - color
+    default_chart_role: y
+    weight_field: null
+    bucket_field: ead_bucket
+    notes: ''
+  forecast_funded_balance:
+    canonical_field: forecast_funded_balance
+    mi_tier: extended
+    business_name: Forecast Funded Balance
+    display_name: Forecast Funded Balance
+    business_description: Probability-weighted expected funded balance for a pipeline opportunity (forecast;
+      state layer).
+    description: ''
+    synonyms:
+    - forecast funded balance
+    - expected funded balance
+    - projected funded balance
+    source_criteria:
+    - forecast
+    role: metric
+    format: currency
+    chartable: true
+    allowed_aggregations:
+    - sum
+    - avg
+    - median
+    default_aggregation: sum
+    allowed_chart_roles:
+    - y
+    - size
+    - x
+    - bucket
+    - filter
+    - color
+    default_chart_role: y
+    weight_field: null
+    bucket_field: ticket_bucket
+    notes: ''
+    virtual: true
+  forecast_funding_date:
+    canonical_field: forecast_funding_date
+    mi_tier: extended
+    business_name: Forecast Funding Date
+    display_name: Forecast Funding Date
+    business_description: Expected funding date for a pipeline opportunity (forecast; state layer).
+    description: ''
+    synonyms:
+    - forecast funding date
+    - expected funding date
+    - projected funding date
+    source_criteria:
+    - forecast
+    role: date
+    format: date
+    chartable: true
+    allowed_aggregations:
+    - count
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - filter
+    - cohort
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    virtual: true
+  forecast_funding_probability:
+    canonical_field: forecast_funding_probability
+    mi_tier: extended
+    business_name: Forecast Funding Probability
+    display_name: Forecast Funding Probability
+    business_description: Expected conversion probability for a pipeline opportunity (forecast; state
+      layer).
+    description: ''
+    synonyms:
+    - forecast funding probability
+    - conversion probability
+    - expected conversion
+    - funding probability
+    source_criteria:
+    - forecast
+    role: metric
+    format: decimal
+    chartable: true
+    allowed_aggregations:
+    - avg
+    - median
+    - distribution
+    default_aggregation: avg
+    allowed_chart_roles:
+    - x
+    - y
+    - bucket
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    virtual: true
+  funded_status:
+    canonical_field: funded_status
+    mi_tier: core
+    business_name: Funded Status
+    display_name: Funded Status
+    business_description: Whether the loan is funded or still in pipeline (state assignment).
+    description: ''
+    synonyms:
+    - funded status
+    - funded flag
+    - funded or pipeline
+    - funding status
+    source_criteria:
+    - pipeline_state
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    virtual: true
   further_advance_flag:
     canonical_field: further_advance_flag
     mi_tier: core
@@ -1071,6 +1425,36 @@ fields:
     notes: ''
     derived: true
     derived_from: geographic_region_obligor
+  ifrs9_stage:
+    canonical_field: ifrs9_stage
+    mi_tier: core
+    business_name: IFRS 9 Stage
+    display_name: Ifrs9 Stage
+    business_description: IFRS 9 impairment stage (Stage 1 / 2 / 3).
+    description: ''
+    synonyms:
+    - ifrs9 stage
+    - ifrs 9 stage
+    - impairment stage
+    - credit impairment stage
+    source_criteria:
+    - layer:performance
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
   indexed_loan_to_value:
     canonical_field: indexed_loan_to_value
     mi_tier: core
@@ -1224,6 +1608,135 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+  internal_risk_grade:
+    canonical_field: internal_risk_grade
+    mi_tier: core
+    business_name: Risk Grade
+    display_name: Internal Risk Grade
+    business_description: Generic internal/obligor risk grade (e.g. A-G, 1-10); asset-class neutral.
+    description: ''
+    synonyms:
+    - internal risk grade
+    - risk grade
+    - internal rating
+    - credit grade
+    - obligor grade
+    - borrower grade
+    source_criteria:
+    - layer:performance
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+  internal_risk_score:
+    canonical_field: internal_risk_score
+    mi_tier: extended
+    business_name: Risk Score
+    display_name: Internal Risk Score
+    business_description: Numeric internal / behavioural / application risk score.
+    description: ''
+    synonyms:
+    - internal risk score
+    - risk score
+    - credit score
+    - behavioural score
+    - application score
+    - scorecard score
+    source_criteria:
+    - layer:performance
+    role: metric
+    format: decimal
+    chartable: true
+    allowed_aggregations:
+    - avg
+    - median
+    - distribution
+    default_aggregation: avg
+    allowed_chart_roles:
+    - x
+    - y
+    - bucket
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+  internal_risk_stage:
+    canonical_field: internal_risk_stage
+    mi_tier: core
+    business_name: Risk Stage
+    display_name: Internal Risk Stage
+    business_description: Internal monitoring / watchlist stage (lender taxonomy; distinct from IFRS 9).
+    description: ''
+    synonyms:
+    - internal risk stage
+    - risk stage
+    - watchlist stage
+    - monitoring stage
+    - internal stage
+    source_criteria:
+    - layer:performance
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+  lgd_bucket:
+    canonical_field: lgd_bucket
+    mi_tier: core
+    business_name: LGD Bucket
+    display_name: LGD Bucket
+    business_description: Banded LGD for stratification (derived from loss_given_default).
+    description: ''
+    synonyms:
+    - lgd bucket
+    - lgd band
+    - lgd range
+    - loss given default band
+    source_criteria:
+    - derived_bucket
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    derived: true
+    derived_from: loss_given_default
   lien:
     canonical_field: lien
     mi_tier: extended
@@ -1282,6 +1795,38 @@ fields:
     default_chart_role: filter
     weight_field: null
     bucket_field: null
+    notes: ''
+  loss_given_default:
+    canonical_field: loss_given_default
+    mi_tier: core
+    business_name: LGD
+    display_name: Loss Given Default
+    business_description: Loss given default as a decimal (0-1).
+    description: ''
+    synonyms:
+    - lgd
+    - loss given default
+    - loss severity
+    - recovery assumption
+    source_criteria:
+    - layer:performance
+    role: metric
+    format: decimal
+    chartable: true
+    allowed_aggregations:
+    - avg
+    - median
+    - distribution
+    default_aggregation: avg
+    allowed_chart_roles:
+    - x
+    - y
+    - bucket
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: lgd_bucket
     notes: ''
   ltv_bucket:
     canonical_field: ltv_bucket
@@ -1375,6 +1920,42 @@ fields:
     notes: ''
     derived: true
     derived_from: maturity_date
+  months_on_book:
+    canonical_field: months_on_book
+    mi_tier: core
+    business_name: Months on Book
+    display_name: Months On Book
+    business_description: Time on book in months (funding/origination date vs reporting date; derived
+      in the state layer).
+    description: ''
+    synonyms:
+    - months on book
+    - time on book
+    - mob
+    - seasoning
+    - loan age
+    source_criteria:
+    - derived_metric
+    role: metric
+    format: integer
+    chartable: true
+    allowed_aggregations:
+    - avg
+    - median
+    - distribution
+    default_aggregation: avg
+    allowed_chart_roles:
+    - x
+    - y
+    - bucket
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    virtual: true
+    derived_from: funding_date
   negative_equity_guarantee:
     canonical_field: negative_equity_guarantee
     mi_tier: core
@@ -1463,6 +2044,37 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+  number_of_borrowers:
+    canonical_field: number_of_borrowers
+    mi_tier: core
+    business_name: Number of Borrowers
+    display_name: Number Of Borrowers
+    business_description: Count of borrowers on the loan (basis for single vs joint borrower).
+    description: ''
+    synonyms:
+    - number of borrowers
+    - borrower count
+    - borrowers
+    - count of borrowers
+    source_criteria:
+    - loan_level_virtual
+    role: dimension
+    format: integer
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: group
+    weight_field: null
+    bucket_field: borrower_structure
+    notes: ''
+    virtual: true
   number_of_days_in_arrears:
     canonical_field: number_of_days_in_arrears
     mi_tier: core
@@ -1889,6 +2501,99 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+  pd_bucket:
+    canonical_field: pd_bucket
+    mi_tier: core
+    business_name: PD Bucket
+    display_name: PD Bucket
+    business_description: Banded PD for stratification (derived from probability_of_default).
+    description: ''
+    synonyms:
+    - pd bucket
+    - pd band
+    - pd range
+    - probability of default band
+    source_criteria:
+    - derived_bucket
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    derived: true
+    derived_from: probability_of_default
+  pipeline_stage:
+    canonical_field: pipeline_stage
+    mi_tier: core
+    business_name: Pipeline Stage
+    display_name: Pipeline Stage
+    business_description: Pipeline funnel stage (KFI / application / offer / completion / funded).
+    description: ''
+    synonyms:
+    - pipeline stage
+    - funnel stage
+    - application stage
+    - pipeline status
+    source_criteria:
+    - pipeline_state
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    virtual: true
+  portfolio_id:
+    canonical_field: portfolio_id
+    mi_tier: core
+    business_name: Portfolio
+    display_name: Portfolio ID
+    business_description: Portfolio segmentation key (snapshot/state layer).
+    description: ''
+    synonyms:
+    - portfolio
+    - portfolio id
+    - portfolio identifier
+    source_criteria:
+    - segmentation_key
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    virtual: true
   postcode:
     canonical_field: postcode
     mi_tier: extended
@@ -1949,6 +2654,40 @@ fields:
     default_chart_role: y
     weight_field: null
     bucket_field: null
+    notes: ''
+  probability_of_default:
+    canonical_field: probability_of_default
+    mi_tier: core
+    business_name: PD
+    display_name: Probability Of Default
+    business_description: Probability of default as a decimal (0-1).
+    description: ''
+    synonyms:
+    - pd
+    - probability of default
+    - default probability
+    - lifetime pd
+    - 12 month pd
+    - one year pd
+    source_criteria:
+    - layer:performance
+    role: metric
+    format: decimal
+    chartable: true
+    allowed_aggregations:
+    - avg
+    - median
+    - distribution
+    default_aggregation: avg
+    allowed_chart_roles:
+    - x
+    - y
+    - bucket
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: pd_bucket
     notes: ''
   protected_equity_flag:
     canonical_field: protected_equity_flag
@@ -2043,6 +2782,96 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+  reporting_date:
+    canonical_field: reporting_date
+    mi_tier: core
+    business_name: Reporting Date
+    display_name: Reporting Date
+    business_description: MI reporting period the snapshot represents (snapshot header; distinct from
+      upload/cut-off).
+    description: ''
+    synonyms:
+    - reporting date
+    - report date
+    - mi reporting date
+    - as of date
+    - reporting period
+    source_criteria:
+    - snapshot_metadata
+    role: date
+    format: date
+    chartable: true
+    allowed_aggregations:
+    - count
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - filter
+    - cohort
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    virtual: true
+  spv_id:
+    canonical_field: spv_id
+    mi_tier: core
+    business_name: SPV
+    display_name: Spv ID
+    business_description: Special-purpose-vehicle segmentation key (snapshot/state layer).
+    description: ''
+    synonyms:
+    - spv
+    - spv id
+    - special purpose vehicle
+    - issuer
+    source_criteria:
+    - segmentation_key
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    virtual: true
+  spv_transfer_date:
+    canonical_field: spv_transfer_date
+    mi_tier: extended
+    business_name: SPV Transfer Date
+    display_name: Spv Transfer Date
+    business_description: Date the loan was transferred to the SPV (snapshot/state layer).
+    description: ''
+    synonyms:
+    - spv transfer date
+    - transfer date
+    - date transferred to spv
+    source_criteria:
+    - snapshot_metadata
+    role: date
+    format: date
+    chartable: true
+    allowed_aggregations:
+    - count
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - filter
+    - cohort
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    virtual: true
   tenure:
     canonical_field: tenure
     mi_tier: core
@@ -2139,6 +2968,34 @@ fields:
     notes: ''
     derived: true
     derived_from: current_outstanding_balance
+  upload_timestamp:
+    canonical_field: upload_timestamp
+    mi_tier: extended
+    business_name: Upload Timestamp
+    display_name: Upload Timestamp
+    business_description: When the file landed (operational); never used as the reporting date (snapshot
+      header).
+    description: ''
+    synonyms:
+    - upload timestamp
+    - upload date
+    - file upload time
+    - ingestion time
+    source_criteria:
+    - snapshot_metadata
+    role: date
+    format: date
+    chartable: false
+    allowed_aggregations:
+    - count
+    default_aggregation: count
+    allowed_chart_roles:
+    - filter
+    default_chart_role: filter
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    virtual: true
   valuation_type:
     canonical_field: valuation_type
     mi_tier: core

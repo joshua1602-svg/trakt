@@ -54,7 +54,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE = REPO_ROOT / "config" / "system" / "fields_registry.yaml"
 DEFAULT_OUTPUT = Path(__file__).resolve().parent / "mi_semantics_field_registry.yaml"
 
-VERSION = "0.2.2"
+VERSION = "0.3.0"
 
 CLEANUP_NOTES = [
     "numeric axis roles enabled",
@@ -63,6 +63,8 @@ CLEANUP_NOTES = [
     "YAML aliases disabled",
     "core-tier preference added to parser",
     "derived bucket semantic fields added",
+    "MI/M&A risk-model fields curated (Phase 0B)",
+    "segmentation/snapshot/state virtual dimensions added (Phase 0B)",
 ]
 
 
@@ -598,6 +600,263 @@ CURATION: Dict[str, dict] = {
             allowed_chart_roles=["x", "group", "filter", "color", "cohort"],
         ),
     },
+
+    # ================= RISK MODEL (Phase 0B) =================
+    # Generic, asset-class-neutral risk fields added to the canonical registry in
+    # Phase 0 (see docs/phase0_risk_field_registry_changes.md).  Curated here so
+    # they surface as first-class MI dimensions/metrics for the MI risk monitor
+    # and M&A diligence risk views.  No orchestration / states / migration logic
+    # is built in this phase — these are semantic registry entries only.
+    "amortisation_type": {
+        "tier": "core", "business_name": "Amortisation Type",
+        "business_description": "Loan amortisation / repayment profile "
+                               "(e.g. interest-only, repayment, bullet).",
+        "synonyms": ["amortisation type", "amortization type", "repayment type",
+                     "repayment method", "amortisation profile",
+                     "interest only or repayment"],
+        "overrides": {"role": "dimension", "format": "string"},
+    },
+    "internal_risk_grade": {
+        "tier": "core", "business_name": "Risk Grade",
+        "business_description": "Generic internal/obligor risk grade "
+                               "(e.g. A-G, 1-10); asset-class neutral.",
+        "synonyms": ["internal risk grade", "risk grade", "internal rating",
+                     "credit grade", "obligor grade", "borrower grade"],
+        "overrides": {"role": "dimension", "format": "string"},
+    },
+    "internal_risk_score": {
+        "tier": "extended", "business_name": "Risk Score",
+        "business_description": "Numeric internal / behavioural / application "
+                               "risk score.",
+        "synonyms": ["internal risk score", "risk score", "credit score",
+                     "behavioural score", "application score", "scorecard score"],
+        "overrides": {"role": "metric", "format": "decimal", **_RATIO_AGG},
+    },
+    "internal_risk_stage": {
+        "tier": "core", "business_name": "Risk Stage",
+        "business_description": "Internal monitoring / watchlist stage "
+                               "(lender taxonomy; distinct from IFRS 9).",
+        "synonyms": ["internal risk stage", "risk stage", "watchlist stage",
+                     "monitoring stage", "internal stage"],
+        "overrides": {"role": "dimension", "format": "string"},
+    },
+    "ifrs9_stage": {
+        "tier": "core", "business_name": "IFRS 9 Stage",
+        "business_description": "IFRS 9 impairment stage (Stage 1 / 2 / 3).",
+        "synonyms": ["ifrs9 stage", "ifrs 9 stage", "impairment stage",
+                     "credit impairment stage"],
+        "overrides": {"role": "dimension", "format": "string"},
+    },
+    "probability_of_default": {
+        "tier": "core", "business_name": "PD",
+        "business_description": "Probability of default as a decimal (0-1).",
+        "synonyms": ["pd", "probability of default", "default probability",
+                     "lifetime pd", "12 month pd", "one year pd"],
+        "overrides": {"role": "metric", "format": "decimal",
+                      "bucket_field": "pd_bucket", **_RATIO_AGG},
+    },
+    "loss_given_default": {
+        "tier": "core", "business_name": "LGD",
+        "business_description": "Loss given default as a decimal (0-1).",
+        "synonyms": ["lgd", "loss given default", "loss severity",
+                     "recovery assumption"],
+        "overrides": {"role": "metric", "format": "decimal",
+                      "bucket_field": "lgd_bucket", **_RATIO_AGG},
+    },
+    "exposure_at_default": {
+        "tier": "core", "business_name": "EAD",
+        "business_description": "Exposure at default (currency amount).",
+        "synonyms": ["ead", "exposure at default", "default exposure",
+                     "exposure amount"],
+        "overrides": {"role": "metric", "format": "currency",
+                      "bucket_field": "ead_bucket"},
+    },
+    # ---- Risk-model derived bands (analytics layer; see config/mi/buckets.yaml) ----
+    "pd_bucket": {
+        "tier": "core", "derived": True, "derived_from": "probability_of_default",
+        "business_name": "PD Bucket",
+        "business_description": "Banded PD for stratification "
+                               "(derived from probability_of_default).",
+        "synonyms": ["pd bucket", "pd band", "pd range", "probability of default band"],
+        "overrides": dict(_BUCKET_OVERRIDES),
+    },
+    "lgd_bucket": {
+        "tier": "core", "derived": True, "derived_from": "loss_given_default",
+        "business_name": "LGD Bucket",
+        "business_description": "Banded LGD for stratification "
+                               "(derived from loss_given_default).",
+        "synonyms": ["lgd bucket", "lgd band", "lgd range", "loss given default band"],
+        "overrides": dict(_BUCKET_OVERRIDES),
+    },
+    "ead_bucket": {
+        "tier": "core", "derived": True, "derived_from": "exposure_at_default",
+        "business_name": "EAD Bucket",
+        "business_description": "Banded EAD for stratification "
+                               "(derived from exposure_at_default).",
+        "synonyms": ["ead bucket", "ead band", "ead range", "exposure at default band"],
+        "overrides": dict(_BUCKET_OVERRIDES),
+    },
+    "borrower_structure": {
+        "tier": "core", "derived": True, "derived_from": "number_of_borrowers",
+        "business_name": "Borrower Structure",
+        "business_description": "Single vs joint borrower band "
+                               "(derived from number_of_borrowers).",
+        "synonyms": ["borrower structure", "single or joint", "sole or joint",
+                     "joint borrower", "single borrower"],
+        "overrides": dict(_BUCKET_OVERRIDES),
+    },
+
+    # ================= SEGMENTATION / SNAPSHOT / STATE (Phase 0B) =================
+    # VIRTUAL semantic dimensions.  These are NOT loan-level canonical fields in
+    # config/system/fields_registry.yaml — they belong to the snapshot/state layer
+    # (build-plan Phase 2) or are derived in the state layer.  They are registered
+    # here as first-class MI semantic dimensions so route contracts and the
+    # stratification catalogue can reference them by a stable key.  Marked
+    # ``virtual: True`` so consumers can tell them apart from materialised
+    # loan-level fields.  No snapshot layer is built in this phase.
+    "portfolio_id": {
+        "tier": "core", "virtual": True, "source_criteria": ["segmentation_key"],
+        "business_name": "Portfolio",
+        "business_description": "Portfolio segmentation key (snapshot/state layer).",
+        "synonyms": ["portfolio", "portfolio id", "portfolio identifier"],
+        "overrides": {"role": "dimension", "format": "string"},
+    },
+    "spv_id": {
+        "tier": "core", "virtual": True, "source_criteria": ["segmentation_key"],
+        "business_name": "SPV",
+        "business_description": "Special-purpose-vehicle segmentation key "
+                               "(snapshot/state layer).",
+        "synonyms": ["spv", "spv id", "special purpose vehicle", "issuer"],
+        "overrides": {"role": "dimension", "format": "string"},
+    },
+    "acquired_portfolio_id": {
+        "tier": "core", "virtual": True, "source_criteria": ["segmentation_key"],
+        "business_name": "Acquired Portfolio",
+        "business_description": "Acquired-portfolio segmentation key for M&A / "
+                               "acquired-book cohorts (snapshot/state layer).",
+        "synonyms": ["acquired portfolio", "acquired portfolio id",
+                     "acquisition portfolio"],
+        "overrides": {"role": "dimension", "format": "string"},
+    },
+    "acquisition_date": {
+        "tier": "core", "virtual": True, "source_criteria": ["snapshot_metadata"],
+        "business_name": "Acquisition Date",
+        "business_description": "Date the loan/portfolio was acquired "
+                               "(cohorting; snapshot/state layer).",
+        "synonyms": ["acquisition date", "date acquired", "purchase date"],
+        "overrides": {"role": "date", "format": "date", "chartable": True},
+    },
+    "spv_transfer_date": {
+        "tier": "extended", "virtual": True, "source_criteria": ["snapshot_metadata"],
+        "business_name": "SPV Transfer Date",
+        "business_description": "Date the loan was transferred to the SPV "
+                               "(snapshot/state layer).",
+        "synonyms": ["spv transfer date", "transfer date", "date transferred to spv"],
+        "overrides": {"role": "date", "format": "date", "chartable": True},
+    },
+    "reporting_date": {
+        "tier": "core", "virtual": True, "source_criteria": ["snapshot_metadata"],
+        "business_name": "Reporting Date",
+        "business_description": "MI reporting period the snapshot represents "
+                               "(snapshot header; distinct from upload/cut-off).",
+        "synonyms": ["reporting date", "report date", "mi reporting date",
+                     "as of date", "reporting period"],
+        "overrides": {"role": "date", "format": "date", "chartable": True},
+    },
+    "cut_off_date": {
+        "tier": "core", "virtual": True, "source_criteria": ["snapshot_metadata"],
+        "business_name": "Cut-off Date",
+        "business_description": "Data cut-off the figures reflect "
+                               "(snapshot header; may differ from reporting date).",
+        "synonyms": ["cut off date", "cutoff date", "data cut off date",
+                     "data cut-off"],
+        "overrides": {"role": "date", "format": "date", "chartable": True},
+    },
+    "upload_timestamp": {
+        "tier": "extended", "virtual": True, "source_criteria": ["snapshot_metadata"],
+        "business_name": "Upload Timestamp",
+        "business_description": "When the file landed (operational); never used as "
+                               "the reporting date (snapshot header).",
+        "synonyms": ["upload timestamp", "upload date", "file upload time",
+                     "ingestion time"],
+        "overrides": {"role": "date", "format": "date", "chartable": False,
+                      "allowed_chart_roles": ["filter"],
+                      "default_chart_role": "filter"},
+    },
+    "pipeline_stage": {
+        "tier": "core", "virtual": True, "source_criteria": ["pipeline_state"],
+        "business_name": "Pipeline Stage",
+        "business_description": "Pipeline funnel stage "
+                               "(KFI / application / offer / completion / funded).",
+        "synonyms": ["pipeline stage", "funnel stage", "application stage",
+                     "pipeline status"],
+        "overrides": {"role": "dimension", "format": "string"},
+    },
+    "funded_status": {
+        "tier": "core", "virtual": True, "source_criteria": ["pipeline_state"],
+        "business_name": "Funded Status",
+        "business_description": "Whether the loan is funded or still in pipeline "
+                               "(state assignment).",
+        "synonyms": ["funded status", "funded flag", "funded or pipeline",
+                     "funding status"],
+        "overrides": {"role": "dimension", "format": "string"},
+    },
+    "forecast_funding_date": {
+        "tier": "extended", "virtual": True, "source_criteria": ["forecast"],
+        "business_name": "Forecast Funding Date",
+        "business_description": "Expected funding date for a pipeline opportunity "
+                               "(forecast; state layer).",
+        "synonyms": ["forecast funding date", "expected funding date",
+                     "projected funding date"],
+        "overrides": {"role": "date", "format": "date", "chartable": True},
+    },
+    "forecast_funding_probability": {
+        "tier": "extended", "virtual": True, "source_criteria": ["forecast"],
+        "business_name": "Forecast Funding Probability",
+        "business_description": "Expected conversion probability for a pipeline "
+                               "opportunity (forecast; state layer).",
+        "synonyms": ["forecast funding probability", "conversion probability",
+                     "expected conversion", "funding probability"],
+        "overrides": {"role": "metric", "format": "decimal", **_RATIO_AGG},
+    },
+    "forecast_funded_balance": {
+        "tier": "extended", "virtual": True, "source_criteria": ["forecast"],
+        "business_name": "Forecast Funded Balance",
+        "business_description": "Probability-weighted expected funded balance "
+                               "for a pipeline opportunity (forecast; state layer).",
+        "synonyms": ["forecast funded balance", "expected funded balance",
+                     "projected funded balance"],
+        "overrides": {"role": "metric", "format": "currency"},
+    },
+    "number_of_borrowers": {
+        "tier": "core", "virtual": True, "source_criteria": ["loan_level_virtual"],
+        "business_name": "Number of Borrowers",
+        "business_description": "Count of borrowers on the loan "
+                               "(basis for single vs joint borrower).",
+        "synonyms": ["number of borrowers", "borrower count", "borrowers",
+                     "count of borrowers"],
+        "overrides": {"role": "dimension", "format": "integer",
+                      "allowed_aggregations": ["count", "balance_sum"],
+                      "default_aggregation": "count",
+                      "allowed_chart_roles": ["x", "group", "filter", "color"],
+                      "default_chart_role": "group", "chartable": True,
+                      "bucket_field": "borrower_structure"},
+    },
+    "months_on_book": {
+        "tier": "core", "virtual": True, "derived_from": "funding_date",
+        "source_criteria": ["derived_metric"],
+        "business_name": "Months on Book",
+        "business_description": "Time on book in months "
+                               "(funding/origination date vs reporting date; "
+                               "derived in the state layer).",
+        "synonyms": ["months on book", "time on book", "mob", "seasoning",
+                     "loan age"],
+        "overrides": {"role": "metric", "format": "integer", "chartable": True,
+                      "allowed_aggregations": ["avg", "median", "distribution"],
+                      "default_aggregation": "avg",
+                      "allowed_chart_roles": ["x", "y", "bucket", "filter", "color"],
+                      "default_chart_role": "x", "bucket_field": None},
+    },
 }
 
 
@@ -878,9 +1137,13 @@ def build_entry(name: str, meta: dict, curated: dict,
         "business_description": curated.get("business_description", ""),
         "description": "",
         "synonyms": list(curated.get("synonyms", []) or []),
-        "source_criteria": (["derived_bucket"]
-                            if curated.get("derived")
-                            else list(selection_criteria(meta))),
+        "source_criteria": (
+            list(curated["source_criteria"])
+            if curated.get("source_criteria")
+            else (["derived_bucket"]
+                  if curated.get("derived")
+                  else list(selection_criteria(meta)))
+        ),
         "role": role,
         "format": fmt,
         "chartable": overrides.get("chartable", inf_chartable),
@@ -898,6 +1161,11 @@ def build_entry(name: str, meta: dict, curated: dict,
         if curated.get("derived_from"):
             entry["derived_from"] = curated["derived_from"]
 
+    if curated.get("virtual"):
+        entry["virtual"] = True
+        if curated.get("derived_from"):
+            entry["derived_from"] = curated["derived_from"]
+
     if entry["role"] == "unknown" and not entry["notes"]:
         entry["notes"] = "requires manual analytics classification"
 
@@ -908,8 +1176,9 @@ def build_registry(source: Path) -> dict:
     fields = load_canonical_registry(source)
 
     derived = [name for name, c in CURATION.items() if c.get("derived")]
+    virtual = [name for name, c in CURATION.items() if c.get("virtual")]
     canonical_curated = [name for name, c in CURATION.items()
-                         if not c.get("derived")]
+                         if not c.get("derived") and not c.get("virtual")]
     present = [name for name in canonical_curated if name in fields]
     missing = [name for name in canonical_curated if name not in fields]
     for name in missing:
@@ -920,7 +1189,7 @@ def build_registry(source: Path) -> dict:
     weight_target = pick_weight_field(selected_names)
 
     out_fields: Dict[str, dict] = {}
-    for name in sorted(set(present) | set(derived)):
+    for name in sorted(set(present) | set(derived) | set(virtual)):
         # Derived bucket fields are not in the canonical registry; pass an
         # empty meta so build_entry uses overrides + defaults only.
         meta = fields.get(name, {})
@@ -941,12 +1210,20 @@ def build_registry(source: Path) -> dict:
             "duplicate borrower-2/guarantor fields",
             "derived bucket dimensions (age_bucket, ltv_bucket, ticket_bucket, "
             "vintage_year, …) added as first-class semantic fields",
+            "Phase 0B: MI/M&A risk-model fields (internal_risk_grade, ifrs9_stage, "
+            "probability_of_default, loss_given_default, exposure_at_default, …) "
+            "curated from the canonical registry",
+            "Phase 0B: segmentation/snapshot/state dimensions (portfolio_id, "
+            "spv_id, acquired_portfolio_id, reporting_date, cut_off_date, "
+            "pipeline_stage, funded_status, months_on_book, …) added as VIRTUAL "
+            "semantic dimensions (not loan-level canonical fields)",
         ],
         "mi_tiers": ["core", "extended"],
         "field_count": len(out_fields),
         "core_field_count": tier_counts.get("core", 0),
         "extended_field_count": tier_counts.get("extended", 0),
         "derived_field_count": len(derived),
+        "virtual_field_count": len(virtual),
         "missing_curated_fields": missing,
         "version": VERSION,
         "default_weight_field": weight_target,

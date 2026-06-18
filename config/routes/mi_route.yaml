@@ -1,0 +1,81 @@
+# =========================================================================
+# MI RouteContract — recurring / time-series management information.
+# =========================================================================
+#
+# Phase 0B SKELETON — declaration only. This file declares the MI route
+# contract that the future route layer (build-plan Phase 3-4) will resolve
+# before any query runs. NO orchestration, state assembler, snapshot layer,
+# MI states, risk monitor or charts are built in this phase.
+#
+# See:
+#   docs/mi_mna_target_architecture_and_build_plan.md   (§2, §3, §8)
+#   docs/phase0b_mi_mna_semantic_route_foundations.md
+#
+# State / dimension keys reference the MI semantic registry
+# (mi_agent/mi_semantics_field_registry.yaml) and config/mi/state_library.yaml.
+# Nothing here is wired into executable code yet.
+
+route_id: mi
+description: >-
+  Recurring, snapshot-aware MI route. Funded-book evolution, pipeline movement,
+  forecast-funded movement, cohort/vintage across periods, SPV & acquired-
+  portfolio trends, and the early-warning risk monitor.
+
+temporality: recurring
+requires_history: true
+
+# Portfolio-state library keys this route may assemble (config/mi/state_library.yaml).
+allowed_states:
+  - total_pipeline
+  - total_funded
+  - total_forecast_funded
+  - cohort_by_date
+  - cohort_by_portfolio
+  - cohort_by_spv
+  - cohort_by_acquired_portfolio
+
+# Segmentation keys (snapshot/state layer dimensions).
+allowed_segments:
+  - portfolio
+  - spv
+  - acquired_portfolio
+
+# Stratification dimensions this route may slice by. Keys resolve to the MI
+# semantic registry and config/mi/stratification_catalogue.yaml.
+allowed_dimensions:
+  - ltv_bucket
+  - original_ltv_bucket
+  - age_bucket
+  - geographic_region_obligor
+  - geographic_region_collateral
+  - interest_rate_bucket
+  - erm_product_type
+  - amortisation_type
+  - origination_channel
+  - broker_channel
+  - internal_risk_grade
+  - internal_risk_stage
+  - ifrs9_stage
+  - pd_bucket
+  - lgd_bucket
+  - ead_bucket
+  - interest_rate_type
+  - account_status
+  - arrears_bucket
+  - pipeline_stage
+  - funded_status
+  - borrower_structure
+  - time_on_book_bucket
+  - vintage_year
+  - balance_band
+
+# Temporal selector modes permitted (recurring ⇒ all three).
+temporal_modes:
+  - single
+  - compare
+  - trend
+
+# Route capabilities.
+risk_monitor: enabled
+forecast: enabled
+exceptions_scorecard: optional

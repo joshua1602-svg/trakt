@@ -105,13 +105,15 @@ def test_bucket_field_metadata(semantics, key):
 
 def test_registry_field_count_and_tiers(semantics):
     m = semantics["metadata"]
-    # derived = 8 bucket fields + 2 ITL3 drilldown fields (obligor/collateral)
-    assert m["derived_field_count"] == len(DERIVED_BUCKETS) + 2
+    # derived = 8 LTV/age/etc bucket fields + 2 ITL3 drilldown fields
+    # (obligor/collateral) + 4 Phase 0B risk/borrower bands
+    # (pd_bucket, lgd_bucket, ead_bucket, borrower_structure).
+    assert m["derived_field_count"] == len(DERIVED_BUCKETS) + 2 + 4
     assert m["field_count"] == m["core_field_count"] + m["extended_field_count"]
-    # Sanity: 70 (v0.2.x set incl. collateral_geography) + 2 ITL3 drilldown
-    # fields (obligor/collateral) == 72.
-    assert m["field_count"] == 72
-    assert m["core_field_count"] == 46
+    # v0.2.x set == 72; Phase 0B adds 27 MI/M&A risk + segmentation/snapshot
+    # semantic fields == 99.
+    assert m["field_count"] == 99
+    assert m["core_field_count"] == 67
     assert "derived bucket semantic fields added" in (m.get("cleanup_notes") or [])
 
 
