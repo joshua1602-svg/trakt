@@ -28,6 +28,18 @@ MISSING_PIPELINE_STAGE = "missing_pipeline_stage"
 UNSUPPORTED_STATE_FOR_ROUTE = "unsupported_state_for_route"
 INVALID_DATE = "invalid_date"
 
+# Phase 4 — temporal (compare / trend) issue codes.
+MISSING_BASELINE_SNAPSHOT = "missing_baseline_snapshot"
+MISSING_CURRENT_SNAPSHOT = "missing_current_snapshot"
+INSUFFICIENT_SNAPSHOTS_FOR_TREND = "insufficient_snapshots_for_trend"
+MISSING_STABLE_KEY_FOR_MOVEMENT = "missing_stable_key_for_movement"
+MISSING_PROBABILITY_FOR_FORECAST = "missing_probability_for_forecast"
+FORECAST_PROBABILITY_FROM_CONFIG = "forecast_probability_from_config"
+UNAVAILABLE_TEMPORAL_MODE = "unavailable_temporal_mode"
+UNSUPPORTED_TEMPORAL_STATE = "unsupported_temporal_state"
+EMPTY_TEMPORAL_RESULT = "empty_temporal_result"
+PERCENTAGE_CHANGE_DIVIDE_BY_ZERO = "percentage_change_divide_by_zero"
+
 ERROR = "error"
 WARNING = "warning"
 INFO = "info"
