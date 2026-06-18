@@ -58,3 +58,71 @@ deterioration_flags:
 trajectory:
   min_snapshots: 3
   approaching_limit_at: 0.90     # group share trending towards >=90% of limit
+
+# =========================================================================
+# Phase 5 — risk monitor execution config (additive; consumed by
+# mi_agent/risk_monitor/). Thresholds are generic defaults, not client rules.
+# =========================================================================
+
+# Dimensions monitored for concentration early-warning.
+monitored_dimensions:
+  - geographic_region_obligor
+  - broker_channel
+  - origination_channel
+  - erm_product_type
+  - amortisation_type
+  - internal_risk_grade
+  - ifrs9_stage
+  - pd_bucket
+  - ltv_bucket
+  - portfolio_id
+  - spv_id
+  - acquired_portfolio_id
+
+# Dimensions for two-snapshot migration matrices.
+migration_dimensions:
+  - internal_risk_grade
+  - internal_risk_stage
+  - ifrs9_stage
+  - pd_bucket
+  - lgd_bucket
+  - arrears_bucket
+  - ltv_bucket
+
+# Ordered categories (BEST -> WORST). A move to a later entry is a
+# deterioration; an earlier entry is an improvement. Dimensions absent here are
+# treated as UNORDERED: changes are classified as "changed" (never invented as
+# improve/deteriorate). 'internal_risk_stage' is intentionally omitted as an
+# unordered example.
+deterioration_orderings:
+  internal_risk_grade: ["A", "B", "C", "D", "E", "F", "G"]
+  ifrs9_stage: ["Stage 1", "Stage 2", "Stage 3"]
+  pd_bucket: ["<0.25%", "0.25-0.5%", "0.5-1%", "1-2.5%", "2.5-5%", "5-10%",
+              "10-25%", ">=25%"]
+  lgd_bucket: ["<10%", "10-20%", "20-30%", "30-40%", "40-50%", "50-75%", ">=75%"]
+  arrears_bucket: ["0", "1-30", "31-60", "61-90", "91-180", "180+"]
+  ltv_bucket: ["<20%", "20-30%", "30-40%", "40-50%", "50-60%", "60-70%",
+               "70-80%", "80-90%", "90-100%", ">=100%"]
+
+# Group-share RAG thresholds for a single-snapshot concentration view
+# (distinct from limit_usage_thresholds, which are share-of-limit consumed).
+concentration_thresholds:
+  amber: 0.20
+  red: 0.30
+
+# Number of snapshots required for a trajectory (trend) warning.
+trajectory_window: 3
+
+# Minimum size for a group to be RAG-classified (below -> reported, not flagged).
+minimum_balance_threshold: 0
+minimum_count_threshold: 0
+
+# Generic ILLUSTRATIVE concentration limits. NOT enforced as production rules;
+# real client limits belong in a separate config/client/ file. Present only so
+# limit-usage evaluation has a documented shape to read when a client supplies
+# one.
+example_concentration_limits:
+  geographic_region_obligor:
+    default_max_share: 0.30
+  internal_risk_grade:
+    default_max_share: 0.25
