@@ -87,6 +87,14 @@ PS_UNRESOLVED = "unresolved"               # no evidence at all
 PS_CONFLICT = "conflict"                   # collision / multi-code-cell pollution — do not promote
 PROMOTION_STATUSES = [PS_SAMPLE, PS_WORKBOOK, PS_MANUAL, PS_UNRESOLVED, PS_CONFLICT]
 
+# Builder-acceptance vocabulary (formal gate: which paths are good enough for the
+# NEW XML builder to wire — still behind a structure gate, never production XML).
+BA_SAMPLE = "sample_confirmed"        # XSD + sample agree (strongest)
+BA_ACCEPTED = "accepted_for_builder"  # workbook PATH, XSD-validated, consistent, hierarchy OK
+BA_MANUAL = "needs_manual_review"     # no clean XSD-validated workbook path
+BA_REJECTED = "rejected"              # polluted multi-code / collision
+ACCEPTANCE_STATUSES = [BA_SAMPLE, BA_ACCEPTED, BA_MANUAL, BA_REJECTED]
+
 
 # --------------------------------------------------------------------------- #
 # XSD model
@@ -541,8 +549,87 @@ def build_rows():
     _flag_path_collisions(rows_by_code)
     # Reviewed promotion layer (separate path-readiness axis; never data readiness).
     _assign_promotion(rows_by_code, rejected_pollution, wb_codes)
+    # Formal builder-acceptance gate over the workbook/XSD-validated paths.
+    valid = xsd_path_validator()
+    for r in rows_by_code.values():
+        r["builder_acceptance_status"] = evaluate_acceptance(r, valid)["builder_acceptance_status"]
     rows = [rows_by_code[c] for c in sorted(rows_by_code, key=sort_key)]
     return rows, xsd_index
+
+
+def evaluate_acceptance(r, valid):
+    """Apply the formal acceptance criteria to one path-map row and return the
+    decision + per-criterion evidence. Pure: re-validates the path against the
+    XSD; never generates XML; never touches data readiness or production gates.
+
+    Accept a workbook path for builder use only if it: comes from the workbook
+    PATH column, re-validates against the XSD, is code/leaf consistent, is not a
+    polluted multi-code row, respects the RREL/RREC hierarchy, and (for RREC)
+    stays nested under Coll. NoDataOptn handling is recorded (understood or
+    explicitly flagged) but does not by itself block acceptance.
+    """
+    code = r["esma_code"]
+    rg = r["record_group"]
+    ps = r.get("promotion_status", PS_UNRESOLVED)
+    path = r.get("xml_path")
+    leaf = path.split("/")[-1] if path else ""
+    es = r.get("evidence_source") or ""
+
+    from_workbook = ("workbook" in es) or (ps == PS_WORKBOOK)
+    xsd_validated = bool(path) and valid(path)
+    consistent = bool(path) and r.get("xsd_element") == leaf
+    not_polluted = ps != PS_CONFLICT
+    hierarchy_ok = (r.get("xml_level") in ("header", "exposure")) if rg == "RREL" \
+        else (r.get("xml_level") == "collateral")
+    rrec_nested = True if rg == "RREL" else (bool(path) and "Coll" in path.split("/"))
+
+    vm = r.get("value_mode")
+    if vm == "value_or_nodata":
+        nd_handling = ("handled_value_or_nodata" if (r.get("nd_wrapper_path")
+                       and valid(r["nd_wrapper_path"])) else "flagged_needs_review")
+    elif vm == "value":
+        nd_handling = "not_applicable"
+    else:
+        nd_handling = "flagged_needs_review"
+
+    blocking = {
+        "xsd_validated": xsd_validated,
+        "code_label_type_consistent": consistent,
+        "not_polluted_multicode": not_polluted,
+        "respects_rrel_rrec_hierarchy": hierarchy_ok,
+        "rrec_nested_under_coll": rrec_nested,
+    }
+
+    if ps == PS_SAMPLE:
+        status, reason, risk = BA_SAMPLE, "XSD + sample message agree (strongest evidence)", "low"
+    elif ps == PS_CONFLICT:
+        status, reason, risk = (BA_REJECTED,
+                                "multi-code-cell pollution / path collision — XSD wins, do not use", "high")
+    elif ps in (PS_MANUAL, PS_UNRESOLVED):
+        status, reason, risk = (BA_MANUAL,
+                                "no clean XSD-validated workbook path; manual crosswalk required", "high")
+    elif ps == PS_WORKBOOK:
+        if all(blocking.values()) and from_workbook:
+            status, reason, risk = (BA_ACCEPTED,
+                                    "workbook PATH, XSD-validated, code-consistent, hierarchy "
+                                    "respected, RREC nested; ND handling recorded", "low")
+        else:
+            fails = [k for k, v in blocking.items() if not v]
+            status, reason, risk = (BA_MANUAL,
+                                    "workbook path failed acceptance check(s): " + ", ".join(fails), "medium")
+    else:
+        status, reason, risk = BA_MANUAL, "unclassified promotion status", "high"
+
+    return {
+        "esma_code": code,
+        "builder_acceptance_status": status,
+        "from_workbook_path": from_workbook,
+        "nodataoptn_handling": nd_handling,
+        "sample_confirmed": ps == PS_SAMPLE,
+        "decision_reason": reason,
+        "risk_level": risk,
+        **blocking,
+    }
 
 
 def _assign_promotion(rows_by_code, rejected_pollution, wb_codes):
@@ -610,7 +697,8 @@ def _flag_path_collisions(rows_by_code):
 
 _COLUMNS = ["esma_code", "canonical_field", "record_group", "xml_level", "xml_path",
             "xsd_element", "xsd_type", "cardinality", "sequence_order", "value_mode",
-            "nd_wrapper_path", "mapping_status", "promotion_status", "evidence_source",
+            "nd_wrapper_path", "mapping_status", "promotion_status",
+            "builder_acceptance_status", "evidence_source",
             "evidence_note", "blocks_production_xml", "path_production_eligible",
             "builder_eligible_behind_structure_gate", "data_readiness",
             "production_ready", "owner"]
@@ -620,6 +708,7 @@ def write_outputs(rows):
     from collections import Counter
     counts = Counter(r["mapping_status"] for r in rows)
     pcounts = Counter(r["promotion_status"] for r in rows)
+    acounts = Counter(r["builder_acceptance_status"] for r in rows)
     blocking = sum(1 for r in rows if r["blocks_production_xml"])
 
     # YAML — production source of truth.
@@ -652,6 +741,14 @@ def write_outputs(rows):
                 "path_production_eligible": sum(1 for r in rows if r["path_production_eligible"]),
                 "builder_eligible_behind_structure_gate":
                     sum(1 for r in rows if r["builder_eligible_behind_structure_gate"]),
+                "production_ready": sum(1 for r in rows if r["production_ready"]),
+            },
+            "builder_acceptance_summary": {
+                "note": ("Formal acceptance gate: which paths the NEW XML builder may wire "
+                         "(behind a structure gate). accepted_for_builder / sample_confirmed are "
+                         "good enough for builder use; they do NOT make any field production-ready. "
+                         "See docs/annex2_path_acceptance_gate.md."),
+                "by_builder_acceptance_status": {a: acounts.get(a, 0) for a in ACCEPTANCE_STATUSES},
                 "production_ready": sum(1 for r in rows if r["production_ready"]),
             },
             "production_guardrails": {
@@ -696,6 +793,10 @@ def main():
     for ps in PROMOTION_STATUSES:
         print(f"    {ps}: {pc.get(ps, 0)}")
     print(f"  path_production_eligible: {sum(1 for r in rows if r['path_production_eligible'])}")
+    ac = Counter(r["builder_acceptance_status"] for r in rows)
+    print("  builder_acceptance_status:")
+    for a in ACCEPTANCE_STATUSES:
+        print(f"    {a}: {ac.get(a, 0)}")
     print(f"  production_ready: {sum(1 for r in rows if r['production_ready'])}")
     return 0
 
