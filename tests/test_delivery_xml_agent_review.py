@@ -14,6 +14,7 @@ Covers:
 
 from __future__ import annotations
 
+import csv
 import sys
 import unittest
 from pathlib import Path
@@ -24,6 +25,9 @@ if str(_REPO_ROOT) not in sys.path:
 
 DOC = _REPO_ROOT / "docs" / "delivery_xml_agent_v1_review.md"
 ROADMAP = _REPO_ROOT / "docs" / "xml_readiness_remediation_roadmap.md"
+PREVIEW_PLAN = _REPO_ROOT / "docs" / "minimum_xml_preview_remediation_plan.md"
+PREVIEW_MATRIX = (_REPO_ROOT / "output" / "config_review"
+                  / "minimum_xml_preview_remediation_matrix.csv")
 
 
 class TestReviewDoc(unittest.TestCase):
@@ -239,6 +243,80 @@ class TestIssueGrouping(unittest.TestCase):
                     "source_projection", "nd_default", "template_order"):
             self.assertTrue(g[key]["needed_before_preview"], key)
             self.assertTrue(g[key]["needed_before_production"], key)
+
+
+_ALLOWED_PREVIEW_TREATMENTS = {
+    "must_resolve", "explicit_preview_assumption", "preview_exclusion",
+    "synthetic_placeholder_for_demo_only", "defer_until_production",
+    "not_required_for_preview",
+}
+_MATRIX_COLUMNS = [
+    "esma_code", "canonical_field", "current_blocker_type", "issue_group",
+    "affected_rows", "preview_required", "production_required",
+    "recommended_preview_treatment", "recommended_production_treatment",
+    "owner", "risk_level", "reason",
+]
+
+
+class TestMinimumXmlPreviewPlan(unittest.TestCase):
+    def test_plan_doc_present_and_answers_questions(self):
+        self.assertTrue(PREVIEW_PLAN.exists(),
+                        "docs/minimum_xml_preview_remediation_plan.md must exist")
+        text = PREVIEW_PLAN.read_text(encoding="utf-8")
+        for n in range(1, 11):  # the ten questions
+            self.assertRegex(text, rf"###\s*{n}\.")
+        self.assertIn("smallest safe path", text.lower())
+        self.assertIn("No silent fills", text)
+        self.assertIn("xml_generation", text)
+
+    def test_matrix_generates_and_is_well_formed(self):
+        from scripts.build_minimum_xml_preview_matrix import build_rows
+        rows = build_rows()
+        self.assertTrue(rows)
+        for r in rows:
+            self.assertEqual(set(r.keys()), set(_MATRIX_COLUMNS))
+            self.assertIn(r["recommended_preview_treatment"], _ALLOWED_PREVIEW_TREATMENTS)
+            self.assertIn(r["recommended_production_treatment"], _ALLOWED_PREVIEW_TREATMENTS)
+
+    def test_no_silent_fill_or_fake_production(self):
+        from scripts.build_minimum_xml_preview_matrix import build_rows
+        for r in build_rows():
+            # synthetic placeholders are PREVIEW-only, never a production treatment.
+            self.assertNotEqual(r["recommended_production_treatment"],
+                                "synthetic_placeholder_for_demo_only", r["esma_code"])
+
+    def test_client_identifiers_not_guessed(self):
+        from scripts.build_minimum_xml_preview_matrix import build_rows
+        by_code = {r["esma_code"]: r for r in build_rows()}
+        for code in ("RREL1", "RREL2"):
+            self.assertEqual(by_code[code]["owner"], "client_onboarding")
+            # production must be earned via onboarding, not a placeholder.
+            self.assertEqual(by_code[code]["recommended_production_treatment"], "must_resolve")
+            self.assertEqual(by_code[code]["recommended_preview_treatment"],
+                             "synthetic_placeholder_for_demo_only")
+
+    def test_operator_valuations_stay_operator(self):
+        from scripts.build_minimum_xml_preview_matrix import build_rows
+        by_code = {r["esma_code"]: r for r in build_rows()}
+        for code in ("RREC17", "RREC13", "RREC9", "RREL43"):
+            self.assertEqual(by_code[code]["owner"], "operator")
+            self.assertEqual(by_code[code]["recommended_production_treatment"], "must_resolve")
+            # never fabricated for preview.
+            self.assertEqual(by_code[code]["recommended_preview_treatment"], "preview_exclusion")
+
+    def test_rrel35_documented_as_resolved(self):
+        from scripts.build_minimum_xml_preview_matrix import build_rows
+        rrel35 = next(r for r in build_rows() if r["esma_code"] == "RREL35")
+        self.assertEqual(rrel35["recommended_preview_treatment"], "not_required_for_preview")
+        self.assertEqual(rrel35["current_blocker_type"], "resolved")
+
+    def test_matrix_csv_written_matches_builder(self):
+        # the committed CSV exists and has the contract columns.
+        self.assertTrue(PREVIEW_MATRIX.exists(),
+                        "minimum_xml_preview_remediation_matrix.csv must exist")
+        with open(PREVIEW_MATRIX, newline="", encoding="utf-8") as fh:
+            header = next(csv.reader(fh))
+        self.assertEqual(header, _MATRIX_COLUMNS)
 
 
 if __name__ == "__main__":
