@@ -167,12 +167,18 @@ _CLASS = [
      "Originator establishment country (COUNTRYCODE_2, no ND). Likely known (GB) "
      "via client/config; supply explicitly, do not guess."),
 
-    # --- 5. ND/default policy gap (mislabelled — RREL82 has NO ND allowed) ---
-    ("RREL82", "nd_default_rule_missing", "nd_default", ROWS_PER_CODE,
-     "yes", "yes", "must_resolve", "must_resolve", "config_policy", "medium",
-     "Originator name (ALPHANUM-100, no ND). 'nd_default_rule_missing' is a "
-     "misnomer: no ND is permitted, so the fix is to SUPPLY the originator name "
-     "from client/config — never an ND or silent fill. ALSO missing from order."),
+    # --- 5. onboarding static-reference dependency (NOT an ND/default item) ---
+    # RREL82 carries the technical gate label 'nd_default_rule_missing', but the
+    # BUSINESS remediation group is onboarding_static_reference: originator_name is
+    # static client/originator reference data captured during onboarding. No ND is
+    # allowed, so it must never be solved with an ND/default rule.
+    ("RREL82", "nd_default_rule_missing", "onboarding_static_reference", ROWS_PER_CODE,
+     "if_included", "yes", "synthetic_placeholder_for_demo_only", "must_resolve",
+     "client_onboarding / onboarding_agent", "medium",
+     "Originator name (ALPHANUM-100). Static client/originator reference data "
+     "captured during onboarding/static client configuration. ND is NOT allowed "
+     "and must not be used; do not fabricate for production. Preview may use a "
+     "clearly-labelled non-production placeholder. ALSO missing from esma_code_order."),
 
     # --- 6. delivery structure (separate from data-content blockers) ---
     ("(structural)", "delivery_structure_deferred", "delivery_structure", 163282,

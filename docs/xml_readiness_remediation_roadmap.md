@@ -79,8 +79,9 @@ clearing **all delivery-blocking rows and the required structural gates**:
    RREL27 purpose — see group 3).
 4. **Source / projection mapping** — `source_mapping_unresolved` (**10 codes**)
    + the 1 `delivery_format_invalid` code (1,526 rows).
-5. **ND / default policy** — `nd_default_rule_missing` (**RREL82**) for a
-   *mandatory* field with no allowed/selected ND/default.
+5. **Onboarding static reference** — **RREL82 `originator_name`** (carries the
+   `nd_default_rule_missing` label but allows **no ND**): captured at onboarding /
+   static client config, never via an ND/default rule.
 6. **Template / order** — add every required code missing from
    `esma_code_order.yaml::Record` so XML ordering is deterministic.
 
@@ -97,6 +98,9 @@ clearing **all delivery-blocking rows and the required structural gates**:
 * **RREL1 (ScrtstnIdr) / RREL2 (Original Underlying Exposure Identifier)** —
   formal identifier policy. ND is **not** permitted for either, so a real
   identifier scheme must be agreed with the client/lender.
+* **RREL82 `originator_name`** — static client/originator reference data captured
+  during the Onboarding Agent step. ND is **not** permitted; supply from
+  onboarding/config, never an ND or silent fill.
 
 ### D. What needs operator review
 
@@ -111,8 +115,11 @@ confirm the correct source before a value is projected.
 ### E. What needs config / rules work
 
 * **RREL27 purpose** — enum mapping in config (`config_mapping_required`).
-* Any `nd_default_rule_missing` items — define an *allowed* ND/default rule in
-  `annex2_delivery_rules.yaml` / asset config, never a silent fill.
+* Genuine `nd_default_rule_missing` items (where ND **is** ESMA-allowed) — define
+  an *allowed* ND/default rule in `annex2_delivery_rules.yaml` / asset config,
+  never a silent fill. **Note:** the only such-labelled code this run is RREL82,
+  which allows **no ND** and is therefore an onboarding static-reference item
+  (group C / onboarding), **not** a config ND/default decision.
 
 ### F. What needs structural XML design
 
@@ -181,17 +188,20 @@ appear as `delivery_status = deliverable` in `62_delivery_normalised_frame.csv`.
 | **Needed before XML preview?** | **Yes** |
 | **Needed before production XML?** | **Yes** |
 
-### 5. ND / default policy gaps
+### 5. ND / default policy gaps  →  onboarding static-reference (reclassified)
 
 | | |
 | --- | --- |
-| **Field codes** | RREL82 (1 on the real run). RREL24 / RREL40 are **already resolved** to ND5 (`projected_from_transformed`, deliverable) and are *not* in this group. |
-| **Current blocker type** | `nd_default_rule_missing` |
-| **Business meaning** | A mandatory field is absent and there is no *allowed* ND or configured default to fall back to. |
-| **Recommended owner** | Config / policy |
-| **Recommended action** | Define an *allowed* ND/default rule in the regime/asset config where ESMA permits it; otherwise escalate to operator/source. Never silently fill. |
-| **Needed before XML preview?** | **Yes** (for mandatory codes) |
-| **Needed before production XML?** | **Yes** |
+| **Field codes** | RREL82 `originator_name` — the only `nd_default_rule_missing` issue on the real run, now **reclassified** as an onboarding static-reference dependency (see below). RREL24 / RREL40 are **already resolved** to ND5 (`projected_from_transformed`, deliverable) and are not in this group. |
+| **Current blocker type** | `nd_default_rule_missing` (technical gate label only) |
+| **Business meaning** | **No genuine ND/default-rule gap remains.** RREL82 allows **no ND**, so it cannot and must not be solved with an ND/default rule. `originator_name` is **static client/originator reference data captured during the Onboarding Agent step / static client configuration** — business remediation group `onboarding_static_reference`. |
+| **Recommended owner** | client_onboarding / onboarding_agent |
+| **Recommended action** | Supply `originator_name` from onboarding/static client config. **ND is not allowed and must not be used; never silently fabricate.** A preview may use a clearly-labelled non-production placeholder only. |
+| **Needed before XML preview?** | **Yes, if included** (preview placeholder is demo-only / non-reportable) |
+| **Needed before production XML?** | **Yes** (must_resolve via onboarding) |
+
+> See `docs/minimum_xml_preview_remediation_plan.md` (group `onboarding_static_reference`)
+> for the field-level treatment.
 
 ### 6. Delivery structure gaps
 

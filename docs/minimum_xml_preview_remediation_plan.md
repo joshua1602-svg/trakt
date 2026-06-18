@@ -26,6 +26,12 @@ next_agent = operator_config_projection_remediation
 Issue mix: client_onboarding 2 · operator_or_config 7 · config 11 ·
 source_mapping 10 · nd_default 1 · delivery_structure 1 · template_order 1.
 
+> The single `nd_default_rule_missing` issue (**RREL82 originator_name**) is a
+> **technical gate label only**. Its business remediation group is
+> **onboarding_static_reference** (originator name captured at onboarding), **not**
+> ND/default — no ND is permitted for RREL82. There are therefore **no genuine
+> ND/default-rule gaps** in this run.
+
 ## Guard-rails (non-negotiable)
 
 - **No silent fills.** A blank is never quietly populated.
@@ -73,9 +79,14 @@ Handled by a **declared, labelled** assumption (not a silent fill):
   from a minimal preview, completed for production.
 
 ### 4. Which blockers require client/lender input?
-- **RREL1, RREL2** (formal identifiers; no ND) — and the **originator identity**
-  **RREL82** (originator name) and **RREL84** (originator country), which are known
-  to the client/lender and must be supplied, not invented.
+- **RREL1, RREL2** (formal identifiers; no ND).
+- **RREL82 originator_name** — **onboarding static-reference data**: captured
+  during the Onboarding Agent step / static client configuration. It carries the
+  technical gate label `nd_default_rule_missing`, but it is **not** an ND/default
+  item — **no ND is allowed** for RREL82, so it must never be solved with an ND or
+  a silent fill. It must be supplied from onboarding/config, not invented.
+- **RREL84** (originator establishment country) — likewise known to the
+  client/lender and supplied via config, not guessed.
 
 ### 5. Which blockers require operator review?
 - **RREC1, RREC9, RREC13, RREC17, RREL9, RREL43, RREL69** — source ambiguity on
@@ -166,7 +177,7 @@ present and satisfied — it does not bypass the production gates today.
 | operator_review | RREC1 (placeholder); RREC13, RREC17, RREC9, RREL43, RREL9 (exclude); RREL69 (must_resolve) | mixed | operator |
 | config_mapping | RREC7, RREC14, RREC16, RREL10, RREL11, RREL14, RREL26, RREL27, RREL44, RREL45, RREL75 | must_resolve (config) | config_policy |
 | source_projection | RREC2/3/4, RREL3/4/5 (placeholder); RREC5, RREL67, RREL68, RREL84 (must_resolve) | mixed | projection / config_policy |
-| nd_default | RREL82 (no ND → supply value) | must_resolve | config_policy / client |
+| onboarding_static_reference | RREL82 originator_name (no ND → captured at onboarding; preview placeholder is demo-only) | synthetic_placeholder_for_demo_only (preview) / must_resolve (production) | client_onboarding / onboarding_agent |
 | delivery_structure | record hierarchy / header / cardinality | must_resolve (minimal preview shape) | delivery_xml |
 | template_order | RREL6 (must_resolve); 19 others (preview_exclusion) | mixed | delivery_xml |
 | resolved_example | RREL35 | not_required_for_preview | resolved |

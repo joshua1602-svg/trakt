@@ -269,6 +269,16 @@ class TestMinimumXmlPreviewPlan(unittest.TestCase):
         self.assertIn("No silent fills", text)
         self.assertIn("xml_generation", text)
 
+    def test_plan_classifies_rrel82_as_onboarding_static_reference(self):
+        text = PREVIEW_PLAN.read_text(encoding="utf-8")
+        self.assertIn("onboarding_static_reference", text)
+        self.assertIn("RREL82", text)
+        # explicitly: captured during onboarding + ND not allowed.
+        self.assertRegex(text, r"RREL82[\s\S]{0,400}?[Oo]nboarding")
+        self.assertRegex(text, r"RREL82[\s\S]{0,400}?[Nn]o ND")
+        # not framed as an ND/default policy item.
+        self.assertNotRegex(text, r"RREL82[^\n]*ND/default rule")
+
     def test_matrix_generates_and_is_well_formed(self):
         from scripts.build_minimum_xml_preview_matrix import build_rows
         rows = build_rows()
@@ -303,6 +313,26 @@ class TestMinimumXmlPreviewPlan(unittest.TestCase):
             self.assertEqual(by_code[code]["recommended_production_treatment"], "must_resolve")
             # never fabricated for preview.
             self.assertEqual(by_code[code]["recommended_preview_treatment"], "preview_exclusion")
+
+    def test_rrel82_is_onboarding_static_reference_not_nd_default(self):
+        from scripts.build_minimum_xml_preview_matrix import build_rows
+        rrel82 = next(r for r in build_rows() if r["esma_code"] == "RREL82")
+        # business group reclassified away from nd_default.
+        self.assertEqual(rrel82["issue_group"], "onboarding_static_reference")
+        self.assertNotEqual(rrel82["issue_group"], "nd_default")
+        # owned by onboarding, production must_resolve, preview placeholder demo-only.
+        self.assertIn("onboarding", rrel82["owner"])
+        self.assertEqual(rrel82["recommended_production_treatment"], "must_resolve")
+        self.assertEqual(rrel82["recommended_preview_treatment"],
+                         "synthetic_placeholder_for_demo_only")
+        # reason must state ND is not allowed and never fabricate.
+        self.assertIn("ND is NOT allowed", rrel82["reason"])
+        self.assertIn("onboarding", rrel82["reason"].lower())
+
+    def test_no_code_grouped_as_nd_default(self):
+        # the nd_default business group is now empty for this run.
+        from scripts.build_minimum_xml_preview_matrix import build_rows
+        self.assertFalse([r for r in build_rows() if r["issue_group"] == "nd_default"])
 
     def test_rrel35_documented_as_resolved(self):
         from scripts.build_minimum_xml_preview_matrix import build_rows
