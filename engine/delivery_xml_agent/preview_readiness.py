@@ -622,6 +622,40 @@ def evaluate_xsd_structured_preview(
             loans_map[lid][code] = _to_str(r.get("delivery_value"))
     loans = [(lid, loans_map[lid]) for lid in loans_order]
 
+    # --- mandatory LEADING structural siblings inside each record. Emit
+    # accepted-but-absent codes (NewUndrlygXpsrIdr, PoolAddtnDt, RpDt,
+    # CollIdr/OrgnlIdr+NewIdr) as preview-only placeholders so the record-level
+    # XSD sequence is valid (NewUndrlygXpsrIdr before OrgnlUndrlygXpsrIdr,
+    # ActvtyDtDtls before UndrlygXpsrDtls, CollIdr before CollCmonData). The
+    # builder additionally orders all siblings by the XSD sequence. ---
+    struct_cfg = mode_cfg.get("structural_mandatory_codes") or []
+    structural_placeholder_codes: List[str] = []
+    for s in struct_cfg:
+        code = s.get("esma_code")
+        pm = pm_by_code.get(code, {})
+        ba = pm.get("builder_acceptance_status", "absent")
+        if (not code or code in header_codes or code in emit_codes
+                or code not in accepted or not pm.get("xml_path")):
+            continue
+        field = {
+            "esma_code": code, "record_group": pm.get("record_group", ""),
+            "xml_path": pm.get("xml_path"), "value_mode": pm.get("value_mode"),
+            "nd_wrapper_path": pm.get("nd_wrapper_path"),
+            "sequence_order": pm.get("sequence_order"),
+            "value_source": SRC_PLACEHOLDER, "structural_placeholder": True,
+        }
+        emit_fields.append(field)
+        emit_codes[code] = field
+        structural_placeholder_codes.append(code)
+        val = str(s.get("preview_placeholder", ""))
+        for lid in loans_order:
+            loans_map[lid][code] = val
+        applications.append({
+            "esma_code": code, "record_group": field["record_group"],
+            "disposition": "structural_placeholder", "builder_acceptance_status": ba,
+            "xml_path": field["xml_path"] or "", "value_source": SRC_PLACEHOLDER,
+            "reason": "mandatory leading sibling for XSD record sequence (preview-only)"})
+
     # --- mandatory report-header fields: ALWAYS emitted, in XSD order, BEFORE
     # records, so the top-level Securitisation1 sequence is valid. Real value
     # where deliverable; otherwise a pattern-valid, clearly-labelled preview
@@ -700,6 +734,7 @@ def evaluate_xsd_structured_preview(
         "rrec_all_nested_under_coll": rrec_all_nested,
         "header_field_codes": [f["esma_code"] for f in header_fields],
         "header_placeholder_codes": sorted(set(header_placeholder_codes)),
+        "structural_placeholder_codes": sorted(set(structural_placeholder_codes)),
         "header_values": header_values,
         "applications": applications,
         "emit_fields": emit_fields,
@@ -1265,6 +1300,8 @@ def _write_xsd_structured_readiness_artefacts(
         "accepted_path_count": verdict["accepted_path_count"],
         "emit_field_codes": verdict["emit_field_codes"],
         "placeholder_codes": verdict["placeholder_codes"],
+        "structural_placeholder_codes": verdict.get("structural_placeholder_codes", []),
+        "header_placeholder_codes": verdict.get("header_placeholder_codes", []),
         "excluded_codes": verdict["excluded_codes"],
         "blocked_not_accepted_codes": verdict["blocked_not_accepted_codes"],
         "rejected_or_manual_skipped": verdict["rejected_or_manual_skipped"],
@@ -1368,16 +1405,34 @@ def _emit_xsd_structured_preview(
         "uses_only_builder_accepted_paths": True,
         "non_production": True, "production_xml_remains_blocked": True,
         "emit_field_codes": verdict["emit_field_codes"],
+        "header_placeholder_codes": verdict.get("header_placeholder_codes", []),
+        "structural_placeholder_codes": verdict.get("structural_placeholder_codes", []),
+        "preview_only_placeholders_note": (
+            "header/structural placeholders are preview-only; never production values"),
         "records_emitted": stats["records_emitted"],
         "fields_emitted": stats["fields_emitted"],
     }, indent=2), encoding="utf-8")
 
-    # 102 — assumptions (placeholders).
+    # 102 — assumptions (placeholders), distinguishing structural-mandatory ones.
+    header_codes = set(verdict.get("header_placeholder_codes", []))
+    struct_codes = set(verdict.get("structural_placeholder_codes", []))
+    assumption_rows = []
+    for f in emit_fields:
+        if f.get("value_source") != SRC_PLACEHOLDER:
+            continue
+        code = f["esma_code"]
+        if code in header_codes:
+            kind = "mandatory_report_header_placeholder"
+        elif code in struct_codes or f.get("structural_placeholder"):
+            kind = "mandatory_structural_sibling_placeholder"
+        else:
+            kind = "identifier_preview_placeholder"
+        assumption_rows.append({
+            "esma_code": code, "xml_path": f.get("xml_path", ""), "assumption_kind": kind,
+            "assumption": "preview-only placeholder placed at an accepted ESMA path; "
+                          "NOT a real/production value"})
     _write_csv(out / "102_xsd_structured_preview_assumptions.csv",
-               ["esma_code", "xml_path", "assumption"],
-               [{"esma_code": f["esma_code"], "xml_path": f.get("xml_path", ""),
-                 "assumption": "preview-only placeholder placed at accepted ESMA path"}
-                for f in emit_fields if f.get("value_source") == SRC_PLACEHOLDER])
+               ["esma_code", "xml_path", "assumption_kind", "assumption"], assumption_rows)
 
     # 103 — exclusions (excluded + path-not-accepted).
     _write_csv(out / "103_xsd_structured_preview_exclusions.csv",

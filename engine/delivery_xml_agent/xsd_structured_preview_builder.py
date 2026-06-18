@@ -70,6 +70,7 @@ class XsdResolver:
         self._ct: Dict[str, ET.Element] = {}
         self._doc_type: Optional[str] = None
         self._cache: Dict[str, Optional[str]] = {}
+        self._order_cache: Dict[str, List[str]] = {}
         if not xsd_path:
             return
         try:
@@ -125,6 +126,15 @@ class XsdResolver:
         self._cache[path] = result
         return result
 
+    def child_order(self, path: str) -> List[str]:
+        """XSD-declared child element order for the element at ``path`` (i.e. the
+        order of its type's sequence). Empty if unknown."""
+        if path in self._order_cache:
+            return self._order_cache[path]
+        order = list(self._children(self._leaf_type(path)).keys())
+        self._order_cache[path] = order
+        return order
+
 
 # --------------------------------------------------------------------------- #
 # Tree construction
@@ -142,10 +152,38 @@ def _gc(parent: ET.Element, tag: str) -> ET.Element:
     return el
 
 
-def _build_chain(start: ET.Element, parts: List[str]) -> ET.Element:
+def _gc_ordered(parent: ET.Element, parent_path: str, tag: str,
+                resolver: XsdResolver) -> ET.Element:
+    """get-or-create a singleton child, INSERTED in the XSD-declared sibling
+    order (so e.g. NewUndrlygXpsrIdr precedes OrgnlUndrlygXpsrIdr, ActvtyDtDtls
+    precedes UndrlygXpsrDtls, CollIdr precedes CollCmonData)."""
+    existing = parent.find(_q(tag))
+    if existing is not None:
+        return existing
+    order = resolver.child_order(parent_path)
+    new = ET.Element(_q(tag))
+    if tag in order:
+        pos = order.index(tag)
+        insert_at = len(parent)
+        for i, ch in enumerate(list(parent)):
+            ln = ch.tag.replace(f"{{{NS}}}", "")
+            if ln in order and order.index(ln) > pos:
+                insert_at = i
+                break
+        parent.insert(insert_at, new)
+    else:
+        parent.append(new)
+    return new
+
+
+def _build_chain(start: ET.Element, start_path: str, parts: List[str],
+                 resolver: XsdResolver) -> ET.Element:
+    """Build/descend a singleton chain, inserting each node in XSD sibling order."""
     cur = start
+    cur_path = start_path
     for p in parts:
-        cur = _gc(cur, p)
+        cur = _gc_ordered(cur, cur_path, p, resolver)
+        cur_path = f"{cur_path}/{p}"
     return cur
 
 
@@ -230,7 +268,7 @@ def build_tree(
                         if vals.get(f["esma_code"], "")), "")
         if val == "":
             continue
-        leaf = _build_chain(root, f["xml_path"].split("/")[1:])  # after 'Document'
+        leaf = _build_chain(root, "Document", f["xml_path"].split("/")[1:], resolver)
         _place_value(leaf, f, val, resolver)
         _count(f, val)
         stats["header_fields"] += 1
@@ -248,11 +286,18 @@ def build_tree(
             report_parts = p[1:p.index(_REPORT_LEAF) + 1]
 
     if record and report_parts is not None:
-        report_node = _build_chain(root, report_parts)
+        report_path = "/".join(["Document", *report_parts])
+        report_node = _build_chain(root, "Document", report_parts, resolver)
+        record_path = f"{report_path}/{RECORD_ANCHOR}"
+        # process record fields in XSD sequence order too (belt-and-braces with
+        # the ordered insertion in _gc_ordered).
+        record_sorted = sorted(record, key=_seq_key)
         for loan_id, vals in loans[:max(0, int(max_records))]:
+            # UndrlygXpsrRcrd is repeatable (maxOccurs unbounded): fresh node per
+            # loan, appended AFTER the mandatory header elements already in place.
             record_node = ET.SubElement(report_node, _q(RECORD_ANCHOR))
             emitted_here = 0
-            for f in record:
+            for f in record_sorted:
                 val = vals.get(f["esma_code"], "")
                 if val == "":
                     continue
@@ -260,7 +305,7 @@ def build_tree(
                 rel = parts[parts.index(RECORD_ANCHOR) + 1:]
                 if not rel:
                     continue
-                leaf = _build_chain(record_node, rel)
+                leaf = _build_chain(record_node, record_path, rel, resolver)
                 _place_value(leaf, f, val, resolver)
                 _count(f, val)
                 emitted_here += 1

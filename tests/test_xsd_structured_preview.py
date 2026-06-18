@@ -271,5 +271,100 @@ class TestHeaderOrdering(unittest.TestCase):
         self.assertFalse(manifest["xml_generated"])
 
 
+def _child_local_tags(elem):
+    return [c.tag.replace(NS, "") for c in list(elem)]
+
+
+def _first(root, tag):
+    return root.find(f".//{NS}{tag}")
+
+
+class TestRecordSequenceOrdering(unittest.TestCase):
+    """The three deeper sequence errors are fixed: loan identifier order,
+    activity/date details order, and collateral identifier order."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.root = Path(tempfile.mkdtemp(prefix="xsd_seq_"))
+        cls.out, cls.res = _run(cls.root, enabled=True)
+        cls.sp = cls.out / "preview" / "xsd_structured_preview"
+        cls.xml = ET.fromstring((cls.sp / "105_xsd_structured_preview.xml").read_text())
+        cls.verdict = cls.res["xsd_structured_preview_verdict"]
+        cls.validation = json.loads(
+            (cls.sp / "107_xsd_structured_preview_xsd_validation.json").read_text())
+
+    def test_new_before_orgnl_underlying_id(self):
+        uid = _first(self.xml, "UndrlygXpsrId")
+        self.assertIsNotNone(uid)
+        tags = _child_local_tags(uid)
+        self.assertIn("NewUndrlygXpsrIdr", tags)
+        self.assertIn("OrgnlUndrlygXpsrIdr", tags)
+        self.assertLess(tags.index("NewUndrlygXpsrIdr"), tags.index("OrgnlUndrlygXpsrIdr"))
+
+    def test_activity_dt_before_underlying_dtls(self):
+        cmon = _first(self.xml, "UndrlygXpsrCmonData")
+        self.assertIsNotNone(cmon)
+        tags = _child_local_tags(cmon)
+        self.assertIn("ActvtyDtDtls", tags)
+        self.assertIn("UndrlygXpsrDtls", tags)
+        self.assertLess(tags.index("ActvtyDtDtls"), tags.index("UndrlygXpsrDtls"))
+
+    def test_collidr_before_collcmondata(self):
+        coll = _first(self.xml, "Coll")
+        self.assertIsNotNone(coll)
+        tags = _child_local_tags(coll)
+        self.assertIn("CollIdr", tags)
+        self.assertIn("CollCmonData", tags)
+        self.assertLess(tags.index("CollIdr"), tags.index("CollCmonData"))
+
+    def test_activity_dt_has_pooladdtn_and_rpdt_in_order(self):
+        act = _first(self.xml, "ActvtyDtDtls")
+        tags = _child_local_tags(act)
+        self.assertEqual(tags[:2], ["PoolAddtnDt", "RpDt"])
+
+    def test_structural_placeholders_recorded(self):
+        # verdict + lineage + assumptions all record the preview-only structurals.
+        struct = set(self.verdict["structural_placeholder_codes"])
+        self.assertTrue({"RREL3", "RREL7", "RREL8", "RREC3", "RREC4"}.issubset(struct))
+        lineage = json.loads((self.sp / "101_xsd_structured_preview_lineage.json").read_text())
+        self.assertTrue(set(lineage["structural_placeholder_codes"]) >= struct)
+        import csv as _csv
+        rows = list(_csv.DictReader(open(self.sp / "102_xsd_structured_preview_assumptions.csv")))
+        kinds = {r["esma_code"]: r["assumption_kind"] for r in rows}
+        for c in ("RREL3", "RREL7", "RREC3"):
+            self.assertEqual(kinds.get(c), "mandatory_structural_sibling_placeholder", c)
+
+    def test_collateral_still_nested_under_loan(self):
+        for prfrmg in self.xml.iter(f"{NS}PrfrmgLn"):
+            if prfrmg.find(f"{NS}Coll") is not None:
+                break
+        else:
+            self.fail("Coll must remain nested under PrfrmgLn")
+
+    def test_three_known_errors_gone(self):
+        errs = self.validation["validation_errors"]
+        for e in errs:
+            self.assertFalse("OrgnlUndrlygXpsrIdr" in e and "Expected" in e
+                             and "NewUndrlygXpsrIdr" in e, f"loan-id order error remains: {e}")
+            self.assertFalse("UndrlygXpsrDtls" in e and "Expected" in e
+                             and "ActvtyDtDtls" in e, f"activity-date order error remains: {e}")
+            self.assertFalse("CollCmonData" in e and "Expected" in e
+                             and "CollIdr" in e, f"collateral-id order error remains: {e}")
+        # header ordering also still ok.
+        self.assertTrue(self.validation["top_level_header_ordering_ok"])
+
+    def test_remaining_errors_reported_honestly(self):
+        # deeper errors are acceptable but must be present + categorised.
+        if not self.validation["xsd_validation_passed"]:
+            self.assertTrue(self.validation["validation_errors"])
+            self.assertTrue(self.validation["known_limitations"])
+
+    def test_production_gates_false(self):
+        manifest = json.loads((self.out / "60_delivery_manifest.json").read_text())
+        self.assertFalse(any([manifest["xml_generation_allowed"],
+                              manifest["ready_for_xml_delivery"], manifest["xml_generated"]]))
+        self.assertFalse(any(self.res["flags"]["production_flags_unchanged"].values()))
+
+
 if __name__ == "__main__":
     unittest.main()

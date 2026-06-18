@@ -139,6 +139,16 @@ ESMA-path construction — the opposite of the flat preview above — and:
   `needs_manual_review` / `unresolved` / `conflict`) paths;
 - keeps RREC/collateral nested under `Coll`; emits NoDataOptn wrappers only where
   the path map says `value_or_nodata` and the value is a genuine ND sentinel;
+- emits children in **XSD sequence order**, and always emits the mandatory
+  **report header** (`ScrtstnIdr`, `CutOffDt` — `mandatory_report_header`) and the
+  mandatory **leading record siblings** (`NewUndrlygXpsrIdr` before
+  `OrgnlUndrlygXpsrIdr`; `ActvtyDtDtls`/`PoolAddtnDt`,`RpDt` before
+  `UndrlygXpsrDtls`; `CollIdr`/`OrgnlIdr`,`NewIdr` before `CollCmonData` —
+  `structural_mandatory_codes`). When absent from the data these use accepted
+  path-map codes filled with **preview-only, type/pattern-valid placeholders**,
+  recorded in `101_..._lineage.json` and `102_..._assumptions.csv`
+  (`assumption_kind = mandatory_structural_sibling_placeholder`). They are never
+  production values;
 - defaults to a small sample (`max_records: 5`) — structure proof, not volume;
 - attempts XSD validation and records the result **honestly** in
   `107_xsd_structured_preview_xsd_validation.json` (it is expected to FAIL today —

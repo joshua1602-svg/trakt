@@ -77,6 +77,25 @@ preview_modes:
       - esma_code: RREL6
         xsd_element: CutOffDt
         preview_placeholder: "2024-12-31"
+    # Mandatory LEADING siblings the XSD requires inside each loan/collateral
+    # record, in sequence, before the fields we already emit. All are accepted
+    # path-map codes; when absent from the delivery data they are emitted as
+    # preview-only placeholders (recorded in assumptions/lineage) so the record
+    # sequence is valid. They are NEVER production values.
+    #   UndrlygXpsrId : NewUndrlygXpsrIdr (RREL3) before OrgnlUndrlygXpsrIdr (RREL2)
+    #   UndrlygXpsrCmonData : ActvtyDtDtls (PoolAddtnDt RREL7, RpDt RREL8) before UndrlygXpsrDtls
+    #   Coll : CollIdr (OrgnlIdr RREC3, NewIdr RREC4) before CollCmonData
+    structural_mandatory_codes:
+      - esma_code: RREL3      # NewUndrlygXpsrIdr (Max1000Text)
+        preview_placeholder: "PREVIEW_ONLY_RREL3"
+      - esma_code: RREL7      # PoolAddtnDt (ISODate2Choice -> Dt)
+        preview_placeholder: "2024-12-31"
+      - esma_code: RREL8      # RpDt (ISODate2Choice -> Dt)
+        preview_placeholder: "2024-12-31"
+      - esma_code: RREC3      # CollIdr/OrgnlIdr (Max1000Text)
+        preview_placeholder: "PREVIEW_ONLY_RREC3"
+      - esma_code: RREC4      # CollIdr/NewIdr (Max1000Text)
+        preview_placeholder: "PREVIEW_ONLY_RREC4"
 
 # --------------------------------------------------------------------- #
 # Production guardrails — asserted by the evaluator. The preview path must
