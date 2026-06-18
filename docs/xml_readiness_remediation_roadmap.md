@@ -52,10 +52,14 @@ Delivery issues: **34** across 31 blocked ESMA codes (+ 1 format-invalid code,
 | `delivery_structure_deferred` | 1 | 6 |
 | `template_order_incomplete` | 1 | 7 |
 
-> One ESMA code accounts for all **1,526** `delivery_invalid` rows (every record
-> for that field fails the regime regex/enum check). Identify it from the
-> `delivery_blocker_type = delivery_format_invalid` row in `63_delivery_issues.csv`
-> and fix the projected value / format rule (group 4).
+> The single `delivery_format_invalid` code accounting for all **1,526**
+> `delivery_invalid` rows was **RREL35 amortisation_type** (`enum_fail`, sample
+> value `Bullet`). This was a **code-list coverage / config issue, not an XML
+> builder issue**: the regime `enum_map` had been narrowed to ERM `OTHR`
+> synonyms. **Resolved** by restoring the authoritative RREL35 code list
+> (`FRXX/DEXX/FIXE/BLLT/OTHR`) in the regime contract and adding a config-driven
+> ERM asset-policy override (`Bullet → OTHR`). After a projection re-run the
+> 1,526 rows clear to `0`. See `docs/rrel35_amortisation_type_remediation.md`.
 
 ---
 
@@ -169,11 +173,11 @@ appear as `delivery_status = deliverable` in `62_delivery_normalised_frame.csv`.
 
 | | |
 | --- | --- |
-| **Field codes** | `source_mapping_unresolved` (10): RREC2, RREC3, RREC4, RREC5, RREL3, RREL4, RREL5, RREL35, RREL67, RREL68, RREL84 — plus 1 `delivery_format_invalid` code (1,526 rows; identify from `63_*`) |
-| **Current blocker type** | `source_mapping_unresolved` (and `delivery_format_invalid` for malformed values) |
+| **Field codes** | `source_mapping_unresolved` (10): RREC2, RREC3, RREC4, RREC5, RREL3, RREL4, RREL5, RREL67, RREL68, RREL84. **RREL35** was the 1 `delivery_format_invalid` code (1,526 rows) — **now RESOLVED** (see below / `docs/rrel35_amortisation_type_remediation.md`). |
+| **Current blocker type** | `source_mapping_unresolved` (RREL35 `delivery_format_invalid` resolved via regime enum code-list + ERM asset policy) |
 | **Business meaning** | Target field has related source data but no confirmed projection rule (notably the RREL3/RREL4/RREL5 new/original identifier chain), or a projected value fails the regime regex/enum format check. |
 | **Recommended owner** | Projection / Transformation |
-| **Recommended action** | Add the explicit projection/source-mapping rule (never guess); fix values that fail `validators.regex` / `enum_map`. |
+| **Recommended action** | Add the explicit projection/source-mapping rule (never guess); fix values that fail `validators.regex` / `enum_map`. RREL35: authoritative code list restored + ERM `Bullet → OTHR` policy override (config-driven). |
 | **Needed before XML preview?** | **Yes** |
 | **Needed before production XML?** | **Yes** |
 

@@ -189,6 +189,16 @@ These are treated as **candidate deliverable** values (subject to delivery
 validation): `projected_from_transformed`, `projected_nd_default`,
 `projected_asset_default`.
 
+> **Note — `delivery_invalid` (enum/format) is a config issue, not an XML builder
+> issue.** A candidate-deliverable value that fails the regime `enum_map`/regex is
+> flagged `delivery_invalid`; the agent does **not** rewrite it. The first such
+> case was **RREL35 amortisation_type** (`Bullet`, 1,526 rows): the regime
+> `enum_map` had been narrowed to ERM `OTHR` synonyms, dropping the authoritative
+> `FRXX/DEXX/FIXE/BLLT/OTHR` list. The fix was **config only** — restore the
+> authoritative regime code list and add a config-driven ERM asset-policy override
+> (`Bullet → OTHR`) — applied at **Projection** time, never in the XML builder and
+> never hard-coded in Python. See `docs/rrel35_amortisation_type_remediation.md`.
+
 ### 9. How should target-frame long format be converted into XML-ready shape?
 
 The frame is **long** (one row per *loan × ESMA field*). The conversion is

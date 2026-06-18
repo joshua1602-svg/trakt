@@ -27,6 +27,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import yaml
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
@@ -55,6 +57,8 @@ _FRAME_SPEC = [
     ("RREC9", "property_type", "RREC", "projected_from_transformed", ["RHOS", "RFLT"]),
     # deliverable — allowed ND default.
     ("RREL16", "primary_income", "RREL", "projected_nd_default", ["ND1", "ND1"]),
+    # deliverable — RREL35 amortisation_type after ERM asset policy (Bullet->OTHR).
+    ("RREL35", "amortisation_type", "RREL", "projected_from_transformed", ["OTHR", "OTHR"]),
     # blocked — client onboarding identifier policy.
     ("RREL2", "original_underlying_exposure_identifier", "RREL",
      "blocked_client_onboarding_dependency", ["", ""]),
@@ -467,6 +471,43 @@ class TestInspectHelperAndGrouping(unittest.TestCase):
         self.assertGreaterEqual(b["format_fail"], 1)
         self.assertIn("BAD VALUE", b["samples"])
         self.assertTrue(b["regex"], "the violated regime regex should be surfaced")
+
+
+class TestRrel35DeliveryClears(unittest.TestCase):
+    """RREL35 amortisation_type no longer produces delivery_format_invalid once
+    the regime enum_map carries the authoritative codes and the ERM asset policy
+    has resolved the source value to OTHR. XML stays gated by other blockers."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.root = Path(tempfile.mkdtemp(prefix="da_rrel35_"))
+        mpath = _write_projection_package(cls.root)
+        da.build_delivery_package(mpath, field_universe_path=UNIVERSE)
+        cls.out = cls.root / "output" / "delivery_xml"
+        cls.frame = json.loads(
+            (cls.out / "62_delivery_normalised_frame.json").read_text())["rows"]
+        cls.manifest = json.loads((cls.out / "60_delivery_manifest.json").read_text())
+
+    def test_rrel35_deliverable_not_invalid(self):
+        cells = [r for r in self.frame if r["esma_code"] == "RREL35"]
+        self.assertTrue(cells)
+        self.assertTrue(all(c["delivery_status"] == da.DS_DELIVERABLE for c in cells))
+        self.assertTrue(all(c["delivery_value"] == "OTHR" for c in cells))
+        self.assertTrue(all(c["enum_valid"] in (True, "True") for c in cells))
+        # RREL35 must not appear as a delivery_invalid row.
+        self.assertFalse(any(c["delivery_status"] == da.DS_INVALID for c in cells))
+
+    def test_xml_still_gated(self):
+        # other client/operator/config/source blockers remain.
+        self.assertFalse(self.manifest["xml_generation_allowed"])
+        self.assertFalse(self.manifest["xml_generated"])
+
+    def test_regime_enum_valid_accepts_authoritative_codes(self):
+        from engine.delivery_xml_agent import gate5_adapter as g5
+        rule = yaml.safe_load(open(REGIME, encoding="utf-8"))["field_rules"]["RREL35"]
+        for v in ("OTHR", "BLLT", "FRXX", "DEXX", "FIXE", "Bullet"):
+            self.assertTrue(g5.enum_valid(v, rule), v)
+        self.assertFalse(g5.enum_valid("NotAnAmortType", rule))
 
 
 if __name__ == "__main__":

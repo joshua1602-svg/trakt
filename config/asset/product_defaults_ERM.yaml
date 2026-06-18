@@ -73,3 +73,23 @@ reporting_policy:
 
   # Fields explicitly not applicable to this asset class (excluded from delivery).
   not_applicable: []
+
+  # ASSET-SPECIFIC ENUM OVERRIDES. These take precedence over the GENERIC Annex 2
+  # enum_map in config/regime/annex2_delivery_rules.yaml for THIS asset class only.
+  # Keyed by canonical field; each maps a source label -> the ESMA code that this
+  # asset class must report. This is a deliberate, documented policy decision —
+  # not a global synonym — applied by the Projection Agent as a config-driven
+  # override (no enum value is hard-coded in Python).
+  #
+  # Rationale (amortisation_type): a UK equity release / lifetime mortgage rolls
+  # up interest and repays at death/sale. The internal tape labels this "Bullet",
+  # but it is NOT a scheduled bullet amortisation under the Annex 2 definition
+  # (RREL35 BLLT = "full principal repaid in the LAST instalment" of a schedule).
+  # The correct regulatory reporting value for this product is therefore OTHR.
+  # Generic (non-ERM) portfolios still map Bullet -> BLLT via the regime enum_map.
+  # If product/legal review later confirms a genuine scheduled bullet, change the
+  # target here to BLLT (or remove the override).
+  enum_overrides:
+    amortisation_type:
+      Bullet: OTHR
+      "Interest roll-up": OTHR

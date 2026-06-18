@@ -34,7 +34,10 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+import yaml
+
 from engine.projection_agent import projection_agent as pa
+from engine.projection_agent import gate4_adapter as g4
 from engine.projection_agent.projection_agent import ValidationHandoffError
 
 REGISTRY = str(_REPO_ROOT / "config" / "system" / "fields_registry.yaml")
@@ -421,6 +424,71 @@ class TestProjectionRun(unittest.TestCase):
         # projection wrote nothing into the validation dir.
         self.assertNotIn("50_projection_manifest.json",
                          [p.name for p in val.iterdir()])
+
+
+class TestRrel35AmortisationEnum(unittest.TestCase):
+    """RREL35 amortisation_type enum reconciliation + asset-policy override.
+
+    The mapping is config-driven (regime enum_map + asset reporting_policy), never
+    hard-coded in Python.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.regime = yaml.safe_load(open(REGIME, encoding="utf-8"))
+        cls.rule = g4.build_projection_index(cls.regime)["RREL35"]
+        cls.asset_cfg = yaml.safe_load(open(ASSET, encoding="utf-8"))
+        cls.overrides = g4.load_asset_enum_overrides(cls.asset_cfg)
+
+    def test_authoritative_enum_set_present(self):
+        # regime config carries the full authoritative workbook code list.
+        values = set((self.regime["field_rules"]["RREL35"]["transform"]["enum_map"]).values())
+        self.assertTrue({"FRXX", "DEXX", "FIXE", "BLLT", "OTHR"}.issubset(values))
+
+    def test_workbook_nd_corrected(self):
+        # workbook RREL35: ND1-4 allowed, ND5 not. Config must not allow ND5.
+        nd = self.regime["field_rules"]["RREL35"]["nd_allowed"]
+        self.assertNotIn("ND5", [str(x).upper() for x in nd])
+
+    def test_generic_bullet_maps_to_bllt(self):
+        # No asset overrides -> generic Annex meaning Bullet = BLLT.
+        cell = pa._project_cell("Bullet", self.rule, {}, {}, {})
+        self.assertEqual(cell["projected_value"], "BLLT")
+        self.assertEqual(cell["value_source"], "enum_map")
+        self.assertFalse(cell["blocking_for_delivery"])
+
+    def test_erm_bullet_maps_to_othr_by_asset_policy(self):
+        cell = pa._project_cell(
+            "Bullet", self.rule, self.asset_cfg.get("defaults", {}),
+            self.asset_cfg.get("nd_defaults", {}), self.overrides)
+        self.assertEqual(cell["projected_value"], "OTHR")
+        self.assertEqual(cell["value_source"], "asset_policy")
+        self.assertFalse(cell["blocking_for_delivery"])
+
+    def test_erm_asset_default_bullet_maps_to_othr(self):
+        # blank source -> ERM asset default 'Bullet' is reported as OTHR by policy.
+        cell = pa._project_cell(
+            "", self.rule, self.asset_cfg.get("defaults", {}),
+            self.asset_cfg.get("nd_defaults", {}), self.overrides)
+        self.assertEqual(cell["projected_value"], "OTHR")
+        self.assertEqual(cell["value_source"], "asset_policy")
+
+    def test_override_is_config_driven_not_hardcoded(self):
+        # Removing the configured override must change the result back to the
+        # generic BLLT — proving the OTHR decision lives in config, not Python.
+        cell = pa._project_cell("Bullet", self.rule, {}, {}, {})
+        self.assertEqual(cell["projected_value"], "BLLT")
+        # a config without reporting_policy.enum_overrides yields no overrides.
+        self.assertEqual(g4.load_asset_enum_overrides({"defaults": {}}), {})
+        self.assertEqual(
+            g4.apply_asset_enum_override("amortisation_type", "Bullet", {}),
+            ("Bullet", False))
+
+    def test_other_labels_map_to_codes(self):
+        for label, code in (("French", "FRXX"), ("German", "DEXX"),
+                            ("Fixed amortisation schedule", "FIXE"), ("Other", "OTHR")):
+            cell = pa._project_cell(label, self.rule, {}, {}, {})
+            self.assertEqual(cell["projected_value"], code, label)
 
 
 if __name__ == "__main__":
