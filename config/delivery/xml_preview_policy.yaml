@@ -1,0 +1,164 @@
+# =====================================================================
+# xml_preview_policy.yaml
+# =====================================================================
+# Source-of-truth policy for the two NON-PRODUCTION XML artefact modes
+# emitted by engine/delivery_xml_agent/preview_readiness.py:
+#
+#   1. client_safe_preview                  — a watermarked, client-facing
+#                                              preview built from real
+#                                              delivery-valid values, safe
+#                                              PREVIEW_ONLY_* placeholders and
+#                                              explicit exclusions.
+#   2. synthetic_full_coverage_schema_test  — an engineering-only artefact
+#                                              that populates EVERY Annex 2
+#                                              field with dummy values to test
+#                                              XML structure / field coverage.
+#
+# Neither mode is production. Neither mode may flip a production XML gate.
+# Both modes are DISABLED by default. The Python evaluator reads the field
+# sets from this file — they are NOT hard-coded in engine code.
+# =====================================================================
+
+policy_version: "1.0"
+regime: ESMA_Annex2
+
+# --------------------------------------------------------------------- #
+# Preview modes (both disabled by default).
+# --------------------------------------------------------------------- #
+preview_modes:
+  client_safe_preview:
+    enabled: false
+    output_dir: "preview/client_preview"
+    watermark: "NON-PRODUCTION CLIENT PREVIEW - NOT FOR REGULATORY SUBMISSION"
+    allow_synthetic_placeholders: true
+    allow_preview_exclusions: true
+    allow_full_dummy_population: false
+    allow_fabricated_economic_values: false
+    intended_audience: "client_demo"
+
+  synthetic_full_coverage_schema_test:
+    enabled: false
+    output_dir: "preview/synthetic_schema_test"
+    watermark: "SYNTHETIC FULL-COVERAGE SCHEMA TEST - ENGINEERING ONLY - NOT FOR CLIENT OR REGULATORY USE"
+    allow_synthetic_placeholders: true
+    allow_preview_exclusions: false
+    allow_full_dummy_population: true
+    allow_fabricated_economic_values: true
+    intended_audience: "engineering_schema_test"
+
+# --------------------------------------------------------------------- #
+# Production guardrails — asserted by the evaluator. The preview path must
+# NEVER do any of the things below.
+# --------------------------------------------------------------------- #
+production_guardrails:
+  never_set_xml_generation_allowed: true
+  never_set_ready_for_xml_delivery: true
+  never_write_preview_to_production_output: true
+  never_promote_preview_values_to_production: true
+  preserve_production_gates: true
+
+# --------------------------------------------------------------------- #
+# Client Preview field policy.
+#
+# placeholder_fields:
+#   Identifier / reference fields that may carry a safe PREVIEW_ONLY_*
+#   placeholder in the client preview (and only there). These are the fields
+#   that are blocked by client onboarding identifier policy upstream but are
+#   safe to demonstrate with a non-real placeholder.
+#
+# placeholder_prefix:
+#   Every placeholder value is rendered as "<prefix><code>", e.g.
+#   PREVIEW_ONLY_RREL1.
+#
+# exclusion_fields / exclusion_blocker_types:
+#   Operator-ambiguous fields and optional / deferred template-order fields
+#   are EXCLUDED from the client preview (shown as omitted, never fabricated).
+#
+# must_resolve_before_preview_fields / must_resolve_before_preview_blocker_types:
+#   Real config / source / projection gaps that MUST be resolved before a
+#   client preview can be shown. While any of these remain unresolved the
+#   client preview verdict is NOT allowed.
+#
+# never_fabricate_fields / never_fabricate_categories:
+#   Economic fields (valuation, current interest rate, balances). The client
+#   preview must never fabricate or placeholder these — if blocked they fall
+#   through to exclusion or must-resolve, never to a synthetic value.
+# --------------------------------------------------------------------- #
+client_preview_field_policy:
+  placeholder_prefix: "PREVIEW_ONLY_"
+  placeholder_fields:
+    - RREL1    # Unique Identifier
+    - RREL2    # Original Underlying Exposure Identifier
+    - RREL3    # New Underlying Exposure Identifier
+    - RREL4    # Original Obligor Identifier
+    - RREL5    # New Obligor Identifier
+    - RREL82   # Originator Name (placeholder-only in preview; must-resolve in production)
+    - RREC1    # Collateral Identifier
+    - RREC2    # Original Collateral Identifier
+    - RREC3    # New Collateral Identifier
+    - RREC4    # Underlying Exposure Identifier (collateral link)
+
+  exclusion_fields: []
+  exclusion_blocker_types:
+    - operator_or_config_dependency   # operator-ambiguous fields
+    - delivery_structure_deferred     # optional / deferred structural fields
+    - template_order_incomplete       # optional / deferred template-order fields
+
+  must_resolve_before_preview_fields:
+    - RREL69   # Account Status — no ND permitted; real value required
+    - RREL6    # Data Cut-Off Date — header/report ordering
+  must_resolve_before_preview_blocker_types:
+    - config_dependency               # config mappings
+    - source_mapping_unresolved       # source / projection gaps
+    - nd_default_rule_missing         # missing allowed ND/default rule
+    - delivery_format_invalid         # value present but fails format/enum
+
+  # Economic fields that must NEVER be fabricated or placeholdered in the
+  # client preview (valuations, current rates, balances). If blocked they are
+  # excluded, never filled.
+  never_fabricate_fields:
+    - RREC17   # Original Valuation Amount
+    - RREC22   # Current Valuation Amount
+  never_fabricate_format_tokens:
+    - "{MONETARY}"
+    - "{PERCENTAGE}"
+
+# --------------------------------------------------------------------- #
+# Resolved-field exceptions: codes that are confirmed delivery-valid and so
+# must NOT be treated as placeholder / exclusion / synthetic by default.
+# RREL35 (amortisation_type: source Bullet -> ERM asset policy -> OTHR) is
+# resolved and delivery-valid.
+# --------------------------------------------------------------------- #
+resolved_fields:
+  - RREL35
+
+# --------------------------------------------------------------------- #
+# Synthetic full-coverage schema test policy.
+#
+# The synthetic mode populates EVERY field in the Annex 2 field universe with
+# a dummy value (unless a real delivery-valid value already exists). Every
+# synthetic value is labelled source = synthetic_schema_test.
+# --------------------------------------------------------------------- #
+synthetic_schema_test_policy:
+  synthetic_source_label: "synthetic_schema_test"
+  # Where a real delivery-valid value exists, prefer it over a dummy (still
+  # labelled as real, never synthetic). RREL35 etc. stay real.
+  prefer_real_values: true
+  # Dummy values are generated per format token (see preview_readiness.py
+  # _DUMMY_BY_TOKEN). enum_map fields prefer the first authoritative code.
+  field_universe_path: "config/regime/annex2_field_universe.yaml"
+
+# --------------------------------------------------------------------- #
+# XML emission policy. The production ESMA XSD path/cardinality mapping is
+# NOT yet configured, so both preview XML files use an internal, clearly
+# non-production preview namespace. This is documented in the summaries and
+# in docs/xml_preview_policy_spec.md.
+# --------------------------------------------------------------------- #
+xml_emission:
+  preview_namespace: "urn:trakt:nonproduction:preview"
+  production_xsd_mapping_configured: false
+  production_xsd_blocker: >-
+    Production Annex 2 XML requires XML path / cardinality / XSD mapping
+    (auth.099.001.04). Until that mapping is configured the preview emits a
+    flat, internally-consistent structure under an internal preview namespace
+    and is NOT XSD-valid.

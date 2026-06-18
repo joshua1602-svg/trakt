@@ -1,0 +1,137 @@
+# XML Preview Policy Spec — two non-production artefact modes
+
+This spec governs the **two separate, non-production** XML artefact modes built
+by `engine/delivery_xml_agent/preview_readiness.py`. Neither mode is production.
+Neither mode may flip a production XML gate. Both modes are **disabled by
+default**.
+
+| | Client Preview XML | Synthetic Full-Coverage Schema Test XML |
+|---|---|---|
+| mode key | `client_safe_preview` | `synthetic_full_coverage_schema_test` |
+| audience | client demo | engineering / schema test |
+| data | real delivery-valid values + approved `PREVIEW_ONLY_*` placeholders + explicit exclusions | dummy values for every Annex 2 field (real reused where available) |
+| fabricate economic values? | **no** | yes (clearly labelled synthetic) |
+| client-facing? | yes (watermarked) | **no** (engineering only) |
+| reportable? | no | no |
+| output dir | `output/delivery_xml/preview/client_preview/` | `output/delivery_xml/preview/synthetic_schema_test/` |
+
+## Production boundary (unchanged)
+
+The production Delivery/XML Agent still refuses XML:
+
+```
+xml_generation_allowed = false
+xml_generated          = false
+ready_for_xml_delivery = false
+```
+
+The preview evaluator **reads these flags read-only** and echoes them in every
+readiness artefact (`production_flags_unchanged`). It never writes or sets them.
+The new, separate flags it introduces are:
+
+```
+xml_preview_allowed / ready_for_xml_preview / xml_preview_generated
+synthetic_schema_test_allowed / ready_for_synthetic_schema_test / synthetic_schema_test_generated
+```
+
+## Source of truth
+
+Field sets are defined in **`config/delivery/xml_preview_policy.yaml`**, not in
+Python:
+
+- `client_preview_field_policy.placeholder_fields` — identifier/reference fields
+  that may carry a `PREVIEW_ONLY_<code>` placeholder
+  (`RREL1, RREL2, RREL3, RREL4, RREL5, RREL82, RREC1, RREC2, RREC3, RREC4`).
+- `exclusion_blocker_types` — operator-ambiguous (`operator_or_config_dependency`)
+  and optional/deferred (`delivery_structure_deferred`, `template_order_incomplete`)
+  fields are **excluded** from the client preview.
+- `must_resolve_before_preview_*` — config mappings (`config_dependency`),
+  source/projection gaps (`source_mapping_unresolved`, `nd_default_rule_missing`),
+  format-invalid values, plus `RREL69` and `RREL6` (header/data-cut-off ordering).
+  While any of these remain, the **client preview verdict is not allowed**.
+- `never_fabricate_fields` / `never_fabricate_format_tokens` — valuation / rate /
+  monetary / percentage fields are **never** fabricated or placeholdered in the
+  client preview; if blocked they are excluded or flagged must-resolve.
+- `resolved_fields` — e.g. `RREL35` (source Bullet → ERM asset policy → `OTHR`):
+  delivery-valid and therefore never placeholder/exclusion/synthetic.
+
+## Verdict rules
+
+**Client preview** is *allowed* only when every blocked field is covered by an
+approved placeholder or an explicit exclusion — i.e. there are **no
+must-resolve** fields left. Otherwise it reports the blocking codes and refuses
+to emit, even when the mode is enabled.
+
+**Synthetic full-coverage** is *allowed* whenever the Annex 2 field universe
+loads. It plans a value for all 107 fields, reusing real delivery-valid values
+where present (labelled `real_delivery_valid`) and a labelled
+`synthetic_schema_test` dummy everywhere else. Dummy values are chosen per format
+token (and prefer the first authoritative `enum_map` code) so they pass
+type/enum validation where possible.
+
+## Artefacts
+
+Readiness (always written under `preview/`):
+
+```
+70_xml_preview_readiness.json        72_xml_preview_policy_application.csv
+71_xml_preview_readiness.md          73_xml_preview_assumptions.csv
+                                     74_xml_preview_blockers.csv
+75_synthetic_schema_test_readiness.json   77_synthetic_schema_field_plan.csv
+76_synthetic_schema_test_readiness.md
+```
+
+Client preview (only when `client_safe_preview.enabled` **and** allowed):
+
+```
+80_client_preview_frame.csv   83_client_preview_exclusions.csv   85_client_preview.xml
+81_client_preview_lineage.json 84_client_preview_watermark.txt   86_client_preview_summary.md
+82_client_preview_assumptions.csv
+```
+
+Synthetic schema test (only when `synthetic_full_coverage_schema_test.enabled`
+**and** allowed):
+
+```
+90_synthetic_schema_frame.csv   93_synthetic_schema_watermark.txt   94_synthetic_schema_test.xml
+91_synthetic_schema_lineage.json 92_synthetic_values_catalog.csv    95_synthetic_schema_summary.md
+```
+
+## XML structure — what is and is NOT valid
+
+> **Production XSD mapping remains a blocker.** The production Annex 2 XSD
+> (`auth.099.001.04`) requires an XML path / cardinality / element-nesting
+> mapping that is **not yet configured** (`xml_emission.production_xsd_mapping_configured: false`).
+
+Therefore both preview XML files are emitted as a **flat, internally-consistent**
+structure under an **internal preview namespace** `urn:trakt:nonproduction:preview`,
+with `UnderlyingExposure` (RREL) and `Collateral` (RREC) record groups and a
+`<Field code= name= source=>` element per field. They are well-formed XML and
+clearly watermarked, but they are **not production-XSD-valid** and cannot be
+mistaken for a submission.
+
+- `client_preview.xml` = structurally illustrative / internally consistent preview.
+- `synthetic_schema_test.xml` = full-field coverage test (every Annex 2 field).
+- production XML structure = **still deferred** until the XSD path/cardinality
+  mapping is configured.
+
+### Work remaining before production XML can be claimed
+
+1. Configure the Annex 2 XML path / cardinality / element nesting (RREL↔RREC
+   nesting, collateral cardinality) against `DRAFT1auth.099.001.04_1.3.0.xsd`.
+2. Resolve the production blockers: `client_onboarding_dependency`,
+   `operator_or_config_dependency`, `config_dependency`,
+   `source_mapping_unresolved`, `delivery_structure_deferred`,
+   `template_order_incomplete`.
+3. Only then may the production gate (`xml_generation_allowed`,
+   `ready_for_xml_delivery`) be revisited — never via the preview path.
+
+## Inspecting
+
+```
+python scripts/inspect_delivery_xml_readiness.py <delivery_xml_dir> --preview --synthetic-schema-test
+```
+
+prints production XML readiness, client-preview readiness, synthetic
+schema-test readiness, whether any preview/production XML exists, placeholder /
+exclusion / synthetic value counts, and the remaining production blockers.
