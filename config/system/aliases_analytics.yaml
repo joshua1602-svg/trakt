@@ -487,3 +487,153 @@ origination_channel:
     - channel
     - sale type
     - orig_channel
+# ============================================================
+# MI / M&A RISK MODEL — Phase 0 analytics aliases
+# Map common lender/servicer source labels (and superseded
+# bank/SME-specific fields) into the new generic canonical risk
+# fields in fields_registry.yaml.
+# ============================================================
+internal_risk_grade:
+  aliases:
+  - internal rating
+  - internal risk grade
+  - risk grade
+  - credit grade
+  - credit rating
+  - obligor rating
+  - borrower rating
+  - account rating
+  - loan rating
+  - bank internal rating        # legacy bank_internal_rating -> internal_risk_grade
+internal_risk_score:
+  aliases:
+  - risk score
+  - credit score
+  - internal score
+  - behavioural score
+  - application score
+  - scorecard score
+internal_risk_stage:
+  aliases:
+  - risk stage
+  - internal stage
+  - credit stage
+  - monitoring stage
+  - watchlist stage
+ifrs9_stage:
+  aliases:
+  - IFRS9 stage
+  - IFRS 9 stage
+  - IFRS stage
+  - impairment stage
+  - credit impairment stage
+  # NB: bare "stage" is intentionally NOT an alias — too ambiguous in Trakt
+  # (pipeline stage / internal risk stage / arrears / collection / deal stage).
+probability_of_default:
+  aliases:
+  - PD
+  - probability of default
+  - default probability
+  - lifetime PD
+  - 12 month PD
+  - 12m PD
+  - one year PD
+  - point in time PD
+  - through the cycle PD
+pd_bucket:
+  aliases:
+  - PD bucket
+  - PD band
+  - pd band
+  - probability of default bucket
+loss_given_default:
+  aliases:
+  - LGD
+  - loss given default
+  - lgd estimate
+  - loss severity
+  - bank internal lgd estimate  # legacy bank_internal_loss_given_default_lgd_estimate -> loss_given_default
+  - internal lgd estimate
+  # NB: "recovery rate" is intentionally NOT an alias — it is the inverse
+  # concept (LGD = 1 - recovery rate) and requires transformation, not a
+  # direct map. The flat analytics alias schema has no transformation flag,
+  # so it is excluded rather than silently mapped.
+lgd_bucket:
+  aliases:
+  - LGD bucket
+  - LGD band
+  - loss given default bucket
+exposure_at_default:
+  aliases:
+  - EAD
+  - exposure at default
+  - default exposure
+  - exposure amount
+  - outstanding exposure
+ead_bucket:
+  aliases:
+  - EAD bucket
+  - EAD band
+  - exposure at default bucket
+rating_review_date:
+  aliases:
+  - rating review date
+  - last rating review
+  - last internal rating review
+  - last internal obligor rating review  # legacy last_internal_obligor_rating_review -> rating_review_date
+  - last obligor rating review
+  - credit review date
+  - risk review date
+risk_grade_current:
+  aliases:
+  - current risk grade
+  - current internal rating
+  - risk grade current
+risk_grade_previous:
+  aliases:
+  - previous risk grade
+  - prior risk grade
+  - risk grade previous
+  - previous internal rating
+pd_current:
+  aliases:
+  - current PD
+  - pd current
+  - current probability of default
+pd_previous:
+  aliases:
+  - previous PD
+  - prior PD
+  - pd previous
+lgd_current:
+  aliases:
+  - current LGD
+  - lgd current
+lgd_previous:
+  aliases:
+  - previous LGD
+  - prior LGD
+  - lgd previous
+ifrs9_stage_current:
+  aliases:
+  - current IFRS9 stage
+  - current stage
+  - ifrs9 stage current
+ifrs9_stage_previous:
+  aliases:
+  - previous IFRS9 stage
+  - prior stage
+  - ifrs9 stage previous
+risk_model_version:
+  aliases:
+  - risk model version
+  - model version
+  - scorecard version
+  - rating model version
+risk_model_source:
+  aliases:
+  - risk model source
+  - model source
+  - rating model source
+  - scorecard source
+  - rating system
