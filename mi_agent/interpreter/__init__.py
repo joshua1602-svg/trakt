@@ -30,6 +30,7 @@ from .models import (
     InterpreterContext,
 )
 from .prompt import build_mi_spec_prompt
+from .runtime_bridge import BridgeResult, interpret_and_run_mi_query
 
 __all__ = [
     "interpret",
@@ -47,4 +48,6 @@ __all__ = [
     "parse_spec_json",
     "AnthropicClient",
     "AnthropicMIInterpreterClient",
+    "interpret_and_run_mi_query",
+    "BridgeResult",
 ]
