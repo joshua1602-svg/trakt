@@ -1,0 +1,5 @@
+loan_id,property_value,current_ltv,property_region
+F1,200000,0.50,North
+F2,400000,0.55,South
+F3,500000,0.60,North
+F9,150000,0.40,East

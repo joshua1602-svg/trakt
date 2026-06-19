@@ -82,4 +82,6 @@ onboarding_output/
 !synthetic_onboarding_pack_domain_based/scenario_b_split/*.csv
 # Onboarding Agent — committed test fixtures (synthetic, no real data)
 !tests/fixtures/*.csv
+# MI runtime — committed synthetic multi-artefact fixtures (subdirectories)
+!tests/fixtures/**/*.csv
 portfolio_test/

@@ -1,0 +1,4 @@
+loan_id,portfolio_id,portfolio_name,spv_id,acquired_portfolio_id
+F1,PF_001,Prime Residential,SPV1,
+F2,PF_002,Buy To Let,SPV2,ACQ_2023_01
+F3,PF_001,Prime Residential,SPV1,
