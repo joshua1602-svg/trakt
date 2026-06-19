@@ -27,6 +27,33 @@ AGGREGATIONS = {
 }
 OUTPUT_FORMATS = {"chart", "table", "text", "chart_and_table"}
 
+# --------------------------------------------------------------------------- #
+# Phase 7 — MIQuerySpec v2 controlled vocabularies (shared with the validator
+# and the LLM interpretation contract). All additive.
+# --------------------------------------------------------------------------- #
+SPEC_VERSION = "2.0"
+EXECUTION_MODES = {"flat", "snapshot", "state", "temporal", "risk"}
+STATES = {
+    "total_funded", "total_pipeline", "total_forecast_funded",
+    "cohort_by_date", "cohort_by_portfolio", "cohort_by_spv",
+    "cohort_by_acquired_portfolio",
+    # descriptive cohort aliases (resolve to cohort_by_date at the runtime)
+    "cohort_by_origination_date", "cohort_by_funding_date",
+    "cohort_by_acquisition_date",
+}
+TEMPORAL_MODES = {"latest", "as_of", "compare", "trend"}
+RISK_MONITOR_MODES = {"migration", "concentration", "trajectory", "flags"}
+BUCKET_STRATEGIES = {"configured", "quantile", "none"}
+TREND_GRAINS = {"daily", "weekly", "monthly", "quarterly"}
+FORECAST_PROBABILITY_SOURCES = {"row", "config", "explicit_balance"}
+OUTPUT_TYPES = {"table", "chart", "both"}
+SEGMENTS = {"portfolio", "spv", "acquired_portfolio"}
+
+# Bare, ambiguous natural-language concepts that must be RESOLVED to a concrete
+# field before reaching a spec (see the interpretation contract). A spec whose
+# dimension is one of these is rejected by the validator.
+AMBIGUOUS_DIMENSION_TERMS = {"stage", "portfolio", "region", "rate", "balance"}
+
 # Semantic-field-bearing fields on the spec (used by referenced_fields and the
 # validator).  `dimensions`/`hierarchy` are list-valued and handled separately.
 _SCALAR_FIELD_SLOTS = ("metric", "dimension", "x", "y", "size", "color", "weight_field")
@@ -83,6 +110,58 @@ class MIQuerySpec:
     snapshot_store_root: Optional[str] = None    # local/dev/test only
 
     # ------------------------------------------------------------------ #
+    # Phase 7 — MIQuerySpec v2 expansion (ADDITIVE; all optional/defaulted).
+    # The single governed contract for BOTH the flat path and the snapshot/
+    # state/temporal/risk runtime path. Convenience fields are normalised onto
+    # the canonical runtime fields by ``normalized()`` so run_mi_query is
+    # unchanged.
+    # ------------------------------------------------------------------ #
+    query_id: Optional[str] = None
+
+    # State
+    state_filters: Dict[str, Any] = field(default_factory=dict)
+
+    # Snapshot metadata / segmentation keys
+    reporting_date: Optional[str] = None
+    cut_off_date: Optional[str] = None
+    portfolio_id: Optional[str] = None
+    spv_id: Optional[str] = None
+    acquired_portfolio_id: Optional[str] = None
+
+    # Temporal
+    comparison_basis: Optional[str] = None
+    trend_grain: Optional[str] = None            # daily|weekly|monthly|quarterly
+
+    # Forecast
+    forecast_mode: Optional[str] = None
+    forecast_probability_source: Optional[str] = None  # row|config|explicit_balance
+    allow_config_probability: Optional[bool] = None
+
+    # Risk monitor
+    risk_monitor_mode: Optional[str] = None      # migration|concentration|trajectory|flags
+    migration_dimension: Optional[str] = None
+    concentration_dimension: Optional[str] = None
+    risk_dimension: Optional[str] = None
+    baseline_risk_field: Optional[str] = None
+    current_risk_field: Optional[str] = None
+
+    # Buckets
+    bucket_strategy: Optional[str] = None        # configured|quantile|none
+    bucket_count: int = 4
+    bucket_field: Optional[str] = None
+    bucket_config_key: Optional[str] = None
+
+    # Chart / output
+    output_type: Optional[str] = None            # table|chart|both
+    chart_preference: Optional[str] = None
+    allow_chart_fallback: Optional[bool] = None
+
+    # Governance
+    require_structured_issues: bool = True
+    allow_partial_result: Optional[bool] = None
+    strict_mode: Optional[bool] = None
+
+    # ------------------------------------------------------------------ #
     # Serialisation
     # ------------------------------------------------------------------ #
     def to_dict(self) -> Dict[str, Any]:
@@ -108,6 +187,53 @@ class MIQuerySpec:
     @classmethod
     def from_json(cls, text: str) -> "MIQuerySpec":
         return cls.from_dict(json.loads(text))
+
+    # ------------------------------------------------------------------ #
+    # Phase 7 — mode inference & normalisation (keeps run_mi_query unchanged)
+    # ------------------------------------------------------------------ #
+    def effective_execution_mode(self) -> str:
+        """Infer the execution mode (mirrors mi_runtime.infer_execution_mode)."""
+        if self.execution_mode:
+            return self.execution_mode
+        if self.risk_monitor or self.risk_monitor_mode:
+            return "risk"
+        if self.temporal_mode in ("compare", "trend"):
+            return "temporal"
+        if self.state:
+            return "state"
+        return "flat"
+
+    def effective_risk_dimension(self) -> Optional[str]:
+        """Resolve the dimension a risk query should group/migrate on."""
+        mode = self.risk_monitor_mode
+        if mode == "migration" and self.migration_dimension:
+            return self.migration_dimension
+        if mode == "concentration" and self.concentration_dimension:
+            return self.concentration_dimension
+        return self.risk_dimension or self.dimension
+
+    def normalized(self) -> "MIQuerySpec":
+        """Return a copy with v2 convenience fields mapped onto the canonical
+        runtime fields (risk_monitor / dimension / as_of_date / execution_mode).
+
+        Idempotent for v1/Phase-6 specs, so ``run_mi_query`` is unaffected.
+        """
+        import dataclasses as _dc
+        out = _dc.replace(self)
+        # risk_monitor_mode -> risk_monitor (+ dimension)
+        if out.risk_monitor_mode and not out.risk_monitor:
+            out.risk_monitor = out.risk_monitor_mode
+        if (out.risk_monitor or out.risk_monitor_mode) and not out.dimension:
+            rdim = self.effective_risk_dimension()
+            if rdim:
+                out.dimension = rdim
+        # reporting_date -> as_of_date for as_of temporal selection
+        if out.temporal_mode == "as_of" and not out.as_of_date and out.reporting_date:
+            out.as_of_date = out.reporting_date
+        # fill execution_mode for downstream clarity
+        if not out.execution_mode:
+            out.execution_mode = out.effective_execution_mode()
+        return out
 
     # ------------------------------------------------------------------ #
     # Introspection
