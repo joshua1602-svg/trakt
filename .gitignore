@@ -36,6 +36,11 @@ run_manifest.json
 *lineage*.json
 *out*.json
 
+# Phase 8E — dev-only live Anthropic smoke artefacts (may contain provider
+# responses; never commit). The directory is kept via artifacts/.gitkeep.
+artifacts/*
+!artifacts/.gitkeep
+
 # -----------------------------
 # OUTPUT DIRECTORIES
 # -----------------------------
