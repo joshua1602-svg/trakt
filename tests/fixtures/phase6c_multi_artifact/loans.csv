@@ -1,0 +1,9 @@
+loan_id,borrower_id,reporting_date,balance,interest_rate,funded_status,product_type,amortisation_type,origination_date,funding_date,internal_risk_grade,ifrs9_stage,pd_bucket
+F1,B1,2024-01-31,100000,0.03,funded,BTL,repayment,2020-01-15,2020-02-01,A,Stage 1,<0.25%
+F2,B2,2024-01-31,200000,0.04,funded,BTL,interest_only,2019-06-10,2019-07-01,B,Stage 1,0.25-0.5%
+F1,B1,2024-02-29,100000,0.03,funded,BTL,repayment,2020-01-15,2020-02-01,A,Stage 1,<0.25%
+F2,B2,2024-02-29,220000,0.04,funded,BTL,interest_only,2019-06-10,2019-07-01,B,Stage 1,0.25-0.5%
+F3,B3,2024-02-29,300000,0.05,funded,Bridging,bullet,2021-03-01,2021-04-01,C,Stage 2,1-2.5%
+F1,B1,2024-03-31,100000,0.03,funded,BTL,repayment,2020-01-15,2020-02-01,A,Stage 1,<0.25%
+F2,B2,2024-03-31,220000,0.04,funded,BTL,interest_only,2019-06-10,2019-07-01,C,Stage 2,0.5-1%
+F3,B3,2024-03-31,300000,0.05,funded,Bridging,bullet,2021-03-01,2021-04-01,C,Stage 2,1-2.5%

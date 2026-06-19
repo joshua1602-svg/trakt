@@ -1,0 +1,9 @@
+loan_id,reporting_date,interest_due,interest_paid,principal_due,principal_paid,arrears_balance,arrears_status
+F1,2024-01-31,300,300,0,0,0,current
+F2,2024-01-31,800,800,0,0,0,current
+F1,2024-02-29,300,300,0,0,0,current
+F2,2024-02-29,800,700,0,0,100,1-30
+F3,2024-02-29,1250,1250,0,0,0,current
+F1,2024-03-31,300,300,0,0,0,current
+F2,2024-03-31,800,600,0,0,400,31-60
+F3,2024-03-31,1250,1250,0,0,0,current
