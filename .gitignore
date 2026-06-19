@@ -55,6 +55,8 @@ logs/
 *secret*
 *key*
 *cred*
+# Legitimate source module wrongly caught by the defensive "*key*" rule above.
+!snapshot/keys.py
 
 # -----------------------------
 # ALLOW CONFIG / SCHEMA FILES
