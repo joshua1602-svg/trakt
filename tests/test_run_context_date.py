@@ -72,6 +72,47 @@ class TestParsing(unittest.TestCase):
     def test_filename_none(self):
         self.assertEqual(rc.dates_from_filename("portfolio.csv"), [])
 
+    def test_period_token_yyyy_mm(self):
+        self.assertEqual(rc.dates_from_period_token("2025-10"), ["2025-10-31"])
+        self.assertEqual(rc.dates_from_period_token("mi_2025_10"), ["2025-10-31"])
+
+    def test_period_token_compact(self):
+        self.assertEqual(rc.dates_from_period_token("202511"), ["2025-11-30"])
+
+    def test_period_token_rejects_bare_year_or_bad_month(self):
+        self.assertEqual(rc.dates_from_period_token("2025"), [])
+        self.assertEqual(rc.dates_from_period_token("2025-13"), [])
+
+
+class TestPeriodInference(unittest.TestCase):
+    def test_from_folder_period(self):
+        root = Path(tempfile.mkdtemp(prefix="rc_folder_"))
+        central = _mk_project(
+            root, inventory_rows=[{"file_name": "portfolio.csv"}],
+            central_cols=["loan_identifier"], central_rows=[["LN1"]])
+        r = rc.extract_data_cut_off_date(root, central, input_dir="/data/input/2025-10")
+        self.assertEqual(r["value"], "2025-10-31")
+        self.assertEqual(r["source"], rc.SRC_FOLDER_PERIOD)
+
+    def test_from_run_id(self):
+        root = Path(tempfile.mkdtemp(prefix="rc_runid_"))
+        central = _mk_project(
+            root, inventory_rows=[{"file_name": "portfolio.csv"}],
+            central_cols=["loan_identifier"], central_rows=[["LN1"]])
+        r = rc.extract_data_cut_off_date(root, central, run_id="mi_2025_10")
+        self.assertEqual(r["value"], "2025-10-31")
+        self.assertEqual(r["source"], rc.SRC_RUN_ID)
+
+    def test_source_column_beats_folder_and_runid(self):
+        root = Path(tempfile.mkdtemp(prefix="rc_prio_"))
+        central = _mk_project(
+            root, inventory_rows=[{"file_name": "p.csv"}],
+            central_cols=["data_cut_off_date"], central_rows=[["2025-09-30"]])
+        r = rc.extract_data_cut_off_date(
+            root, central, input_dir="/data/input/2025-10", run_id="mi_2025_11")
+        self.assertEqual(r["value"], "2025-09-30")
+        self.assertEqual(r["source"], rc.SRC_SOURCE_COLUMN)
+
 
 # --------------------------------------------------------------------------- #
 # Unit: extraction tiers + conflict / missing
