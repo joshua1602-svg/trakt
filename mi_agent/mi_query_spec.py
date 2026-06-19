@@ -63,6 +63,26 @@ class MIQuerySpec:
     output_format: str = "chart"                # chart | table | text | chart_and_table
 
     # ------------------------------------------------------------------ #
+    # Phase 6 — runtime integration fields (ADDITIVE; all optional).
+    # Existing flat single-CSV queries leave these defaulted and behave
+    # exactly as before. They are NOT semantic-field slots and do not affect
+    # referenced_fields()/validation of the v1 chart structure.
+    # ------------------------------------------------------------------ #
+    route_id: str = "mi"                         # mi | mna | regulatory_annex2 | ...
+    execution_mode: Optional[str] = None         # flat|snapshot|state|temporal|risk
+    state: Optional[str] = None                  # state-library key (e.g. total_funded)
+    temporal_mode: Optional[str] = None          # latest|as_of|compare|trend
+    as_of_date: Optional[str] = None
+    baseline_date: Optional[str] = None
+    current_date: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    segment: Optional[str] = None                # portfolio|spv|acquired_portfolio
+    risk_monitor: Optional[Any] = None           # bool | migration|concentration|trajectory
+    snapshot_client_id: Optional[str] = None
+    snapshot_store_root: Optional[str] = None    # local/dev/test only
+
+    # ------------------------------------------------------------------ #
     # Serialisation
     # ------------------------------------------------------------------ #
     def to_dict(self) -> Dict[str, Any]:
