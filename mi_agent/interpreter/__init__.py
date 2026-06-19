@@ -12,6 +12,13 @@ no Azure/Streamlit/onboarding/M&A/Annex 2 work. Generated specs never bypass
 
 from __future__ import annotations
 
+from .anthropic import (
+    AnthropicClient,
+    AnthropicMIInterpreterClient,
+    interpret_from_llm_output,
+    interpret_with_anthropic,
+    parse_spec_json,
+)
 from .deterministic import interpret
 from .evaluator import EvalReport, evaluate_interpretation
 from .examples import load_golden
@@ -22,6 +29,7 @@ from .models import (
     InterpretationResult,
     InterpreterContext,
 )
+from .prompt import build_mi_spec_prompt
 
 __all__ = [
     "interpret",
@@ -33,4 +41,10 @@ __all__ = [
     "DETERMINISTIC",
     "LLM_STUB",
     "FIXTURE",
+    "build_mi_spec_prompt",
+    "interpret_with_anthropic",
+    "interpret_from_llm_output",
+    "parse_spec_json",
+    "AnthropicClient",
+    "AnthropicMIInterpreterClient",
 ]
