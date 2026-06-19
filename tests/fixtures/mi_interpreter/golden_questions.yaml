@@ -1,0 +1,220 @@
+# Golden MI question → MIQuerySpec v2 dataset (Phase 8A).
+#
+# Aligns with docs/mi_query_spec_v2_interpretation_contract.md. Graded by the
+# deterministic baseline interpreter today, and reusable to grade a future LLM
+# interpreter. Specs are matched on NORMALISED spec fields (see the evaluator's
+# COMPARABLE_FIELDS); only the discriminating fields are asserted per example.
+#
+# Per-example keys:
+#   question                          : the business question
+#   interpreter_supported             : whether the deterministic baseline handles it
+#   context_overrides (optional)      : overrides on InterpreterContext (e.g. portfolio config)
+#   expected_spec (optional)          : normalised spec fields to match
+#   expected_valid                    : whether the spec validates
+#   expected_issue_codes (optional)   : issue codes that must be present (invalid cases)
+#   expected_clarification_required   : whether a clarification is required
+#   notes
+
+examples:
+  # ---------------------- VALID — current state ----------------------
+  - question: "show total funded"
+    interpreter_supported: true
+    expected_spec: {route_id: mi, execution_mode: state, state: total_funded, temporal_mode: latest}
+    expected_valid: true
+    expected_clarification_required: false
+    notes: funded book at the latest snapshot
+
+  - question: "show total pipeline"
+    interpreter_supported: true
+    expected_spec: {execution_mode: state, state: total_pipeline, temporal_mode: latest}
+    expected_valid: true
+    expected_clarification_required: false
+    notes: pipeline at the latest snapshot
+
+  - question: "show forecast funded"
+    interpreter_supported: true
+    expected_spec: {execution_mode: state, state: total_forecast_funded, temporal_mode: latest}
+    expected_valid: true
+    expected_clarification_required: false
+    notes: forecast-funded at the latest snapshot
+
+  - question: "show funded balance by portfolio"
+    interpreter_supported: true
+    expected_spec: {execution_mode: risk, state: total_funded, risk_monitor_mode: concentration, dimension: portfolio_id}
+    expected_valid: true
+    expected_clarification_required: false
+    notes: 'portfolio resolves to the Trakt portfolio_id (config available)'
+
+  - question: "show funded balance by region"
+    interpreter_supported: true
+    expected_spec: {execution_mode: risk, state: total_funded, risk_monitor_mode: concentration, dimension: geographic_region_obligor}
+    expected_valid: true
+    expected_clarification_required: false
+    notes: region → obligor region
+
+  - question: "show pipeline by stage"
+    interpreter_supported: true
+    expected_spec: {execution_mode: risk, state: total_pipeline, risk_monitor_mode: concentration, dimension: pipeline_stage}
+    expected_valid: true
+    expected_clarification_required: false
+    notes: stage is valid in a pipeline context
+
+  # ---------------------- VALID — temporal ----------------------
+  - question: "trend funded balance over the last three months"
+    interpreter_supported: true
+    expected_spec: {execution_mode: temporal, state: total_funded, temporal_mode: trend, start_date: "2024-01-01", end_date: "2024-03-31"}
+    expected_valid: true
+    expected_clarification_required: false
+    notes: trend uses context range_start..as_of
+
+  - question: "trend pipeline over the last three months"
+    interpreter_supported: true
+    expected_spec: {execution_mode: temporal, state: total_pipeline, temporal_mode: trend, start_date: "2024-01-01", end_date: "2024-03-31"}
+    expected_valid: true
+    expected_clarification_required: false
+
+  - question: "compare funded balance to last month"
+    interpreter_supported: true
+    expected_spec: {execution_mode: temporal, state: total_funded, temporal_mode: compare, baseline_date: "2024-02-29", current_date: "2024-03-31"}
+    expected_valid: true
+    expected_clarification_required: false
+
+  - question: "what changed since last month"
+    interpreter_supported: true
+    expected_spec: {execution_mode: temporal, state: total_funded, temporal_mode: compare, baseline_date: "2024-02-29", current_date: "2024-03-31"}
+    expected_valid: true
+    expected_clarification_required: false
+    notes: defaults to funded compare vs last month
+
+  # ---------------------- VALID — risk ----------------------
+  - question: "has risk deteriorated"
+    interpreter_supported: true
+    expected_spec: {execution_mode: risk, risk_monitor_mode: flags, dimension: internal_risk_grade, baseline_date: "2024-02-29", current_date: "2024-03-31"}
+    expected_valid: true
+    expected_clarification_required: false
+    notes: deterioration flags on risk grade between periods
+
+  - question: "show risk grade migration"
+    interpreter_supported: true
+    expected_spec: {execution_mode: risk, risk_monitor_mode: migration, dimension: internal_risk_grade, baseline_date: "2024-02-29", current_date: "2024-03-31"}
+    expected_valid: true
+    expected_clarification_required: false
+
+  - question: "show IFRS stage migration"
+    interpreter_supported: true
+    expected_spec: {execution_mode: risk, risk_monitor_mode: migration, dimension: ifrs9_stage}
+    expected_valid: true
+    expected_clarification_required: false
+
+  - question: "show PD bucket migration"
+    interpreter_supported: true
+    expected_spec: {execution_mode: risk, risk_monitor_mode: migration, dimension: pd_bucket}
+    expected_valid: true
+    expected_clarification_required: false
+
+  - question: "show concentration by region"
+    interpreter_supported: true
+    expected_spec: {execution_mode: risk, risk_monitor_mode: concentration, dimension: geographic_region_obligor}
+    expected_valid: true
+    expected_clarification_required: false
+
+  - question: "are we too concentrated by broker"
+    interpreter_supported: true
+    expected_spec: {execution_mode: risk, risk_monitor_mode: concentration, dimension: broker_channel}
+    expected_valid: true
+    expected_clarification_required: false
+
+  # ---------------------- VALID — buckets ----------------------
+  - question: "show balance buckets"
+    interpreter_supported: true
+    expected_spec: {execution_mode: risk, risk_monitor_mode: concentration, dimension: balance_band, bucket_strategy: quantile}
+    expected_valid: true
+    expected_clarification_required: false
+    notes: asset-agnostic quantile default
+
+  - question: "show interest rate buckets"
+    interpreter_supported: true
+    expected_spec: {risk_monitor_mode: concentration, dimension: interest_rate_bucket, bucket_strategy: quantile}
+    expected_valid: true
+    expected_clarification_required: false
+
+  - question: "show time on book buckets"
+    interpreter_supported: true
+    expected_spec: {risk_monitor_mode: concentration, dimension: time_on_book_bucket, bucket_strategy: quantile}
+    expected_valid: true
+    expected_clarification_required: false
+
+  - question: "show LTV buckets"
+    interpreter_supported: true
+    expected_spec: {risk_monitor_mode: concentration, dimension: ltv_bucket, bucket_strategy: configured}
+    expected_valid: true
+    expected_clarification_required: false
+    notes: LTV keeps configured asset-specific bands
+
+  # ---------------------- INVALID — ambiguous (clarification) ----------------------
+  - question: "show stage"
+    interpreter_supported: true
+    expected_valid: false
+    expected_clarification_required: true
+    notes: bare "stage" outside a pipeline context is ambiguous
+
+  - question: "show portfolio"
+    interpreter_supported: true
+    context_overrides: {portfolio_config_available: false}
+    expected_valid: false
+    expected_clarification_required: true
+    notes: portfolio without a Trakt portfolio reference config
+
+  - question: "show risk"
+    interpreter_supported: true
+    expected_valid: false
+    expected_clarification_required: true
+    notes: too vague — migration vs flags vs concentration
+
+  - question: "show changes"
+    interpreter_supported: true
+    expected_valid: false
+    expected_clarification_required: true
+    notes: no date context
+
+  - question: "show rate"
+    interpreter_supported: true
+    expected_valid: false
+    expected_clarification_required: true
+    notes: unclear whether metric or buckets
+
+  # ---------------------- INVALID — validation failures (graded via the spec) ----------------------
+  - question: "(spec) pipeline state on the M&A route"
+    interpreter_supported: false
+    expected_spec: {route_id: mna, state: total_pipeline, temporal_mode: latest, snapshot_client_id: clientA}
+    expected_valid: false
+    expected_issue_codes: [invalid_route_for_state]
+    notes: M&A route cannot run pipeline states
+
+  - question: "(spec) MI state on the regulatory route"
+    interpreter_supported: false
+    expected_spec: {route_id: regulatory_annex2, state: total_funded, temporal_mode: latest, snapshot_client_id: clientA}
+    expected_valid: false
+    expected_issue_codes: [invalid_route_for_state]
+    notes: regulatory route rejects MI states
+
+  - question: "(spec) compare without dates"
+    interpreter_supported: false
+    expected_spec: {route_id: mi, state: total_funded, temporal_mode: compare, snapshot_client_id: clientA}
+    expected_valid: false
+    expected_issue_codes: [temporal_selector_incomplete]
+    notes: compare needs baseline_date and current_date
+
+  - question: "(spec) risk without a mode"
+    interpreter_supported: false
+    expected_spec: {route_id: mi, risk_monitor: true, dimension: internal_risk_grade, snapshot_client_id: clientA}
+    expected_valid: false
+    expected_issue_codes: [invalid_risk_monitor_spec]
+    notes: risk requires a risk_monitor_mode
+
+  - question: "(spec) ambiguous bare dimension"
+    interpreter_supported: false
+    expected_spec: {route_id: mi, risk_monitor_mode: concentration, state: total_pipeline, concentration_dimension: stage, snapshot_client_id: clientA}
+    expected_valid: false
+    expected_issue_codes: [ambiguous_dimension]
+    notes: bare "stage" as a dimension must be resolved first
