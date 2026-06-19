@@ -1,0 +1,7 @@
+loan_identifier,current_outstanding_balance,current_loan_to_value,collateral_geography,broker_channel
+L0001,100000,0.30,North,Broker A
+L0002,150000,0.45,South,Broker B
+L0003,200000,0.55,North,Broker A
+L0004,250000,0.62,East,Broker B
+L0005,300000,0.70,South,Broker A
+L0006,120000,0.38,East,Broker B
