@@ -127,6 +127,16 @@ def resolve_field_scope(
     # Only ever block on included fields.
     blocking &= included
 
+    # Legal/regulatory entity-identifier fields (e.g. originator_legal_entity_
+    # identifier, originator_name) are core_canonical but are NOT required for MI
+    # runtime/dashboarding/state-temporal-risk analytics or the central MI tape.
+    # When regulatory scope is inactive for this mode (e.g. mi_only, or warehouse
+    # without regulatory reporting enabled) they must not block promotion. They
+    # remain INCLUDED (visible/mappable, raised as a non-blocking gap); only the
+    # blocking severity is dropped. Regulatory/securitisation modes are untouched.
+    if not regulatory_active and policy.blocking_exclude_field_groups:
+        blocking -= _field_group_members(universe, policy.blocking_exclude_field_groups)
+
     return FieldScopeResult(
         mode_name=policy.name,
         included_fields=included,

@@ -138,7 +138,22 @@ class TestModeSeverity(unittest.TestCase):
     def test_mi_only_emits_missing_core_field_gaps(self):
         core_qs = [q for q in self.mi.gap_questions if q.category == "core_field"]
         self.assertTrue(core_qs)
-        self.assertTrue(all(q.severity == "blocking" for q in core_qs))
+        # MI-critical core fields still block (at least one blocking gap).
+        self.assertTrue(any(q.severity == "blocking" for q in core_qs))
+
+    def test_mi_only_legal_entity_core_fields_not_blocking(self):
+        # Legal/regulatory entity identifiers (LEI, originator name) are core but
+        # not required for MI analytics -> visible (high) but NOT blocking, so
+        # they never block MI-only promotion.
+        by_subject = {q.subject: q for q in self.mi.gap_questions
+                      if q.category == "core_field"}
+        for fname in ("originator_legal_entity_identifier", "originator_name"):
+            if fname in by_subject:  # only if unmapped in the synthetic pack
+                self.assertNotEqual(by_subject[fname].severity, "blocking", fname)
+        blocking_subjects = {q.subject for q in self.mi.gap_questions
+                             if q.category == "core_field" and q.severity == "blocking"}
+        self.assertNotIn("originator_legal_entity_identifier", blocking_subjects)
+        self.assertNotIn("originator_name", blocking_subjects)
 
     def test_mna_dd_missing_core_nonblocking(self):
         core_qs = [q for q in self.mna.gap_questions if q.category == "core_field"]

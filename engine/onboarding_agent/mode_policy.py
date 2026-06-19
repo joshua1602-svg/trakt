@@ -58,6 +58,10 @@ class ModePolicy:
     regulatory_fields_active_if: List[str] = field(default_factory=list)
     blocking_rules: Dict[str, Any] = field(default_factory=dict)
     structural_viability_fields: List[str] = field(default_factory=list)
+    # Field groups (name-pattern) that must NOT be blocking when regulatory scope
+    # is inactive for the mode — e.g. legal/regulatory entity identifiers in
+    # mi_only. They stay included/visible but are downgraded from blocking.
+    blocking_exclude_field_groups: List[str] = field(default_factory=list)
 
     # ------------------------------------------------------------------
     def severity_for(self, category: str, detected_severity: str) -> str:
@@ -143,4 +147,5 @@ def load_mode_policy(mode: str, policy_path: Path | None = None) -> ModePolicy:
         regulatory_fields_active_if=list(m.get("regulatory_fields_active_if", []) or []),
         blocking_rules=dict(m.get("blocking_rules", {}) or {}),
         structural_viability_fields=list(m.get("structural_viability_fields", []) or []),
+        blocking_exclude_field_groups=list(m.get("blocking_exclude_field_groups", []) or []),
     )
