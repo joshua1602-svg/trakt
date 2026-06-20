@@ -155,5 +155,64 @@ class TestFundedIngestion(unittest.TestCase):
             self.assertEqual(int(df[f].notna().sum()), len(df), f"{f} has nulls in tape")
 
 
+class TestPromotionConsumesResolvedMappings(unittest.TestCase):
+    """Promotion / central tape must consume the resolved 28a selection (role
+    guardrail + profile proxy/inference), not re-resolve from 05 — so funded
+    fields are sourced from funded extracts and pipeline columns never populate
+    them, and conflicts on resolved fields disappear."""
+
+    @classmethod
+    def setUpClass(cls):
+        warnings.simplefilter("ignore")
+        cls.root = Path(tempfile.mkdtemp(prefix="promo_consume_"))
+        cls.inp = _build_pack(cls.root)
+        # Pipeline file with a conflicting funded-style rate column ("Product
+        # Rate") — must NOT win for current_interest_rate.
+        pl = cls.inp / "pipeline" / "2025-12-01"
+        pd.DataFrame({"KFI Number": ["L1", "L2"], "Product Rate": [9.99, 9.99]}).to_csv(
+            pl / "M2L KFI and Pipeline.csv", index=False)
+        cls.proj = cls.root / "proj"
+        cls.summary = wf.run_operator_workflow(
+            input_dir=str(cls.inp), client_name="T", client_id="t",
+            run_id="mi_2025_10", mode="mi_only", project_dir=str(cls.proj),
+            product_profile=PROFILE)
+        rp = storage_paths.resolve_run_paths(
+            project_dir=str(cls.proj), input_dir=str(cls.inp), output_root=None,
+            client_id="t", run_id="mi_2025_10", storage_backend="local",
+            input_uri="", output_uri="")
+        cls.tape_result = central_tape_builder.build_central_tapes(
+            str(cls.proj), rp,
+            str(_REPO_ROOT / "config" / "system" / "fields_registry.yaml"),
+            mode="mi_only")
+        cls.tape = pd.read_csv(cls.tape_result["central_lender_tape_path"])
+        cls.lineage = pd.read_csv(cls.tape_result["central_tape_lineage_path"])
+
+    def test_funded_balance_and_origination_non_null(self):
+        for f in ("current_outstanding_balance", "origination_date"):
+            self.assertIn(f, self.tape.columns)
+            self.assertGreater(int(self.tape[f].notna().sum()), 0, f"{f} all null")
+
+    def test_interest_rate_lineage_is_funded_not_pipeline(self):
+        ir = self.lineage[self.lineage["canonical_field"] == "current_interest_rate"]
+        self.assertTrue(len(ir) > 0, "no interest-rate lineage")
+        files = set(ir["source_file"].astype(str))
+        self.assertTrue(any("LoanExtract" in f for f in files), files)
+        for f in files:
+            self.assertNotIn("Pipeline", f, "interest rate sourced from pipeline")
+            self.assertNotIn("KFI", f, "interest rate sourced from pipeline KFI")
+        self.assertTrue(all(c == "Loan Interest Rate"
+                            for c in ir["source_column"].astype(str)))
+
+    def test_no_conflicts_on_resolved_fields(self):
+        # Re-resolution previously produced funded/pipeline conflicts; consuming
+        # the resolved selection removes them.
+        self.assertEqual(int(self.tape_result.get("conflict_count", 0)), 0)
+
+    def test_principal_and_reporting_materialised(self):
+        for f in ("current_principal_balance", "reporting_date"):
+            self.assertIn(f, self.tape.columns)
+            self.assertGreater(int(self.tape[f].notna().sum()), 0, f"{f} all null")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
