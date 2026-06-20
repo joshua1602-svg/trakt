@@ -22,9 +22,6 @@ from typing import Any, Dict, List, Optional
 # Brand palette (mirrors mi_chart_factory.DEFAULT_THEME / charts_plotly.py).
 _PALETTE = ["#919dd1", "#232d55", "#3d4a82", "#36c2a8", "#e0a93b", "#c46b8f"]
 
-# React-renderable chart types (the renderer does not yet draw heatmap/treemap).
-_RENDERABLE_CHARTS = {"bar", "line", "scatter", "bubble"}
-
 _FORMAT_MAP = {
     "currency": "gbp",
     "percent": "pct",
@@ -33,6 +30,11 @@ _FORMAT_MAP = {
     "date": "date",
     "string": "text",
 }
+
+
+def _figure_has_content(figure: Any) -> bool:
+    """True when a Plotly figure carries at least one trace worth rendering."""
+    return isinstance(figure, dict) and bool(figure.get("data"))
 
 
 def _uid(prefix: str = "art") -> str:
@@ -151,7 +153,6 @@ def _table_artifact(
     spec: Dict[str, Any],
     ctx: AdapterContext,
     title: str,
-    cr: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     rows = qr.get("data") or []
     resolved = qr.get("resolved_fields", {})
@@ -168,11 +169,6 @@ def _table_artifact(
                 }
             )
     source = _source(spec, ctx, "MI Agent · table")
-    # When this table stands in for an un-rendered chart (heatmap/treemap),
-    # preserve the native chart type and raw Plotly figure so nothing is lost.
-    if cr and cr.get("chart_type") not in _RENDERABLE_CHARTS:
-        source["nativeChartType"] = cr.get("chart_type")
-        source["figure"] = cr.get("figure")
     return {
         "id": _uid(),
         "type": "table",
@@ -193,38 +189,47 @@ def _chart_artifact(
     ctx: AdapterContext,
 ) -> Optional[Dict[str, Any]]:
     chart_type = cr.get("chart_type")
-    if chart_type not in _RENDERABLE_CHARTS:
-        return None
+    figure = cr.get("figure") if _figure_has_content(cr.get("figure")) else None
     rows = qr.get("data") or []
-    if not rows:
-        return None
     resolved = qr.get("resolved_fields", {})
-    columns = list(rows[0].keys())
+    columns = list(rows[0].keys()) if rows else []
+
+    x_key: Optional[str] = None
+    series: List[Dict[str, Any]] = []
+    value_format = "number"
 
     if chart_type in ("scatter", "bubble"):
         # Loan-level x / y / (size) — the renderer reads series[0]=x, [1]=y, [2]=size.
         x_key = spec.get("x") if spec.get("x") in columns else (columns[0] if columns else None)
         y_key = spec.get("y") if spec.get("y") in columns else None
         size_key = spec.get("size") if spec.get("size") in columns else None
-        if not x_key or not y_key:
-            return None
-        series = [
-            {"key": x_key, "label": x_key.replace("_", " ").title(), "color": _PALETTE[0]},
-            {"key": y_key, "label": y_key.replace("_", " ").title(), "color": _PALETTE[1]},
-        ]
-        if chart_type == "bubble" and size_key:
-            series.append({"key": size_key, "label": size_key.replace("_", " ").title(), "color": _PALETTE[2]})
-        value_format = _infer_col_format(y_key, resolved)
-    else:
+        if x_key and y_key:
+            series = [
+                {"key": x_key, "label": x_key.replace("_", " ").title(), "color": _PALETTE[0]},
+                {"key": y_key, "label": y_key.replace("_", " ").title(), "color": _PALETTE[1]},
+            ]
+            if chart_type == "bubble" and size_key:
+                series.append({"key": size_key, "label": size_key.replace("_", " ").title(), "color": _PALETTE[2]})
+            value_format = _infer_col_format(y_key, resolved)
+    elif chart_type in ("bar", "line"):
         # Grouped categorical (bar) / ordered (line): one dimension + one value.
         x_key = _dimension_column(resolved, columns)
         value_cols = [c for c in columns if c != x_key]
         value_cols.sort(key=lambda c: (c.endswith("_pct") or "concentration" in c))
         primary = value_cols[0] if value_cols else None
-        if primary is None:
-            return None
-        series = [{"key": primary, "label": primary.replace("_", " ").title(), "color": _PALETTE[0]}]
-        value_format = _infer_col_format(primary, resolved)
+        if primary is not None:
+            series = [{"key": primary, "label": primary.replace("_", " ").title(), "color": _PALETTE[0]}]
+            value_format = _infer_col_format(primary, resolved)
+    else:
+        # heatmap / treemap (and any future type): the fidelity lives in the
+        # Plotly figure. We keep the result rows for context but emit no Recharts
+        # series — the figure is the source of truth for these.
+        x_key = columns[0] if columns else None
+
+    # Emit a chart artifact when we have *either* a faithful Plotly figure or a
+    # Recharts-normalisable series. Otherwise there is nothing to draw.
+    if not figure and not series:
+        return None
 
     return {
         "id": _uid(),
@@ -324,6 +329,7 @@ def adapt_workflow_result(
 
     artifacts: List[Dict[str, Any]] = []
     chart_type = cr.get("chart_type") if cr else None
+    chart_emitted = False
 
     if qr:
         result_type = qr.get("result_type")
@@ -334,15 +340,19 @@ def adapt_workflow_result(
                 chart = _chart_artifact(qr, cr, spec, ctx)
                 if chart:
                     artifacts.append(chart)
-            artifacts.append(_table_artifact(qr, spec, ctx, cr.get("title") if cr else "Result", cr=cr))
+                    chart_emitted = True
+            artifacts.append(_table_artifact(qr, spec, ctx, cr.get("title") if cr else "Result"))
 
     val_artifact = _validation_artifact(validation, spec, ctx)
     if val_artifact:
         artifacts.append(val_artifact)
 
     warnings = list(workflow.get("warnings", []))
-    if chart_type in {"heatmap", "treemap"}:
-        warnings.append(f"{chart_type} is not yet rendered in the React UI; showing the result table.")
+    # Only warn about degraded fidelity when we could not emit a chart at all
+    # (no Plotly figure and no normalisable series). With a figure present,
+    # heatmap/treemap render faithfully via the Plotly renderer.
+    if chart_type in {"heatmap", "treemap"} and not chart_emitted:
+        warnings.append(f"{chart_type} could not be rendered; showing the result table.")
 
     return {
         "ok": bool(workflow.get("ok")),

@@ -9,7 +9,8 @@ from __future__ import annotations
 from mi_agent_api.adapters import adapt_workflow_result
 
 
-def _workflow(chart_type, result_type, data, spec, resolved):
+def _workflow(chart_type, result_type, data, spec, resolved, figure_traces=1):
+    figure = {"data": [{"type": chart_type}] * figure_traces, "layout": {}}
     return {
         "ok": True,
         "error": None,
@@ -29,7 +30,7 @@ def _workflow(chart_type, result_type, data, spec, resolved):
         },
         "chart_result": None
         if chart_type == "none"
-        else {"chart_type": chart_type, "title": "T", "subtitle": None, "warnings": [], "metadata": {}, "figure": {"data": [], "layout": {}}},
+        else {"chart_type": chart_type, "title": "T", "subtitle": None, "warnings": [], "metadata": {}, "figure": figure},
         "warnings": [],
         "metadata": {},
     }
@@ -88,7 +89,7 @@ def test_scatter_maps_x_y_series_no_size():
     assert [s["key"] for s in chart["series"]] == ["current_valuation_amount", "current_outstanding_balance"]
 
 
-def test_heatmap_falls_back_to_table_with_figure_preserved():
+def test_heatmap_emits_chart_with_figure_plus_table():
     spec = {"chart_type": "heatmap", "dimensions": ["geographic_region_obligor", "ltv_bucket"]}
     resolved = {
         "geographic_region_obligor": {"canonical_field": "geographic_region_obligor", "role": "dimension", "format": "string"},
@@ -96,21 +97,49 @@ def test_heatmap_falls_back_to_table_with_figure_preserved():
     }
     data = [{"geographic_region_obligor": "London", "ltv_bucket": "30-40%", "current_outstanding_balance_sum": 50.0}]
     resp = adapt_workflow_result(_workflow("heatmap", "table", data, spec, resolved))
-    # No chart artifact (not renderable); a table carries the figure + native type.
-    assert "chart" not in _types(resp)
-    table = next(a for a in resp["artifacts"] if a["type"] == "table")
-    assert table["source"]["nativeChartType"] == "heatmap"
-    assert table["source"]["figure"] is not None
-    assert any("heatmap" in w for w in resp["warnings"])
+    # Now emits a chart artifact carrying the Plotly figure, plus the table.
+    assert "chart" in _types(resp)
+    assert "table" in _types(resp)
+    chart = next(a for a in resp["artifacts"] if a["type"] == "chart")
+    assert chart["chartType"] == "heatmap"
+    assert chart["source"]["nativeChartType"] == "heatmap"
+    assert chart["source"]["figure"] is not None
+    # With a figure present there is no degraded-fidelity warning.
+    assert not any("could not be rendered" in w for w in resp["warnings"])
 
 
-def test_treemap_falls_back_to_table():
+def test_treemap_emits_chart_with_figure():
     spec = {"chart_type": "treemap", "hierarchy": ["geographic_region_obligor"]}
     resolved = {"geographic_region_obligor": {"canonical_field": "geographic_region_obligor", "role": "dimension", "format": "string"}}
     data = [{"geographic_region_obligor": "London", "current_outstanding_balance_sum": 184.0}]
     resp = adapt_workflow_result(_workflow("treemap", "table", data, spec, resolved))
-    assert "chart" not in _types(resp)
+    chart = next(a for a in resp["artifacts"] if a["type"] == "chart")
+    assert chart["chartType"] == "treemap"
+    assert chart["source"]["figure"] is not None
     assert "table" in _types(resp)
+
+
+def test_all_chart_types_carry_figure_on_chart_artifact():
+    resolved = {
+        "geographic_region_obligor": {"canonical_field": "geographic_region_obligor", "role": "dimension", "format": "string"},
+        "current_outstanding_balance": {"canonical_field": "current_outstanding_balance", "role": "metric", "format": "currency"},
+        "current_loan_to_value": {"canonical_field": "current_loan_to_value", "role": "metric", "format": "percent"},
+        "youngest_borrower_age": {"canonical_field": "youngest_borrower_age", "role": "metric", "format": "integer"},
+        "origination_date": {"canonical_field": "origination_date", "role": "date", "format": "date"},
+    }
+    cases = {
+        "bar": ({"chart_type": "bar", "dimension": "geographic_region_obligor", "metric": "current_outstanding_balance"},
+                [{"geographic_region_obligor": "London", "current_outstanding_balance_sum": 1.0}]),
+        "line": ({"chart_type": "line", "x": "origination_date", "metric": "current_outstanding_balance"},
+                 [{"origination_date": "2026-01-01", "current_outstanding_balance_sum": 1.0}]),
+        "scatter": ({"chart_type": "scatter", "x": "youngest_borrower_age", "y": "current_loan_to_value"},
+                    [{"youngest_borrower_age": 70, "current_loan_to_value": 30.0}]),
+    }
+    for ct, (spec, data) in cases.items():
+        resp = adapt_workflow_result(_workflow(ct, "table" if ct != "scatter" else "loan_level", data, spec, resolved))
+        chart = next(a for a in resp["artifacts"] if a["type"] == "chart")
+        assert chart["source"]["figure"] is not None, ct
+        assert chart["source"]["nativeChartType"] == ct
 
 
 def test_none_summary_maps_to_kpi():
@@ -126,7 +155,7 @@ def test_none_summary_maps_to_kpi():
 def test_empty_result_produces_table_with_no_rows():
     spec = {"chart_type": "bar", "dimension": "geographic_region_obligor", "metric": "current_outstanding_balance"}
     resolved = {"geographic_region_obligor": {"canonical_field": "geographic_region_obligor", "role": "dimension", "format": "string"}}
-    resp = adapt_workflow_result(_workflow("bar", "table", [], spec, resolved))
-    # No data -> no chart artifact, but a (empty) table artifact is still present.
+    # Empty result -> empty figure (no traces) and no series -> no chart artifact.
+    resp = adapt_workflow_result(_workflow("bar", "table", [], spec, resolved, figure_traces=0))
     assert "chart" not in _types(resp)
     assert "table" in _types(resp)

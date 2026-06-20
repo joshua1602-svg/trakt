@@ -13,6 +13,30 @@ mock data: `mi_agent/mi_query_spec.py`, `mi_query_validator.py`,
 
 ---
 
+## 0. Update — Plotly rendering implemented (2026-06-20)
+
+The highest-priority gap below ("native heatmap/treemap via a lazy Plotly
+renderer") is now **closed**:
+
+- The API adapter emits a **chart artifact carrying `source.figure`** (the raw
+  Plotly figure) for **every** chart type, including `heatmap`/`treemap`, plus
+  the result table. The figure is included only when it has traces; empty
+  results stay table-only.
+- React routes chart artifacts **Plotly-first**: `source.figure` present →
+  lazy-loaded `PlotlyArtifactView`; else Recharts (bar/line/area/scatter/bubble/
+  waterfall); else an explicit `unsupported` state. Plotly ships in a **separate
+  async chunk** (`plotly.js-dist-min`, ~1.42 MB gzip) so the initial bundle is
+  unchanged (~188 KB gzip).
+- **heatmap and treemap are now faithfully rendered** whenever the backend
+  provides a figure. The matrices in §2/§4 marked them "degraded → table"; they
+  are now "✅ via Plotly" when a figure is present (table still emitted alongside).
+
+Remaining: a slimmer custom Plotly partial bundle, and the deterministic parser
+needs materialised bucket columns (e.g. `age_bucket`) in the demo dataset to
+exercise heatmap live.
+
+---
+
 ## 1. Executive conclusion
 
 **Partially — and now closer.** After the minimal fixes in this change set, the
