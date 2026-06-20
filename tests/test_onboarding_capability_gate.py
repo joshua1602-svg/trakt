@@ -264,6 +264,83 @@ class TestRegulatoryUnchanged(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------- #
+# 5b — funded-column mapping: balance proxy + reporting-date inference
+# --------------------------------------------------------------------------- #
+class TestProxyAndReportingDate(unittest.TestCase):
+    """Simulates the real pack's funded columns (already alias-resolved) and proves
+    the last base-MI blockers clear: outstanding-balance proxy for principal, and
+    reporting_date inferred from the run id."""
+
+    def _resolved(self):
+        return pp.resolve_product_profile(EQUITY_CTX, profiles_path=str(
+            _REPO_ROOT / "config" / "asset" / "product_profiles.yaml"))
+
+    def test_balance_proxy_derives_principal_from_outstanding(self):
+        rows = [
+            {"target_field": "current_principal_balance", "coverage_status": tcov.MISSING_REQUIRED,
+             "blocking": True, "requires_user_decision": True, "selected_source_column": ""},
+            {"target_field": "current_outstanding_balance", "coverage_status": tcov.SOURCE_MAPPED,
+             "blocking": False, "selected_source_column": "Total OSBalance"},
+        ]
+        changes = tcov.apply_profile_proxy_derivations(rows, self._resolved(), run_id="")
+        by = {r["target_field"]: r for r in rows}
+        self.assertEqual(by["current_principal_balance"]["coverage_status"], tcov.DERIVED)
+        self.assertFalse(by["current_principal_balance"]["blocking"])
+        self.assertTrue(any(c["target_field"] == "current_principal_balance" for c in changes))
+
+    def test_balance_proxy_does_not_fabricate(self):
+        # No mapped equivalent present -> principal stays missing/blocking.
+        rows = [
+            {"target_field": "current_principal_balance", "coverage_status": tcov.MISSING_REQUIRED,
+             "blocking": True, "requires_user_decision": True},
+            {"target_field": "current_outstanding_balance", "coverage_status": tcov.MISSING_REQUIRED,
+             "blocking": True},
+        ]
+        tcov.apply_profile_proxy_derivations(rows, self._resolved(), run_id="")
+        self.assertEqual(rows[0]["coverage_status"], tcov.MISSING_REQUIRED)
+        self.assertTrue(rows[0]["blocking"])
+
+    def test_reporting_date_inferred_from_run_id(self):
+        rows = [{"target_field": "reporting_date", "coverage_status": tcov.MISSING_REQUIRED,
+                 "blocking": True, "requires_user_decision": True, "selected_value": ""}]
+        changes = tcov.apply_profile_proxy_derivations(rows, self._resolved(), run_id="mi_2025_10")
+        self.assertEqual(rows[0]["coverage_status"], tcov.DEFAULTED_VALUE)
+        self.assertEqual(rows[0]["selected_value"], "2025-10-31")
+        self.assertFalse(rows[0]["blocking"])
+        self.assertTrue(any(c["target_field"] == "reporting_date" for c in changes))
+
+    def test_proxy_noop_without_applied_profile(self):
+        rows = [{"target_field": "current_principal_balance",
+                 "coverage_status": tcov.MISSING_REQUIRED, "blocking": True},
+                {"target_field": "current_outstanding_balance",
+                 "coverage_status": tcov.SOURCE_MAPPED}]
+        # generic context -> no profile applied -> no derivation
+        generic = pp.resolve_product_profile(GENERIC_CTX)
+        self.assertEqual(tcov.apply_profile_proxy_derivations(rows, generic, run_id="mi_2025_10"), [])
+        self.assertEqual(rows[0]["coverage_status"], tcov.MISSING_REQUIRED)
+
+    def test_end_to_end_funded_columns_clear_blockers(self):
+        # Funded extract columns, already alias-resolved to their canonicals.
+        evidence = [
+            _ev("Loan Interest Rate", "current_interest_rate", dtype="decimal"),
+            _ev("Latest Property Value", "current_valuation_amount", dtype="decimal"),
+            _ev("Policy Completion Date", "origination_date", dtype="date"),
+            _ev("Total OSBalance", "current_outstanding_balance", dtype="decimal"),
+        ]
+        out = Path(tempfile.mkdtemp(prefix="proxy_"))
+        warnings.simplefilter("ignore")
+        res = tcov.run_target_first_coverage(
+            mode="mi_only", context=EQUITY_CTX, evidence_rows=evidence,
+            resolved_rows=[], output_dir=out, client_id="c", run_id="mi_2025_10")
+        blocking = {d["target_field"] for d in res["decision_queue"] if d.get("blocking")}
+        for f in ("current_interest_rate", "current_valuation_amount", "origination_date",
+                  "current_principal_balance", "reporting_date"):
+            self.assertNotIn(f, blocking, f"{f} should be resolved/non-blocking")
+        scope = res["product_profile_scope"]
+        self.assertGreaterEqual(scope["proxy_derivation_count"], 2)  # principal + reporting_date
+
+
+# --------------------------------------------------------------------------- #
 # 6 — operator workflow honours an explicit --product-profile selection
 # --------------------------------------------------------------------------- #
 class TestWorkflowProductProfileFlag(unittest.TestCase):
