@@ -121,16 +121,39 @@ def _load_yaml(path: Path) -> Any:
     return yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else None
 
 
-def _read_df(file_path: str) -> Optional[pd.DataFrame]:
+def _read_df(file_path: str, sheet: str = "") -> Optional[pd.DataFrame]:
     p = Path(file_path)
     try:
         if p.suffix.lower() in (".xlsx", ".xls"):
+            if sheet:
+                xl = pd.ExcelFile(p)
+                target = str(sheet).strip()
+                match = next((sh for sh in xl.sheet_names if str(sh).strip() == target), None)
+                if match is None:
+                    match = next((sh for sh in xl.sheet_names
+                                  if _norm(sh) == _norm(sheet)), None)
+                return xl.parse(match if match is not None else xl.sheet_names[0])
             return pd.read_excel(p)
         if p.suffix.lower() == ".csv":
             return pd.read_csv(p, low_memory=False)
     except Exception:
         return None
     return None
+
+
+def _norm_key(v: Any) -> str:
+    """Normalise a loan-id key so it joins across sources regardless of how each
+    file typed it (e.g. ``76034101.0`` from a float column == ``76034101``)."""
+    s = str(v).strip()
+    if not s or s.lower() in ("nan", "none", "nat", "<na>"):
+        return ""
+    try:
+        f = float(s)
+        if f.is_integer():
+            return str(int(f))
+    except (ValueError, TypeError):
+        pass
+    return s
 
 
 def _norm(col: str) -> str:
@@ -382,37 +405,42 @@ def _build_lender_tape(
         if in_lender_scope(canon):
             field_sources[canon] = [src]   # single authoritative source -> no conflict
 
-    # Load frames + loan-key columns for every file that has loan-level sources.
-    frames: Dict[str, pd.DataFrame] = {}
-    key_cols: Dict[str, str] = {}
-    files_in_play = {s.file_name for srcs in field_sources.values() for s in srcs}
-    for fname in files_in_play:
+    # Load frames + loan-key columns per (file, SHEET) — a source selected from a
+    # specific sheet of a multi-sheet workbook must read THAT sheet, not the first.
+    def _play_key(s: "_Source") -> Tuple[str, str]:
+        return (s.file_name, s.sheet or "")
+
+    frames: Dict[Tuple[str, str], pd.DataFrame] = {}
+    key_cols: Dict[Tuple[str, str], str] = {}
+    plays = {_play_key(s) for srcs in field_sources.values() for s in srcs}
+    for (fname, sheet) in plays:
         inv = inventory_by_name.get(fname, {})
-        df = _read_df(inv.get("file_path", ""))
+        df = _read_df(inv.get("file_path", ""), sheet)
         if df is None:
             continue
         key = _find_key_column(df, _LOAN_KEY_NAMES)
         if key is None:
             continue
-        frames[fname] = df
-        key_cols[fname] = key
+        frames[(fname, sheet)] = df
+        key_cols[(fname, sheet)] = key
 
-    # Per-file lookup index: {file: {loan_id: {col: value}}}
-    indexes: Dict[str, Dict[str, Dict[str, Any]]] = {}
+    # Per-(file,sheet) lookup index: {(file,sheet): {loan_id: {col: value}}}.
+    # Loan ids are normalised (76034101.0 -> 76034101) so they join across files.
+    indexes: Dict[Tuple[str, str], Dict[str, Dict[str, Any]]] = {}
     loan_ids: List[str] = []
     seen_ids: set = set()
-    for fname, df in frames.items():
-        key = key_cols[fname]
+    for pk, df in frames.items():
+        key = key_cols[pk]
         idx: Dict[str, Dict[str, Any]] = {}
         for _, row in df.iterrows():
-            lid = str(row[key]).strip()
-            if not lid or lid.lower() == "nan":
+            lid = _norm_key(row[key])
+            if not lid:
                 continue
             idx[lid] = row.to_dict()
             if lid not in seen_ids:
                 seen_ids.add(lid)
                 loan_ids.append(lid)
-        indexes[fname] = idx
+        indexes[pk] = idx
 
     # Funded/live loan universe: ids appearing in a loan-classified source file
     # (a file whose detected domains include loan). Fall back to all ids.
@@ -455,12 +483,13 @@ def _build_lender_tape(
             srcs = _order_sources(
                 canon, field_sources[canon], precedence, registry_fields, precedence_defaults
             )
-            srcs = [s for s in srcs if s.file_name in indexes and lid in indexes[s.file_name]]
+            srcs = [s for s in srcs
+                    if _play_key(s) in indexes and lid in indexes[_play_key(s)]]
             if not srcs:
                 continue
             domain = next(iter(dc.field_domains(canon, registry_fields.get(canon, {})) & _LENDER_DOMAINS), dc.LOAN)
             primary = srcs[0]
-            primary_value = indexes[primary.file_name][lid].get(primary.column)
+            primary_value = indexes[_play_key(primary)][lid].get(primary.column)
 
             validation_sources: List[str] = []
             alternate_values: List[str] = []
@@ -468,7 +497,7 @@ def _build_lender_tape(
             precedence_applied = bool((precedence or {}).get(canon, {}).get("primary_source_file"))
 
             for other in srcs[1:]:
-                ov = indexes[other.file_name][lid].get(other.column)
+                ov = indexes[_play_key(other)][lid].get(other.column)
                 if _is_blank(ov):
                     continue
                 if _values_match(primary_value, ov):
