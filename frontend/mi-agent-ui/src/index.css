@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------ *
+ * Trakt MI Agent — enterprise design tokens
+ * Palette derived from analytics/charts_plotly.py:
+ *   PRIMARY  #232D55 (Trakt navy)   SECONDARY #919DD1 (periwinkle)
+ * ------------------------------------------------------------------ */
+@theme {
+  --color-navy-950: #0c1024;
+  --color-navy-900: #11162e;
+  --color-navy-850: #161c38;
+  --color-navy-800: #1b2240;
+  --color-navy-700: #232d55;
+  --color-navy-600: #2f3a68;
+  --color-navy-500: #3d4a82;
+
+  --color-peri-400: #919dd1;
+  --color-peri-300: #aab4dd;
+  --color-peri-200: #c6cdea;
+
+  --color-mint-400: #36c2a8;
+  --color-amber-400: #e0a93b;
+  --color-rose-400: #e0607a;
+
+  --color-ink-100: #eef1f8;
+  --color-ink-300: #b8c0d6;
+  --color-ink-400: #8c95b0;
+  --color-ink-500: #6b7493;
+
+  --color-line: #232b48;
+  --color-line-soft: #1c2440;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(
+      1200px 600px at 80% -10%,
+      rgba(145, 157, 209, 0.08),
+      transparent 60%
+    ),
+    var(--color-navy-950);
+  color: var(--color-ink-100);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv05", "ss01", "tnum";
+}
+
+/* Tight, professional scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-navy-600) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-navy-600);
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--color-navy-500);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-in {
+  animation: fade-in 0.28s ease both;
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.dot-1 {
+  animation: blink 1.2s infinite 0s;
+}
+.dot-2 {
+  animation: blink 1.2s infinite 0.2s;
+}
+.dot-3 {
+  animation: blink 1.2s infinite 0.4s;
+}
