@@ -301,11 +301,14 @@ def run_onboarding(
         mode=policy.name, client_name=client_name,
         document_terms=list(getattr(project, "document_terms", []) or []),
         llm_callable=(context_llm_callable if enable_context_resolver else None))
-    project.resolved_context = _ctx_out
-    _final_ctx = dict(_ctx_out["final"])
+    # Stamp an explicit operator/config profile onto the shared final context so
+    # BOTH gap analysis (System A) and the target-first review (System B, which
+    # reads context['product_profile']) honour it; detection is used otherwise.
     if product_profile:
-        _final_ctx["product_profile"] = str(product_profile)
-    resolved_product_profile = _pp.resolve_product_profile(_final_ctx)
+        _ctx_out["final"]["product_profile"] = str(product_profile)
+    project.resolved_context = _ctx_out
+    resolved_product_profile = _pp.resolve_product_profile(
+        _ctx_out["final"], explicit_profile_id=str(product_profile or ""))
     project.product_profile_resolution = resolved_product_profile.as_dict()
 
     # --- PART 8: gap questions (mode-aware severity + field scope) ---
