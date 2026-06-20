@@ -758,9 +758,18 @@ CURATION: Dict[str, dict] = {
         "tier": "core", "virtual": True, "source_criteria": ["snapshot_metadata"],
         "business_name": "Reporting Date",
         "business_description": "MI reporting period the snapshot represents "
-                               "(snapshot header; distinct from upload/cut-off).",
+                               "(snapshot header; distinct from upload/cut-off). "
+                               "For an MI package this is the funded-book reporting "
+                               "date shared by the loan, collateral and cashflow "
+                               "tapes (funded_reporting_date).",
         "synonyms": ["reporting date", "report date", "mi reporting date",
-                     "as of date", "reporting period"],
+                     "as of date", "reporting period",
+                     # funded-book reporting-date aliases (NOT a new canonical
+                     # field; these all resolve to reporting_date).
+                     "funded_reporting_date", "funded reporting date",
+                     "funded book reporting date", "funded as-of date",
+                     "funded as of date", "loan tape reporting date",
+                     "loan extract reporting date", "book date"],
         "overrides": {"role": "date", "format": "date", "chartable": True},
     },
     "cut_off_date": {
@@ -791,6 +800,22 @@ CURATION: Dict[str, dict] = {
         "synonyms": ["pipeline stage", "funnel stage", "application stage",
                      "pipeline status"],
         "overrides": {"role": "dimension", "format": "string"},
+    },
+    "pipeline_snapshot_date": {
+        "tier": "core", "virtual": True, "source_criteria": ["pipeline_state"],
+        "business_name": "Pipeline Snapshot Date",
+        "business_description": "As-of date of the origination pipeline snapshot "
+                               "(forward exposure / forecast). Applies ONLY to "
+                               "pipeline artefacts and may legitimately differ from "
+                               "the funded-book reporting_date; it is an MI/pipeline "
+                               "date, not a regulatory core field.",
+        "synonyms": ["pipeline snapshot date", "pipeline as-of date",
+                     "pipeline as of date", "pipeline extract date",
+                     "pipeline report date", "application pipeline date",
+                     "kfi pipeline date"],
+        "overrides": {"role": "date", "format": "date", "chartable": True,
+                      "allowed_chart_roles": ["x", "filter", "cohort"],
+                      "default_chart_role": "x"},
     },
     "funded_status": {
         "tier": "core", "virtual": True, "source_criteria": ["pipeline_state"],

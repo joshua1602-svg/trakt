@@ -1876,6 +1876,7 @@ def load_mi_applicability_overlay(
     mode: str,
     context: Optional[Dict[str, Any]] = None,
     overlay_path: Optional[str | Path] = None,
+    resolved_profile: Optional[Any] = None,
 ) -> Dict[str, Dict[str, Any]]:
     """Load the MI applicability/default overlay for the run context.
 
@@ -1883,37 +1884,57 @@ def load_mi_applicability_overlay(
     scoped by asset_class / jurisdiction / mode (both file-level ``meta`` and
     per-rule overrides). Returns ``{}`` when the overlay does not apply or is
     missing — the generic registry behaviour is then used unchanged.
+
+    When an applied ``resolved_profile`` (a
+    :class:`product_profile.ResolvedProfile`) is supplied, its config-driven
+    field policies are merged in for fields the static overlay does not already
+    cover. The static YAML overlay always wins on conflict; the product profile
+    only *fills gaps* so a no-source field the profile marks non-blocking is not
+    reported as ``missing_required``. A profile that is not applied (e.g. only
+    proposed for confirmation) contributes nothing.
     """
     if target_contract_kind(mode, context) != "mi_semantics":
         return {}
-    path = Path(overlay_path) if overlay_path else _MI_OVERLAY_PATH
-    if not path.exists():
-        return {}
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    meta = data.get("meta", {}) or {}
-    ctx = context or {}
-    asset = ctx.get("asset_class", "")
-    juris = ctx.get("jurisdiction", "")
-    # File-level scope gate.
-    if not (_matches(meta.get("asset_class"), asset)
-            and _matches(meta.get("jurisdiction"), juris)
-            and _matches(meta.get("mode"), mode)):
-        return {}
     out: Dict[str, Dict[str, Any]] = {}
-    for rule in data.get("rules", []) or []:
-        field = rule.get("field")
-        if not field:
-            continue
-        # Per-rule scope overrides (default to file-level meta when omitted).
-        if not (_matches(rule.get("asset_class", meta.get("asset_class")), asset)
-                and _matches(rule.get("jurisdiction", meta.get("jurisdiction")), juris)
-                and _matches(rule.get("mode", meta.get("mode")), mode)):
-            continue
-        status = str(rule.get("coverage_status_if_no_source", "")).strip()
-        if status and status not in _OVERLAY_STATUSES:
-            # Unknown status -> safest is to require confirmation, never silently drop.
-            status = NEEDS_CONFIRMATION
-        out[field] = {**rule, "coverage_status_if_no_source": status}
+
+    path = Path(overlay_path) if overlay_path else _MI_OVERLAY_PATH
+    if path.exists():
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        meta = data.get("meta", {}) or {}
+        ctx = context or {}
+        asset = ctx.get("asset_class", "")
+        juris = ctx.get("jurisdiction", "")
+        # File-level scope gate.
+        if (_matches(meta.get("asset_class"), asset)
+                and _matches(meta.get("jurisdiction"), juris)
+                and _matches(meta.get("mode"), mode)):
+            for rule in data.get("rules", []) or []:
+                field = rule.get("field")
+                if not field:
+                    continue
+                # Per-rule scope overrides (default to file-level meta when omitted).
+                if not (_matches(rule.get("asset_class", meta.get("asset_class")), asset)
+                        and _matches(rule.get("jurisdiction", meta.get("jurisdiction")), juris)
+                        and _matches(rule.get("mode", meta.get("mode")), mode)):
+                    continue
+                status = str(rule.get("coverage_status_if_no_source", "")).strip()
+                if status and status not in _OVERLAY_STATUSES:
+                    # Unknown status -> require confirmation, never silently drop.
+                    status = NEEDS_CONFIRMATION
+                out[field] = {**rule, "coverage_status_if_no_source": status}
+
+    # Merge config-driven product-profile rules (gap-fill only; YAML wins).
+    if resolved_profile is not None and getattr(resolved_profile, "applied", False):
+        prof = getattr(resolved_profile, "profile", None)
+        if prof is not None:
+            from .product_profile import profile_overlay_rules
+            for field, rule in profile_overlay_rules(prof).items():
+                if field in out:
+                    continue
+                status = str(rule.get("coverage_status_if_no_source", "")).strip()
+                if status and status not in _OVERLAY_STATUSES:
+                    status = NEEDS_CONFIRMATION
+                out[field] = {**rule, "coverage_status_if_no_source": status}
     return out
 
 

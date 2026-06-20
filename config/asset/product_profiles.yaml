@@ -1,0 +1,254 @@
+# Product profile registry — asset-agnostic, config-driven onboarding hardening.
+# ============================================================================
+#
+# Purpose
+# -------
+# The onboarding engine is deliberately asset-agnostic. Some products, however,
+# have structural characteristics that make a number of generic "required" fields
+# *not applicable*, *derivable*, or *defaultable* for base management information
+# (MI) — e.g. an equity-release / lifetime mortgage has no contractual maturity
+# and capitalises interest, so `maturity_date` and `amortisation_type` are not
+# meaningful base-MI blockers.
+#
+# This registry expresses those characteristics as **product profiles**. A profile
+# is:
+#   * config-driven (no client names, no source-file names, no tape-specific keys);
+#   * keyed by a stable `profile_id`;
+#   * matched to a run by asset_class / product_type / jurisdiction context, OR
+#     set explicitly by config/operator, OR inferred with confidence from evidence.
+#
+# A profile NEVER:
+#   * removes a field from the registry;
+#   * weakens regulatory_mi requirements (profiles only relax base/optional MI
+#     capabilities; regulatory capabilities keep their own contract);
+#   * fabricates loan-level values silently (every default/derivation is recorded
+#     with rationale + source + confidence into the review/handoff artefacts).
+#
+# Resolution policy (see engine/onboarding_agent/product_profile.py):
+#   * explicit config/operator selection is trusted outright;
+#   * a detected profile at >= apply_confidence is applied and its evidence recorded;
+#   * a detected profile at >= confirm_confidence but < apply_confidence is proposed
+#     for confirmation (never silently applied);
+#   * below confirm_confidence no profile is applied (generic stricter behaviour).
+
+version: 2
+
+# Global thresholds (a profile may override under its own `confidence_policy`).
+defaults:
+  apply_confidence: 0.80      # >= -> apply detected profile automatically
+  confirm_confidence: 0.55    # >= and < apply -> ask operator to confirm
+
+# Canonical capability vocabulary. Readiness is emitted per capability so that
+# base MI never depends on every possible MI / risk / regulatory field.
+capabilities:
+  - base_mi
+  - pipeline_mi
+  - risk_migration
+  - risk_monitor
+  - spv_segmentation
+  - mna_segmentation
+  - regulatory_reporting
+
+profiles:
+  # -------------------------------------------------------------------------
+  # Equity release / lifetime mortgage.
+  # -------------------------------------------------------------------------
+  equity_release_lifetime_mortgage:
+    label: "Equity release / lifetime mortgage"
+    description: >
+      Roll-up (interest-capitalising) lifetime mortgage. No contractual
+      amortisation schedule and no fixed maturity; the loan redeems on death,
+      move into long-term care, or voluntary sale. Current loan balance already
+      includes capitalised interest, so it equals the current outstanding balance.
+
+    # Evidence-based matching (asset-agnostic tokens, NOT file or client names).
+    match:
+      asset_class: [equity_release_mortgage, equity_release, lifetime_mortgage]
+      product_type: [lifetime_mortgage, equity_release, drawdown, lump_sum, rio, erm]
+      # Soft signal tokens that raise detection confidence when present in the
+      # resolved onboarding context rationale / evidence. Never file names.
+      signal_tokens:
+        - equity release
+        - lifetime mortgage
+        - roll-up
+        - roll up
+        - capitalis
+        - no negative equity
+        - nneg
+        - drawdown
+
+    confidence_policy:
+      apply_confidence: 0.80
+      confirm_confidence: 0.55
+
+    reporting_date:
+      # Allow folder-period / run-id inference for this profile (default on).
+      allow_period_inference: true
+
+    # Per-field base-MI policy. `base_mi` is one of:
+    #   not_applicable | derived | defaulted | optional | required
+    # Anything that is not `required` is NON-BLOCKING for base MI but stays
+    # visible as a gap. `required_for_capabilities` lists the capabilities that
+    # DO need the field (so disabling them is explicit, never silent).
+    field_policies:
+
+      maturity_date:
+        base_mi: not_applicable
+        rationale: >
+          Lifetime mortgage / equity release has no contractual maturity in the
+          amortising sense (matures on death / move into care / sale).
+
+      amortisation_type:
+        base_mi: defaulted
+        # Canonical enum supports OTHR for capitalising / roll-up / no scheduled
+        # amortisation (see config/system/enum_mapping.yaml + product_defaults_ERM).
+        default_value: "OTHR"
+        default_label: "capitalising_rollup_no_scheduled_amortisation"
+        rationale: >
+          Roll-up products have no scheduled amortisation. The canonical enum
+          represents this as OTHR; the value is defaulted with profile rationale,
+          not inferred from a source column.
+
+      current_outstanding_balance:
+        base_mi: derived
+        derivation: from_field
+        derivation_source: current_principal_balance
+        # Equivalent current-balance fields accepted as the proxy source.
+        derivation_source_alternatives:
+          - current_loan_balance
+          - outstanding_balance
+        rationale: >
+          Interest capitalises, so the current loan balance already includes
+          rolled-up interest and equals the current outstanding balance.
+
+      funded_status:
+        base_mi: derived
+        derivation: from_artefact_role
+        # Rows from a funded loan extract / loan tape are funded/live unless a
+        # source status column clearly contradicts it.
+        funded_when_artefact_role_in:
+          - current_loan_report
+          - historical_loan_report
+        contradicting_status_tokens:
+          - pipeline
+          - application
+          - offer
+          - kfi
+          - redeemed
+          - declined
+          - withdrawn
+        rationale: >
+          Funded status derives from the funded-loan-extract artefact role unless
+          a source status value clearly contradicts it.
+
+      months_on_book:
+        base_mi: derived
+        derivation: from_dates
+        derivation_inputs: [origination_date, reporting_date]
+        rationale: "Months on book = whole months between origination_date and reporting_date."
+
+      number_of_borrowers:
+        base_mi: optional
+        derivation: from_borrower_fields
+        # Borrower / person / applicant fields only. NEVER a unique loan id count.
+        derivation_source_tokens:
+          - borrower
+          - applicant
+          - person
+          - obligor
+          - customer
+        forbid_derivation_from:
+          - loan_identifier
+          - loan_id
+          - account_number
+          - policy_number
+        rationale: >
+          Number of borrowers derives only from borrower/person/applicant fields.
+          It is never derived from a unique loan-id count. Non-blocking for base MI.
+
+      # --- portfolio segmentation keys (non-blocking unless explicitly required) ---
+      portfolio_id:
+        base_mi: defaulted
+        default_rule: client_run_portfolio
+        rationale: >
+          When no source portfolio field exists and multi-portfolio segmentation
+          is not required, default to the client/run portfolio.
+
+      acquired_portfolio_id:
+        base_mi: optional
+        required_for_capabilities: [mna_segmentation]
+        rationale: "Only needed when M&A / acquired-portfolio segmentation is required."
+
+      acquisition_date:
+        base_mi: optional
+        required_for_capabilities: [mna_segmentation]
+        rationale: "Only needed when M&A / acquired-portfolio segmentation is required."
+
+      spv_id:
+        base_mi: optional
+        required_for_capabilities: [spv_segmentation]
+        rationale: "Only needed when SPV segmentation is explicitly required."
+
+      # --- risk fields: non-blocking for base MI; gate risk capabilities only ---
+      ifrs9_stage:
+        base_mi: optional
+        required_for_capabilities: [risk_migration, risk_monitor]
+        rationale: "Risk staging is required only for risk-migration / risk-monitor capabilities."
+
+      internal_risk_grade:
+        base_mi: optional
+        required_for_capabilities: [risk_migration, risk_monitor]
+        rationale: "Internal grade is required only for risk capabilities."
+
+      probability_of_default:
+        base_mi: optional
+        required_for_capabilities: [risk_monitor]
+        rationale: "PD is required only for risk-monitor."
+
+      loss_given_default:
+        base_mi: optional
+        required_for_capabilities: [risk_monitor]
+        rationale: "LGD is required only for risk-monitor."
+
+      exposure_at_default:
+        base_mi: optional
+        required_for_capabilities: [risk_monitor]
+        rationale: "EAD is required only for risk-monitor."
+
+    # Capability field contracts. A capability is `ready` when all of its
+    # required_fields are satisfied (mapped, derived, defaulted, or
+    # not_applicable) and none of its required_fields are unresolved-missing.
+    capability_fields:
+      base_mi:
+        required_fields:
+          - loan_identifier
+          - current_principal_balance
+          - current_interest_rate
+          - origination_date
+          - current_valuation_amount
+          - reporting_date
+        # Either of these satisfies the "current balance" requirement.
+        equivalent_field_groups:
+          - [current_principal_balance, current_outstanding_balance, current_loan_balance]
+      pipeline_mi:
+        required_fields:
+          - pipeline_stage
+        artefact_role_required: pipeline_report
+      risk_migration:
+        required_fields:
+          - ifrs9_stage
+      risk_monitor:
+        required_fields:
+          - ifrs9_stage
+          - probability_of_default
+          - loss_given_default
+          - exposure_at_default
+      spv_segmentation:
+        required_fields:
+          - spv_id
+      mna_segmentation:
+        required_fields:
+          - acquired_portfolio_id
+          - acquisition_date
+      # regulatory_reporting is intentionally NOT relaxed here — it keeps its own
+      # regime contract (config/regime/*). Profiles never weaken it.

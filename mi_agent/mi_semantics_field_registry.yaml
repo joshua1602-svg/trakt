@@ -4,7 +4,7 @@
 # Do NOT edit by hand without also updating the build script (CURATION),
 # or your changes will be overwritten on the next regeneration.
 metadata:
-  generated_at: '2026-06-18T19:54:29.418676+00:00'
+  generated_at: '2026-06-20T08:58:36.860119+00:00'
   source_registry: /home/user/trakt/config/system/fields_registry.yaml
   selection_approach: curated MI-first allowlist (see CURATION in build script)
   selection_rules:
@@ -21,11 +21,11 @@ metadata:
   mi_tiers:
   - core
   - extended
-  field_count: 99
-  core_field_count: 67
+  field_count: 100
+  core_field_count: 68
   extended_field_count: 32
   derived_field_count: 14
-  virtual_field_count: 15
+  virtual_field_count: 16
   missing_curated_fields: []
   version: 0.3.0
   default_weight_field: current_outstanding_balance
@@ -2533,6 +2533,40 @@ fields:
     notes: ''
     derived: true
     derived_from: probability_of_default
+  pipeline_snapshot_date:
+    canonical_field: pipeline_snapshot_date
+    mi_tier: core
+    business_name: Pipeline Snapshot Date
+    display_name: Pipeline Snapshot Date
+    business_description: As-of date of the origination pipeline snapshot (forward exposure / forecast).
+      Applies ONLY to pipeline artefacts and may legitimately differ from the funded-book reporting_date;
+      it is an MI/pipeline date, not a regulatory core field.
+    description: ''
+    synonyms:
+    - pipeline snapshot date
+    - pipeline as-of date
+    - pipeline as of date
+    - pipeline extract date
+    - pipeline report date
+    - application pipeline date
+    - kfi pipeline date
+    source_criteria:
+    - pipeline_state
+    role: date
+    format: date
+    chartable: true
+    allowed_aggregations:
+    - count
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - filter
+    - cohort
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    virtual: true
   pipeline_stage:
     canonical_field: pipeline_stage
     mi_tier: core
@@ -2788,7 +2822,8 @@ fields:
     business_name: Reporting Date
     display_name: Reporting Date
     business_description: MI reporting period the snapshot represents (snapshot header; distinct from
-      upload/cut-off).
+      upload/cut-off). For an MI package this is the funded-book reporting date shared by the loan, collateral
+      and cashflow tapes (funded_reporting_date).
     description: ''
     synonyms:
     - reporting date
@@ -2796,6 +2831,14 @@ fields:
     - mi reporting date
     - as of date
     - reporting period
+    - funded_reporting_date
+    - funded reporting date
+    - funded book reporting date
+    - funded as-of date
+    - funded as of date
+    - loan tape reporting date
+    - loan extract reporting date
+    - book date
     source_criteria:
     - snapshot_metadata
     role: date

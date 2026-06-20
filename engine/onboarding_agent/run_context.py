@@ -42,6 +42,8 @@ import yaml
 SRC_CLI_OVERRIDE = "cli_override"
 SRC_SOURCE_COLUMN = "source_column"
 SRC_FILENAME = "filename"
+SRC_FOLDER_PERIOD = "folder_period"
+SRC_RUN_ID = "run_id"
 SRC_CONFIG = "config"
 SRC_CLI_FALLBACK = "cli_fallback"
 
@@ -149,6 +151,36 @@ def dates_from_filename(name: str) -> List[str]:
     return list(dict.fromkeys(out))
 
 
+def dates_from_period_token(text: str) -> List[str]:
+    """Extract a reporting month-end from a *period token* deterministically.
+
+    Recognises ``YYYY-MM`` / ``YYYY_MM`` / ``YYYY/MM`` and ``YYYYMM`` style
+    period markers embedded in a folder name or a run id (e.g. an
+    ``input/2025-10`` folder or a ``mi_2025_10`` run id -> ``2025-10-31``).
+    A bare year, or a year-month whose month is out of range, yields nothing —
+    no date is invented.
+    """
+    out: List[str] = []
+    s = str(text or "")
+
+    # YYYY[sep]MM (separated) -> month end. Require a separator so a 4-digit
+    # year alone or an 8-digit YYYYMMDD is not misread as a period.
+    for m in re.finditer(r"(?<!\d)((?:19|20)\d{2})[\-_/.]((?:0[1-9]|1[0-2]))(?!\d)", s):
+        me = _month_end_iso(int(m.group(1)), int(m.group(2)))
+        if me:
+            out.append(me)
+
+    # Compact YYYYMM (exactly 6 digits, not part of a longer run) -> month end.
+    for tok in re.findall(r"(?<!\d)(\d{6})(?!\d)", s):
+        head4 = tok[:4]
+        if re.fullmatch(r"(19|20)\d{2}", head4):
+            me = _month_end_iso(int(head4), int(tok[4:6]))
+            if me:
+                out.append(me)
+
+    return list(dict.fromkeys(out))
+
+
 # --------------------------------------------------------------------------- #
 # Candidate gathering
 # --------------------------------------------------------------------------- #
@@ -210,8 +242,19 @@ def extract_data_cut_off_date(
     regime_config_path: str = "",
     cli_reporting_date: str = "",
     override_reporting_date: bool = False,
+    run_id: str = "",
+    input_dir: str | Path = "",
 ) -> Dict[str, Any]:
     """Resolve a single portfolio-level ``data_cut_off_date`` with full evidence.
+
+    Resolution priority (deterministic, never invented):
+        1. explicit operator override;
+        2. source column values (tape date);
+        3. a date embedded in a source file name;
+        4. a folder period (e.g. ``input/2025-10`` -> ``2025-10-31``);
+        5. the run id period (e.g. ``mi_2025_10`` -> ``2025-10-31``);
+        6. a configured static reporting date;
+        7. a plain CLI fallback.
 
     Returns a dict with the resolved ``value`` (ISO or ""), ``source`` label,
     ``source_file``, ``source_location``, ``confidence``, the full ``candidates``
@@ -250,6 +293,31 @@ def extract_data_cut_off_date(
                                   "source_file": fname,
                                   "source_location": "filename", "confidence": 0.6})
 
+    # Tier 4a: folder period (e.g. an `input/2025-10` period folder -> month end).
+    folder_vals: List[Dict[str, Any]] = []
+    period_dirs: List[str] = []
+    if input_dir:
+        ip = Path(input_dir)
+        period_dirs.append(ip.name)
+        period_dirs.append(ip.parent.name)
+    # Also consider the onboarding project dir's own period-looking segments.
+    period_dirs.append(project_dir.name)
+    seen_period = set()
+    for seg in period_dirs:
+        if not seg or seg in seen_period:
+            continue
+        seen_period.add(seg)
+        for iso in dates_from_period_token(seg):
+            folder_vals.append({"value": iso, "source": SRC_FOLDER_PERIOD,
+                                "source_file": "", "source_location": f"folder:{seg}",
+                                "confidence": 0.7})
+
+    # Tier 4b: run id period (e.g. `mi_2025_10` -> month end).
+    runid_vals: List[Dict[str, Any]] = []
+    for iso in dates_from_period_token(run_id):
+        runid_vals.append({"value": iso, "source": SRC_RUN_ID, "source_file": "",
+                           "source_location": f"run_id:{run_id}", "confidence": 0.65})
+
     # Tier 4: config static date
     config_vals: List[Dict[str, Any]] = []
     cfg_hit = _config_static_date(asset_config_path, regime_config_path)
@@ -262,7 +330,7 @@ def extract_data_cut_off_date(
     # CLI value (override or fallback)
     cli_iso = normalize_to_iso(cli_reporting_date) if cli_reporting_date else None
 
-    candidates = source_vals + filename_vals + config_vals
+    candidates = source_vals + filename_vals + folder_vals + runid_vals + config_vals
     if cli_iso:
         candidates = [{"value": cli_iso,
                        "source": SRC_CLI_OVERRIDE if override_reporting_date else SRC_CLI_FALLBACK,
@@ -285,14 +353,15 @@ def extract_data_cut_off_date(
         _accept({"value": cli_iso, "source": SRC_CLI_OVERRIDE, "source_file": "",
                  "source_location": "cli", "confidence": 1.0})
         # note if it disagreed with a source-derived value
-        sd = {v["value"] for v in source_vals + filename_vals + config_vals}
+        sd = {v["value"] for v in
+              source_vals + filename_vals + folder_vals + runid_vals + config_vals}
         if sd and cli_iso not in sd:
             result["conflict_detail"] = (
                 f"cli override {cli_iso} differs from source-derived {sorted(sd)}")
         return result
 
     # Walk the deterministic tiers; surface intra-tier conflicts.
-    for tier in (source_vals, filename_vals, config_vals):
+    for tier in (source_vals, filename_vals, folder_vals, runid_vals, config_vals):
         distinct = sorted({c["value"] for c in tier})
         if len(distinct) == 1:
             _accept(next(c for c in tier if c["value"] == distinct[0]))

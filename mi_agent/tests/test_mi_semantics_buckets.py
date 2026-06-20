@@ -111,9 +111,10 @@ def test_registry_field_count_and_tiers(semantics):
     assert m["derived_field_count"] == len(DERIVED_BUCKETS) + 2 + 4
     assert m["field_count"] == m["core_field_count"] + m["extended_field_count"]
     # v0.2.x set == 72; Phase 0B adds 27 MI/M&A risk + segmentation/snapshot
-    # semantic fields == 99.
-    assert m["field_count"] == 99
-    assert m["core_field_count"] == 67
+    # semantic fields == 99; the funded-book vs pipeline date-semantics work adds
+    # the separate pipeline_snapshot_date core dimension == 100.
+    assert m["field_count"] == 100
+    assert m["core_field_count"] == 68
     assert "derived bucket semantic fields added" in (m.get("cleanup_notes") or [])
 
 
