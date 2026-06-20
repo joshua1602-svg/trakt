@@ -138,22 +138,15 @@ class TestModeSeverity(unittest.TestCase):
     def test_mi_only_emits_missing_core_field_gaps(self):
         core_qs = [q for q in self.mi.gap_questions if q.category == "core_field"]
         self.assertTrue(core_qs)
-        # MI-critical core fields still block (at least one blocking gap).
-        self.assertTrue(any(q.severity == "blocking" for q in core_qs))
-
-    def test_mi_only_legal_entity_core_fields_not_blocking(self):
-        # Legal/regulatory entity identifiers (LEI, originator name) are core but
-        # not required for MI analytics -> visible (high) but NOT blocking, so
-        # they never block MI-only promotion.
-        by_subject = {q.subject: q for q in self.mi.gap_questions
-                      if q.category == "core_field"}
-        for fname in ("originator_legal_entity_identifier", "originator_name"):
-            if fname in by_subject:  # only if unmapped in the synthetic pack
-                self.assertNotEqual(by_subject[fname].severity, "blocking", fname)
-        blocking_subjects = {q.subject for q in self.mi.gap_questions
-                             if q.category == "core_field" and q.severity == "blocking"}
-        self.assertNotIn("originator_legal_entity_identifier", blocking_subjects)
-        self.assertNotIn("originator_name", blocking_subjects)
+        # Genuine base-MI core fields still block (e.g. the reporting cut-off date).
+        blocking = {q.subject for q in core_qs if q.severity == "blocking"}
+        self.assertIn("data_cut_off_date", blocking)
+        # The synthetic pack is an equity-release book: the applied product profile
+        # demotes not_applicable/defaulted/derived core fields (e.g.
+        # amortisation_type) to a visible, NON-blocking gap — never silently dropped.
+        non_blocking = {q.subject for q in core_qs if q.severity != "blocking"}
+        self.assertIn("amortisation_type", non_blocking)
+        self.assertTrue(all(q.severity in ("blocking", "high") for q in core_qs))
 
     def test_mna_dd_missing_core_nonblocking(self):
         core_qs = [q for q in self.mna.gap_questions if q.category == "core_field"]

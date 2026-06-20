@@ -139,6 +139,7 @@ def run_onboarding(
     target_contract: str = "",
     regime_config_path: str = "",
     asset_config_path: str = "",
+    product_profile: str = "",
 ) -> OnboardingProject:
     in_dir = Path(input_dir)
     out_dir = Path(output_dir)
@@ -282,6 +283,23 @@ def run_onboarding(
         regime_optional=(policy.name == "mna_dd"),
     )
 
+    # Resolve a product profile deterministically (asset-agnostic, config-driven)
+    # so base-MI gap severity and Gate-4 target classification become capability
+    # aware. Only POSITIVE asset evidence (or an explicit profile) applies a
+    # profile; a generic pack keeps the stricter generic behaviour.
+    from . import onboarding_context as _oc
+    from . import product_profile as _pp
+    _det_ctx = _oc.detect_context(
+        [i.to_dict() for i in inventory],
+        [{"source_column": p.source_column,
+          "sample_values_distinct_redacted": "; ".join((p.sample_values_redacted or [])[:5])}
+         for p in profiles],
+        mode=policy.name, client_name=client_name,
+        document_terms=list(getattr(project, "document_terms", []) or []))
+    resolved_product_profile = _pp.resolve_product_profile(
+        {**_det_ctx, "product_profile": str(product_profile or "")})
+    project.product_profile_resolution = resolved_product_profile.as_dict()
+
     # --- PART 8: gap questions (mode-aware severity + field scope) ---
     project.gap_questions = gap_analyzer.analyze_gaps(
         inventory, profiles, project.overlap_analysis, project.config_suggestions,
@@ -291,6 +309,7 @@ def run_onboarding(
         memory_resolved_enums=memory_resolved_enums,
         memory_ignored_columns=memory_ignored_columns,
         memory_resolved_source_fields=memory_resolved_source_fields,
+        resolved_profile=resolved_product_profile,
     )
     # Warning gaps from materially-conflicting client memory (PART 10).
     if memory_gap_questions:

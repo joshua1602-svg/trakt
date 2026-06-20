@@ -240,12 +240,19 @@ CORE_FIELD_ACTIONS = [
 ]
 
 
-def _missing_core_field_questions(field_scope, mapping_candidates, start_idx: int):
+def _missing_core_field_questions(field_scope, mapping_candidates, start_idx: int,
+                                  resolved_profile=None):
     """Emit answerable gaps for in-scope core_canonical fields with no mapping.
 
     Severity is ``blocking`` when the field is in the mode's blocking set, else
     ``high`` (visible but non-blocking — e.g. non-structural core fields in
     mna_dd). Out-of-scope / regulatory non-core fields never produce these.
+
+    When a product profile is APPLIED, a core field the profile marks
+    not_applicable / derived / defaulted / optional for base MI is downgraded to a
+    visible, NON-blocking ``high`` gap (with the profile rationale recorded) — so
+    e.g. ``maturity_date`` / ``amortisation_type`` no longer block an
+    equity-release base-MI run. Genuine base fields stay blocking.
     """
     if field_scope is None:
         return []
@@ -253,12 +260,24 @@ def _missing_core_field_questions(field_scope, mapping_candidates, start_idx: in
         m.candidate_canonical_field for m in (mapping_candidates or [])
         if m.candidate_canonical_field
     }
+    profile_applied = bool(resolved_profile is not None
+                           and getattr(resolved_profile, "applied", False))
+    prof = getattr(resolved_profile, "profile", None) if profile_applied else None
     in_scope_core = field_scope.included_fields & field_scope.core_canonical_fields
     questions: List[GapQuestion] = []
     idx = start_idx
     for fname in sorted(in_scope_core - covered):
         idx += 1
         blocking = fname in field_scope.blocking_fields
+        reason = f"Core canonical field '{fname}' has no mapping candidate."
+        if blocking and prof is not None and prof.is_non_blocking_for_base_mi(fname):
+            # Profile policy demotes this from a base-MI blocker to a visible gap.
+            blocking = False
+            policy = prof.base_mi_policy(fname)
+            rationale = prof.field_policy(fname).get("rationale", "")
+            reason = (f"Core field '{fname}' is {policy} for base MI under product "
+                      f"profile '{prof.profile_id}' ({rationale}); visible but "
+                      f"non-blocking.")
         questions.append(
             GapQuestion(
                 question_id=f"Q{idx}",
@@ -268,7 +287,7 @@ def _missing_core_field_questions(field_scope, mapping_candidates, start_idx: in
                     f"The core canonical field {fname} is missing or unmapped. "
                     f"Which source column should be used, or should it be marked unavailable?"
                 ),
-                reason=f"Core canonical field '{fname}' has no mapping candidate.",
+                reason=reason,
                 candidate_answers=list(CORE_FIELD_ACTIONS),
                 default_recommendation="mark_unavailable",
                 blocking_for=["canonical_loan_reporting"] if blocking else [],
@@ -292,6 +311,7 @@ def analyze_gaps(
     memory_resolved_enums: Optional[set] = None,
     memory_ignored_columns: Optional[set] = None,
     memory_resolved_source_fields: Optional[set] = None,
+    resolved_profile=None,
 ) -> List[GapQuestion]:
     """Generate gap questions, then re-rank severity for the onboarding mode.
 
@@ -441,7 +461,11 @@ def analyze_gaps(
     questions.extend(_warehouse_gap_questions(inventory, config_suggestions, mode, len(questions)))
 
     # --- Missing in-scope core canonical fields (answerable) ---
-    questions.extend(_missing_core_field_questions(field_scope, mapping_candidates, len(questions)))
+    # Product-profile core-field demotion applies to MI modes only — regulatory_mi
+    # keeps its strict core requirements (never weakened by a product profile).
+    core_profile = resolved_profile if mode in ("mi_only", "mna_dd") else None
+    questions.extend(_missing_core_field_questions(field_scope, mapping_candidates,
+                                                   len(questions), core_profile))
 
     # --- Out-of-scope summary (regulatory fields excluded by mode field scope) ---
     if field_scope is not None:

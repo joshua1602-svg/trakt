@@ -376,6 +376,26 @@ def configured_capabilities(path: Optional[str | Path] = None) -> List[str]:
     return list(data.get("capabilities", []) or [])
 
 
+def base_mi_required_fields(
+    profile: ProductProfile,
+) -> tuple[set, set, List[List[str]]]:
+    """Return ``(required_set, required_flat, equivalent_groups)`` for the profile's
+    ``base_mi`` capability contract.
+
+    ``required_flat`` expands every equivalence group that intersects the required
+    set, so any member of a "current balance" group counts as satisfying the base
+    requirement. All names are normalised.
+    """
+    spec = profile.capability_fields.get("base_mi", {}) or {}
+    req = {_norm(f) for f in (spec.get("required_fields", []) or [])}
+    groups = [[_norm(x) for x in g] for g in (spec.get("equivalent_field_groups", []) or [])]
+    flat = set(req)
+    for g in groups:
+        if set(g) & req:
+            flat |= set(g)
+    return req, flat, groups
+
+
 def _match_score(profile: ProductProfile, context: Dict[str, Any]) -> tuple[float, List[str]]:
     """Deterministic evidence score for a profile against the run context."""
     match = profile.spec.get("match", {}) or {}
@@ -447,6 +467,13 @@ def resolve_product_profile(
             rationale=f"Explicit profile '{explicit_profile_id}' is not configured.",
             evidence=[], profile=None,
         )
+
+    # Guard against detectors that DEFAULT an asset_class with no real evidence
+    # (so a generic, non-equity-release pack stays on stricter generic behaviour).
+    if context.get("asset_signal_strength") == 0 and not context.get("product_profile"):
+        return ResolvedProfile(
+            decision=DECISION_NONE, confidence=0.0,
+            rationale="No positive asset-class evidence; generic behaviour retained.")
 
     best: Optional[ProductProfile] = None
     best_score = 0.0

@@ -1938,6 +1938,56 @@ def load_mi_applicability_overlay(
     return out
 
 
+def apply_mi_capability_scope(
+    target_fields: List[Dict[str, Any]],
+    resolved_profile: Optional[Any],
+    mode: str,
+) -> List[Dict[str, Any]]:
+    """Capability-aware required-status pass for the MI semantics target contract.
+
+    The MI semantics registry marks every ``core``-tier field ``required``. For a
+    base-MI run that would make every unmapped MI dimension a blocking Gate-4
+    decision. When a product profile is APPLIED for an MI mode, a missing target
+    field is only a *base-MI blocker* if it is in the profile's ``base_mi``
+    capability contract. Every other still-required core field is downgraded to
+    ``optional`` (so it surfaces as a visible, NON-blocking gap, not
+    ``missing_required``), tagged with the capability that actually needs it.
+
+    Fields with an explicit profile field-policy (not_applicable / derived /
+    defaulted / optional) are left untouched here — the applicability overlay
+    classifies them as non-blocking when they have no source. Regulatory contracts
+    are never touched. Returns an auditable list of the changes made.
+    """
+    if resolved_profile is None or not getattr(resolved_profile, "applied", False):
+        return []
+    prof = getattr(resolved_profile, "profile", None)
+    if prof is None or mode not in ("mi_only", "mna_dd"):
+        return []
+    from .product_profile import base_mi_required_fields, _norm as _pnorm
+
+    _, base_flat, _ = base_mi_required_fields(prof)
+    changes: List[Dict[str, Any]] = []
+    for tf in target_fields:
+        name = _pnorm(tf.get("target_field", ""))
+        if name in base_flat:
+            continue                      # genuine base-MI field stays blocking
+        if prof.field_policy(name):
+            continue                      # explicit policy -> overlay handles it
+        if tf.get("required_status") in ("mandatory", "required"):
+            caps = prof.required_for_capabilities(name)
+            tf["required_status"] = "optional"
+            tf["applicability_status"] = tf.get("applicability_status") or "applicable"
+            reason = ("required only for " + ", ".join(caps) if caps
+                      else "not required for base_mi capability")
+            tf["default_reason"] = (
+                "product_profile capability scope: " + reason +
+                " (visible, non-blocking for base MI)")
+            changes.append({"target_field": name, "new_required_status": "optional",
+                            "required_for_capabilities": caps, "rationale": reason,
+                            "profile_id": prof.profile_id})
+    return changes
+
+
 def load_target_contract(
     mode: str, context: Optional[Dict[str, Any]] = None,
     mi_registry_path: Optional[str | Path] = None,
@@ -2697,7 +2747,18 @@ def run_target_first_coverage(
                 "asset_config_source": asset_src,
             }
 
-    overlay = load_mi_applicability_overlay(mode, context, overlay_path=mi_overlay_path)
+    # --- Product-profile-aware capability scope (asset-agnostic, config-driven) ---
+    # Resolve an applied product profile from the run context (explicit
+    # `product_profile`, else evidence-based detection) and let it control which
+    # missing MI targets are base-MI blocking vs visible/non-blocking. This binds
+    # the standalone product-profile layer into the live Gate-4 classification.
+    from . import product_profile as _pp
+    resolved_profile = _pp.resolve_product_profile(
+        context or {}, explicit_profile_id=str((context or {}).get("product_profile", "")))
+    capability_scope_changes = apply_mi_capability_scope(target_fields, resolved_profile, mode)
+
+    overlay = load_mi_applicability_overlay(
+        mode, context, overlay_path=mi_overlay_path, resolved_profile=resolved_profile)
     coverage_rows, matched_by_key = build_target_coverage(
         mode, context, cid, csrc, target_fields, evidence_rows, resolved_rows,
         overlay=overlay)
@@ -2825,12 +2886,39 @@ def run_target_first_coverage(
     if decisions_file is None or Path(decisions_file).resolve() != template_path.resolve():
         tfd.write_decision_template(template, out)
 
+    # 28d — product-profile resolution + capability scope audit (always written so
+    # the resolution is transparent, even when no profile is applied).
+    profile_scope: Dict[str, Any] = {
+        "product_profile": resolved_profile.as_dict(),
+        "capability_scope_applied": bool(capability_scope_changes),
+        "capability_scope_changes": capability_scope_changes,
+        "capability_scope_field_count": len(capability_scope_changes),
+    }
+    if resolved_profile.applied and resolved_profile.profile is not None:
+        try:
+            from . import capability_readiness as _cr
+            satisfied = [r["target_field"] for r in coverage_rows
+                         if r["coverage_status"] != MISSING_REQUIRED]
+            roles = list((context or {}).get("artefact_roles", []) or [])
+            readiness = _cr.compute_capability_readiness(
+                profile=resolved_profile.profile, satisfied_fields=satisfied,
+                artefact_roles=roles)
+            profile_scope["capability_readiness"] = _cr.readiness_summary(readiness)
+            profile_scope["promotion_decision"] = _cr.promotion_decision(readiness, mode=mode)
+        except Exception as exc:  # readiness is advisory; never break coverage
+            profile_scope["capability_readiness_error"] = str(exc)
+    profile_scope_path = out / "28d_product_profile_scope.json"
+    profile_scope_path.write_text(json.dumps(profile_scope, indent=2, default=str),
+                                  encoding="utf-8")
+    paths["product_profile_scope"] = str(profile_scope_path)
+
     return {
         "target_contract_id": cid,
         "target_contract_source": csrc,
         "target_contract_kind": target_contract_kind(mode, context),
         "overlay_applied": bool(overlay),
         "overlay_fields": sorted(overlay.keys()),
+        "product_profile_scope": profile_scope,
         "config_validation": config_validation,
         "field_universe": field_universe,
         "coverage": coverage_rows,
