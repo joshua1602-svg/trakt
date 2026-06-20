@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Layers } from "lucide-react";
-import { PORTFOLIOS } from "@/data/mockData";
+import { PORTFOLIOS } from "@/data/catalog";
 import { cn } from "@/lib/utils";
 
 export function PortfolioSelector({

@@ -1,5 +1,5 @@
 import { ArrowUpRight } from "lucide-react";
-import { PROMPT_SUGGESTIONS } from "@/data/agentEngine";
+import { PROMPT_SUGGESTIONS } from "@/data/mockResponses";
 
 export function PromptSuggestions({
   onPick,

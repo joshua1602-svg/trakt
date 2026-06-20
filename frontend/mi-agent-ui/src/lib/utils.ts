@@ -40,3 +40,33 @@ export function formatTime(iso: string): string {
     minute: "2-digit",
   });
 }
+
+export function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+/** Format a value by a domain ValueFormat tag. */
+export function formatValue(
+  value: string | number,
+  format?: "gbp" | "pct" | "number" | "decimal" | "text" | "date",
+): string {
+  if (typeof value !== "number") {
+    return format === "date" && value ? formatDate(String(value)) : String(value);
+  }
+  switch (format) {
+    case "gbp":
+      return formatGBP(value);
+    case "pct":
+      return `${value.toFixed(1)}%`;
+    case "decimal":
+      return value.toFixed(2);
+    case "number":
+      return value.toLocaleString("en-GB");
+    default:
+      return value.toLocaleString("en-GB");
+  }
+}

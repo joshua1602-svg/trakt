@@ -1,20 +1,22 @@
-# Trakt · MI Agent — React Front End (First-Pass Prototype)
+# Trakt · MI Agent — React Front End
 
-An enterprise-grade React front end for the **MI Agent**: a two-pane analytical
-workspace where an analyst asks natural-language MI questions on the left and
-the agent generates charts, tables, KPI strips and validation summaries on the
-right.
+The production-oriented React **presentation & orchestration layer** for the
+existing Python MI platform. A two-pane analytical workspace: an analyst asks
+natural-language MI questions on the left; the agent returns typed **artifacts**
+(KPIs, charts, tables, validation, risk, scenario) rendered on the right.
 
-This is a **parallel prototype**. It does not touch or replace the existing
-Streamlit MI dashboard (`mi_agent/streamlit_mi_agent.py`). All data and agent
-responses are **mocked** — the component and data shapes are deliberately close
-to a future MI Agent API so wiring a live backend is mechanical.
+```
+User Question → AgentClient → MI Agent → Analytics Engine → Artifact Schema → React Renderer
+```
 
-> Reference for the analytical concepts: the Python MI stack under
-> [`mi_agent/`](../../mi_agent) and [`analytics/`](../../analytics)
-> (portfolio stratifications, pipeline / forward exposure, static pools,
-> validation / governance). The brand palette (navy `#232D55`, periwinkle
-> `#919DD1`) is taken from `analytics/charts_plotly.py`.
+This is a **parallel front end**. It does not touch or replace the Streamlit MI
+dashboard (`mi_agent/streamlit_mi_agent.py`, `analytics/streamlit_app_erm.py`).
+Responses are currently served by a `MockAgentClient`; the contract mirrors
+`mi_agent.mi_agent_workflow.run_mi_agent_query`, so a real backend is a drop-in.
+
+See [`docs/react_mi_alignment_review.md`](../../docs/react_mi_alignment_review.md)
+for the full Streamlit→React capability/chart/dimension/measure/artifact mapping
+and the artifact-schema rationale.
 
 ## Running it
 
@@ -24,85 +26,56 @@ Requires Node 18+ (developed on Node 22).
 cd frontend/mi-agent-ui
 npm install
 npm run dev      # http://localhost:5173
+npm run build    # type-check (tsc) + production build
+npm test         # vitest suite (intent routing, guards, response, rendering)
+npm run lint     # tsc --noEmit
 ```
 
-Other scripts:
+## Architecture
 
-```bash
-npm run build    # type-check (tsc) + production build to dist/
-npm run preview  # serve the production build
-npm run lint     # tsc --noEmit type check
-```
+The app has clear, backend-ready boundaries:
 
-## What it does (first pass)
+| Layer | Path | Responsibility |
+| --- | --- | --- |
+| **Domain** | `src/domain/` | Strong types + guards. `mi.ts` (states/aggregations/chart types mirroring `MIQuerySpec`), `artifacts.ts` (the artifact union + payloads), `agent.ts` (`AgentRequest`/`AgentResponse`/contexts), `guards.ts`. |
+| **API** | `src/api/` | `AgentClient` interface; `MockAgentClient` (latency + simulated failures). UI talks **only** to `AgentClient`. `createAgentClient()` is the single swap point for a future `HttpAgentClient`. |
+| **Data** | `src/data/` | `catalog.ts` (dimensions/measures/portfolios), `mockArtifacts.ts` (lineage-carrying artifact builders), `mockResponses.ts` (intent routing + narratives). |
+| **State** | `src/state/` | `useWorkspace` (orchestration: context, chat, canvas, loading/error/empty) + versioned `localStorage` persistence. |
+| **Components** | `src/components/` | `AppShell` → `HeaderBar`/`AgentChatPanel`/`ArtifactCanvas`. `artifacts/ArtifactRenderer` dispatches by type to per-type views. `states/` holds empty/error/loading. |
 
-- **Left — MI Agent chat panel** (fixed ~400px): chat history, starter prompt
-  suggestions, streaming-style loading state, and assistant responses that carry
-  a concise narrative, surfaced **assumptions**, and clickable links to the
-  artifacts they produced.
-- **Right — Artifact workspace**: a vertical **stack** or **tabbed** view of
-  artifact cards. Each card has a title, description, source/timestamp context
-  and actions: **pin**, **copy** (JSON), **download** (JSON), **collapse/expand**.
-  Pinned artifacts persist across turns and float to the top.
-- **Top header**: brand, portfolio selector, reporting-date selector,
-  environment/status indicator (`Staging · Mock Data`) and a user area.
-- **Landing state**: an executive KPI strip, balance-by-region chart, and a
-  data-quality / governance summary.
+### Artifact-driven UI
+
+The canvas is driven by artifact **type**, not hardcoded dashboards. Each
+artifact carries lineage (`source`: engine, MI state, spec, `asOf`, portfolio)
+and a `mock` flag (surfaced as a disclosure badge). Adding an artifact type means
+adding a payload type + guard + view and registering it in `ArtifactRenderer` —
+nothing in the canvas/card layer changes.
+
+Supported types: `kpi`, `chart` (bar/line/area/scatter/bubble/waterfall),
+`table`, `validation`, `risk` (RAG concentration limits + grade-migration
+matrix), `scenario` (balance run-off / LTV / NNEG projection).
 
 ### Mocked agent intents
 
-The mock engine (`src/data/agentEngine.ts`) classifies a question via keyword
-matching and returns a narrative + relevant artifacts:
-
-| Intent | Example prompt | Artifacts |
-| --- | --- | --- |
-| `portfolio_overview` | "Show portfolio movement since last period" | KPI strip, funded vs. pipeline area chart |
-| `concentration_risk` | "Explain top concentration risks" | Regional bar chart + concentration table |
-| `pipeline` | "Generate pipeline bridge to £100MM securitisation size" | Waterfall bridge + funded/pipeline line |
-| `static_pools` | "Show static pool performance by vintage" | Cumulative-redemption-by-vintage line |
-| `validation` | "Summarise validation issues blocking reporting" | Validation summary (blockers/warnings/passes) |
-| `unknown` | anything else | Generic response + default dashboard artifacts |
-
-## Component hierarchy
-
-```
-App
-└── AppShell                      # state + orchestration (mocked agent turns)
-    ├── HeaderBar
-    │   └── PortfolioSelector
-    ├── AgentChatPanel
-    │   ├── ChatMessage
-    │   └── PromptSuggestions
-    └── ArtifactCanvas
-        └── ArtifactCard          # pin / copy / download / collapse
-            ├── KPIGrid
-            ├── ChartArtifact     # bar | line | area | waterfall (Recharts)
-            ├── TableArtifact
-            └── ValidationSummaryArtifact
-```
-
-Shared: `src/types/index.ts` (domain types), `src/data/mockData.ts`
-(representative ERM UK figures), `src/lib/utils.ts` (formatting helpers),
-`src/components/ui.tsx` (Card / Badge / IconButton primitives).
-
-## Stack
-
-- **Vite 6** + **React 18** + **TypeScript** (strict)
-- **Tailwind CSS v4** (`@tailwindcss/vite`) with design tokens in `src/index.css`
-- **Recharts** for charts, **lucide-react** for icons
+`classifyIntent` (keyword routing, mirroring
+`mi_agent/interpreter/deterministic.py`) maps a question to one of:
+`portfolio_overview`, `concentration_risk`, `pipeline`, `static_pools`,
+`risk_monitoring`, `scenario`, `validation`, or `unknown` (default dashboard).
 
 ## Wiring to a real backend
 
-Replace the body of `runAgent()` in `src/data/agentEngine.ts` with a `fetch`
-to the MI Agent API. The function already returns the `AgentResponse` shape
-(`intent`, `narrative`, `assumptions`, `artifacts`) consumed by `AppShell`, and
-the `Artifact` / `ArtifactData` union in `src/types` maps directly onto the
-chart/table/KPI/validation outputs the Python stack already produces.
+Implement `AgentClient.ask(request, signal)` against the MI Agent API and return
+it from `createAgentClient()`. `AgentRequest` already carries the question +
+`PortfolioContext` + `ReportingContext`; map the `run_mi_agent_query` response
+(`spec`, `interpreted`, `query_result`, `chart_result`, `warnings`) onto the
+`Artifact[]` union. No component changes required.
 
 ## Notes / assumptions
 
-- All figures are **illustrative** and representative of a UK Equity Release
-  Mortgage (ERM) portfolio; they are not real.
-- Prompt suggestions hide after the first message to keep the chat compact.
-- Per-turn artifacts replace the previous turn's (except pinned ones); this
-  keeps the canvas focused on the current question.
+- Figures are **illustrative** of a UK Equity Release Mortgage (ERM) portfolio.
+- Brand/chart palette (`src/lib/theme.ts`) mirrors `analytics/charts_plotly.py`
+  and `mi_agent/mi_chart_factory.DEFAULT_THEME`.
+- Pinned artifacts persist across turns and float to the top; per-turn artifacts
+  replace the previous turn's (except pinned).
+- Workspace state (context, chat, artifacts) persists in `localStorage` under a
+  versioned key.

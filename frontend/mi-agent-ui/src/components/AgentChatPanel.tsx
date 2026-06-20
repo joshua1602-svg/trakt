@@ -1,19 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import { CornerDownLeft, Sparkles } from "lucide-react";
-import type { ChatMessage as ChatMessageType } from "@/types";
+import type { ChatMessage as ChatMessageType } from "@/domain";
 import { ChatMessage } from "@/components/ChatMessage";
 import { PromptSuggestions } from "@/components/PromptSuggestions";
+import { cn } from "@/lib/utils";
 
 export function AgentChatPanel({
   messages,
   isWorking,
+  mock,
   onSubmit,
   onOpenArtifact,
+  onRetry,
 }: {
   messages: ChatMessageType[];
   isWorking: boolean;
+  mock: boolean;
   onSubmit: (text: string) => void;
   onOpenArtifact: (id: string) => void;
+  onRetry: () => void;
 }) {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -42,15 +47,22 @@ export function AgentChatPanel({
           <h1 className="text-sm font-semibold text-ink-100">MI Agent</h1>
           <p className="text-[11px] text-ink-400">Portfolio intelligence assistant</p>
         </div>
-        <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-mint-400/30 bg-mint-400/10 px-2 py-0.5 text-[10px] font-medium text-mint-400">
-          <span className="h-1.5 w-1.5 rounded-full bg-mint-400" />
-          Online
+        <span
+          className={cn(
+            "ml-auto inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-medium",
+            mock
+              ? "border-amber-400/30 bg-amber-400/10 text-amber-400"
+              : "border-mint-400/30 bg-mint-400/10 text-mint-400",
+          )}
+        >
+          <span className={cn("h-1.5 w-1.5 rounded-full", mock ? "bg-amber-400" : "bg-mint-400")} />
+          {mock ? "Mock Agent" : "Online"}
         </span>
       </header>
 
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
         {messages.map((m) => (
-          <ChatMessage key={m.id} message={m} onOpenArtifact={onOpenArtifact} />
+          <ChatMessage key={m.id} message={m} onOpenArtifact={onOpenArtifact} onRetry={onRetry} />
         ))}
 
         {messages.length <= 1 && (

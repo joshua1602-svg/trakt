@@ -1,6 +1,6 @@
 import { Bell, CalendarDays, Settings, ShieldCheck } from "lucide-react";
 import { PortfolioSelector } from "@/components/PortfolioSelector";
-import { REPORTING_DATES } from "@/data/mockData";
+import { REPORTING_DATES } from "@/data/catalog";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-GB", {
@@ -15,11 +15,13 @@ export function HeaderBar({
   onPortfolioChange,
   reportingDate,
   onReportingDateChange,
+  mock,
 }: {
   portfolio: string;
   onPortfolioChange: (id: string) => void;
   reportingDate: string;
   onReportingDateChange: (d: string) => void;
+  mock: boolean;
 }) {
   return (
     <header className="flex h-14 shrink-0 items-center gap-4 border-b border-[var(--color-line)] bg-navy-900/70 px-5 backdrop-blur">
@@ -60,9 +62,15 @@ export function HeaderBar({
       </label>
 
       <div className="ml-auto flex items-center gap-3">
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium text-amber-400">
+        <span
+          className={
+            mock
+              ? "inline-flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium text-amber-400"
+              : "inline-flex items-center gap-1.5 rounded-full border border-mint-400/30 bg-mint-400/10 px-2.5 py-1 text-[11px] font-medium text-mint-400"
+          }
+        >
           <ShieldCheck size={13} />
-          Staging · Mock Data
+          {mock ? "Staging · Mock Data" : "Production"}
         </span>
         <div className="flex items-center gap-0.5">
           <button
