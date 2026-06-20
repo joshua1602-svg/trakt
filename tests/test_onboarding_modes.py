@@ -138,7 +138,15 @@ class TestModeSeverity(unittest.TestCase):
     def test_mi_only_emits_missing_core_field_gaps(self):
         core_qs = [q for q in self.mi.gap_questions if q.category == "core_field"]
         self.assertTrue(core_qs)
-        self.assertTrue(all(q.severity == "blocking" for q in core_qs))
+        # Genuine base-MI core fields still block (e.g. the reporting cut-off date).
+        blocking = {q.subject for q in core_qs if q.severity == "blocking"}
+        self.assertIn("data_cut_off_date", blocking)
+        # The synthetic pack is an equity-release book: the applied product profile
+        # demotes not_applicable/defaulted/derived core fields (e.g.
+        # amortisation_type) to a visible, NON-blocking gap — never silently dropped.
+        non_blocking = {q.subject for q in core_qs if q.severity != "blocking"}
+        self.assertIn("amortisation_type", non_blocking)
+        self.assertTrue(all(q.severity in ("blocking", "high") for q in core_qs))
 
     def test_mna_dd_missing_core_nonblocking(self):
         core_qs = [q for q in self.mna.gap_questions if q.category == "core_field"]

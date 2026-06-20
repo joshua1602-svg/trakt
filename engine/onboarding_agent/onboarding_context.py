@@ -128,6 +128,10 @@ def detect_context(
         "use_cases": sorted(set(use_cases)),
         "required_domains": required_domains,
         "confidence": confidence,
+        # Raw asset-signal strength (0 == asset_class was a default guess, not
+        # evidenced); consumers use this to avoid applying asset-specific policy
+        # to a generic pack.
+        "asset_signal_strength": int(asset_strength),
         "needs_user_confirmation": confidence < 0.6,
         "rationale": rationale,
         "mode": mode,
@@ -296,6 +300,10 @@ def backstop_context(
     final.setdefault("reporting_regime", deterministic_guess["reporting_regime"])
     final.setdefault("use_cases", deterministic_guess["use_cases"])
     final.setdefault("required_domains", deterministic_guess["required_domains"])
+    # Carry the deterministic asset-signal strength so downstream product-profile
+    # resolution can avoid applying asset policy to a generic (no-evidence) pack.
+    final.setdefault("asset_signal_strength",
+                     deterministic_guess.get("asset_signal_strength", 0))
     final.setdefault("confidence", confidence)
     final.setdefault("rationale", deterministic_guess.get("rationale", ""))
     final["mode"] = mode

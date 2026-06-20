@@ -189,6 +189,36 @@ profiles:
         required_for_capabilities: [spv_segmentation]
         rationale: "Only needed when SPV segmentation is explicitly required."
 
+      # --- originator / legal-entity identity (config-level, not per-loan MI) ---
+      originator_name:
+        base_mi: optional
+        required_for_capabilities: [regulatory_reporting]
+        rationale: >
+          Originator / lender name is a client-config attribute, not a base-MI
+          blocker; required only for regulatory reporting.
+
+      originator_legal_entity_identifier:
+        base_mi: optional
+        required_for_capabilities: [regulatory_reporting]
+        rationale: >
+          Originator LEI is a regulatory identity field; non-blocking for mi_only.
+
+      # --- interest-rate structure (known for a roll-up product) ---
+      interest_rate_type:
+        base_mi: defaulted
+        default_value: "fixed"
+        default_label: "fixed_lifetime_rollup"
+        rationale: >
+          Equity-release rate structure is fixed roll-up by product design;
+          defaulted with profile rationale rather than blocking base MI.
+
+      # --- account/loan status (arrears MI, not base MI) ---
+      account_status:
+        base_mi: optional
+        rationale: >
+          Account/loan status drives arrears MI, not base MI; non-blocking for
+          base MI and derivable alongside funded_status.
+
       # --- risk fields: non-blocking for base MI; gate risk capabilities only ---
       ifrs9_stage:
         base_mi: optional
