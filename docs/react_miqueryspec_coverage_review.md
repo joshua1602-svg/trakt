@@ -13,6 +13,50 @@ mock data: `mi_agent/mi_query_spec.py`, `mi_query_validator.py`,
 
 ---
 
+## 0b. Bucket-dimension trace & fix (2026-06-20)
+
+Traced `age_bucket / ltv_bucket / original_ltv_bucket / ticket_bucket /
+vintage_year / origination_month / region / broker` across all seven layers.
+The earlier "buckets missing" note was wrong — they exist; the gap was a single
+un-run step.
+
+| Layer | Finding |
+| --- | --- |
+| Canonical CSV (the `/mi/query` dataframe) | Has `geographic_region_obligor/collateral`, `origination_date/channel`, `youngest_borrower_age`, `current_loan_to_value`, … but **no `*_bucket`/`*_band`/`vintage_year`/`origination_month`** columns, and **no `broker_channel`**. |
+| `analytics/mi_prep` | Creates `ltv_bucket, ticket_bucket, original_ltv_bucket, rate_bucket, age_bucket` (+ `geographic_region, origination_year, origination_month`) — but only in the Streamlit/analytics layer. |
+| Streamlit dashboard | Uses `mi_prep.add_buckets` → columns present there. |
+| MI semantic registry | `age_bucket, ltv_bucket, original_ltv_bucket, ticket_bucket, vintage_year, term_bucket, arrears_bucket` exist as `derived` dimensions; `canonical_field` = the bucket name. |
+| `/mi/catalogue` | All present (43 dims) — projected from the registry. |
+| `/mi/query` executor | By design **reuses** pre-materialised bucket columns and does **not** create them (`mi_query_executor` docstring); validator check 2 then rejects `age_bucket` as "not present in dataset columns". |
+| React render path | Fine — heatmap adapter/`HeatmapArtifactView` only needs the result columns, which never arrived. |
+
+**Diagnosis:** *field exists in registry + catalogue but not in the dataframe
+used by `run_mi_agent_query`.* Not a missing field, not a parser gap (the
+deterministic parser already maps "age bucket"→`age_bucket`, "region"→region),
+not an adapter key mismatch.
+
+**Canonical source of truth exists:** `analytics_lib/buckets.py::materialise_buckets`
++ `config/mi/buckets.yaml`, with `target="semantic_field"` writing registry
+names (`borrower_age_bucket→age_bucket`, `balance_band→ticket_bucket`, …).
+
+**Fix (reuse, no duplicate logic):** `mi_agent_api/data_source.get_dataframe`
+now runs `materialise_buckets(..., target="semantic_field")` after loading the
+CSV. Verified: `/mi/query` "…by age bucket and region as a heatmap" → `ok:true`,
+chart `heatmap` with native keys (`xKey=age_bucket`, `yKey=collateral_geography`,
+`valueKey=current_loan_to_value_weighted_avg`).
+
+**Residual gaps (documented, not patched — would need config/data changes, not
+code dup):**
+- `config/mi/buckets.yaml` has **no spec** for `original_ltv_bucket`,
+  `vintage_year`, `term_bucket`, `arrears_bucket` → these registry dims are still
+  unmaterialised for the API (pd/lgd/ead/time_on_book are specced but their
+  source fields are absent in the synthetic CSV).
+- `broker_channel` is **genuinely absent** from the synthetic dataset (only
+  `origination_channel` exists) — a data gap, not a pipeline gap.
+- `region` already works natively (`geographic_region_obligor/collateral`).
+
+---
+
 ## 0. Update — native-first chart rendering (2026-06-20)
 
 The heatmap/treemap gap is closed with **native renderers**, and chart routing

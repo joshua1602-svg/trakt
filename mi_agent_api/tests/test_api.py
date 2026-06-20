@@ -13,6 +13,32 @@ from mi_agent_api.app import app
 client = TestClient(app)
 
 
+def test_dataframe_has_materialised_bucket_dimensions():
+    # The API must apply the existing bucketing engine so registry-named bucket
+    # dimensions resolve in run_mi_agent_query (not only in Streamlit).
+    from mi_agent_api.data_source import get_dataframe
+
+    cols = set(get_dataframe().columns)
+    assert {"age_bucket", "ltv_bucket", "ticket_bucket"} <= cols
+
+
+def test_query_bucket_heatmap_resolves_natively():
+    r = client.post(
+        "/mi/query",
+        json={"question": "Show LTV by age bucket and region as a heatmap", "asOfDate": "2026-05-31"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True, body.get("validation")
+    chart = next((a for a in body["artifacts"] if a["type"] == "chart"), None)
+    assert chart is not None
+    assert chart["chartType"] == "heatmap"
+    # Native grid keys populated -> renders via the React HeatmapArtifactView.
+    assert chart["xKey"] == "age_bucket"
+    assert chart["yKey"]
+    assert chart["valueKey"]
+
+
 def test_health():
     r = client.get("/health")
     assert r.status_code == 200
