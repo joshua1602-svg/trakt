@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -243,6 +244,58 @@ def _collect_field_sources(
 _CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "system" / "onboarding_agent.yaml"
 
 
+# Coverage statuses (28a) the central tape consumes as RESOLVED selections.
+_COV_SOURCE_MAPPED = {"source_mapped", "source_mapped_with_alternatives"}
+_COV_CONSTANT = {"defaulted_value", "configured_static", "defaulted_ND"}
+_COV_DERIVED = "derived"
+
+
+def _coverage_selections(
+    coverage_rows: List[Dict[str, Any]],
+    inventory_by_name: Dict[str, Dict[str, Any]],
+) -> Tuple[Dict[str, "_Source"], Dict[str, Any], Dict[str, str]]:
+    """Turn the resolved 28a coverage matrix into authoritative selections.
+
+    Gate 4 already applied the artefact-role guardrail (funded over pipeline) and
+    the product-profile proxy / reporting-date inference, so promotion consumes
+    those decisions instead of re-discovering mappings. Returns:
+
+    * ``forced``      — ``{canonical_field: _Source}`` (the single selected source);
+    * ``constants``   — ``{canonical_field: value}`` (inferred/defaulted constants,
+                        e.g. reporting_date / data_cut_off_date from run-id);
+    * ``derive_from`` — ``{canonical_field: source_canonical_field}`` (profile
+                        proxy, e.g. current_principal_balance <- current_outstanding_balance).
+    """
+    forced: Dict[str, "_Source"] = {}
+    constants: Dict[str, Any] = {}
+    derive_from: Dict[str, str] = {}
+    for r in coverage_rows or []:
+        canon = r.get("target_field", "")
+        status = r.get("coverage_status", "")
+        if not canon:
+            continue
+        if status in _COV_SOURCE_MAPPED:
+            f = r.get("selected_source_file", "")
+            c = r.get("selected_source_column", "")
+            if f and c:
+                inv = inventory_by_name.get(f, {})
+                forced[canon] = _Source(
+                    file_name=f, file_path=inv.get("file_path", ""), column=c,
+                    sheet=r.get("selected_source_sheet", "") or inv.get("sheet_name", ""),
+                    method="target_first_resolved",
+                    confidence=float(r.get("selected_source_confidence") or 1.0),
+                    classification=inv.get("classification", ""))
+        elif status in _COV_CONSTANT and str(r.get("selected_value", "")).strip():
+            constants[canon] = r.get("selected_value")
+        elif status == _COV_DERIVED:
+            dr = str(r.get("derivation_rule", "") or "")
+            m = re.match(r"=\s*([a-z0-9_]+)", dr.strip())
+            if m:
+                derive_from[canon] = m.group(1)
+    return forced, constants, derive_from
+
+
+
 def _load_source_precedence_defaults() -> Dict[str, List[str]]:
     """PART 9 — domain -> ordered classification precedence (config-driven)."""
     try:
@@ -301,6 +354,7 @@ def _build_lender_tape(
     field_scope: Any,
     registry_fields: Dict[str, Any],
     mode: str,
+    coverage_rows: Optional[List[Dict[str, Any]]] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]:
     inventory_by_name = {i.get("file_name", ""): i for i in inventory}
     included = getattr(field_scope, "included_fields", set()) or set()
@@ -314,6 +368,19 @@ def _build_lender_tape(
         return bool(dc.field_domains(canon, registry_fields.get(canon, {})) & _LENDER_DOMAINS)
 
     field_sources = {f: s for f, s in field_sources.items() if in_lender_scope(f)}
+
+    # --- Consume the resolved target-first coverage (28a) ------------------
+    # Gate 4 already selected the authoritative source per field (artefact-role
+    # guardrail: funded over pipeline) and recorded profile proxy / inferred
+    # constants. Promotion consumes those decisions and does NOT re-resolve them,
+    # so a single authoritative source replaces the rediscovered candidates
+    # (eliminating funded/pipeline conflicts and pipeline leakage into funded
+    # fields). Fields without a resolved selection keep the legacy behaviour.
+    forced, tape_constants, tape_derivations = _coverage_selections(
+        coverage_rows or [], inventory_by_name)
+    for canon, src in forced.items():
+        if in_lender_scope(canon):
+            field_sources[canon] = [src]   # single authoritative source -> no conflict
 
     # Load frames + loan-key columns for every file that has loan-level sources.
     frames: Dict[str, pd.DataFrame] = {}
@@ -352,7 +419,12 @@ def _build_lender_tape(
     loan_ids = sorted(loan_ids)
 
     # The loan identifier is the primary key column, never also a data column.
-    canonical_order = sorted(f for f in field_sources.keys() if f != "loan_identifier")
+    # Include resolved profile-proxy and inferred-constant fields as columns even
+    # when they have no per-row source (they materialise below).
+    extra_cols = {c for c in tape_constants if c != "loan_identifier"}
+    extra_cols |= {c for c in tape_derivations if c != "loan_identifier"}
+    canonical_order = sorted(
+        (set(field_sources.keys()) | extra_cols) - {"loan_identifier"})
     enum_decisions = enum_decisions or {}
     precedence_defaults = _load_source_precedence_defaults()
 
@@ -378,6 +450,8 @@ def _build_lender_tape(
     for lid in loan_ids:
         row: Dict[str, Any] = {"loan_identifier": lid}
         for canon in canonical_order:
+            if canon not in field_sources:
+                continue  # constant / derived field — materialised below
             srcs = _order_sources(
                 canon, field_sources[canon], precedence, registry_fields, precedence_defaults
             )
@@ -451,6 +525,39 @@ def _build_lender_tape(
                 "review_required": conflict_status == "conflict",
                 "notes": "",
             })
+
+        # Materialise resolved profile-proxy derivations (e.g. equity-release
+        # current_principal_balance <- current_outstanding_balance) and inferred
+        # constants (reporting_date / data_cut_off_date from the run-id period).
+        for canon, src_field in tape_derivations.items():
+            if not _is_blank(row.get(canon)):
+                continue
+            v = row.get(src_field, "")
+            if not _is_blank(v):
+                row[canon] = v
+                populated_cells += 1
+                lineage.append({
+                    "loan_identifier": lid, "canonical_field": canon, "value": v,
+                    "source_file": "", "source_sheet": "", "source_column": src_field,
+                    "source_value": v, "mapping_method": "product_profile_proxy",
+                    "confidence": 0.9, "domain": dc.LOAN,
+                    "source_precedence_applied": False, "validation_sources": "",
+                    "alternate_values": "", "conflict_status": "derived",
+                    "enum_decision_applied": "", "review_required": False,
+                    "notes": f"derived from {src_field} (target-first resolved)"})
+        for canon, val in tape_constants.items():
+            if _is_blank(row.get(canon)) and not _is_blank(val):
+                row[canon] = val
+                populated_cells += 1
+                lineage.append({
+                    "loan_identifier": lid, "canonical_field": canon, "value": val,
+                    "source_file": "", "source_sheet": "", "source_column": "",
+                    "source_value": val, "mapping_method": "run_context_inference",
+                    "confidence": 0.9, "domain": dc.LOAN,
+                    "source_precedence_applied": False, "validation_sources": "",
+                    "alternate_values": "", "conflict_status": "inferred",
+                    "enum_decision_applied": "", "review_required": False,
+                    "notes": "inferred/defaulted (target-first resolved)"})
         tape.append(row)
 
     # Required-domain coverage gaps: representative fields that never mapped.
@@ -585,6 +692,16 @@ def build_central_tapes(
     precedence = _load_yaml(project_dir / "13_source_precedence_rules.yaml") or {}
     enum_decisions = _load_yaml(project_dir / "14_enum_review_decisions.yaml") or {}
     inventory = _load_json(project_dir / "01_file_inventory.json") or []
+    # Resolved target-first coverage (28a) — the authoritative source selection
+    # from Gate 4 (role guardrail + profile proxy/inference). Consumed so
+    # promotion does not re-resolve already-decided fields. Only for MI modes,
+    # whose 28a target fields are canonical field names; the regulatory (Annex 2)
+    # contract uses ESMA codes and keeps the legacy generic tape unchanged.
+    coverage_rows: List[Dict[str, Any]] = []
+    if mode in ("mi_only", "mna_dd"):
+        coverage_doc = _load_json(project_dir / "28a_target_coverage_matrix.json") or {}
+        coverage_rows = (coverage_doc.get("rows", [])
+                         if isinstance(coverage_doc, dict) else [])
 
     policy = load_mode_policy(mode)
     field_scope = resolve_field_scope(
@@ -595,7 +712,7 @@ def build_central_tapes(
 
     tape, lineage, gaps, summary = _build_lender_tape(
         mapping_candidates, overrides, precedence, enum_decisions, inventory,
-        field_scope, registry_fields, mode,
+        field_scope, registry_fields, mode, coverage_rows=coverage_rows,
     )
 
     central_dir = Path(run_paths.central_dir)
