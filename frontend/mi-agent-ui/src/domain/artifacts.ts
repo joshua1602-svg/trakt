@@ -96,6 +96,10 @@ export interface ChartArtifact extends ArtifactBase {
   series: ChartSeries[];
   valueFormat?: ValueFormat;
   unit?: string;
+  /** Second categorical axis (heatmap) — the y dimension column. */
+  yKey?: string;
+  /** Measure column for grid/area charts (heatmap intensity, treemap size). */
+  valueKey?: string;
 }
 
 /* ------------------------------ Table ------------------------------- */

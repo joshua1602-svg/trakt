@@ -81,6 +81,16 @@ def _dimension_column(resolved: Dict[str, Any], columns: List[str]) -> Optional[
     return columns[0] if columns else None
 
 
+def _dimension_columns(resolved: Dict[str, Any], columns: List[str]) -> List[str]:
+    """All result columns whose resolved role is a dimension, in column order."""
+    dim_fields = {
+        meta.get("canonical_field")
+        for meta in resolved.values()
+        if meta.get("role") == "dimension"
+    }
+    return [c for c in columns if c in dim_fields]
+
+
 def _infer_col_format(col: str, resolved: Dict[str, Any]) -> str:
     if col.endswith("_pct") or "concentration" in col:
         return "pct"
@@ -189,64 +199,94 @@ def _chart_artifact(
     ctx: AdapterContext,
 ) -> Optional[Dict[str, Any]]:
     chart_type = cr.get("chart_type")
-    figure = cr.get("figure") if _figure_has_content(cr.get("figure")) else None
+    has_figure = _figure_has_content(cr.get("figure"))
     rows = qr.get("data") or []
     resolved = qr.get("resolved_fields", {})
     columns = list(rows[0].keys()) if rows else []
 
     x_key: Optional[str] = None
+    y_key: Optional[str] = None
+    value_key: Optional[str] = None
     series: List[Dict[str, Any]] = []
     value_format = "number"
+
+    def _value_column(exclude: List[str]) -> Optional[str]:
+        cand = [c for c in columns if c not in exclude]
+        cand.sort(key=lambda c: (c.endswith("_pct") or "concentration" in c))
+        return cand[0] if cand else None
 
     if chart_type in ("scatter", "bubble"):
         # Loan-level x / y / (size) — the renderer reads series[0]=x, [1]=y, [2]=size.
         x_key = spec.get("x") if spec.get("x") in columns else (columns[0] if columns else None)
-        y_key = spec.get("y") if spec.get("y") in columns else None
+        sy = spec.get("y") if spec.get("y") in columns else None
         size_key = spec.get("size") if spec.get("size") in columns else None
-        if x_key and y_key:
+        if x_key and sy:
             series = [
                 {"key": x_key, "label": x_key.replace("_", " ").title(), "color": _PALETTE[0]},
-                {"key": y_key, "label": y_key.replace("_", " ").title(), "color": _PALETTE[1]},
+                {"key": sy, "label": sy.replace("_", " ").title(), "color": _PALETTE[1]},
             ]
             if chart_type == "bubble" and size_key:
                 series.append({"key": size_key, "label": size_key.replace("_", " ").title(), "color": _PALETTE[2]})
-            value_format = _infer_col_format(y_key, resolved)
+            value_format = _infer_col_format(sy, resolved)
     elif chart_type in ("bar", "line"):
         # Grouped categorical (bar) / ordered (line): one dimension + one value.
         x_key = _dimension_column(resolved, columns)
-        value_cols = [c for c in columns if c != x_key]
-        value_cols.sort(key=lambda c: (c.endswith("_pct") or "concentration" in c))
-        primary = value_cols[0] if value_cols else None
+        primary = _value_column([x_key] if x_key else [])
         if primary is not None:
             series = [{"key": primary, "label": primary.replace("_", " ").title(), "color": _PALETTE[0]}]
             value_format = _infer_col_format(primary, resolved)
+    elif chart_type == "heatmap":
+        # Native grid renderer needs two dimensions + an intensity measure.
+        dims = _dimension_columns(resolved, columns)
+        x_key = dims[0] if len(dims) > 0 else None
+        y_key = dims[1] if len(dims) > 1 else None
+        value_key = _value_column([d for d in (x_key, y_key) if d])
+        value_format = _infer_col_format(value_key or "", resolved)
+    elif chart_type == "treemap":
+        # Native Recharts treemap needs a label dimension + a size measure.
+        dims = _dimension_columns(resolved, columns)
+        x_key = dims[0] if dims else (columns[0] if columns else None)
+        value_key = _value_column([x_key] if x_key else [])
+        value_format = _infer_col_format(value_key or "", resolved)
     else:
-        # heatmap / treemap (and any future type): the fidelity lives in the
-        # Plotly figure. We keep the result rows for context but emit no Recharts
-        # series — the figure is the source of truth for these.
         x_key = columns[0] if columns else None
 
-    # Emit a chart artifact when we have *either* a faithful Plotly figure or a
-    # Recharts-normalisable series. Otherwise there is nothing to draw.
-    if not figure and not series:
+    # The Plotly figure is a *fallback* only for fidelity-sensitive types that
+    # have no Recharts equivalent. Standard charts render natively, so we drop
+    # their (redundant, heavy) figure payload.
+    keep_figure = chart_type in ("heatmap", "treemap") or chart_type not in (
+        "bar", "line", "scatter", "bubble", "heatmap", "treemap"
+    )
+    figure_out = cr.get("figure") if (keep_figure and has_figure) else None
+
+    native_ok = bool(series) or (
+        chart_type == "heatmap" and x_key and y_key and value_key and rows
+    ) or (chart_type == "treemap" and x_key and value_key and rows)
+
+    # Nothing to draw natively and no fallback figure → no chart artifact.
+    if not native_ok and not figure_out:
         return None
+
+    source = {
+        **_source(spec, ctx, f"MI Agent · {chart_type}"),
+        # Backend-native chart type, kept distinct from the render type.
+        "nativeChartType": chart_type,
+    }
+    if figure_out is not None:
+        source["figure"] = figure_out
 
     return {
         "id": _uid(),
         "type": "chart",
         "title": cr.get("title") or "Chart",
         "description": cr.get("subtitle"),
-        "source": {
-            **_source(spec, ctx, f"MI Agent · {chart_type}"),
-            # Backend-native chart type, kept distinct from the render type.
-            "nativeChartType": chart_type,
-            # Carry the raw Plotly figure for fidelity / future Plotly rendering.
-            "figure": cr.get("figure"),
-        },
+        "source": source,
         "createdAt": _now(),
         "mock": False,
         "chartType": chart_type,
         "xKey": x_key,
+        "yKey": y_key,
+        "valueKey": value_key,
         "series": series,
         "rows": rows,
         "valueFormat": value_format,

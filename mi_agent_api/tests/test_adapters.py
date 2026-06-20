@@ -89,37 +89,47 @@ def test_scatter_maps_x_y_series_no_size():
     assert [s["key"] for s in chart["series"]] == ["current_valuation_amount", "current_outstanding_balance"]
 
 
-def test_heatmap_emits_chart_with_figure_plus_table():
+def test_heatmap_emits_native_keys_plus_fallback_figure_and_table():
     spec = {"chart_type": "heatmap", "dimensions": ["geographic_region_obligor", "ltv_bucket"]}
     resolved = {
         "geographic_region_obligor": {"canonical_field": "geographic_region_obligor", "role": "dimension", "format": "string"},
         "ltv_bucket": {"canonical_field": "ltv_bucket", "role": "dimension", "format": "string"},
+        "current_outstanding_balance": {"canonical_field": "current_outstanding_balance", "role": "metric", "format": "currency"},
     }
     data = [{"geographic_region_obligor": "London", "ltv_bucket": "30-40%", "current_outstanding_balance_sum": 50.0}]
     resp = adapt_workflow_result(_workflow("heatmap", "table", data, spec, resolved))
-    # Now emits a chart artifact carrying the Plotly figure, plus the table.
     assert "chart" in _types(resp)
     assert "table" in _types(resp)
     chart = next(a for a in resp["artifacts"] if a["type"] == "chart")
     assert chart["chartType"] == "heatmap"
-    assert chart["source"]["nativeChartType"] == "heatmap"
+    # Native grid keys are populated so React renders without Plotly.
+    assert chart["xKey"] == "geographic_region_obligor"
+    assert chart["yKey"] == "ltv_bucket"
+    assert chart["valueKey"] == "current_outstanding_balance_sum"
+    # Figure is kept as a fidelity fallback for heatmap.
     assert chart["source"]["figure"] is not None
-    # With a figure present there is no degraded-fidelity warning.
     assert not any("could not be rendered" in w for w in resp["warnings"])
 
 
-def test_treemap_emits_chart_with_figure():
+def test_treemap_emits_native_keys_plus_fallback_figure():
     spec = {"chart_type": "treemap", "hierarchy": ["geographic_region_obligor"]}
-    resolved = {"geographic_region_obligor": {"canonical_field": "geographic_region_obligor", "role": "dimension", "format": "string"}}
+    resolved = {
+        "geographic_region_obligor": {"canonical_field": "geographic_region_obligor", "role": "dimension", "format": "string"},
+        "current_outstanding_balance": {"canonical_field": "current_outstanding_balance", "role": "metric", "format": "currency"},
+    }
     data = [{"geographic_region_obligor": "London", "current_outstanding_balance_sum": 184.0}]
     resp = adapt_workflow_result(_workflow("treemap", "table", data, spec, resolved))
     chart = next(a for a in resp["artifacts"] if a["type"] == "chart")
     assert chart["chartType"] == "treemap"
+    assert chart["xKey"] == "geographic_region_obligor"
+    assert chart["valueKey"] == "current_outstanding_balance_sum"
     assert chart["source"]["figure"] is not None
     assert "table" in _types(resp)
 
 
-def test_all_chart_types_carry_figure_on_chart_artifact():
+def test_recharts_types_do_not_carry_redundant_figure():
+    # Native Recharts renders bar/line/scatter faithfully, so the heavy Plotly
+    # figure is dropped from those chart artifacts.
     resolved = {
         "geographic_region_obligor": {"canonical_field": "geographic_region_obligor", "role": "dimension", "format": "string"},
         "current_outstanding_balance": {"canonical_field": "current_outstanding_balance", "role": "metric", "format": "currency"},
@@ -138,8 +148,9 @@ def test_all_chart_types_carry_figure_on_chart_artifact():
     for ct, (spec, data) in cases.items():
         resp = adapt_workflow_result(_workflow(ct, "table" if ct != "scatter" else "loan_level", data, spec, resolved))
         chart = next(a for a in resp["artifacts"] if a["type"] == "chart")
-        assert chart["source"]["figure"] is not None, ct
+        assert "figure" not in chart["source"], ct
         assert chart["source"]["nativeChartType"] == ct
+        assert chart["series"], ct
 
 
 def test_none_summary_maps_to_kpi():

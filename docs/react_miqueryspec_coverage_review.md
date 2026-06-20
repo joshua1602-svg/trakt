@@ -13,27 +13,35 @@ mock data: `mi_agent/mi_query_spec.py`, `mi_query_validator.py`,
 
 ---
 
-## 0. Update — Plotly rendering implemented (2026-06-20)
+## 0. Update — native-first chart rendering (2026-06-20)
 
-The highest-priority gap below ("native heatmap/treemap via a lazy Plotly
-renderer") is now **closed**:
+The heatmap/treemap gap is closed with **native renderers**, and chart routing
+is **native-first** (Plotly is a themed fallback, not the default):
 
-- The API adapter emits a **chart artifact carrying `source.figure`** (the raw
-  Plotly figure) for **every** chart type, including `heatmap`/`treemap`, plus
-  the result table. The figure is included only when it has traces; empty
-  results stay table-only.
-- React routes chart artifacts **Plotly-first**: `source.figure` present →
-  lazy-loaded `PlotlyArtifactView`; else Recharts (bar/line/area/scatter/bubble/
-  waterfall); else an explicit `unsupported` state. Plotly ships in a **separate
-  async chunk** (`plotly.js-dist-min`, ~1.42 MB gzip) so the initial bundle is
-  unchanged (~188 KB gzip).
-- **heatmap and treemap are now faithfully rendered** whenever the backend
-  provides a figure. The matrices in §2/§4 marked them "degraded → table"; they
-  are now "✅ via Plotly" when a figure is present (table still emitted alongside).
+- **Routing (ArtifactRenderer):**
+  1. `bar/line/area/scatter/bubble/waterfall` → native **Recharts** (Trakt theme).
+  2. `treemap` → native **Recharts `<Treemap>`** (`TreemapArtifactView`).
+  3. `heatmap` → native **custom CSS-grid** (`HeatmapArtifactView`) — Recharts has
+     no heatmap primitive, so a lightweight themed grid renders the intensity
+     matrix faithfully without any chart dependency.
+  4. **Plotly fallback** only when a chart type has no native renderer and a
+     figure exists; the figure is re-skinned by `applyTraktTheme` (transparent
+     background, Inter typography, navy/periwinkle palette, soft gridlines, dark
+     hover). Otherwise → explicit `unsupported`.
+- **Adapter:** populates native keys (`xKey`/`yKey`/`valueKey`) for heatmap and
+  `xKey`/`valueKey` for treemap. The Plotly `figure` is **dropped for the
+  Recharts types** (redundant, heavy) and **kept only for `heatmap`/`treemap`**
+  as a fidelity fallback. Standard charts therefore never carry a Plotly payload.
+- **Bundle:** Plotly stays a **lazy async chunk** (`plotly.js-dist-min`, ~1.42 MB
+  gzip) that is now only fetched if the themed fallback is actually used —
+  verified in-browser that a bar query renders via Recharts and never requests
+  the Plotly chunk. Main bundle ~197 KB gzip.
 
-Remaining: a slimmer custom Plotly partial bundle, and the deterministic parser
-needs materialised bucket columns (e.g. `age_bucket`) in the demo dataset to
-exercise heatmap live.
+The §2/§4 matrices' "degraded → table" for heatmap/treemap is superseded:
+both now render **natively** (table still emitted alongside). Remaining: the
+deterministic parser needs materialised bucket columns (e.g. `age_bucket`) in
+the demo dataset to exercise heatmap end-to-end on live data; a slimmer custom
+Plotly partial bundle for the rare fallback.
 
 ---
 

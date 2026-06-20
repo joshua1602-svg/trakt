@@ -11,12 +11,7 @@ vi.mock("./PlotlyLazy", () => ({
   ),
 }));
 
-const base = {
-  id: "c1",
-  title: "Chart",
-  createdAt: "2026-05-31T08:00:00Z",
-  mock: false,
-};
+const base = { id: "c1", title: "Chart", createdAt: "2026-05-31T08:00:00Z", mock: false };
 
 function chart(partial: Partial<ChartArtifact> & { figure?: unknown }): ChartArtifact {
   const { figure, ...rest } = partial;
@@ -27,14 +22,14 @@ function chart(partial: Partial<ChartArtifact> & { figure?: unknown }): ChartArt
     xKey: "region",
     series: [{ key: "balance", label: "Balance", color: "#919dd1" }],
     rows: [{ region: "London", balance: 184 }],
-    source: { engine: "mi_agent.workflow", label: "MI Agent · bar", figure },
+    source: { engine: "mi_agent.workflow", label: "MI Agent · bar", ...(figure ? { figure } : {}) },
     ...rest,
   } as ChartArtifact;
 }
 
-const FIGURE = { data: [{ type: "bar", x: ["London"], y: [184] }], layout: {} };
+const FIGURE = { data: [{ type: "heatmap" }], layout: {} };
 
-describe("PlotlyArtifactView", () => {
+describe("PlotlyArtifactView (fallback, themed)", () => {
   it("renders a valid figure through the lazy Plotly chunk", async () => {
     render(<PlotlyArtifactView artifact={chart({ figure: FIGURE })} />);
     expect(await screen.findByTestId("plotly-stub")).toHaveTextContent("traces:1");
@@ -51,33 +46,73 @@ describe("PlotlyArtifactView", () => {
   });
 });
 
-describe("ArtifactRenderer chart routing", () => {
-  it("routes a chart with a Plotly figure to the Plotly renderer", async () => {
-    render(<ArtifactRenderer artifact={chart({ chartType: "bar", figure: FIGURE })} />);
-    expect(await screen.findByTestId("plotly-stub")).toBeInTheDocument();
-  });
-
-  it("routes a heatmap WITH a figure to the Plotly renderer (no longer degraded)", async () => {
-    const heatmap = chart({ chartType: "heatmap", series: [], figure: { data: [{ type: "heatmap" }] } });
-    render(<ArtifactRenderer artifact={heatmap} />);
-    expect(await screen.findByTestId("plotly-stub")).toBeInTheDocument();
-  });
-
-  it("routes a treemap WITH a figure to the Plotly renderer", async () => {
-    const treemap = chart({ chartType: "treemap", series: [], figure: { data: [{ type: "treemap" }] } });
-    render(<ArtifactRenderer artifact={treemap} />);
-    expect(await screen.findByTestId("plotly-stub")).toBeInTheDocument();
-  });
-
-  it("falls back to the Recharts renderer when no figure is present", () => {
-    const { container } = render(<ArtifactRenderer artifact={chart({ chartType: "bar", figure: undefined })} />);
+describe("ArtifactRenderer chart routing — native first", () => {
+  it("renders bar via Recharts even when a figure is present (Plotly is not default)", () => {
+    const { container } = render(<ArtifactRenderer artifact={chart({ chartType: "bar", figure: FIGURE })} />);
     expect(container.querySelector(".recharts-responsive-container")).toBeTruthy();
     expect(screen.queryByTestId("plotly-stub")).toBeNull();
   });
 
-  it("shows unsupported for a heatmap with no figure", () => {
-    const heatmap = chart({ chartType: "heatmap", series: [], figure: undefined });
-    render(<ArtifactRenderer artifact={heatmap} />);
-    expect(screen.getByText(/require a Plotly figure/)).toBeInTheDocument();
+  it("renders scatter via Recharts", () => {
+    const a = chart({
+      chartType: "scatter",
+      xKey: "age",
+      series: [
+        { key: "age", label: "Age", color: "#919dd1" },
+        { key: "ltv", label: "LTV", color: "#232d55" },
+      ],
+      rows: [{ age: 70, ltv: 30 }],
+    });
+    const { container } = render(<ArtifactRenderer artifact={a} />);
+    expect(container.querySelector(".recharts-responsive-container")).toBeTruthy();
+  });
+
+  it("renders heatmap natively from grid keys (no Plotly)", () => {
+    const a = chart({
+      chartType: "heatmap",
+      xKey: "region",
+      yKey: "ltv",
+      valueKey: "balance",
+      series: [],
+      rows: [
+        { region: "London", ltv: "30-40%", balance: 50 },
+        { region: "London", ltv: "40-50%", balance: 30 },
+        { region: "Scotland", ltv: "30-40%", balance: 20 },
+      ],
+      figure: FIGURE, // present, but native should win
+    });
+    render(<ArtifactRenderer artifact={a} />);
+    expect(screen.getByText("London")).toBeInTheDocument();
+    expect(screen.getByText("30-40%")).toBeInTheDocument();
+    expect(screen.queryByTestId("plotly-stub")).toBeNull();
+  });
+
+  it("renders treemap natively via Recharts (no Plotly)", () => {
+    const a = chart({
+      chartType: "treemap",
+      xKey: "region",
+      valueKey: "balance",
+      series: [],
+      rows: [
+        { region: "London", balance: 184 },
+        { region: "Scotland", balance: 48 },
+      ],
+      figure: FIGURE,
+    });
+    const { container } = render(<ArtifactRenderer artifact={a} />);
+    expect(container.querySelector(".recharts-responsive-container")).toBeTruthy();
+    expect(screen.queryByTestId("plotly-stub")).toBeNull();
+  });
+
+  it("falls back to themed Plotly for heatmap when native grid keys are absent", async () => {
+    const a = chart({ chartType: "heatmap", xKey: undefined, yKey: undefined, valueKey: undefined, series: [], rows: [], figure: FIGURE });
+    render(<ArtifactRenderer artifact={a} />);
+    expect(await screen.findByTestId("plotly-stub")).toBeInTheDocument();
+  });
+
+  it("shows unsupported for a heatmap with neither native keys nor a figure", () => {
+    const a = chart({ chartType: "heatmap", xKey: undefined, series: [], rows: [], figure: undefined });
+    render(<ArtifactRenderer artifact={a} />);
+    expect(screen.getByText(/No native renderer is available/)).toBeInTheDocument();
   });
 });
