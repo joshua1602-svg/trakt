@@ -1988,6 +1988,105 @@ def apply_mi_capability_scope(
     return changes
 
 
+def apply_profile_proxy_derivations(
+    coverage_rows: List[Dict[str, Any]],
+    resolved_profile: Optional[Any],
+    *,
+    run_id: str = "",
+    context: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
+    """Resolve base-MI fields that are genuinely satisfiable but unmapped, when a
+    product profile is applied — never fabricating.
+
+    Two profile-driven derivations:
+
+    * **Equivalence proxy** — for a ``base_mi`` equivalent_field_group (e.g.
+      ``current_principal_balance`` / ``current_outstanding_balance``), if one
+      member is source-mapped, a still-missing required member is derived from it
+      (equity-release: the outstanding balance *is* the principal because interest
+      capitalises). Acts only when a real mapped member exists.
+    * **Reporting-date inference** — ``reporting_date`` / ``data_cut_off_date`` are
+      inferred from a run-id / context period (``mi_2025_10`` -> ``2025-10-31``)
+      when otherwise missing. Acts only when a period is actually resolvable.
+
+    Re-classified rows become non-blocking (DERIVED / DEFAULTED_VALUE) with a
+    recorded rationale. Returns an auditable list of the derivations made.
+    """
+    changes: List[Dict[str, Any]] = []
+    if resolved_profile is None or not getattr(resolved_profile, "applied", False):
+        return changes
+    prof = getattr(resolved_profile, "profile", None)
+    if prof is None:
+        return changes
+    from .product_profile import base_mi_required_fields, _norm as _pnorm
+
+    cov_by_field: Dict[str, Dict[str, Any]] = {}
+    for r in coverage_rows:
+        cov_by_field.setdefault(_pnorm(r.get("target_field", "")), r)
+
+    # (1) Equivalence-group proxy (e.g. outstanding balance -> principal balance).
+    _, _, groups = base_mi_required_fields(prof)
+    mapped_states = {SOURCE_MAPPED, SOURCE_MAPPED_ALT}
+    # Unresolved states the proxy may upgrade to a clean, evidence-backed
+    # derivation (a confirmation prompt is also "unresolved" for this purpose).
+    unresolved_states = {MISSING_REQUIRED, NEEDS_CONFIRMATION}
+    for group in groups:
+        proxy_name, proxy_row = "", None
+        for member in group:
+            r = cov_by_field.get(_pnorm(member))
+            if r is not None and r.get("coverage_status") in mapped_states:
+                proxy_name, proxy_row = member, r
+                break
+        if proxy_row is None:
+            continue
+        for member in group:
+            r = cov_by_field.get(_pnorm(member))
+            if r is None or r is proxy_row:
+                continue
+            if r.get("coverage_status") in unresolved_states:
+                r["coverage_status"] = DERIVED
+                r["coverage_basis"] = "product_profile_balance_proxy"
+                r["requires_user_decision"] = False
+                r["blocking"] = False
+                r["derivation_rule"] = (
+                    f"= {proxy_name} ({proxy_row.get('selected_source_column','')})")
+                r["decision_reason"] = (
+                    f"derived from mapped equivalent '{proxy_name}' under product "
+                    f"profile '{prof.profile_id}' (interest capitalises)")
+                changes.append({"target_field": r.get("target_field", ""),
+                                "method": "equivalent_field", "from": proxy_name,
+                                "profile_id": prof.profile_id})
+
+    # (2) reporting_date / data_cut_off_date from a run-id / context period.
+    from . import run_context as rc
+    period = ""
+    period_src = ""
+    for tok in (run_id,):
+        hits = rc.dates_from_period_token(tok) if tok else []
+        if hits:
+            period, period_src = hits[0], f"run_id:{tok}"
+            break
+    if not period and context:
+        iso = rc.normalize_to_iso(context.get("reporting_date")
+                                  or context.get("data_cut_off_date") or "")
+        if iso:
+            period, period_src = iso, "context"
+    if period:
+        for fld in ("reporting_date", "data_cut_off_date"):
+            r = cov_by_field.get(fld)
+            if r is not None and r.get("coverage_status") == MISSING_REQUIRED:
+                r["coverage_status"] = DEFAULTED_VALUE
+                r["coverage_basis"] = "run_context_period_inference"
+                r["selected_value"] = period
+                r["requires_user_decision"] = False
+                r["blocking"] = False
+                r["default_reason"] = (
+                    f"inferred reporting period {period} from {period_src}")
+                changes.append({"target_field": fld, "method": "period_inference",
+                                "value": period, "source": period_src})
+    return changes
+
+
 def load_target_contract(
     mode: str, context: Optional[Dict[str, Any]] = None,
     mi_registry_path: Optional[str | Path] = None,
@@ -2762,6 +2861,10 @@ def run_target_first_coverage(
     coverage_rows, matched_by_key = build_target_coverage(
         mode, context, cid, csrc, target_fields, evidence_rows, resolved_rows,
         overlay=overlay)
+    # Profile-driven proxy/inference derivations (equity-release balance proxy;
+    # reporting-date period inference) — non-blocking, evidence-backed, auditable.
+    proxy_changes = apply_profile_proxy_derivations(
+        coverage_rows, resolved_profile, run_id=run_id, context=context)
     residual_rows = build_source_residual_register(mode, evidence_rows, matched_by_key)
     decision_rows = build_human_decision_queue(mode, coverage_rows, residual_rows)
 
@@ -2893,6 +2996,8 @@ def run_target_first_coverage(
         "capability_scope_applied": bool(capability_scope_changes),
         "capability_scope_changes": capability_scope_changes,
         "capability_scope_field_count": len(capability_scope_changes),
+        "proxy_derivations": proxy_changes,
+        "proxy_derivation_count": len(proxy_changes),
     }
     if resolved_profile.applied and resolved_profile.profile is not None:
         try:

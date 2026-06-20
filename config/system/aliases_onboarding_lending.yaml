@@ -20,7 +20,37 @@
 current_valuation_amount:
   aliases:
     - valuation amount
+    # Funded loan/property extract wording (specific; not the pipeline's bare
+    # "property value", which is a forward/indicative figure).
+    - latest property value
+    - latest property valuation
 
 original_principal_balance:
   aliases:
     - original principal
+
+# Funded loan-extract synonyms for the current loan interest rate. Deliberately
+# specific to the funded book ("loan interest rate"); the pipeline's "product
+# rate" is a separate, indicative figure handled elsewhere.
+current_interest_rate:
+  aliases:
+    - loan interest rate
+
+# Equity-release / lifetime-mortgage current balance is reported as an
+# *outstanding* balance (principal + capitalised interest). These funded-extract
+# wordings map to current_outstanding_balance; the equity-release product profile
+# then satisfies current_principal_balance from it (interest capitalises).
+current_outstanding_balance:
+  aliases:
+    - total osbalance
+    - total os balance
+    - os balance
+    - osbalance
+
+# Funded loan/policy completion = origination/drawdown date for equity release.
+# Specific to the funded book ("completion"); the pipeline's "date funds released"
+# / "offer date" are pipeline milestones handled separately.
+origination_date:
+  aliases:
+    - policy completion date
+    - date of completion
