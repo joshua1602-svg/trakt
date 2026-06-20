@@ -45,9 +45,18 @@ EQUITY_CTX = {
     "reporting_regime": "mi_only",
     "rationale": "equity release lifetime mortgage roll-up nneg drawdown",
 }
-GENERIC_CTX = {  # no asset evidence -> profile must NOT apply
+GENERIC_CTX = {  # default-guess asset with no evidence -> profile must NOT apply
     "asset_class": "equity_release_mortgage", "asset_signal_strength": 0,
-    "reporting_regime": "mi_only",
+    "context_backstop_decision": "deterministic_only", "reporting_regime": "mi_only",
+}
+# Asset detected by the LLM (no deterministic tokens) and accepted by the backstop:
+# strength 0 but the profile MUST still apply (regression for the live Oct/Nov run
+# where the profile was wrongly skipped as "no positive asset-class evidence").
+LLM_DETECTED_CTX = {
+    "asset_class": "equity_release_mortgage", "product_type": "lifetime_mortgage",
+    "jurisdiction": "UK", "confidence": 0.9, "asset_signal_strength": 0,
+    "context_backstop_decision": "accepted_llm", "final_context_source": "llm",
+    "reporting_regime": "mi_only", "rationale": "LLM detected equity release",
 }
 
 # Fields that must NOT be base-MI blockers under the equity-release profile.
@@ -128,6 +137,14 @@ class TestGate4CapabilityScope(unittest.TestCase):
         for ch in scope["capability_scope_changes"]:
             self.assertIn("rationale", ch)
             self.assertEqual(ch["new_required_status"], "optional")
+
+    def test_llm_detected_asset_applies_profile(self):
+        # strength 0 but backstop accepted the LLM detection -> profile MUST apply
+        # (regression: the live run skipped it as "no positive asset evidence").
+        res, _ = _run_coverage(LLM_DETECTED_CTX)
+        self.assertTrue(res["product_profile_scope"]["product_profile"]["applied"])
+        leaked = NON_BASE_FIELDS & _blocking_fields(res["decision_queue"])
+        self.assertEqual(leaked, set(), f"should not block base MI: {sorted(leaked)}")
 
     def test_base_fields_still_resolve(self):
         # The genuine base-MI fields are mapped from source (not blocking).

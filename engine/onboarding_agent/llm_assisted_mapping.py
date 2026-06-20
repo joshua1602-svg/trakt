@@ -89,6 +89,7 @@ def run_llm_assisted_mapping(
     target_contract: str = "",
     regime_config_path: Optional[str] = None,
     asset_config_path: Optional[str] = None,
+    precomputed_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Run the full controlled mapping workbench pipeline and write artefacts.
 
@@ -165,9 +166,15 @@ def run_llm_assisted_mapping(
     from . import llm_mapping_resolver as resolver
     ctx_inventory = inventory or [{"file_name": t[0], "classification": "",
                                    "domains_detected": []} for t in tables]
-    ctx_out = octx.resolve_onboarding_context(
-        ctx_inventory, evidence_rows, mode=mode, client_name=client_id,
-        llm_callable=(context_llm_callable if enable_context_resolver else None))
+    # Reuse a context already resolved upstream (so the orchestrator resolves it
+    # once and shares the SAME backstopped context with gap analysis), else resolve
+    # here. The final context is always backstopped either way.
+    if precomputed_context and precomputed_context.get("final"):
+        ctx_out = precomputed_context
+    else:
+        ctx_out = octx.resolve_onboarding_context(
+            ctx_inventory, evidence_rows, mode=mode, client_name=client_id,
+            llm_callable=(context_llm_callable if enable_context_resolver else None))
     context = ctx_out["final"]
     context_usage = ctx_out["usage"]
     octx.write_context_artifacts(context, out_dir, deterministic=ctx_out["deterministic"],
