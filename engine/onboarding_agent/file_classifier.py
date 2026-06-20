@@ -225,11 +225,22 @@ def classify_file(path: Path) -> FileInventoryItem:
 
 
 def classify_directory(input_dir: Path) -> List[FileInventoryItem]:
-    """Classify every supported file directly under ``input_dir`` (sorted)."""
+    """Classify every supported file under ``input_dir`` (recursively, sorted).
+
+    Discovery recurses into subdirectories so packs that use role/date folder
+    conventions (e.g. ``input/funded/2025-11-30/`` and
+    ``input/pipeline/2025-12-01/``) are fully ingested — files nested below the
+    input root are no longer silently skipped. Hidden files/dirs (``.`` prefixed)
+    and READMEs are ignored.
+    """
     input_dir = Path(input_dir)
     items: List[FileInventoryItem] = []
-    for path in sorted(input_dir.iterdir()):
+    for path in sorted(input_dir.rglob("*")):
         if not path.is_file():
+            continue
+        rel_parts = path.relative_to(input_dir).parts
+        if any(part.startswith(".") for part in rel_parts):
+            # Skip hidden files and anything inside a hidden directory.
             continue
         if path.name.lower() in {"readme.md", "readme.txt"}:
             # README is documentation about the pack, not an artefact.
