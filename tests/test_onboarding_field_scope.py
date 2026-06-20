@@ -100,6 +100,35 @@ class TestResolver(unittest.TestCase):
         self.assertTrue(s.blocking_fields)
         self.assertTrue(s.blocking_fields.issubset(s.core_canonical_fields))
 
+    def test_mi_only_legal_entity_fields_not_blocking_but_included(self):
+        # Regulatory legal-entity identifiers must not block MI-only promotion,
+        # yet remain in scope (visible/mappable, raised as a non-blocking gap).
+        s = _scope("mi_only")
+        for f in ("originator_legal_entity_identifier", "originator_name"):
+            self.assertIn(f, s.core_canonical_fields)
+            self.assertIn(f, s.included_fields)        # still in scope
+            self.assertNotIn(f, s.blocking_fields)     # but not blocking
+
+    def test_mi_only_mi_critical_core_fields_remain_blocking(self):
+        # MI-critical core fields are unaffected and still block where required.
+        s = _scope("mi_only")
+        for f in ("loan_identifier", "current_principal_balance"):
+            if f in s.included_fields:
+                self.assertIn(f, s.blocking_fields, f)
+
+    def test_regulatory_mi_legal_entity_fields_still_blocking(self):
+        # Regulatory mode requirements must NOT be weakened.
+        s = _scope("regulatory_mi")
+        for f in ("originator_legal_entity_identifier", "originator_name"):
+            self.assertIn(f, s.blocking_fields, f)
+
+    def test_warehouse_legal_entity_blocking_follows_regulatory_flag(self):
+        s_off = _scope("warehouse_securitisation", regulatory_reporting_enabled=False)
+        s_on = _scope("warehouse_securitisation", regulatory_reporting_enabled=True)
+        for f in ("originator_legal_entity_identifier", "originator_name"):
+            self.assertNotIn(f, s_off.blocking_fields, f)   # non-blocking when off
+            self.assertIn(f, s_on.blocking_fields, f)       # re-blocks when on
+
     def test_mna_dd_full_universe(self):
         s = _scope("mna_dd")
         self.assertFalse(s.excluded_fields)  # nothing excluded

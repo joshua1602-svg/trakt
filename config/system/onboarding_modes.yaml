@@ -46,6 +46,9 @@ modes:
       core_canonical_missing: true
       analytics_missing: false
       regulatory_missing: false
+    # Legal/regulatory entity identifiers (LEI, originator/servicer name) are not
+    # required for MI analytics — keep them visible but non-blocking in MI-only.
+    blocking_exclude_field_groups: [legal_entity]
     required_config_fields: [client_name, asset_class, currency, reporting_date]
     gap_category_severity:
       date: blocking
@@ -144,6 +147,9 @@ modes:
       warehouse_core_missing: true
       source_of_truth_missing: true
       analytics_missing: false
+    # Non-blocking unless regulatory reporting is enabled (gated in field_scope by
+    # regulatory_active, so these re-block when regulatory_reporting_enabled).
+    blocking_exclude_field_groups: [legal_entity]
     required_config_fields:
       [client_name, asset_class, currency, reporting_date,
        warehouse_facility_present, advance_rate, margin, warehouse_limit]
@@ -166,3 +172,10 @@ field_group_patterns:
   funding: [funding, funded, advance, committed]
   pipeline: [pipeline, application, offer, completion, expected]
   cashflow: [cashflow, payment, principal, interest, redemption, fee, recovery]
+  # Legal/regulatory entity-identity fields (originator/servicer/lender/sponsor
+  # legal entity identifiers and names). Used by blocking_exclude_field_groups to
+  # keep these non-blocking for MI analytics. Patterns are deliberately specific
+  # so loan-level financial cores (balances/rates/dates) are never matched.
+  legal_entity:
+    [legal_entity_identifier, originator_name, originator_affiliate, sponsor,
+     servicer_name, servicer_identifier, original_lender, seller_name]
