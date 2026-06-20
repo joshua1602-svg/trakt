@@ -160,6 +160,60 @@ def _norm(col: str) -> str:
     return str(col).strip().lower().replace(" ", "_")
 
 
+def _alias_norm(text: str) -> str:
+    try:
+        from engine.gate_1_alignment.semantic_alignment import normalise_name
+        return normalise_name(str(text))
+    except Exception:
+        return _norm(text)
+
+
+def _alias_loan_columns() -> set:
+    """Normalised headers (alias keys) that resolve to ``loan_identifier``."""
+    try:
+        from engine.gate_1_alignment.semantic_alignment import load_aliases_from_dir
+        amap = load_aliases_from_dir(_CONFIG_DIR)
+        return {k for k, v in amap.items() if v == "loan_identifier"}
+    except Exception:
+        return set()
+
+
+def _loan_key_hints(project_dir: Path) -> Dict[Tuple[str, str], str]:
+    """``{(file_name, sheet_name): column}`` of onboarding-detected loan-id keys.
+
+    Uses 02_column_profiles (``likely_identifier``) so promotion joins on the same
+    key column onboarding profiled, even when it is a non-standard header.
+    """
+    hints: Dict[Tuple[str, str], str] = {}
+    rows = _load_json(Path(project_dir) / "02_column_profiles.json") or []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        if str(r.get("likely_identifier", "")).strip().lower() in ("true", "1", "yes"):
+            key = (r.get("file_name", ""), r.get("sheet_name", ""))
+            col = r.get("source_column", "")
+            if col and key not in hints:
+                hints[key] = col
+    return hints
+
+
+def _resolve_key_column(
+    df: pd.DataFrame, file_sheet: Tuple[str, str],
+    loan_key_hints: Dict[Tuple[str, str], str], alias_loan_cols: set,
+) -> Optional[str]:
+    """Resolve the loan-id key column: onboarding hint -> alias -> name list."""
+    hint = loan_key_hints.get(file_sheet) if loan_key_hints else None
+    if hint:
+        for c in df.columns:
+            if _norm(c) == _norm(hint):
+                return c
+    if alias_loan_cols:
+        for c in df.columns:
+            if _alias_norm(c) in alias_loan_cols:
+                return c
+    return _find_key_column(df, _LOAN_KEY_NAMES)
+
+
 def _find_key_column(df: pd.DataFrame, names: List[str]) -> Optional[str]:
     cols = {_norm(c): c for c in df.columns}
     for n in names:
@@ -264,7 +318,8 @@ def _collect_field_sources(
     return sources
 
 
-_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "system" / "onboarding_agent.yaml"
+_CONFIG_DIR = Path(__file__).resolve().parents[2] / "config" / "system"
+_CONFIG_PATH = _CONFIG_DIR / "onboarding_agent.yaml"
 
 
 # Coverage statuses (28a) the central tape consumes as RESOLVED selections.
@@ -378,8 +433,22 @@ def _build_lender_tape(
     registry_fields: Dict[str, Any],
     mode: str,
     coverage_rows: Optional[List[Dict[str, Any]]] = None,
+    loan_key_hints: Optional[Dict[Tuple[str, str], str]] = None,
+    alias_loan_cols: Optional[set] = None,
+    debug_dir: Optional[Path] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]:
     inventory_by_name = {i.get("file_name", ""): i for i in inventory}
+    # Case/basename-tolerant file lookup (28a selected_source_file should match the
+    # inventory file_name, but normalise to be safe).
+    inv_by_basename = {Path(k).name.lower(): v for k, v in inventory_by_name.items()}
+
+    def _resolve_inv(file_name: str) -> Dict[str, Any]:
+        return (inventory_by_name.get(file_name)
+                or inv_by_basename.get(Path(str(file_name)).name.lower())
+                or {})
+
+    loan_key_hints = loan_key_hints or {}
+    alias_loan_cols = alias_loan_cols or set()
     included = getattr(field_scope, "included_fields", set()) or set()
 
     field_sources = _collect_field_sources(
@@ -412,17 +481,39 @@ def _build_lender_tape(
 
     frames: Dict[Tuple[str, str], pd.DataFrame] = {}
     key_cols: Dict[Tuple[str, str], str] = {}
+    load_debug: Dict[Tuple[str, str], Dict[str, Any]] = {}
     plays = {_play_key(s) for srcs in field_sources.values() for s in srcs}
     for (fname, sheet) in plays:
-        inv = inventory_by_name.get(fname, {})
-        df = _read_df(inv.get("file_path", ""), sheet)
+        inv = _resolve_inv(fname)
+        path = inv.get("file_path", "")
+        df = _read_df(path, sheet)
+        dbg: Dict[str, Any] = {
+            "file_in_inventory": bool(inv), "resolved_file_path": path,
+            "frame_loaded": df is not None,
+            "df_shape": list(df.shape) if df is not None else None,
+            "df_columns": [str(c) for c in df.columns] if df is not None else [],
+        }
         if df is None:
+            load_debug[(fname, sheet)] = {**dbg, "key_column": "", "key_count": 0}
             continue
-        key = _find_key_column(df, _LOAN_KEY_NAMES)
+        key = _resolve_key_column(df, (fname, sheet), loan_key_hints, alias_loan_cols)
+        dbg["key_column"] = key or ""
         if key is None:
+            load_debug[(fname, sheet)] = {**dbg, "key_count": 0}
             continue
         frames[(fname, sheet)] = df
         key_cols[(fname, sheet)] = key
+        load_debug[(fname, sheet)] = dbg
+
+    # Normalised-header -> actual-column map per frame, so a selected source column
+    # joins even if its header differs only by case / whitespace.
+    col_maps: Dict[Tuple[str, str], Dict[str, str]] = {
+        pk: {_norm(c): c for c in df.columns} for pk, df in frames.items()
+    }
+
+    def _actual_col(pk: Tuple[str, str], col: str) -> str:
+        m = col_maps.get(pk, {})
+        return m.get(_norm(col), col)
 
     # Per-(file,sheet) lookup index: {(file,sheet): {loan_id: {col: value}}}.
     # Loan ids are normalised (76034101.0 -> 76034101) so they join across files.
@@ -441,10 +532,13 @@ def _build_lender_tape(
                 seen_ids.add(lid)
                 loan_ids.append(lid)
         indexes[pk] = idx
+        load_debug.setdefault(pk, {})["key_count"] = len(idx)
 
     # Funded/live loan universe: ids appearing in a loan-classified source file
     # (a file whose detected domains include loan). Fall back to all ids.
     loan_ids = sorted(loan_ids)
+    universe_keys = set(loan_ids)
+    assigned_by_field: Dict[str, int] = {}
 
     # The loan identifier is the primary key column, never also a data column.
     # Include resolved profile-proxy and inferred-constant fields as columns even
@@ -489,7 +583,8 @@ def _build_lender_tape(
                 continue
             domain = next(iter(dc.field_domains(canon, registry_fields.get(canon, {})) & _LENDER_DOMAINS), dc.LOAN)
             primary = srcs[0]
-            primary_value = indexes[_play_key(primary)][lid].get(primary.column)
+            pk_primary = _play_key(primary)
+            primary_value = indexes[pk_primary][lid].get(_actual_col(pk_primary, primary.column))
 
             validation_sources: List[str] = []
             alternate_values: List[str] = []
@@ -497,7 +592,8 @@ def _build_lender_tape(
             precedence_applied = bool((precedence or {}).get(canon, {}).get("primary_source_file"))
 
             for other in srcs[1:]:
-                ov = indexes[_play_key(other)][lid].get(other.column)
+                pk_other = _play_key(other)
+                ov = indexes[pk_other][lid].get(_actual_col(pk_other, other.column))
                 if _is_blank(ov):
                     continue
                 if _values_match(primary_value, ov):
@@ -535,6 +631,7 @@ def _build_lender_tape(
 
             row[canon] = primary_value
             populated_cells += 1
+            assigned_by_field[canon] = assigned_by_field.get(canon, 0) + 1
             lineage.append({
                 "loan_identifier": lid,
                 "canonical_field": canon,
@@ -603,6 +700,39 @@ def _build_lender_tape(
                     domain == dc.LOAN and mode in ("regulatory_mi", "warehouse_securitisation"),
                 )
 
+    # Per-field materialisation diagnostics for the RESOLVED (28a-selected)
+    # source-mapped fields — so a real-pack run that still produces nulls reveals
+    # exactly where (file/sheet/column/key/join) the assignment failed.
+    materialisation_debug: List[Dict[str, Any]] = []
+    for canon, src in sorted(forced.items()):
+        pk = _play_key(src)
+        ld = load_debug.get(pk, {})
+        src_keys = set(indexes.get(pk, {}).keys())
+        materialisation_debug.append({
+            "canonical_field": canon,
+            "selected_source_file": src.file_name,
+            "selected_source_sheet": src.sheet,
+            "selected_source_column": src.column,
+            "resolved_file_path": ld.get("resolved_file_path", ""),
+            "file_in_inventory": ld.get("file_in_inventory", False),
+            "frame_loaded": ld.get("frame_loaded", False),
+            "df_shape": ld.get("df_shape"),
+            "selected_column_present": (
+                _norm(src.column) in {_norm(c) for c in ld.get("df_columns", [])}),
+            "loan_key_column_used": ld.get("key_column", ""),
+            "source_key_count": ld.get("key_count", len(src_keys)),
+            "central_universe_count": len(universe_keys),
+            "key_intersection": len(src_keys & universe_keys),
+            "assigned_non_null": assigned_by_field.get(canon, 0),
+            "in_lender_scope": in_lender_scope(canon),
+        })
+    if debug_dir is not None:
+        try:
+            (Path(debug_dir) / "18e_central_tape_materialisation_debug.json").write_text(
+                json.dumps(materialisation_debug, indent=2, default=str), encoding="utf-8")
+        except Exception:
+            pass
+
     summary = {
         "loan_count": len(tape),
         "canonical_fields_populated": len(canonical_order),
@@ -611,6 +741,7 @@ def _build_lender_tape(
         "gap_count": len(gaps),
         "lineage_rows": len(lineage),
         "mode": mode,
+        "materialisation_debug": materialisation_debug,
         "columns": ["loan_identifier"] + canonical_order,
     }
     # Ensure every tape row has all columns (blank where unpopulated).
@@ -739,9 +870,18 @@ def build_central_tapes(
     )
     registry_fields = load_field_registry(Path(registry_path)).get("fields", {}) or {}
 
+    # Onboarding-detected loan-key hints per (file, sheet) — from 02 column
+    # profiles (likely_identifier) and the loan_identifier alias set — so the
+    # central tape uses the SAME key column onboarding detected rather than
+    # guessing from a fixed name list (handles non-standard key headers).
+    loan_key_hints = _loan_key_hints(project_dir)
+    alias_loan_cols = _alias_loan_columns()
+
     tape, lineage, gaps, summary = _build_lender_tape(
         mapping_candidates, overrides, precedence, enum_decisions, inventory,
         field_scope, registry_fields, mode, coverage_rows=coverage_rows,
+        loan_key_hints=loan_key_hints, alias_loan_cols=alias_loan_cols,
+        debug_dir=project_dir,
     )
 
     central_dir = Path(run_paths.central_dir)
