@@ -670,6 +670,8 @@ def run_operator_workflow(
     asset_config: str = "",
     reporting_date: str = "",
     override_reporting_date: bool = False,
+    product_profile: str = "",
+    enable_context_resolver: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """Run the managed-service operator workflow; returns the 40 summary dict."""
     client_id = client_id or client_name.lower().replace(" ", "_")
@@ -710,6 +712,14 @@ def run_operator_workflow(
 
     run_error = ""
     input_files = 0
+    # Use the (low-cost) LLM also for onboarding-context resolution so the asset
+    # class / product profile can be DETECTED when deterministic file/column tokens
+    # are weak. Defaults to following the advisor flag; an explicit
+    # ``enable_context_resolver`` overrides. Reuses the same callable (no extra
+    # configuration / key).
+    use_context_resolver = (bool(advisor_callable) if enable_context_resolver is None
+                            else bool(enable_context_resolver))
+    context_callable = advisor_callable if use_context_resolver else None
     try:
         from engine.onboarding_agent.onboarding_orchestrator import run_onboarding
         project = run_onboarding(
@@ -727,6 +737,9 @@ def run_operator_workflow(
             target_contract=("ESMA_Annex2" if is_annex2 else target_contract),
             regime_config_path=regime_config,
             asset_config_path=asset_config,
+            product_profile=product_profile,
+            enable_context_resolver=use_context_resolver,
+            context_llm_callable=context_callable,
         )
         input_files = len(project.file_inventory)
     except Exception as exc:  # produce a FAILED summary instead of crashing
@@ -856,6 +869,20 @@ def build_parser() -> argparse.ArgumentParser:
                    help="OPTIONAL fallback reporting cut-off date (YYYY-MM-DD). "
                         "Source-derived data_cut_off_date is preferred; this is used "
                         "only when none is found in the source pack/config.")
+    p.add_argument("--product-profile", default="",
+                   help="explicitly select a config-driven product profile (e.g. "
+                        "equity_release_lifetime_mortgage) from config/asset/"
+                        "product_profiles.yaml. Trusted outright; otherwise the "
+                        "profile is detected from evidence. Controls which missing "
+                        "fields are base-MI blocking vs visible/non-blocking.")
+    p.add_argument("--enable-context-resolver", dest="enable_context_resolver",
+                   action="store_true", default=None,
+                   help="use the LLM to resolve the onboarding context (asset class / "
+                        "product profile) when deterministic tokens are weak. Defaults "
+                        "to following --enable-llm-target-advisor.")
+    p.add_argument("--no-context-resolver", dest="enable_context_resolver",
+                   action="store_false",
+                   help="disable LLM onboarding-context resolution (deterministic only).")
     p.add_argument("--override-reporting-date", action="store_true",
                    help="force --reporting-date to win even when a source-derived "
                         "data_cut_off_date exists (recorded as cli_override).")
@@ -938,7 +965,9 @@ def main(argv=None) -> int:
         llm_max_items_per_call=args.llm_max_items_per_call,
         target_contract=args.target_contract, regime_config=args.regime_config,
         asset_config=args.asset_config, reporting_date=args.reporting_date,
-        override_reporting_date=args.override_reporting_date)
+        override_reporting_date=args.override_reporting_date,
+        product_profile=args.product_profile,
+        enable_context_resolver=args.enable_context_resolver)
     _print_console(summary)
     return 0 if summary["status"] != FAILED else 2
 

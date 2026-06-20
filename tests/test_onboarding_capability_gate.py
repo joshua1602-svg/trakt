@@ -263,5 +263,28 @@ class TestRegulatoryUnchanged(unittest.TestCase):
         self.assertEqual(overlay, {})  # regulatory contract -> no MI overlay
 
 
+# --------------------------------------------------------------------------- #
+# 6 — operator workflow honours an explicit --product-profile selection
+# --------------------------------------------------------------------------- #
+class TestWorkflowProductProfileFlag(unittest.TestCase):
+    def test_explicit_profile_unblocks_equity_base_mi(self):
+        import json
+        import tempfile
+        from engine.onboarding_agent import workflow as wf
+        warnings.simplefilter("ignore")
+        out = tempfile.mkdtemp(prefix="wf_profile_")
+        summary = wf.run_operator_workflow(
+            input_dir=str(_REPO_ROOT / "synthetic_onboarding_pack"),
+            client_name="PT", client_id="pt", run_id="r1", mode="mi_only",
+            project_dir=out, product_profile="equity_release_lifetime_mortgage")
+        # Base-MI run is no longer blocked on non-base fields.
+        self.assertEqual(summary["blocking_decisions_count"], 0,
+                         f"unexpected blockers; status={summary['status']}")
+        scope = json.loads((Path(out) / "28d_product_profile_scope.json").read_text())
+        self.assertTrue(scope["product_profile"]["applied"])
+        self.assertEqual(scope["product_profile"]["decision"], "explicit_config_or_operator")
+        self.assertGreater(scope["capability_scope_field_count"], 0)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
