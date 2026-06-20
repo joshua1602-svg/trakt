@@ -214,5 +214,76 @@ class TestPromotionConsumesResolvedMappings(unittest.TestCase):
             self.assertGreater(int(self.tape[f].notna().sum()), 0, f"{f} all null")
 
 
+class TestPromotionMaterialisesMultiSheetNumericIds(unittest.TestCase):
+    """Regression for the source_mapped materialisation step: a funded source
+    selected from a NON-first sheet of a multi-sheet workbook, with numeric loan
+    ids (float vs int across sheets), must still populate row-by-row with lineage.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        warnings.simplefilter("ignore")
+        cls.root = Path(tempfile.mkdtemp(prefix="promo_multisheet_"))
+        inp = cls.root / "input"
+        fb = inp / "funded" / "2025-10-31"
+        fb.mkdir(parents=True)
+        with pd.ExcelWriter(fb / "M2L Portfolio.xlsx") as xl:
+            pd.DataFrame({"info": ["cover sheet — not loan data"]}).to_excel(
+                xl, sheet_name="Cover", index=False)
+            pd.DataFrame({
+                "Loan ID": [76034101, 76034102, 76034103],       # int ids
+                "Loan Interest Rate": [3.10, 3.25, 3.40],
+                "Current Outstanding Balance": [100000, 120000, 90000],
+                "Policy Completion Date": ["2018-05-01", "2019-06-01", "2020-07-01"],
+                "Latest Property Value": [300000, 320000, 280000],
+            }).to_excel(xl, sheet_name="LoanExtract One", index=False)
+            pd.DataFrame({
+                "Loan ID": [76034101.0, 76034102.0, 76034103.0],  # float ids
+                "Total OSBalance": [100000, 120000, 90000],
+            }).to_excel(xl, sheet_name="PropertyExtract", index=False)
+        cls.proj = cls.root / "proj"
+        cls.summary = wf.run_operator_workflow(
+            input_dir=str(inp), client_name="T", client_id="t",
+            run_id="mi_2025_10", mode="mi_only", project_dir=str(cls.proj),
+            product_profile=PROFILE)
+        rp = storage_paths.resolve_run_paths(
+            project_dir=str(cls.proj), input_dir=str(inp), output_root=None,
+            client_id="t", run_id="mi_2025_10", storage_backend="local",
+            input_uri="", output_uri="")
+        cls.tr = central_tape_builder.build_central_tapes(
+            str(cls.proj), rp,
+            str(_REPO_ROOT / "config" / "system" / "fields_registry.yaml"),
+            mode="mi_only")
+        cls.tape = pd.read_csv(cls.tr["central_lender_tape_path"])
+        cls.lineage = pd.read_csv(cls.tr["central_tape_lineage_path"])
+
+    def test_all_loans_present(self):
+        self.assertEqual(len(self.tape), 3)
+
+    def test_source_mapped_fields_non_null(self):
+        for f in ("current_interest_rate", "current_outstanding_balance",
+                  "origination_date"):
+            self.assertIn(f, self.tape.columns, f"{f} absent")
+            self.assertEqual(int(self.tape[f].notna().sum()), len(self.tape),
+                             f"{f} has nulls (materialisation failed)")
+
+    def test_derived_and_inferred_non_null(self):
+        for f in ("current_principal_balance", "reporting_date"):
+            self.assertIn(f, self.tape.columns)
+            self.assertEqual(int(self.tape[f].notna().sum()), len(self.tape), f)
+
+    def test_lineage_exists_for_each_field(self):
+        present = set(self.lineage["canonical_field"].astype(str))
+        for f in ("current_interest_rate", "current_outstanding_balance",
+                  "origination_date", "current_principal_balance", "reporting_date"):
+            self.assertIn(f, present, f"no lineage for {f}")
+
+    def test_interest_rate_from_funded_workbook(self):
+        ir = self.lineage[self.lineage["canonical_field"] == "current_interest_rate"]
+        self.assertTrue(all("M2L Portfolio" in str(f) for f in ir["source_file"]))
+        for f in ir["source_file"].astype(str):
+            self.assertNotIn("Pipeline", f)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
