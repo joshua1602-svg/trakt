@@ -2034,7 +2034,9 @@ def apply_profile_proxy_derivations(
         proxy_name, proxy_row = "", None
         for member in group:
             r = cov_by_field.get(_pnorm(member))
-            if r is not None and r.get("coverage_status") in mapped_states:
+            # Never derive a funded balance from a pipeline-sourced column.
+            if (r is not None and r.get("coverage_status") in mapped_states
+                    and r.get("artefact_role_selected") != "pipeline"):
                 proxy_name, proxy_row = member, r
                 break
         if proxy_row is None:
@@ -2300,6 +2302,41 @@ def _classify(
     }
 
 
+def _apply_funded_role_guardrail(
+    tf: Dict[str, Any], cands: List[Dict[str, Any]],
+    artefact_roles: Optional[Dict[str, str]],
+) -> Tuple[List[Dict[str, Any]], str, str, str]:
+    """Narrow artefact-role guardrail for funded-book base-MI target fields.
+
+    A pipeline artefact must NOT become the *selected* source for a funded-book
+    base-MI field; it may remain a lower-priority alternative. Returns
+    ``(cands_for_classify, role_note, selected_role, excluded_pipeline_display)``.
+    A no-op when no role map is supplied or the field is not protected.
+    """
+    from . import date_semantics as ds
+    field = tf.get("target_field", "")
+    if not artefact_roles or field not in ds.FUNDED_BOOK_BASE_MI_FIELDS or not cands:
+        return cands, "", "", ""
+    for c in cands:
+        c["artefact_role_class"] = ds.artefact_role_class(
+            artefact_roles.get(c.get("source_file", ""), ""))
+    pipeline = [c for c in cands if c.get("artefact_role_class") == ds.ROLE_PIPELINE]
+    eligible = [c for c in cands if c.get("artefact_role_class") != ds.ROLE_PIPELINE]
+    if not pipeline:
+        return cands, "", (eligible[0]["artefact_role_class"] if eligible else ""), ""
+    pipe_disp = "; ".join(
+        f"{c['source_file']}::{c['source_sheet']}::{c['source_column']} (pipeline)"
+        for c in pipeline)
+    if eligible:
+        note = (f"funded-book field: {len(pipeline)} pipeline candidate(s) demoted "
+                "below the funded source (artefact-role guardrail)")
+        return eligible + pipeline, note, eligible[0]["artefact_role_class"], pipe_disp
+    # Pipeline-only: never auto-select for a funded-book target.
+    note = (f"funded-book field: {len(pipeline)} pipeline-only candidate(s) excluded "
+            "from auto-selection — operator approval required (artefact-role guardrail)")
+    return [], note, "", pipe_disp
+
+
 def build_target_coverage(
     mode: str,
     context: Dict[str, Any],
@@ -2309,6 +2346,7 @@ def build_target_coverage(
     evidence_rows: List[Dict[str, Any]],
     resolved_rows: List[Dict[str, Any]],
     overlay: Optional[Dict[str, Dict[str, Any]]] = None,
+    artefact_roles: Optional[Dict[str, str]] = None,
 ) -> Tuple[List[Dict[str, Any]], Dict[Tuple[str, str, str], List[Tuple[str, float, bool]]]]:
     """Build the target coverage matrix (28a) — one row per TARGET field.
 
@@ -2326,6 +2364,10 @@ def build_target_coverage(
     rows: List[Dict[str, Any]] = []
     for tf in target_fields:
         cands = _match_candidates(tf, evidence_rows, resolved_by_key)
+        # Artefact-role guardrail: keep pipeline artefacts from auto-filling
+        # funded-book base-MI fields (they may stay as lower-priority alternatives).
+        cands, role_note, selected_role, pipeline_excluded = _apply_funded_role_guardrail(
+            tf, cands, artefact_roles)
         for i, c in enumerate(cands):
             k = (c["source_file"], c["source_sheet"], c["source_column"])
             matched_by_key.setdefault(k, []).append(
@@ -2361,8 +2403,11 @@ def build_target_coverage(
             "selected_source_confidence": primary.get("confidence", ""),
             "selected_value": selected_value,
             "alternative_source_candidates": "; ".join(
-                f"{c['source_file']}::{c['source_sheet']}::{c['source_column']} "
-                f"({c['confidence']})" for c in alts),
+                [f"{c['source_file']}::{c['source_sheet']}::{c['source_column']} "
+                 f"({c['confidence']})" for c in alts]
+                + ([pipeline_excluded] if pipeline_excluded else [])),
+            "artefact_role_selected": selected_role,
+            "role_preference_note": role_note,
             "overlap_evidence": (
                 f"{len(cands)} candidate source columns" if len(cands) > 1 else ""),
             "value_compatibility_status": cls["value_compatibility_status"],
@@ -2648,7 +2693,8 @@ _COVERAGE_COLUMNS = [
     "target_domain", "target_label", "required_status", "applicability_status",
     "coverage_status", "coverage_basis", "selected_source_file",
     "selected_source_sheet", "selected_source_column", "selected_source_confidence",
-    "selected_value", "alternative_source_candidates", "overlap_evidence",
+    "selected_value", "alternative_source_candidates",
+    "artefact_role_selected", "role_preference_note", "overlap_evidence",
     "value_compatibility_status", "derivation_rule", "default_rule", "default_value",
     "default_rule_source", "default_reason", "nd_allowed", "nd_rule_applied",
     "configured_value_source", "config_validation_status", "config_validation_message",
@@ -2804,6 +2850,7 @@ def run_target_first_coverage(
     client_id: str = "",
     run_id: str = "",
     decisions_path: Optional[str | Path] = None,
+    artefact_roles: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """Build + write the target-first coverage artefacts (28a/28b/28c).
 
@@ -2860,7 +2907,7 @@ def run_target_first_coverage(
         mode, context, overlay_path=mi_overlay_path, resolved_profile=resolved_profile)
     coverage_rows, matched_by_key = build_target_coverage(
         mode, context, cid, csrc, target_fields, evidence_rows, resolved_rows,
-        overlay=overlay)
+        overlay=overlay, artefact_roles=artefact_roles)
     # Profile-driven proxy/inference derivations (equity-release balance proxy;
     # reporting-date period inference) — non-blocking, evidence-backed, auditable.
     proxy_changes = apply_profile_proxy_derivations(
@@ -2998,6 +3045,12 @@ def run_target_first_coverage(
         "capability_scope_field_count": len(capability_scope_changes),
         "proxy_derivations": proxy_changes,
         "proxy_derivation_count": len(proxy_changes),
+        "artefact_role_guardrail": [
+            {"target_field": r["target_field"],
+             "artefact_role_selected": r.get("artefact_role_selected", ""),
+             "note": r.get("role_preference_note", "")}
+            for r in coverage_rows if r.get("role_preference_note")
+        ],
     }
     if resolved_profile.applied and resolved_profile.profile is not None:
         try:

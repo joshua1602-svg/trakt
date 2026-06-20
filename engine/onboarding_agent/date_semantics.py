@@ -72,6 +72,29 @@ PIPELINE_ROLES = {"pipeline_report", "pipeline", "origination_pipeline"}
 # All roles that must share the funded reporting date basis.
 FUNDED_BASIS_ROLES = FUNDED_BOOK_ROLES | COLLATERAL_ROLES | CASHFLOW_ROLES
 
+# Funded-book BASE-MI target fields that a pipeline artefact must NOT auto-fill.
+# A pipeline column may remain a lower-priority alternative, but never the
+# selected source for these (config/role-driven guardrail).
+FUNDED_BOOK_BASE_MI_FIELDS = {
+    "current_interest_rate", "current_principal_balance",
+    "current_outstanding_balance", "current_valuation_amount",
+    "origination_date", "reporting_date", "data_cut_off_date",
+}
+
+# Artefact-role classes.
+ROLE_FUNDED = "funded"
+ROLE_PIPELINE = "pipeline"
+
+
+def artefact_role_class(role: str) -> str:
+    """Classify an artefact role as ``funded`` / ``pipeline`` / ``""`` (unknown)."""
+    r = re.sub(r"[^a-z0-9_]+", "_", str(role or "").strip().lower())
+    if r in PIPELINE_ROLES:
+        return ROLE_PIPELINE
+    if r in FUNDED_BASIS_ROLES:
+        return ROLE_FUNDED
+    return ""
+
 # Folder-token -> basis (for role/date folders like input/funded/2025-11-30).
 _FOLDER_ROLE_TOKENS = {
     BASIS_FUNDED: ("funded", "loan", "loans", "loan_tape", "loantape", "book",

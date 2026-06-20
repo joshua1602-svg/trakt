@@ -335,6 +335,12 @@ def run_llm_assisted_mapping(
     # column. The 33/34 source-column queue (below) remains as audit detail but
     # is no longer the primary gate artefact.
     from . import target_coverage as tcov
+    # Per-source-file artefact role (file classification), for the funded-book
+    # vs pipeline guardrail in coverage. Empty when no inventory is available.
+    artefact_roles = {
+        it.get("file_name", ""): it.get("classification", "")
+        for it in (inventory or []) if it.get("file_name")
+    }
     target_first = tcov.run_target_first_coverage(
         mode=policy.name, context=context, evidence_rows=evidence_rows,
         resolved_rows=res["resolved"], output_dir=out_dir,
@@ -342,7 +348,8 @@ def run_llm_assisted_mapping(
         asset_config_path=asset_config_path,
         registry_path=registry_path,
         client_id=client_id, run_id=run_id,
-        decisions_path=target_first_decisions_path)
+        decisions_path=target_first_decisions_path,
+        artefact_roles=artefact_roles)
 
     # 36 — OPTIONAL target-first LLM ADVISOR. Operates on the 28c decisions +
     # 28a/28b evidence (NOT the raw source-column universe). Advisory only: it
