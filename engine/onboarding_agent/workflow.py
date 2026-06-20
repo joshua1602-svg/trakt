@@ -99,9 +99,14 @@ def _next_action(stage: str, status: str, advisor_enabled: bool) -> str:
         return ("Workflow failed to produce the required target-first artefacts — "
                 "re-run with --enable-mapping-review and check the logs.")
     if status == BLOCKED:
+        advice = (" LLM recommendations are advisory: to apply them run "
+                  "`python -m engine.onboarding_agent.cli accept-target-advice` "
+                  "(writes 34_target_first_decisions_approved.yaml), or approve "
+                  "manually." if advisor_enabled else "")
         return ("Resolve the remaining BLOCKING Gate 4 decisions (provide a source, "
                 "configure a value, or mark not applicable) in a copy of "
-                "34_target_first_decisions.yaml and rerun with --target-first-decisions.")
+                "34_target_first_decisions.yaml and rerun with "
+                "--target-first-decisions." + advice)
     if status == NEEDS_CONFIGURATION:
         return ("The Annex 2 target universe is loaded but not fully configured — some "
                 "codes are pending a regime field rule (or missing from 28a). Complete the "
@@ -931,6 +936,10 @@ def _print_console(s: Dict[str, Any]) -> None:
     print(f"  enabled: {str(s['llm_target_advisor_enabled']).lower()}")
     print(f"  advised: {s['llm_target_advisor_advised_count']}")
     print(f"  cost: £{s['llm_target_advisor_estimated_cost_gbp']}")
+    if s.get("llm_target_advisor_advised_count"):
+        print("  note: recommendations are advisory. To apply them, run "
+              "`python -m engine.onboarding_agent.cli accept-target-advice "
+              f"--project-dir {s.get('project_dir', '<project-dir>')}` or approve manually.")
     print("")
     print("Review pack:")
     print(f"  {s['review_pack_html'] or '—'}")

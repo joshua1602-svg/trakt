@@ -670,8 +670,12 @@ def _gate4_decision_queue_html(tf: dict) -> str:
         advisor_html = (
             '<div class="callout pass"><strong>Target-first LLM advisor:</strong> '
             f"reviewed {len(rec_by_id)} Gate 4 decision(s); {advised} advised; "
-            f"{review} require operator review. Advisory only — deterministic 28a/28c "
-            "are unchanged; the operator still approves via 34_target_first_decisions.yaml."
+            f"{review} require operator review. LLM recommendations are advisory — "
+            "deterministic 28a/28c are unchanged. To apply them, run "
+            "<code>accept-target-advice</code> (writes "
+            "34_target_first_decisions_approved.yaml) or approve manually in "
+            "34_target_first_decisions.yaml, then rerun with "
+            "<code>--target-first-decisions</code>."
             "</div>"
             '<p class="meta">Source-column LLM review and the target-first LLM advisor '
             "are separate layers; a source-column count of 0 does not mean the advisor "

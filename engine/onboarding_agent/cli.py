@@ -230,6 +230,54 @@ def build_ingest_parser() -> argparse.ArgumentParser:
     return p
 
 
+def build_accept_advice_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        description="Accept the target-first LLM advisor's recommendations into an "
+        "approved 34 decision file. Advisory only: never mutates 28a/28c."
+    )
+    p.add_argument("--project-dir", required=True,
+                   help="Existing onboarding output folder (holds 34_/36_/28a_).")
+    p.add_argument("--recommendations", default="",
+                   help="36_target_first_llm_recommendations.json (default: in project-dir).")
+    p.add_argument("--decisions", default="",
+                   help="34_target_first_decisions.yaml template (default: in project-dir).")
+    p.add_argument("--coverage", default="",
+                   help="28a_target_coverage_matrix.json for candidate validation "
+                        "(default: in project-dir).")
+    p.add_argument("--out", default="",
+                   help="Approved decisions output (default: "
+                        "<project-dir>/34_target_first_decisions_approved.yaml).")
+    p.add_argument("--approved-by", default="",
+                   help="Operator name recorded on each approved decision.")
+    p.add_argument("--allow-status", action="append", default=[],
+                   help="Additionally accept an advice_status beyond 'advised' "
+                        "(repeatable). Use with care.")
+    p.add_argument("--allow-action", action="append", default=[],
+                   help="Additionally accept an operator-review action (e.g. "
+                        "requires_operator_review) (repeatable). Use with care.")
+    p.add_argument("--min-confidence", type=float, default=0.0,
+                   help="Skip recommendations below this LLM confidence (0..1).")
+    return p
+
+
+def run_accept_advice(args) -> int:
+    from engine.onboarding_agent.accept_target_advice import (
+        accept_target_advice, format_summary)
+    summary = accept_target_advice(
+        args.project_dir,
+        recommendations_path=(args.recommendations or None),
+        decisions_path=(args.decisions or None),
+        coverage_path=(args.coverage or None),
+        out_path=(args.out or None),
+        approved_by=args.approved_by,
+        allow_statuses=args.allow_status,
+        allow_actions=args.allow_action,
+        min_confidence=args.min_confidence,
+    )
+    print(format_summary(summary))
+    return 0 if not summary.get("error") else 2
+
+
 def build_promote_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description="Dry-run Azure-ready promotion: build central tapes, lineage, "
@@ -556,6 +604,11 @@ def main(argv=None) -> int:
         report = ingest_answers(args.project_dir, args.answers, confirm=args.confirm)
         _print_ingestion_report(report)
         return 0
+
+    # Subcommand: accept-target-advice (LLM advisor -> approved 34 file)
+    if argv and argv[0] == "accept-target-advice":
+        args = build_accept_advice_parser().parse_args(argv[1:])
+        return run_accept_advice(args)
 
     # Subcommand: promote (Azure-ready dry-run handoff)
     if argv and argv[0] == "promote":
