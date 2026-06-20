@@ -470,7 +470,15 @@ def resolve_product_profile(
 
     # Guard against detectors that DEFAULT an asset_class with no real evidence
     # (so a generic, non-equity-release pack stays on stricter generic behaviour).
-    if context.get("asset_signal_strength") == 0 and not context.get("product_profile"):
+    # Positive evidence is any of: an explicit profile/asset selection; deterministic
+    # asset-signal tokens (asset_signal_strength > 0); or an LLM-detected asset that
+    # the deterministic backstop ACCEPTED. A bare default guess (strength 0, no LLM
+    # acceptance) is treated as no evidence.
+    strength = context.get("asset_signal_strength")
+    explicit = bool(context.get("product_profile"))
+    llm_accepted = context.get("context_backstop_decision") == "accepted_llm"
+    det_evidence = strength is None or (isinstance(strength, (int, float)) and strength > 0)
+    if not (explicit or det_evidence or llm_accepted):
         return ResolvedProfile(
             decision=DECISION_NONE, confidence=0.0,
             rationale="No positive asset-class evidence; generic behaviour retained.")
