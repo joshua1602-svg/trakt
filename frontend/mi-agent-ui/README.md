@@ -62,13 +62,33 @@ matrix), `scenario` (balance run-off / LTV / NNEG projection).
 `portfolio_overview`, `concentration_risk`, `pipeline`, `static_pools`,
 `risk_monitoring`, `scenario`, `validation`, or `unknown` (default dashboard).
 
-## Wiring to a real backend
+## Connecting to the MI Agent API
 
-Implement `AgentClient.ask(request, signal)` against the MI Agent API and return
-it from `createAgentClient()`. `AgentRequest` already carries the question +
-`PortfolioContext` + `ReportingContext`; map the `run_mi_agent_query` response
-(`spec`, `interpreted`, `query_result`, `chart_result`, `warnings`) onto the
-`Artifact[]` union. No component changes required.
+A FastAPI backend that wraps the real MI Agent lives at
+[`mi_agent_api/`](../../mi_agent_api). The React app talks to it via
+`HttpAgentClient` (same `AgentClient` interface as the mock).
+
+```bash
+# 1. start the backend (from repo root)
+pip install -r requirements.txt -r mi_agent_api/requirements.txt
+uvicorn mi_agent_api.app:app --reload --port 8000
+
+# 2. point the UI at it
+cd frontend/mi-agent-ui
+echo "VITE_AGENT_API_URL=http://localhost:8000" > .env.local
+npm run dev
+```
+
+Client selection (`src/api/index.ts`):
+
+- `VITE_AGENT_API_URL` set → **HttpAgentClient** (live Python MI Agent).
+- unset (or `VITE_AGENT_MODE=mock`) → **MockAgentClient** (demo mode).
+
+The app **always builds and runs without the backend** (mock fallback). API and
+network errors surface as a retryable error message in chat (and the canvas
+keeps the last good artifacts). The API returns artifacts already in this
+schema, so `HttpAgentClient` is a thin transport + envelope translation — no
+component changes were needed to go live.
 
 ## Notes / assumptions
 

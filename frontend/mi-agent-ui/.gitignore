@@ -7,3 +7,6 @@ dist-ssr
 npm-debug.log*
 
 *.tsbuildinfo
+
+.env
+.env.local

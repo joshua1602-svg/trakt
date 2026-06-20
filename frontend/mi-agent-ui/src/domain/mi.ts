@@ -37,17 +37,19 @@ export const AGGREGATIONS = [
 ] as const;
 export type Aggregation = (typeof AGGREGATIONS)[number];
 
-/** Chart types supported by the chart factory, plus `waterfall` for bridges. */
-export const CHART_TYPES = [
-  "bar",
-  "line",
-  "area",
-  "scatter",
-  "bubble",
-  "heatmap",
-  "treemap",
-  "waterfall",
-] as const;
+/** Chart types the MI Agent can actually emit (mi_query_spec.CHART_TYPES,
+ *  excluding the sentinel "none"). This is the authoritative set — the
+ *  /mi/catalogue endpoint serves exactly these from the Python side. */
+export const MI_CHART_TYPES = ["bar", "line", "scatter", "bubble", "heatmap", "treemap"] as const;
+export type MIChartType = (typeof MI_CHART_TYPES)[number];
+
+/**
+ * Render chart types: the MI Agent set PLUS front-end presentation-only
+ * variants (`area`, `waterfall`) used for mock/derived visuals. These two are
+ * NOT part of the MIQuerySpec contract — they are renderer conveniences and
+ * must never be sent back to the agent as a spec chart_type.
+ */
+export const CHART_TYPES = [...MI_CHART_TYPES, "area", "waterfall"] as const;
 export type ChartType = (typeof CHART_TYPES)[number];
 
 /** Risk-monitor modes (mi_query_spec.RISK_MONITOR_MODES). */

@@ -1,7 +1,11 @@
 /**
- * MI catalogue — dimensions, measures and portfolio context, mirroring the
- * Python semantic registry and stratification catalogue. Drives portfolio
- * selectors today and the future query-builder UI.
+ * MI catalogue — STATIC FALLBACK only.
+ *
+ * The authoritative catalogue is served at runtime by `GET /mi/catalogue`
+ * (mi_agent_api), which projects the real `mi_semantics_field_registry.yaml`
+ * (43 dimensions, 37 measures) and the MIQuerySpec enums. The keys below are a
+ * registry-accurate subset used for offline/demo mode and the portfolio
+ * selector; prefer the live catalogue when the backend is reachable.
  */
 
 import type { DimensionDef, MeasureDef } from "@/domain";
@@ -23,8 +27,10 @@ export const PRIOR_PERIOD: Record<string, string> = {
   "2026-02-28": "2026-01-31",
 };
 
+// Keys below are verified against mi_semantics_field_registry.yaml.
 export const DIMENSIONS: DimensionDef[] = [
-  { key: "geographic_region_obligor", label: "Region", bucketed: false, group: "geography" },
+  { key: "geographic_region_obligor", label: "Region (Obligor)", bucketed: false, group: "geography" },
+  { key: "geographic_region_collateral", label: "Region (Collateral)", bucketed: false, group: "geography" },
   { key: "broker_channel", label: "Broker", bucketed: false, group: "channel" },
   { key: "origination_channel", label: "Origination Channel", bucketed: false, group: "channel" },
   { key: "erm_product_type", label: "Product Type", bucketed: false, group: "product" },
@@ -35,11 +41,11 @@ export const DIMENSIONS: DimensionDef[] = [
   { key: "internal_risk_grade", label: "Risk Grade", bucketed: false, group: "risk" },
   { key: "ifrs9_stage", label: "IFRS 9 Stage", bucketed: false, group: "risk" },
   { key: "ltv_bucket", label: "LTV Band", bucketed: true, group: "risk" },
-  { key: "youngest_borrower_age", label: "Borrower Age Band", bucketed: true, group: "structure" },
-  { key: "interest_rate_bucket", label: "Interest Rate Band", bucketed: true, group: "product" },
+  { key: "age_bucket", label: "Borrower Age Band", bucketed: true, group: "structure" },
   { key: "pd_bucket", label: "PD Band", bucketed: true, group: "risk" },
-  { key: "balance_band", label: "Balance Band", bucketed: true, group: "structure" },
-  { key: "time_on_book", label: "Time on Book", bucketed: true, group: "performance" },
+  { key: "ead_bucket", label: "EAD Band", bucketed: true, group: "risk" },
+  { key: "ticket_bucket", label: "Ticket Size Band", bucketed: true, group: "structure" },
+  { key: "term_bucket", label: "Term Band", bucketed: true, group: "performance" },
   { key: "vintage_year", label: "Vintage", bucketed: false, group: "vintage" },
   { key: "portfolio_id", label: "Portfolio", bucketed: false, group: "segmentation" },
   { key: "spv_id", label: "SPV", bucketed: false, group: "segmentation" },
@@ -47,14 +53,15 @@ export const DIMENSIONS: DimensionDef[] = [
 
 export const MEASURES: MeasureDef[] = [
   { key: "current_outstanding_balance", label: "Balance", format: "gbp", defaultAggregation: "sum" },
+  { key: "current_principal_balance", label: "Principal Balance", format: "gbp", defaultAggregation: "sum" },
+  { key: "current_valuation_amount", label: "Valuation", format: "gbp", defaultAggregation: "sum" },
   { key: "forecast_funded_balance", label: "Forecast Funded", format: "gbp", defaultAggregation: "sum" },
-  { key: "loan_count", label: "Loan Count", format: "number", defaultAggregation: "count" },
   { key: "current_loan_to_value", label: "Current LTV", format: "pct", defaultAggregation: "weighted_avg" },
   { key: "current_interest_rate", label: "Coupon", format: "pct", defaultAggregation: "weighted_avg" },
-  { key: "youngest_borrower_age", label: "Borrower Age", format: "number", defaultAggregation: "weighted_avg" },
+  { key: "youngest_borrower_age", label: "Borrower Age", format: "number", defaultAggregation: "avg" },
   { key: "arrears_balance", label: "Arrears", format: "gbp", defaultAggregation: "sum" },
+  { key: "default_amount", label: "Default Amount", format: "gbp", defaultAggregation: "sum" },
   { key: "redemptions_received_in_period", label: "Redemptions", format: "gbp", defaultAggregation: "sum" },
-  { key: "expected_nneg_loss", label: "NNEG Loss", format: "gbp", defaultAggregation: "sum" },
 ];
 
 export const DEFAULT_PORTFOLIO = PORTFOLIOS[0];

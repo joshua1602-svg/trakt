@@ -15,6 +15,36 @@ User Question → MI Agent (interpreter) → Analytics Engine (states/risk/scena
 
 ---
 
+## 0. Source-of-truth correction (2026-06-20)
+
+A follow-up verification found the first cut of this document and the React
+domain model were **partly anchored on the legacy Streamlit ERM dashboard**
+(`analytics/streamlit_app_erm.py`) and on prototype conveniences, rather than
+exclusively on the MI Agent. The authoritative contract is, and remains:
+
+- **`mi_agent/mi_query_spec.py`** — `MIQuerySpec`, `CHART_TYPES`,
+  `AGGREGATIONS`, `STATES`, `RISK_MONITOR_MODES`.
+- **`mi_agent/mi_semantics_field_registry.yaml`** — 100 fields:
+  **43 dimensions, 37 measures**, 13 dates, 7 flags.
+- **`mi_agent/mi_chart_factory.py`** — builders for exactly
+  `bar, line, scatter, bubble, heatmap, treemap`.
+- **`mi_agent/mi_agent_workflow.py:run_mi_agent_query`** — the response shape.
+
+`streamlit_app_erm.py` is **legacy and reference-only** (visual ideas), not a
+schema authority. Corrections applied:
+
+| Area | Before (wrong) | After (corrected) |
+| --- | --- | --- |
+| Chart types | added `area`, `waterfall`; dropped `heatmap`/`treemap` from the renderer | `MI_CHART_TYPES` = the real 6; `area`/`waterfall` kept only as clearly-labelled **front-end render variants**, never sent as a spec |
+| Dimensions/measures | invented `loan_count`, `expected_nneg_loss`, `time_on_book`; `youngest_borrower_age` as a dimension | registry-accurate keys (`age_bucket`, `term_bucket`, `ticket_bucket`, `ead_bucket`, …); catalogue now served live by `GET /mi/catalogue` |
+| `risk` / `scenario` artifacts | presented as MI Agent outputs | clarified as **separate engines** (`risk_monitor`, `scenario_engine`), NOT part of `run_mi_agent_query`; in the React UI they are demo-only artifact types pending their own endpoints |
+| Chart transport | implied native Recharts is the agent output | agent emits **Plotly figure JSON**; the API adapter transforms bar/line/scatter/bubble into the Recharts artifact from the result table (lossless on data) and carries the Plotly figure in `metadata` |
+
+The MI Agent API (`mi_agent_api/`) now exposes the real catalogue and query
+flow so the React UI binds to the live contract instead of a static mirror.
+
+---
+
 ## 1. Existing MI capability inventory
 
 The Streamlit app (`analytics/streamlit_app_erm.py`) builds its tabs dynamically
