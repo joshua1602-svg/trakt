@@ -437,8 +437,11 @@ def write_advisor_artifacts(result: Dict[str, Any], out_dir: str | Path) -> Dict
           f"- **Recommendations:** {summary['recommendations_total']}",
           f"- **Advised:** {summary['advised']}",
           f"- **Require operator review:** {summary['requires_operator_review']}", "",
-          "Advisory only — deterministic 28a/28c are unchanged; the operator still "
-          "approves via 34_target_first_decisions.yaml.", "",
+          "LLM recommendations are advisory — deterministic 28a/28c are unchanged. "
+          "To apply them, run `accept-target-advice` (writes "
+          "34_target_first_decisions_approved.yaml) or approve manually in "
+          "34_target_first_decisions.yaml, then rerun with "
+          "--target-first-decisions.", "",
           "## Recommended action counts", ""]
     for a, c in sorted(summary["action_counts"].items(), key=lambda kv: -kv[1]):
         md.append(f"- `{a}`: {c}")
