@@ -6,6 +6,7 @@ import {
   ChevronDown,
   Copy,
   Download,
+  FileWarning,
   FlaskConical,
   LayoutGrid,
   Pin,
@@ -24,6 +25,7 @@ const KIND_ICON: Record<ArtifactType, typeof LayoutGrid> = {
   validation: ShieldCheck,
   risk: Activity,
   scenario: FlaskConical,
+  unsupported: FileWarning,
 };
 
 export function ArtifactCard({

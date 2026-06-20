@@ -146,7 +146,13 @@ def _kpi_artifact(qr: Dict[str, Any], spec: Dict[str, Any], ctx: AdapterContext)
     }
 
 
-def _table_artifact(qr: Dict[str, Any], spec: Dict[str, Any], ctx: AdapterContext, title: str) -> Dict[str, Any]:
+def _table_artifact(
+    qr: Dict[str, Any],
+    spec: Dict[str, Any],
+    ctx: AdapterContext,
+    title: str,
+    cr: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     rows = qr.get("data") or []
     resolved = qr.get("resolved_fields", {})
     columns = []
@@ -161,12 +167,18 @@ def _table_artifact(qr: Dict[str, Any], spec: Dict[str, Any], ctx: AdapterContex
                     "format": fmt,
                 }
             )
+    source = _source(spec, ctx, "MI Agent · table")
+    # When this table stands in for an un-rendered chart (heatmap/treemap),
+    # preserve the native chart type and raw Plotly figure so nothing is lost.
+    if cr and cr.get("chart_type") not in _RENDERABLE_CHARTS:
+        source["nativeChartType"] = cr.get("chart_type")
+        source["figure"] = cr.get("figure")
     return {
         "id": _uid(),
         "type": "table",
         "title": title,
         "description": f"{qr.get('row_count', len(rows))} rows.",
-        "source": _source(spec, ctx, "MI Agent · table"),
+        "source": source,
         "createdAt": _now(),
         "mock": False,
         "columns": columns,
@@ -188,18 +200,32 @@ def _chart_artifact(
         return None
     resolved = qr.get("resolved_fields", {})
     columns = list(rows[0].keys())
-    x_key = _dimension_column(resolved, columns)
 
-    # Value columns = everything except the dimension; prefer non-pct first.
-    value_cols = [c for c in columns if c != x_key]
-    value_cols.sort(key=lambda c: (c.endswith("_pct") or "concentration" in c))
-    primary = value_cols[0] if value_cols else None
-    if primary is None:
-        return None
+    if chart_type in ("scatter", "bubble"):
+        # Loan-level x / y / (size) — the renderer reads series[0]=x, [1]=y, [2]=size.
+        x_key = spec.get("x") if spec.get("x") in columns else (columns[0] if columns else None)
+        y_key = spec.get("y") if spec.get("y") in columns else None
+        size_key = spec.get("size") if spec.get("size") in columns else None
+        if not x_key or not y_key:
+            return None
+        series = [
+            {"key": x_key, "label": x_key.replace("_", " ").title(), "color": _PALETTE[0]},
+            {"key": y_key, "label": y_key.replace("_", " ").title(), "color": _PALETTE[1]},
+        ]
+        if chart_type == "bubble" and size_key:
+            series.append({"key": size_key, "label": size_key.replace("_", " ").title(), "color": _PALETTE[2]})
+        value_format = _infer_col_format(y_key, resolved)
+    else:
+        # Grouped categorical (bar) / ordered (line): one dimension + one value.
+        x_key = _dimension_column(resolved, columns)
+        value_cols = [c for c in columns if c != x_key]
+        value_cols.sort(key=lambda c: (c.endswith("_pct") or "concentration" in c))
+        primary = value_cols[0] if value_cols else None
+        if primary is None:
+            return None
+        series = [{"key": primary, "label": primary.replace("_", " ").title(), "color": _PALETTE[0]}]
+        value_format = _infer_col_format(primary, resolved)
 
-    series = [
-        {"key": primary, "label": primary.replace("_", " ").title(), "color": _PALETTE[0]}
-    ]
     return {
         "id": _uid(),
         "type": "chart",
@@ -207,6 +233,8 @@ def _chart_artifact(
         "description": cr.get("subtitle"),
         "source": {
             **_source(spec, ctx, f"MI Agent · {chart_type}"),
+            # Backend-native chart type, kept distinct from the render type.
+            "nativeChartType": chart_type,
             # Carry the raw Plotly figure for fidelity / future Plotly rendering.
             "figure": cr.get("figure"),
         },
@@ -216,7 +244,7 @@ def _chart_artifact(
         "xKey": x_key,
         "series": series,
         "rows": rows,
-        "valueFormat": _infer_col_format(primary, resolved),
+        "valueFormat": value_format,
         "warnings": cr.get("warnings", []),
     }
 
@@ -306,7 +334,7 @@ def adapt_workflow_result(
                 chart = _chart_artifact(qr, cr, spec, ctx)
                 if chart:
                     artifacts.append(chart)
-            artifacts.append(_table_artifact(qr, spec, ctx, cr.get("title") if cr else "Result"))
+            artifacts.append(_table_artifact(qr, spec, ctx, cr.get("title") if cr else "Result", cr=cr))
 
     val_artifact = _validation_artifact(validation, spec, ctx)
     if val_artifact:

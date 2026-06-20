@@ -7,6 +7,7 @@ import {
   isRiskArtifact,
   isScenarioArtifact,
   isTableArtifact,
+  isUnsupportedArtifact,
   isValidationArtifact,
 } from "@/domain";
 
@@ -28,6 +29,7 @@ describe("type guards", () => {
     expect(isValidationArtifact(make("validation"))).toBe(true);
     expect(isRiskArtifact(make("risk"))).toBe(true);
     expect(isScenarioArtifact(make("scenario"))).toBe(true);
+    expect(isUnsupportedArtifact(make("unsupported"))).toBe(true);
   });
 
   it("are mutually exclusive", () => {

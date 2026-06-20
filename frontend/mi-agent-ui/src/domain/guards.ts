@@ -10,6 +10,7 @@ import type {
   RiskArtifact,
   ScenarioArtifact,
   TableArtifact,
+  UnsupportedArtifact,
   ValidationArtifact,
 } from "./artifacts";
 
@@ -20,6 +21,8 @@ export const isValidationArtifact = (a: Artifact): a is ValidationArtifact =>
   a.type === "validation";
 export const isRiskArtifact = (a: Artifact): a is RiskArtifact => a.type === "risk";
 export const isScenarioArtifact = (a: Artifact): a is ScenarioArtifact => a.type === "scenario";
+export const isUnsupportedArtifact = (a: Artifact): a is UnsupportedArtifact =>
+  a.type === "unsupported";
 
 /** Runtime validation that an object is a well-formed artifact envelope. */
 export function isArtifact(value: unknown): value is Artifact {

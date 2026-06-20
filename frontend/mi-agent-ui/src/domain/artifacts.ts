@@ -10,6 +10,7 @@
 
 import type {
   ChartType,
+  MIChartType,
   MIQuerySpec,
   MIState,
   RagStatus,
@@ -25,6 +26,7 @@ export const ARTIFACT_TYPES = [
   "validation",
   "risk",
   "scenario",
+  "unsupported",
 ] as const;
 export type ArtifactType = (typeof ARTIFACT_TYPES)[number];
 
@@ -40,6 +42,10 @@ export interface ArtifactSource {
   portfolio?: string;
   /** Short human label, e.g. "Stratification · NUTS1". */
   label: string;
+  /** Backend-native MIQuerySpec chart type (distinct from the render type). */
+  nativeChartType?: MIChartType;
+  /** Raw Plotly figure JSON from the chart factory, when present. */
+  figure?: unknown;
 }
 
 interface ArtifactBase {
@@ -179,6 +185,21 @@ export interface ScenarioArtifact extends ArtifactBase {
   projection: ScenarioPoint[];
 }
 
+/* ---------------------------- Unsupported ---------------------------- */
+
+/**
+ * A response the renderer cannot natively draw (e.g. a future chart type, or a
+ * payload arriving before a renderer exists). Carries enough context to explain
+ * the gap and, where available, the raw Plotly figure for a future renderer.
+ * This makes "we received it but can't draw it yet" an explicit, visible state
+ * rather than a silent drop.
+ */
+export interface UnsupportedArtifact extends ArtifactBase {
+  type: "unsupported";
+  /** What was received but couldn't be rendered (e.g. "heatmap"). */
+  reason: string;
+}
+
 /* --------------------------- Discriminated --------------------------- */
 
 export type Artifact =
@@ -187,4 +208,5 @@ export type Artifact =
   | TableArtifact
   | ValidationArtifact
   | RiskArtifact
-  | ScenarioArtifact;
+  | ScenarioArtifact
+  | UnsupportedArtifact;

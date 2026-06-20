@@ -14,6 +14,7 @@ const TYPE_LABEL: Record<ArtifactType, string> = {
   validation: "Validation",
   risk: "Risk",
   scenario: "Scenario",
+  unsupported: "Unsupported",
 };
 
 export function ArtifactCanvas({

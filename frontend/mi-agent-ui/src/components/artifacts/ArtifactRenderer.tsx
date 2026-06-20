@@ -11,6 +11,7 @@ import {
   isRiskArtifact,
   isScenarioArtifact,
   isTableArtifact,
+  isUnsupportedArtifact,
   isValidationArtifact,
 } from "@/domain";
 import { KPIArtifactView } from "./KPIArtifactView";
@@ -19,6 +20,7 @@ import { TableArtifactView } from "./TableArtifactView";
 import { ValidationArtifactView } from "./ValidationArtifactView";
 import { RiskArtifactView } from "./RiskArtifactView";
 import { ScenarioArtifactView } from "./ScenarioArtifactView";
+import { UnsupportedArtifactView } from "./UnsupportedArtifactView";
 
 export function ArtifactRenderer({ artifact }: { artifact: Artifact }) {
   if (isKPIArtifact(artifact)) return <KPIArtifactView artifact={artifact} />;
@@ -27,9 +29,16 @@ export function ArtifactRenderer({ artifact }: { artifact: Artifact }) {
   if (isValidationArtifact(artifact)) return <ValidationArtifactView artifact={artifact} />;
   if (isRiskArtifact(artifact)) return <RiskArtifactView artifact={artifact} />;
   if (isScenarioArtifact(artifact)) return <ScenarioArtifactView artifact={artifact} />;
+  if (isUnsupportedArtifact(artifact)) return <UnsupportedArtifactView artifact={artifact} />;
+  // Defensive fallback for an artifact type the renderer doesn't know yet.
+  const unknown = artifact as Artifact;
   return (
-    <div className="rounded-lg border border-[var(--color-line-soft)] bg-navy-850/40 p-4 text-sm text-ink-400">
-      Unsupported artifact type.
-    </div>
+    <UnsupportedArtifactView
+      artifact={{
+        ...unknown,
+        type: "unsupported",
+        reason: `No renderer is registered for artifact type "${unknown.type}".`,
+      }}
+    />
   );
 }
