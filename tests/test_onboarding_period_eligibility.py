@@ -225,7 +225,8 @@ class TestFundedPeriodAndPipelineCadence(unittest.TestCase):
         cut = lin[lin["canonical_field"] == "data_cut_off_date"]
         self.assertFalse(cut.empty)
         self.assertTrue((cut["source_value"].str.lower() == "october").all())  # raw preserved
-        self.assertTrue(cut["mapping_method"].str.contains("period_label_to_month_end").all())
+        # The period->month-end transform is recorded in the resolution basis.
+        self.assertTrue(cut["source_resolution_basis"].str.contains("period_label_to_month_end").all())
 
     def test_04c_domain_rows(self):
         rows = list(csv.DictReader(open(self.oct_proj / "04c_source_period_eligibility.csv")))
@@ -413,6 +414,145 @@ class TestExpectedBalanceReconciliation(unittest.TestCase):
         self.assertEqual(chk["expected_loan_count"], 33)
         self.assertEqual(chk["actual_loan_count"], 33)
         self.assertEqual(chk["balance_check_status"], "pass")
+
+
+# Valuation enrichment + currency default + mapping_method consistency -------- #
+class TestFundedTapeEnrichment(unittest.TestCase):
+    """Funded current-book (Month Run) + a linked collateral report carrying the
+    valuation, keyed long-form (entity-key links short<->long)."""
+
+    N = 14
+
+    @classmethod
+    def setUpClass(cls):
+        warnings.simplefilter("ignore")
+        cls.root = Path(tempfile.mkdtemp(prefix="enrich_"))
+        inp = cls.root / "input"
+        inp.mkdir(parents=True)
+        short = [760000 + i for i in range(cls.N)]
+        long = [s * 100 + 1 for s in short]
+        pd.DataFrame({"Loan Policy Number": short, "Month Run": ["October"] * cls.N,
+                      "Current Outstanding Balance": [100000.0] * cls.N,
+                      "Loan Interest Rate": [3.5] * cls.N,
+                      "Policy Completion Date": ["2025-09-01"] * cls.N}).to_csv(
+            inp / "LoanExtract One.csv", index=False)
+        pd.DataFrame({"Account Number": long,
+                      "Latest Property Value": [250000.0 + i for i in range(cls.N)]}).to_csv(
+            inp / "Collateral Extract.csv", index=False)
+        cls.proj, cls.tr, cls.tape = _run_promotion(cls.root, inp, "mi_2025_10")
+        cls.lin = pd.read_csv(cls.tr["central_tape_lineage_path"], dtype=str)
+
+    # 1 — valuation enrichment from linked collateral source
+    def test_valuation_populated_from_collateral(self):
+        self.assertIn("current_valuation_amount", self.tape.columns)
+        self.assertEqual(int(self.tape["current_valuation_amount"].notna().sum()), self.N)
+
+    def test_valuation_lineage_shows_source_and_join(self):
+        v = self.lin[self.lin["canonical_field"] == "current_valuation_amount"].head(1)
+        self.assertFalse(v.empty)
+        self.assertEqual(v["source_file"].iloc[0], "Collateral Extract.csv")
+        self.assertEqual(v["source_column"].iloc[0], "Latest Property Value")
+        dbg = json.loads((self.proj / "18f_central_universe_debug.json").read_text())
+        diag = {d["canonical_field"]: d for d in dbg["enrichment_field_diagnostics"]}
+        self.assertEqual(diag["current_valuation_amount"]["status"], "populated_from_enrichment")
+        self.assertTrue(diag["current_valuation_amount"]["entity_key_join_basis"])
+
+    def test_unmapped_enrichment_flagged_not_silently_null(self):
+        # original_valuation_amount has no source -> diagnostic, not a silent null.
+        dbg = json.loads((self.proj / "18f_central_universe_debug.json").read_text())
+        diag = {d["canonical_field"]: d for d in dbg["enrichment_field_diagnostics"]}
+        self.assertIn("original_valuation_amount", diag)
+        self.assertIn(diag["original_valuation_amount"]["status"],
+                      ("no_period_eligible_source", "needs_operator_review"))
+
+    # 2 — configured/default currency
+    def test_currency_defaults_to_gbp_all_rows(self):
+        self.assertIn("exposure_currency_denomination", self.tape.columns)
+        self.assertEqual(set(self.tape["exposure_currency_denomination"].dropna()), {"GBP"})
+        self.assertEqual(int(self.tape["exposure_currency_denomination"].notna().sum()), self.N)
+
+    def test_currency_lineage_configured_static(self):
+        c = self.lin[self.lin["canonical_field"] == "exposure_currency_denomination"].head(1)
+        self.assertFalse(c.empty)
+        self.assertEqual(c["mapping_method"].iloc[0], "configured_static")
+        self.assertIn("onboarding_agent.yaml", c["source_file"].iloc[0])
+        self.assertEqual(str(c["review_required"].iloc[0]).lower(), "false")
+
+    # 3 — mapping_method consistency under target-first
+    def test_funded_fields_use_target_first_resolved(self):
+        for f in ("current_interest_rate", "current_outstanding_balance",
+                  "current_valuation_amount"):
+            rows = self.lin[self.lin["canonical_field"] == f]
+            self.assertFalse(rows.empty, f)
+            self.assertTrue((rows["mapping_method"] == "target_first_resolved").all(), f)
+
+    def test_source_resolution_basis_preserved(self):
+        rate = self.lin[self.lin["canonical_field"] == "current_interest_rate"].head(1)
+        self.assertEqual(rate["source_resolution_basis"].iloc[0], "alias")
+
+
+class TestMappingMethodConsistencyAcrossPeriods(unittest.TestCase):
+    """Two separate monthly funded extracts: 28a selects one (November); the
+    October run uses the period-eligible October file via fallback. Both must
+    still report mapping_method = target_first_resolved (issue #3)."""
+
+    @classmethod
+    def setUpClass(cls):
+        warnings.simplefilter("ignore")
+        cls.root = Path(tempfile.mkdtemp(prefix="method_"))
+        inp = cls.root / "input"
+        inp.mkdir(parents=True)
+        oct_dir = inp / "2025-10-31"; oct_dir.mkdir()
+        nov_dir = inp / "2025-11-30"; nov_dir.mkdir()
+        pd.DataFrame({"Loan Policy Number": [760000 + i for i in range(30)],
+                      "Current Outstanding Balance": [100000.0] * 30,
+                      "Loan Interest Rate": [3.5] * 30,
+                      "Policy Completion Date": ["2025-09-01"] * 30}).to_csv(
+            oct_dir / "LoanExtract October.csv", index=False)
+        pd.DataFrame({"Loan Policy Number": [760000 + i for i in range(50)],
+                      "Current Outstanding Balance": [110000.0] * 50,
+                      "Loan Interest Rate": [3.6] * 50,
+                      "Policy Completion Date": ["2025-09-01"] * 50}).to_csv(
+            nov_dir / "LoanExtract November.csv", index=False)
+        cls.oct_lin = pd.read_csv(
+            _run_promotion(cls.root, inp, "mi_2025_10")[1]["central_tape_lineage_path"], dtype=str)
+        cls.nov_lin = pd.read_csv(
+            _run_promotion(cls.root, inp, "mi_2025_11")[1]["central_tape_lineage_path"], dtype=str)
+
+    def _method(self, lin, field):
+        rows = lin[lin["canonical_field"] == field]
+        return set(rows["mapping_method"]) if not rows.empty else set()
+
+    def test_both_months_target_first_resolved(self):
+        for field in ("current_interest_rate", "current_outstanding_balance"):
+            self.assertEqual(self._method(self.oct_lin, field), {"target_first_resolved"}, field)
+            self.assertEqual(self._method(self.nov_lin, field), {"target_first_resolved"}, field)
+
+
+class TestNoHardcodedCurrencyOrClient(unittest.TestCase):
+    def test_no_gbp_or_client_literals_in_python(self):
+        import inspect
+        from engine.onboarding_agent import central_tape_builder, source_period_eligibility
+        for mod in (central_tape_builder, source_period_eligibility):
+            src = inspect.getsource(mod)
+            self.assertNotIn('"GBP"', src)
+            self.assertNotIn("'GBP'", src)
+            self.assertNotIn("client_001", src)
+
+    def test_currency_and_enrichment_from_config(self):
+        cfg = ctb._load_central_tape_config()
+        self.assertIn("current_valuation_amount", cfg.get("mi_enrichment_fields", []))
+        self.assertEqual(
+            cfg["static_field_defaults"]["exposure_currency_denomination"]["value"], "GBP")
+
+    def test_jurisdiction_inference_fallback(self):
+        # When no static default exists, a configured jurisdiction maps to currency.
+        specs = ctb._resolve_static_field_specs(
+            {"jurisdiction_currency": {"IE": "EUR"}, "default_jurisdiction": "IE",
+             "jurisdiction_currency_fields": ["exposure_currency_denomination"]},
+            {}, client_id="x")
+        self.assertEqual(specs["exposure_currency_denomination"]["value"], "EUR")
+        self.assertEqual(specs["exposure_currency_denomination"]["method"], "jurisdiction_inference")
 
 
 # F — regulatory untouched --------------------------------------------------- #
