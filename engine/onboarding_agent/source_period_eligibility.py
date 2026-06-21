@@ -109,6 +109,129 @@ def load_config(config_path: str | Path = "") -> Dict[str, Any]:
     return cfg
 
 
+# --------------------------------------------------------------------------- #
+# Expected-balance reconciliation (generic, config-driven, opt-in)
+# --------------------------------------------------------------------------- #
+
+def _coerce_float(v: Any) -> Optional[float]:
+    """Numeric-normalise a value, stripping commas / currency symbols / blanks."""
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    s = re.sub(r"[^0-9.\-]", "", str(v).strip())
+    if s in ("", "-", ".", "--"):
+        return None
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def load_expected_balance_checks(config_path: str | Path = "") -> Dict[str, Any]:
+    """Load the top-level ``expected_balance_checks`` config block (empty when
+    absent). Generic: keyed by client id then run id (or period) — never hard-coded."""
+    path = Path(config_path) if config_path else _CONFIG_PATH
+    try:
+        doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        block = doc.get("expected_balance_checks") or {}
+        return block if isinstance(block, dict) else {}
+    except Exception:
+        return {}
+
+
+def lookup_expected(
+    checks: Dict[str, Any], client_id: str, run_id: str, run_period: str = "",
+) -> Optional[Dict[str, Any]]:
+    """Resolve the expected-balance entry for a run, trying (in order):
+    ``checks[client_id][run_id]`` -> ``[client_id][run_period]`` ->
+    ``checks[run_id]`` -> ``checks[run_period]``. ``None`` when not configured."""
+    if not isinstance(checks, dict):
+        return None
+    client_block = checks.get(client_id) if client_id else None
+    for src in (client_block, checks):
+        if isinstance(src, dict):
+            for key in (run_id, run_period):
+                entry = src.get(key) if key else None
+                if isinstance(entry, dict):
+                    return entry
+    return None
+
+
+_BLOCKING_SEVERITIES = {"blocking", "blocker", "fail", "error"}
+
+
+def reconcile_balance(
+    expected: Optional[Dict[str, Any]],
+    actual_loan_count: int,
+    actual_balance: Optional[float],
+    balance_populated: int,
+    balance_column_present: bool,
+) -> Dict[str, Any]:
+    """Run-level reconciliation diagnostic (never raises; pure data).
+
+    Returns the 18f ``expected_balance_check`` block. ``balance_check_status`` is
+    one of pass / warning / fail / not_configured — ``fail`` only when the entry is
+    explicitly configured as a blocking severity. The default severity is warning,
+    so an out-of-tolerance run reports a warning rather than failing promotion."""
+    out: Dict[str, Any] = {
+        "expected_loan_count": None,
+        "actual_loan_count": int(actual_loan_count),
+        "loan_count_match": None,
+        "expected_current_outstanding_balance": None,
+        "actual_current_outstanding_balance": (round(actual_balance, 2)
+                                               if actual_balance is not None else None),
+        "balance_delta": None,
+        "balance_delta_pct": None,
+        "tolerance_abs": None,
+        "tolerance_pct": None,
+        "severity": "warning",
+        "balance_check_status": "not_configured",
+        "diagnostic": "",
+    }
+    if not expected:
+        return out
+
+    exp_count = expected.get("expected_loan_count")
+    exp_bal = _coerce_float(expected.get("expected_current_outstanding_balance"))
+    tol_abs = _coerce_float(expected.get("tolerance_abs")) or 0.0
+    tol_pct = _coerce_float(expected.get("tolerance_pct")) or 0.0
+    severity = str(expected.get("severity", "warning") or "warning").strip().lower()
+    out.update(expected_loan_count=exp_count,
+               expected_current_outstanding_balance=exp_bal,
+               tolerance_abs=tol_abs, tolerance_pct=tol_pct, severity=severity)
+
+    diagnostics: List[str] = []
+    loan_count_match = (exp_count is None) or (int(actual_loan_count) == int(exp_count))
+    out["loan_count_match"] = loan_count_match
+    if not loan_count_match:
+        diagnostics.append(f"loan_count {actual_loan_count} != expected {exp_count}")
+
+    balance_ok = True
+    if not balance_column_present:
+        balance_ok = False
+        diagnostics.append("current_outstanding_balance column not present in central tape")
+    elif balance_populated == 0 or actual_balance is None:
+        balance_ok = False
+        diagnostics.append("current_outstanding_balance missing or non-numeric for all rows")
+    elif exp_bal is not None:
+        delta = round(actual_balance - exp_bal, 2)
+        out["balance_delta"] = delta
+        out["balance_delta_pct"] = round(delta / exp_bal, 6) if exp_bal else None
+        tol = max(tol_abs, abs(exp_bal) * tol_pct)
+        balance_ok = abs(delta) <= tol
+        if not balance_ok:
+            diagnostics.append(f"balance delta {delta} exceeds tolerance {round(tol, 2)}")
+
+    passed = loan_count_match and balance_ok
+    if passed:
+        out["balance_check_status"] = "pass"
+    else:
+        out["balance_check_status"] = "fail" if severity in _BLOCKING_SEVERITIES else "warning"
+    out["diagnostic"] = "; ".join(diagnostics)
+    return out
+
+
 def _norm_col(s: Any) -> str:
     return re.sub(r"[^a-z0-9]+", "_", str(s or "").strip().lower()).strip("_")
 

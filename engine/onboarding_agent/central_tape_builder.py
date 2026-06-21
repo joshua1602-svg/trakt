@@ -62,6 +62,11 @@ from . import source_period_eligibility as spe
 from .field_scope import resolve_field_scope
 from .mode_policy import load_mode_policy
 
+class ExpectedBalanceCheckError(RuntimeError):
+    """Raised when a run's expected-balance reconciliation is configured as
+    blocking and fails — only after the central tape + diagnostics are written."""
+
+
 # Canonical fields whose value is a reporting-period cut-off: a bare source period
 # label (e.g. ``October``) is canonicalised to the month-end ISO date, while the
 # raw value is preserved in lineage. ``reporting_date`` is deliberately NOT here —
@@ -1227,23 +1232,29 @@ def build_central_tapes(
             return None
 
     udbg = summary.get("universe_debug") or {}
-    if "current_outstanding_balance" in cols:
-        vals = [_to_float(r.get("current_outstanding_balance")) for r in tape]
-        nums = [v for v in vals if v is not None]
-        agg = round(sum(nums), 2) if nums else 0.0
-        udbg["aggregate_current_outstanding_balance"] = agg
-        udbg["current_outstanding_balance_populated"] = len(nums)
-        # Optional configured expected-balance check (per run period).
-        if period_gate:
-            checks = ((period_gate.get("config") or {}).get("expected_balance_checks") or {})
-            exp = checks.get(period_gate.get("run_id", "")) or checks.get(udbg.get("run_reporting_period", ""))
-            if exp is not None:
-                exp_f = _to_float(exp)
-                tol = float((period_gate.get("config") or {}).get("expected_balance_tolerance", 0.02) or 0.02)
-                udbg["expected_balance_check"] = {
-                    "expected": exp_f, "actual": agg,
-                    "within_tolerance": bool(exp_f and abs(agg - exp_f) <= abs(exp_f) * tol),
-                    "tolerance_fraction": tol}
+    bal_present = "current_outstanding_balance" in cols
+    nums: List[float] = []
+    if bal_present:
+        nums = [v for v in (_to_float(r.get("current_outstanding_balance")) for r in tape)
+                if v is not None]
+    agg = round(sum(nums), 2) if nums else None
+    udbg["aggregate_current_outstanding_balance"] = agg if agg is not None else 0.0
+    udbg["current_outstanding_balance_populated"] = len(nums)
+
+    # Optional run-level expected-balance reconciliation — a generic, config-driven
+    # diagnostic (config/system/onboarding_agent.yaml: expected_balance_checks).
+    # Default severity is warning; promotion only fails (after diagnostics are
+    # written) when a matching entry is explicitly configured as blocking. Runs
+    # with no configured entry report balance_check_status: not_configured.
+    run_id_for_check = (period_gate.get("run_id", "") if period_gate
+                        else run_summary.get("run_id", ""))
+    client_id_for_check = getattr(run_paths, "client_id", "") or run_summary.get("client_id", "")
+    expected = spe.lookup_expected(
+        spe.load_expected_balance_checks(), client_id_for_check, run_id_for_check,
+        udbg.get("run_reporting_period", ""))
+    recon = spe.reconcile_balance(expected, len(tape), agg, len(nums), bal_present)
+    udbg["expected_balance_check"] = recon
+
     # Pipeline sources that stay available for pipeline_mi on their own cadence
     # (recorded so the tape exclusion is clearly NOT a global pipeline exclusion).
     if period_gate:
@@ -1281,6 +1292,14 @@ def build_central_tapes(
             encoding="utf-8")
     except Exception:
         pass
+
+    # A blocking expected-balance check fails promotion ONLY after the central tape
+    # and its diagnostics (18d/18f) have been written, so the evidence persists.
+    if recon.get("balance_check_status") == "fail":
+        raise ExpectedBalanceCheckError(
+            f"Expected-balance check failed for run '{run_id_for_check}' "
+            f"(blocking): {recon.get('diagnostic') or 'out of tolerance'}. "
+            f"See {central_dir / '18f_central_universe_debug.json'}.")
 
     # Pipeline tape.
     lender_loan_ids = {str(r.get("loan_identifier", "")).strip() for r in tape}

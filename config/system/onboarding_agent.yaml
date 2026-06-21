@@ -243,10 +243,32 @@ source_period_eligibility:
     regulatory:
       eligible_roles: []
       cadence: funded_book_period
-  # Optional per-run expected aggregate current_outstanding_balance checks, e.g.
-  #   expected_balance_checks: {"mi_2025_10": 4200000, "mi_2025_11": 8900000}
-  expected_balance_checks: {}
-  expected_balance_tolerance: 0.02
+
+# ---------------------------------------------------------------------------
+# Expected-balance reconciliation (engine/onboarding_agent/source_period_eligibility.py
+# + central_tape_builder.py). OPTIONAL run-level diagnostics that compare the
+# promoted central lender tape against an expected loan count / aggregate
+# current_outstanding_balance, recorded in 18f_central_universe_debug.json. This
+# is a GENERIC reconciliation framework keyed by client id then run id — never
+# hard-coded in Python. Runs with no matching entry report
+# balance_check_status: not_configured and promote normally. Default severity is
+# `warning` (never blocks); set severity: blocking to fail promotion AFTER the
+# central tape + diagnostics have been written.
+# ---------------------------------------------------------------------------
+expected_balance_checks:
+  client_001:
+    mi_2025_10:
+      expected_loan_count: 33
+      expected_current_outstanding_balance: 4200000
+      tolerance_abs: 50000
+      tolerance_pct: 0.02
+      severity: warning
+    mi_2025_11:
+      expected_loan_count: 73
+      expected_current_outstanding_balance: 8900000
+      tolerance_abs: 50000
+      tolerance_pct: 0.02
+      severity: warning
 
 source_precedence:
   defaults_by_domain:

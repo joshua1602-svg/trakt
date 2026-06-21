@@ -324,6 +324,97 @@ class TestStaleDuplicateAvoidance(unittest.TestCase):
         self.assertIn("_test", excluded)
 
 
+# Expected-balance reconciliation (generic, config-driven) ------------------- #
+class TestExpectedBalanceReconciliation(unittest.TestCase):
+    def test_not_configured_when_missing(self):
+        r = spe.reconcile_balance(None, 33, 4_200_000.0, 33, True)
+        self.assertEqual(r["balance_check_status"], "not_configured")
+        self.assertEqual(r["actual_loan_count"], 33)
+
+    def test_pass_within_tolerance(self):
+        exp = {"expected_loan_count": 33, "expected_current_outstanding_balance": 4_200_000,
+               "tolerance_abs": 50000, "tolerance_pct": 0.02, "severity": "warning"}
+        r = spe.reconcile_balance(exp, 33, 4_180_000.0, 33, True)
+        self.assertEqual(r["balance_check_status"], "pass")
+        self.assertTrue(r["loan_count_match"])
+        self.assertEqual(r["expected_loan_count"], 33)
+
+    def test_warning_out_of_tolerance_default_severity(self):
+        exp = {"expected_loan_count": 33, "expected_current_outstanding_balance": 4_200_000,
+               "tolerance_abs": 1000, "tolerance_pct": 0.0, "severity": "warning"}
+        r = spe.reconcile_balance(exp, 30, 3_000_000.0, 30, True)
+        self.assertEqual(r["balance_check_status"], "warning")
+        self.assertFalse(r["loan_count_match"])
+        self.assertIn("loan_count", r["diagnostic"])
+
+    def test_fail_only_when_blocking(self):
+        exp = {"expected_loan_count": 33, "expected_current_outstanding_balance": 4_200_000,
+               "tolerance_abs": 1000, "tolerance_pct": 0.0, "severity": "blocking"}
+        r = spe.reconcile_balance(exp, 30, 3_000_000.0, 30, True)
+        self.assertEqual(r["balance_check_status"], "fail")
+
+    def test_missing_balance_reports_diagnostic(self):
+        exp = {"expected_loan_count": 33, "expected_current_outstanding_balance": 4_200_000,
+               "severity": "warning"}
+        r = spe.reconcile_balance(exp, 33, None, 0, False)
+        self.assertEqual(r["balance_check_status"], "warning")
+        self.assertIn("current_outstanding_balance", r["diagnostic"])
+
+    def test_numeric_normalisation(self):
+        self.assertEqual(spe._coerce_float("£4,200,000.00"), 4200000.0)
+        self.assertEqual(spe._coerce_float("112,619.77"), 112619.77)
+        self.assertIsNone(spe._coerce_float(""))
+        self.assertIsNone(spe._coerce_float("n/a"))
+
+    def test_lookup_nested_by_client_then_run(self):
+        checks = {"client_001": {"mi_2025_10": {"expected_loan_count": 33}}}
+        self.assertEqual(spe.lookup_expected(checks, "client_001", "mi_2025_10")["expected_loan_count"], 33)
+        self.assertIsNone(spe.lookup_expected(checks, "client_001", "mi_2099_01"))
+        self.assertIsNone(spe.lookup_expected(checks, "other", "mi_2025_10"))
+
+    def test_config_has_client_001_entries_not_in_python(self):
+        # The values live in config only — assert the engine reads them from yaml.
+        import inspect
+        src = inspect.getsource(ctb)
+        self.assertNotIn("4200000", src)
+        self.assertNotIn("8900000", src)
+        checks = spe.load_expected_balance_checks()
+        self.assertEqual(
+            checks["client_001"]["mi_2025_10"]["expected_current_outstanding_balance"], 4200000)
+
+    def test_18f_includes_reconciliation_block(self):
+        # An end-to-end run for a client_id with configured checks records the
+        # full reconciliation block in 18f.
+        warnings.simplefilter("ignore")
+        root = Path(tempfile.mkdtemp(prefix="period_recon_"))
+        inp = root / "input"
+        inp.mkdir(parents=True)
+        n = 33
+        pd.DataFrame({"Loan Policy Number": [760000 + i for i in range(n)],
+                      "Month Run": ["October"] * n,
+                      "Current Outstanding Balance": [round(4_200_000 / n, 2)] * n,
+                      "Loan Interest Rate": [3.5] * n}).to_csv(inp / "LoanExtract One.csv", index=False)
+        from engine.onboarding_agent import workflow as wf, storage_paths
+        proj = root / "proj"
+        wf.run_operator_workflow(input_dir=str(inp), client_name="C1", client_id="client_001",
+                                 run_id="mi_2025_10", mode="mi_only", project_dir=str(proj),
+                                 product_profile="equity_release_lifetime_mortgage")
+        rp = storage_paths.resolve_run_paths(
+            project_dir=str(proj), input_dir=str(inp), output_root=None,
+            client_id="client_001", run_id="mi_2025_10", storage_backend="local",
+            input_uri="", output_uri="")
+        ctb.build_central_tapes(str(proj), rp, _REGISTRY, mode="mi_only")
+        chk = json.loads((proj / "18f_central_universe_debug.json").read_text())["expected_balance_check"]
+        for f in ("expected_loan_count", "actual_loan_count", "loan_count_match",
+                  "expected_current_outstanding_balance", "actual_current_outstanding_balance",
+                  "balance_delta", "balance_delta_pct", "tolerance_abs", "tolerance_pct",
+                  "balance_check_status"):
+            self.assertIn(f, chk)
+        self.assertEqual(chk["expected_loan_count"], 33)
+        self.assertEqual(chk["actual_loan_count"], 33)
+        self.assertEqual(chk["balance_check_status"], "pass")
+
+
 # F — regulatory untouched --------------------------------------------------- #
 class TestRegulatoryUntouched(unittest.TestCase):
     def test_period_gate_only_for_mi_modes(self):
