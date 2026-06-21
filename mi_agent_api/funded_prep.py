@@ -190,8 +190,33 @@ def _derive_youngest_age(out: pd.DataFrame, derived: List[str]) -> None:
             derived.append("youngest_borrower_age")
 
 
-def _derive_source_fields(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str], List[Dict[str, Any]]]:
+def _dedupe_columns(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
+    """Collapse duplicate-named columns into one, coalescing values row-wise.
+
+    A promoted tape can carry the same canonical name twice (e.g. a field both
+    in the loan domain and promoted as MI enrichment). Selecting that name then
+    returns a DataFrame, not a Series, which crashes numeric coercion. Keep the
+    first occurrence's position and fill blanks from the later duplicates so no
+    populated value is lost; record what was collapsed."""
+    if not df.columns.duplicated().any():
+        return df, []
+    collapsed: List[Dict[str, Any]] = []
+    new: Dict[str, pd.Series] = {}
+    for name in list(dict.fromkeys(df.columns)):  # first-seen order, unique
+        sub = df.loc[:, df.columns == name]
+        if sub.shape[1] == 1:
+            new[name] = sub.iloc[:, 0]
+        else:
+            # Treat blank/whitespace as missing, then take first non-null per row.
+            filled = sub.replace(r"^\s*$", pd.NA, regex=True).bfill(axis=1).iloc[:, 0]
+            new[name] = filled
+            collapsed.append({"column": str(name), "occurrences": int(sub.shape[1])})
+    return pd.DataFrame(new, index=df.index), collapsed
+
+
+def _derive_source_fields(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str], List[Dict[str, Any]], List[Dict[str, Any]]]:
     out = df.copy()
+    out, dedup = _dedupe_columns(out)
     _normalise_numeric_columns(out)
     derived: List[str] = []
     basis: List[Dict[str, Any]] = []
@@ -217,12 +242,12 @@ def _derive_source_fields(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str], Li
 
     _derive_youngest_age(out, derived)
 
-    return out, derived, basis
+    return out, derived, basis, dedup
 
 
 def prepare_funded_mi_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """Return ``(analytics_ready_df, report)`` for a funded central lender tape."""
-    out, derived, ltv_basis = _derive_source_fields(df)
+    out, derived, ltv_basis, dedup = _derive_source_fields(df)
 
     applied: Dict[str, Any] = {}
     issues: List[Dict[str, Any]] = []
@@ -303,6 +328,7 @@ def prepare_funded_mi_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str,
         "ltv_derivation_basis": ltv_basis,
         "buckets_applied": {k: v for k, v in applied.items() if v},
         "group_aliases": group_aliases,
+        "duplicate_columns_collapsed": dedup,
         "dimensions_available": sorted(available),
         "missing_dimensions": missing,
         "bucket_errors": [i for i in (issues or []) if i.get("severity") == "error"][:20],

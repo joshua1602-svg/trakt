@@ -125,6 +125,20 @@ class TestPrepEngine(unittest.TestCase):
         self.assertEqual(by_dim["geographic_region_obligor"]["reason"],
                          "postcode_available_region_not_derived")
 
+    def test_duplicate_columns_collapsed(self):
+        # A promoted tape can carry the same canonical name twice; prep must
+        # collapse it (coalescing values) so a single-name selection is a Series.
+        df = pd.DataFrame({"loan_identifier": [1, 2, 3]})
+        df["current_outstanding_balance"] = [100000.0, 200000.0, 90000.0]
+        df["current_loan_to_value"] = [0.30, 0.40, 0.25]
+        df.insert(2, "current_loan_to_value", ["", "", "0.99"], allow_duplicates=True)
+        out, rep = prepare_funded_mi_dataset(df)
+        self.assertFalse(out.columns.duplicated().any())
+        self.assertEqual(rep["duplicate_columns_collapsed"],
+                         [{"column": "current_loan_to_value", "occurrences": 2}])
+        # Leftmost-blank rows coalesce from the duplicate; ltv still buckets.
+        self.assertIn("ltv_bucket", rep["dimensions_available"])
+
     def test_comma_and_currency_formatted_amounts_parse(self):
         # Real packs store amounts as accounting-formatted strings; a naive
         # pd.to_numeric coerces these to NaN -> balance sums to 0 and buckets

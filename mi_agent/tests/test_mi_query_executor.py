@@ -156,6 +156,22 @@ def test_bubble_ltv_by_age_sized_by_balance(df, semantics):
     }
 
 
+def test_duplicate_columns_raise_controlled_error_not_attributeerror(df, semantics):
+    # A duplicated x/y/size column must yield a controlled MIDuplicateColumnError
+    # (-> API validation failure), never a raw AttributeError 500 from
+    # coerce_numeric receiving a DataFrame.
+    from mi_agent.mi_query_executor import MIDuplicateColumnError
+    dup = pd.concat([df, df[["current_loan_to_value"]]], axis=1)  # duplicate y
+    assert dup.columns.duplicated().any()
+    spec = MIQuerySpec(intent="chart", chart_type="bubble",
+                       x="youngest_borrower_age", y="current_loan_to_value",
+                       size="current_outstanding_balance", aggregation="loan_level")
+    with pytest.raises(MIDuplicateColumnError) as exc:
+        _exec(spec, dup, semantics)
+    assert "current_loan_to_value" in exc.value.duplicate_columns
+    assert any("current_loan_to_value" in a for a in exc.value.affected_fields)
+
+
 # --------------------------------------------------------------------------- #
 # 6. scatter: interest rate vs ltv
 # --------------------------------------------------------------------------- #
