@@ -98,6 +98,33 @@ class TestPrepEngine(unittest.TestCase):
         self.assertIn("interest_rate_bucket", df2.columns)
         self.assertIn("ticket_bucket", df2.columns)
 
+    def test_youngest_age_derived_from_dobs(self):
+        # No explicit youngest_borrower_age: derive it from borrower DOBs as of the
+        # reporting date (youngest borrower = latest DOB = minimum age) -> age_bucket.
+        df = pd.DataFrame({
+            "loan_identifier": [1, 2, 3],
+            "current_outstanding_balance": [100000.0, 120000.0, 90000.0],
+            "reporting_date": ["2025-10-31"] * 3,
+            "borrower_1_DOB": ["1950-03-15", "1948-01-10", "1960-12-01"],
+            "borrower_2_DOB": ["1952-09-10", "", "1962-04-04"],
+        })
+        out, rep = prepare_funded_mi_dataset(df)
+        self.assertIn("youngest_borrower_age", rep["derived_fields"])
+        # 2025 - 1952 = 73 ; 2025 - 1948 = 77 ; 2025 - 1962 = 63 (rounded).
+        self.assertEqual(out["youngest_borrower_age"].tolist(), [73, 77, 63])
+        self.assertIn("age_bucket", rep["dimensions_available"])
+
+    def test_postcode_only_region_is_reason_coded(self):
+        df = pd.DataFrame({
+            "loan_identifier": [1, 2],
+            "current_outstanding_balance": [100000.0, 120000.0],
+            "property_post_code": ["SW1A 1AA", "EC1A 1BB"],
+        })
+        _out, rep = prepare_funded_mi_dataset(df)
+        by_dim = {m["dimension"]: m for m in rep["missing_dimensions"]}
+        self.assertEqual(by_dim["geographic_region_obligor"]["reason"],
+                         "postcode_available_region_not_derived")
+
     def test_comma_and_currency_formatted_amounts_parse(self):
         # Real packs store amounts as accounting-formatted strings; a naive
         # pd.to_numeric coerces these to NaN -> balance sums to 0 and buckets

@@ -149,6 +149,47 @@ def _derive_ltv(out: pd.DataFrame, target: str) -> Dict[str, Any]:
     return basis
 
 
+# Borrower DOB fields (mapped from "Customer 1/2 DOB" etc.) used to derive the
+# youngest-borrower age when no explicit age field is supplied.
+_DOB_FIELDS = ("borrower_1_DOB", "borrower_2_DOB", "borrower_1_dob", "borrower_2_dob",
+               "customer_1_dob", "customer_2_dob")
+# Postcode fields preserved for region derivation / reason-coding.
+_POSTCODE_FIELDS = ("property_post_code", "postcode", "post_code")
+
+
+def _reporting_date(out: pd.DataFrame) -> Optional[pd.Series]:
+    """The run reporting date series (reporting_date / cut-off), or None."""
+    rep_col = next((c for c in ("reporting_date", "data_cut_off_date", "cut_off_date")
+                    if c in out.columns), None)
+    if not rep_col:
+        return None
+    rd = pd.to_datetime(out[rep_col], errors="coerce")
+    return rd if rd.notna().any() else None
+
+
+def _derive_youngest_age(out: pd.DataFrame, derived: List[str]) -> None:
+    """Derive ``youngest_borrower_age`` from borrower DOBs as of the reporting
+    date when no explicit, populated age field exists. The youngest borrower is
+    the one with the latest DOB, i.e. the MINIMUM age across borrowers."""
+    if "youngest_borrower_age" in out.columns and _to_num(out["youngest_borrower_age"]).notna().any():
+        return
+    dob_cols = [c for c in _DOB_FIELDS if c in out.columns]
+    rd = _reporting_date(out)
+    if not dob_cols or rd is None:
+        return
+    ages = pd.DataFrame(index=out.index)
+    for c in dob_cols:
+        dob = pd.to_datetime(out[c], errors="coerce", dayfirst=True)
+        ages[c] = (rd - dob).dt.days / 365.25
+    youngest = ages.min(axis=1, skipna=True)  # youngest borrower => minimum age
+    if youngest.notna().any():
+        # Completed years (floor) — 77.8 years of age is 77, not 78.
+        import numpy as np
+        out["youngest_borrower_age"] = np.floor(youngest).astype("Int64")
+        if "youngest_borrower_age" not in derived:
+            derived.append("youngest_borrower_age")
+
+
 def _derive_source_fields(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str], List[Dict[str, Any]]]:
     out = df.copy()
     _normalise_numeric_columns(out)
@@ -167,14 +208,14 @@ def _derive_source_fields(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str], Li
             if "vintage_year" not in out.columns:
                 out["vintage_year"] = od.dt.year.astype("Int64")
                 derived.append("vintage_year")
-            rep_col = next((c for c in ("reporting_date", "data_cut_off_date", "cut_off_date")
-                            if c in out.columns), None)
-            if rep_col and "months_on_book" not in out.columns:
-                rd = pd.to_datetime(out[rep_col], errors="coerce")
+            rd = _reporting_date(out)
+            if rd is not None and "months_on_book" not in out.columns:
                 mob = (rd.dt.year - od.dt.year) * 12 + (rd.dt.month - od.dt.month)
                 if mob.notna().any():
                     out["months_on_book"] = mob.astype("Int64")
                     derived.append("months_on_book")
+
+    _derive_youngest_age(out, derived)
 
     return out, derived, basis
 
@@ -245,8 +286,16 @@ def prepare_funded_mi_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str,
                       else f"source field {src!r} not in dataset")
             missing.append({"dimension": dim, "reason": reason, "detail": detail})
         else:  # group (region / channel) — none of the interchangeable sources present
-            missing.append({"dimension": dim, "reason": "not_in_central_tape",
-                            "detail": f"none of {spec['sources']} in dataset"})
+            # Region: if only a postcode is available (no region/geography field
+            # and no postcode->region map), say so exactly rather than "absent".
+            if dim == "geographic_region_obligor" and any(_has_values(p) for p in _POSTCODE_FIELDS):
+                pc = next(p for p in _POSTCODE_FIELDS if _has_values(p))
+                missing.append({"dimension": dim, "reason": "postcode_available_region_not_derived",
+                                "detail": f"{pc!r} present but no region field and no "
+                                          "postcode->region mapping configured"})
+            else:
+                missing.append({"dimension": dim, "reason": "not_in_central_tape",
+                                "detail": f"none of {spec['sources']} in dataset"})
 
     report = {
         "preparation_applied": True,
