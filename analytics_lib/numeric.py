@@ -24,9 +24,24 @@ def coerce_numeric(series: pd.Series) -> pd.Series:
     accounting negatives ``(1,234.50)`` and blanks; already-numeric input is
     returned unchanged (coerced to numeric dtype). Anything still unparseable
     becomes ``NaN`` — same contract as ``pd.to_numeric(errors="coerce")``.
+
+    Defensive: if a one-column ``DataFrame`` is passed (which happens when the
+    caller selects a column name that is DUPLICATED in the frame), it is squeezed
+    to a Series; a multi-column DataFrame raises a clear ``ValueError`` naming the
+    duplicate so the caller can surface a controlled error instead of crashing
+    with ``'DataFrame' object has no attribute 'str'``.
     """
     if series is None:
         return series
+    if isinstance(series, pd.DataFrame):
+        if series.shape[1] == 1:
+            series = series.iloc[:, 0]
+        else:
+            name = series.columns[0] if len(series.columns) else "?"
+            raise ValueError(
+                f"coerce_numeric received a DataFrame with {series.shape[1]} columns "
+                f"(duplicate column name {name!r}); pass a single Series. The source "
+                "frame has duplicate column names and must be de-duplicated.")
     if pd.api.types.is_numeric_dtype(series):
         return pd.to_numeric(series, errors="coerce")
     s = series.astype("string").str.strip()

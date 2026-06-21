@@ -78,6 +78,40 @@ class MIQueryExecutionError(Exception):
     """Raised when an MI query cannot be executed (bad spec, missing column…)."""
 
 
+class MIDuplicateColumnError(MIQueryExecutionError):
+    """Raised when the dataset has duplicate column names so a single-name
+    selection returns a DataFrame instead of a Series. Carries the duplicate
+    names and the query fields they affect so the API can return controlled
+    validation output (never a raw 500)."""
+
+    def __init__(self, message: str, duplicate_columns: List[str],
+                 affected_fields: List[str]):
+        super().__init__(message)
+        self.duplicate_columns = duplicate_columns
+        self.affected_fields = affected_fields
+
+
+def _guard_duplicate_columns(spec: "MIQuerySpec", df: pd.DataFrame, semantics: dict) -> None:
+    """Fail fast (and controlled) when the dataset has duplicate column names."""
+    dup_mask = df.columns.duplicated(keep=False)
+    if not dup_mask.any():
+        return
+    dups = sorted({str(c) for c in df.columns[dup_mask]})
+    affected: List[str] = []
+    for slot in ("x", "y", "size", "dimension", "metric", "color", "weight_field"):
+        key = getattr(spec, slot, None)
+        if not key:
+            continue
+        canon = _canonical_or_self(key, semantics)
+        if canon in dups:
+            affected.append(f"{slot}={key}->{canon}")
+    raise MIDuplicateColumnError(
+        "duplicate_column_names: the dataset has duplicate column names "
+        f"{dups}; query fields affected: {affected or 'none directly referenced'}. "
+        "The prepared dataset must be de-duplicated (data-preparation defect).",
+        duplicate_columns=dups, affected_fields=affected)
+
+
 @dataclass
 class MIQueryResult:
     spec: MIQuerySpec
@@ -589,8 +623,17 @@ def _execute_loan_level(spec, work, semantics, warnings, *, need_size,
     # identifiers and other canonical columns are NOT exposed by default.
     out = work[selected].copy()
 
-    # numeric coercion for x / y / size; color preserved as-is
+    # numeric coercion for x / y / size; color preserved as-is. Defensive: a
+    # duplicated column name would make out[c] a DataFrame and crash coercion —
+    # never pass a DataFrame into coerce_numeric.
     numeric_cols = [c for c, _ in cols]
+    dups = sorted({c for c in numeric_cols if (out.columns == c).sum() > 1})
+    if dups:
+        raise MIDuplicateColumnError(
+            f"duplicate_column_names: loan-level x/y/size columns {dups} are "
+            "duplicated in the dataset; de-duplicate the prepared dataset.",
+            duplicate_columns=dups,
+            affected_fields=[f"{role}={c}" for c, role in cols if c in dups])
     for c in numeric_cols:
         out[c] = coerce_numeric(out[c])
     before = len(out)
@@ -673,6 +716,9 @@ def execute_mi_query(
 
     warnings: List[str] = []
     work = df.copy()  # never mutate the caller's dataframe
+    # Duplicate column names make a single-name selection return a DataFrame
+    # (crashing numeric coercion). Fail fast with a controlled, explained error.
+    _guard_duplicate_columns(spec, work, semantics)
     work = _apply_filters(work, spec, semantics, warnings)
 
     balance_col = resolve_default_balance_field(semantics, work.columns)

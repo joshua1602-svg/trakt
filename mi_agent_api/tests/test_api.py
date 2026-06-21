@@ -39,6 +39,27 @@ def test_query_bucket_heatmap_resolves_natively():
     assert chart["valueKey"]
 
 
+def test_duplicate_columns_return_controlled_validation_not_500(monkeypatch):
+    # A duplicated column in the served dataset must yield a controlled 200
+    # validation failure (duplicate_column_names), never a raw 500.
+    import pandas as pd
+    from mi_agent_api import app as app_module
+
+    df = pd.DataFrame({"loan_identifier": [1, 2, 3]})
+    df["current_outstanding_balance"] = [100000.0, 200000.0, 90000.0]
+    df["youngest_borrower_age"] = [67, 72, 80]
+    df["current_loan_to_value"] = [0.30, 0.40, 0.25]
+    df.insert(2, "current_loan_to_value", [0.31, 0.41, 0.26], allow_duplicates=True)
+    monkeypatch.setattr(app_module, "get_dataframe", lambda: df)
+
+    r = client.post("/mi/query", json={"question": "balance by ltv by age"})
+    assert r.status_code == 200          # NOT a raw 500
+    body = r.json()
+    assert body["ok"] is False
+    assert body["validation"].get("duplicate_column_names") == ["current_loan_to_value"]
+    assert body["validation"].get("duplicate_query_fields_affected")
+
+
 def test_health():
     r = client.get("/health")
     assert r.status_code == 200

@@ -219,6 +219,19 @@ def run_mi_agent_query(
         )
     except MIQueryExecutionError as exc:
         result["error"] = f"Execution failed: {exc}"
+        # Surface as controlled validation output (never a raw 500). For a
+        # duplicate-column defect, carry the structured fields the UI/API expose.
+        val = result.get("validation") or {"ok": True, "errors": [], "warnings": [],
+                                            "resolved_fields": {}}
+        val["ok"] = False
+        val.setdefault("errors", []).append(str(exc))
+        dup = getattr(exc, "duplicate_columns", None)
+        if dup is not None:
+            val["duplicate_column_names"] = dup
+            val["duplicate_query_fields_affected"] = getattr(exc, "affected_fields", [])
+        result["validation"] = val
+        if isinstance(result.get("interpreted"), dict):
+            result["interpreted"]["Validation"] = "Failed"
         result["warnings"] = _dedupe(warnings)
         return result
     result["query_result"] = qres
