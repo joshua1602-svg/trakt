@@ -61,6 +61,17 @@ class QueryRequest(BaseModel):
     context: Optional[List[Dict[str, Any]]] = None
 
 
+@app.get("/")
+def root() -> Dict[str, Any]:
+    """Friendly index so the bare URL isn't a confusing 404."""
+    return {
+        "service": "mi_agent_api",
+        "version": app.version,
+        "endpoints": ["/health", "/mi/catalogue", "/mi/query"],
+        "hint": "GET /health for data-source status; POST /mi/query to ask a question.",
+    }
+
+
 @app.get("/health")
 def health() -> Dict[str, Any]:
     csv = data_source_label()
