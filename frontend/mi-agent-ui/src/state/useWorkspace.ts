@@ -72,9 +72,13 @@ export function useWorkspace(client: AgentClient): Workspace {
   const [messages, setMessages] = useState<ChatMessage[]>(
     () => persisted?.messages ?? [greeting(portfolio, asOf)],
   );
-  const [artifacts, setArtifacts] = useState<Artifact[]>(
-    () => persisted?.artifacts ?? landingArtifacts(reporting, portfolioId),
-  );
+  const [artifacts, setArtifacts] = useState<Artifact[]>(() => {
+    // Demo mode seeds the sample landing artifacts; LIVE mode starts clean and
+    // never shows mock cards (and drops any mock artifacts left in localStorage
+    // from a previous demo session). Real artifacts appear as queries succeed.
+    if (client.mock) return persisted?.artifacts ?? landingArtifacts(reporting, portfolioId);
+    return (persisted?.artifacts ?? []).filter((a) => !a.mock);
+  });
   const [isWorking, setIsWorking] = useState(false);
 
   const lastQuestion = useRef<string | null>(null);
@@ -204,8 +208,8 @@ export function useWorkspace(client: AgentClient): Workspace {
   const resetWorkspace = useCallback(() => {
     abortRef.current?.abort();
     setMessages([greeting(portfolio, asOf)]);
-    setArtifacts(landingArtifacts({ asOf }, portfolioId));
-  }, [portfolio, asOf, portfolioId]);
+    setArtifacts(client.mock ? landingArtifacts({ asOf }, portfolioId) : []);
+  }, [client.mock, portfolio, asOf, portfolioId]);
 
   return {
     portfolio,

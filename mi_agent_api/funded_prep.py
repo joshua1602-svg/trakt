@@ -32,6 +32,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
+from analytics_lib.numeric import coerce_numeric
+
 # Percent-vs-fraction detector (mirrors analytics_lib.buckets median heuristic):
 # an LTV column whose median exceeds this is treated as a percentage (÷100).
 _PERCENT_MEDIAN = 1.5
@@ -68,7 +70,36 @@ _LTV_INPUTS = {
 
 
 def _to_num(s: pd.Series) -> pd.Series:
-    return pd.to_numeric(s, errors="coerce")
+    # Shared deterministic parser (commas / £ / accounting negatives), so LTV
+    # and valuation inputs that arrive as formatted strings parse correctly.
+    return coerce_numeric(s)
+
+
+def _numeric_mi_fields() -> List[str]:
+    """Numeric MI columns to normalise up-front, sourced from config (no hard
+    client values): every ``source_field`` in ``config/mi/buckets.yaml`` plus the
+    LTV derivation inputs. Normalising these once means balance aggregation,
+    ticket_bucket, LTV derivation and valuation parsing all see clean floats."""
+    fields = set()
+    try:
+        from analytics_lib.buckets import load_bucket_config
+        for spec in (load_bucket_config().get("buckets") or {}).values():
+            sf = spec.get("source_field")
+            if sf:
+                fields.add(sf)
+    except Exception:
+        pass
+    for tgt, (num, den) in _LTV_INPUTS.items():
+        fields.update((tgt, num, den))
+    return sorted(fields)
+
+
+def _normalise_numeric_columns(out: pd.DataFrame) -> pd.DataFrame:
+    """Coerce the configured numeric MI columns in place (only those present)."""
+    for col in _numeric_mi_fields():
+        if col in out.columns:
+            out[col] = coerce_numeric(out[col])
+    return out
 
 
 def _to_ratio(s: pd.Series) -> pd.Series:
@@ -120,6 +151,7 @@ def _derive_ltv(out: pd.DataFrame, target: str) -> Dict[str, Any]:
 
 def _derive_source_fields(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str], List[Dict[str, Any]]]:
     out = df.copy()
+    _normalise_numeric_columns(out)
     derived: List[str] = []
     basis: List[Dict[str, Any]] = []
 
@@ -178,12 +210,29 @@ def prepare_funded_mi_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str,
     missing: List[Dict[str, Any]] = []
     basis_by_target = {b["target"]: b for b in ltv_basis}
 
+    def _has_values(col: str) -> bool:
+        # A dimension is only usable if its column exists AND has at least one
+        # non-blank value (a bucket can exist but be all-NaN when values fall
+        # outside the configured edges — that is NOT a usable stratification).
+        return col in out.columns and out[col].notna().any() and (
+            out[col].astype(str).str.strip() != "").any()
+
     for dim, spec in _DIM_SPEC.items():
-        if dim in cols:
+        if _has_values(dim):
             available.append(dim)
             continue
         kind = spec["kind"]
-        if kind == "bucket_ltv":
+        if dim in cols:
+            # Column was produced but is entirely empty (e.g. LTV out of bucket
+            # range / a scale mismatch) — report it honestly, not as available.
+            detail = "column present but all rows blank after preparation"
+            if kind == "bucket_ltv":
+                b = basis_by_target.get(spec["target"], {})
+                detail = (f"{spec['target']} bucketed to no value for any row "
+                          f"(check scale/edges; basis={b.get('method')})")
+            missing.append({"dimension": dim, "reason": "no_values_after_preparation",
+                            "detail": detail})
+        elif kind == "bucket_ltv":
             b = basis_by_target.get(spec["target"], {})
             missing.append({"dimension": dim, "reason": "derivation_inputs_missing",
                             "detail": b.get("detail", "LTV inputs unavailable")})

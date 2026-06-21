@@ -30,6 +30,7 @@ import numpy as np
 import pandas as pd
 
 from .config_loader import load_bucket_config
+from .numeric import coerce_numeric
 
 # --------------------------------------------------------------------------- #
 # Issue records
@@ -159,7 +160,9 @@ def apply_bucket(df: pd.DataFrame, bucket_key: str, spec: Dict[str, Any],
         return None, issues
 
     raw = df[source_field]
-    numeric = pd.to_numeric(raw, errors="coerce")
+    # Deterministic shared parser: tolerates comma / currency / accounting
+    # formatting so amounts like "111,757.38" are not silently coerced to NaN.
+    numeric = coerce_numeric(raw)
 
     # Invalid numeric = was populated but could not be coerced to a number.
     invalid_mask = numeric.isna() & raw.notna()

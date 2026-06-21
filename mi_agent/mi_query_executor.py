@@ -57,6 +57,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
+from analytics_lib.numeric import coerce_numeric
+
 from .mi_query_spec import MIQuerySpec
 from .mi_query_validator import load_mi_semantics, validate_mi_query
 
@@ -230,7 +232,7 @@ def aggregate_series(df: pd.DataFrame, value_col: Optional[str], aggregation: st
     if aggregation == "balance_sum":
         if not balance_col:
             raise MIQueryExecutionError("balance_sum requires a balance field")
-        return float(pd.to_numeric(df[balance_col], errors="coerce").sum())
+        return float(coerce_numeric(df[balance_col]).sum())
 
     if aggregation in ("distribution", "loan_level"):
         raise MIQueryExecutionError(
@@ -241,7 +243,7 @@ def aggregate_series(df: pd.DataFrame, value_col: Optional[str], aggregation: st
         raise MIQueryExecutionError(
             f"aggregation {aggregation!r} requires a metric column"
         )
-    vals = pd.to_numeric(df[value_col], errors="coerce")
+    vals = coerce_numeric(df[value_col])
     if aggregation == "sum":
         return float(vals.sum())
     if aggregation == "avg":
@@ -251,7 +253,7 @@ def aggregate_series(df: pd.DataFrame, value_col: Optional[str], aggregation: st
     if aggregation == "weighted_avg":
         if not weight_col:
             raise MIQueryExecutionError("weighted_avg requires a weight field")
-        w = pd.to_numeric(df[weight_col], errors="coerce")
+        w = coerce_numeric(df[weight_col])
         mask = vals.notna() & w.notna()
         denom = float(w[mask].sum())
         if denom == 0:
@@ -336,7 +338,7 @@ def _apply_filters(work: pd.DataFrame, spec: MIQuerySpec, semantics: dict,
 
 def _group_sum(work: pd.DataFrame, group_cols: List[str], col: str) -> pd.Series:
     tmp = work.copy()
-    tmp[col] = pd.to_numeric(tmp[col], errors="coerce")
+    tmp[col] = coerce_numeric(tmp[col])
     return tmp.groupby(group_cols, sort=False)[col].sum()
 
 
@@ -355,7 +357,7 @@ def _maybe_concentration(out: pd.DataFrame, metric_col: str, work: pd.DataFrame,
     """Add ``concentration_pct`` (share of total) where it is meaningful."""
     try:
         if aggregation in _ADDITIVE_AGGS:
-            basis = pd.to_numeric(out[metric_col], errors="coerce")
+            basis = coerce_numeric(out[metric_col])
         elif balance_col and balance_col in work.columns:
             basis = _align(out, group_cols, _group_sum(work, group_cols, balance_col))
         else:
@@ -364,10 +366,10 @@ def _maybe_concentration(out: pd.DataFrame, metric_col: str, work: pd.DataFrame,
                 "balance field available)"
             )
             return out
-        total = float(pd.to_numeric(basis, errors="coerce").sum())
+        total = float(coerce_numeric(basis).sum())
         if total and total == total and total != 0:
             out = out.copy()
-            out["concentration_pct"] = pd.to_numeric(basis, errors="coerce") / total * 100.0
+            out["concentration_pct"] = coerce_numeric(basis) / total * 100.0
         return out
     except Exception as exc:  # pragma: no cover - defensive
         warnings.append(f"concentration_pct not computed: {exc}")
@@ -396,7 +398,7 @@ def _apply_top_n(out: pd.DataFrame, metric_col: str, work: pd.DataFrame,
             basis_name = "concentration"
             break
     if rank is None:
-        rank = pd.to_numeric(out[metric_col], errors="coerce")
+        rank = coerce_numeric(out[metric_col])
         basis_name = "metric"
     order = rank.sort_values(ascending=False, kind="mergesort").index
     out2 = out.loc[order].head(int(top_n)).reset_index(drop=True)
@@ -416,7 +418,7 @@ def _detect_percent_scale(df: pd.DataFrame, semantics: dict) -> Tuple[str, Optio
             continue
         col = entry.get("canonical_field")
         if col in df.columns:
-            s = pd.to_numeric(df[col], errors="coerce").dropna()
+            s = coerce_numeric(df[col]).dropna()
             if len(s):
                 medians.append(float(s.median()))
     if not medians:
@@ -455,7 +457,7 @@ def _execute_summary(spec, work, semantics, warnings, balance_col):
         row = {"loan_count": int(len(work))}
         if balance_col:
             row[f"{balance_col}_sum"] = float(
-                pd.to_numeric(work[balance_col], errors="coerce").sum()
+                coerce_numeric(work[balance_col]).sum()
             )
         data = pd.DataFrame([row])
     return data, "summary"
@@ -590,7 +592,7 @@ def _execute_loan_level(spec, work, semantics, warnings, *, need_size,
     # numeric coercion for x / y / size; color preserved as-is
     numeric_cols = [c for c, _ in cols]
     for c in numeric_cols:
-        out[c] = pd.to_numeric(out[c], errors="coerce")
+        out[c] = coerce_numeric(out[c])
     before = len(out)
     out = out.dropna(subset=numeric_cols)
     if len(out) < before:
