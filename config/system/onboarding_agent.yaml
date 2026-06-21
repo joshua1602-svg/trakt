@@ -172,6 +172,104 @@ document_extraction:
 # is escalated to the user. The defaults only choose a sensible primary when
 # values agree or only one source is present.
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Source reporting-period eligibility (engine/onboarding_agent/source_period_eligibility.py).
+# For monthly MI runs the central lender tape universe must be built from the
+# sources that belong to the run's reporting period only — not from every
+# loan-like key in the input directory. This gates a cumulative current-book file
+# (row-filtered by a Month Run / cut-off column) and excludes future-period
+# pipeline/KFI files. Generic + config-driven; never hard-codes a client filename.
+# ---------------------------------------------------------------------------
+source_period_eligibility:
+  enabled: true
+  # Roles whose eligible rows DEFINE the lender-tape universe, in precedence order.
+  # warehouse_agreement / collateral_report are enrichment by default and only
+  # become universe sources when explicitly added here.
+  funded_current_book_roles:
+    - current_loan_report
+    - funded_book
+    - current_book
+    - loan_book
+    - servicing_report
+  # Roles that ENRICH the lender tape (join fields) but never define its rows.
+  enrichment_roles:
+    - collateral_report
+    - warehouse_agreement
+    - cashflow_report
+  # Roles evaluated under the pipeline snapshot cadence (NOT the funded-book
+  # period). Never drive central_lender_tape; stay available for pipeline_mi /
+  # forward_exposure on their own delivery cadence.
+  pipeline_roles:
+    - pipeline_report
+    - kfi
+    - application_pipeline
+  # A file dated YYYY-MM-01 may represent the PRIOR month close; set to -1 to
+  # shift a filename-derived period back one month (e.g. 2025_11_01 -> October).
+  filename_delivery_offset_months: 0
+  # Source columns read for an explicit per-row / per-file reporting period. A
+  # cumulative current-book file with one of these is ROW-filtered to the run period.
+  period_columns:
+    - month run
+    - month_run
+    - as of month
+    - as_of_month
+    - cut off date
+    - cut_off_date
+    - cutoff date
+    - reporting month
+    - reporting_month
+    - reporting period
+    - reporting_period
+    - report date
+    - as at date
+    - as_at_date
+    - snapshot date
+  # Treat unknown-period sources as eligible (permissive). Set false to require an
+  # inferred period before a source may contribute rows/values.
+  allow_unknown_period: true
+  # Per-file explicit period overrides, e.g. {"LoanExtract One - OMNI_test.csv": "2025-11"}.
+  overrides: {}
+  # Output-domain routing: the same source can be ineligible for central_lender_tape
+  # yet eligible for pipeline_mi / forward_exposure under the pipeline cadence.
+  output_domains:
+    central_lender_tape:
+      cadence: funded_book_period
+    pipeline_mi:
+      eligible_roles: [pipeline_report, kfi, application_pipeline]
+      cadence: pipeline_snapshot
+    forward_exposure:
+      eligible_roles: [pipeline_report, kfi]
+      cadence: pipeline_snapshot
+    regulatory:
+      eligible_roles: []
+      cadence: funded_book_period
+
+# ---------------------------------------------------------------------------
+# Expected-balance reconciliation (engine/onboarding_agent/source_period_eligibility.py
+# + central_tape_builder.py). OPTIONAL run-level diagnostics that compare the
+# promoted central lender tape against an expected loan count / aggregate
+# current_outstanding_balance, recorded in 18f_central_universe_debug.json. This
+# is a GENERIC reconciliation framework keyed by client id then run id — never
+# hard-coded in Python. Runs with no matching entry report
+# balance_check_status: not_configured and promote normally. Default severity is
+# `warning` (never blocks); set severity: blocking to fail promotion AFTER the
+# central tape + diagnostics have been written.
+# ---------------------------------------------------------------------------
+expected_balance_checks:
+  client_001:
+    mi_2025_10:
+      expected_loan_count: 33
+      expected_current_outstanding_balance: 4200000
+      tolerance_abs: 50000
+      tolerance_pct: 0.02
+      severity: warning
+    mi_2025_11:
+      expected_loan_count: 73
+      expected_current_outstanding_balance: 8900000
+      tolerance_abs: 50000
+      tolerance_pct: 0.02
+      severity: warning
+
 source_precedence:
   defaults_by_domain:
     loan:

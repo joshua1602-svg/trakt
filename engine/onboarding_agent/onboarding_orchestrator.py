@@ -212,6 +212,21 @@ def run_onboarding(
         import logging as _logging
         _logging.getLogger(__name__).warning("entity-key resolution skipped: %s", _exc)
 
+    # --- PART 4c: source reporting-period eligibility ---
+    # Decide, per (file, sheet), whether the source belongs to this run's reporting
+    # period (run_id / filename date / period folder / Month Run column / override),
+    # and whether it is an eligible funded / current-book source that defines the
+    # lender-tape universe. Writes 04c_source_period_eligibility.{csv,json};
+    # consumed by central-tape promotion to keep each monthly run to its period.
+    try:
+        from . import source_period_eligibility as _spe
+        _spe.resolve_and_write(
+            [i.to_dict() for i in inventory], run_id, out_dir,
+            input_dir=str(in_dir), enable_conversion=enable_file_conversion_fallback)
+    except Exception as _exc:  # never block onboarding on period eligibility
+        import logging as _logging
+        _logging.getLogger(__name__).warning("period eligibility skipped: %s", _exc)
+
     # --- Field scope (registry category + core_canonical, driven by mode) ---
     field_scope = resolve_field_scope(
         str(registry_path), policy, regulatory_reporting_enabled=regulatory_reporting_enabled

@@ -57,8 +57,36 @@ import yaml
 
 from engine.gate_1_alignment.semantic_alignment import load_field_registry
 from . import domain_coverage as dc
+from . import run_context as _rc
+from . import source_period_eligibility as spe
 from .field_scope import resolve_field_scope
 from .mode_policy import load_mode_policy
+
+class ExpectedBalanceCheckError(RuntimeError):
+    """Raised when a run's expected-balance reconciliation is configured as
+    blocking and fails — only after the central tape + diagnostics are written."""
+
+
+# Canonical fields whose value is a reporting-period cut-off: a bare source period
+# label (e.g. ``October``) is canonicalised to the month-end ISO date, while the
+# raw value is preserved in lineage. ``reporting_date`` is deliberately NOT here —
+# it stays run-context inferred; ``data_cut_off_date`` is source-period derived.
+_PERIOD_CUTOFF_FIELDS = {"data_cut_off_date"}
+
+
+def _canonicalise_period_cutoff(raw: Any, run_year: Optional[int]) -> Tuple[str, str, str]:
+    """``(canonical_iso, transform_method, basis)`` for a period / cut-off value.
+
+    An explicit date is date-normalised; a bare month label (``October``) becomes
+    the month end using the run year. Empty transform when it cannot be resolved
+    without guessing (the raw value is then left untouched)."""
+    iso = _rc.normalize_to_iso(raw)
+    if iso:
+        return iso, "date_normalised", "source_explicit_date"
+    p = spe.period_of_value(raw, run_year)
+    if p:
+        return spe._cutoff_for_period(p), "period_label_to_month_end", "source_period_column+run_year"
+    return "", "", ""
 
 # Loan-level domains that belong in the central lender tape. Cashflow is NOT a
 # lender-tape domain (per-period schedule rows belong to the pipeline/cashflow
@@ -437,6 +465,7 @@ def _build_lender_tape(
     alias_loan_cols: Optional[set] = None,
     entity_keys: Optional[Dict[Tuple[str, str], Dict[str, Any]]] = None,
     debug_dir: Optional[Path] = None,
+    period_gate: Optional[Dict[str, Any]] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]:
     inventory_by_name = {i.get("file_name", ""): i for i in inventory}
     # Case/basename-tolerant file lookup (28a selected_source_file should match the
@@ -480,10 +509,38 @@ def _build_lender_tape(
     # so a single authoritative source replaces the rediscovered candidates
     # (eliminating funded/pipeline conflicts and pipeline leakage into funded
     # fields). Fields without a resolved selection keep the legacy behaviour.
+    # Period eligibility gate (MI modes): the run only consumes sources that
+    # belong to its reporting period, and the lender-tape universe is built from
+    # the eligible funded / current-book source(s) — not every loan-like key. A
+    # cumulative current-book file is row-filtered by its Month Run / cut-off
+    # column; future-period pipeline/KFI files contribute no rows or values.
+    period_gate = period_gate or {}
+    gate_active = bool(period_gate.get("active"))
+    eligibility: Dict[Tuple[str, str], Dict[str, Any]] = period_gate.get("eligibility", {}) or {}
+    run_period = period_gate.get("run_period", "")
+    run_year = period_gate.get("run_year")
+    pipeline_roles: set = period_gate.get("pipeline_roles", set()) or set()
+    role_by_file: Dict[str, str] = period_gate.get("role_by_file", {}) or {}
+
+    def _is_pipeline_role(classification: str) -> bool:
+        return spe._norm_col(classification) in pipeline_roles
+
     forced, tape_constants, tape_derivations = _coverage_selections(
         coverage_rows or [], inventory_by_name)
     for canon, src in forced.items():
-        if in_lender_scope(canon):
+        if not in_lender_scope(canon):
+            continue
+        if gate_active:
+            # Keep the authoritative funded source first, but retain other
+            # funded/current-book candidates (e.g. the correct reporting period's
+            # file) as fallbacks. Never fall back to a pipeline source (the
+            # artefact-role guardrail still holds). The period gate then routes
+            # each run to the source eligible for its period.
+            fallbacks = [s for s in field_sources.get(canon, [])
+                         if (s.file_name, s.sheet or "") != (src.file_name, src.sheet or "")
+                         and not _is_pipeline_role(s.classification)]
+            field_sources[canon] = [src] + fallbacks
+        else:
             field_sources[canon] = [src]   # single authoritative source -> no conflict
 
     # Load frames + loan-key columns per (file, SHEET) — a source selected from a
@@ -491,9 +548,32 @@ def _build_lender_tape(
     def _play_key(s: "_Source") -> Tuple[str, str]:
         return (s.file_name, s.sheet or "")
 
+    universe_roles: set = period_gate.get("universe_roles", set()) or set()
+
+    def _role_for(fname: str) -> str:
+        return role_by_file.get(fname) or _resolve_inv(fname).get("classification", "")
+
+    def _elig_for(fname: str, sheet: str, df) -> Optional[Dict[str, Any]]:
+        e = eligibility.get((fname, sheet))
+        if e is not None or not gate_active:
+            return e
+        inv = _resolve_inv(fname)
+        recs = [{"file_name": fname, "file_path": inv.get("file_path", ""),
+                 "sheet_name": sheet, "artefact_role": _role_for(fname),
+                 "detected_reporting_date": inv.get("detected_reporting_date", ""),
+                 "df": df}]
+        rows = spe.compute_eligibility(
+            recs, period_gate.get("run_id", ""), config=period_gate.get("config"),
+            input_dir=period_gate.get("input_dir", ""))
+        for r in rows:
+            if r.output_domain == "central_lender_tape":
+                return r.as_dict()
+        return rows[0].as_dict() if rows else None
+
     frames: Dict[Tuple[str, str], pd.DataFrame] = {}
     key_cols: Dict[Tuple[str, str], str] = {}
     load_debug: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    excluded_sources: List[Dict[str, Any]] = []
     plays = {_play_key(s) for srcs in field_sources.values() for s in srcs}
     for (fname, sheet) in plays:
         inv = _resolve_inv(fname)
@@ -504,9 +584,27 @@ def _build_lender_tape(
             "frame_loaded": df is not None,
             "df_shape": list(df.shape) if df is not None else None,
             "df_columns": [str(c) for c in df.columns] if df is not None else [],
+            "artefact_role": _role_for(fname),
         }
         if df is None:
             load_debug[(fname, sheet)] = {**dbg, "key_column": "", "key_count": 0}
+            continue
+        # Reporting-period eligibility (MI modes). An ineligible source contributes
+        # no rows and no values: it is recorded in 18f / 04c but not loaded.
+        elig = _elig_for(fname, sheet, df)
+        dbg["inferred_reporting_period"] = (elig or {}).get("inferred_reporting_period", "")
+        dbg["period_column"] = ((elig or {}).get("source_period_column", "")
+                                or (elig or {}).get("period_column", ""))
+        dbg["is_universe_source"] = bool((elig or {}).get("is_universe_source"))
+        dbg["period_eligible"] = bool((elig or {}).get("is_period_eligible", True))
+        if gate_active and elig is not None and not elig.get("is_period_eligible", True):
+            excluded_sources.append({
+                "source_file": fname, "source_sheet": sheet, "artefact_role": _role_for(fname),
+                "inferred_reporting_period": elig.get("inferred_reporting_period", ""),
+                "reason": elig.get("reason_excluded", "period_mismatch"),
+                "row_count": int(df.shape[0])})
+            load_debug[(fname, sheet)] = {**dbg, "key_column": "", "key_count": 0,
+                                          "excluded": True}
             continue
         ent = _entity_for((fname, sheet))
         key = None
@@ -539,33 +637,137 @@ def _build_lender_tape(
         return m.get(_norm(col), col)
 
     # Per-(file,sheet) lookup index: {(file,sheet): {loan_id: {col: value}}}.
-    # Loan ids are normalised (76034101.0 -> 76034101) so they join across files.
+    # Loan ids are normalised (76034101.0 -> 76034101) so they join across files;
+    # a resolved 04b rule (e.g. strip_trailing_01) collapses short/long-form keys
+    # for the SAME entity to one canonical id.
+    universe_role_order: List[str] = period_gate.get("universe_role_order", []) or []
+
+    def _role_rank(role: str) -> int:
+        rn = spe._norm_col(role)
+        return universe_role_order.index(rn) if rn in universe_role_order else len(universe_role_order)
+
     indexes: Dict[Tuple[str, str], Dict[str, Dict[str, Any]]] = {}
-    loan_ids: List[str] = []
-    seen_ids: set = set()
+    all_ids: set = set()
+    universe_pks: List[Tuple[str, str]] = []
     for pk, df in frames.items():
         key = key_cols[pk]
         rule = _entity_for(pk).get("normalisation_rule", "")
+        ld = load_debug.setdefault(pk, {})
+        period_col = ld.get("period_column", "")
+        actual_period_col = _actual_col(pk, period_col) if period_col else ""
         idx: Dict[str, Dict[str, Any]] = {}
         collisions = 0
+        rows_raw = 0
+        rows_kept = 0
         for _, row in df.iterrows():
+            rows_raw += 1
+            # Row-level period filter for a cumulative current-book file: keep only
+            # rows whose Month Run / cut-off period equals the run period.
+            if (gate_active and actual_period_col and run_period
+                    and spe.period_of_value(row.get(actual_period_col), run_year) != run_period):
+                continue
+            rows_kept += 1
             lid = _join_key(row[key], rule)
             if not lid:
                 continue
             if lid in idx:
                 collisions += 1
             idx[lid] = row.to_dict()
-            if lid not in seen_ids:
-                seen_ids.add(lid)
-                loan_ids.append(lid)
+            all_ids.add(lid)
         indexes[pk] = idx
-        d = load_debug.setdefault(pk, {})
-        d["key_count"] = len(idx)
-        d["key_collision_count"] = collisions
+        ld["key_count"] = len(idx)
+        ld["key_collision_count"] = collisions
+        ld["rows_raw"] = rows_raw
+        ld["rows_after_period_filter"] = rows_kept
+        ld["raw_keys_in_scope"] = rows_kept
+        if bool(ld.get("is_universe_source")):
+            universe_pks.append(pk)
 
-    # Funded/live loan universe: ids appearing in a loan-classified source file
-    # (a file whose detected domains include loan). Fall back to all ids.
-    loan_ids = sorted(loan_ids)
+    # --- Universe SOURCE selection (not a blind union) ---------------------- #
+    # Among eligible funded/current-book frames, choose the authoritative
+    # universe source(s) by role precedence, preferring clean high-overlap 04b
+    # sources over needs_operator_review / stale `_test` duplicates. Only the
+    # selected source(s) contribute lender-tape rows; the rest are recorded as
+    # excluded so the universe stays the period-eligible funded book.
+    def _is_test_file(pk: Tuple[str, str]) -> bool:
+        n = str(pk[0]).lower()
+        return "_test" in n or "-test" in n
+
+    def _univ_rank(pk: Tuple[str, str]):
+        # Stale `_test` duplicates are demoted ahead of the 04b review flag: a
+        # disjoint stale file can win the (arbitrary) 04b seed and so look "clean",
+        # but the filename signal must keep it out of the authoritative universe.
+        ek = _entity_for(pk)
+        ld = load_debug.get(pk, {})
+        return (_role_rank(ld.get("artefact_role", "")),
+                1 if _is_test_file(pk) else 0,
+                1 if ek.get("needs_operator_review") else 0,
+                -float(ek.get("overlap_pct_normalised", 0.0) or 0.0),
+                -int(ld.get("key_count", 0)))
+
+    selected_universe_pks: List[Tuple[str, str]] = []
+    if universe_pks:
+        ranked = sorted(universe_pks, key=_univ_rank)
+        best_role = spe._norm_col(load_debug.get(ranked[0], {}).get("artefact_role", ""))
+        pool = [pk for pk in ranked
+                if spe._norm_col(load_debug.get(pk, {}).get("artefact_role", "")) == best_role]
+        # Prefer non-`_test` sources, then non-review sources, only collapsing the
+        # preference when nothing cleaner exists (so the universe is never empty).
+        non_test = [pk for pk in pool if not _is_test_file(pk)]
+        pool = non_test or pool
+        non_review = [pk for pk in pool if not _entity_for(pk).get("needs_operator_review")]
+        pool = non_review or pool
+        selected_universe_pks = pool
+    selected_set = set(selected_universe_pks)
+
+    universe_ids: set = set()
+    for pk in selected_universe_pks:
+        universe_ids |= set(indexes.get(pk, {}).keys())
+
+    # Record universe candidates that lost selection (dominated / lower precedence).
+    for pk in universe_pks:
+        if pk in selected_set:
+            continue
+        ek = _entity_for(pk)
+        reason = ("needs_operator_review_or_stale_duplicate"
+                  if (ek.get("needs_operator_review") or "_test" in str(pk[0]).lower())
+                  else "lower_role_precedence_universe_source")
+        excluded_sources.append({
+            "source_file": pk[0], "source_sheet": pk[1],
+            "artefact_role": load_debug.get(pk, {}).get("artefact_role", ""),
+            "output_domain": "central_lender_tape",
+            "inferred_reporting_period": load_debug.get(pk, {}).get("inferred_reporting_period", ""),
+            "reason": reason, "row_count": load_debug.get(pk, {}).get("key_count", 0)})
+
+    universe_source_debug: List[Dict[str, Any]] = []
+    duplicate_raw_keys_collapsed = 0
+    for pk in selected_universe_pks:
+        ld = load_debug.get(pk, {})
+        ek = _entity_for(pk)
+        raw_in_scope = int(ld.get("raw_keys_in_scope", 0))
+        canonical = len(indexes.get(pk, {}))
+        duplicate_raw_keys_collapsed += max(0, raw_in_scope - canonical)
+        universe_source_debug.append({
+            "selected_universe_source_file": pk[0],
+            "selected_universe_source_sheet": pk[1],
+            "selected_universe_role": ld.get("artefact_role", ""),
+            "selected_universe_reporting_period": ld.get("inferred_reporting_period", "") or run_period,
+            "selected_universe_key_column": key_cols.get(pk, ""),
+            "selected_universe_normalisation_rule": ek.get("normalisation_rule", ""),
+            "period_column": ld.get("period_column", ""),
+            "rows_raw": ld.get("rows_raw", 0),
+            "rows_after_period_filter": ld.get("rows_after_period_filter", 0),
+            "canonical_rows": canonical})
+
+    has_universe_source = bool(selected_universe_pks)
+    # Loan universe: when the period gate is active and an eligible funded /
+    # current-book source defines the universe, the tape rows come ONLY from the
+    # selected source(s). Otherwise fall back to every discovered id (legacy /
+    # regulatory behaviour).
+    if gate_active and has_universe_source:
+        loan_ids = sorted(universe_ids)
+    else:
+        loan_ids = sorted(all_ids)
     universe_keys = set(loan_ids)
     assigned_by_field: Dict[str, int] = {}
 
@@ -658,18 +860,31 @@ def _build_lender_tape(
                 if dec:
                     enum_applied = dec.get("decision", "")
 
-            row[canon] = primary_value
+            # Reporting-period cut-off canonicalisation: a bare Month Run label
+            # (October) becomes the month-end ISO (2025-10-31); the raw value is
+            # preserved in lineage source_value + notes.
+            materialised_value = primary_value
+            cutoff_method = ""
+            cutoff_basis = ""
+            if canon in _PERIOD_CUTOFF_FIELDS:
+                canon_iso, cutoff_method, cutoff_basis = _canonicalise_period_cutoff(
+                    primary_value, run_year)
+                if canon_iso:
+                    materialised_value = canon_iso
+
+            row[canon] = materialised_value
             populated_cells += 1
             assigned_by_field[canon] = assigned_by_field.get(canon, 0) + 1
             lineage.append({
                 "loan_identifier": lid,
                 "canonical_field": canon,
-                "value": primary_value,
+                "value": materialised_value,
                 "source_file": primary.file_name,
                 "source_sheet": primary.sheet,
                 "source_column": primary.column,
                 "source_value": primary_value,
-                "mapping_method": primary.method,
+                "mapping_method": (f"{primary.method}+{cutoff_method}"
+                                   if cutoff_method else primary.method),
                 "confidence": round(primary.confidence, 3),
                 "domain": domain,
                 "source_precedence_applied": precedence_applied,
@@ -678,7 +893,8 @@ def _build_lender_tape(
                 "conflict_status": conflict_status,
                 "enum_decision_applied": enum_applied,
                 "review_required": conflict_status == "conflict",
-                "notes": "",
+                "notes": (f"{cutoff_method}: raw '{primary_value}' -> '{materialised_value}'"
+                          f" (basis: {cutoff_basis})" if cutoff_method else ""),
             })
 
         # Materialise resolved profile-proxy derivations (e.g. equity-release
@@ -765,6 +981,35 @@ def _build_lender_tape(
         except Exception:
             pass
 
+    # Period-eligible universe diagnostics (18f): which source(s) defined the
+    # lender-tape rows for this run, and which were excluded and why.
+    primary = universe_source_debug[0] if universe_source_debug else {}
+    pipeline_excluded = [e for e in excluded_sources
+                         if "pipeline" in str(e.get("reason", "")).lower()]
+    universe_debug = {
+        "run_id": period_gate.get("run_id", ""),
+        "run_reporting_period": run_period,
+        "period_gate_active": gate_active,
+        "universe_basis": ("period_eligible_funded_current_book"
+                           if (gate_active and has_universe_source) else "all_discovered_ids"),
+        "selected_universe_source_file": primary.get("selected_universe_source_file", ""),
+        "selected_universe_source_sheet": primary.get("selected_universe_source_sheet", ""),
+        "selected_universe_role": primary.get("selected_universe_role", ""),
+        "selected_universe_reporting_period": primary.get("selected_universe_reporting_period", ""),
+        "selected_universe_key_column": primary.get("selected_universe_key_column", ""),
+        "selected_universe_normalisation_rule": primary.get("selected_universe_normalisation_rule", ""),
+        "selected_universe_sources": universe_source_debug,
+        "raw_universe_rows": sum(s.get("rows_raw", 0) for s in universe_source_debug),
+        "canonical_universe_rows": len(loan_ids),
+        "duplicate_raw_keys_collapsed": duplicate_raw_keys_collapsed,
+        "excluded_sources": excluded_sources,
+        "excluded_row_counts": sum(e.get("row_count", 0) for e in excluded_sources),
+        "pipeline_sources_excluded_from_lender_tape":
+            [e.get("source_file", "") for e in pipeline_excluded],
+        # Filled in by build_central_tapes from the pipeline_mi 04c domain.
+        "pipeline_sources_available_for_pipeline_mi": [],
+    }
+
     summary = {
         "loan_count": len(tape),
         "canonical_fields_populated": len(canonical_order),
@@ -774,8 +1019,15 @@ def _build_lender_tape(
         "lineage_rows": len(lineage),
         "mode": mode,
         "materialisation_debug": materialisation_debug,
+        "universe_debug": universe_debug,
         "columns": ["loan_identifier"] + canonical_order,
     }
+    if debug_dir is not None:
+        try:
+            (Path(debug_dir) / "18f_central_universe_debug.json").write_text(
+                json.dumps(universe_debug, indent=2, default=str), encoding="utf-8")
+        except Exception:
+            pass
     # Ensure every tape row has all columns (blank where unpopulated).
     for r in tape:
         for c in ["loan_identifier"] + canonical_order:
@@ -912,15 +1164,43 @@ def build_central_tapes(
     # rule per (file, sheet) that links the same loan entity across sheets/files.
     # Consumed for the MI central-tape flow only; regulatory (Annex 2) is untouched.
     entity_keys: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    period_gate: Dict[str, Any] = {}
     if mode in ("mi_only", "mna_dd"):
         from . import entity_key_resolver as _ekr
         entity_keys = _ekr.load_resolution(project_dir)
+        # Reporting-period eligibility (04c): the lender-tape universe is built from
+        # the run-period funded / current-book source(s) only; future-period or
+        # other-period files contribute no rows or values. Gated to MI modes;
+        # regulatory (Annex 2) keeps the legacy generic universe.
+        spe_cfg = spe.load_config()
+        if spe_cfg.get("enabled", True):
+            run_id = getattr(run_paths, "run_id", "") or run_summary.get("run_id", "")
+            input_dir = getattr(run_paths, "input_dir", "") or run_summary.get("input_dir", "")
+            run_p, _run_cut = spe.run_period(run_id, input_dir)
+            universe_role_order = [spe._norm_col(r)
+                                   for r in (spe_cfg.get("funded_current_book_roles") or [])]
+            # The central tape consumes ONLY the central_lender_tape eligibility
+            # context; pipeline_mi / forward_exposure stay on their own cadence.
+            period_gate = {
+                "active": True,
+                "run_id": run_id,
+                "input_dir": input_dir,
+                "run_period": run_p,
+                "run_year": int(run_p[:4]) if re.fullmatch(r"\d{4}-\d{2}", run_p or "") else None,
+                "config": spe_cfg,
+                "eligibility": spe.load_eligibility(project_dir, "central_lender_tape"),
+                "pipeline_roles": {spe._norm_col(r) for r in (spe_cfg.get("pipeline_roles") or [])},
+                "universe_roles": set(universe_role_order),
+                "universe_role_order": universe_role_order,
+                "role_by_file": {i.get("file_name", ""): i.get("classification", "")
+                                 for i in inventory},
+            }
 
     tape, lineage, gaps, summary = _build_lender_tape(
         mapping_candidates, overrides, precedence, enum_decisions, inventory,
         field_scope, registry_fields, mode, coverage_rows=coverage_rows,
         loan_key_hints=loan_key_hints, alias_loan_cols=alias_loan_cols,
-        entity_keys=entity_keys, debug_dir=project_dir,
+        entity_keys=entity_keys, debug_dir=project_dir, period_gate=period_gate,
     )
 
     central_dir = Path(run_paths.central_dir)
@@ -940,7 +1220,86 @@ def build_central_tapes(
     _write_rows(lineage_path, _LENDER_LINEAGE_COLUMNS, lineage)
     _write_rows(gaps_path, _GAP_COLUMNS, gaps)
     summary["central_lender_tape_path"] = str(tape_path)
+
+    # Aggregate the funded balance over the resolved universe (for the universe
+    # debug + an optional configured expected-balance check). Parses currency
+    # strings ("112,619.77") tolerantly; never fabricates a value.
+    def _to_float(v: Any) -> Optional[float]:
+        s = re.sub(r"[^0-9.\-]", "", str(v or "").strip())
+        try:
+            return float(s) if s not in ("", "-", ".") else None
+        except ValueError:
+            return None
+
+    udbg = summary.get("universe_debug") or {}
+    bal_present = "current_outstanding_balance" in cols
+    nums: List[float] = []
+    if bal_present:
+        nums = [v for v in (_to_float(r.get("current_outstanding_balance")) for r in tape)
+                if v is not None]
+    agg = round(sum(nums), 2) if nums else None
+    udbg["aggregate_current_outstanding_balance"] = agg if agg is not None else 0.0
+    udbg["current_outstanding_balance_populated"] = len(nums)
+
+    # Optional run-level expected-balance reconciliation — a generic, config-driven
+    # diagnostic (config/system/onboarding_agent.yaml: expected_balance_checks).
+    # Default severity is warning; promotion only fails (after diagnostics are
+    # written) when a matching entry is explicitly configured as blocking. Runs
+    # with no configured entry report balance_check_status: not_configured.
+    run_id_for_check = (period_gate.get("run_id", "") if period_gate
+                        else run_summary.get("run_id", ""))
+    client_id_for_check = getattr(run_paths, "client_id", "") or run_summary.get("client_id", "")
+    expected = spe.lookup_expected(
+        spe.load_expected_balance_checks(), client_id_for_check, run_id_for_check,
+        udbg.get("run_reporting_period", ""))
+    recon = spe.reconcile_balance(expected, len(tape), agg, len(nums), bal_present)
+    udbg["expected_balance_check"] = recon
+
+    # Pipeline sources that stay available for pipeline_mi on their own cadence
+    # (recorded so the tape exclusion is clearly NOT a global pipeline exclusion).
+    if period_gate:
+        pmi = spe.load_eligibility(project_dir, "pipeline_mi")
+        if not pmi:
+            # No 04c on disk (standalone promote): recompute the pipeline_mi domain.
+            try:
+                recs = [{"file_name": i.get("file_name", ""), "file_path": i.get("file_path", ""),
+                         "sheet_name": i.get("sheet_name", ""),
+                         "artefact_role": i.get("classification", ""),
+                         "detected_reporting_date": i.get("detected_reporting_date", "")}
+                        for i in inventory]
+                for r in spe.compute_eligibility(recs, period_gate.get("run_id", ""),
+                                                 config=period_gate.get("config"),
+                                                 input_dir=period_gate.get("input_dir", "")):
+                    if r.output_domain == "pipeline_mi":
+                        pmi[(r.source_file, r.source_sheet)] = r.as_dict()
+            except Exception:
+                pmi = {}
+        udbg["pipeline_sources_available_for_pipeline_mi"] = sorted(
+            {f for (f, _s), r in pmi.items() if r.get("is_period_eligible")})
+    summary["universe_debug"] = udbg
     lender_summary_path.write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
+
+    # Refresh the project-dir 18f with the enriched universe debug (balance +
+    # pipeline_mi availability), then mirror it (and 18e) into the central dir
+    # (alongside 18_/18d_) so they are discoverable next to the tape they explain.
+    try:
+        (project_dir / "18f_central_universe_debug.json").write_text(
+            json.dumps(udbg, indent=2, default=str), encoding="utf-8")
+        (central_dir / "18f_central_universe_debug.json").write_text(
+            json.dumps(udbg, indent=2, default=str), encoding="utf-8")
+        (central_dir / "18e_central_tape_materialisation_debug.json").write_text(
+            json.dumps(summary.get("materialisation_debug", []), indent=2, default=str),
+            encoding="utf-8")
+    except Exception:
+        pass
+
+    # A blocking expected-balance check fails promotion ONLY after the central tape
+    # and its diagnostics (18d/18f) have been written, so the evidence persists.
+    if recon.get("balance_check_status") == "fail":
+        raise ExpectedBalanceCheckError(
+            f"Expected-balance check failed for run '{run_id_for_check}' "
+            f"(blocking): {recon.get('diagnostic') or 'out of tolerance'}. "
+            f"See {central_dir / '18f_central_universe_debug.json'}.")
 
     # Pipeline tape.
     lender_loan_ids = {str(r.get("loan_identifier", "")).strip() for r in tape}
