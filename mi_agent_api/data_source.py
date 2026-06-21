@@ -1,26 +1,26 @@
 """Resolve the canonical dataframe and semantics registry for the API.
 
-The same API can serve either a synthetic demo portfolio (default, shipped in the
-repo) or a **promoted funded central lender tape** from an onboarding run — so the
-React dashboard reflects real promoted output rather than demo data. Selection is
+The same API serves either a synthetic demo portfolio (default) or a **promoted
+funded central lender tape** from an onboarding run — and, for the funded path, it
+runs the existing MI data-preparation layer (derive bucket source fields + the
+canonical ``analytics_lib.buckets`` engine over ``config/mi/buckets.yaml``) so the
+React dashboard gets an **analytics-ready funded MI dataset** (LTV / rate / ticket
+/ time-on-book / vintage dimensions), consistent with Streamlit. Selection is
 environment-driven (no code change), resolved in priority order:
 
-    1. MI_AGENT_CENTRAL_TAPE          - explicit path to an onboarding run's
-                                        ``18_central_lender_tape.csv``.
-    2. MI_AGENT_ONBOARDING_OUTPUT_ROOT + MI_AGENT_CLIENT_ID + MI_AGENT_RUN_ID
-                                      - resolve the promoted central lender tape for
-                                        a run generically by client_id / run_id.
-    3. MI_AGENT_DATA_CSV              - explicit canonical_typed.csv.
+    1. MI_AGENT_ANALYTICS_DATASET    - explicit path to an already MI-prepared CSV.
+    2. MI_AGENT_CENTRAL_TAPE  /  MI_AGENT_ONBOARDING_OUTPUT_ROOT + MI_AGENT_CLIENT_ID
+       + MI_AGENT_RUN_ID            - a promoted ``18_central_lender_tape.csv``;
+                                      MI preparation is applied (unless
+                                      MI_AGENT_DISABLE_PREP=1, which serves the raw
+                                      thin tape for KPI-only mode).
+    3. MI_AGENT_DATA_CSV             - explicit canonical_typed.csv.
     4. synthetic_demo/**/*canonical_typed.csv  (default demo).
 
     MI_AGENT_SEMANTICS               - path to mi_semantics_field_registry.yaml.
 
-The promoted funded central lender tape already uses canonical field names
-(current_outstanding_balance, current_valuation_amount, exposure_currency_
-denomination, reporting_date, ...) that align with the MI semantic layer, so it is
-served as-is; bucket dimensions are materialised additively (same as the demo).
-Because the tape is period-scoped, the dashboard inherently shows the funded
-universe (e.g. 33 / 73 loans), never the old 2,196-row universe and never
+Because the funded tape is period-scoped, the dashboard inherently shows the
+funded universe (e.g. 33 / 73 loans), never the old 2,196-row universe and never
 pipeline rows.
 """
 
@@ -29,9 +29,11 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
+
+from .funded_prep import CORE_FUNDED_DIMENSIONS, prepare_funded_mi_dataset
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -40,10 +42,15 @@ DEFAULT_SEMANTICS = _REPO_ROOT / "mi_agent" / "mi_semantics_field_registry.yaml"
 _CENTRAL_TAPE_NAME = "18_central_lender_tape.csv"
 
 # Source kinds (surfaced on /health).
-KIND_FUNDED_TAPE = "funded_central_lender_tape"
+KIND_PREPARED = "funded_mi_prepared_dataset"
+KIND_FUNDED_RAW = "funded_central_lender_tape_raw"
 KIND_EXPLICIT_CSV = "explicit_csv"
 KIND_SYNTHETIC_DEMO = "synthetic_demo"
 KIND_UNAVAILABLE = "unavailable"
+
+
+def _prep_disabled() -> bool:
+    return str(os.environ.get("MI_AGENT_DISABLE_PREP", "")).strip().lower() in ("1", "true", "yes")
 
 
 def _resolve_central_tape() -> Optional[Path]:
@@ -59,8 +66,6 @@ def _resolve_central_tape() -> Optional[Path]:
     root_path = Path(root)
     client_id = os.environ.get("MI_AGENT_CLIENT_ID", "")
     run_id = os.environ.get("MI_AGENT_RUN_ID", "")
-
-    # Common run-folder layouts (most specific first); generic by client/run.
     candidates = [
         root_path / "central" / _CENTRAL_TAPE_NAME,
         root_path / client_id / run_id / "output" / "central" / _CENTRAL_TAPE_NAME,
@@ -70,7 +75,6 @@ def _resolve_central_tape() -> Optional[Path]:
     for c in candidates:
         if c.exists():
             return c
-    # Fallback: glob for the run's tape anywhere under the root.
     if run_id:
         hits = sorted(root_path.glob(f"**/{run_id}/**/{_CENTRAL_TAPE_NAME}"))
         if hits:
@@ -80,7 +84,7 @@ def _resolve_central_tape() -> Optional[Path]:
 
 
 def _find_demo_csv() -> Optional[Path]:
-    """Back-compat: the explicit/demo CSV (MI_AGENT_DATA_CSV or synthetic demo)."""
+    """The explicit/demo CSV (MI_AGENT_DATA_CSV or the bundled synthetic demo)."""
     override = os.environ.get("MI_AGENT_DATA_CSV")
     if override:
         p = Path(override)
@@ -90,15 +94,24 @@ def _find_demo_csv() -> Optional[Path]:
 
 
 def resolve_data_source() -> Tuple[Optional[Path], str]:
-    """``(path, kind)`` for the active data source, by priority."""
+    """``(path, base_kind)`` for the active data source, by priority.
+
+    ``base_kind`` ∈ ``prepared_explicit`` | ``central_tape`` | ``explicit_csv`` |
+    ``synthetic_demo`` | ``unavailable``.
+    """
+    ds = os.environ.get("MI_AGENT_ANALYTICS_DATASET")
+    if ds:
+        p = Path(ds)
+        if p.exists():
+            return p, "prepared_explicit"
     tape = _resolve_central_tape()
     if tape is not None:
-        return tape, KIND_FUNDED_TAPE
+        return tape, "central_tape"
     if os.environ.get("MI_AGENT_DATA_CSV"):
         p = _find_demo_csv()
-        return p, (KIND_EXPLICIT_CSV if p else KIND_UNAVAILABLE)
+        return p, ("explicit_csv" if p else "unavailable")
     demo = _find_demo_csv()
-    return demo, (KIND_SYNTHETIC_DEMO if demo else KIND_UNAVAILABLE)
+    return demo, ("synthetic_demo" if demo else "unavailable")
 
 
 def semantics_path() -> Path:
@@ -109,15 +122,8 @@ def semantics_path() -> Path:
 def _materialise_mi_buckets(df: pd.DataFrame) -> pd.DataFrame:
     """Add registry-named bucket dimensions using the EXISTING bucketing engine.
 
-    The MI executor reuses pre-materialised bucket columns (age_bucket,
-    ltv_bucket, ticket_bucket, ...) and deliberately does not create them. The
-    Streamlit dashboard runs this step via analytics/mi_prep; the API must do the
-    equivalent so the same registry/catalogue dimensions resolve here too.
-
-    We reuse the canonical source of truth — ``analytics_lib.buckets`` with
-    ``config/mi/buckets.yaml`` — and write columns under their registry semantic
-    names (``target="semantic_field"``: borrower_age_bucket→age_bucket,
-    balance_band→ticket_bucket, ...). No bucket logic is duplicated here.
+    Used for the demo / pre-typed CSV paths. The funded path uses the richer
+    ``prepare_funded_mi_dataset`` (derive sources + same bucket engine).
     """
     try:
         from analytics_lib.buckets import load_bucket_config, materialise_buckets
@@ -130,39 +136,96 @@ def _materialise_mi_buckets(df: pd.DataFrame) -> pd.DataFrame:
         return df
 
 
+def _present_dimensions(df: pd.DataFrame) -> Tuple[List[str], List[str]]:
+    cols = set(df.columns)
+    available = sorted([d for d in CORE_FUNDED_DIMENSIONS if d in cols]
+                       + [c for c in cols if c.endswith("_bucket") and c not in CORE_FUNDED_DIMENSIONS])
+    missing = [d for d in CORE_FUNDED_DIMENSIONS if d not in cols]
+    return available, missing
+
+
 @lru_cache(maxsize=1)
-def get_dataframe() -> pd.DataFrame:
-    """Load and cache the active canonical dataframe (with MI bucket dimensions)."""
-    csv, _kind = resolve_data_source()
-    if csv is None:
+def _active() -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """Load + prepare the active dataset once; return ``(df, info)``."""
+    path, base = resolve_data_source()
+    if path is None:
         raise FileNotFoundError(
-            "No data source found. Set MI_AGENT_CENTRAL_TAPE (a promoted "
-            "18_central_lender_tape.csv), MI_AGENT_ONBOARDING_OUTPUT_ROOT + "
+            "No data source found. Set MI_AGENT_ANALYTICS_DATASET, "
+            "MI_AGENT_CENTRAL_TAPE, MI_AGENT_ONBOARDING_OUTPUT_ROOT + "
             "MI_AGENT_CLIENT_ID + MI_AGENT_RUN_ID, MI_AGENT_DATA_CSV, or add a "
             "synthetic_demo/**/*canonical_typed.csv file."
         )
-    return _materialise_mi_buckets(pd.read_csv(csv, low_memory=False))
+    raw = pd.read_csv(path, low_memory=False)
+    info: Dict[str, Any] = {"label": path.name, "path": str(path)}
+
+    if base == "central_tape" and not _prep_disabled():
+        try:
+            df, report = prepare_funded_mi_dataset(raw)
+            info.update(kind=KIND_PREPARED, **report)
+        except Exception as exc:  # never block: serve the raw thin tape
+            df = raw
+            avail, missing = _present_dimensions(raw)
+            info.update(kind=KIND_FUNDED_RAW, preparation_applied=False,
+                        preparation_error=str(exc), derived_fields=[],
+                        dimensions_available=avail, missing_dimensions=missing)
+    elif base == "central_tape":  # prep explicitly disabled -> thin KPI mode
+        df = raw
+        avail, missing = _present_dimensions(raw)
+        info.update(kind=KIND_FUNDED_RAW, preparation_applied=False,
+                    derived_fields=[], dimensions_available=avail,
+                    missing_dimensions=missing)
+    elif base == "prepared_explicit":
+        df = _materialise_mi_buckets(raw)
+        avail, missing = _present_dimensions(df)
+        info.update(kind=KIND_PREPARED, preparation_applied=True, derived_fields=[],
+                    dimensions_available=avail, missing_dimensions=missing)
+    else:  # explicit_csv | synthetic_demo
+        df = _materialise_mi_buckets(raw)
+        avail, missing = _present_dimensions(df)
+        info.update(kind=(KIND_EXPLICIT_CSV if base == "explicit_csv" else KIND_SYNTHETIC_DEMO),
+                    preparation_applied=False, derived_fields=[],
+                    dimensions_available=avail, missing_dimensions=missing)
+
+    if base == "central_tape":
+        info["client_id"] = os.environ.get("MI_AGENT_CLIENT_ID", "")
+        info["run_id"] = os.environ.get("MI_AGENT_RUN_ID", "")
+    return df, info
+
+
+def reset_cache() -> None:
+    """Clear the cached active dataset (used by tests when env changes)."""
+    _active.cache_clear()
+
+
+def get_dataframe() -> pd.DataFrame:
+    """The active analytics dataframe (funded MI-prepared, demo, or explicit)."""
+    return _active()[0]
+
+
+# Back-compat: tests historically cleared the cache via get_dataframe.cache_clear().
+get_dataframe.cache_clear = reset_cache  # type: ignore[attr-defined]
 
 
 def data_source_label() -> str:
-    csv, _kind = resolve_data_source()
-    return csv.name if csv else KIND_UNAVAILABLE
+    try:
+        return _active()[1].get("label", KIND_UNAVAILABLE)
+    except FileNotFoundError:
+        return KIND_UNAVAILABLE
 
 
 def data_source_kind() -> str:
-    _csv, kind = resolve_data_source()
-    return kind
+    try:
+        return _active()[1].get("kind", KIND_UNAVAILABLE)
+    except FileNotFoundError:
+        return KIND_UNAVAILABLE
 
 
-def data_source_info() -> Dict[str, str]:
-    """Full data-source descriptor for /health (kind, label, path, client/run)."""
-    csv, kind = resolve_data_source()
-    info = {
-        "kind": kind,
-        "label": csv.name if csv else KIND_UNAVAILABLE,
-        "path": str(csv) if csv else "",
-    }
-    if kind == KIND_FUNDED_TAPE:
-        info["client_id"] = os.environ.get("MI_AGENT_CLIENT_ID", "")
-        info["run_id"] = os.environ.get("MI_AGENT_RUN_ID", "")
-    return info
+def data_source_info() -> Dict[str, Any]:
+    """Full data-source descriptor for /health (kind, preparation, dimensions)."""
+    try:
+        _df, info = _active()
+        return dict(info)
+    except FileNotFoundError:
+        return {"kind": KIND_UNAVAILABLE, "label": KIND_UNAVAILABLE, "path": "",
+                "preparation_applied": False, "dimensions_available": [],
+                "missing_dimensions": list(CORE_FUNDED_DIMENSIONS)}

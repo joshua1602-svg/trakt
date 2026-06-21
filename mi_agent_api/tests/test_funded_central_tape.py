@@ -45,7 +45,7 @@ _FUNDED_ENV = ("MI_AGENT_CENTRAL_TAPE", "MI_AGENT_ONBOARDING_OUTPUT_ROOT",
 def _clear_funded_env():
     for k in _FUNDED_ENV:
         os.environ.pop(k, None)
-    data_source.get_dataframe.cache_clear()
+    data_source.reset_cache()
 
 
 def _to_num(v) -> float:
@@ -115,7 +115,7 @@ class TestFundedCentralTapeServedByApi(unittest.TestCase):
         os.environ["MI_AGENT_CENTRAL_TAPE"] = str(tape)
         os.environ["MI_AGENT_CLIENT_ID"] = client_id
         os.environ["MI_AGENT_RUN_ID"] = run_id
-        data_source.get_dataframe.cache_clear()
+        data_source.reset_cache()
 
     # --- data layer ---
     def test_get_dataframe_october(self):
@@ -147,8 +147,8 @@ class TestFundedCentralTapeServedByApi(unittest.TestCase):
         os.environ["MI_AGENT_ONBOARDING_OUTPUT_ROOT"] = str(self.oct_tape.parent.parent)  # .../output
         os.environ["MI_AGENT_CLIENT_ID"] = "client_001"
         os.environ["MI_AGENT_RUN_ID"] = "mi_2025_10"
-        data_source.get_dataframe.cache_clear()
-        self.assertEqual(data_source.data_source_kind(), data_source.KIND_FUNDED_TAPE)
+        data_source.reset_cache()
+        self.assertEqual(data_source.data_source_kind(), data_source.KIND_PREPARED)
         self.assertEqual(len(data_source.get_dataframe()), 33)
 
     # --- /health ---
@@ -158,7 +158,7 @@ class TestFundedCentralTapeServedByApi(unittest.TestCase):
         self._serve(self.oct_tape, run_id="mi_2025_10")
         body = TestClient(app).get("/health").json()
         self.assertTrue(body["dataAvailable"])
-        self.assertEqual(body["dataSourceKind"], data_source.KIND_FUNDED_TAPE)
+        self.assertEqual(body["dataSourceKind"], data_source.KIND_PREPARED)
         self.assertEqual(body["dataSourceInfo"]["run_id"], "mi_2025_10")
         self.assertEqual(body["dataSource"], "18_central_lender_tape.csv")
 

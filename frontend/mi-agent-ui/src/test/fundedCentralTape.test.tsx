@@ -9,6 +9,7 @@ import { ArtifactRenderer } from "@/components/artifacts/ArtifactRenderer";
 // UI renders the funded central tape, not synthetic demo data.
 import octEnvelope from "./fixtures/funded_summary_mi_2025_10.json";
 import novEnvelope from "./fixtures/funded_summary_mi_2025_11.json";
+import octLtvStrat from "./fixtures/funded_strat_ltv_mi_2025_10.json";
 
 function kpiArtifactOf(envelope: { artifacts: Array<{ type: string }> }): KPIArtifact {
   const art = (envelope.artifacts as Artifact[]).find((a) => a.type === "kpi");
@@ -44,5 +45,16 @@ describe("Funded central lender tape → React dashboard", () => {
   it("envelope is real Python-engine output, not mock", () => {
     expect(octEnvelope.metadata.mock).toBe(false);
     expect(octEnvelope.metadata.engine).toBe("mi_agent");
+  });
+
+  // Prepared (not raw / not demo): the backend MI-prep layer derived LTV and the
+  // bucket engine produced ltv_bucket, so a stratification chart renders.
+  it("renders an LTV-bucket stratification chart from the prepared funded dataset", () => {
+    expect(octLtvStrat.ok).toBe(true);
+    const chart = (octLtvStrat.artifacts as unknown as Artifact[]).find((a) => a.type === "chart");
+    expect(chart).toBeDefined();
+    expect((chart as unknown as { xKey: string }).xKey).toBe("ltv_bucket");
+    const { container } = render(<ArtifactRenderer artifact={chart as Artifact} />);
+    expect(container.querySelector(".recharts-responsive-container")).toBeTruthy();
   });
 });

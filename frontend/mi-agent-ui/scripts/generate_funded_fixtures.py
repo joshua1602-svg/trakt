@@ -22,8 +22,8 @@ def make_pack(root):
     inp=root/"input"; inp.mkdir(parents=True)
     ids=[760000+i for i in range(NOV_N)]; lng=[s*100+1 for s in ids]; o=[];n=[]
     for i,lid in enumerate(ids):
-        n.append({"Loan Policy Number":lid,"Month Run":"November","Loan Interest Rate":3.1+(i%5)*0.05,"Current Outstanding Balance":NOV,"Policy Completion Date":"2025-06-01"})
-        if i<OCT_N:o.append({"Loan Policy Number":lid,"Month Run":"October","Loan Interest Rate":3.1+(i%5)*0.05,"Current Outstanding Balance":OCT,"Policy Completion Date":"2025-06-01"})
+        n.append({"Loan Policy Number":lid,"Month Run":"November","Loan Interest Rate":3.1+(i%5)*0.05,"Current Outstanding Balance":NOV,"Policy Completion Date":f"20{16+i%7}-0{1+i%9}-15"})
+        if i<OCT_N:o.append({"Loan Policy Number":lid,"Month Run":"October","Loan Interest Rate":3.1+(i%5)*0.05,"Current Outstanding Balance":OCT,"Policy Completion Date":f"20{16+i%7}-0{1+i%9}-15"})
     pd.DataFrame(o+n).to_csv(inp/"LoanExtract One.csv",index=False)
     pd.DataFrame({"Account Number":lng,"Latest Property Value":[250000.0+i for i in range(NOV_N)]}).to_csv(inp/"Collateral Extract.csv",index=False)
     pd.DataFrame({"application_id":[f"APP{i}" for i in range(20)],"Account Number":[990000+i for i in range(20)],"product rate":[4.0]*20}).to_csv(inp/"M2L KFI and Pipeline 2025_12_01.csv",index=False)
@@ -44,6 +44,8 @@ for run_id in ("mi_2025_10","mi_2025_11"):
     from mi_agent_api.app import app
     body=TestClient(app).post("/mi/query",json={"question":"portfolio summary","portfolioId":f"client_001/{run_id}","asOfDate":"2025-10-31"}).json()
     (OUT/f"funded_summary_{run_id}.json").write_text(json.dumps(body,indent=2,default=str))
+    strat=TestClient(app).post("/mi/query",json={"question":"current outstanding balance by ltv bucket","portfolioId":f"client_001/{run_id}","asOfDate":"2025-10-31"}).json()
+    (OUT/f"funded_strat_ltv_{run_id}.json").write_text(json.dumps(strat,indent=2,default=str))
     kpi=next(a for a in body["artifacts"] if a["type"]=="kpi")
     print(run_id, "ok=",body["ok"], "kpis=", [(k["label"],k["value"]) for k in kpi["kpis"]])
 import os, json, tempfile, warnings
@@ -61,8 +63,8 @@ def make_pack(root):
     inp=root/"input"; inp.mkdir(parents=True)
     ids=[760000+i for i in range(NOV_N)]; lng=[s*100+1 for s in ids]; o=[];n=[]
     for i,lid in enumerate(ids):
-        n.append({"Loan Policy Number":lid,"Month Run":"November","Loan Interest Rate":3.1+(i%5)*0.05,"Current Outstanding Balance":NOV,"Policy Completion Date":"2025-06-01"})
-        if i<OCT_N:o.append({"Loan Policy Number":lid,"Month Run":"October","Loan Interest Rate":3.1+(i%5)*0.05,"Current Outstanding Balance":OCT,"Policy Completion Date":"2025-06-01"})
+        n.append({"Loan Policy Number":lid,"Month Run":"November","Loan Interest Rate":3.1+(i%5)*0.05,"Current Outstanding Balance":NOV,"Policy Completion Date":f"20{16+i%7}-0{1+i%9}-15"})
+        if i<OCT_N:o.append({"Loan Policy Number":lid,"Month Run":"October","Loan Interest Rate":3.1+(i%5)*0.05,"Current Outstanding Balance":OCT,"Policy Completion Date":f"20{16+i%7}-0{1+i%9}-15"})
     pd.DataFrame(o+n).to_csv(inp/"LoanExtract One.csv",index=False)
     pd.DataFrame({"Account Number":lng,"Latest Property Value":[250000.0+i for i in range(NOV_N)]}).to_csv(inp/"Collateral Extract.csv",index=False)
     pd.DataFrame({"application_id":[f"APP{i}" for i in range(20)],"Account Number":[990000+i for i in range(20)],"product rate":[4.0]*20}).to_csv(inp/"M2L KFI and Pipeline 2025_12_01.csv",index=False)
@@ -83,5 +85,7 @@ for run_id in ("mi_2025_10","mi_2025_11"):
     from mi_agent_api.app import app
     body=TestClient(app).post("/mi/query",json={"question":"portfolio summary","portfolioId":f"client_001/{run_id}","asOfDate":"2025-10-31"}).json()
     (OUT/f"funded_summary_{run_id}.json").write_text(json.dumps(body,indent=2,default=str))
+    strat=TestClient(app).post("/mi/query",json={"question":"current outstanding balance by ltv bucket","portfolioId":f"client_001/{run_id}","asOfDate":"2025-10-31"}).json()
+    (OUT/f"funded_strat_ltv_{run_id}.json").write_text(json.dumps(strat,indent=2,default=str))
     kpi=next(a for a in body["artifacts"] if a["type"]=="kpi")
     print(run_id, "ok=",body["ok"], "kpis=", [(k["label"],k["value"]) for k in kpi["kpis"]])

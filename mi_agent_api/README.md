@@ -85,14 +85,31 @@ uvicorn mi_agent_api.app:app --reload --port 8000
 
 The promoted tape is period-scoped, so the dashboard inherently shows the funded
 universe (e.g. 33 loans for `mi_2025_10`, 73 for `mi_2025_11`) — never the old
-2,196-row universe and never pipeline/KFI rows. Resolution priority:
-`MI_AGENT_CENTRAL_TAPE` → `MI_AGENT_ONBOARDING_OUTPUT_ROOT`+client/run →
+2,196-row universe and never pipeline/KFI rows.
+
+**MI preparation (default for the funded path).** The promoted tape is a thin
+canonical funded tape. The API runs the existing MI data-prep layer
+(`mi_agent_api/funded_prep.py`) before serving it: it derives the bucket source
+fields the tape supports (`current_loan_to_value`, `vintage_year`,
+`months_on_book`) and then runs the canonical bucket engine
+(`analytics_lib.buckets` over `config/mi/buckets.yaml` — the same engine Streamlit
+uses) to materialise `ltv_bucket`, `interest_rate_bucket`, `ticket_bucket`,
+`time_on_book_bucket`. So the dashboard gets funded **KPIs and stratifications**,
+not just thin KPIs. `/health` reports `dataSourceKind`
+(`funded_mi_prepared_dataset` | `funded_central_lender_tape_raw`),
+`preparationApplied`, `dimensionsAvailable`, `missingDimensions`. See
+`funded_mi_data_path_report.md`.
+
+Resolution priority: `MI_AGENT_ANALYTICS_DATASET` →
+`MI_AGENT_CENTRAL_TAPE` / `MI_AGENT_ONBOARDING_OUTPUT_ROOT`+client/run →
 `MI_AGENT_DATA_CSV` → synthetic demo.
 
 Configuration (env):
 
+- `MI_AGENT_ANALYTICS_DATASET` — explicit path to an already MI-prepared CSV.
 - `MI_AGENT_CENTRAL_TAPE` / `MI_AGENT_ONBOARDING_OUTPUT_ROOT` (+ `MI_AGENT_CLIENT_ID`,
-  `MI_AGENT_RUN_ID`) — serve a promoted funded central lender tape (above).
+  `MI_AGENT_RUN_ID`) — serve a promoted funded central lender tape (prepared above).
+- `MI_AGENT_DISABLE_PREP=1` — serve the raw thin tape (KPI-only mode).
 - `MI_AGENT_DATA_CSV` — path to a canonical `*_typed.csv` (defaults to the
   bundled `synthetic_demo/**/*canonical_typed.csv`).
 - `MI_AGENT_SEMANTICS` — path to the semantics registry (defaults to

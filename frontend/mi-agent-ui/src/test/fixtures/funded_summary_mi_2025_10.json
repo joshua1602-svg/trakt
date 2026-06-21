@@ -72,7 +72,7 @@
   },
   "artifacts": [
     {
-      "id": "art_65f8a086",
+      "id": "art_557ec33a",
       "type": "kpi",
       "title": "Summary",
       "description": "Aggregated MI summary.",
@@ -143,16 +143,16 @@
         "asOf": "2025-10-31",
         "portfolio": "client_001/mi_2025_10"
       },
-      "createdAt": "2026-06-21T14:20:57.131451+00:00",
+      "createdAt": "2026-06-21T15:01:26.448238+00:00",
       "mock": false,
       "kpis": [
         {
-          "id": "kpi_8864071d",
+          "id": "kpi_c880da91",
           "label": "Loan",
           "value": "33"
         },
         {
-          "id": "kpi_e1a60269",
+          "id": "kpi_244e8d88",
           "label": "Current Outstanding Balance",
           "value": "4,208,000"
         }
@@ -160,7 +160,7 @@
     }
   ],
   "warnings": [
-    "percent-scale heuristically detected as 'whole_number_percent' (median 3.2); the executor does NOT rescale percentages",
+    "percent-scale heuristically detected as 'whole_number_percent' (median 1.855); the executor does NOT rescale percentages",
     "No chart rendered (chart_type='none'); showing the result table only."
   ],
   "assumptions": [],
