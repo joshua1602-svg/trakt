@@ -147,5 +147,46 @@ class TestPipelineOnlyEnrichment(unittest.TestCase):
         self.assertEqual(int(self.df["broker_channel"].notna().sum()), 20)
 
 
+class TestDashboardReviewGenerator(unittest.TestCase):
+    """The static review generator captures real /mi/query envelopes per run."""
+
+    @classmethod
+    def setUpClass(cls):
+        warnings.simplefilter("ignore")
+        cls.root = Path(tempfile.mkdtemp(prefix="review_"))
+        inp = cls.root / "input"
+        inp.mkdir(parents=True)
+        n = 12
+        ids = [760000 + i for i in range(n)]
+        pd.DataFrame({"Loan Policy Number": ids, "Month Run": ["October"] * n,
+                      "Loan Interest Rate": [3.0 + (i % 5) * 0.5 for i in range(n)],
+                      "Current Outstanding Balance": [100000.0 + i * 5000 for i in range(n)],
+                      "Geo Region": [["UKI", "UKJ", "UKK"][i % 3] for i in range(n)],
+                      "Policy Completion Date": [f"20{16 + i % 6}-0{1 + i % 9}-15" for i in range(n)]}).to_csv(
+            inp / "LoanExtract One.csv", index=False)
+        pd.DataFrame({"Account Number": [s * 100 + 1 for s in ids],
+                      "Latest Property Value": [240000.0 + i * 4000 for i in range(n)]}).to_csv(
+            inp / "Collateral Extract.csv", index=False)
+        # promote under an output-root the generator can resolve by client/run.
+        cls.out_root = cls.root / "out"
+        _promote(str(inp), cls.out_root / "mi_2025_10", "mi_2025_10")
+
+    def test_collect_run_and_render(self):
+        from mi_agent_api.scripts.generate_dashboard_review import collect_run, render
+        run = collect_run(self.out_root, "client_001", "mi_2025_10", _REGISTRY)
+        self.assertEqual(run["health"]["dataSourceKind"], "funded_mi_prepared_dataset")
+        self.assertTrue(run["health"]["preparationApplied"])
+        # every funded MI query was attempted and at least summary + ltv/region succeed.
+        by_q = {q["question"]: q for q in run["queries"]}
+        self.assertTrue(by_q["portfolio summary"]["ok"])
+        self.assertTrue(by_q["current outstanding balance by ltv bucket"]["ok"])
+        self.assertTrue(by_q["current outstanding balance by region"]["ok"])
+        html = render([run], "test")
+        self.assertIn("mi_2025_10", html)
+        self.assertIn("funded_mi_prepared_dataset", html)
+        # data source honestly labelled
+        self.assertIn("REAL prepared funded MI dataset", html)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
