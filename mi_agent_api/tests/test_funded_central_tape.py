@@ -191,6 +191,28 @@ class TestFundedCentralTapeServedByApi(unittest.TestCase):
         self.assertEqual(int(_to_num(loan_kpi)), 73)
 
 
+class TestMessyHeaderCsvLoading(unittest.TestCase):
+    """PropertyExtract-style CSVs put the real header in row 2; the central tape
+    loader must re-detect it (not read ``Unnamed:*`` columns)."""
+
+    def test_read_df_redetects_row_two_header(self):
+        from engine.onboarding_agent.central_tape_builder import _read_df
+        d = Path(tempfile.mkdtemp(prefix="hdr_"))
+        f = d / "PG_PropertyExtract Internal OMNI_test.csv"
+        f.write_text(
+            "PG PropertyExtract Internal OMNI,,,,\n"
+            "Loan ID,Latest Valuation,Original Valuation,Youngest Age,Property Region\n"
+            "76034101,500000,450000,67,London\n"
+            "76034201,300000,280000,72,Wales\n", encoding="utf-8")
+        df = _read_df(str(f))
+        self.assertIsNotNone(df)
+        self.assertEqual(len(df), 2)  # rows_raw non-zero
+        for col in ("Loan ID", "Latest Valuation", "Original Valuation",
+                    "Youngest Age", "Property Region"):
+            self.assertIn(col, df.columns)
+        self.assertFalse(any(str(c).startswith("Unnamed") for c in df.columns))
+
+
 class TestDefaultStillSyntheticDemo(unittest.TestCase):
     def test_demo_default_when_unconfigured(self):
         _clear_funded_env()

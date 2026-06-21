@@ -151,6 +151,7 @@ def _load_yaml(path: Path) -> Any:
 
 def _read_df(file_path: str, sheet: str = "") -> Optional[pd.DataFrame]:
     p = Path(file_path)
+    df: Optional[pd.DataFrame] = None
     try:
         if p.suffix.lower() in (".xlsx", ".xls"):
             if sheet:
@@ -160,13 +161,25 @@ def _read_df(file_path: str, sheet: str = "") -> Optional[pd.DataFrame]:
                 if match is None:
                     match = next((sh for sh in xl.sheet_names
                                   if _norm(sh) == _norm(sheet)), None)
-                return xl.parse(match if match is not None else xl.sheet_names[0])
-            return pd.read_excel(p)
-        if p.suffix.lower() == ".csv":
-            return pd.read_csv(p, low_memory=False)
+                df = xl.parse(match if match is not None else xl.sheet_names[0])
+            else:
+                df = pd.read_excel(p)
+        elif p.suffix.lower() == ".csv":
+            df = pd.read_csv(p, low_memory=False)
     except Exception:
         return None
-    return None
+    if df is None:
+        return None
+    # Messy client extracts (e.g. PropertyExtract) put the real header in row 2,
+    # so a default read yields ``Unnamed:*`` columns and every enrichment column
+    # looks absent. Reuse the deterministic header re-detector (same one the
+    # source-table loader uses) so promotion reads the real column names.
+    try:
+        from .source_table_loader import redetect_header
+        df, _hr, _hfail = redetect_header(df)
+    except Exception:
+        pass
+    return df
 
 
 def _norm_key(v: Any) -> str:

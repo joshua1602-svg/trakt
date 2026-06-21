@@ -146,8 +146,9 @@ def collect_run(output_root: Path, client_id: str, run_id: str, registry: str) -
     except Exception as exc:  # pragma: no cover
         trace_rows = [{"error": str(exc)}]
     import pandas as pd
+    from analytics_lib.numeric import coerce_numeric
     df = pd.read_csv(tape)
-    bal = pd.to_numeric(df.get("current_outstanding_balance"), errors="coerce").sum()
+    bal = coerce_numeric(df.get("current_outstanding_balance")).sum()
     return {
         "run_id": run_id, "tape": str(tape), "row_count": int(len(df)),
         "aggregate_balance": round(float(bal), 2),

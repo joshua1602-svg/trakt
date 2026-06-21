@@ -295,11 +295,18 @@ central_lender_tape:
     - original_loan_to_value
     # Original advance (original LTV denominator-pair + vintage analytics).
     - original_principal_balance
-    # Borrower age (equity-release age stratification -> age_bucket).
+    # Borrower age (equity-release age stratification -> age_bucket). When the
+    # source has no explicit youngest-age field, the funded MI prep layer derives
+    # it from the borrower DOBs below as of the reporting date.
     - youngest_borrower_age
-    # Geography / region stratification (obligor + collateral).
+    - borrower_1_DOB
+    - borrower_2_DOB
+    # Geography / region stratification (obligor + collateral). Postcode is
+    # preserved so region can be derived where a postcode->region map exists,
+    # else reason-coded (postcode_available_region_not_derived) by funded_prep.
     - geographic_region_obligor
     - collateral_geography
+    - property_post_code
     # Origination channel / broker stratification.
     - origination_channel
     - broker_channel
