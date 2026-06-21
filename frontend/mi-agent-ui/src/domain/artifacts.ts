@@ -96,10 +96,24 @@ export interface ChartArtifact extends ArtifactBase {
   series: ChartSeries[];
   valueFormat?: ValueFormat;
   unit?: string;
-  /** Second categorical axis (heatmap) — the y dimension column. */
+  /** Second axis column — the y dimension (heatmap) or y measure (scatter/bubble). */
   yKey?: string;
+  /** Bubble size measure column (scatter/bubble). */
+  sizeKey?: string;
   /** Measure column for grid/area charts (heatmap intensity, treemap size). */
   valueKey?: string;
+  /** Per-role labels (scatter/bubble). */
+  xLabel?: string;
+  yLabel?: string;
+  sizeLabel?: string;
+  /** Per-role display formats (scatter/bubble). */
+  xFormat?: ValueFormat;
+  yFormat?: ValueFormat;
+  sizeFormat?: ValueFormat;
+  /** Per-role display multipliers (e.g. 100 to show a 0..1 LTV fraction as %). */
+  xScale?: number;
+  yScale?: number;
+  sizeScale?: number;
 }
 
 /* ------------------------------ Table ------------------------------- */
@@ -109,6 +123,8 @@ export interface TableColumn {
   label: string;
   align?: "left" | "right";
   format?: ValueFormat;
+  /** Display multiplier (e.g. 100 to show a 0..1 LTV fraction as a percentage). */
+  scale?: number;
   /** Render an inline magnitude bar scaled to the column max. */
   bar?: boolean;
 }

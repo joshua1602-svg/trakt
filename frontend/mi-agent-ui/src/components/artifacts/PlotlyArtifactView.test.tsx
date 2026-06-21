@@ -57,6 +57,9 @@ describe("ArtifactRenderer chart routing — native first", () => {
     const a = chart({
       chartType: "scatter",
       xKey: "age",
+      yKey: "ltv",
+      xLabel: "Age",
+      yLabel: "LTV",
       series: [
         { key: "age", label: "Age", color: "#919dd1" },
         { key: "ltv", label: "LTV", color: "#232d55" },

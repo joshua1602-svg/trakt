@@ -104,6 +104,25 @@ def _infer_col_format(col: str, resolved: Dict[str, Any]) -> str:
     return _value_format(fmt)
 
 
+def _title(col: str) -> str:
+    return (col or "").replace("_", " ").title()
+
+
+def _pct_scale(rows: List[Dict[str, Any]], col: Optional[str], fmt: str) -> int:
+    """Display multiplier for a percentage column: 100 when the values are stored
+    as fractions (median in (0, 1]) so 0.51 renders as 51.0%, otherwise 1. The
+    raw row values are left unchanged for plotting."""
+    if fmt != "pct" or not col or not rows:
+        return 1
+    import statistics
+    vals = [abs(float(r.get(col)))
+            for r in rows
+            if isinstance(r.get(col), (int, float)) and r.get(col) == r.get(col)]
+    if not vals:
+        return 1
+    return 100 if 0 < statistics.median(vals) <= 1 else 1
+
+
 def _kpi_label(key: str, resolved: Dict[str, Any]) -> str:
     base = key
     for suffix in ("_sum", "_avg", "_weighted_avg", "_median", "_count", "_count_distinct"):
@@ -126,7 +145,10 @@ def _format_kpi_value(value: Any, fmt: str) -> str:
             return f"£{v / 1e3:.0f}K"
         return f"£{v:,.0f}"
     if fmt == "pct":
-        return f"{float(value):.1f}%"
+        # A fraction (|v| <= 1) is a 0..1 ratio -> show as a percentage (×100);
+        # an already-percentage value (e.g. concentration 51.0) is shown as-is.
+        v = float(value)
+        return f"{(v * 100 if 0 < abs(v) <= 1 else v):.1f}%"
     if fmt == "decimal":
         return f"{float(value):.2f}"
     return f"{value:,.0f}" if isinstance(value, (int, float)) else str(value)
@@ -176,6 +198,8 @@ def _table_artifact(
                     "label": col.replace("_", " ").title(),
                     "align": "left" if fmt == "text" else "right",
                     "format": fmt,
+                    # Display multiplier so a 0..1 LTV fraction renders as 51.0%.
+                    "scale": _pct_scale(rows, col, fmt),
                 }
             )
     source = _source(spec, ctx, "MI Agent · table")
@@ -206,9 +230,11 @@ def _chart_artifact(
 
     x_key: Optional[str] = None
     y_key: Optional[str] = None
+    size_key: Optional[str] = None
     value_key: Optional[str] = None
     series: List[Dict[str, Any]] = []
     value_format = "number"
+    x_format = y_format = size_format = "number"
 
     def _value_column(exclude: List[str]) -> Optional[str]:
         cand = [c for c in columns if c not in exclude]
@@ -216,18 +242,22 @@ def _chart_artifact(
         return cand[0] if cand else None
 
     if chart_type in ("scatter", "bubble"):
-        # Loan-level x / y / (size) — the renderer reads series[0]=x, [1]=y, [2]=size.
+        # Loan-level x / y / (size). Expose EXPLICIT role keys (xKey/yKey/sizeKey)
+        # so the renderer never has to infer roles from series order.
         x_key = spec.get("x") if spec.get("x") in columns else (columns[0] if columns else None)
-        sy = spec.get("y") if spec.get("y") in columns else None
+        y_key = spec.get("y") if spec.get("y") in columns else None
         size_key = spec.get("size") if spec.get("size") in columns else None
-        if x_key and sy:
+        x_format = _infer_col_format(x_key or "", resolved)
+        y_format = _infer_col_format(y_key or "", resolved)
+        size_format = _infer_col_format(size_key or "", resolved)
+        if x_key and y_key:
             series = [
-                {"key": x_key, "label": x_key.replace("_", " ").title(), "color": _PALETTE[0]},
-                {"key": sy, "label": sy.replace("_", " ").title(), "color": _PALETTE[1]},
+                {"key": x_key, "label": _title(x_key), "color": _PALETTE[0]},
+                {"key": y_key, "label": _title(y_key), "color": _PALETTE[1]},
             ]
             if chart_type == "bubble" and size_key:
-                series.append({"key": size_key, "label": size_key.replace("_", " ").title(), "color": _PALETTE[2]})
-            value_format = _infer_col_format(sy, resolved)
+                series.append({"key": size_key, "label": _title(size_key), "color": _PALETTE[2]})
+            value_format = y_format
     elif chart_type in ("bar", "line"):
         # Grouped categorical (bar) / ordered (line): one dimension + one value.
         x_key = _dimension_column(resolved, columns)
@@ -291,6 +321,19 @@ def _chart_artifact(
         "rows": rows,
         "valueFormat": value_format,
         "warnings": cr.get("warnings", []),
+        # Explicit per-role contract for scatter/bubble (x/y/size) so the renderer
+        # reads roles by name, not by series order. Labels + per-role display
+        # format and pct scale (raw row values stay unchanged for plotting).
+        "sizeKey": size_key,
+        "xLabel": _title(x_key) if x_key else None,
+        "yLabel": _title(y_key) if y_key else None,
+        "sizeLabel": _title(size_key) if size_key else None,
+        "xFormat": x_format,
+        "yFormat": y_format,
+        "sizeFormat": size_format,
+        "xScale": _pct_scale(rows, x_key, x_format),
+        "yScale": _pct_scale(rows, y_key, y_format),
+        "sizeScale": _pct_scale(rows, size_key, size_format),
     }
 
 

@@ -68,13 +68,40 @@ def test_bubble_maps_x_y_size_series():
         "current_loan_to_value": {"canonical_field": "current_loan_to_value", "role": "metric", "format": "percent"},
         "current_outstanding_balance": {"canonical_field": "current_outstanding_balance", "role": "metric", "format": "currency"},
     }
-    data = [{"youngest_borrower_age": 71, "current_loan_to_value": 31.4, "current_outstanding_balance": 184000.0}]
+    data = [
+        {"youngest_borrower_age": 71, "current_loan_to_value": 0.314, "current_outstanding_balance": 184000.0},
+        {"youngest_borrower_age": 68, "current_loan_to_value": 0.51, "current_outstanding_balance": 220000.0},
+    ]
     resp = adapt_workflow_result(_workflow("bubble", "loan_level", data, spec, resolved))
     chart = next(a for a in resp["artifacts"] if a["type"] == "chart")
-    keys = [s["key"] for s in chart["series"]]
-    assert keys == ["youngest_borrower_age", "current_loan_to_value", "current_outstanding_balance"]
+    # EXPLICIT role keys — renderer must not rely on series order.
     assert chart["xKey"] == "youngest_borrower_age"
+    assert chart["yKey"] == "current_loan_to_value"
+    assert chart["sizeKey"] == "current_outstanding_balance"
+    assert chart["yKey"] is not None  # never null for a bubble
+    assert chart["xLabel"] and chart["yLabel"] and chart["sizeLabel"]
+    assert chart["yFormat"] == "pct"
+    # LTV stored as 0..1 fraction -> display scale 100 (renders 0.51 as 51.0%).
+    assert chart["yScale"] == 100
+    assert chart["sizeScale"] == 1
     assert chart["source"]["nativeChartType"] == "bubble"
+
+
+def test_table_fractional_ltv_gets_pct_scale_100():
+    spec = {"chart_type": "bar", "dimension": "geographic_region_obligor", "metric": "current_loan_to_value"}
+    resolved = {
+        "geographic_region_obligor": {"canonical_field": "geographic_region_obligor", "role": "dimension", "format": "string"},
+        "current_loan_to_value": {"canonical_field": "current_loan_to_value", "role": "metric", "format": "percent"},
+    }
+    data = [
+        {"geographic_region_obligor": "London", "current_loan_to_value": 0.51},
+        {"geographic_region_obligor": "Wales", "current_loan_to_value": 0.40},
+    ]
+    resp = adapt_workflow_result(_workflow("bar", "table", data, spec, resolved))
+    table = next(a for a in resp["artifacts"] if a["type"] == "table")
+    ltv = next(c for c in table["columns"] if c["key"] == "current_loan_to_value")
+    assert ltv["format"] == "pct"
+    assert ltv["scale"] == 100
 
 
 def test_scatter_maps_x_y_series_no_size():

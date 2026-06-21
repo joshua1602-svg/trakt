@@ -12,7 +12,7 @@ export function TableArtifactView({ artifact }: { artifact: TableArtifact }) {
   const cell = (value: string | number, col: TableColumn) =>
     col.format === "number" && typeof value === "number"
       ? value.toLocaleString("en-GB")
-      : formatValue(value, col.format);
+      : formatValue(value, col.format, col.scale);
 
   return (
     <div className="overflow-hidden rounded-lg border border-[var(--color-line-soft)]">

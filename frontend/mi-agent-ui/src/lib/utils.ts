@@ -49,10 +49,16 @@ export function formatDate(iso: string): string {
   });
 }
 
-/** Format a value by a domain ValueFormat tag. */
+/**
+ * Format a value by a domain ValueFormat tag.
+ *
+ * `scale` is a display multiplier applied to percentages only, so a value stored
+ * as a 0..1 fraction (LTV 0.51) renders as `51.0%`; plotting keeps the raw value.
+ */
 export function formatValue(
   value: string | number,
   format?: "gbp" | "pct" | "number" | "decimal" | "text" | "date",
+  scale = 1,
 ): string {
   if (typeof value !== "number") {
     return format === "date" && value ? formatDate(String(value)) : String(value);
@@ -61,7 +67,7 @@ export function formatValue(
     case "gbp":
       return formatGBP(value);
     case "pct":
-      return `${value.toFixed(1)}%`;
+      return `${(value * (scale || 1)).toFixed(1)}%`;
     case "decimal":
       return value.toFixed(2);
     case "number":

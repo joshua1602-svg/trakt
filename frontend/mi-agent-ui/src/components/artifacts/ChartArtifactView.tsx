@@ -17,6 +17,7 @@ import {
 } from "recharts";
 import type { ChartArtifact } from "@/domain";
 import { THEME } from "@/lib/theme";
+import { formatValue } from "@/lib/utils";
 
 const AXIS = "#6b7493";
 const GRID = "#1c2440";
@@ -30,6 +31,52 @@ function valueFormatter(fmt: Fmt, unit?: string) {
     if (fmt === "pct") return `${v}%`;
     return v.toLocaleString();
   };
+}
+
+/** Per-role formatter honouring a display scale (e.g. 0..1 LTV -> 51.0%). */
+function roleFormatter(fmt: Fmt, scale?: number) {
+  return (v: number) => (typeof v === "number" ? formatValue(v, fmt, scale) : String(v));
+}
+
+/** Controlled message when a chart artifact is missing a required role key,
+ *  instead of silently rendering a blank chart. */
+function ChartConfigError({ chartType, missing }: { chartType: string; missing: string[] }) {
+  return (
+    <div
+      role="alert"
+      className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-4 text-xs text-amber-200"
+    >
+      Cannot render {chartType} chart: missing required key{missing.length > 1 ? "s" : ""}{" "}
+      <span className="font-mono font-medium">{missing.join(", ")}</span>.
+    </div>
+  );
+}
+
+type RoleTooltipItem = { name: string; value: number; color: string };
+
+/** Scatter/bubble tooltip: format each point by its role (x/y/size). */
+function ScatterTooltip({
+  active,
+  payload,
+  fmtByName,
+}: {
+  active?: boolean;
+  payload?: RoleTooltipItem[];
+  fmtByName: Record<string, (v: number) => string>;
+}) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-lg border border-[var(--color-line)] bg-navy-950/95 px-3 py-2 text-xs shadow-xl">
+      {payload.map((p) => (
+        <div key={p.name} className="flex items-center gap-2">
+          <span className="text-ink-400">{p.name}</span>
+          <span className="ml-auto font-mono font-medium text-ink-100">
+            {(fmtByName[p.name] ?? ((v: number) => String(v)))(p.value)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 type TooltipItem = { name: string; value: number; color: string };
@@ -188,15 +235,40 @@ function Body({ artifact }: { artifact: ChartArtifact }) {
   }
 
   if (artifact.chartType === "scatter" || artifact.chartType === "bubble") {
-    const [sx, sy, sz] = artifact.series;
+    // Read roles by EXPLICIT key (never by series order). Missing a required key
+    // is a controlled error, not a blank chart.
+    const missing: string[] = [];
+    if (!artifact.xKey) missing.push("xKey");
+    if (!artifact.yKey) missing.push("yKey");
+    if (artifact.chartType === "bubble" && !artifact.sizeKey) missing.push("sizeKey");
+    if (missing.length) return <ChartConfigError chartType={artifact.chartType} missing={missing} />;
+
+    const xLabel = artifact.xLabel ?? artifact.xKey;
+    const yLabel = artifact.yLabel ?? artifact.yKey;
+    const sizeLabel = artifact.sizeLabel ?? artifact.sizeKey;
+    const xFmt = roleFormatter(artifact.xFormat, artifact.xScale);
+    const yFmt = roleFormatter(artifact.yFormat, artifact.yScale);
+    const sizeFmt = roleFormatter(artifact.sizeFormat, artifact.sizeScale);
+    const fmtByName: Record<string, (v: number) => string> = {};
+    if (xLabel) fmtByName[xLabel] = xFmt;
+    if (yLabel) fmtByName[yLabel] = yFmt;
+    if (sizeLabel) fmtByName[sizeLabel] = sizeFmt;
+
     return (
       <ResponsiveContainer width="100%" height={H}>
         <ScatterChart margin={{ top: 8, right: 8, bottom: 8, left: 0 }}>
           <CartesianGrid stroke={GRID} />
-          <XAxis type="number" dataKey={sx?.key} name={sx?.label} tick={tick} axisLine={{ stroke: GRID }} tickLine={false} />
-          <YAxis type="number" dataKey={sy?.key} name={sy?.label} tick={tick} axisLine={false} tickLine={false} width={56} />
-          {artifact.chartType === "bubble" && sz && <ZAxis type="number" dataKey={sz.key} range={[40, 400]} />}
-          {tip}
+          <XAxis type="number" dataKey={artifact.xKey} name={xLabel} tick={tick} axisLine={{ stroke: GRID }} tickLine={false} tickFormatter={xFmt} />
+          <YAxis type="number" dataKey={artifact.yKey} name={yLabel} tick={tick} axisLine={false} tickLine={false} width={56} tickFormatter={yFmt} />
+          {artifact.chartType === "bubble" && artifact.sizeKey && (
+            <ZAxis type="number" dataKey={artifact.sizeKey} name={sizeLabel} range={[40, 400]} />
+          )}
+          <Tooltip
+            cursor={{ strokeDasharray: "3 3" }}
+            content={(p) => (
+              <ScatterTooltip active={p.active} payload={p.payload as unknown as RoleTooltipItem[]} fmtByName={fmtByName} />
+            )}
+          />
           <Scatter data={artifact.rows} fill={THEME.peri} fillOpacity={0.6} />
         </ScatterChart>
       </ResponsiveContainer>

@@ -31,12 +31,17 @@ describe("ArtifactRenderer — unsupported + scatter", () => {
     expect(screen.getByText(/No renderer is registered/)).toBeInTheDocument();
   });
 
-  it("renders a scatter chart with x/y series from the adapter mapping", () => {
+  it("renders a scatter chart from explicit x/y role keys", () => {
     const artifact: ChartArtifact = {
       ...base,
       type: "chart",
       chartType: "scatter",
       xKey: "youngest_borrower_age",
+      yKey: "current_loan_to_value",
+      xLabel: "Age",
+      yLabel: "LTV",
+      xFormat: "number",
+      yFormat: "pct",
       series: [
         { key: "youngest_borrower_age", label: "Age", color: "#919dd1" },
         { key: "current_loan_to_value", label: "LTV", color: "#232d55" },
