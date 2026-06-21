@@ -22,7 +22,12 @@ from mi_agent.mi_agent_workflow import run_mi_agent_query
 
 from .adapters import adapt_workflow_result
 from .catalogue import build_catalogue
-from .data_source import data_source_label, get_dataframe, semantics_path
+from .data_source import (
+    data_source_info,
+    data_source_label,
+    get_dataframe,
+    semantics_path,
+)
 
 app = FastAPI(title="Trakt MI Agent API", version="1.0.0")
 
@@ -59,11 +64,21 @@ class QueryRequest(BaseModel):
 @app.get("/health")
 def health() -> Dict[str, Any]:
     csv = data_source_label()
+    info = data_source_info()
     return {
         "ok": True,
         "service": "mi_agent_api",
         "version": app.version,
         "dataSource": csv,
+        "dataSourceKind": info.get("kind"),
+        "preparationApplied": info.get("preparation_applied", False),
+        "dimensionsAvailable": info.get("dimensions_available", []),
+        "missingDimensions": info.get("missing_dimensions", []),
+        "missingDimensionNames": [
+            m["dimension"] if isinstance(m, dict) else m
+            for m in info.get("missing_dimensions", [])
+        ],
+        "dataSourceInfo": info,
         "dataAvailable": csv != "unavailable",
         "semantics": semantics_path().name,
     }
