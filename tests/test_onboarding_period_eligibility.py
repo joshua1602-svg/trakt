@@ -462,8 +462,13 @@ class TestFundedTapeEnrichment(unittest.TestCase):
         dbg = json.loads((self.proj / "18f_central_universe_debug.json").read_text())
         diag = {d["canonical_field"]: d for d in dbg["enrichment_field_diagnostics"]}
         self.assertIn("original_valuation_amount", diag)
-        self.assertIn(diag["original_valuation_amount"]["status"],
-                      ("no_period_eligible_source", "needs_operator_review"))
+        # No mapped source -> exact reason (not a silent null). The sharpened
+        # verdict distinguishes unmapped / join_failed / period-ineligible.
+        d = diag["original_valuation_amount"]
+        self.assertIn(d["status"],
+                      ("enrichment_field_unmapped", "no_period_eligible_source",
+                       "needs_operator_review", "join_failed", "source_period_ineligible"))
+        self.assertEqual(d["populated_rows"], 0)
 
     # 2 — configured/default currency
     def test_currency_defaults_to_gbp_all_rows(self):

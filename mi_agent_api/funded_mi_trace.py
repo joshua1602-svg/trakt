@@ -174,3 +174,37 @@ def trace_to_file(project_dir: str | Path, central_tape_path: str | Path, out_pa
     md = render_markdown(rows, run_id=run_id, client_id=client_id)
     Path(out_path).write_text(md, encoding="utf-8")
     return str(out_path)
+
+
+def _main(argv: List[str]) -> int:
+    """CLI: trace one promoted run. Prints the reason-coded markdown table.
+
+      python -m mi_agent_api.funded_mi_trace <project_dir> <central_tape.csv>
+
+    ``project_dir`` is the onboarding output dir holding 05_mapping_candidates.json
+    and 04c_source_period_eligibility.json; ``central_tape`` is the promoted
+    18_central_lender_tape.csv. Also surfaces the central tape's own enrichment
+    diagnostics (18f) when present, so collateral join breaks are explicit.
+    """
+    if len(argv) < 3:
+        print(_main.__doc__)
+        return 2
+    project_dir, tape = argv[1], argv[2]
+    print(render_markdown(trace(project_dir, tape)))
+    dbg = _load_json(Path(project_dir) / "18f_central_universe_debug.json") or \
+        _load_json(Path(tape).resolve().parent / "18f_central_universe_debug.json")
+    if isinstance(dbg, dict) and dbg.get("enrichment_field_diagnostics"):
+        print("\n## Central-tape enrichment diagnostics (18f)\n")
+        for d in dbg["enrichment_field_diagnostics"]:
+            print(f"- `{d.get('canonical_field')}`: **{d.get('status')}** "
+                  f"reason=`{d.get('reason', d.get('status'))}` "
+                  f"populated={d.get('populated_rows')}/{d.get('universe_rows')}; "
+                  f"candidates={d.get('candidate_source_columns')}")
+            for c in d.get("candidate_join_detail", []):
+                print(f"    - {c}")
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+    raise SystemExit(_main(sys.argv))

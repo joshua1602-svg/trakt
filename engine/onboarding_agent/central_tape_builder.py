@@ -1117,21 +1117,59 @@ def _build_lender_tape(
                 "source_column": s0.column if s0 else "",
                 "entity_key_join_basis": _entity_for(_play_key(s0)).get("basis", "") if s0 else ""})
         else:
-            candidates = sorted({f"{s.file_name}:{s.column}" for s in srcs})
+            # No value populated: pinpoint WHY per candidate source so the reason
+            # is EXACT (source_period_ineligible vs join_failed vs column-missing),
+            # never a blanket "needs review". Mirrors the 18e materialisation debug
+            # for the enrichment (collateral) join so a real-pack null is explained.
+            cand_details: List[Dict[str, Any]] = []
+            for s in srcs:
+                pk = _play_key(s)
+                ld = load_debug.get(pk, {})
+                src_keys = set(indexes.get(pk, {}).keys())
+                ek = _entity_for(pk)
+                cand_details.append({
+                    "source": f"{s.file_name}:{s.column}",
+                    "frame_loaded": bool(ld.get("frame_loaded", False)),
+                    "selected_column_present":
+                        _norm(s.column) in {_norm(c) for c in ld.get("df_columns", [])},
+                    "rows_raw": ld.get("rows_raw", 0),
+                    "rows_after_period_filter": ld.get("rows_after_period_filter", 0),
+                    "source_key_count": len(src_keys),
+                    "key_intersection_with_universe": len(src_keys & universe_keys),
+                    "key_resolution_basis": ek.get("basis", ""),
+                    "normalisation_rule": ek.get("normalisation_rule", ""),
+                })
+            candidates = sorted({d["source"] for d in cand_details})
+            # Verdict from the best (most key-overlapping) candidate.
+            best = (max(cand_details, key=lambda d: d["key_intersection_with_universe"])
+                    if cand_details else None)
+            if not candidates:
+                status = reason = "enrichment_field_unmapped"
+            elif best and not best["selected_column_present"]:
+                status = "needs_operator_review"; reason = "enrichment_source_column_missing"
+            elif best and best["rows_raw"] and not best["rows_after_period_filter"]:
+                status = reason = "source_period_ineligible"
+            elif best and best["key_intersection_with_universe"] == 0:
+                status = reason = "join_failed"
+            else:
+                status = "needs_operator_review"; reason = "enrichment_field_needs_review"
             enrichment_diagnostics.append({
                 "canonical_field": canon,
-                "status": "needs_operator_review" if candidates else "no_period_eligible_source",
+                "status": status,
+                "reason": reason,
                 "populated_rows": 0, "universe_rows": len(loan_ids),
-                "candidate_source_columns": candidates})
+                "candidate_source_columns": candidates,
+                "candidate_join_detail": cand_details})
+            bfile, bcol = (best["source"].split(":", 1) if best else ("", ""))
             new_gap(
-                "medium", dc.COLLATERAL, canon, "", "",
-                "enrichment_field_unmapped" if not candidates else "enrichment_field_needs_review",
-                (f"Enrichment field '{canon}' has no period-eligible source; "
-                 "central tape column would be null."
-                 if not candidates else
-                 f"Enrichment field '{canon}' has candidate sources {candidates} but no value "
-                 "joined to the funded universe; operator review."),
-                ["map_collateral_source_column", "confirm_field_absent"], False)
+                "medium", dc.COLLATERAL, canon, bfile, bcol, reason,
+                (f"Enrichment field '{canon}' has no mapped source; central tape "
+                 "column would be null."
+                 if reason == "enrichment_field_unmapped" else
+                 f"Enrichment field '{canon}': {reason}. Candidates {candidates}; "
+                 f"best join detail {best}."),
+                ["map_collateral_source_column", "fix_entity_key_bridge",
+                 "confirm_source_period_eligibility", "confirm_field_absent"], False)
 
     # Per-field materialisation diagnostics for the RESOLVED (28a-selected)
     # source-mapped fields — so a real-pack run that still produces nulls reveals
