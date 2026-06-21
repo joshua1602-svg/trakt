@@ -588,8 +588,13 @@ def _build_lender_tape(
             return src.method
         return cand_basis.get((canon, src.file_name, _norm(src.column)), "target_first_28a_selected")
 
-    # Restrict to loan-level domains for the lender tape.
+    # Restrict to loan-level domains for the lender tape. Configured MI enrichment
+    # fields bypass the domain filter so a linked collateral/pipeline field (e.g.
+    # broker_channel) can ENRICH the funded universe via entity-key linkage — it
+    # still never creates funded rows (universe selection is unchanged).
     def in_lender_scope(canon: str) -> bool:
+        if canon in enrichment_fields:
+            return True
         return bool(dc.field_domains(canon, registry_fields.get(canon, {})) & _LENDER_DOMAINS)
 
     field_sources = {f: s for f, s in field_sources.items() if in_lender_scope(f)}

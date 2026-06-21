@@ -100,6 +100,19 @@ not just thin KPIs. `/health` reports `dataSourceKind`
 `preparationApplied`, `dimensionsAvailable`, `missingDimensions`. See
 `funded_mi_data_path_report.md`.
 
+**Enrichment + LTV derivation.** Raw client fields beyond the core funded set
+(borrower age, geography, broker/channel, original advance/valuation) are promoted
+into the funded tape via `central_lender_tape.mi_enrichment_fields` + 04b
+entity-key linkage (collateral/loan), so they become MI dimensions. LTV is a
+product rule: `current_loan_to_value` / `original_loan_to_value` prefer an explicit
+source value, otherwise are **derived** (`current_outstanding_balance /
+current_valuation_amount`, `original_principal_balance / original_valuation_amount`)
+in the backend prep — never in React. Missing valuation →
+`derivation_inputs_missing` (no misleading LTV). `/health` reports
+`missingDimensions` with a reason code; see `funded_mi_missing_dimension_trace.md`
+for the per-field raw→mapping→scope→eligibility→tape→prep→React trace, and
+`funded_mi_data_path_report.md` for the fields added by prep.
+
 Resolution priority: `MI_AGENT_ANALYTICS_DATASET` →
 `MI_AGENT_CENTRAL_TAPE` / `MI_AGENT_ONBOARDING_OUTPUT_ROOT`+client/run →
 `MI_AGENT_DATA_CSV` → synthetic demo.

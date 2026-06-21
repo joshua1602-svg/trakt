@@ -74,9 +74,13 @@ class TestPrepEngine(unittest.TestCase):
             self.assertIn(dim, self.report["dimensions_available"], dim)
 
     def test_reports_missing_dimensions_with_reason(self):
-        # No borrower age / geography / risk fields in a funded tape.
+        from mi_agent_api.funded_prep import missing_dimension_names
+        names = missing_dimension_names(self.report)
         for dim in ("age_bucket", "geographic_region_obligor", "original_ltv_bucket"):
-            self.assertIn(dim, self.report["missing_dimensions"], dim)
+            self.assertIn(dim, names, dim)
+        # original LTV missing -> derivation_inputs_missing (no original valuation).
+        by_dim = {m["dimension"]: m for m in self.report["missing_dimensions"]}
+        self.assertEqual(by_dim["original_ltv_bucket"]["reason"], "derivation_inputs_missing")
 
     def test_preparation_does_not_change_row_count_or_balance(self):
         raw = _canonical_funded_df()
@@ -88,8 +92,9 @@ class TestPrepEngine(unittest.TestCase):
     def test_no_valuation_means_no_ltv_but_still_rate_and_ticket(self):
         thin = _canonical_funded_df().drop(columns=["current_valuation_amount", "origination_date"])
         df2, rep2 = prepare_funded_mi_dataset(thin)
+        from mi_agent_api.funded_prep import missing_dimension_names
         self.assertNotIn("ltv_bucket", df2.columns)
-        self.assertIn("ltv_bucket", rep2["missing_dimensions"])
+        self.assertIn("ltv_bucket", missing_dimension_names(rep2))
         self.assertIn("interest_rate_bucket", df2.columns)
         self.assertIn("ticket_bucket", df2.columns)
 
@@ -154,7 +159,7 @@ class TestPreparedDatasetThroughApi(unittest.TestCase):
         self.assertTrue(body["preparationApplied"])
         self.assertIn("ltv_bucket", body["dimensionsAvailable"])
         self.assertIn("ticket_bucket", body["dimensionsAvailable"])
-        self.assertIn("age_bucket", body["missingDimensions"])
+        self.assertIn("age_bucket", body["missingDimensionNames"])
 
     def test_disable_prep_serves_raw(self):
         self._serve(disable_prep=True)

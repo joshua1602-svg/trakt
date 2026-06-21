@@ -286,8 +286,23 @@ expected_balance_checks:
 # ---------------------------------------------------------------------------
 central_lender_tape:
   mi_enrichment_fields:
+    # Collateral valuation (current LTV / indexed LTV / collateral MI).
     - current_valuation_amount
     - original_valuation_amount
+    # LTV — promoted when the source supplies it explicitly; otherwise the funded
+    # MI prep layer derives it from balance / valuation (see funded_prep.py).
+    - current_loan_to_value
+    - original_loan_to_value
+    # Original advance (original LTV denominator-pair + vintage analytics).
+    - original_principal_balance
+    # Borrower age (equity-release age stratification -> age_bucket).
+    - youngest_borrower_age
+    # Geography / region stratification (obligor + collateral).
+    - geographic_region_obligor
+    - collateral_geography
+    # Origination channel / broker stratification.
+    - origination_channel
+    - broker_channel
   static_field_defaults:
     exposure_currency_denomination:
       value: GBP

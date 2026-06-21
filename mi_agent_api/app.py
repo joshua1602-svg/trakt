@@ -74,6 +74,10 @@ def health() -> Dict[str, Any]:
         "preparationApplied": info.get("preparation_applied", False),
         "dimensionsAvailable": info.get("dimensions_available", []),
         "missingDimensions": info.get("missing_dimensions", []),
+        "missingDimensionNames": [
+            m["dimension"] if isinstance(m, dict) else m
+            for m in info.get("missing_dimensions", [])
+        ],
         "dataSourceInfo": info,
         "dataAvailable": csv != "unavailable",
         "semantics": semantics_path().name,

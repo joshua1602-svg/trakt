@@ -136,11 +136,17 @@ def _materialise_mi_buckets(df: pd.DataFrame) -> pd.DataFrame:
         return df
 
 
-def _present_dimensions(df: pd.DataFrame) -> Tuple[List[str], List[str]]:
+def _present_dimensions(
+    df: pd.DataFrame, missing_reason: str = "not_in_dataset",
+) -> Tuple[List[str], List[Dict[str, Any]]]:
+    """``(available_names, missing_dicts)`` for a non-prepared dataframe."""
     cols = set(df.columns)
     available = sorted([d for d in CORE_FUNDED_DIMENSIONS if d in cols]
-                       + [c for c in cols if c.endswith("_bucket") and c not in CORE_FUNDED_DIMENSIONS])
-    missing = [d for d in CORE_FUNDED_DIMENSIONS if d not in cols]
+                       + [c for c in cols if c.endswith("_bucket")
+                          and c not in CORE_FUNDED_DIMENSIONS])
+    missing = [{"dimension": d, "reason": missing_reason,
+                "detail": f"{d!r} not present in this data source"}
+               for d in CORE_FUNDED_DIMENSIONS if d not in cols]
     return available, missing
 
 
@@ -164,13 +170,13 @@ def _active() -> Tuple[pd.DataFrame, Dict[str, Any]]:
             info.update(kind=KIND_PREPARED, **report)
         except Exception as exc:  # never block: serve the raw thin tape
             df = raw
-            avail, missing = _present_dimensions(raw)
+            avail, missing = _present_dimensions(raw, "not_consumed_by_mi_prep")
             info.update(kind=KIND_FUNDED_RAW, preparation_applied=False,
                         preparation_error=str(exc), derived_fields=[],
                         dimensions_available=avail, missing_dimensions=missing)
     elif base == "central_tape":  # prep explicitly disabled -> thin KPI mode
         df = raw
-        avail, missing = _present_dimensions(raw)
+        avail, missing = _present_dimensions(raw, "not_consumed_by_mi_prep")
         info.update(kind=KIND_FUNDED_RAW, preparation_applied=False,
                     derived_fields=[], dimensions_available=avail,
                     missing_dimensions=missing)
@@ -228,4 +234,6 @@ def data_source_info() -> Dict[str, Any]:
     except FileNotFoundError:
         return {"kind": KIND_UNAVAILABLE, "label": KIND_UNAVAILABLE, "path": "",
                 "preparation_applied": False, "dimensions_available": [],
-                "missing_dimensions": list(CORE_FUNDED_DIMENSIONS)}
+                "missing_dimensions": [{"dimension": d, "reason": "unavailable",
+                                        "detail": "no data source"}
+                                       for d in CORE_FUNDED_DIMENSIONS]}
