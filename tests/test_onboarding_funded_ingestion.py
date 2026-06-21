@@ -215,9 +215,12 @@ class TestPromotionConsumesResolvedMappings(unittest.TestCase):
 
 
 class TestPromotionMaterialisesMultiSheetNumericIds(unittest.TestCase):
-    """Regression for the source_mapped materialisation step: a funded source
-    selected from a NON-first sheet of a multi-sheet workbook, with numeric loan
-    ids (float vs int across sheets), must still populate row-by-row with lineage.
+    """Regression for the source_mapped materialisation step, mirroring the real
+    pack: a funded extract whose data is on a NON-first sheet of a multi-sheet
+    workbook, with a NON-standard loan-id header ("Mortgage Account Reference")
+    and numeric ids typed differently across files (int vs float). The central
+    tape must still populate every source_mapped funded field row-by-row with
+    lineage (using onboarding's detected key + sheet-aware reads + key norming).
     """
 
     @classmethod
@@ -227,20 +230,23 @@ class TestPromotionMaterialisesMultiSheetNumericIds(unittest.TestCase):
         inp = cls.root / "input"
         fb = inp / "funded" / "2025-10-31"
         fb.mkdir(parents=True)
-        with pd.ExcelWriter(fb / "M2L Portfolio.xlsx") as xl:
+        # Funded loan extract: data on a non-first sheet, non-standard key.
+        with pd.ExcelWriter(fb / "LoanExtract One.xlsx") as xl:
             pd.DataFrame({"info": ["cover sheet — not loan data"]}).to_excel(
                 xl, sheet_name="Cover", index=False)
             pd.DataFrame({
-                "Loan ID": [76034101, 76034102, 76034103],       # int ids
+                "Mortgage Account Reference": [76034101, 76034102, 76034103],
                 "Loan Interest Rate": [3.10, 3.25, 3.40],
                 "Current Outstanding Balance": [100000, 120000, 90000],
                 "Policy Completion Date": ["2018-05-01", "2019-06-01", "2020-07-01"],
                 "Latest Property Value": [300000, 320000, 280000],
-            }).to_excel(xl, sheet_name="LoanExtract One", index=False)
+            }).to_excel(xl, sheet_name="LoanExtract One Data", index=False)
+        # Separate funded property extract with float ids (key-join normalisation).
+        with pd.ExcelWriter(fb / "PropertyExtract.xlsx") as xl:
             pd.DataFrame({
-                "Loan ID": [76034101.0, 76034102.0, 76034103.0],  # float ids
+                "Mortgage Account Reference": [76034101.0, 76034102.0, 76034103.0],
                 "Total OSBalance": [100000, 120000, 90000],
-            }).to_excel(xl, sheet_name="PropertyExtract", index=False)
+            }).to_excel(xl, sheet_name="PropertyExtract Data", index=False)
         cls.proj = cls.root / "proj"
         cls.summary = wf.run_operator_workflow(
             input_dir=str(inp), client_name="T", client_id="t",
@@ -280,9 +286,22 @@ class TestPromotionMaterialisesMultiSheetNumericIds(unittest.TestCase):
 
     def test_interest_rate_from_funded_workbook(self):
         ir = self.lineage[self.lineage["canonical_field"] == "current_interest_rate"]
-        self.assertTrue(all("M2L Portfolio" in str(f) for f in ir["source_file"]))
+        self.assertTrue(all("LoanExtract" in str(f) for f in ir["source_file"]))
         for f in ir["source_file"].astype(str):
             self.assertNotIn("Pipeline", f)
+
+    def test_materialisation_debug_artefact(self):
+        # 18e records, per resolved field, that the frame loaded, the column and
+        # key resolved, and rows were assigned (so a real-pack null is debuggable).
+        dbg = json.loads((self.proj / "18e_central_tape_materialisation_debug.json").read_text())
+        by = {d["canonical_field"]: d for d in dbg}
+        for f in ("current_interest_rate", "current_outstanding_balance", "origination_date"):
+            d = by[f]
+            self.assertTrue(d["frame_loaded"], f)
+            self.assertTrue(d["selected_column_present"], f)
+            self.assertTrue(d["loan_key_column_used"], f)
+            self.assertGreater(d["key_intersection"], 0, f)
+            self.assertGreater(d["assigned_non_null"], 0, f)
 
 
 if __name__ == "__main__":
