@@ -172,6 +172,54 @@ document_extraction:
 # is escalated to the user. The defaults only choose a sensible primary when
 # values agree or only one source is present.
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Source reporting-period eligibility (engine/onboarding_agent/source_period_eligibility.py).
+# For monthly MI runs the central lender tape universe must be built from the
+# sources that belong to the run's reporting period only — not from every
+# loan-like key in the input directory. This gates a cumulative current-book file
+# (row-filtered by a Month Run / cut-off column) and excludes future-period
+# pipeline/KFI files. Generic + config-driven; never hard-codes a client filename.
+# ---------------------------------------------------------------------------
+source_period_eligibility:
+  enabled: true
+  # Roles whose eligible rows DEFINE the lender-tape universe (vs enrichment-only).
+  funded_current_book_roles:
+    - current_loan_report
+    - loan_book
+    - servicing_report
+    - current_book
+    - funded_book
+    - warehouse_agreement
+  # Roles that must never define the universe (forward-looking / enrichment).
+  pipeline_roles:
+    - pipeline_report
+    - kfi
+    - application_pipeline
+  # A file dated YYYY-MM-01 may represent the PRIOR month close; set to -1 to
+  # shift a filename-derived period back one month (e.g. 2025_11_01 -> October).
+  filename_delivery_offset_months: 0
+  # Source columns read for an explicit per-row / per-file reporting period. A
+  # cumulative current-book file with one of these is ROW-filtered to the run period.
+  period_columns:
+    - month run
+    - month_run
+    - cut off date
+    - cut_off_date
+    - cutoff date
+    - reporting month
+    - reporting_month
+    - reporting period
+    - reporting_period
+    - report date
+    - as at date
+    - as_at_date
+    - snapshot date
+  # Treat unknown-period sources as eligible (permissive). Set false to require an
+  # inferred period before a source may contribute rows/values.
+  allow_unknown_period: true
+  # Per-file explicit period overrides, e.g. {"LoanExtract One - OMNI_test.csv": "2025-11"}.
+  overrides: {}
+
 source_precedence:
   defaults_by_domain:
     loan:
