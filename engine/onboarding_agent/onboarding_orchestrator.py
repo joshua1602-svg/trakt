@@ -196,6 +196,22 @@ def run_onboarding(
                 item.detected_reporting_date = rep_dates[-1]
     project.field_profiles = profiles
 
+    # --- PART 4b: generic entity-key (cross-sheet linkage) resolution ---
+    # Detect, score and record the row-level join key per (file, sheet) used to
+    # link the same loan/policy entity across funded extracts / KFI / cashflow
+    # sheets (alias + profiling + cross-sheet overlap + safe normalisation). Writes
+    # 04b_entity_key_resolution.{csv,json}; consumed by central-tape promotion.
+    try:
+        from . import entity_key_resolver as _ekr
+        _ekr.resolve_and_write(
+            [i.to_dict() for i in inventory],
+            [p.to_dict() for p in profiles],
+            out_dir,
+            enable_conversion=enable_file_conversion_fallback)
+    except Exception as _exc:  # never block onboarding on key resolution
+        import logging as _logging
+        _logging.getLogger(__name__).warning("entity-key resolution skipped: %s", _exc)
+
     # --- Field scope (registry category + core_canonical, driven by mode) ---
     field_scope = resolve_field_scope(
         str(registry_path), policy, regulatory_reporting_enabled=regulatory_reporting_enabled

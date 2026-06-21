@@ -435,6 +435,7 @@ def _build_lender_tape(
     coverage_rows: Optional[List[Dict[str, Any]]] = None,
     loan_key_hints: Optional[Dict[Tuple[str, str], str]] = None,
     alias_loan_cols: Optional[set] = None,
+    entity_keys: Optional[Dict[Tuple[str, str], Dict[str, Any]]] = None,
     debug_dir: Optional[Path] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]:
     inventory_by_name = {i.get("file_name", ""): i for i in inventory}
@@ -449,6 +450,17 @@ def _build_lender_tape(
 
     loan_key_hints = loan_key_hints or {}
     alias_loan_cols = alias_loan_cols or set()
+    entity_keys = entity_keys or {}
+    from . import entity_key_resolver as _ekr
+
+    def _entity_for(pk: Tuple[str, str]) -> Dict[str, Any]:
+        return entity_keys.get(pk) or {}
+
+    def _join_key(value: Any, rule: str) -> str:
+        # Resolved entity-key normalisation when available; else the generic
+        # numeric/decimal id normalisation (76034101.0 -> 76034101).
+        return _ekr.normalise_key(value, rule) if rule else _norm_key(value)
+
     included = getattr(field_scope, "included_fields", set()) or set()
 
     field_sources = _collect_field_sources(
@@ -496,8 +508,19 @@ def _build_lender_tape(
         if df is None:
             load_debug[(fname, sheet)] = {**dbg, "key_column": "", "key_count": 0}
             continue
-        key = _resolve_key_column(df, (fname, sheet), loan_key_hints, alias_loan_cols)
+        ent = _entity_for((fname, sheet))
+        key = None
+        if ent.get("key_column"):
+            for c in df.columns:
+                if _norm(c) == _norm(ent["key_column"]):
+                    key = c
+                    break
+        if key is None:
+            key = _resolve_key_column(df, (fname, sheet), loan_key_hints, alias_loan_cols)
         dbg["key_column"] = key or ""
+        dbg["key_resolution_basis"] = (ent.get("basis", "entity_key_resolution")
+                                       if ent.get("key_column") else "profile/alias/name")
+        dbg["normalisation_rule"] = ent.get("normalisation_rule", "")
         if key is None:
             load_debug[(fname, sheet)] = {**dbg, "key_count": 0}
             continue
@@ -522,17 +545,23 @@ def _build_lender_tape(
     seen_ids: set = set()
     for pk, df in frames.items():
         key = key_cols[pk]
+        rule = _entity_for(pk).get("normalisation_rule", "")
         idx: Dict[str, Dict[str, Any]] = {}
+        collisions = 0
         for _, row in df.iterrows():
-            lid = _norm_key(row[key])
+            lid = _join_key(row[key], rule)
             if not lid:
                 continue
+            if lid in idx:
+                collisions += 1
             idx[lid] = row.to_dict()
             if lid not in seen_ids:
                 seen_ids.add(lid)
                 loan_ids.append(lid)
         indexes[pk] = idx
-        load_debug.setdefault(pk, {})["key_count"] = len(idx)
+        d = load_debug.setdefault(pk, {})
+        d["key_count"] = len(idx)
+        d["key_collision_count"] = collisions
 
     # Funded/live loan universe: ids appearing in a loan-classified source file
     # (a file whose detected domains include loan). Fall back to all ids.
@@ -720,9 +749,12 @@ def _build_lender_tape(
             "selected_column_present": (
                 _norm(src.column) in {_norm(c) for c in ld.get("df_columns", [])}),
             "loan_key_column_used": ld.get("key_column", ""),
+            "key_resolution_basis": ld.get("key_resolution_basis", ""),
+            "normalisation_rule": ld.get("normalisation_rule", ""),
             "source_key_count": ld.get("key_count", len(src_keys)),
             "central_universe_count": len(universe_keys),
             "key_intersection": len(src_keys & universe_keys),
+            "key_collision_count": ld.get("key_collision_count", 0),
             "assigned_non_null": assigned_by_field.get(canon, 0),
             "in_lender_scope": in_lender_scope(canon),
         })
@@ -876,12 +908,19 @@ def build_central_tapes(
     # guessing from a fixed name list (handles non-standard key headers).
     loan_key_hints = _loan_key_hints(project_dir)
     alias_loan_cols = _alias_loan_columns()
+    # Generic entity-key resolution (04b): the resolved join key + normalisation
+    # rule per (file, sheet) that links the same loan entity across sheets/files.
+    # Consumed for the MI central-tape flow only; regulatory (Annex 2) is untouched.
+    entity_keys: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    if mode in ("mi_only", "mna_dd"):
+        from . import entity_key_resolver as _ekr
+        entity_keys = _ekr.load_resolution(project_dir)
 
     tape, lineage, gaps, summary = _build_lender_tape(
         mapping_candidates, overrides, precedence, enum_decisions, inventory,
         field_scope, registry_fields, mode, coverage_rows=coverage_rows,
         loan_key_hints=loan_key_hints, alias_loan_cols=alias_loan_cols,
-        debug_dir=project_dir,
+        entity_keys=entity_keys, debug_dir=project_dir,
     )
 
     central_dir = Path(run_paths.central_dir)
