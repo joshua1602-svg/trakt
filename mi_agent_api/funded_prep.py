@@ -32,6 +32,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
+from analytics_lib.numeric import coerce_numeric
+
 # Percent-vs-fraction detector (mirrors analytics_lib.buckets median heuristic):
 # an LTV column whose median exceeds this is treated as a percentage (÷100).
 _PERCENT_MEDIAN = 1.5
@@ -68,7 +70,36 @@ _LTV_INPUTS = {
 
 
 def _to_num(s: pd.Series) -> pd.Series:
-    return pd.to_numeric(s, errors="coerce")
+    # Shared deterministic parser (commas / £ / accounting negatives), so LTV
+    # and valuation inputs that arrive as formatted strings parse correctly.
+    return coerce_numeric(s)
+
+
+def _numeric_mi_fields() -> List[str]:
+    """Numeric MI columns to normalise up-front, sourced from config (no hard
+    client values): every ``source_field`` in ``config/mi/buckets.yaml`` plus the
+    LTV derivation inputs. Normalising these once means balance aggregation,
+    ticket_bucket, LTV derivation and valuation parsing all see clean floats."""
+    fields = set()
+    try:
+        from analytics_lib.buckets import load_bucket_config
+        for spec in (load_bucket_config().get("buckets") or {}).values():
+            sf = spec.get("source_field")
+            if sf:
+                fields.add(sf)
+    except Exception:
+        pass
+    for tgt, (num, den) in _LTV_INPUTS.items():
+        fields.update((tgt, num, den))
+    return sorted(fields)
+
+
+def _normalise_numeric_columns(out: pd.DataFrame) -> pd.DataFrame:
+    """Coerce the configured numeric MI columns in place (only those present)."""
+    for col in _numeric_mi_fields():
+        if col in out.columns:
+            out[col] = coerce_numeric(out[col])
+    return out
 
 
 def _to_ratio(s: pd.Series) -> pd.Series:
@@ -120,6 +151,7 @@ def _derive_ltv(out: pd.DataFrame, target: str) -> Dict[str, Any]:
 
 def _derive_source_fields(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str], List[Dict[str, Any]]]:
     out = df.copy()
+    _normalise_numeric_columns(out)
     derived: List[str] = []
     basis: List[Dict[str, Any]] = []
 

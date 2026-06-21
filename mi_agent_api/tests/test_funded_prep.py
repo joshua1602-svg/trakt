@@ -98,6 +98,27 @@ class TestPrepEngine(unittest.TestCase):
         self.assertIn("interest_rate_bucket", df2.columns)
         self.assertIn("ticket_bucket", df2.columns)
 
+    def test_comma_and_currency_formatted_amounts_parse(self):
+        # Real packs store amounts as accounting-formatted strings; a naive
+        # pd.to_numeric coerces these to NaN -> balance sums to 0 and buckets
+        # empty. The shared deterministic parser must handle commas, currency
+        # symbols and accounting negatives.
+        df = pd.DataFrame({
+            "loan_identifier": [1, 2, 3, 4, 5],
+            "current_outstanding_balance":
+                ["111,757.38", "200,000.00", "£1,000,000.00", "(5,000.00)", "81,000"],
+            "current_valuation_amount":
+                ["1,000,000", "2,000,000", "5,000,000", "100,000", "500,000"],
+            "current_interest_rate": ["3.5", "4.0", "5.0", "2.5", "6.0"],
+        })
+        out, rep = prepare_funded_mi_dataset(df)
+        self.assertAlmostEqual(out["current_outstanding_balance"].sum(), 1387757.38, places=2)
+        self.assertIn("ticket_bucket", rep["dimensions_available"])
+        self.assertTrue(out["ticket_bucket"].notna().any())
+        # LTV derives from clean balance/valuation -> ltv_bucket populated.
+        self.assertIn("ltv_bucket", rep["dimensions_available"])
+        self.assertTrue(out["ltv_bucket"].notna().any())
+
 
 # --------------------------------------------------------------------------- #
 # End-to-end: real promoted tape -> prepared dataset -> API stratification
