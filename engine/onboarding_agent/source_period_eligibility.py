@@ -54,19 +54,26 @@ _CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "system" / "onbo
 
 _DEFAULTS: Dict[str, Any] = {
     "enabled": True,
-    # Roles whose (eligible) rows define the central lender tape universe.
+    # Roles whose (eligible) rows define the central lender tape universe, in
+    # precedence order. warehouse_agreement / collateral_report are enrichment by
+    # default and only become universe sources when explicitly configured here.
     "funded_current_book_roles": [
-        "current_loan_report", "loan_book", "servicing_report",
-        "current_book", "funded_book", "warehouse_agreement",
+        "current_loan_report", "funded_book", "current_book",
+        "loan_book", "servicing_report",
     ],
-    # Roles that must never define the universe (enrichment / forward-looking).
+    # Roles that enrich the lender tape (join fields) but never define its rows.
+    "enrichment_roles": ["collateral_report", "warehouse_agreement", "cashflow_report"],
+    # Roles evaluated under the pipeline snapshot cadence (NOT the funded-book
+    # period). These never drive central_lender_tape but stay available for
+    # pipeline_mi / forward_exposure on their own delivery cadence.
     "pipeline_roles": ["pipeline_report", "kfi", "application_pipeline"],
     # A file dated YYYY-MM-01 may represent the PRIOR month close: set to -1 to
     # shift a filename-derived period back one month (e.g. 2025_11_01 -> October).
     "filename_delivery_offset_months": 0,
     # Source columns read for an explicit per-row / per-file reporting period.
     "period_columns": [
-        "month run", "month_run", "cut off date", "cut_off_date", "cutoff date",
+        "month run", "month_run", "as of month", "as_of_month",
+        "cut off date", "cut_off_date", "cutoff date",
         "reporting month", "reporting_month", "reporting period", "reporting_period",
         "report date", "as at date", "as_at_date", "snapshot date",
     ],
@@ -75,6 +82,16 @@ _DEFAULTS: Dict[str, Any] = {
     "allow_unknown_period": True,
     # Per-file explicit overrides: {file_name: "YYYY-MM"}.
     "overrides": {},
+    # Output-domain routing: the same source can be ineligible for one output and
+    # eligible for another (a pipeline file drives pipeline_mi, never the tape).
+    "output_domains": {
+        "central_lender_tape": {"cadence": "funded_book_period"},
+        "pipeline_mi": {"eligible_roles": ["pipeline_report", "kfi", "application_pipeline"],
+                        "cadence": "pipeline_snapshot"},
+        "forward_exposure": {"eligible_roles": ["pipeline_report", "kfi"],
+                             "cadence": "pipeline_snapshot"},
+        "regulatory": {"eligible_roles": [], "cadence": "funded_book_period"},
+    },
 }
 
 
@@ -180,10 +197,11 @@ def _column_periods(df, column: str, run_year: Optional[int]) -> List[str]:
 # --------------------------------------------------------------------------- #
 
 _COLUMNS = [
-    "source_file", "source_sheet", "artefact_role", "inferred_reporting_period",
-    "inferred_cutoff_date", "period_column", "run_id", "run_reporting_period",
-    "is_period_eligible", "is_universe_source", "eligibility_basis",
-    "reason_excluded", "confidence",
+    "source_file", "source_sheet", "artefact_role", "output_domain", "run_id",
+    "run_reporting_period", "inferred_reporting_period", "inferred_cutoff_date",
+    "delivery_date", "cadence_rule", "is_period_eligible", "is_universe_source",
+    "eligibility_basis", "reason_excluded", "confidence", "source_period_column",
+    "source_period_raw_value", "source_period_canonical_value",
 ]
 
 
@@ -192,16 +210,26 @@ class SourcePeriodEligibility:
     source_file: str
     source_sheet: str
     artefact_role: str
-    inferred_reporting_period: str
-    inferred_cutoff_date: str
-    period_column: str
+    output_domain: str
     run_id: str
     run_reporting_period: str
+    inferred_reporting_period: str
+    inferred_cutoff_date: str
+    delivery_date: str
+    cadence_rule: str
     is_period_eligible: bool
     is_universe_source: bool
     eligibility_basis: str
     reason_excluded: str
     confidence: float
+    source_period_column: str
+    source_period_raw_value: str
+    source_period_canonical_value: str
+
+    # Back-compat alias (older callers used ``period_column``).
+    @property
+    def period_column(self) -> str:
+        return self.source_period_column
 
     def as_dict(self) -> Dict[str, Any]:
         return {k: getattr(self, k) for k in _COLUMNS}
@@ -214,55 +242,109 @@ def _cutoff_for_period(period: str) -> str:
     return _rc._month_end_iso(int(m.group(1)), int(m.group(2))) or ""
 
 
+def _column_raw_value(df, column: str, run_period_val: str, run_year: Optional[int]) -> str:
+    """A representative raw cell from the period column — the run-period one when
+    present (so 04c shows e.g. ``October``), else the first non-empty value."""
+    if df is None or not column or column not in df.columns:
+        return ""
+    first = ""
+    for v in df[column].tolist():
+        s = str(v).strip()
+        if not s or s.lower() in ("nan", "nat", "none", "<na>"):
+            continue
+        if not first:
+            first = s
+        if run_period_val and period_of_value(v, run_year) == run_period_val:
+            return s
+    return first
+
+
 def _infer_source_period(
     file_name: str, file_path: str, role: str, detected_reporting_date: str,
-    df, cfg: Dict[str, Any], run_year: Optional[int],
-) -> Tuple[str, str, str, str, float, List[str]]:
-    """Return ``(period, cutoff, period_column, basis, confidence, present_periods)``.
+    df, cfg: Dict[str, Any], run_year: Optional[int], run_period_val: str,
+) -> Dict[str, Any]:
+    """Resolve a source's reporting-period profile (deterministic, never invented).
 
-    ``period`` is the single inferred period (``""`` when several / unknown);
-    ``present_periods`` are all periods carried by a period column (for row-level
-    filtering of a cumulative file).
+    Returns ``{period, cutoff, period_column, basis, confidence, present,
+    raw_value, delivery_date}`` where ``present`` lists all periods carried by a
+    period column (for row-level filtering of a cumulative file).
     """
     overrides = cfg.get("overrides") or {}
     period_cols = cfg.get("period_columns") or []
+    # Delivery date — a filename date (verbatim, no offset) or the profiler date —
+    # used for the pipeline snapshot cadence.
+    fdates = _rc.dates_from_filename(file_name)
+    delivery = fdates[0] if fdates else (_rc.normalize_to_iso(detected_reporting_date) or "")
+
+    def _result(period, basis, conf, present, col="", raw=""):
+        return {"period": period, "cutoff": _cutoff_for_period(period), "period_column": col,
+                "basis": basis, "confidence": conf, "present": present,
+                "raw_value": raw, "delivery_date": delivery}
 
     # 1. Operator / config override (highest priority).
     ov = overrides.get(file_name) or overrides.get(Path(str(file_path)).name)
     if ov:
         p = period_of_value(ov, run_year) or str(ov)[:7]
         if re.fullmatch(r"\d{4}-\d{2}", p):
-            return p, _cutoff_for_period(p), "", "operator_config", 1.0, [p]
+            return _result(p, "operator_config", 1.0, [p], raw=str(ov))
 
     # 2. Period column inside the data (supports row-level cumulative filtering).
     col = _detect_period_column(df, period_cols)
     if col:
         present = _column_periods(df, col, run_year)
+        raw = _column_raw_value(df, col, run_period_val, run_year)
         if len(present) == 1:
-            return present[0], _cutoff_for_period(present[0]), col, "month_run_column", 0.95, present
+            return _result(present[0], "month_run_column", 0.95, present, col, raw)
         if len(present) > 1:
             # Cumulative / multi-period file: no single file period, but rows can
             # be filtered to the run period.
-            return "", "", col, "month_run_column", 0.9, present
+            return _result("", "month_run_column", 0.9, present, col, raw)
         # column exists but unparseable -> fall through to weaker signals
 
     # 3. Filename date (with configurable delivery offset).
-    fdates = _rc.dates_from_filename(file_name)
     if fdates:
         p = _shift_period(fdates[0][:7], int(cfg.get("filename_delivery_offset_months", 0) or 0))
-        return p, _cutoff_for_period(p), "", "filename_date", 0.6, [p]
+        return _result(p, "filename_date", 0.6, [p], raw=fdates[0])
 
     # 4. Period folder in the path.
     fp = _path_period(file_path)
     if fp:
-        return fp, _cutoff_for_period(fp), "", "period_folder", 0.7, [fp]
+        return _result(fp, "period_folder", 0.7, [fp])
 
     # 5. Profiler-detected reporting date.
     iso = _rc.normalize_to_iso(detected_reporting_date)
     if iso:
-        return iso[:7], _cutoff_for_period(iso[:7]), "", "detected_reporting_date", 0.55, [iso[:7]]
+        return _result(iso[:7], "detected_reporting_date", 0.55, [iso[:7]], raw=str(detected_reporting_date))
 
-    return "", "", "", "unknown", 0.0, []
+    return _result("", "unknown", 0.0, [])
+
+
+def _funded_period_match(prof: Dict[str, Any], run_p: str, allow_unknown: bool) -> Tuple[bool, str]:
+    """Funded-book cadence: the source period must equal the run period."""
+    if not run_p:
+        return True, ""
+    present, period = prof["present"], prof["period"]
+    if present:
+        if run_p in present:
+            return True, ""
+        return False, ("future_period" if all(p > run_p for p in present) else "period_mismatch")
+    if period:
+        return (period == run_p, "" if period == run_p
+                else ("future_period" if period > run_p else "period_mismatch"))
+    return (allow_unknown, "" if allow_unknown else "no_period_detected")
+
+
+def _pipeline_cadence_match(prof: Dict[str, Any], run_p: str, allow_unknown: bool) -> Tuple[bool, str]:
+    """Pipeline snapshot cadence: a snapshot delivered AFTER the funded close is
+    valid; do not exclude a pipeline file merely for a later delivery date."""
+    if not run_p:
+        return True, ""
+    dp = (prof["delivery_date"][:7] if prof["delivery_date"] else "") or prof["period"]
+    if not dp:
+        return (allow_unknown, "" if allow_unknown else "no_period_detected")
+    if dp >= run_p:
+        return True, ""
+    return False, "pre_period_pipeline_snapshot"
 
 
 def compute_eligibility(
@@ -273,62 +355,75 @@ def compute_eligibility(
     config_path: str | Path = "",
     input_dir: str | Path = "",
 ) -> List[SourcePeriodEligibility]:
-    """Resolve period eligibility for each source record.
+    """Resolve **output-domain-aware** period eligibility for each source record.
 
-    ``records``: ``[{file_name, file_path, sheet_name, artefact_role,
-    detected_reporting_date, df (optional)}]``.
+    Emits one row per applicable output domain: every source gets a
+    ``central_lender_tape`` row (so exclusions are explicit); pipeline-role
+    sources additionally get ``pipeline_mi`` / ``forward_exposure`` rows under the
+    pipeline snapshot cadence. ``records``: ``[{file_name, file_path, sheet_name,
+    artefact_role, detected_reporting_date, df (optional)}]``.
     """
     cfg = config or load_config(config_path)
-    run_p, run_cut = run_period(run_id, input_dir)
+    run_p, _run_cut = run_period(run_id, input_dir)
     run_year = int(run_p[:4]) if re.fullmatch(r"\d{4}-\d{2}", run_p) else None
     allow_unknown = bool(cfg.get("allow_unknown_period", True))
     universe_roles = {_norm_col(r) for r in (cfg.get("funded_current_book_roles") or [])}
+    enrichment_roles = {_norm_col(r) for r in (cfg.get("enrichment_roles") or [])}
+    pipeline_roles = {_norm_col(r) for r in (cfg.get("pipeline_roles") or [])}
+    domains_cfg = cfg.get("output_domains") or {}
 
     out: List[SourcePeriodEligibility] = []
     for rec in records:
         role = str(rec.get("artefact_role", "") or "")
-        period, cutoff, pcol, basis, conf, present = _infer_source_period(
+        role_n = _norm_col(role)
+        prof = _infer_source_period(
             rec.get("file_name", ""), rec.get("file_path", ""), role,
-            rec.get("detected_reporting_date", ""), rec.get("df"), cfg, run_year)
+            rec.get("detected_reporting_date", ""), rec.get("df"), cfg, run_year, run_p)
 
-        eligible = True
-        reason = ""
-        if run_p:
-            if present:
-                # File carries one or more concrete periods.
-                if run_p in present:
-                    eligible = True
-                else:
-                    eligible = False
-                    future = [p for p in present if p > run_p]
-                    reason = ("future_period" if future and all(p > run_p for p in present)
-                              else "period_mismatch")
-            elif period:
-                eligible = (period == run_p)
-                if not eligible:
-                    reason = "future_period" if period > run_p else "period_mismatch"
+        for dom, dcfg in domains_cfg.items():
+            cadence = str((dcfg or {}).get("cadence", ""))
+            elig_roles = {_norm_col(r) for r in ((dcfg or {}).get("eligible_roles") or [])}
+            if dom == "central_lender_tape":
+                applies = True  # always recorded, so exclusions are explicit
             else:
-                # Unknown period.
-                eligible = allow_unknown
-                reason = "" if allow_unknown else "no_period_detected"
-        # When the run period itself is unknown, nothing can be excluded on period.
+                applies = role_n in elig_roles
+            if not applies:
+                continue
 
-        is_universe = bool(eligible and _norm_col(role) in universe_roles)
-        out.append(SourcePeriodEligibility(
-            source_file=rec.get("file_name", ""),
-            source_sheet=rec.get("sheet_name", ""),
-            artefact_role=role,
-            inferred_reporting_period=period,
-            inferred_cutoff_date=cutoff,
-            period_column=pcol,
-            run_id=run_id,
-            run_reporting_period=run_p,
-            is_period_eligible=eligible,
-            is_universe_source=is_universe,
-            eligibility_basis=basis,
-            reason_excluded=reason,
-            confidence=round(float(conf), 4),
-        ))
+            is_universe = False
+            if dom == "central_lender_tape":
+                if role_n in pipeline_roles:
+                    eligible, reason = False, "pipeline_role_excluded_from_lender_tape"
+                elif role_n in universe_roles or role_n in enrichment_roles:
+                    eligible, reason = _funded_period_match(prof, run_p, allow_unknown)
+                    is_universe = bool(eligible and role_n in universe_roles)
+                else:
+                    eligible, reason = False, "role_not_funded_or_enrichment"
+            elif cadence == "pipeline_snapshot":
+                eligible, reason = _pipeline_cadence_match(prof, run_p, allow_unknown)
+            else:
+                eligible, reason = _funded_period_match(prof, run_p, allow_unknown)
+
+            out.append(SourcePeriodEligibility(
+                source_file=rec.get("file_name", ""),
+                source_sheet=rec.get("sheet_name", ""),
+                artefact_role=role,
+                output_domain=dom,
+                run_id=run_id,
+                run_reporting_period=run_p,
+                inferred_reporting_period=prof["period"],
+                inferred_cutoff_date=prof["cutoff"],
+                delivery_date=prof["delivery_date"],
+                cadence_rule=cadence,
+                is_period_eligible=eligible,
+                is_universe_source=is_universe,
+                eligibility_basis=prof["basis"],
+                reason_excluded=reason,
+                confidence=round(float(prof["confidence"]), 4),
+                source_period_column=prof["period_column"],
+                source_period_raw_value=prof["raw_value"],
+                source_period_canonical_value=prof["cutoff"],
+            ))
     return out
 
 
@@ -355,8 +450,11 @@ def write_artifacts(rows: List[SourcePeriodEligibility], out_dir: str | Path) ->
     return {"csv": str(csv_path), "json": str(json_path)}
 
 
-def load_eligibility(project_dir: str | Path) -> Dict[Tuple[str, str], Dict[str, Any]]:
-    """Load 04c as ``{(file_name, sheet_name): row_dict}``. Empty when absent."""
+def load_eligibility(
+    project_dir: str | Path, output_domain: str = "central_lender_tape",
+) -> Dict[Tuple[str, str], Dict[str, Any]]:
+    """Load the 04c rows for one ``output_domain`` as
+    ``{(file_name, sheet_name): row_dict}``. Empty when absent."""
     p = Path(project_dir) / _ARTEFACT_JSON
     if not p.exists():
         return {}
@@ -366,6 +464,9 @@ def load_eligibility(project_dir: str | Path) -> Dict[Tuple[str, str], Dict[str,
         return {}
     out: Dict[Tuple[str, str], Dict[str, Any]] = {}
     for r in (data.get("rows", []) if isinstance(data, dict) else []):
+        # Back-compat: rows written before output_domain default to the tape domain.
+        if (r.get("output_domain", "central_lender_tape") or "central_lender_tape") != output_domain:
+            continue
         out[(r.get("source_file", ""), r.get("source_sheet", ""))] = r
     return out
 

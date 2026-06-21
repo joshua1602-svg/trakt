@@ -182,15 +182,23 @@ document_extraction:
 # ---------------------------------------------------------------------------
 source_period_eligibility:
   enabled: true
-  # Roles whose eligible rows DEFINE the lender-tape universe (vs enrichment-only).
+  # Roles whose eligible rows DEFINE the lender-tape universe, in precedence order.
+  # warehouse_agreement / collateral_report are enrichment by default and only
+  # become universe sources when explicitly added here.
   funded_current_book_roles:
     - current_loan_report
+    - funded_book
+    - current_book
     - loan_book
     - servicing_report
-    - current_book
-    - funded_book
+  # Roles that ENRICH the lender tape (join fields) but never define its rows.
+  enrichment_roles:
+    - collateral_report
     - warehouse_agreement
-  # Roles that must never define the universe (forward-looking / enrichment).
+    - cashflow_report
+  # Roles evaluated under the pipeline snapshot cadence (NOT the funded-book
+  # period). Never drive central_lender_tape; stay available for pipeline_mi /
+  # forward_exposure on their own delivery cadence.
   pipeline_roles:
     - pipeline_report
     - kfi
@@ -203,6 +211,8 @@ source_period_eligibility:
   period_columns:
     - month run
     - month_run
+    - as of month
+    - as_of_month
     - cut off date
     - cut_off_date
     - cutoff date
@@ -219,6 +229,24 @@ source_period_eligibility:
   allow_unknown_period: true
   # Per-file explicit period overrides, e.g. {"LoanExtract One - OMNI_test.csv": "2025-11"}.
   overrides: {}
+  # Output-domain routing: the same source can be ineligible for central_lender_tape
+  # yet eligible for pipeline_mi / forward_exposure under the pipeline cadence.
+  output_domains:
+    central_lender_tape:
+      cadence: funded_book_period
+    pipeline_mi:
+      eligible_roles: [pipeline_report, kfi, application_pipeline]
+      cadence: pipeline_snapshot
+    forward_exposure:
+      eligible_roles: [pipeline_report, kfi]
+      cadence: pipeline_snapshot
+    regulatory:
+      eligible_roles: []
+      cadence: funded_book_period
+  # Optional per-run expected aggregate current_outstanding_balance checks, e.g.
+  #   expected_balance_checks: {"mi_2025_10": 4200000, "mi_2025_11": 8900000}
+  expected_balance_checks: {}
+  expected_balance_tolerance: 0.02
 
 source_precedence:
   defaults_by_domain:

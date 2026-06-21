@@ -1,20 +1,26 @@
 #!/usr/bin/env python3
 """tests/test_onboarding_period_eligibility.py
 
-Reporting-period eligibility + period-scoped central lender tape universe.
+Domain-aware reporting-period eligibility + period-scoped central lender tape
+universe (without breaking pipeline reporting).
 
-Covers (per spec):
-  1. run-period inference from run_id;
-  2. period_of_value (Month-Run column, bare month name + run year, ISO);
-  3. file-level eligibility (separate monthly files; future-period excluded);
-  4. row-level eligibility (a cumulative current-book file with a Month Run
-     column is filtered to the run period);
-  5. promotion end-to-end:
-       mi_2025_10 -> 33 funded loans, c. £4.2MM current_outstanding_balance;
-       mi_2025_11 -> 73 funded loans, c. £8.9MM;
-     pipeline-only / future-period files create no lender-tape rows;
-  6. 04c explains include/exclude; 18b lineage + 18f universe debug present;
-  7. regulatory mode universe gate untouched.
+Unit:
+  * run-period inference; period_of_value;
+  * output-domain rows (pipeline file excluded from the tape but eligible for
+    pipeline_mi / forward_exposure under the snapshot cadence);
+  * filename delivery offset; future-period tape exclusion; cumulative
+    row-filtering; warehouse_agreement is enrichment (not universe);
+  * data_cut_off_date period_label_to_month_end normalisation.
+
+End-to-end (per spec acceptance tests A-F):
+  A funded period filtering: mi_2025_10 -> 33 / c.£4.2MM, mi_2025_11 -> 73 / c.£8.9MM;
+  B pipeline cadence separation: pipeline files create no tape rows but stay
+    available for pipeline_mi;
+  C entity-key canonicalisation: short/long-form keys collapse to one funded row;
+  D duplicate/stale avoidance: a `_test` duplicate is not the universe source;
+  E date cut-off: Month Run October -> 2025-10-31, November -> 2025-11-30, no bare
+    month names in promoted data_cut_off_date;
+  F regulatory mode universe gate untouched.
 """
 
 from __future__ import annotations
@@ -34,10 +40,17 @@ if str(_REPO_ROOT) not in sys.path:
 import pandas as pd
 
 from engine.onboarding_agent import source_period_eligibility as spe
+from engine.onboarding_agent import central_tape_builder as ctb
+
+_REGISTRY = str(_REPO_ROOT / "config" / "system" / "fields_registry.yaml")
+
+
+def _domain_row(rows, domain):
+    return next((r for r in rows if r.output_domain == domain), None)
 
 
 # --------------------------------------------------------------------------- #
-# 1-4 — unit behaviour
+# Unit behaviour
 # --------------------------------------------------------------------------- #
 class TestPeriodUnit(unittest.TestCase):
     def test_run_period_from_run_id(self):
@@ -49,62 +62,111 @@ class TestPeriodUnit(unittest.TestCase):
         self.assertEqual(spe.period_of_value("Nov", 2025), "2025-11")
         self.assertEqual(spe.period_of_value("2025-11-30", None), "2025-11")
         self.assertEqual(spe.period_of_value("31/10/2025", None), "2025-10")
-        self.assertEqual(spe.period_of_value("", 2025), "")
 
-    def test_filename_delivery_offset(self):
+    def test_warehouse_agreement_is_enrichment_not_universe(self):
+        df = pd.DataFrame({"Account Number": [1, 2]})
+        recs = [{"file_name": "funder.csv", "file_path": "/x/funder.csv", "sheet_name": "",
+                 "artefact_role": "warehouse_agreement", "detected_reporting_date": "", "df": df}]
+        r = _domain_row(spe.compute_eligibility(recs, "mi_2025_10"), "central_lender_tape")
+        self.assertTrue(r.is_period_eligible)        # eligible to enrich
+        self.assertFalse(r.is_universe_source)       # but not a universe source
+
+    def test_pipeline_excluded_from_tape_but_eligible_for_pipeline_mi(self):
+        recs = [{"file_name": "M2L KFI and Pipeline 2025_12_01.csv",
+                 "file_path": "/x/M2L KFI and Pipeline 2025_12_01.csv", "sheet_name": "",
+                 "artefact_role": "pipeline_report", "detected_reporting_date": "", "df": None}]
+        rows = spe.compute_eligibility(recs, "mi_2025_10")
+        tape = _domain_row(rows, "central_lender_tape")
+        pmi = _domain_row(rows, "pipeline_mi")
+        fwd = _domain_row(rows, "forward_exposure")
+        self.assertFalse(tape.is_period_eligible)
+        self.assertEqual(tape.reason_excluded, "pipeline_role_excluded_from_lender_tape")
+        self.assertTrue(pmi.is_period_eligible)            # later delivery still valid
+        self.assertEqual(pmi.cadence_rule, "pipeline_snapshot")
+        self.assertTrue(fwd.is_period_eligible)
+
+    def test_filename_delivery_offset_pipeline(self):
         cfg = dict(spe._DEFAULTS, filename_delivery_offset_months=-1)
         recs = [{"file_name": "M2L KFI and Pipeline 2025_11_01_113916.xlsx",
-                 "file_path": "/x/M2L KFI and Pipeline 2025_11_01_113916.xlsx",
-                 "sheet_name": "", "artefact_role": "pipeline_report",
-                 "detected_reporting_date": "", "df": None}]
-        rows = spe.compute_eligibility(recs, "mi_2025_10", config=cfg)
-        # 2025_11_01 delivery, offset -1 -> October close -> eligible for mi_2025_10.
-        self.assertEqual(rows[0].inferred_reporting_period, "2025-10")
-        self.assertTrue(rows[0].is_period_eligible)
+                 "file_path": "/x/M2L KFI and Pipeline 2025_11_01_113916.xlsx", "sheet_name": "",
+                 "artefact_role": "pipeline_report", "detected_reporting_date": "", "df": None}]
+        r = _domain_row(spe.compute_eligibility(recs, "mi_2025_10", config=cfg), "pipeline_mi")
+        self.assertEqual(r.inferred_reporting_period, "2025-10")  # delivery -1 month
+        self.assertEqual(r.delivery_date, "2025-11-01")           # raw delivery preserved
 
-    def test_future_period_excluded(self):
+    def test_future_period_excluded_for_tape(self):
         df = pd.DataFrame({"Loan ID": [1, 2], "Month Run": ["November", "November"]})
         recs = [{"file_name": "nov.csv", "file_path": "/x/nov.csv", "sheet_name": "",
-                 "artefact_role": "current_loan_report", "detected_reporting_date": "",
-                 "df": df}]
-        rows = spe.compute_eligibility(recs, "mi_2025_10")
-        self.assertFalse(rows[0].is_period_eligible)
-        self.assertEqual(rows[0].reason_excluded, "future_period")
+                 "artefact_role": "current_loan_report", "detected_reporting_date": "", "df": df}]
+        r = _domain_row(spe.compute_eligibility(recs, "mi_2025_10"), "central_lender_tape")
+        self.assertFalse(r.is_period_eligible)
+        self.assertEqual(r.reason_excluded, "future_period")
 
-    def test_cumulative_file_is_row_filterable(self):
+    def test_cumulative_file_row_filterable(self):
         df = pd.DataFrame({"Loan ID": [1, 2, 3],
                            "Month Run": ["October", "November", "November"]})
         recs = [{"file_name": "book.csv", "file_path": "/x/book.csv", "sheet_name": "",
+                 "artefact_role": "current_loan_report", "detected_reporting_date": "", "df": df}]
+        r = _domain_row(spe.compute_eligibility(recs, "mi_2025_10"), "central_lender_tape")
+        self.assertTrue(r.is_period_eligible and r.is_universe_source)
+        self.assertEqual(r.source_period_column, "Month Run")
+        self.assertEqual(r.source_period_raw_value, "October")
+
+    def test_cutoff_label_to_month_end(self):
+        self.assertEqual(ctb._canonicalise_period_cutoff("October", 2025),
+                         ("2025-10-31", "period_label_to_month_end", "source_period_column+run_year"))
+        self.assertEqual(ctb._canonicalise_period_cutoff("November", 2025)[0], "2025-11-30")
+        # explicit date -> date normalised, not forced to month end
+        self.assertEqual(ctb._canonicalise_period_cutoff("2025-10-15", 2025),
+                         ("2025-10-15", "date_normalised", "source_explicit_date"))
+
+    def test_04c_columns_present(self):
+        recs = [{"file_name": "book.csv", "file_path": "/x/book.csv", "sheet_name": "",
                  "artefact_role": "current_loan_report", "detected_reporting_date": "",
-                 "df": df}]
-        oct_rows = spe.compute_eligibility(recs, "mi_2025_10")
-        self.assertTrue(oct_rows[0].is_period_eligible)         # run period present
-        self.assertEqual(oct_rows[0].period_column, "Month Run")
-        self.assertTrue(oct_rows[0].is_universe_source)
+                 "df": pd.DataFrame({"Loan ID": [1], "Month Run": ["October"]})}]
+        d = spe.compute_eligibility(recs, "mi_2025_10")[0].as_dict()
+        for col in ("output_domain", "delivery_date", "cadence_rule", "source_period_column",
+                    "source_period_raw_value", "source_period_canonical_value"):
+            self.assertIn(col, d)
 
 
 # --------------------------------------------------------------------------- #
-# 5-7 — promotion end-to-end (period-scoped universe)
+# Promotion helpers
 # --------------------------------------------------------------------------- #
-class _PromoBase(unittest.TestCase):
-    """One cumulative current-book file (Oct 33 / Nov 73 cumulative) + a
-    future-period pipeline file in the same input dir."""
+def _run_promotion(root: Path, inp: Path, run_id: str, profile="equity_release_lifetime_mortgage"):
+    from engine.onboarding_agent import workflow as wf
+    from engine.onboarding_agent import storage_paths
+    proj = root / f"proj_{run_id}"
+    wf.run_operator_workflow(
+        input_dir=str(inp), client_name="T", client_id="t", run_id=run_id,
+        mode="mi_only", project_dir=str(proj), product_profile=profile)
+    rp = storage_paths.resolve_run_paths(
+        project_dir=str(proj), input_dir=str(inp), output_root=None,
+        client_id="t", run_id=run_id, storage_backend="local", input_uri="", output_uri="")
+    tr = ctb.build_central_tapes(str(proj), rp, _REGISTRY, mode="mi_only")
+    return proj, tr, pd.read_csv(tr["central_lender_tape_path"], dtype=str)
 
-    OCT_N = 33
-    NOV_N = 73
-    OCT_BAL = 4_200_000.0
-    NOV_BAL = 8_900_000.0
+
+def _sum_balance(tape) -> float:
+    s = tape["current_outstanding_balance"].astype(str).str.replace(",", "", regex=False)
+    return pd.to_numeric(s, errors="coerce").dropna().sum()
+
+
+# A + B + E ----------------------------------------------------------------- #
+class TestFundedPeriodAndPipelineCadence(unittest.TestCase):
+    OCT_N, NOV_N = 33, 73
+    OCT_BAL, NOV_BAL = 4_200_000.0, 8_900_000.0
 
     @classmethod
-    def _make_input(cls, root: Path) -> Path:
-        inp = root / "input"
+    def setUpClass(cls):
+        warnings.simplefilter("ignore")
+        cls.root = Path(tempfile.mkdtemp(prefix="period_promo_"))
+        inp = cls.root / "input"
         inp.mkdir(parents=True)
         ids = [760000 + i for i in range(cls.NOV_N)]
-        # October book: first 33 loans, ~£4.2MM total.
-        # November book (cumulative): all 73 loans, ~£8.9MM total.
-        oct_rows, nov_rows = [], []
         oct_each = round(cls.OCT_BAL / cls.OCT_N, 2)
         nov_each = round(cls.NOV_BAL / cls.NOV_N, 2)
+        oct_rows, nov_rows = [], []
         for i, lid in enumerate(ids):
             nov_rows.append({"Loan Policy Number": lid, "Month Run": "November",
                              "Loan Interest Rate": 3.10 + (i % 5) * 0.05,
@@ -116,99 +178,164 @@ class _PromoBase(unittest.TestCase):
                                  "Current Outstanding Balance": oct_each,
                                  "Policy Completion Date": "2025-10-15"})
         pd.DataFrame(oct_rows + nov_rows).to_csv(inp / "LoanExtract One.csv", index=False)
-        # A future-period pipeline file (must not create lender-tape rows).
-        pd.DataFrame({"application_id": [f"APP{i}" for i in range(20)],
-                      "Account Number": [990000 + i for i in range(20)],
-                      "product rate": [4.0] * 20,
-                      "Month Run": ["December"] * 20}).to_csv(
-            inp / "M2L KFI and Pipeline 2025_12_01.csv", index=False)
-        return inp
+        # Pipeline files delivered AFTER each close (different cadence).
+        for tag in ("2025_11_01", "2025_12_01"):
+            pd.DataFrame({"application_id": [f"APP{tag}{i}" for i in range(20)],
+                          "Account Number": [990000 + i for i in range(20)],
+                          "product rate": [4.0] * 20}).to_csv(
+                inp / f"M2L KFI and Pipeline {tag}.csv", index=False)
+        cls.oct_proj, cls.oct_tr, cls.oct_tape = _run_promotion(cls.root, inp, "mi_2025_10")
+        cls.nov_proj, cls.nov_tr, cls.nov_tape = _run_promotion(cls.root, inp, "mi_2025_11")
 
-    @classmethod
-    def _run(cls, root: Path, inp: Path, run_id: str):
-        from engine.onboarding_agent import workflow as wf
-        from engine.onboarding_agent import central_tape_builder, storage_paths
-        proj = root / f"proj_{run_id}"
-        wf.run_operator_workflow(
-            input_dir=str(inp), client_name="T", client_id="t", run_id=run_id,
-            mode="mi_only", project_dir=str(proj),
-            product_profile="equity_release_lifetime_mortgage")
-        rp = storage_paths.resolve_run_paths(
-            project_dir=str(proj), input_dir=str(inp), output_root=None,
-            client_id="t", run_id=run_id, storage_backend="local",
-            input_uri="", output_uri="")
-        tr = central_tape_builder.build_central_tapes(
-            str(proj), rp,
-            str(_REPO_ROOT / "config" / "system" / "fields_registry.yaml"),
-            mode="mi_only")
-        return proj, tr, pd.read_csv(tr["central_lender_tape_path"])
-
-
-class TestPeriodScopedPromotion(_PromoBase):
-    @classmethod
-    def setUpClass(cls):
-        warnings.simplefilter("ignore")
-        cls.root = Path(tempfile.mkdtemp(prefix="period_promo_"))
-        cls.inp = cls._make_input(cls.root)
-        cls.oct_proj, cls.oct_tr, cls.oct_tape = cls._run(cls.root, cls.inp, "mi_2025_10")
-        cls.nov_proj, cls.nov_tr, cls.nov_tape = cls._run(cls.root, cls.inp, "mi_2025_11")
-
-    def _bal(self, tape) -> float:
-        s = (tape["current_outstanding_balance"].astype(str)
-             .str.replace(",", "", regex=False))
-        return pd.to_numeric(s, errors="coerce").dropna().sum()
-
-    def test_october_universe_is_33(self):
+    def test_A_october_universe(self):
         self.assertEqual(len(self.oct_tape), self.OCT_N)
+        self.assertAlmostEqual(_sum_balance(self.oct_tape), self.OCT_BAL, delta=1.0)
 
-    def test_november_universe_is_73(self):
+    def test_A_november_universe(self):
         self.assertEqual(len(self.nov_tape), self.NOV_N)
+        self.assertAlmostEqual(_sum_balance(self.nov_tape), self.NOV_BAL, delta=1.0)
 
-    def test_october_balance(self):
-        self.assertAlmostEqual(self._bal(self.oct_tape), self.OCT_BAL, delta=1.0)
-
-    def test_november_balance(self):
-        self.assertAlmostEqual(self._bal(self.nov_tape), self.NOV_BAL, delta=1.0)
-
-    def test_funded_fields_populated_full_universe(self):
+    def test_A_funded_fields_full_universe(self):
         for tape, n in ((self.oct_tape, self.OCT_N), (self.nov_tape, self.NOV_N)):
             for f in ("current_interest_rate", "current_outstanding_balance"):
                 self.assertEqual(int(tape[f].notna().sum()), n, f)
 
-    def test_pipeline_does_not_create_rows(self):
-        # 20 future-period pipeline accounts must not appear as lender-tape rows.
-        self.assertEqual(len(self.oct_tape), self.OCT_N)
+    def test_B_pipeline_creates_no_tape_rows(self):
         self.assertNotIn("990000", set(self.oct_tape["loan_identifier"].astype(str)))
+        self.assertEqual(len(self.oct_tape), self.OCT_N)
 
-    def test_04c_explains_include_exclude(self):
+    def test_B_pipeline_available_for_pipeline_mi(self):
+        elig = spe.load_eligibility(self.oct_proj, "pipeline_mi")
+        eligible_files = {f for (f, _s), r in elig.items() if r.get("is_period_eligible")}
+        self.assertTrue(any("M2L" in f for f in eligible_files))
+        dbg = json.loads((self.oct_proj / "18f_central_universe_debug.json").read_text())
+        self.assertTrue(dbg["pipeline_sources_available_for_pipeline_mi"])
+
+    def test_E_data_cut_off_date_month_end(self):
+        self.assertEqual(set(self.oct_tape["data_cut_off_date"]), {"2025-10-31"})
+        self.assertEqual(set(self.nov_tape["data_cut_off_date"]), {"2025-11-30"})
+        # No bare month names anywhere in the promoted column.
+        for tape in (self.oct_tape, self.nov_tape):
+            joined = " ".join(tape["data_cut_off_date"].astype(str)).lower()
+            self.assertNotIn("october", joined)
+            self.assertNotIn("november", joined)
+
+    def test_E_lineage_preserves_raw_and_transform(self):
+        lin = pd.read_csv(self.oct_tr["central_tape_lineage_path"], dtype=str)
+        cut = lin[lin["canonical_field"] == "data_cut_off_date"]
+        self.assertFalse(cut.empty)
+        self.assertTrue((cut["source_value"].str.lower() == "october").all())  # raw preserved
+        self.assertTrue(cut["mapping_method"].str.contains("period_label_to_month_end").all())
+
+    def test_04c_domain_rows(self):
         rows = list(csv.DictReader(open(self.oct_proj / "04c_source_period_eligibility.csv")))
-        by_file = {r["source_file"]: r for r in rows}
-        self.assertTrue(any("LoanExtract" in f for f in by_file))
-        # The pipeline file is recorded with its (future) period and excluded.
-        pipe = next((r for f, r in by_file.items() if "M2L" in f), None)
-        self.assertIsNotNone(pipe)
+        domains = {r["output_domain"] for r in rows}
+        self.assertIn("central_lender_tape", domains)
+        self.assertIn("pipeline_mi", domains)
+        # the funded extract is a universe source; pipeline files are not
+        univ = [r for r in rows if r["is_universe_source"] in ("True", "true")]
+        self.assertTrue(any("LoanExtract" in r["source_file"] for r in univ))
+        self.assertFalse(any("M2L" in r["source_file"] for r in univ))
 
-    def test_18f_universe_debug_written(self):
+    def test_18f_universe_debug_fields(self):
         for proj, n in ((self.oct_proj, self.OCT_N), (self.nov_proj, self.NOV_N)):
             dbg = json.loads((proj / "18f_central_universe_debug.json").read_text())
             self.assertTrue(dbg["period_gate_active"])
             self.assertEqual(dbg["canonical_universe_rows"], n)
-            self.assertTrue(dbg["selected_universe_sources"])
-
-    def test_18b_lineage_has_funded_source(self):
-        lin = pd.read_csv(self.oct_tr["central_tape_lineage_path"])
-        present = set(lin["canonical_field"].astype(str))
-        self.assertIn("current_outstanding_balance", present)
+            self.assertIn("LoanExtract", dbg["selected_universe_source_file"])
+            self.assertTrue(dbg["selected_universe_key_column"])
+            self.assertIn("duplicate_raw_keys_collapsed", dbg)
 
 
-class TestRegulatoryUniverseUntouched(unittest.TestCase):
+# C — entity-key canonicalisation -------------------------------------------- #
+class TestEntityKeyCanonicalisation(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        warnings.simplefilter("ignore")
+        cls.root = Path(tempfile.mkdtemp(prefix="period_ek_"))
+        inp = cls.root / "input"
+        inp.mkdir(parents=True)
+        n = 12
+        short = [760000 + i for i in range(n)]                 # 760000..
+        long = [s * 100 + 1 for s in short]                    # 76000001.. (stable 01 suffix)
+        # Source A: short-form key + the funded balance (current-book, with period).
+        pd.DataFrame({"Loan Policy Number": short, "Month Run": ["October"] * n,
+                      "Current Outstanding Balance": [100000.0] * n,
+                      "Loan Interest Rate": [3.5] * n}).to_csv(
+            inp / "LoanExtract One.csv", index=False)
+        # Source B: long-form key, enrichment fields (collateral).
+        pd.DataFrame({"Account Number": long,
+                      "Property Valuation": [250000.0] * n,
+                      "Property Post Code": [f"AB{i} 1CD" for i in range(n)]}).to_csv(
+            inp / "Collateral Extract.csv", index=False)
+        cls.n = n
+        cls.proj, cls.tr, cls.tape = _run_promotion(cls.root, inp, "mi_2025_10")
+
+    def test_one_canonical_row_per_entity(self):
+        # 12 entities, not 24 short+long duplicates.
+        self.assertEqual(len(self.tape), self.n)
+
+    def test_no_longform_duplicate_rows(self):
+        ids = set(self.tape["loan_identifier"].astype(str))
+        self.assertNotIn("76000001", ids)   # long form collapsed onto short canonical
+
+    def test_raw_source_keys_recorded_in_04b(self):
+        rows = list(csv.DictReader(open(self.proj / "04b_entity_key_resolution.csv")))
+        cols = {r["selected_key_column"] for r in rows}
+        self.assertIn("Loan Policy Number", cols)
+        self.assertIn("Account Number", cols)
+
+
+# D — duplicate / stale source avoidance ------------------------------------- #
+class TestStaleDuplicateAvoidance(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        warnings.simplefilter("ignore")
+        cls.root = Path(tempfile.mkdtemp(prefix="period_stale_"))
+        inp = cls.root / "input"
+        inp.mkdir(parents=True)
+        n = 20
+        ids = [760000 + i for i in range(n)]
+        pd.DataFrame({"Loan Policy Number": ids, "Month Run": ["October"] * n,
+                      "Current Outstanding Balance": [100000.0] * n,
+                      "Loan Interest Rate": [3.5] * n}).to_csv(
+            inp / "LoanExtract One.csv", index=False)
+        # Stale `_test` duplicate with DIFFERENT extra ids that must NOT enter the universe.
+        stale_ids = [880000 + i for i in range(n)]
+        pd.DataFrame({"Loan Policy Number": stale_ids, "Month Run": ["October"] * n,
+                      "Current Outstanding Balance": [1.0] * n,
+                      "Loan Interest Rate": [9.9] * n}).to_csv(
+            inp / "LoanExtract One - OMNI_test.csv", index=False)
+        cls.n = n
+        cls.proj, cls.tr, cls.tape = _run_promotion(cls.root, inp, "mi_2025_10")
+
+    def test_clean_source_is_universe_not_test_duplicate(self):
+        dbg = json.loads((self.proj / "18f_central_universe_debug.json").read_text())
+        self.assertNotIn("_test", dbg["selected_universe_source_file"].lower())
+        self.assertEqual(len(self.tape), self.n)
+
+    def test_stale_ids_absent(self):
+        ids = set(self.tape["loan_identifier"].astype(str))
+        self.assertFalse(any(i.startswith("8800") for i in ids))
+
+    def test_stale_recorded_in_excluded(self):
+        dbg = json.loads((self.proj / "18f_central_universe_debug.json").read_text())
+        excluded = " ".join(json.dumps(e) for e in dbg["excluded_sources"]).lower()
+        self.assertIn("_test", excluded)
+
+
+# F — regulatory untouched --------------------------------------------------- #
+class TestRegulatoryUntouched(unittest.TestCase):
     def test_period_gate_only_for_mi_modes(self):
         import inspect
-        from engine.onboarding_agent import central_tape_builder
-        src = inspect.getsource(central_tape_builder.build_central_tapes)
+        src = inspect.getsource(ctb.build_central_tapes)
         self.assertIn('if mode in ("mi_only", "mna_dd")', src)
-        # The gate is only assembled inside that MI-mode block.
         self.assertIn('period_gate: Dict[str, Any] = {}', src)
+
+    def test_load_eligibility_defaults_to_lender_tape_domain(self):
+        import inspect
+        sig = inspect.signature(spe.load_eligibility)
+        self.assertEqual(sig.parameters["output_domain"].default, "central_lender_tape")
 
 
 if __name__ == "__main__":

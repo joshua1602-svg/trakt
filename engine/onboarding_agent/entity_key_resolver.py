@@ -395,6 +395,9 @@ def load_resolution(project_dir: str | Path) -> Dict[Tuple[str, str], Dict[str, 
             "normalisation_rule": r.get("normalisation_rule", _RULE_EXACT),
             "basis": r.get("selected_key_basis", ""),
             "needs_operator_review": bool(r.get("needs_operator_review", False)),
+            "overlap_pct_normalised": float(r.get("overlap_pct_normalised", 0.0) or 0.0),
+            "confidence": float(r.get("confidence", 0.0) or 0.0),
+            "uniqueness_pct": float(r.get("uniqueness_pct", 0.0) or 0.0),
         }
     return out
 
