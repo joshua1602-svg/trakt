@@ -64,8 +64,35 @@ uvicorn mi_agent_api.app:app --reload --port 8000
 # GET http://localhost:8000/health
 ```
 
+### Serving a promoted funded central lender tape
+
+By default the API serves the synthetic demo portfolio. To make the React
+dashboard reflect a **promoted funded central lender tape** from an onboarding
+run instead, point the data source at it (generic by `client_id` / `run_id`):
+
+```bash
+# Option A — explicit tape path
+export MI_AGENT_CENTRAL_TAPE=onboarding_output/client_001/mi_2025_10/output/central/18_central_lender_tape.csv
+
+# Option B — resolve by client_id / run_id under an onboarding output root
+export MI_AGENT_ONBOARDING_OUTPUT_ROOT=onboarding_output
+export MI_AGENT_CLIENT_ID=client_001
+export MI_AGENT_RUN_ID=mi_2025_10
+
+uvicorn mi_agent_api.app:app --reload --port 8000
+# GET /health -> { "dataSourceKind": "funded_central_lender_tape", ... }
+```
+
+The promoted tape is period-scoped, so the dashboard inherently shows the funded
+universe (e.g. 33 loans for `mi_2025_10`, 73 for `mi_2025_11`) — never the old
+2,196-row universe and never pipeline/KFI rows. Resolution priority:
+`MI_AGENT_CENTRAL_TAPE` → `MI_AGENT_ONBOARDING_OUTPUT_ROOT`+client/run →
+`MI_AGENT_DATA_CSV` → synthetic demo.
+
 Configuration (env):
 
+- `MI_AGENT_CENTRAL_TAPE` / `MI_AGENT_ONBOARDING_OUTPUT_ROOT` (+ `MI_AGENT_CLIENT_ID`,
+  `MI_AGENT_RUN_ID`) — serve a promoted funded central lender tape (above).
 - `MI_AGENT_DATA_CSV` — path to a canonical `*_typed.csv` (defaults to the
   bundled `synthetic_demo/**/*canonical_typed.csv`).
 - `MI_AGENT_SEMANTICS` — path to the semantics registry (defaults to
