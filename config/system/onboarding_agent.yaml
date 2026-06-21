@@ -270,6 +270,44 @@ expected_balance_checks:
       tolerance_pct: 0.02
       severity: warning
 
+# ---------------------------------------------------------------------------
+# Central lender tape enrichment + static/default field values
+# (engine/onboarding_agent/central_tape_builder.py). GENERIC + config-driven —
+# no client-specific or currency value is hard-coded in Python.
+#   * mi_enrichment_fields  : canonical fields additionally included in the MI
+#     funded tape beyond registry-category scope, sourced from period-eligible
+#     enrichment roles (e.g. collateral_report) via 04b entity-key linkage. Equity
+#     release MI needs current valuation for LTV / indexed LTV / collateral MI.
+#   * static_field_defaults : values materialised on every funded row when no
+#     source maps the field (priority 2: client/run/product config default).
+#     Optional per-client override under `by_client: {<client_id>: {...}}`.
+#   * jurisdiction_currency / default_jurisdiction / jurisdiction_currency_fields:
+#     priority 3 country -> ISO currency inference fallback.
+# ---------------------------------------------------------------------------
+central_lender_tape:
+  mi_enrichment_fields:
+    - current_valuation_amount
+    - original_valuation_amount
+  static_field_defaults:
+    exposure_currency_denomination:
+      value: GBP
+      method: configured_static
+      source: config/system/onboarding_agent.yaml
+      confidence: 1.0
+    # Example per-client override (generic mechanism, not required):
+    # by_client:
+    #   some_eur_client:
+    #     exposure_currency_denomination: {value: EUR, method: configured_static}
+  jurisdiction_currency:
+    GB: GBP
+    GBR: GBP
+    UK: GBP
+    IE: EUR
+    IRL: EUR
+  jurisdiction_currency_fields:
+    - exposure_currency_denomination
+  default_jurisdiction: GB
+
 source_precedence:
   defaults_by_domain:
     loan:

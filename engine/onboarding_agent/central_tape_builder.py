@@ -103,9 +103,9 @@ _LOAN_KEY_NAMES = [
 
 _LENDER_LINEAGE_COLUMNS = [
     "loan_identifier", "canonical_field", "value", "source_file", "source_sheet",
-    "source_column", "source_value", "mapping_method", "confidence", "domain",
-    "source_precedence_applied", "validation_sources", "alternate_values",
-    "conflict_status", "enum_decision_applied", "review_required", "notes",
+    "source_column", "source_value", "mapping_method", "source_resolution_basis",
+    "confidence", "domain", "source_precedence_applied", "validation_sources",
+    "alternate_values", "conflict_status", "enum_decision_applied", "review_required", "notes",
 ]
 
 _GAP_COLUMNS = [
@@ -411,6 +411,73 @@ def _load_source_precedence_defaults() -> Dict[str, List[str]]:
         return {}
 
 
+def _load_central_tape_config() -> Dict[str, Any]:
+    """Config-driven central-tape enrichment + static defaults (never client-coded).
+
+    ``central_lender_tape``:
+      * ``mi_enrichment_fields``  — canonical fields to additionally include in the
+        MI funded tape beyond the registry-category scope (sourced from
+        period-eligible enrichment roles, e.g. collateral valuation);
+      * ``static_field_defaults`` — ``{canon: {value, method, source, confidence}}``
+        materialised on every funded row when no source maps the field;
+      * ``jurisdiction_currency`` — country -> ISO currency inference fallback;
+      * ``default_jurisdiction``  — country used for the inference fallback.
+    """
+    try:
+        cfg = yaml.safe_load(_CONFIG_PATH.read_text(encoding="utf-8")) or {}
+        block = cfg.get("central_lender_tape", {}) or {}
+        return block if isinstance(block, dict) else {}
+    except Exception:
+        return {}
+
+
+def _resolve_static_field_specs(
+    ct_cfg: Dict[str, Any], registry_fields: Dict[str, Any], client_id: str = "",
+) -> Dict[str, Dict[str, Any]]:
+    """Resolve config-driven static / inferred field values, by priority:
+
+      1. (explicit source field — handled by normal mapping, not here);
+      2. client/run/product config default (``static_field_defaults`` + per-client
+         override) -> ``configured_static``;
+      3. country/jurisdiction inference (``jurisdiction_currency`` + a resolved
+         ``default_jurisdiction``) for currency fields -> ``jurisdiction_inference``;
+      4. (otherwise operator review — left unmapped).
+
+    No client-specific or currency value is hard-coded here; all come from config.
+    """
+    specs: Dict[str, Dict[str, Any]] = {}
+    defaults = dict(ct_cfg.get("static_field_defaults", {}) or {})
+    by_client = (defaults.pop("by_client", {}) or {}) if isinstance(defaults, dict) else {}
+    merged = dict(defaults)
+    if client_id and isinstance(by_client, dict) and isinstance(by_client.get(client_id), dict):
+        merged.update(by_client[client_id])
+
+    for canon, spec in merged.items():
+        if not isinstance(spec, dict) or _is_blank(spec.get("value")):
+            continue
+        specs[canon] = {
+            "value": spec.get("value"),
+            "method": spec.get("method", "configured_static"),
+            "source": spec.get("source", str(_CONFIG_PATH.name)),
+            "confidence": spec.get("confidence", 1.0),
+            "review_required": bool(spec.get("review_required", False)),
+        }
+
+    # Jurisdiction inference fallback for the configured currency fields.
+    jmap = {str(k).upper(): v for k, v in (ct_cfg.get("jurisdiction_currency", {}) or {}).items()}
+    country = str(ct_cfg.get("default_jurisdiction", "") or "").upper()
+    cur_fields = ct_cfg.get("jurisdiction_currency_fields", ["exposure_currency_denomination"]) or []
+    if country and jmap.get(country):
+        for canon in cur_fields:
+            if canon in specs:
+                continue
+            specs[canon] = {
+                "value": jmap[country], "method": "jurisdiction_inference",
+                "source": f"jurisdiction_currency[{country}]", "confidence": 0.8,
+                "review_required": False}
+    return specs
+
+
 def _order_sources(
     canon: str,
     srcs: List[_Source],
@@ -466,6 +533,8 @@ def _build_lender_tape(
     entity_keys: Optional[Dict[Tuple[str, str], Dict[str, Any]]] = None,
     debug_dir: Optional[Path] = None,
     period_gate: Optional[Dict[str, Any]] = None,
+    enrichment_fields: Optional[set] = None,
+    static_field_specs: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]:
     inventory_by_name = {i.get("file_name", ""): i for i in inventory}
     # Case/basename-tolerant file lookup (28a selected_source_file should match the
@@ -490,11 +559,34 @@ def _build_lender_tape(
         # numeric/decimal id normalisation (76034101.0 -> 76034101).
         return _ekr.normalise_key(value, rule) if rule else _norm_key(value)
 
-    included = getattr(field_scope, "included_fields", set()) or set()
+    enrichment_fields = enrichment_fields or set()
+    static_field_specs = static_field_specs or {}
+    # MI funded tape may include configured collateral-enrichment fields (e.g.
+    # current_valuation_amount) beyond the registry-category scope; they are sourced
+    # from period-eligible enrichment roles via entity-key linkage.
+    included = (getattr(field_scope, "included_fields", set()) or set()) | set(enrichment_fields)
 
     field_sources = _collect_field_sources(
         mapping_candidates, overrides, inventory_by_name, included
     )
+
+    # Lower-level source-selection basis per (canon, file, column) from the
+    # deterministic mapping candidates — so the lineage can show the real
+    # alias/normalized basis even when the 28a forced source carries the synthetic
+    # ``target_first_resolved`` method.
+    cand_basis: Dict[Tuple[str, str, str], str] = {}
+    for m in mapping_candidates or []:
+        canon = m.get("candidate_canonical_field", "")
+        f = m.get("source_file", "")
+        c = m.get("source_column", "")
+        meth = m.get("method", "")
+        if canon and f and c and meth:
+            cand_basis.setdefault((canon, f, _norm(c)), meth)
+
+    def _resolution_basis(canon: str, src: "_Source") -> str:
+        if src.method and src.method != "target_first_resolved":
+            return src.method
+        return cand_basis.get((canon, src.file_name, _norm(src.column)), "target_first_28a_selected")
 
     # Restrict to loan-level domains for the lender tape.
     def in_lender_scope(canon: str) -> bool:
@@ -776,6 +868,10 @@ def _build_lender_tape(
     # when they have no per-row source (they materialise below).
     extra_cols = {c for c in tape_constants if c != "loan_identifier"}
     extra_cols |= {c for c in tape_derivations if c != "loan_identifier"}
+    # Configured static-default fields (e.g. exposure_currency_denomination) are
+    # in-scope columns materialised on every funded row even with no per-row source.
+    extra_cols |= {c for c in static_field_specs
+                   if c != "loan_identifier" and (not included or c in included)}
     canonical_order = sorted(
         (set(field_sources.keys()) | extra_cols) - {"loan_identifier"})
     enum_decisions = enum_decisions or {}
@@ -875,6 +971,15 @@ def _build_lender_tape(
             row[canon] = materialised_value
             populated_cells += 1
             assigned_by_field[canon] = assigned_by_field.get(canon, 0) + 1
+            # Promotion method: a field resolved under the target-first (28a)
+            # decision contract is labelled target_first_resolved consistently
+            # across monthly period-eligible sources, even when a period fallback
+            # supplied the value. The lower-level source-selection basis (alias /
+            # normalized / …, plus any cut-off transform) is preserved separately.
+            under_target_first = canon in forced
+            basis = _resolution_basis(canon, primary)
+            if cutoff_method:
+                basis = f"{basis}+{cutoff_method}"
             lineage.append({
                 "loan_identifier": lid,
                 "canonical_field": canon,
@@ -883,8 +988,8 @@ def _build_lender_tape(
                 "source_sheet": primary.sheet,
                 "source_column": primary.column,
                 "source_value": primary_value,
-                "mapping_method": (f"{primary.method}+{cutoff_method}"
-                                   if cutoff_method else primary.method),
+                "mapping_method": "target_first_resolved" if under_target_first else primary.method,
+                "source_resolution_basis": basis,
                 "confidence": round(primary.confidence, 3),
                 "domain": domain,
                 "source_precedence_applied": precedence_applied,
@@ -910,7 +1015,8 @@ def _build_lender_tape(
                 lineage.append({
                     "loan_identifier": lid, "canonical_field": canon, "value": v,
                     "source_file": "", "source_sheet": "", "source_column": src_field,
-                    "source_value": v, "mapping_method": "product_profile_proxy",
+                    "source_value": v, "mapping_method": "target_first_resolved",
+                    "source_resolution_basis": "product_profile_proxy",
                     "confidence": 0.9, "domain": dc.LOAN,
                     "source_precedence_applied": False, "validation_sources": "",
                     "alternate_values": "", "conflict_status": "derived",
@@ -923,12 +1029,37 @@ def _build_lender_tape(
                 lineage.append({
                     "loan_identifier": lid, "canonical_field": canon, "value": val,
                     "source_file": "", "source_sheet": "", "source_column": "",
-                    "source_value": val, "mapping_method": "run_context_inference",
+                    "source_value": val, "mapping_method": "target_first_resolved",
+                    "source_resolution_basis": "run_context_inference",
                     "confidence": 0.9, "domain": dc.LOAN,
                     "source_precedence_applied": False, "validation_sources": "",
                     "alternate_values": "", "conflict_status": "inferred",
                     "enum_decision_applied": "", "review_required": False,
                     "notes": "inferred/defaulted (target-first resolved)"})
+        # Configured static / jurisdiction-inferred defaults (e.g.
+        # exposure_currency_denomination = GBP) materialise on every funded row
+        # when no source mapped the field. Lineage records method + source.
+        for canon, spec in static_field_specs.items():
+            if included and canon not in included:
+                continue
+            if not _is_blank(row.get(canon)):
+                continue
+            val = spec.get("value", "")
+            if _is_blank(val):
+                continue
+            row[canon] = val
+            populated_cells += 1
+            lineage.append({
+                "loan_identifier": lid, "canonical_field": canon, "value": val,
+                "source_file": spec.get("source", ""), "source_sheet": "",
+                "source_column": "", "source_value": val,
+                "mapping_method": spec.get("method", "configured_static"),
+                "source_resolution_basis": spec.get("method", "configured_static"),
+                "confidence": float(spec.get("confidence", 1.0) or 1.0), "domain": dc.LOAN,
+                "source_precedence_applied": False, "validation_sources": "",
+                "alternate_values": "", "conflict_status": "configured",
+                "enum_decision_applied": "", "review_required": bool(spec.get("review_required", False)),
+                "notes": f"{spec.get('method', 'configured_static')} from {spec.get('source', 'config')}"})
         tape.append(row)
 
     # Required-domain coverage gaps: representative fields that never mapped.
@@ -944,6 +1075,42 @@ def _build_lender_tape(
                     ["map_source_column", "confirm_field_absent"],
                     domain == dc.LOAN and mode in ("regulatory_mi", "warehouse_securitisation"),
                 )
+
+    # Enrichment-field diagnostics (e.g. current_valuation_amount sourced from a
+    # linked collateral report): record whether the in-scope enrichment field found
+    # a period-eligible source, its lineage, or needs operator review with the
+    # candidate raw columns shown — never a silently-null column.
+    enrichment_diagnostics: List[Dict[str, Any]] = []
+    for canon in sorted(enrichment_fields):
+        if included and canon not in included:
+            continue
+        srcs = field_sources.get(canon, [])
+        populated = assigned_by_field.get(canon, 0)
+        if populated:
+            s0 = srcs[0] if srcs else None
+            enrichment_diagnostics.append({
+                "canonical_field": canon, "status": "populated_from_enrichment",
+                "populated_rows": populated, "universe_rows": len(loan_ids),
+                "source_file": s0.file_name if s0 else "",
+                "source_sheet": s0.sheet if s0 else "",
+                "source_column": s0.column if s0 else "",
+                "entity_key_join_basis": _entity_for(_play_key(s0)).get("basis", "") if s0 else ""})
+        else:
+            candidates = sorted({f"{s.file_name}:{s.column}" for s in srcs})
+            enrichment_diagnostics.append({
+                "canonical_field": canon,
+                "status": "needs_operator_review" if candidates else "no_period_eligible_source",
+                "populated_rows": 0, "universe_rows": len(loan_ids),
+                "candidate_source_columns": candidates})
+            new_gap(
+                "medium", dc.COLLATERAL, canon, "", "",
+                "enrichment_field_unmapped" if not candidates else "enrichment_field_needs_review",
+                (f"Enrichment field '{canon}' has no period-eligible source; "
+                 "central tape column would be null."
+                 if not candidates else
+                 f"Enrichment field '{canon}' has candidate sources {candidates} but no value "
+                 "joined to the funded universe; operator review."),
+                ["map_collateral_source_column", "confirm_field_absent"], False)
 
     # Per-field materialisation diagnostics for the RESOLVED (28a-selected)
     # source-mapped fields — so a real-pack run that still produces nulls reveals
@@ -1008,6 +1175,7 @@ def _build_lender_tape(
             [e.get("source_file", "") for e in pipeline_excluded],
         # Filled in by build_central_tapes from the pipeline_mi 04c domain.
         "pipeline_sources_available_for_pipeline_mi": [],
+        "enrichment_field_diagnostics": enrichment_diagnostics,
     }
 
     summary = {
@@ -1196,11 +1364,24 @@ def build_central_tapes(
                                  for i in inventory},
             }
 
+    # Config-driven MI enrichment fields + static/inferred field defaults
+    # (collateral valuation enrichment; configured currency). MI modes only;
+    # regulatory/Annex 2 keeps the legacy generic tape untouched.
+    enrichment_fields: set = set()
+    static_field_specs: Dict[str, Dict[str, Any]] = {}
+    if mode in ("mi_only", "mna_dd"):
+        ct_cfg = _load_central_tape_config()
+        enrichment_fields = set(ct_cfg.get("mi_enrichment_fields", []) or [])
+        static_field_specs = _resolve_static_field_specs(
+            ct_cfg, registry_fields,
+            client_id=getattr(run_paths, "client_id", "") or run_summary.get("client_id", ""))
+
     tape, lineage, gaps, summary = _build_lender_tape(
         mapping_candidates, overrides, precedence, enum_decisions, inventory,
         field_scope, registry_fields, mode, coverage_rows=coverage_rows,
         loan_key_hints=loan_key_hints, alias_loan_cols=alias_loan_cols,
         entity_keys=entity_keys, debug_dir=project_dir, period_gate=period_gate,
+        enrichment_fields=enrichment_fields, static_field_specs=static_field_specs,
     )
 
     central_dir = Path(run_paths.central_dir)
