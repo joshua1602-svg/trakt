@@ -178,12 +178,29 @@ def prepare_funded_mi_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str,
     missing: List[Dict[str, Any]] = []
     basis_by_target = {b["target"]: b for b in ltv_basis}
 
+    def _has_values(col: str) -> bool:
+        # A dimension is only usable if its column exists AND has at least one
+        # non-blank value (a bucket can exist but be all-NaN when values fall
+        # outside the configured edges — that is NOT a usable stratification).
+        return col in out.columns and out[col].notna().any() and (
+            out[col].astype(str).str.strip() != "").any()
+
     for dim, spec in _DIM_SPEC.items():
-        if dim in cols:
+        if _has_values(dim):
             available.append(dim)
             continue
         kind = spec["kind"]
-        if kind == "bucket_ltv":
+        if dim in cols:
+            # Column was produced but is entirely empty (e.g. LTV out of bucket
+            # range / a scale mismatch) — report it honestly, not as available.
+            detail = "column present but all rows blank after preparation"
+            if kind == "bucket_ltv":
+                b = basis_by_target.get(spec["target"], {})
+                detail = (f"{spec['target']} bucketed to no value for any row "
+                          f"(check scale/edges; basis={b.get('method')})")
+            missing.append({"dimension": dim, "reason": "no_values_after_preparation",
+                            "detail": detail})
+        elif kind == "bucket_ltv":
             b = basis_by_target.get(spec["target"], {})
             missing.append({"dimension": dim, "reason": "derivation_inputs_missing",
                             "detail": b.get("detail", "LTV inputs unavailable")})
