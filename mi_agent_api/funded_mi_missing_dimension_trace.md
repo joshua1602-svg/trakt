@@ -1,19 +1,21 @@
-# Funded MI — missing-dimension trace (client_001/mi_2025_10 (rich pack))
+# Funded MI — missing-dimension trace (client_001/mi_2026_01)
 
-raw source → mapping → period eligibility → central tape → MI prep → React.
+**Framing.** MI availability is decided by the active MI target contract + MI enrichment configuration (`central_lender_tape.mi_enrichment_fields`) and the source fields actually present — NOT by the registry category/layer. A field that is regulatory/collateral in the registry can still be an MI dimension (this is MI contract enrichment using source fields that may also be relevant to regulatory reporting — not contract leakage).
+
+raw source → mapping → MI contract/scope → period eligibility → entity-key join → central tape → MI prep → React health.
 
 | canonical_field | dimension | source file:col | period_eligible | in_enrich_cfg | in_tape (non-null) | dim_available | status | reason |
 |---|---|---|---|---|---|---|---|---|
-| `youngest_borrower_age` | `age_bucket` | LoanExtract One.csv:Youngest Age | True | True | True (33) | True | **available** | `promoted_and_dimension_available` |
-| `geographic_region_obligor` | `geographic_region_obligor` | :— | None | True | True (33) | True | **available** | `promoted_and_dimension_available` |
-| `collateral_geography` | `geographic_region_obligor` | Collateral Extract.csv:property region | True | True | True (33) | True | **available** | `promoted_and_dimension_available` |
-| `current_valuation_amount` | `ltv_bucket` | :— | None | True | True (33) | True | **available** | `promoted_and_dimension_available` |
-| `current_loan_to_value` | `ltv_bucket` | :— | None | True | False (0) | True | **available** | `dimension_available_via_derivation` |
-| `original_valuation_amount` | `original_ltv_bucket` | :— | None | True | True (33) | True | **available** | `promoted_and_dimension_available` |
-| `original_principal_balance` | `original_ltv_bucket` | LoanExtract One.csv:Original Principal Balance | True | True | True (33) | True | **available** | `promoted_and_dimension_available` |
-| `original_loan_to_value` | `original_ltv_bucket` | :— | None | True | False (0) | True | **available** | `dimension_available_via_derivation` |
-| `origination_channel` | `origination_channel` | :— | None | True | True (33) | True | **available** | `promoted_and_dimension_available` |
-| `broker_channel` | `origination_channel` | LoanExtract One.csv:broker | True | True | True (33) | True | **available** | `promoted_and_dimension_available` |
+| `youngest_borrower_age` | `age_bucket` | :— | None | True | False (0) | False | **unavailable** | `raw_not_found` |
+| `geographic_region_obligor` | `geographic_region_obligor` | :— | None | True | False (0) | True | **available** | `dimension_available` |
+| `collateral_geography` | `geographic_region_obligor` | monthly_collateral_report.csv:collateral_region | True | True | True (8) | True | **available** | `promoted_and_dimension_available` |
+| `current_valuation_amount` | `ltv_bucket` | :— | None | True | True (8) | True | **available** | `promoted_and_dimension_available` |
+| `current_loan_to_value` | `ltv_bucket` | :— | None | True | True (8) | True | **available** | `promoted_and_dimension_available` |
+| `original_valuation_amount` | `original_ltv_bucket` | :— | None | True | False (0) | False | **unavailable** | `raw_not_found` |
+| `original_principal_balance` | `original_ltv_bucket` | monthly_loan_report.csv:original_principal_balance | True | True | True (8) | False | **promoted** | `in_central_tape` |
+| `original_loan_to_value` | `original_ltv_bucket` | :— | None | True | False (0) | False | **unavailable** | `derivation_inputs_missing` |
+| `origination_channel` | `origination_channel` | :— | None | True | False (0) | False | **unavailable** | `raw_not_found` |
+| `broker_channel` | `origination_channel` | :— | None | True | False (0) | False | **unavailable** | `raw_not_found` |
 
 ## Reason codes
 - `raw_not_found` — no source column maps to the canonical field.

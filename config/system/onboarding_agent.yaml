@@ -303,6 +303,14 @@ central_lender_tape:
     # Origination channel / broker stratification.
     - origination_channel
     - broker_channel
+  # Pipeline-only enrichment (explicit). Pipeline records NEVER create funded rows,
+  # but these configured attributes may ENRICH an existing funded loan when the
+  # pipeline source is period-eligible (pipeline cadence) and entity-key matched.
+  # Funded/collateral sources take precedence over pipeline for the same field.
+  allow_pipeline_enrichment: true
+  pipeline_enrichment_fields:
+    - broker_channel
+    - origination_channel
   static_field_defaults:
     exposure_currency_denomination:
       value: GBP

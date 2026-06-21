@@ -100,10 +100,22 @@ not just thin KPIs. `/health` reports `dataSourceKind`
 `preparationApplied`, `dimensionsAvailable`, `missingDimensions`. See
 `funded_mi_data_path_report.md`.
 
-**Enrichment + LTV derivation.** Raw client fields beyond the core funded set
+**Enrichment + LTV derivation.** MI availability is decided by the **active MI
+target contract + MI enrichment configuration** (`central_lender_tape.mi_enrichment_fields`)
+and the source fields actually present — not by the registry category/layer. A
+field tagged regulatory/collateral in the registry can still be an MI dimension
+(MI contract enrichment using source fields that may also matter for regulatory
+reporting — not contract leakage). Raw client fields beyond the core funded set
 (borrower age, geography, broker/channel, original advance/valuation) are promoted
-into the funded tape via `central_lender_tape.mi_enrichment_fields` + 04b
-entity-key linkage (collateral/loan), so they become MI dimensions. LTV is a
+into the funded tape via `mi_enrichment_fields` + 04b entity-key linkage
+(collateral/loan), so they become MI dimensions. Region/channel are resolved as
+groups (obligor/collateral/`collateral_geography`; origination/broker), so a query
+"by region" resolves regardless of which field the source supplied.
+**Pipeline-only enrichment** is explicit and config-gated
+(`allow_pipeline_enrichment` + `pipeline_enrichment_fields`): a pipeline snapshot
+NEVER creates funded rows, but a configured pipeline attribute (e.g. broker) may
+enrich an existing funded loan when entity-key matched and period-eligible
+(funded/collateral sources take precedence). LTV is a
 product rule: `current_loan_to_value` / `original_loan_to_value` prefer an explicit
 source value, otherwise are **derived** (`current_outstanding_balance /
 current_valuation_amount`, `original_principal_balance / original_valuation_amount`)

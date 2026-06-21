@@ -138,7 +138,14 @@ def _classify(canon, dim, *, mapped, src_file, period_eligible, in_tape, non_nul
 
 def render_markdown(rows: List[Dict[str, Any]], *, run_id: str = "", client_id: str = "") -> str:
     head = (f"# Funded MI — missing-dimension trace ({client_id}/{run_id})\n\n"
-            "raw source → mapping → period eligibility → central tape → MI prep → React.\n\n"
+            "**Framing.** MI availability is decided by the active MI target contract + "
+            "MI enrichment configuration (`central_lender_tape.mi_enrichment_fields`) and the "
+            "source fields actually present — NOT by the registry category/layer. A field that "
+            "is regulatory/collateral in the registry can still be an MI dimension (this is MI "
+            "contract enrichment using source fields that may also be relevant to regulatory "
+            "reporting — not contract leakage).\n\n"
+            "raw source → mapping → MI contract/scope → period eligibility → entity-key join → "
+            "central tape → MI prep → React health.\n\n"
             "| canonical_field | dimension | source file:col | period_eligible | "
             "in_enrich_cfg | in_tape (non-null) | dim_available | status | reason |\n"
             "|---|---|---|---|---|---|---|---|---|\n")

@@ -37,7 +37,11 @@ import pandas as pd
 _PERCENT_MEDIAN = 1.5
 
 # Core funded stratification dimensions and how each is sourced.
-#   kind: bucket_ltv | bucket | bucket_derived | derived | raw
+#   kind: bucket_ltv | bucket | bucket_derived | derived | group
+# A ``group`` dimension is satisfied by ANY of several interchangeable source
+# fields (region may arrive as obligor / collateral / collateral_geography;
+# channel as origination_channel / broker_channel). The first present is aliased
+# onto the catalogue ``primary`` so MI queries resolve regardless of which arrived.
 _DIM_SPEC: Dict[str, Dict[str, Any]] = {
     "ltv_bucket": {"kind": "bucket_ltv", "target": "current_loan_to_value"},
     "original_ltv_bucket": {"kind": "bucket_ltv", "target": "original_loan_to_value"},
@@ -46,8 +50,13 @@ _DIM_SPEC: Dict[str, Dict[str, Any]] = {
     "age_bucket": {"kind": "bucket", "source": "youngest_borrower_age"},
     "time_on_book_bucket": {"kind": "bucket_derived", "source": "months_on_book"},
     "vintage_year": {"kind": "derived", "source": "vintage_year"},
-    "geographic_region_obligor": {"kind": "raw", "source": "geographic_region_obligor"},
-    "origination_channel": {"kind": "raw", "source": "origination_channel"},
+    "geographic_region_obligor": {
+        "kind": "group", "primary": "geographic_region_obligor",
+        "sources": ["geographic_region_obligor", "geographic_region_collateral",
+                    "collateral_geography"]},
+    "origination_channel": {
+        "kind": "group", "primary": "origination_channel",
+        "sources": ["origination_channel", "broker_channel"]},
 }
 CORE_FUNDED_DIMENSIONS = list(_DIM_SPEC.keys())
 
@@ -152,6 +161,18 @@ def prepare_funded_mi_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str,
         issues = [{"bucket": "*", "code": "engine_error", "severity": "error",
                    "detail": str(exc)}]
 
+    # Group dimensions: alias the first present interchangeable source onto the
+    # catalogue primary so MI queries (e.g. "by region") resolve regardless of
+    # which region/channel field the source supplied (obligor vs collateral, etc.).
+    group_aliases: List[str] = []
+    for dim, spec in _DIM_SPEC.items():
+        if spec.get("kind") != "group" or spec["primary"] in out.columns:
+            continue
+        alt = next((s for s in spec["sources"] if s in out.columns), None)
+        if alt:
+            out[spec["primary"]] = out[alt]
+            group_aliases.append(f"{spec['primary']}<-{alt}")
+
     cols = set(out.columns)
     available: List[str] = []
     missing: List[Dict[str, Any]] = []
@@ -174,15 +195,16 @@ def prepare_funded_mi_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str,
                       if reason == "derivation_inputs_missing"
                       else f"source field {src!r} not in dataset")
             missing.append({"dimension": dim, "reason": reason, "detail": detail})
-        else:  # raw
+        else:  # group (region / channel) — none of the interchangeable sources present
             missing.append({"dimension": dim, "reason": "not_in_central_tape",
-                            "detail": f"source field {spec['source']!r} not in dataset"})
+                            "detail": f"none of {spec['sources']} in dataset"})
 
     report = {
         "preparation_applied": True,
         "derived_fields": derived,
         "ltv_derivation_basis": ltv_basis,
         "buckets_applied": {k: v for k, v in applied.items() if v},
+        "group_aliases": group_aliases,
         "dimensions_available": sorted(available),
         "missing_dimensions": missing,
         "bucket_errors": [i for i in (issues or []) if i.get("severity") == "error"][:20],

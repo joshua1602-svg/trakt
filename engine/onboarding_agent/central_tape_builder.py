@@ -618,6 +618,11 @@ def _build_lender_tape(
     run_year = period_gate.get("run_year")
     pipeline_roles: set = period_gate.get("pipeline_roles", set()) or set()
     role_by_file: Dict[str, str] = period_gate.get("role_by_file", {}) or {}
+    # Pipeline-only enrichment (explicit, config-gated): period-eligible pipeline
+    # snapshots may ENRICH existing funded loans (entity-key matched) without
+    # creating funded rows, serving ONLY the configured pipeline_enrichment_fields.
+    pipeline_enrichment_pks: set = period_gate.get("pipeline_enrichment_pks", set()) or set()
+    pipeline_enrichment_fields: set = period_gate.get("pipeline_enrichment_fields", set()) or set()
 
     def _is_pipeline_role(classification: str) -> bool:
         return spe._norm_col(classification) in pipeline_roles
@@ -695,14 +700,20 @@ def _build_lender_tape(
         dbg["is_universe_source"] = bool((elig or {}).get("is_universe_source"))
         dbg["period_eligible"] = bool((elig or {}).get("is_period_eligible", True))
         if gate_active and elig is not None and not elig.get("is_period_eligible", True):
-            excluded_sources.append({
-                "source_file": fname, "source_sheet": sheet, "artefact_role": _role_for(fname),
-                "inferred_reporting_period": elig.get("inferred_reporting_period", ""),
-                "reason": elig.get("reason_excluded", "period_mismatch"),
-                "row_count": int(df.shape[0])})
-            load_debug[(fname, sheet)] = {**dbg, "key_column": "", "key_count": 0,
-                                          "excluded": True}
-            continue
+            if (fname, sheet) in pipeline_enrichment_pks:
+                # Load as enrichment-only: never enters the universe; serves only
+                # the configured pipeline_enrichment_fields to matched funded loans.
+                dbg["enrichment_only"] = True
+                dbg["is_universe_source"] = False
+            else:
+                excluded_sources.append({
+                    "source_file": fname, "source_sheet": sheet, "artefact_role": _role_for(fname),
+                    "inferred_reporting_period": elig.get("inferred_reporting_period", ""),
+                    "reason": elig.get("reason_excluded", "period_mismatch"),
+                    "row_count": int(df.shape[0])})
+                load_debug[(fname, sheet)] = {**dbg, "key_column": "", "key_count": 0,
+                                              "excluded": True}
+                continue
         ent = _entity_for((fname, sheet))
         key = None
         if ent.get("key_column"):
@@ -752,6 +763,7 @@ def _build_lender_tape(
         ld = load_debug.setdefault(pk, {})
         period_col = ld.get("period_column", "")
         actual_period_col = _actual_col(pk, period_col) if period_col else ""
+        enrichment_only = bool(ld.get("enrichment_only"))
         idx: Dict[str, Dict[str, Any]] = {}
         collisions = 0
         rows_raw = 0
@@ -770,7 +782,9 @@ def _build_lender_tape(
             if lid in idx:
                 collisions += 1
             idx[lid] = row.to_dict()
-            all_ids.add(lid)
+            # Enrichment-only (pipeline) frames never seed the funded universe.
+            if not enrichment_only:
+                all_ids.add(lid)
         indexes[pk] = idx
         ld["key_count"] = len(idx)
         ld["key_collision_count"] = collisions
@@ -910,7 +924,9 @@ def _build_lender_tape(
                 canon, field_sources[canon], precedence, registry_fields, precedence_defaults
             )
             srcs = [s for s in srcs
-                    if _play_key(s) in indexes and lid in indexes[_play_key(s)]]
+                    if _play_key(s) in indexes and lid in indexes[_play_key(s)]
+                    and (not load_debug.get(_play_key(s), {}).get("enrichment_only")
+                         or canon in pipeline_enrichment_fields)]
             if not srcs:
                 continue
             domain = next(iter(dc.field_domains(canon, registry_fields.get(canon, {})) & _LENDER_DOMAINS), dc.LOAN)
@@ -1380,6 +1396,15 @@ def build_central_tapes(
         static_field_specs = _resolve_static_field_specs(
             ct_cfg, registry_fields,
             client_id=getattr(run_paths, "client_id", "") or run_summary.get("client_id", ""))
+        # Pipeline-only enrichment (explicit, config-gated): configured pipeline
+        # attributes may enrich existing funded loans (entity-key matched, period
+        # eligible under the pipeline cadence) without creating funded rows.
+        if period_gate and ct_cfg.get("allow_pipeline_enrichment"):
+            pe_fields = set(ct_cfg.get("pipeline_enrichment_fields", []) or []) & enrichment_fields
+            pe_pks = {(f, s) for (f, s), r in spe.load_eligibility(project_dir, "pipeline_mi").items()
+                      if r.get("is_period_eligible")}
+            period_gate["pipeline_enrichment_pks"] = pe_pks
+            period_gate["pipeline_enrichment_fields"] = pe_fields
 
     tape, lineage, gaps, summary = _build_lender_tape(
         mapping_candidates, overrides, precedence, enum_decisions, inventory,
