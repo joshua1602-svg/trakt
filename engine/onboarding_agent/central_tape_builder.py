@@ -654,6 +654,28 @@ def _build_lender_tape(
             fallbacks = [s for s in field_sources.get(canon, [])
                          if (s.file_name, s.sheet or "") != (src.file_name, src.sheet or "")
                          and not _is_pipeline_role(s.classification)]
+            # As-of enrichment across reporting months: a configured enrichment
+            # field (e.g. current_valuation_amount) may be supplied by SEVERAL
+            # same-role extracts delivered in different months (an October and a
+            # November PropertyExtract). 28a selects one authoritative source; add
+            # the other same-role (non-pipeline) extracts carrying the same column
+            # as fallbacks so every period-eligible extract enriches its loans.
+            # Period eligibility still gates each one (future months excluded), and
+            # this only runs for fields that already have a forced source, so no
+            # new field is promoted.
+            if canon in (enrichment_fields or set()):
+                have = {(s.file_name, s.sheet or "") for s in [src] + fallbacks}
+                src_class = spe._norm_col(src.classification)
+                for fname, inv in inventory_by_name.items():
+                    sheet = inv.get("sheet_name", "") or ""
+                    cls = inv.get("classification", "")
+                    if ((fname, sheet) in have or _is_pipeline_role(cls)
+                            or not src_class or spe._norm_col(cls) != src_class):
+                        continue
+                    fallbacks.append(_Source(
+                        file_name=fname, file_path=inv.get("file_path", ""),
+                        column=src.column, sheet=sheet, method="enrichment_sibling",
+                        confidence=0.85, classification=cls))
             field_sources[canon] = [src] + fallbacks
         else:
             field_sources[canon] = [src]   # single authoritative source -> no conflict

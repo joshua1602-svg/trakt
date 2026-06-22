@@ -92,11 +92,21 @@ def _load_structured_dataframes(inventory) -> Dict[str, pd.DataFrame]:
             continue
         try:
             if item.file_type in ("xlsx", "xls"):
-                frames[item.file_path] = pd.read_excel(item.file_path)
+                df = pd.read_excel(item.file_path)
             else:
-                frames[item.file_path] = pd.read_csv(item.file_path, low_memory=False)
+                df = pd.read_csv(item.file_path, low_memory=False)
         except Exception:
             continue
+        # Apply the SHARED header re-detector (same one promotion/enrichment and the
+        # source-table loader use) so a messy extract whose real header sits in
+        # row 2 (e.g. PropertyExtract) maps its real columns, not ``Unnamed:*``.
+        # Only fires when the frame looks misaligned, so clean files are untouched.
+        try:
+            from .source_table_loader import redetect_header
+            df, _hr, _hfail = redetect_header(df)
+        except Exception:
+            pass
+        frames[item.file_path] = df
     return frames
 
 
