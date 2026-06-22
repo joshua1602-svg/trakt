@@ -210,15 +210,29 @@ def profile_column(
     return profile
 
 
+def _redetect(df):
+    """Apply the SHARED header re-detector (the same one promotion / enrichment
+    and the source-table loader use) so a messy extract whose real header sits in
+    row 2 (e.g. PropertyExtract) profiles its real columns, not ``Unnamed:*``.
+    Only fires when the frame looks misaligned, so clean files are untouched."""
+    try:
+        from .source_table_loader import redetect_header
+        out, _hr, _hfail = redetect_header(df)
+        return out
+    except Exception:
+        return df
+
+
 def _read_structured(path: Path):
-    """Yield (sheet_name, dataframe) for a structured file."""
+    """Yield (sheet_name, dataframe) for a structured file, header-redetected so
+    source profiling sees the same columns promotion / enrichment will."""
     suffix = path.suffix.lower()
     if suffix in (".xlsx", ".xls"):
         xl = pd.ExcelFile(path)
         for sheet in xl.sheet_names:
-            yield str(sheet), xl.parse(sheet)
+            yield str(sheet), _redetect(xl.parse(sheet))
     else:
-        yield "", pd.read_csv(path, low_memory=False)
+        yield "", _redetect(pd.read_csv(path, low_memory=False))
 
 
 def profile_file(path: Path) -> List[ColumnProfile]:

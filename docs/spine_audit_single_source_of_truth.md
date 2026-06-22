@@ -612,3 +612,64 @@ consolidation/diagnostic work; none requires new MI features.
 
 *Descriptive audit. Citations are to files/functions verified in the repo on
 2026-06-21.*
+
+---
+
+## 18. Consolidation log — stages 1–7 (raw files → central lender tape)
+
+**Date:** 2026-06-22. Scope: stages 1–7 only. No React, MI parser, or chart
+changes. The first half of the spine now has one production path for reading
+source tables, detecting headers, mapping fields, selecting period-eligible
+sources, joining entities, and promoting values.
+
+### Root cause found (the November-LTV regression)
+
+The exact stage was **period eligibility**, confirmed by reproducing it: a
+collateral / PropertyExtract delivered for October was dropped from the November
+run with `reason="period_mismatch"` (visible in `18f_central_universe_debug.json`
+`excluded_sources`). Enrichment roles (`collateral_report`, `warehouse_agreement`,
+`cashflow_report`) were matched with the **strict funded-book cadence**
+(`source_period_eligibility._funded_period_match`, `period == run_p`), the same
+rule that defines the funded universe. An October valuation is, however, the
+*latest-available* valuation for a loan still funded in November, so it must
+enrich — not be excluded.
+
+### Changes (production code)
+
+1. **Enrichment cadence** — `source_period_eligibility.py`: new
+   `_enrichment_period_match` (on-or-before the run period is eligible; only
+   *future* enrichment is excluded). The `central_lender_tape` domain now splits
+   universe roles (strict `_funded_period_match`, preserves 33/73) from enrichment
+   roles (as-of cadence). Enrichment never seeds the universe, so counts are
+   unchanged.
+2. **Row-level filter is role-aware** — `central_tape_builder._build_lender_tape`:
+   universe rows are still filtered to `period == run_period`; a *cumulative
+   enrichment* file keeps rows `period <= run_period`, ordered latest-wins.
+3. **Shared header detection in profiling** — `file_profiler._read_structured`
+   now applies the same `source_table_loader.redetect_header` that promotion
+   (`central_tape_builder._read_df`) and the source-table loader use, so a row-2
+   PropertyExtract header profiles its real columns. Header detection is now one
+   shared function across profiling and promotion/enrichment (item B).
+4. **Run-level diagnostic** — `central_tape_builder` now writes
+   `…/<run_id>/output/diagnostics/spine_stage_1_7_report.json` with, per target
+   field: raw source candidates, selected source, per-source period eligibility
+   (`inferred_reporting_period`, `period_eligible`, `rows_raw`,
+   `rows_after_period_filter`, key overlap), promoted non-null count, derivation
+   basis, and failure reason when unavailable; plus the funded-universe summary
+   (counts, balance, excluded sources, pipeline exclusion). Built from the existing
+   18e/18f debug data — no recomputation.
+
+### Result (verified)
+
+- `mi_2025_10`: 33 rows, ≈£4.208MM; valuation 33/33 (unchanged).
+- `mi_2025_11`: 73 rows, ≈£8.903MM; **valuation 73/73**, and downstream
+  `funded_prep` derives `current_loan_to_value` + `ltv_bucket` **73/73**.
+- No pipeline rows promoted as funded; enrichment matches funded rows only.
+- Tests: `mi_agent_api/tests/test_funded_period_enrichment.py` (12 cases — cadence
+  units, both PropertyExtract filename/header variants, entity-key drift,
+  end-to-end Oct/Nov, spine diagnostic). Full onboarding + API suite: 190 passed.
+
+The Stage-3 reader-consolidation item in §16(1) is partially delivered:
+profiling + promotion/enrichment now share `redetect_header`;
+`onboarding_orchestrator`, `llm_assisted_mapping`, and `compare_semantic_alignment`
+remain follow-ups.
