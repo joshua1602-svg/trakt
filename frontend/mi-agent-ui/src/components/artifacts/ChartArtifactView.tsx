@@ -15,19 +15,23 @@ import {
   YAxis,
   ZAxis,
 } from "recharts";
-import type { ChartArtifact } from "@/domain";
+import type { ChartArtifact, DisplayHint } from "@/domain";
 import { THEME } from "@/lib/theme";
+import { toPercentPoints } from "@/lib/utils";
 
 const AXIS = "#6b7493";
 const GRID = "#1c2440";
 
 type Fmt = ChartArtifact["valueFormat"];
 
-function valueFormatter(fmt: Fmt, unit?: string) {
+/** A value formatter honouring the per-column display hint (format + scale). */
+function hintFormatter(hint?: DisplayHint, fallbackFmt?: Fmt, unit?: string) {
+  const fmt = hint?.format ?? fallbackFmt;
+  const scale = hint?.scale;
   return (v: number) => {
     if (typeof v !== "number") return String(v);
     if (fmt === "gbp") return `£${v}${unit ?? ""}`;
-    if (fmt === "pct") return `${v}%`;
+    if (fmt === "pct") return `${toPercentPoints(v, scale).toFixed(1)}%`;
     return v.toLocaleString();
   };
 }
@@ -113,7 +117,11 @@ function Legend({ artifact }: { artifact: ChartArtifact }) {
 const H = 300;
 
 function Body({ artifact }: { artifact: ChartArtifact }) {
-  const fmt = valueFormatter(artifact.valueFormat, artifact.unit);
+  // Format the value axis/tooltip from the value column's display hint (so a
+  // fraction-stored percent renders as points), falling back to valueFormat.
+  const valueCol = artifact.series[0]?.key ?? artifact.valueKey;
+  const valueHint = valueCol ? artifact.displayHints?.[valueCol] : undefined;
+  const fmt = hintFormatter(valueHint, artifact.valueFormat, artifact.unit);
   const tick = { fill: AXIS, fontSize: 11 };
   const yAxis = (
     <YAxis tick={tick} axisLine={false} tickLine={false} tickFormatter={(v) => fmt(v)} width={56} />
@@ -188,14 +196,23 @@ function Body({ artifact }: { artifact: ChartArtifact }) {
   }
 
   if (artifact.chartType === "scatter" || artifact.chartType === "bubble") {
-    const [sx, sy, sz] = artifact.series;
+    // Consume EXPLICIT role keys from the API; fall back to series order only
+    // for older payloads. The y axis is never inferred-then-null.
+    const hints = artifact.displayHints ?? {};
+    const xKey = artifact.xKey ?? artifact.series[0]?.key;
+    const yKey = artifact.yKey ?? artifact.series[1]?.key;
+    const sizeKey = artifact.sizeKey ?? artifact.series[2]?.key;
+    const xLabel = artifact.xLabel ?? artifact.series[0]?.label;
+    const yLabel = artifact.yLabel ?? artifact.series[1]?.label;
+    const xFmt = hintFormatter(xKey ? hints[xKey] : undefined);
+    const yFmt = hintFormatter(yKey ? hints[yKey] : undefined);
     return (
       <ResponsiveContainer width="100%" height={H}>
         <ScatterChart margin={{ top: 8, right: 8, bottom: 8, left: 0 }}>
           <CartesianGrid stroke={GRID} />
-          <XAxis type="number" dataKey={sx?.key} name={sx?.label} tick={tick} axisLine={{ stroke: GRID }} tickLine={false} />
-          <YAxis type="number" dataKey={sy?.key} name={sy?.label} tick={tick} axisLine={false} tickLine={false} width={56} />
-          {artifact.chartType === "bubble" && sz && <ZAxis type="number" dataKey={sz.key} range={[40, 400]} />}
+          <XAxis type="number" dataKey={xKey} name={xLabel} tick={tick} axisLine={{ stroke: GRID }} tickLine={false} tickFormatter={(v) => xFmt(v)} />
+          <YAxis type="number" dataKey={yKey} name={yLabel} tick={tick} axisLine={false} tickLine={false} width={56} tickFormatter={(v) => yFmt(v)} />
+          {artifact.chartType === "bubble" && sizeKey && <ZAxis type="number" dataKey={sizeKey} range={[40, 400]} />}
           {tip}
           <Scatter data={artifact.rows} fill={THEME.peri} fillOpacity={0.6} />
         </ScatterChart>

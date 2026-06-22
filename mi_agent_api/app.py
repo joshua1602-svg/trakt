@@ -89,6 +89,9 @@ def health() -> Dict[str, Any]:
             m["dimension"] if isinstance(m, dict) else m
             for m in info.get("missing_dimensions", [])
         ],
+        # The single MI dataset contract: per-field metadata + display hints
+        # (format + storage scale) so React never guesses field meaning or scale.
+        "datasetContract": info.get("dataset_contract", {}),
         "dataSourceInfo": info,
         "dataAvailable": csv != "unavailable",
         "semantics": semantics_path().name,

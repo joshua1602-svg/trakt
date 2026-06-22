@@ -49,7 +49,17 @@ def _clear_funded_env():
 
 
 def _to_num(v) -> float:
-    return float(re.sub(r"[^0-9.\-]", "", str(v)) or 0)
+    """Parse a KPI display value, honouring compact currency suffixes
+    (£4.2MM / £450K / £1.2BN) now that headline currency KPIs are compacted."""
+    s = str(v).strip().upper().replace("£", "").replace(",", "")
+    mult = 1.0
+    if s.endswith("BN"):
+        mult, s = 1e9, s[:-2]
+    elif s.endswith("MM"):
+        mult, s = 1e6, s[:-2]
+    elif s.endswith("K"):
+        mult, s = 1e3, s[:-1]
+    return float(re.sub(r"[^0-9.\-]", "", s) or 0) * mult
 
 
 def _make_pack(root: Path) -> Path:
@@ -183,7 +193,8 @@ class TestFundedCentralTapeServedByApi(unittest.TestCase):
         loan_kpi = next(v for k, v in kpis.items() if "loan" in k)
         self.assertEqual(int(_to_num(loan_kpi)), 33)
         bal_kpi = next(v for k, v in kpis.items() if "balance" in k)
-        self.assertAlmostEqual(_to_num(bal_kpi), 4_208_000, delta=2_000)
+        # Headline currency KPI is compacted (£4.2MM), so allow the 1-dp rounding.
+        self.assertAlmostEqual(_to_num(bal_kpi), 4_208_000, delta=50_000)
 
     def test_query_summary_november(self):
         kpis = self._summary_kpis(self.nov_tape, "mi_2025_11")

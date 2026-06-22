@@ -23,6 +23,15 @@ This module decides, for each ``(file, sheet)``:
 * whether it is a **universe source** (an eligible funded / current-book role
   whose rows define the lender-tape universe) vs an enrichment-only source.
 
+Two cadences apply to the ``central_lender_tape`` output domain. **Universe**
+(funded / current-book) sources must match the run period exactly (a cumulative
+file is row-filtered to the run period). **Enrichment** sources (collateral
+valuation, warehouse, cashflow) follow an *as-of* cadence: a source delivered in
+or before the run period is the latest-available enrichment for funded loans
+still on book, so it stays eligible; only a future-period enrichment source is
+excluded. Enrichment never creates funded rows, so an earlier-period source
+cannot change the funded count.
+
 It is deliberately NOT lender-specific: roles, period columns, the filename
 delivery offset and per-file overrides are all configurable. Nothing here mutates
 source data — period detection produces comparison metadata only, recorded as an
@@ -457,6 +466,33 @@ def _funded_period_match(prof: Dict[str, Any], run_p: str, allow_unknown: bool) 
     return (allow_unknown, "" if allow_unknown else "no_period_detected")
 
 
+def _enrichment_period_match(prof: Dict[str, Any], run_p: str, allow_unknown: bool) -> Tuple[bool, str]:
+    """Enrichment cadence (collateral valuation / warehouse / cashflow).
+
+    An enrichment source delivered in OR BEFORE the run period is the
+    latest-available enrichment for funded loans still on book, so it stays
+    eligible. Enrichment **never defines the lender-tape universe** (it adds no
+    rows — see ``central_tape_builder``), so an earlier-period source is safe and
+    cannot change the funded count. Only a FUTURE-period source is excluded (never
+    enrich an October book with December valuations).
+
+    This is the fix for the November-LTV regression: a collateral / PropertyExtract
+    delivered for October is the latest valuation for the loans still funded in
+    November, so it must enrich the November funded book rather than being dropped
+    as a ``period_mismatch`` under the strict funded-book cadence.
+    """
+    if not run_p:
+        return True, ""
+    present, period = prof["present"], prof["period"]
+    if present:
+        if any(p <= run_p for p in present):
+            return True, ""
+        return False, "future_period"
+    if period:
+        return (period <= run_p, "" if period <= run_p else "future_period")
+    return (allow_unknown, "" if allow_unknown else "no_period_detected")
+
+
 def _pipeline_cadence_match(prof: Dict[str, Any], run_p: str, allow_unknown: bool) -> Tuple[bool, str]:
     """Pipeline snapshot cadence: a snapshot delivered AFTER the funded close is
     valid; do not exclude a pipeline file merely for a later delivery date."""
@@ -517,9 +553,17 @@ def compute_eligibility(
             if dom == "central_lender_tape":
                 if role_n in pipeline_roles:
                     eligible, reason = False, "pipeline_role_excluded_from_lender_tape"
-                elif role_n in universe_roles or role_n in enrichment_roles:
+                elif role_n in universe_roles:
+                    # Funded / current-book cadence: the period must equal the run
+                    # period (a cumulative file is row-filtered downstream). This
+                    # is what keeps mi_2025_10 at 33 rows and mi_2025_11 at 73.
                     eligible, reason = _funded_period_match(prof, run_p, allow_unknown)
-                    is_universe = bool(eligible and role_n in universe_roles)
+                    is_universe = bool(eligible)
+                elif role_n in enrichment_roles:
+                    # Enrichment cadence: on-or-before the run period stays eligible
+                    # (latest-available valuation/attribute); only future-period
+                    # enrichment is excluded. Enrichment never creates funded rows.
+                    eligible, reason = _enrichment_period_match(prof, run_p, allow_unknown)
                 else:
                     eligible, reason = False, "role_not_funded_or_enrichment"
             elif cadence == "pipeline_snapshot":

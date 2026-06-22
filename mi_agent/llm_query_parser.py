@@ -365,6 +365,48 @@ def _det_meta(confidence: str, explicit: bool, terms: List[str],
 # --------------------------------------------------------------------------- #
 
 
+# Numeric comparison phrases -> canonical operator (longest match first).
+_FILTER_COMPARATORS: List[Tuple[str, str]] = [
+    (r"between\s+(-?\d+(?:\.\d+)?)\s+and\s+(-?\d+(?:\.\d+)?)", "between"),
+    (r"(?:greater than or equal to|at least|no less than|>=)\s*(-?\d+(?:\.\d+)?)", "ge"),
+    (r"(?:less than or equal to|at most|no more than|>=)\s*(-?\d+(?:\.\d+)?)", "le"),
+    (r"(?:more than|greater than|over|above|>)\s*(-?\d+(?:\.\d+)?)", "gt"),
+    (r"(?:less than|under|below|fewer than|<)\s*(-?\d+(?:\.\d+)?)", "lt"),
+    (r"(?:equal to|equals|exactly|=)\s*(-?\d+(?:\.\d+)?)", "eq"),
+]
+
+
+def _filter_field_of(q: str, semantics: dict) -> Optional[str]:
+    """Resolve the field a numeric threshold applies to from the question text."""
+    if "ltv" in q or "loan to value" in q:
+        return _ltv_metric(semantics)
+    if "age" in q or "youngest" in q:
+        return _age_metric(semantics)
+    if "rate" in q or "interest" in q:
+        return find_field(semantics, role="metric", fmt="percent", keywords=("rate",))
+    if "balance" in q or "outstanding" in q or "exposure" in q:
+        return _balance_metric(semantics)
+    return None
+
+
+def _parse_numeric_filter(q: str, semantics: dict) -> Optional[Tuple[str, Dict[str, Any]]]:
+    """Detect a single numeric comparison filter, e.g. "youngest age more than 70".
+
+    Returns ``(field_key, {"op": ..., "value": ...})`` or ``None``.
+    """
+    for pattern, op in _FILTER_COMPARATORS:
+        m = re.search(pattern, q)
+        if not m:
+            continue
+        field = _filter_field_of(q, semantics)
+        if not field:
+            return None
+        if op == "between":
+            return field, {"op": "between", "value": [float(m.group(1)), float(m.group(2))]}
+        return field, {"op": op, "value": float(m.group(1))}
+    return None
+
+
 def _deterministic_parse(question: str, semantics: dict,
                          available_columns=None) -> Tuple[MIQuerySpec, dict]:
     """Parse a question into (MIQuerySpec, deterministic-parser metadata).
@@ -376,6 +418,32 @@ def _deterministic_parse(question: str, semantics: dict,
     q = question.lower().strip()
     title = question.strip()
     top_n = _detect_top_n(q)
+
+    # ---- filtered count / balance ("how many loans with <field> <op> N") ---
+    # A counting/aggregating question with a numeric threshold routes to a
+    # filtered summary (count or balance), NOT a bar chart, so "how many loans
+    # with youngest age more than 70" answers a number.
+    is_count_q = bool(re.search(r"\bhow many\b|\bnumber of\b|\bcount of\b", q))
+    is_balance_q = bool(re.search(r"\bhow much\b|\btotal balance\b", q))
+    if is_count_q or is_balance_q:
+        nf = _parse_numeric_filter(q, semantics)
+        if nf is not None:
+            field, cond = nf
+            if is_balance_q:
+                metric = _balance_metric(semantics)
+                spec = MIQuerySpec(
+                    intent="summary", chart_type="none", metric=metric,
+                    aggregation="sum", filters={field: cond}, title=title,
+                    explanation="Filtered balance over loans matching a threshold.",
+                    output_format="table")
+            else:
+                spec = MIQuerySpec(
+                    intent="summary", chart_type="none", aggregation="count",
+                    filters={field: cond}, title=title,
+                    explanation="Filtered loan count over a numeric threshold.",
+                    output_format="table")
+            return spec, _det_meta("high", True, [field],
+                                   note=f"filtered_{'balance' if is_balance_q else 'count'}")
 
     dim_keys, dim_terms, remaining = _explicit_dimensions(q, semantics, available_columns=available_columns)
     explicit = bool(dim_keys)

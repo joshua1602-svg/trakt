@@ -777,17 +777,36 @@ def _build_lender_tape(
         period_col = ld.get("period_column", "")
         actual_period_col = _actual_col(pk, period_col) if period_col else ""
         enrichment_only = bool(ld.get("enrichment_only"))
+        is_universe_src = bool(ld.get("is_universe_source"))
         idx: Dict[str, Dict[str, Any]] = {}
         collisions = 0
         rows_raw = 0
         rows_kept = 0
-        for _, row in df.iterrows():
+        # A cumulative enrichment file (period column carrying several months) keeps
+        # rows on or before the run period — order ascending so a later in-window
+        # period overwrites an earlier one for the same key (latest-available wins).
+        row_iter = df.iterrows()
+        if gate_active and actual_period_col and run_period and not is_universe_src:
+            try:
+                _ord = df[actual_period_col].map(
+                    lambda v: spe.period_of_value(v, run_year) or "")
+                row_iter = (df.assign(__period_ord=_ord).sort_values("__period_ord")
+                            .drop(columns="__period_ord").iterrows())
+            except Exception:
+                row_iter = df.iterrows()
+        for _, row in row_iter:
             rows_raw += 1
-            # Row-level period filter for a cumulative current-book file: keep only
-            # rows whose Month Run / cut-off period equals the run period.
-            if (gate_active and actual_period_col and run_period
-                    and spe.period_of_value(row.get(actual_period_col), run_year) != run_period):
-                continue
+            # Row-level period filter. The funded-book universe is defined by rows
+            # whose Month Run / cut-off period EQUALS the run period (33 vs 73).
+            # Enrichment rows follow the as-of cadence: keep on-or-before the run
+            # period, never future rows (a future valuation must not leak back).
+            if gate_active and actual_period_col and run_period:
+                _rp = spe.period_of_value(row.get(actual_period_col), run_year)
+                if is_universe_src:
+                    if _rp != run_period:
+                        continue
+                elif _rp and _rp > run_period:
+                    continue
             rows_kept += 1
             lid = _join_key(row[key], rule)
             if not lid:
@@ -1250,6 +1269,103 @@ def _build_lender_tape(
         "enrichment_field_diagnostics": enrichment_diagnostics,
     }
 
+    # ----------------------------------------------------------------------- #
+    # Consolidated stage 1-7 spine diagnostic (one entry per target field).
+    # Answers, per field: which raw sources were candidates, which was selected,
+    # was it period-eligible, how many keys overlapped the funded universe, how
+    # many rows were promoted non-null, the derivation basis, and — when a field
+    # is unavailable — the exact failure reason. Built from the same load/entity
+    # debug the 18e/18f artefacts use, so it never recomputes (single source).
+    # ----------------------------------------------------------------------- #
+    enrich_diag_by_field = {d.get("canonical_field"): d for d in enrichment_diagnostics}
+    matz_by_field = {d.get("canonical_field"): d for d in materialisation_debug}
+    # Fields derived downstream by the funded MI prep layer (funded_prep.py), not
+    # promoted into the central tape itself — recorded so a 0/N here is expected.
+    _DOWNSTREAM_DERIVED = {
+        "current_loan_to_value": "derived in funded_prep from current_outstanding_balance / current_valuation_amount",
+        "original_loan_to_value": "derived in funded_prep from original_principal_balance / original_valuation_amount",
+        "youngest_borrower_age": "derived in funded_prep from borrower DOB fields as of the reporting date",
+    }
+    target_fields = sorted(
+        {c for c in (set(enrichment_fields) | set(forced.keys())) if in_lender_scope(c)}
+        | {f for f in _DOWNSTREAM_DERIVED if f in enrichment_fields})
+
+    def _period_for_source(s: "_Source") -> Dict[str, Any]:
+        ld = load_debug.get(_play_key(s), {})
+        return {
+            "source_file": s.file_name, "source_sheet": s.sheet or "",
+            "inferred_reporting_period": ld.get("inferred_reporting_period", ""),
+            "period_eligible": bool(ld.get("period_eligible", True)),
+            "rows_raw": ld.get("rows_raw", 0),
+            "rows_after_period_filter": ld.get("rows_after_period_filter", 0),
+            "key_overlap_with_funded_universe":
+                len(set(indexes.get(_play_key(s), {}).keys()) & universe_keys),
+        }
+
+    spine_fields: List[Dict[str, Any]] = []
+    for canon in target_fields:
+        srcs = field_sources.get(canon, [])
+        promoted = int(assigned_by_field.get(canon, 0))
+        ediag = enrich_diag_by_field.get(canon, {})
+        matz = matz_by_field.get(canon, {})
+        sel = forced.get(canon)
+        selected = ({"source_file": sel.file_name, "source_sheet": sel.sheet or "",
+                     "source_column": sel.column} if sel else
+                    ({"source_file": matz.get("selected_source_file", ""),
+                      "source_sheet": matz.get("selected_source_sheet", ""),
+                      "source_column": matz.get("selected_source_column", "")}
+                     if matz else None))
+        period_elig = [_period_for_source(s) for s in srcs]
+        key_overlap = (matz.get("key_intersection")
+                       if matz else max((p["key_overlap_with_funded_universe"]
+                                         for p in period_elig), default=0))
+        # Failure reason / derivation basis.
+        if canon in _DOWNSTREAM_DERIVED:
+            basis = _DOWNSTREAM_DERIVED[canon]
+            reason = "" if promoted else "promoted_in_central_tape_only_if_source_supplies_it"
+        elif promoted:
+            basis = "promoted_from_source"
+            reason = ""
+        else:
+            basis = ""
+            reason = ediag.get("reason") or matz.get("failure_reason") or "no_value_promoted"
+        spine_fields.append({
+            "canonical_field": canon,
+            "in_enrichment_scope": canon in enrichment_fields,
+            "raw_source_candidates": [
+                {"source_file": s.file_name, "source_sheet": s.sheet or "",
+                 "source_column": s.column, "classification": s.classification,
+                 "confidence": round(float(getattr(s, "confidence", 0.0) or 0.0), 4)}
+                for s in srcs],
+            "selected_source": selected,
+            "period_eligibility": period_elig,
+            "key_overlap_with_funded_universe": int(key_overlap or 0),
+            "promoted_non_null": promoted,
+            "universe_rows": len(loan_ids),
+            "derivation_basis": basis,
+            "failure_reason": reason,
+        })
+
+    spine_stage_1_7 = {
+        "run_id": period_gate.get("run_id", ""),
+        "run_reporting_period": run_period,
+        "period_gate_active": gate_active,
+        "stages": [
+            "1_raw_files", "2_source_classification", "3_header_detection",
+            "4_field_mapping", "5_period_eligibility", "6_entity_key_resolution",
+            "7_central_tape_promotion"],
+        "universe": {
+            "loan_count": len(loan_ids),
+            "universe_basis": universe_debug["universe_basis"],
+            "selected_universe_sources": universe_source_debug,
+            "excluded_sources": excluded_sources,
+            "pipeline_sources_excluded_from_lender_tape":
+                universe_debug["pipeline_sources_excluded_from_lender_tape"],
+            # aggregate_current_outstanding_balance is filled by build_central_tapes.
+        },
+        "fields": spine_fields,
+    }
+
     summary = {
         "loan_count": len(tape),
         "canonical_fields_populated": len(canonical_order),
@@ -1260,6 +1376,7 @@ def _build_lender_tape(
         "mode": mode,
         "materialisation_debug": materialisation_debug,
         "universe_debug": universe_debug,
+        "spine_stage_1_7": spine_stage_1_7,
         "columns": ["loan_identifier"] + canonical_order,
     }
     if debug_dir is not None:
@@ -1552,6 +1669,24 @@ def build_central_tapes(
         (central_dir / "18e_central_tape_materialisation_debug.json").write_text(
             json.dumps(summary.get("materialisation_debug", []), indent=2, default=str),
             encoding="utf-8")
+    except Exception:
+        pass
+
+    # Consolidated stage 1-7 spine diagnostic, written next to the tape under
+    # .../<run_id>/output/diagnostics/spine_stage_1_7_report.json. Carries the
+    # final funded balance so the report is self-contained.
+    try:
+        spine = dict(summary.get("spine_stage_1_7", {}) or {})
+        uni = dict(spine.get("universe", {}) or {})
+        uni["aggregate_current_outstanding_balance"] = udbg.get(
+            "aggregate_current_outstanding_balance", 0.0)
+        uni["expected_balance_check"] = recon
+        spine["universe"] = uni
+        diag_dir = central_dir.parent / "diagnostics"
+        diag_dir.mkdir(parents=True, exist_ok=True)
+        (diag_dir / "spine_stage_1_7_report.json").write_text(
+            json.dumps(spine, indent=2, default=str), encoding="utf-8")
+        summary["spine_stage_1_7"] = spine
     except Exception:
         pass
 

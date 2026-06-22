@@ -113,7 +113,7 @@ def _kpi_label(key: str, resolved: Dict[str, Any]) -> str:
     return base.replace("_", " ").title()
 
 
-def _format_kpi_value(value: Any, fmt: str) -> str:
+def _format_kpi_value(value: Any, fmt: str, scale: Optional[str] = None) -> str:
     if not isinstance(value, (int, float)):
         return str(value)
     if fmt == "gbp":
@@ -126,24 +126,40 @@ def _format_kpi_value(value: Any, fmt: str) -> str:
             return f"£{v / 1e3:.0f}K"
         return f"£{v:,.0f}"
     if fmt == "pct":
-        return f"{float(value):.1f}%"
+        # Apply the storage scale from the dataset contract: a fraction (0.51)
+        # displays as 51.0%, points (51) display as 51.0%. Never guessed.
+        v = float(value)
+        if scale == "percent_fraction":
+            v *= 100.0
+        return f"{v:.1f}%"
     if fmt == "decimal":
         return f"{float(value):.2f}"
     return f"{value:,.0f}" if isinstance(value, (int, float)) else str(value)
 
 
-def _kpi_artifact(qr: Dict[str, Any], spec: Dict[str, Any], ctx: AdapterContext) -> Dict[str, Any]:
+def _hint(hints: Optional[Dict[str, Any]], col: str) -> Dict[str, Any]:
+    """The {format, scale} display hint for an emitted column, from the single
+    dataset contract (suffix-aware). Falls back to format inference with no scale."""
+    if hints:
+        from mi_agent.mi_dataset_profile import display_hint_for
+        return display_hint_for({"display_hints": hints}, col)
+    return {"format": None, "scale": None}
+
+
+def _kpi_artifact(qr: Dict[str, Any], spec: Dict[str, Any], ctx: AdapterContext,
+                  hints: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     rows = qr.get("data") or []
     resolved = qr.get("resolved_fields", {})
     row = rows[0] if rows else {}
     kpis = []
     for key, value in row.items():
-        fmt = _infer_col_format(key, resolved)
+        h = _hint(hints, key)
+        fmt = h.get("format") or _infer_col_format(key, resolved)
         kpis.append(
             {
                 "id": _uid("kpi"),
                 "label": _kpi_label(key, resolved),
-                "value": _format_kpi_value(value, fmt),
+                "value": _format_kpi_value(value, fmt, h.get("scale")),
             }
         )
     return {
@@ -163,19 +179,23 @@ def _table_artifact(
     spec: Dict[str, Any],
     ctx: AdapterContext,
     title: str,
+    hints: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     rows = qr.get("data") or []
     resolved = qr.get("resolved_fields", {})
     columns = []
     if rows:
         for col in rows[0].keys():
-            fmt = _infer_col_format(col, resolved)
+            h = _hint(hints, col)
+            fmt = h.get("format") or _infer_col_format(col, resolved)
             columns.append(
                 {
                     "key": col,
                     "label": col.replace("_", " ").title(),
                     "align": "left" if fmt == "text" else "right",
                     "format": fmt,
+                    # Storage scale so React renders fraction percents as points.
+                    "scale": h.get("scale"),
                 }
             )
     source = _source(spec, ctx, "MI Agent · table")
@@ -192,11 +212,20 @@ def _table_artifact(
     }
 
 
+def _label_for(col: str, resolved: Dict[str, Any]) -> str:
+    """A human label for a column, preferring the resolved business name."""
+    for meta in resolved.values():
+        if meta.get("canonical_field") == col and meta.get("business_name"):
+            return meta["business_name"]
+    return col.replace("_", " ").title()
+
+
 def _chart_artifact(
     qr: Dict[str, Any],
     cr: Dict[str, Any],
     spec: Dict[str, Any],
     ctx: AdapterContext,
+    hints: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[str, Any]]:
     chart_type = cr.get("chart_type")
     has_figure = _figure_has_content(cr.get("figure"))
@@ -206,7 +235,11 @@ def _chart_artifact(
 
     x_key: Optional[str] = None
     y_key: Optional[str] = None
+    size_key: Optional[str] = None
     value_key: Optional[str] = None
+    x_label: Optional[str] = None
+    y_label: Optional[str] = None
+    size_label: Optional[str] = None
     series: List[Dict[str, Any]] = []
     value_format = "number"
 
@@ -216,38 +249,43 @@ def _chart_artifact(
         return cand[0] if cand else None
 
     if chart_type in ("scatter", "bubble"):
-        # Loan-level x / y / (size) — the renderer reads series[0]=x, [1]=y, [2]=size.
+        # Loan-level: emit EXPLICIT role keys (xKey/yKey/sizeKey) + labels so the
+        # renderer never infers axes from series order, and yKey is never null.
         x_key = spec.get("x") if spec.get("x") in columns else (columns[0] if columns else None)
-        sy = spec.get("y") if spec.get("y") in columns else None
-        size_key = spec.get("size") if spec.get("size") in columns else None
-        if x_key and sy:
+        y_key = spec.get("y") if spec.get("y") in columns else None
+        size_key = (spec.get("size") if spec.get("size") in columns else None) \
+            if chart_type == "bubble" else None
+        if x_key and y_key:
+            x_label = _label_for(x_key, resolved)
+            y_label = _label_for(y_key, resolved)
             series = [
-                {"key": x_key, "label": x_key.replace("_", " ").title(), "color": _PALETTE[0]},
-                {"key": sy, "label": sy.replace("_", " ").title(), "color": _PALETTE[1]},
+                {"key": x_key, "label": x_label, "color": _PALETTE[0]},
+                {"key": y_key, "label": y_label, "color": _PALETTE[1]},
             ]
             if chart_type == "bubble" and size_key:
-                series.append({"key": size_key, "label": size_key.replace("_", " ").title(), "color": _PALETTE[2]})
-            value_format = _infer_col_format(sy, resolved)
+                size_label = _label_for(size_key, resolved)
+                series.append({"key": size_key, "label": size_label, "color": _PALETTE[2]})
+            value_format = _hint(hints, y_key).get("format") or _infer_col_format(y_key, resolved)
     elif chart_type in ("bar", "line"):
         # Grouped categorical (bar) / ordered (line): one dimension + one value.
         x_key = _dimension_column(resolved, columns)
         primary = _value_column([x_key] if x_key else [])
         if primary is not None:
-            series = [{"key": primary, "label": primary.replace("_", " ").title(), "color": _PALETTE[0]}]
-            value_format = _infer_col_format(primary, resolved)
+            series = [{"key": primary, "label": _label_for(primary, resolved), "color": _PALETTE[0]}]
+            value_format = _hint(hints, primary).get("format") or _infer_col_format(primary, resolved)
     elif chart_type == "heatmap":
         # Native grid renderer needs two dimensions + an intensity measure.
         dims = _dimension_columns(resolved, columns)
         x_key = dims[0] if len(dims) > 0 else None
         y_key = dims[1] if len(dims) > 1 else None
         value_key = _value_column([d for d in (x_key, y_key) if d])
-        value_format = _infer_col_format(value_key or "", resolved)
+        value_format = _hint(hints, value_key or "").get("format") or _infer_col_format(value_key or "", resolved)
     elif chart_type == "treemap":
         # Native Recharts treemap needs a label dimension + a size measure.
         dims = _dimension_columns(resolved, columns)
         x_key = dims[0] if dims else (columns[0] if columns else None)
         value_key = _value_column([x_key] if x_key else [])
-        value_format = _infer_col_format(value_key or "", resolved)
+        value_format = _hint(hints, value_key or "").get("format") or _infer_col_format(value_key or "", resolved)
     else:
         x_key = columns[0] if columns else None
 
@@ -275,6 +313,10 @@ def _chart_artifact(
     if figure_out is not None:
         source["figure"] = figure_out
 
+    # Per-column display hints (format + storage scale) so React formats values —
+    # especially fraction percents (0.51 -> 51.0%) — without guessing.
+    display_hints = {c: _hint(hints, c) for c in columns} if hints else {}
+
     return {
         "id": _uid(),
         "type": "chart",
@@ -286,10 +328,15 @@ def _chart_artifact(
         "chartType": chart_type,
         "xKey": x_key,
         "yKey": y_key,
+        "sizeKey": size_key,
         "valueKey": value_key,
+        "xLabel": x_label,
+        "yLabel": y_label,
+        "sizeLabel": size_label,
         "series": series,
         "rows": rows,
         "valueFormat": value_format,
+        "displayHints": display_hints,
         "warnings": cr.get("warnings", []),
     }
 
@@ -353,6 +400,8 @@ def adapt_workflow_result(
     ctx = AdapterContext(portfolio_id, as_of)
     spec = workflow.get("spec") or {}
     validation = workflow.get("validation") or {}
+    # Single dataset contract: per-field {format, scale} from the workflow profile.
+    hints = workflow.get("display_hints") or {}
 
     # MIQueryResult / MIChartResult may be objects (in-process) or dicts.
     qr_obj = workflow.get("query_result")
@@ -374,14 +423,15 @@ def adapt_workflow_result(
     if qr:
         result_type = qr.get("result_type")
         if result_type == "summary":
-            artifacts.append(_kpi_artifact(qr, spec, ctx))
+            artifacts.append(_kpi_artifact(qr, spec, ctx, hints))
         else:
             if cr:
-                chart = _chart_artifact(qr, cr, spec, ctx)
+                chart = _chart_artifact(qr, cr, spec, ctx, hints)
                 if chart:
                     artifacts.append(chart)
                     chart_emitted = True
-            artifacts.append(_table_artifact(qr, spec, ctx, cr.get("title") if cr else "Result"))
+            artifacts.append(_table_artifact(qr, spec, ctx,
+                                             cr.get("title") if cr else "Result", hints))
 
     val_artifact = _validation_artifact(validation, spec, ctx)
     if val_artifact:
