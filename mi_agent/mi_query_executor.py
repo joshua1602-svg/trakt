@@ -403,8 +403,15 @@ def _apply_filters(work: pd.DataFrame, spec: MIQuerySpec, semantics: dict,
             work = work[mask.fillna(False)]
             warnings.append(f"filter {field_key} {op} {raw!r} kept {len(work)}/{before} rows")
         elif isinstance(value, (list, tuple, set)):
-            work = work[col.isin(list(value))]
+            vals = [str(v).strip().casefold() for v in value]
+            work = work[col.astype(str).str.strip().str.casefold().isin(vals)]
             warnings.append(f"filter {field_key} in {list(value)!r} kept {len(work)}/{before} rows")
+        elif isinstance(value, str):
+            # Case-/whitespace-insensitive categorical match so a normalised
+            # value ("South West") matches the prepared dimension value robustly.
+            target = value.strip().casefold()
+            work = work[col.astype(str).str.strip().str.casefold() == target]
+            warnings.append(f"filter {field_key}={value!r} kept {len(work)}/{before} rows")
         else:
             work = work[col == value]
             warnings.append(f"filter {field_key}={value!r} kept {len(work)}/{before} rows")
@@ -709,6 +716,55 @@ def _execute_loan_level(spec, work, semantics, warnings, *, need_size,
     return out, "loan_level"
 
 
+# Loan-level context columns surfaced (when present) on a ranked "top loans"
+# table, so the analyst sees the loan + its key attributes alongside the rank.
+_RANKED_CONTEXT_FIELDS = (
+    "loan_identifier", "current_outstanding_balance", "current_principal_balance",
+    "current_loan_to_value", "original_loan_to_value", "youngest_borrower_age",
+    "current_interest_rate", "geographic_region_obligor", "origination_channel",
+    "broker_channel",
+)
+
+
+def _execute_ranked_loans(spec, work, semantics, warnings):
+    """A loan-level 'top loans' ranking table: sort individual loans by a measure
+    and return the head, including the loan identifier and key attributes.
+
+    Deterministic and controlled: a missing rank column raises
+    ``MIQueryExecutionError`` (converted to a validation failure upstream), never
+    a raw 500.
+    """
+    sort_key = spec.sort_by or spec.metric
+    if not sort_key:
+        raise MIQueryExecutionError("ranked loans require a sort_by or metric field")
+    entry = resolve_semantic_field(sort_key, semantics)
+    sort_col = entry.get("canonical_field", sort_key)
+    _require_column(work, sort_col, sort_key)
+
+    out_cols: List[str] = []
+    for col in _RANKED_CONTEXT_FIELDS:
+        if col in work.columns and col not in out_cols:
+            out_cols.append(col)
+    if sort_col not in out_cols:
+        out_cols.insert(0, sort_col)
+
+    out = work[out_cols].copy()
+    out[sort_col] = coerce_numeric(out[sort_col])
+    before = len(out)
+    out = out.dropna(subset=[sort_col])
+    if len(out) < before:
+        warnings.append(f"dropped {before - len(out)} loan(s) with non-numeric "
+                        f"{sort_col!r} before ranking")
+
+    ascending = str(spec.sort_direction or "desc").lower() == "asc"
+    out = out.sort_values(sort_col, ascending=ascending, kind="mergesort")
+    limit = spec.limit or spec.top_n or 10
+    out = out.head(int(limit)).reset_index(drop=True)
+    warnings.append(f"ranked top {len(out)} loan(s) by {sort_col} "
+                    f"({'asc' if ascending else 'desc'})")
+    return out, "table"
+
+
 # --------------------------------------------------------------------------- #
 # Public entry point
 # --------------------------------------------------------------------------- #
@@ -788,6 +844,9 @@ def execute_mi_query(
     # ---- dispatch -------------------------------------------------------- #
     if spec.intent == "summary" or (spec.intent == "chart" and spec.chart_type == "none"):
         data_out, result_type = _execute_summary(spec, work, semantics, warnings, balance_col)
+
+    elif spec.intent == "table" and spec.ranking_mode == "loan_level":
+        data_out, result_type = _execute_ranked_loans(spec, work, semantics, warnings)
 
     elif spec.intent == "table":
         keys = []
