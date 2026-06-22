@@ -351,22 +351,63 @@ def _stringify(work: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
     return work
 
 
+_OP_ALIASES = {
+    ">": "gt", "gt": "gt", "more_than": "gt", "greater_than": "gt", "above": "gt", "over": "gt",
+    ">=": "ge", "ge": "ge", "at_least": "ge", "min": "ge",
+    "<": "lt", "lt": "lt", "less_than": "lt", "below": "lt", "under": "lt",
+    "<=": "le", "le": "le", "at_most": "le", "max": "le",
+    "==": "eq", "eq": "eq", "=": "eq", "is": "eq",
+    "!=": "ne", "ne": "ne",
+    "between": "between",
+}
+
+
+def _apply_numeric_op(col: pd.Series, op: str, value: Any) -> pd.Series:
+    """Boolean mask for a numeric comparison operator against a coerced column."""
+    s = coerce_numeric(col)
+    if op == "between":
+        lo, hi = (value if isinstance(value, (list, tuple)) and len(value) == 2
+                  else (None, None))
+        return (s >= float(lo)) & (s <= float(hi))
+    v = float(value)
+    return {"gt": s > v, "ge": s >= v, "lt": s < v, "le": s <= v,
+            "eq": s == v, "ne": s != v}[op]
+
+
 def _apply_filters(work: pd.DataFrame, spec: MIQuerySpec, semantics: dict,
                    warnings: List[str]) -> pd.DataFrame:
     if not spec.filters:
         return work
+    from .mi_dataset_profile import PERCENT_FRACTION, percent_storage_scale
     for field_key, value in spec.filters.items():
-        canonical = get_canonical_field(field_key, semantics)
+        entry = resolve_semantic_field(field_key, semantics)
+        canonical = entry.get("canonical_field", field_key)
         _require_column(work, canonical, field_key)
         before = len(work)
         col = work[canonical]
-        if isinstance(value, (list, tuple, set)):
+        if isinstance(value, dict) and ("op" in value or "value" in value
+                                        or "min" in value or "max" in value):
+            # Structured numeric comparison filter: {"op": ">", "value": 70}.
+            op = _OP_ALIASES.get(str(value.get("op", "eq")).strip().lower(), "eq")
+            raw = value.get("value", value.get("min", value.get("max")))
+            # Scale-aware: a percent threshold (e.g. "ltv over 80") is compared in
+            # the column's own storage scale. If the column stores fractions
+            # (0.51) but the threshold reads as points (80), convert once here —
+            # the single percent-scale source of truth, never re-guessed downstream.
+            if entry.get("format") == "percent" and isinstance(raw, (int, float)):
+                if percent_storage_scale(col) == PERCENT_FRACTION and abs(raw) > 1.5:
+                    raw = raw / 100.0
+                    if isinstance(value.get("between"), (list, tuple)):
+                        raw = [x / 100.0 for x in value["between"]]
+            mask = _apply_numeric_op(col, op, raw)
+            work = work[mask.fillna(False)]
+            warnings.append(f"filter {field_key} {op} {raw!r} kept {len(work)}/{before} rows")
+        elif isinstance(value, (list, tuple, set)):
             work = work[col.isin(list(value))]
+            warnings.append(f"filter {field_key} in {list(value)!r} kept {len(work)}/{before} rows")
         else:
             work = work[col == value]
-        warnings.append(
-            f"filter {field_key}={value!r} kept {len(work)}/{before} rows"
-        )
+            warnings.append(f"filter {field_key}={value!r} kept {len(work)}/{before} rows")
     return work.copy()
 
 

@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from .llm_query_parser import parse_with_repair
+from .mi_dataset_profile import profile_dataset, validate_query_data
 from .mi_chart_factory import MIChartError, MIChartResult, create_mi_chart
 from .mi_query_executor import (
     MIQueryExecutionError,
@@ -210,6 +211,33 @@ def run_mi_agent_query(
             "llm": parse_meta.get("llm"),
         }
         return result
+
+    # ---- data-aware validation (single dataset profile is the source of truth)
+    # The name/role validator above never inspects values. Before claiming
+    # "Validation: Passed", confirm the requested metric has numeric values, the
+    # dimension(s) have non-blank values, filter fields carry values, and a
+    # loan-level x/y/size has usable rows. A missing/empty LTV therefore fails
+    # here with an exact reason instead of rendering an empty chart.
+    profile = profile_dataset(df, semantics)
+    result["display_hints"] = profile.get("display_hints", {})
+    data_errors = validate_query_data(spec, df, semantics, profile)
+    if data_errors:
+        val = result.get("validation") or {"ok": True, "errors": [], "warnings": [],
+                                            "resolved_fields": {}}
+        val["ok"] = False
+        val.setdefault("errors", []).extend(e["detail"] for e in data_errors)
+        val["data_validation_errors"] = data_errors
+        result["validation"] = val
+        result["interpreted"]["Validation"] = "Failed"
+        result["error"] = "The query cannot be answered from the prepared data: " + \
+            "; ".join(f"{e['field']}: {e['reason']}" for e in data_errors)
+        result["warnings"] = _dedupe(warnings)
+        result["metadata"] = {
+            "parse_metadata": parse_meta,
+            "parser_mode_detail": parse_meta.get("parser_mode_detail"),
+            "data_validation_errors": data_errors,
+        }
+        return result
     result["interpreted"]["Validation"] = "Passed"
 
     # ---- execute ----------------------------------------------------------
@@ -236,6 +264,26 @@ def run_mi_agent_query(
         return result
     result["query_result"] = qres
     warnings.extend(qres.warnings)
+
+    # A grouped / loan-level result with no rows after preparation is not a
+    # "passed" query — surface it as a controlled validation failure with an
+    # exact reason rather than rendering an empty chart.
+    if qres.result_type in ("table", "loan_level") and qres.row_count == 0:
+        reason = ("loan_level_no_usable_rows" if qres.result_type == "loan_level"
+                  else "no_values_after_preparation")
+        val = result.get("validation") or {"ok": True, "errors": [], "warnings": [],
+                                            "resolved_fields": {}}
+        val["ok"] = False
+        val.setdefault("errors", []).append(
+            f"{reason}: the query produced no usable rows after preparation")
+        val["data_validation_errors"] = [{"field": spec.dimension or spec.x or "",
+                                           "reason": reason,
+                                           "detail": "no usable rows after preparation"}]
+        result["validation"] = val
+        result["interpreted"]["Validation"] = "Failed"
+        result["error"] = f"The query produced no usable rows ({reason})."
+        result["warnings"] = _dedupe(warnings)
+        return result
 
     # ---- chart (only where a chart type is renderable) --------------------
     chart_result: Optional[MIChartResult] = None

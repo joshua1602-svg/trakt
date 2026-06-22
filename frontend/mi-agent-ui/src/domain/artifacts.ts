@@ -88,6 +88,13 @@ export interface ChartSeries {
   color: string;
 }
 
+/** Per-column display hint from the API dataset contract (format + storage scale). */
+export interface DisplayHint {
+  format?: ValueFormat;
+  /** "percent_fraction" (0.51) | "percent_points" (51) | null. */
+  scale?: "percent_fraction" | "percent_points" | null;
+}
+
 export interface ChartArtifact extends ArtifactBase {
   type: "chart";
   chartType: ChartType;
@@ -96,10 +103,18 @@ export interface ChartArtifact extends ArtifactBase {
   series: ChartSeries[];
   valueFormat?: ValueFormat;
   unit?: string;
-  /** Second categorical axis (heatmap) — the y dimension column. */
+  /** Loan-level y axis (scatter/bubble) and the heatmap y dimension. */
   yKey?: string;
+  /** Loan-level bubble size measure (explicit, never inferred from series order). */
+  sizeKey?: string;
   /** Measure column for grid/area charts (heatmap intensity, treemap size). */
   valueKey?: string;
+  /** Explicit axis labels for loan-level charts. */
+  xLabel?: string;
+  yLabel?: string;
+  sizeLabel?: string;
+  /** Per-column {format, scale} so the renderer formats without guessing. */
+  displayHints?: Record<string, DisplayHint>;
 }
 
 /* ------------------------------ Table ------------------------------- */
@@ -109,6 +124,8 @@ export interface TableColumn {
   label: string;
   align?: "left" | "right";
   format?: ValueFormat;
+  /** Percent storage scale from the dataset contract (fraction vs points). */
+  scale?: "percent_fraction" | "percent_points" | null;
   /** Render an inline magnitude bar scaled to the column max. */
   bar?: boolean;
 }

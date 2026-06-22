@@ -195,6 +195,25 @@ def _active() -> Tuple[pd.DataFrame, Dict[str, Any]]:
     if base == "central_tape":
         info["client_id"] = os.environ.get("MI_AGENT_CLIENT_ID", "")
         info["run_id"] = os.environ.get("MI_AGENT_RUN_ID", "")
+
+    # Single dataset contract (per-field metadata + display hints), built from the
+    # one dataset profile. /health and the review generator read THIS — never a
+    # separate inference. Dimensions reflect actual non-null prepared values.
+    try:
+        from .mi_dataset_contract import build_dataset_contract
+        from mi_agent.mi_query_validator import load_mi_semantics
+        semantics = load_mi_semantics(semantics_path())
+        prep_report = info if info.get("preparation_applied") else None
+        contract = build_dataset_contract(df, semantics, prep_report)
+        info["dataset_contract"] = contract
+        info["display_hints"] = contract["display_hints"]
+        # Funded prep already supplies reason-coded dimensions; for any other path
+        # surface the contract's (non-null-based) availability so /health is honest.
+        if not info.get("dimensions_available"):
+            info["dimensions_available"] = contract["dimensions_available"]
+            info["missing_dimensions"] = contract["dimensions_missing"]
+    except Exception as exc:  # contract is additive; never block data serving
+        info.setdefault("dataset_contract", {"fields": [], "error": str(exc)})
     return df, info
 
 

@@ -673,3 +673,79 @@ The Stage-3 reader-consolidation item in §16(1) is partially delivered:
 profiling + promotion/enrichment now share `redetect_header`;
 `onboarding_orchestrator`, `llm_assisted_mapping`, and `compare_semantic_alignment`
 remain follow-ups.
+
+---
+
+## 19. Consolidation log — stages 8–13 (central tape → prepared dataset → query → API → React)
+
+**Date:** 2026-06-22. Scope: stages 8–13. No change to raw discovery/promotion.
+Principle delivered: **one prepared MI dataset and one metadata contract**; no
+frontend, review script, or executor independently infers field meaning, numeric
+parsing, bucket availability, or display scale.
+
+### The single dataset contract
+
+- **New `mi_agent/mi_dataset_profile.py`** — the one place that computes, per field:
+  semantic type, **storage scale** (`percent_fraction` 0.51 vs `percent_points`
+  51, by column-median), display format, non-null + numeric-parse counts, and
+  dimension/metric availability. Also `validate_query_data` — the data-aware
+  query validator.
+- **New `mi_agent_api/mi_dataset_contract.py`** — builds the API/health-facing
+  contract from the profile + the funded_prep report (source field / derivation
+  basis / bucket source), and `summary_numbers` (shared review helper).
+- `/health` now exposes `datasetContract` (per-field metadata) and dimensions
+  reflect **actual non-null prepared values** (`mi_agent_api/app.py`,
+  `data_source.py`).
+
+### Query parsing / validation (C, D)
+
+- `llm_query_parser._deterministic_parse` now routes **filtered count/balance**:
+  "how many loans with youngest age more than 70" → `intent=summary`,
+  `aggregation=count`, `filters={youngest_borrower_age: {op: gt, value: 70}}` —
+  not a bar chart. Numeric operators (`gt/ge/lt/le/eq/between`) are parsed from
+  natural language and applied in `mi_query_executor._apply_filters`
+  (percent-scale aware, using the same single scale source).
+- `mi_agent_workflow` runs `validate_query_data` **before** "Validation: Passed":
+  a metric with no numeric values, a dimension with no non-blank values, a filter
+  field with no values, or a loan-level x/y/size with no usable rows now fails
+  with an **exact reason** (`metric_no_numeric_values`, `dimension_no_values`,
+  `loan_level_no_usable_rows`, …). A post-execution empty result fails as
+  `no_values_after_preparation`. Duplicate columns remain a controlled validation
+  failure — `/mi/query` never returns a raw 500.
+
+### API artifact schema (E, F)
+
+- Bubble/scatter artifacts carry **explicit role keys** `xKey` / `yKey` /
+  `sizeKey` + `xLabel` / `yLabel` / `sizeLabel` (`adapters._chart_artifact`).
+  `yKey` is never null for a bubble; React no longer infers axes from series
+  order. Every chart/table/KPI artifact carries per-column `displayHints`
+  (`{format, scale}`) from the contract. The executor keeps internal values
+  unchanged and never rescales.
+
+### React rendering / display (G, H)
+
+- `lib/utils.ts::formatValue` + `toPercentPoints` apply the contract scale, so a
+  fraction (0.51) renders **51.0%**, not 0.5% — consistently across tables
+  (`TableArtifactView`), chart tooltips/axes (`ChartArtifactView`), and KPI values
+  (formatted server-side from the same contract). `ChartArtifactView` consumes
+  `xKey`/`yKey`/`sizeKey` directly. Failed validation surfaces the controlled
+  validation artifact (no silent empty chart).
+
+### Static review generator (I)
+
+- `generate_dashboard_review.py::_num` now delegates to the shared
+  `analytics_lib.numeric.coerce_numeric` (no separate parser); summary numbers use
+  the shared contract helper.
+
+### Result (verified, real pipeline + units)
+
+- `balance by ltv by age` on mi_2025_10 → API 200, `ok:true`, rowCount 33, chart
+  artifact with `xKey`/`yKey`/`sizeKey`; **LTV 0.29–0.56 displays 29%–56%**.
+- `current outstanding balance by ltv bucket` renders for October.
+- Missing/empty LTV → graceful failure with exact reason; never "Validation:
+  Passed"; no chart artifact emitted.
+- `/health` lists available + missing dimensions from non-null prepared values
+  and the per-field contract.
+- Tests: `mi_agent_api/tests/test_mi_dataset_contract.py` (12), frontend
+  `lib/utils.test.ts` + `ChartArtifactView.test.tsx`. Full MI + onboarding suite:
+  **239 passed**; frontend **55 passed**.

@@ -48,10 +48,11 @@ QUERIES = [
 
 
 def _num(v: Any) -> Optional[float]:
-    try:
-        return float(str(v).replace(",", "").replace("£", "").strip())
-    except (ValueError, AttributeError):
-        return None
+    """Parse one value via the SHARED deterministic parser (no separate regex)."""
+    import pandas as pd
+    from analytics_lib.numeric import coerce_numeric
+    s = coerce_numeric(pd.Series([v])).iloc[0]
+    return float(s) if pd.notna(s) else None
 
 
 def _central_tape(output_root: Path, client_id: str, run_id: str) -> Optional[Path]:

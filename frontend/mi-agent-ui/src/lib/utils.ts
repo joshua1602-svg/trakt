@@ -49,10 +49,26 @@ export function formatDate(iso: string): string {
   });
 }
 
-/** Format a value by a domain ValueFormat tag. */
+/** Storage scale of a percent value, from the API dataset contract. */
+export type PercentScale = "percent_fraction" | "percent_points" | null | undefined;
+
+/**
+ * Convert a stored percent to display points using the contract scale. A
+ * fraction (0.51) becomes 51; points (51) stay 51. Internal values are never
+ * mutated — this is display-only.
+ */
+export function toPercentPoints(value: number, scale: PercentScale): number {
+  return scale === "percent_fraction" ? value * 100 : value;
+}
+
+/**
+ * Format a value by a domain ValueFormat tag, honouring the percent storage
+ * scale from the dataset contract (so 0.51 displays as 51.0%, not 0.5%).
+ */
 export function formatValue(
   value: string | number,
   format?: "gbp" | "pct" | "number" | "decimal" | "text" | "date",
+  scale?: PercentScale,
 ): string {
   if (typeof value !== "number") {
     return format === "date" && value ? formatDate(String(value)) : String(value);
@@ -61,7 +77,7 @@ export function formatValue(
     case "gbp":
       return formatGBP(value);
     case "pct":
-      return `${value.toFixed(1)}%`;
+      return `${toPercentPoints(value, scale).toFixed(1)}%`;
     case "decimal":
       return value.toFixed(2);
     case "number":
