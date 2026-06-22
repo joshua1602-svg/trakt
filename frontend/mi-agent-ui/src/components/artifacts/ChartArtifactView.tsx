@@ -18,6 +18,7 @@ import {
 import type { ChartArtifact, DisplayHint } from "@/domain";
 import { THEME } from "@/lib/theme";
 import { toPercentPoints } from "@/lib/utils";
+import { paddedDomain } from "@/lib/chartAxis";
 
 const AXIS = "#6b7493";
 const GRID = "#1c2440";
@@ -206,12 +207,27 @@ function Body({ artifact }: { artifact: ChartArtifact }) {
     const yLabel = artifact.yLabel ?? artifact.series[1]?.label;
     const xFmt = hintFormatter(xKey ? hints[xKey] : undefined);
     const yFmt = hintFormatter(yKey ? hints[yKey] : undefined);
+    // Population-aware axis framing: don't waste area below the population (e.g.
+    // borrower age starting at 55), and snap LTV percent ticks to 20/30/40%.
+    const xHint = xKey ? hints[xKey] : undefined;
+    const yHint = yKey ? hints[yKey] : undefined;
+    const xDomain = paddedDomain(artifact.rows, xKey, {
+      isPercent: xHint?.format === "pct",
+      scale: xHint?.scale,
+    });
+    const yDomain = paddedDomain(artifact.rows, yKey, {
+      isPercent: yHint?.format === "pct",
+      scale: yHint?.scale,
+    });
     return (
       <ResponsiveContainer width="100%" height={H}>
         <ScatterChart margin={{ top: 8, right: 8, bottom: 8, left: 0 }}>
           <CartesianGrid stroke={GRID} />
-          <XAxis type="number" dataKey={xKey} name={xLabel} tick={tick} axisLine={{ stroke: GRID }} tickLine={false} tickFormatter={(v) => xFmt(v)} />
-          <YAxis type="number" dataKey={yKey} name={yLabel} tick={tick} axisLine={false} tickLine={false} width={56} tickFormatter={(v) => yFmt(v)} />
+          <XAxis type="number" dataKey={xKey} name={xLabel} tick={tick} axisLine={{ stroke: GRID }} tickLine={false} tickFormatter={(v) => xFmt(v)}
+            domain={xDomain?.domain ?? ["auto", "auto"]} ticks={xDomain?.ticks} allowDecimals={false} />
+          <YAxis type="number" dataKey={yKey} name={yLabel} tick={tick} axisLine={false} tickLine={false} width={56} tickFormatter={(v) => yFmt(v)}
+            domain={yDomain?.domain ?? ["auto", "auto"]} ticks={yDomain?.ticks} />
+
           {artifact.chartType === "bubble" && sizeKey && <ZAxis type="number" dataKey={sizeKey} range={[40, 400]} />}
           {tip}
           <Scatter data={artifact.rows} fill={THEME.peri} fillOpacity={0.6} />

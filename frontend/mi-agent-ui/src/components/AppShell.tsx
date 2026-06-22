@@ -2,6 +2,7 @@ import { useCallback, useMemo } from "react";
 import { HeaderBar } from "@/components/HeaderBar";
 import { AgentChatPanel } from "@/components/AgentChatPanel";
 import { ArtifactCanvas } from "@/components/ArtifactCanvas";
+import { FundedSnapshotPanel } from "@/components/FundedSnapshotPanel";
 import { createAgentClient } from "@/api";
 import { useWorkspace } from "@/state/useWorkspace";
 
@@ -18,10 +19,12 @@ export function AppShell() {
   return (
     <div className="flex h-screen flex-col overflow-hidden">
       <HeaderBar
-        portfolio={ws.portfolio.id}
+        portfolios={ws.portfolios}
+        runs={ws.runs}
+        selectedClientId={ws.selectedClientId}
+        selectedRunId={ws.selectedRunId}
         onPortfolioChange={ws.setPortfolio}
-        reportingDate={ws.reporting.asOf}
-        onReportingDateChange={ws.setReportingDate}
+        onRunChange={ws.setRun}
         mock={client.mock}
       />
       <div className="flex min-h-0 flex-1">
@@ -33,12 +36,18 @@ export function AppShell() {
           onOpenArtifact={openArtifact}
           onRetry={ws.retryLast}
         />
-        <ArtifactCanvas
-          artifacts={ws.artifacts}
-          onTogglePin={ws.togglePin}
-          isWorking={ws.isWorking}
-          portfolioName={ws.portfolio.name}
-        />
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          {/* Deterministic funded snapshot — shown before any AI query. */}
+          <div className="px-6 pt-5">
+            <FundedSnapshotPanel snapshot={ws.snapshot} loading={ws.snapshotLoading} />
+          </div>
+          <ArtifactCanvas
+            artifacts={ws.artifacts}
+            onTogglePin={ws.togglePin}
+            isWorking={ws.isWorking}
+            portfolioName={ws.portfolio.name}
+          />
+        </div>
       </div>
     </div>
   );

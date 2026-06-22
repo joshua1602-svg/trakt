@@ -5,11 +5,13 @@
 
 import type { Artifact, ChatMessage } from "@/domain";
 
-const KEY = "trakt.mi-agent.workspace.v2";
+const KEY = "trakt.mi-agent.workspace.v3";
 
 export interface PersistedState {
-  portfolioId: string;
-  asOf: string;
+  /** Selected funded portfolio (client) id. */
+  clientId?: string;
+  /** Selected reporting run id. */
+  runId?: string;
   messages: ChatMessage[];
   artifacts: Artifact[];
 }
@@ -20,7 +22,7 @@ export function loadState(): PersistedState | null {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as PersistedState;
-    if (!parsed.portfolioId || !Array.isArray(parsed.messages)) return null;
+    if (!Array.isArray(parsed.messages)) return null;
     // Drop any in-flight pending messages from a previous session.
     parsed.messages = parsed.messages.filter((m) => !m.pending);
     return parsed;

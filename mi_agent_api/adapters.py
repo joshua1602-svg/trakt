@@ -15,9 +15,46 @@ No analytics are performed here — only shape translation.
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+
+# Technical diagnostics that are useful for engineers but must NOT appear in the
+# normal user-facing MI card. They are retained in API metadata/diagnostics and
+# logged backend-side instead. Business-facing warnings (missing data, unavailable
+# dimension, validation failure, partial result) are NEVER matched here.
+_TECHNICAL_WARNING_PATTERNS = (
+    re.compile(r"percent-scale heuristically detected", re.I),
+    re.compile(r"does NOT rescale percentages", re.I),
+    re.compile(r"^No chart rendered \(chart_type=", re.I),
+    re.compile(r"^filter .+ kept \d+/\d+ rows", re.I),
+    re.compile(r"^top_n=.* applied", re.I),
+    re.compile(r"^top_n ignored", re.I),
+    re.compile(r"concentration_pct not (added|computed)", re.I),
+    re.compile(r"^excluded \d+ row\(s\) with missing", re.I),
+    re.compile(r"^dropped \d+ loan-level row\(s\)", re.I),
+    re.compile(r"^loan-level output capped", re.I),
+    re.compile(r"bucket field .+ not present in data", re.I),
+)
+
+
+def _is_technical_warning(message: str) -> bool:
+    return any(p.search(message) for p in _TECHNICAL_WARNING_PATTERNS)
+
+
+def split_warnings(warnings: List[str]) -> Tuple[List[str], List[str]]:
+    """Partition warnings into ``(business_facing, technical_diagnostics)``.
+
+    Technical diagnostics (e.g. the percent-scale heuristic note) are hidden from
+    the main user-visible card and surfaced only in API metadata/diagnostics;
+    business-facing warnings remain prominent.
+    """
+    business: List[str] = []
+    diagnostics: List[str] = []
+    for w in warnings:
+        (diagnostics if _is_technical_warning(str(w)) else business).append(w)
+    return business, diagnostics
 
 # Brand palette (mirrors mi_chart_factory.DEFAULT_THEME / charts_plotly.py).
 _PALETTE = ["#919dd1", "#232d55", "#3d4a82", "#36c2a8", "#e0a93b", "#c46b8f"]
@@ -317,6 +354,10 @@ def _chart_artifact(
     # especially fraction percents (0.51 -> 51.0%) — without guessing.
     display_hints = {c: _hint(hints, c) for c in columns} if hints else {}
 
+    chart_warnings, chart_diagnostics = split_warnings(list(cr.get("warnings", [])))
+    if chart_diagnostics:
+        source["diagnostics"] = chart_diagnostics
+
     return {
         "id": _uid(),
         "type": "chart",
@@ -337,7 +378,9 @@ def _chart_artifact(
         "rows": rows,
         "valueFormat": value_format,
         "displayHints": display_hints,
-        "warnings": cr.get("warnings", []),
+        # User-visible card carries business-facing warnings only; technical
+        # diagnostics live in ``source.diagnostics``.
+        "warnings": chart_warnings,
     }
 
 
@@ -437,12 +480,16 @@ def adapt_workflow_result(
     if val_artifact:
         artifacts.append(val_artifact)
 
-    warnings = list(workflow.get("warnings", []))
+    raw_warnings = list(workflow.get("warnings", []))
     # Only warn about degraded fidelity when we could not emit a chart at all
     # (no Plotly figure and no normalisable series). With a figure present,
     # heatmap/treemap render faithfully via the Plotly renderer.
     if chart_type in {"heatmap", "treemap"} and not chart_emitted:
-        warnings.append(f"{chart_type} could not be rendered; showing the result table.")
+        raw_warnings.append(f"{chart_type} could not be rendered; showing the result table.")
+
+    # Hide technical diagnostics (e.g. the percent-scale heuristic note) from the
+    # main user-facing output, but retain them in metadata.diagnostics.
+    warnings, diagnostics = split_warnings(raw_warnings)
 
     return {
         "ok": bool(workflow.get("ok")),
@@ -454,6 +501,7 @@ def adapt_workflow_result(
         "validation": validation,
         "artifacts": artifacts,
         "warnings": warnings,
+        "diagnostics": diagnostics,
         # The MI Agent does not emit narrative assumptions; kept for schema parity.
         "assumptions": [],
         "metadata": {
@@ -466,5 +514,7 @@ def adapt_workflow_result(
             "resultType": qr.get("result_type") if qr else None,
             "rowCount": qr.get("row_count") if qr else None,
             "chartType": chart_type,
+            # Technical diagnostics retained for engineers / an expandable UI panel.
+            "diagnostics": diagnostics,
         },
     }

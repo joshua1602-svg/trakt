@@ -18,4 +18,8 @@ if (typeof window !== "undefined") {
       unobserve() {}
       disconnect() {}
     };
+  // jsdom doesn't implement scroll APIs the chat / artifact panels call.
+  window.HTMLElement.prototype.scrollTo = window.HTMLElement.prototype.scrollTo || (() => {});
+  window.HTMLElement.prototype.scrollIntoView =
+    window.HTMLElement.prototype.scrollIntoView || (() => {});
 }
