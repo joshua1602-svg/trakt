@@ -191,9 +191,15 @@ EXPLICIT_DIMENSION_TERMS = {
     "borrower age bucket": "age_bucket",
     "age bucket": "age_bucket",
     "age band": "age_bucket",
+    "ltv buckets": "ltv_bucket",
     "ltv bucket": "ltv_bucket",
+    "ltv bands": "ltv_bucket",
     "ltv band": "ltv_bucket",
+    "age buckets": "age_bucket",
+    "age bands": "age_bucket",
+    "interest rate buckets": "interest_rate_bucket",
     "ticket size": "ticket_bucket",
+    "ticket buckets": "ticket_bucket",
     "ticket bucket": "ticket_bucket",
     "vintage year": "vintage_year",
     "vintage": "vintage_year",
@@ -407,6 +413,270 @@ def _parse_numeric_filter(q: str, semantics: dict) -> Optional[Tuple[str, Dict[s
     return None
 
 
+# --------------------------------------------------------------------------- #
+# Ranking ("largest ... / top ...") + two-dimensional grouping helpers
+# --------------------------------------------------------------------------- #
+
+# Ranking trigger words and the implied sort direction.
+# NB: "most" is deliberately excluded — "most concentrated" is a concentration
+# question, not a top-N ranking; it is handled by the generic concentration path.
+_RANK_DESC = ("largest", "biggest", "highest", "greatest", "top ")
+_RANK_ASC = ("smallest", "lowest", "bottom")
+
+
+def _detect_ranking(q: str) -> Tuple[bool, str, Optional[int]]:
+    """Return ``(is_ranking, direction, limit)`` for a 'largest/top N' phrase."""
+    direction = "desc"
+    is_ranking = False
+    if any(t in q for t in _RANK_DESC):
+        is_ranking, direction = True, "desc"
+    if any(t in q for t in _RANK_ASC):
+        is_ranking, direction = True, "asc"
+    limit = _detect_top_n(q)
+    if limit is None:
+        m = re.search(r"\b(\d+)\s+(?:largest|biggest|highest|smallest|lowest)\b", q)
+        if m:
+            limit = int(m.group(1))
+    return is_ranking, direction, limit
+
+
+# Bare numeric-axis terms (NOT explicitly bucketed) -> the bucket dimension they
+# group into when used as a categorical grouping segment, plus a resolver for the
+# underlying numeric field (used for bubble axes).
+_NUMERIC_AXIS_BUCKET = {
+    "ltv": "ltv_bucket",
+    "loan to value": "ltv_bucket",
+    "age": "age_bucket",
+    "borrower age": "age_bucket",
+    "rate": "interest_rate_bucket",
+    "interest rate": "interest_rate_bucket",
+    "balance": "ticket_bucket",
+    "outstanding balance": "ticket_bucket",
+    "exposure": "ticket_bucket",
+}
+
+
+def _resolve_numeric_axis(term: str, semantics: dict) -> Optional[str]:
+    """The numeric (measure) field for a bare axis term (bubble axis)."""
+    if "ltv" in term or "loan to value" in term:
+        return _ltv_metric(semantics)
+    if "age" in term:
+        return _age_metric(semantics)
+    if "rate" in term or "interest" in term:
+        return find_field(semantics, role="metric", fmt="percent", keywords=("rate",))
+    if "balance" in term or "outstanding" in term or "exposure" in term:
+        return _balance_metric(semantics)
+    return None
+
+
+def _grouping_segments(q: str) -> Tuple[str, List[str]]:
+    """Split ``<metric part> by <dim> [by/and <dim> ...]`` into the metric part
+    (before the first ``by``) and the ordered list of grouping segments after it.
+
+    Handles both ``by X by Y`` and ``by X and Y`` / ``X, Y`` separators.
+    """
+    parts = re.split(r"\bby\b", q)
+    metric_part = parts[0].strip()
+    segments: List[str] = []
+    for chunk in parts[1:]:
+        for seg in re.split(r"\band\b|,", chunk):
+            seg = seg.strip()
+            # strip trailing presentation words ("as a heatmap" etc.)
+            seg = re.sub(r"\b(as a|as an|chart|heatmap|treemap|bar|table)\b.*$", "", seg).strip()
+            if seg:
+                segments.append(seg)
+    return metric_part, segments
+
+
+def _classify_segment(seg: str, semantics: dict, available_columns=None
+                      ) -> Optional[Tuple[str, str, Optional[str]]]:
+    """Classify one grouping segment.
+
+    Returns ``("categorical", dim_key, None)`` for an inherently categorical
+    dimension (region, broker, product, *bucket*/*band*, vintage, status, …),
+    ``("numeric", numeric_field, bucket_dim)`` for a bare numeric axis term
+    (ltv / age / rate / balance without an explicit bucket word), or ``None``.
+    """
+    # Explicit categorical dimension (NOT grouping=True, so a bare "age"/"ltv"
+    # is NOT forced to a bucket here — that is what distinguishes bubble axes).
+    keys, _terms, _rem = _explicit_dimensions(seg, semantics, grouping=False,
+                                               available_columns=available_columns)
+    if keys:
+        return ("categorical", keys[0], None)
+    # Bare numeric axis term -> numeric (bubble axis) + its bucket dimension.
+    for term, bucket in sorted(_NUMERIC_AXIS_BUCKET.items(), key=lambda kv: len(kv[0]),
+                               reverse=True):
+        if re.search(r"\b" + re.escape(term) + r"\b", seg):
+            return ("numeric", _resolve_numeric_axis(term, semantics), bucket)
+    return None
+
+
+def _classify_segments(q: str, semantics: dict, available_columns=None
+                       ) -> Tuple[str, List[Tuple[str, str, Optional[str]]]]:
+    """``(metric_part, [classified_segment, ...])`` for the grouping part of q."""
+    metric_part, segments = _grouping_segments(q)
+    classes: List[Tuple[str, str, Optional[str]]] = []
+    for seg in segments:
+        c = _classify_segment(seg, semantics, available_columns)
+        if c is not None and c[1]:
+            classes.append(c)
+    return metric_part, classes
+
+
+def _is_bucket_dim(key: Optional[str]) -> bool:
+    return bool(key) and (key.endswith("_bucket") or key.endswith("_band")
+                          or "bucket" in key)
+
+
+def _grouped_metric(metric_part: str, q: str, semantics: dict) -> Tuple[Optional[str], str]:
+    """Resolve the metric for a grouped query, preferring the phrase BEFORE the
+    first ``by`` (the metric side) and falling back to the whole question."""
+    metric, agg, matched = _detect_metric(metric_part, semantics)
+    if metric is None and not matched:
+        metric, agg, _ = _detect_metric(q, semantics)
+    return metric, agg
+
+
+# --- multi-filter parsing --------------------------------------------------- #
+# Region/geography categorical filter, e.g. "geographic region south west",
+# "region south west", "in south west". The value is normalised to Title Case;
+# the executor matches case-insensitively against the prepared dimension values.
+_CATEGORICAL_FILTER_RE = re.compile(
+    r"(?:geographic\s+region|geographic|geography|region|in)\s+"
+    r"([a-z][a-z]*(?:\s+[a-z]+){0,2})\s*$")
+_CATEGORICAL_STOPWORDS = {"the", "loans", "loan", "with", "and", "by", "more",
+                          "less", "than", "over", "under", "above", "below"}
+
+
+def _parse_categorical_filter(clause: str, semantics: dict, available_columns=None
+                              ) -> Optional[Tuple[str, str]]:
+    """Detect a categorical region filter in a clause -> (field_key, value)."""
+    m = _CATEGORICAL_FILTER_RE.search(clause.strip())
+    if not m:
+        return None
+    value = m.group(1).strip()
+    if not value or value in _CATEGORICAL_STOPWORDS:
+        return None
+    field = _preferred_region(semantics, available_columns) or "geographic_region_obligor"
+    if field not in _fields(semantics):
+        return None
+    return field, value.title()
+
+
+def _parse_filters(q: str, semantics: dict, available_columns=None) -> Dict[str, Any]:
+    """Parse one or more filters joined by ``and`` (numeric thresholds and a
+    categorical region value). Returns ``{field_key: condition}``."""
+    filters: Dict[str, Any] = {}
+    work_q = q
+    # Parse a 'between A and B' first so its 'and' is not used as a clause split.
+    bm = re.search(_FILTER_COMPARATORS[0][0], work_q)
+    if bm:
+        field = _filter_field_of(work_q[max(0, bm.start() - 40):bm.end()], semantics)
+        if field:
+            filters[field] = {"op": "between",
+                              "value": [float(bm.group(1)), float(bm.group(2))]}
+        work_q = work_q[:bm.start()] + " " + work_q[bm.end():]
+
+    for clause in re.split(r"\band\b", work_q):
+        clause = clause.strip()
+        if not clause:
+            continue
+        matched_numeric = False
+        for pattern, op in _FILTER_COMPARATORS[1:]:  # skip 'between' (done above)
+            m = re.search(pattern, clause)
+            if not m:
+                continue
+            field = _filter_field_of(clause, semantics)
+            if field:
+                filters[field] = {"op": op, "value": float(m.group(1))}
+                matched_numeric = True
+            break
+        if matched_numeric:
+            continue
+        cat = _parse_categorical_filter(clause, semantics, available_columns)
+        if cat:
+            filters[cat[0]] = cat[1]
+    return filters
+
+
+def _build_two_dim_spec(metric: Optional[str], dims: List[str], semantics: dict,
+                        title: str, explicit: bool, terms: List[str],
+                        has_count: bool = False) -> Tuple[MIQuerySpec, dict]:
+    """Build a two-dimensional grouped (heatmap / matrix) spec."""
+    fields = _fields(semantics)
+    if has_count or metric is None:
+        metric, agg, weight = (None, "count", None)
+    else:
+        agg = "weighted_avg" if fields.get(metric, {}).get("format") == "percent" else "sum"
+        weight = _default_weight(semantics, metric) if agg == "weighted_avg" else None
+    conf = "high" if len([d for d in dims if d]) >= 2 else "low"
+    spec = MIQuerySpec(
+        intent="chart", chart_type="heatmap", metric=metric,
+        dimensions=[d for d in dims if d][:2], aggregation=agg, weight_field=weight,
+        title=title, explanation="Matrix of a metric across two dimensions.",
+        output_format="chart")
+    return spec, _det_meta(conf, explicit, terms)
+
+
+def _build_ranking_spec(q: str, title: str, rank_dir: str, rank_limit: Optional[int],
+                        top_n: Optional[int], semantics: dict, available_columns=None
+                        ) -> Optional[Tuple[MIQuerySpec, dict]]:
+    """Build a ranked spec: grouped ranking bar (a categorical dimension is
+    present) or a loan-level 'top loans' ranking table."""
+    fields = _fields(semantics)
+    rmetric, ragg, _ = _detect_metric(q, semantics)
+    # The ranked measure: prefer balance whenever it is explicitly named so that
+    # "largest balance by ltv" ranks balance, not the LTV grouping term.
+    if re.search(r"\b(balance|outstanding|exposure)\b", q):
+        rmetric, ragg = _balance_metric(semantics), "sum"
+    if rmetric is None:
+        rmetric, ragg = _balance_metric(semantics), "sum"
+
+    # Grouping dimension: an explicit categorical dimension anywhere, otherwise a
+    # bare post-"by" numeric term's bucket dimension — never the ranked metric.
+    dim: Optional[str] = None
+    gkeys, gterms, _ = _explicit_dimensions(q, semantics, grouping=True,
+                                            available_columns=available_columns)
+    for k in gkeys:
+        if k != rmetric:
+            dim, gterms = k, gterms
+            break
+    if dim is None:
+        _mp, segs = _grouping_segments(q)
+        for seg in segs:
+            c = _classify_segment(seg, semantics, available_columns)
+            if not c:
+                continue
+            if c[0] == "categorical" and c[1] != rmetric:
+                dim = c[1]
+                break
+            if c[0] == "numeric" and c[2] in fields:
+                seg_is_metric = (bool(re.search(r"\b(balance|outstanding|exposure)\b", seg))
+                                 and rmetric == _balance_metric(semantics))
+                if not seg_is_metric:
+                    dim = c[2]
+                    break
+
+    if dim is not None:
+        weight = _default_weight(semantics, rmetric) if ragg == "weighted_avg" else None
+        spec = MIQuerySpec(
+            intent="chart", chart_type="bar", metric=rmetric, dimension=dim,
+            aggregation=ragg, weight_field=weight, top_n=(rank_limit or top_n),
+            sort_by=rmetric, sort_direction=rank_dir, ranking_mode="grouped",
+            title=title, explanation="Ranked bar of a metric by dimension.",
+            output_format="chart")
+        return spec, _det_meta("high", True, gterms or [dim])
+
+    # No dimension -> a loan-level "top loans" ranking table.
+    spec = MIQuerySpec(
+        intent="table", chart_type="none", metric=rmetric,
+        aggregation="loan_level", ranking_mode="loan_level", sort_by=rmetric,
+        sort_direction=rank_dir, limit=(rank_limit or top_n or 10),
+        output_format="table", title=title,
+        explanation="Top loans ranked by a measure.")
+    return spec, _det_meta("high", False, [rmetric])
+
+
 def _deterministic_parse(question: str, semantics: dict,
                          available_columns=None) -> Tuple[MIQuerySpec, dict]:
     """Parse a question into (MIQuerySpec, deterministic-parser metadata).
@@ -426,23 +696,25 @@ def _deterministic_parse(question: str, semantics: dict,
     is_count_q = bool(re.search(r"\bhow many\b|\bnumber of\b|\bcount of\b", q))
     is_balance_q = bool(re.search(r"\bhow much\b|\btotal balance\b", q))
     if is_count_q or is_balance_q:
-        nf = _parse_numeric_filter(q, semantics)
-        if nf is not None:
-            field, cond = nf
+        # Support one OR MORE filters joined by "and" (numeric thresholds and a
+        # categorical region value), e.g. "youngest age more than 70 and
+        # geographic region south west".
+        filters = _parse_filters(q, semantics, available_columns)
+        if filters:
             if is_balance_q:
                 metric = _balance_metric(semantics)
                 spec = MIQuerySpec(
                     intent="summary", chart_type="none", metric=metric,
-                    aggregation="sum", filters={field: cond}, title=title,
-                    explanation="Filtered balance over loans matching a threshold.",
+                    aggregation="sum", filters=filters, title=title,
+                    explanation="Filtered balance over loans matching the criteria.",
                     output_format="table")
             else:
                 spec = MIQuerySpec(
                     intent="summary", chart_type="none", aggregation="count",
-                    filters={field: cond}, title=title,
-                    explanation="Filtered loan count over a numeric threshold.",
+                    filters=filters, title=title,
+                    explanation="Filtered loan count over one or more criteria.",
                     output_format="table")
-            return spec, _det_meta("high", True, [field],
+            return spec, _det_meta("high", True, sorted(filters),
                                    note=f"filtered_{'balance' if is_balance_q else 'count'}")
 
     dim_keys, dim_terms, remaining = _explicit_dimensions(q, semantics, available_columns=available_columns)
@@ -451,19 +723,43 @@ def _deterministic_parse(question: str, semantics: dict,
     # ---- heatmap (two dimensions + metric) --------------------------------
     if "heatmap" in q:
         g_keys, g_terms, g_remaining = _explicit_dimensions(q, semantics, grouping=True, available_columns=available_columns)
-        metric, agg, _ = _detect_metric(g_remaining, semantics)
-        if metric is None:
-            metric = _balance_metric(semantics)
-        agg = "weighted_avg" if (metric and _fields(semantics).get(metric, {})
-                                 .get("format") == "percent") else "avg"
-        dims = g_keys[:2]
-        conf = "high" if len(dims) >= 2 else "low"
-        return (MIQuerySpec(
-            intent="chart", chart_type="heatmap", metric=metric,
-            dimensions=dims, aggregation=agg, title=title,
-            explanation="Heatmap of metric intensity across two dimensions.",
-            output_format="chart"),
-            _det_meta(conf, bool(g_keys), g_terms))
+        metric, _agg, matched = _detect_metric(g_remaining, semantics)
+        return _build_two_dim_spec(metric, g_keys[:2], semantics, title,
+                                   bool(g_keys), g_terms, has_count=("count" in matched))
+
+    # ---- two-dimensional grouped query -> heatmap / matrix ----------------
+    # "<metric> by <dim> by/and <dim>". A categorical dimension (region, broker,
+    # *bucket*, …) makes this a grouped matrix (heatmap), NOT a loan-level bubble.
+    # Two NUMERIC axes (e.g. ltv & age) remain a bubble (handled below).
+    metric_part, seg_classes = _classify_segments(q, semantics, available_columns)
+    explicit_plot = ("bubble" in q or "scatter" in q or "sized by" in q
+                     or " vs " in q or "plot" in q or "against" in q)
+    numeric_bubble = False
+    if len(seg_classes) >= 2 and not explicit_plot and "treemap" not in q:
+        n_categorical = sum(1 for c in seg_classes if c[0] == "categorical")
+        if n_categorical >= 1:
+            # Convert each of the two segments to a categorical dimension key
+            # (numeric segments are bucketed via their bucket dimension), applying
+            # the row/column convention later in the adapter.
+            dims: List[str] = []
+            for c in seg_classes[:2]:
+                key = c[1] if c[0] == "categorical" else c[2]
+                if key and key not in dims:
+                    dims.append(key)
+            metric, _agg, matched = _detect_metric(metric_part, semantics)
+            return _build_two_dim_spec(metric, dims, semantics, title, True,
+                                       [c[1] for c in seg_classes[:2]],
+                                       has_count=("count" in matched))
+        # All-numeric two-segment grouping -> bubble (two numeric axes + size).
+        numeric_bubble = True
+
+    # ---- ranked / "largest" queries ---------------------------------------
+    is_ranking, rank_dir, rank_limit = _detect_ranking(q)
+    if is_ranking and "treemap" not in q and "heatmap" not in q:
+        ranked = _build_ranking_spec(q, title, rank_dir, rank_limit, top_n,
+                                     semantics, available_columns)
+        if ranked is not None:
+            return ranked
 
     # ---- treemap (hierarchy + metric) -------------------------------------
     if "treemap" in q:
@@ -479,12 +775,26 @@ def _deterministic_parse(question: str, semantics: dict,
             output_format="chart"),
             _det_meta(conf, bool(g_keys), g_terms))
 
-    # ---- bubble ("<a> by <b> by <c>" or "... sized by ...") ---------------
+    # ---- bubble (two NUMERIC axes + a size measure) -----------------------
+    # Triggered by explicit "bubble"/"sized by", or by two numeric grouping
+    # segments (e.g. "balance by ltv by age") — NEVER by a categorical pair
+    # (that is a heatmap, handled above).
     by_parts = [p.strip() for p in re.split(r"\bby\b", q) if p.strip()]
-    if "bubble" in q or "sized by" in q or len(by_parts) >= 3:
+    if "bubble" in q or "sized by" in q or numeric_bubble:
         x = _age_metric(semantics) if "age" in q else _balance_metric(semantics)
         y = _ltv_metric(semantics) if "ltv" in q else _balance_metric(semantics)
         size = _balance_metric(semantics)
+        # If the heuristic collapsed the two axes onto one field, recover the two
+        # distinct numeric axes from the classified grouping segments.
+        if numeric_bubble and x == y:
+            nums = [c[1] for c in seg_classes if c[0] == "numeric" and c[1]]
+            if len(nums) >= 2:
+                x, y = nums[0], nums[1]
+        # Never let two roles select the same column (would trip the loan-level
+        # duplicate-column guard). Fall back to a distinct balance field.
+        if size in (x, y):
+            size = next((b for b in _PREFERRED_BALANCE
+                         if b in _fields(semantics) and b not in (x, y)), size)
         return (MIQuerySpec(
             intent="chart", chart_type="bubble", x=x, y=y, size=size,
             aggregation="loan_level", title=title,
@@ -510,7 +820,13 @@ def _deterministic_parse(question: str, semantics: dict,
     # ---- line (trend over time) -------------------------------------------
     is_line = ("over time" in q or "trend" in q or "monthly" in q
                or "by month" in q or "vintage_year" in dim_keys)
-    metric, agg, _ = _detect_metric(remaining, semantics)
+    # Resolve the metric from the phrase BEFORE the first "by" (the metric side),
+    # so "<metric> by <dimension>" never picks the grouping term as the metric
+    # (e.g. "balance by ltv" -> metric=balance, not LTV). Fall back to the dim-
+    # blanked remaining text when the metric side names nothing.
+    metric, agg, _matched = _detect_metric(metric_part, semantics)
+    if metric is None and not _matched:
+        metric, agg, _ = _detect_metric(remaining, semantics)
     if is_line:
         x = ("origination_date" if "origination_date" in _fields(semantics)
              else None)

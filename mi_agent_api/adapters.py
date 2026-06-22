@@ -74,6 +74,12 @@ def _figure_has_content(figure: Any) -> bool:
     return isinstance(figure, dict) and bool(figure.get("data"))
 
 
+def _is_bucket_column(col: Optional[str]) -> bool:
+    """A bucketed dimension column (used as the heatmap COLUMN axis)."""
+    return bool(col) and (col.endswith("_bucket") or col.endswith("_band")
+                          or "bucket" in col)
+
+
 def _uid(prefix: str = "art") -> str:
     return f"{prefix}_{uuid.uuid4().hex[:8]}"
 
@@ -312,9 +318,16 @@ def _chart_artifact(
             value_format = _hint(hints, primary).get("format") or _infer_col_format(primary, resolved)
     elif chart_type == "heatmap":
         # Native grid renderer needs two dimensions + an intensity measure.
+        # Row/column convention: the bucket dimension is the COLUMN axis (xKey)
+        # and the other (e.g. geography) is the ROW axis (yKey), so a matrix reads
+        # geography down the side and the bucket across the top.
         dims = _dimension_columns(resolved, columns)
-        x_key = dims[0] if len(dims) > 0 else None
-        y_key = dims[1] if len(dims) > 1 else None
+        a = dims[0] if len(dims) > 0 else None
+        b = dims[1] if len(dims) > 1 else None
+        if a and b and _is_bucket_column(b) and not _is_bucket_column(a):
+            x_key, y_key = b, a
+        else:
+            x_key, y_key = a, b
         value_key = _value_column([d for d in (x_key, y_key) if d])
         value_format = _hint(hints, value_key or "").get("format") or _infer_col_format(value_key or "", resolved)
     elif chart_type == "treemap":
@@ -358,6 +371,12 @@ def _chart_artifact(
     if chart_diagnostics:
         source["diagnostics"] = chart_diagnostics
 
+    # Heatmap/matrix row/column aliases (explicit, alongside x/y/value keys) so a
+    # consumer can read the matrix as rows × columns without re-deriving them.
+    matrix_keys: Dict[str, Any] = {}
+    if chart_type == "heatmap" and x_key and y_key and value_key:
+        matrix_keys = {"rowKey": y_key, "columnKey": x_key, "metricKey": value_key}
+
     return {
         "id": _uid(),
         "type": "chart",
@@ -371,6 +390,7 @@ def _chart_artifact(
         "yKey": y_key,
         "sizeKey": size_key,
         "valueKey": value_key,
+        **matrix_keys,
         "xLabel": x_label,
         "yLabel": y_label,
         "sizeLabel": size_label,

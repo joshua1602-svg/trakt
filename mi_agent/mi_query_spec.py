@@ -56,7 +56,7 @@ AMBIGUOUS_DIMENSION_TERMS = {"stage", "portfolio", "region", "rate", "balance"}
 
 # Semantic-field-bearing fields on the spec (used by referenced_fields and the
 # validator).  `dimensions`/`hierarchy` are list-valued and handled separately.
-_SCALAR_FIELD_SLOTS = ("metric", "dimension", "x", "y", "size", "color", "weight_field")
+_SCALAR_FIELD_SLOTS = ("metric", "dimension", "x", "y", "size", "color", "weight_field", "sort_by")
 _LIST_FIELD_SLOTS = ("dimensions", "hierarchy")
 
 
@@ -80,6 +80,16 @@ class MIQuerySpec:
 
     filters: Dict[str, Any] = field(default_factory=dict)
     top_n: Optional[int] = None
+
+    # Ranking / "largest" grammar (ADDITIVE; all optional, no-op by default).
+    #   ranking_mode : "loan_level" (top loans table) | "grouped" (ranked bar) | None
+    #   sort_by      : semantic field key to rank by (falls back to ``metric``)
+    #   sort_direction: "desc" (default) | "asc"
+    #   limit        : loan-level row cap for ranked tables (falls back to top_n/10)
+    ranking_mode: Optional[str] = None
+    sort_by: Optional[str] = None
+    sort_direction: str = "desc"
+    limit: Optional[int] = None
 
     # Multi-dimension support (heatmap / treemap)
     dimensions: List[str] = field(default_factory=list)

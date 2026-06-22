@@ -102,9 +102,13 @@ def test_heatmap_emits_native_keys_plus_fallback_figure_and_table():
     assert "table" in _types(resp)
     chart = next(a for a in resp["artifacts"] if a["type"] == "chart")
     assert chart["chartType"] == "heatmap"
-    # Native grid keys are populated so React renders without Plotly.
-    assert chart["xKey"] == "geographic_region_obligor"
-    assert chart["yKey"] == "ltv_bucket"
+    # Native grid keys are populated so React renders without Plotly. Row/column
+    # convention: the bucket dimension is the COLUMN axis (xKey), geography the
+    # ROW axis (yKey), so a matrix reads geography down the side, bucket across.
+    assert chart["xKey"] == "ltv_bucket"
+    assert chart["yKey"] == "geographic_region_obligor"
+    assert chart["columnKey"] == "ltv_bucket"
+    assert chart["rowKey"] == "geographic_region_obligor"
     assert chart["valueKey"] == "current_outstanding_balance_sum"
     # Figure is kept as a fidelity fallback for heatmap.
     assert chart["source"]["figure"] is not None
