@@ -1,6 +1,6 @@
 import { Bell, CalendarDays, Settings, ShieldCheck } from "lucide-react";
 import { PortfolioSelector } from "@/components/PortfolioSelector";
-import { REPORTING_DATES } from "@/data/catalog";
+import type { SnapshotPortfolio, SnapshotRun } from "@/domain";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-GB", {
@@ -10,17 +10,25 @@ function formatDate(iso: string): string {
   });
 }
 
+function runLabel(run: SnapshotRun): string {
+  return run.reporting_date ? formatDate(run.reporting_date) : run.run_id;
+}
+
 export function HeaderBar({
-  portfolio,
+  portfolios,
+  runs,
+  selectedClientId,
+  selectedRunId,
   onPortfolioChange,
-  reportingDate,
-  onReportingDateChange,
+  onRunChange,
   mock,
 }: {
-  portfolio: string;
-  onPortfolioChange: (id: string) => void;
-  reportingDate: string;
-  onReportingDateChange: (d: string) => void;
+  portfolios: SnapshotPortfolio[];
+  runs: SnapshotRun[];
+  selectedClientId: string | null;
+  selectedRunId: string | null;
+  onPortfolioChange: (clientId: string) => void;
+  onRunChange: (runId: string) => void;
   mock: boolean;
 }) {
   return (
@@ -35,27 +43,33 @@ export function HeaderBar({
             Trakt <span className="font-normal text-ink-400">· MI Agent</span>
           </div>
           <div className="text-[10px] uppercase tracking-wider text-ink-500">
-            Portfolio Intelligence
+            Funded Portfolio Intelligence
           </div>
         </div>
       </div>
 
       <div className="mx-1 h-7 w-px bg-[var(--color-line)]" />
 
-      <PortfolioSelector value={portfolio} onChange={onPortfolioChange} />
+      <PortfolioSelector
+        portfolios={portfolios}
+        value={selectedClientId}
+        onChange={onPortfolioChange}
+      />
 
-      {/* Reporting date */}
+      {/* Reporting date — only runs that actually exist for this portfolio. */}
       <label className="flex items-center gap-2 rounded-lg border border-[var(--color-line)] bg-navy-900/60 px-3 py-1.5">
         <CalendarDays size={15} className="text-peri-300" />
-        <span className="text-[10px] uppercase tracking-wider text-ink-500">As of</span>
+        <span className="text-[10px] uppercase tracking-wider text-ink-500">Reporting Date</span>
         <select
-          value={reportingDate}
-          onChange={(e) => onReportingDateChange(e.target.value)}
-          className="cursor-pointer bg-transparent text-[13px] font-medium text-ink-100 focus:outline-none"
+          value={selectedRunId ?? ""}
+          onChange={(e) => onRunChange(e.target.value)}
+          disabled={runs.length === 0}
+          className="cursor-pointer bg-transparent text-[13px] font-medium text-ink-100 focus:outline-none disabled:opacity-50"
         >
-          {REPORTING_DATES.map((d) => (
-            <option key={d} value={d} className="bg-navy-900 text-ink-100">
-              {formatDate(d)}
+          {runs.length === 0 && <option value="">No reporting runs</option>}
+          {runs.map((r) => (
+            <option key={r.run_id} value={r.run_id} className="bg-navy-900 text-ink-100">
+              {runLabel(r)}
             </option>
           ))}
         </select>

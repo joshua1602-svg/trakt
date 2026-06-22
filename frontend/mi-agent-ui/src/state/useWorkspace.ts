@@ -1,10 +1,12 @@
 /**
  * useWorkspace — central orchestration hook.
  *
- * Owns portfolio/reporting context, chat history, the artifact canvas, and all
- * agent interaction (through the AgentClient only). Handles loading, error and
- * empty states and persists across reloads. This is the seam a future backend
- * plugs into: swap the client passed in, nothing else changes.
+ * Owns the data-driven funded portfolio / reporting-run selection, the
+ * deterministic landing-page funded snapshot, chat history, the artifact canvas,
+ * and all agent interaction (through the AgentClient only). The portfolio and
+ * reporting-date dropdowns are populated from `GET /mi/snapshots` (real
+ * onboarding output) — never hardcoded prototype options. This is the seam a
+ * backend plugs into: swap the client passed in, nothing else changes.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -12,42 +14,45 @@ import type {
   AgentRequest,
   Artifact,
   ChatMessage,
+  FundedSnapshot,
   PortfolioContext,
   ReportingContext,
+  SnapshotPortfolio,
+  SnapshotRun,
 } from "@/domain";
 import type { AgentClient } from "@/api";
-import {
-  DEFAULT_PORTFOLIO,
-  DEFAULT_REPORTING_DATE,
-  PORTFOLIOS,
-  PRIOR_PERIOD,
-} from "@/data/catalog";
-import { landingArtifacts } from "@/data/mockArtifacts";
 import { uid } from "@/lib/utils";
 import { loadState, saveState } from "./persistence";
 
-function greeting(portfolio: PortfolioContext, asOf: string): ChatMessage {
-  const date = new Date(asOf).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+function greeting(portfolioLabel: string, asOf: string | null): ChatMessage {
+  const date = asOf
+    ? new Date(asOf).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })
+    : "the latest reporting date";
   return {
     id: "greeting",
     role: "assistant",
-    content: `Welcome back. I'm your MI Agent for ${portfolio.name}, as of ${date}. Ask me about portfolio movement, concentration, the funding pipeline, static pools, risk monitoring, scenarios or validation — I'll surface the analysis and supporting artifacts on the right.`,
+    content: `Welcome back. I'm your MI Agent for the ${portfolioLabel} funded portfolio, as of ${date}. The funded book snapshot is on the right — ask me about portfolio movement, concentration, stratifications, risk monitoring or validation to go deeper.`,
     createdAt: new Date().toISOString(),
   };
 }
 
 export interface Workspace {
+  /** Discovered funded portfolios (data-driven dropdown source). */
+  portfolios: SnapshotPortfolio[];
+  /** Reporting runs available for the selected portfolio. */
+  runs: SnapshotRun[];
+  selectedClientId: string | null;
+  selectedRunId: string | null;
   portfolio: PortfolioContext;
   reporting: ReportingContext;
+  /** Deterministic landing-page funded snapshot for the selected run. */
+  snapshot: FundedSnapshot | null;
+  snapshotLoading: boolean;
   messages: ChatMessage[];
   artifacts: Artifact[];
   isWorking: boolean;
-  setPortfolio: (id: string) => void;
-  setReportingDate: (asOf: string) => void;
+  setPortfolio: (clientId: string) => void;
+  setRun: (runId: string) => void;
   ask: (question: string) => void;
   retryLast: () => void;
   togglePin: (id: string) => void;
@@ -57,37 +62,104 @@ export interface Workspace {
 export function useWorkspace(client: AgentClient): Workspace {
   const persisted = useRef(loadState()).current;
 
-  const [portfolioId, setPortfolioId] = useState(persisted?.portfolioId ?? DEFAULT_PORTFOLIO.id);
-  const [asOf, setAsOf] = useState(persisted?.asOf ?? DEFAULT_REPORTING_DATE);
+  const [portfolios, setPortfolios] = useState<SnapshotPortfolio[]>([]);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(persisted?.clientId ?? null);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(persisted?.runId ?? null);
+  const [snapshot, setSnapshot] = useState<FundedSnapshot | null>(null);
+  const [snapshotLoading, setSnapshotLoading] = useState(false);
 
-  const portfolio = useMemo(
-    () => PORTFOLIOS.find((p) => p.id === portfolioId) ?? DEFAULT_PORTFOLIO,
-    [portfolioId],
+  // Discover available portfolios / runs once; default to the latest run.
+  useEffect(() => {
+    let cancelled = false;
+    client
+      .getSnapshots()
+      .then((index) => {
+        if (cancelled) return;
+        const pfs = index.portfolios ?? [];
+        setPortfolios(pfs);
+        if (pfs.length === 0) return;
+        const persistedPf = pfs.find((p) => p.client_id === persisted?.clientId);
+        const pf = persistedPf ?? pfs[pfs.length - 1];
+        setSelectedClientId((cur) => cur ?? pf.client_id);
+        const run =
+          (persistedPf && pf.runs.find((r) => r.run_id === persisted?.runId)) ??
+          pf.runs[pf.runs.length - 1];
+        setSelectedRunId((cur) => cur ?? run?.run_id ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setPortfolios([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, persisted?.clientId, persisted?.runId]);
+
+  const activePortfolio = useMemo(
+    () => portfolios.find((p) => p.client_id === selectedClientId) ?? portfolios[0] ?? null,
+    [portfolios, selectedClientId],
+  );
+  const runs = activePortfolio?.runs ?? [];
+  const activeRun = useMemo(
+    () => runs.find((r) => r.run_id === selectedRunId) ?? runs[runs.length - 1] ?? null,
+    [runs, selectedRunId],
+  );
+
+  const portfolioId =
+    activePortfolio && activeRun ? `${activePortfolio.client_id}/${activeRun.run_id}` : "";
+
+  const portfolio = useMemo<PortfolioContext>(
+    () => ({
+      id: portfolioId,
+      name: activePortfolio?.label ?? "Funded Portfolio",
+      entity: activeRun?.reporting_date ?? activeRun?.run_id ?? "",
+    }),
+    [portfolioId, activePortfolio?.label, activeRun?.reporting_date, activeRun?.run_id],
   );
   const reporting = useMemo<ReportingContext>(
-    () => ({ asOf, comparedTo: PRIOR_PERIOD[asOf] }),
-    [asOf],
+    () => ({ asOf: activeRun?.reporting_date ?? "", comparedTo: undefined }),
+    [activeRun?.reporting_date],
   );
 
+  // Fetch the deterministic funded snapshot whenever the selected run changes.
+  useEffect(() => {
+    if (!portfolioId) return;
+    let cancelled = false;
+    setSnapshotLoading(true);
+    client
+      .getSnapshot(portfolioId)
+      .then((snap) => {
+        if (!cancelled) setSnapshot(snap);
+      })
+      .catch(() => {
+        if (!cancelled) setSnapshot(null);
+      })
+      .finally(() => {
+        if (!cancelled) setSnapshotLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, portfolioId]);
+
   const [messages, setMessages] = useState<ChatMessage[]>(
-    () => persisted?.messages ?? [greeting(portfolio, asOf)],
+    () => persisted?.messages ?? [greeting("selected", persisted?.runId ? null : null)],
   );
-  const [artifacts, setArtifacts] = useState<Artifact[]>(() => {
-    // Demo mode seeds the sample landing artifacts; LIVE mode starts clean and
-    // never shows mock cards (and drops any mock artifacts left in localStorage
-    // from a previous demo session). Real artifacts appear as queries succeed.
-    if (client.mock) return persisted?.artifacts ?? landingArtifacts(reporting, portfolioId);
-    return (persisted?.artifacts ?? []).filter((a) => !a.mock);
-  });
+  const [artifacts, setArtifacts] = useState<Artifact[]>(
+    () => (persisted?.artifacts ?? []).filter((a) => !a.mock),
+  );
   const [isWorking, setIsWorking] = useState(false);
 
   const lastQuestion = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Persist (debounced via microtask coalescing through React batching).
   useEffect(() => {
-    saveState({ portfolioId, asOf, messages, artifacts });
-  }, [portfolioId, asOf, messages, artifacts]);
+    saveState({
+      clientId: selectedClientId ?? undefined,
+      runId: selectedRunId ?? undefined,
+      messages,
+      artifacts,
+    });
+  }, [selectedClientId, selectedRunId, messages, artifacts]);
 
   const runQuery = useCallback(
     (question: string, pendingId: string) => {
@@ -121,6 +193,7 @@ export function useWorkspace(client: AgentClient): Workspace {
                     interpreted: res.interpreted,
                     assumptions: res.assumptions,
                     warnings: res.warnings,
+                    diagnostics: res.diagnostics,
                     intent: res.intent,
                     artifactRefs: res.artifacts.map((a) => ({ id: a.id, title: a.title, type: a.type })),
                   }
@@ -131,11 +204,7 @@ export function useWorkspace(client: AgentClient): Workspace {
         .catch((err: unknown) => {
           const message = err instanceof Error ? err.message : "The MI Agent could not complete this request.";
           setMessages((prev) =>
-            prev.map((m) =>
-              m.id === pendingId
-                ? { ...m, pending: false, error: true, content: message }
-                : m,
-            ),
+            prev.map((m) => (m.id === pendingId ? { ...m, pending: false, error: true, content: message } : m)),
           );
         })
         .finally(() => {
@@ -177,13 +246,7 @@ export function useWorkspace(client: AgentClient): Workspace {
     const pendingId = uid("msg");
     setMessages((prev) => [
       ...prev,
-      {
-        id: pendingId,
-        role: "assistant",
-        content: "",
-        pending: true,
-        createdAt: new Date().toISOString(),
-      },
+      { id: pendingId, role: "assistant", content: "", pending: true, createdAt: new Date().toISOString() },
     ]);
     runQuery(lastQuestion.current, pendingId);
   }, [isWorking, runQuery]);
@@ -192,33 +255,36 @@ export function useWorkspace(client: AgentClient): Workspace {
     setArtifacts((prev) => prev.map((a) => (a.id === id ? { ...a, pinned: !a.pinned } : a)));
   }, []);
 
-  const setReportingDate = useCallback(
-    (next: string) => {
-      setAsOf(next);
-      // Refresh non-pinned landing artifacts for the new date when idle.
-      setArtifacts((prev) => {
-        const pinned = prev.filter((a) => a.pinned);
-        if (prev.length === pinned.length) return prev;
-        return prev;
-      });
+  const setPortfolio = useCallback(
+    (clientId: string) => {
+      setSelectedClientId(clientId);
+      // Default to the latest run of the newly-selected portfolio.
+      const pf = portfolios.find((p) => p.client_id === clientId);
+      setSelectedRunId(pf?.runs[pf.runs.length - 1]?.run_id ?? null);
     },
-    [],
+    [portfolios],
   );
 
   const resetWorkspace = useCallback(() => {
     abortRef.current?.abort();
-    setMessages([greeting(portfolio, asOf)]);
-    setArtifacts(client.mock ? landingArtifacts({ asOf }, portfolioId) : []);
-  }, [client.mock, portfolio, asOf, portfolioId]);
+    setMessages([greeting(activePortfolio?.label ?? "selected", activeRun?.reporting_date ?? null)]);
+    setArtifacts([]);
+  }, [activePortfolio?.label, activeRun?.reporting_date]);
 
   return {
+    portfolios,
+    runs,
+    selectedClientId: activePortfolio?.client_id ?? null,
+    selectedRunId: activeRun?.run_id ?? null,
     portfolio,
     reporting,
+    snapshot,
+    snapshotLoading,
     messages,
     artifacts,
     isWorking,
-    setPortfolio: setPortfolioId,
-    setReportingDate,
+    setPortfolio,
+    setRun: setSelectedRunId,
     ask,
     retryLast,
     togglePin,

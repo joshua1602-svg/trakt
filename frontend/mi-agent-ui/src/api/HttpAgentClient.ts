@@ -7,7 +7,14 @@
  * so this client is a thin transport + envelope translation.
  */
 
-import type { AgentRequest, AgentResponse, Artifact, Intent } from "@/domain";
+import type {
+  AgentRequest,
+  AgentResponse,
+  Artifact,
+  FundedSnapshot,
+  Intent,
+  SnapshotIndex,
+} from "@/domain";
 import { isArtifact } from "@/domain";
 import { AgentError, type AgentClient } from "./AgentClient";
 
@@ -21,6 +28,7 @@ interface ApiResponse {
   validation?: Record<string, unknown>;
   artifacts?: unknown[];
   warnings?: string[];
+  diagnostics?: string[];
   assumptions?: string[];
   metadata?: Record<string, unknown>;
 }
@@ -42,6 +50,33 @@ export class HttpAgentClient implements AgentClient {
 
   constructor(private readonly baseUrl: string) {
     this.baseUrl = baseUrl.replace(/\/$/, "");
+  }
+
+  private async getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
+    let res: Response;
+    try {
+      res = await fetch(`${this.baseUrl}${path}`, { signal });
+    } catch (err) {
+      if ((err as Error)?.name === "AbortError") throw new AgentError("Request aborted", err);
+      throw new AgentError(`Could not reach the MI Agent API at ${this.baseUrl}.`, err);
+    }
+    if (!res.ok) throw new AgentError(`MI Agent API returned ${res.status} ${res.statusText}`);
+    try {
+      return (await res.json()) as T;
+    } catch (err) {
+      throw new AgentError("MI Agent API returned an invalid response", err);
+    }
+  }
+
+  getSnapshots(signal?: AbortSignal): Promise<SnapshotIndex> {
+    return this.getJson<SnapshotIndex>("/mi/snapshots", signal);
+  }
+
+  getSnapshot(portfolioId: string, signal?: AbortSignal): Promise<FundedSnapshot> {
+    return this.getJson<FundedSnapshot>(
+      `/mi/snapshot?portfolioId=${encodeURIComponent(portfolioId)}`,
+      signal,
+    );
   }
 
   async ask(request: AgentRequest, signal?: AbortSignal): Promise<AgentResponse> {
@@ -89,6 +124,7 @@ export class HttpAgentClient implements AgentClient {
       assumptions: body.assumptions ?? [],
       artifacts,
       warnings: body.warnings ?? [],
+      diagnostics: body.diagnostics ?? [],
       spec: body.spec,
       error: body.error ?? undefined,
     };

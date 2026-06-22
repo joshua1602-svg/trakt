@@ -6,7 +6,7 @@
  * (posting an AgentRequest to the MI Agent API) requires no component changes.
  */
 
-import type { AgentRequest, AgentResponse } from "@/domain";
+import type { AgentRequest, AgentResponse, FundedSnapshot, SnapshotIndex } from "@/domain";
 
 export interface AgentClient {
   /** Identifier surfaced in the UI (e.g. environment badge). */
@@ -16,6 +16,12 @@ export interface AgentClient {
 
   /** Submit a question; resolves with a structured response. */
   ask(request: AgentRequest, signal?: AbortSignal): Promise<AgentResponse>;
+
+  /** Discover available funded portfolios and reporting runs (data-driven dropdowns). */
+  getSnapshots(signal?: AbortSignal): Promise<SnapshotIndex>;
+
+  /** Deterministic funded-book snapshot for a `"<client_id>/<run_id>"` portfolio. */
+  getSnapshot(portfolioId: string, signal?: AbortSignal): Promise<FundedSnapshot>;
 }
 
 /** Error thrown by clients for transport/agent failures. */

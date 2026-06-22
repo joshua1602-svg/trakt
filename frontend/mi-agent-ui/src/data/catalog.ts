@@ -9,23 +9,12 @@
  */
 
 import type { DimensionDef, MeasureDef } from "@/domain";
-import type { PortfolioContext } from "@/domain";
 
-export const PORTFOLIOS: PortfolioContext[] = [
-  { id: "erm-uk-master", name: "ERM UK — Master", entity: "Trakt SPV I" },
-  { id: "erm-uk-warehouse", name: "ERM UK — Warehouse", entity: "Warehouse Co" },
-  { id: "erm-uk-fwd", name: "ERM UK — Forward Flow", entity: "Origination" },
-];
-
-export const REPORTING_DATES = ["2026-05-31", "2026-04-30", "2026-03-31", "2026-02-28"];
-
-/** Prior-period lookup for movement comparisons. */
-export const PRIOR_PERIOD: Record<string, string> = {
-  "2026-05-31": "2026-04-30",
-  "2026-04-30": "2026-03-31",
-  "2026-03-31": "2026-02-28",
-  "2026-02-28": "2026-01-31",
-};
+// NOTE: portfolios and reporting dates are NO LONGER hardcoded here. They are
+// discovered at runtime from real onboarding output via `GET /mi/snapshots`
+// (see `domain/snapshot.ts` and `useWorkspace`), so the dropdowns only ever show
+// portfolios / reporting runs that actually exist. The dimension / measure
+// catalogue below remains a registry-accurate static fallback for offline mode.
 
 // Keys below are verified against mi_semantics_field_registry.yaml.
 export const DIMENSIONS: DimensionDef[] = [
@@ -63,6 +52,3 @@ export const MEASURES: MeasureDef[] = [
   { key: "default_amount", label: "Default Amount", format: "gbp", defaultAggregation: "sum" },
   { key: "redemptions_received_in_period", label: "Redemptions", format: "gbp", defaultAggregation: "sum" },
 ];
-
-export const DEFAULT_PORTFOLIO = PORTFOLIOS[0];
-export const DEFAULT_REPORTING_DATE = REPORTING_DATES[0];

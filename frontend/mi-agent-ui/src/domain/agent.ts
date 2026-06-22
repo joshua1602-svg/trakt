@@ -55,7 +55,10 @@ export interface AgentResponse {
   narrative: string;
   assumptions: string[];
   artifacts: Artifact[];
+  /** Business-facing warnings only (technical diagnostics live in `diagnostics`). */
   warnings: string[];
+  /** Engineer-facing technical diagnostics, hidden behind a disclosure. */
+  diagnostics?: string[];
   spec?: Partial<MIQuerySpec>;
   error?: string;
 }
@@ -81,5 +84,6 @@ export interface ChatMessage {
   assumptions?: string[];
   artifactRefs?: ArtifactRef[];
   warnings?: string[];
+  diagnostics?: string[];
   intent?: Intent;
 }

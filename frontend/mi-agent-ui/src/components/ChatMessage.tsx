@@ -1,4 +1,5 @@
-import { AlertTriangle, FileBarChart, RefreshCw, Sparkles, User } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, ChevronDown, FileBarChart, RefreshCw, Sparkles, User } from "lucide-react";
 import type { ChatMessage as ChatMessageType } from "@/domain";
 import { cn, formatTime } from "@/lib/utils";
 
@@ -12,6 +13,7 @@ export function ChatMessage({
   onRetry?: () => void;
 }) {
   const isUser = message.role === "user";
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   return (
     <div className="animate-fade-in flex gap-2.5">
@@ -85,6 +87,26 @@ export function ChatMessage({
             {message.warnings.map((w, i) => (
               <div key={i}>⚠ {w}</div>
             ))}
+          </div>
+        )}
+
+        {message.diagnostics && message.diagnostics.length > 0 && (
+          <div className="mt-2">
+            <button
+              type="button"
+              onClick={() => setShowDiagnostics((s) => !s)}
+              className="inline-flex items-center gap-1.5 text-[10px] font-medium text-ink-500 hover:text-ink-300"
+            >
+              <ChevronDown size={12} className={cn("transition-transform", !showDiagnostics && "-rotate-90")} />
+              Technical details ({message.diagnostics.length})
+            </button>
+            {showDiagnostics && (
+              <ul className="mt-1 list-disc space-y-0.5 rounded-lg border border-[var(--color-line-soft)] bg-navy-900/60 px-5 py-2 font-mono text-[10px] text-ink-400">
+                {message.diagnostics.map((d, i) => (
+                  <li key={i}>{d}</li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
 

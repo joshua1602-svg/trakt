@@ -170,3 +170,20 @@ def test_empty_result_produces_table_with_no_rows():
     resp = adapt_workflow_result(_workflow("bar", "table", [], spec, resolved, figure_traces=0))
     assert "chart" not in _types(resp)
     assert "table" in _types(resp)
+
+
+def test_technical_warnings_hidden_but_retained_in_diagnostics():
+    """The percent-scale heuristic note (and similar engineer-only diagnostics)
+    must NOT appear in the user-facing warnings, but stay in metadata.diagnostics."""
+    spec = {"chart_type": "none", "intent": "summary", "metric": "current_outstanding_balance"}
+    resolved = {"current_outstanding_balance": {"canonical_field": "current_outstanding_balance", "role": "metric", "format": "currency"}}
+    data = [{"current_outstanding_balance_sum": 1000.0}]
+    wf = _workflow("none", "summary", data, spec, resolved)
+    wf["warnings"] = [
+        "percent-scale heuristically detected as 'fraction'; the executor does NOT rescale percentages",
+        "current LTV is unavailable for this run",
+    ]
+    resp = adapt_workflow_result(wf)
+    assert resp["warnings"] == ["current LTV is unavailable for this run"]
+    assert any("percent-scale" in d for d in resp["metadata"]["diagnostics"])
+    assert any("percent-scale" in d for d in resp["diagnostics"])

@@ -17,7 +17,49 @@ User question → POST /mi/query → run_mi_agent_query
 | --- | --- | --- |
 | `GET` | `/health` | Liveness + data-source status. |
 | `GET` | `/mi/catalogue` | Real semantic layer: `states`, `dimensions` (43), `measures` (37), `dates`, `aggregations`, `chart_types` (`bar,line,scatter,bubble,heatmap,treemap`), `temporal_modes`, `risk_monitor_modes`, `filters`. |
+| `GET` | `/mi/snapshots` | **Data-driven discovery** of available funded portfolios + reporting runs from local onboarding output. Drives the portfolio / reporting-date dropdowns (only real runs appear). |
+| `GET` | `/mi/snapshot` | **Deterministic** funded-book snapshot (KPI tiles + month-on-month change) for `?portfolioId=<client_id>/<run_id>`. Computed from the prepared dataset + dataset contract — never the NL parser. |
 | `POST` | `/mi/query` | Run one MI question. Body: `{ question, portfolio?{id,name,entity}, portfolioId?, asOfDate?, filters?, context? }`. |
+
+### Landing-page snapshot (`/mi/snapshots`, `/mi/snapshot`)
+
+The React MI landing page is **funded-book MI**. Before any AI query it shows a
+deterministic snapshot for the selected portfolio/run:
+
+```jsonc
+// GET /mi/snapshots
+{ "portfolios": [ { "client_id": "client_001", "label": "CLIENT_001",
+  "runs": [ { "run_id": "mi_2025_10", "reporting_date": "2025-10-31",
+              "loan_count": 33, "current_outstanding_balance": 4208216.83 },
+            { "run_id": "mi_2025_11", "reporting_date": "2025-11-30",
+              "loan_count": 73, "current_outstanding_balance": 8903225.07 } ] } ] }
+
+// GET /mi/snapshot?portfolioId=client_001/mi_2025_11
+{ "ok": true, "portfolio": { "client_id": "client_001", "run_id": "mi_2025_11",
+    "reporting_date": "2025-11-30" },
+  "prior": { "run_id": "mi_2025_10", "reporting_date": "2025-10-31" },
+  "loan_count": 73, "current_outstanding_balance": 8903225.07,
+  "kpis": [ { "id": "balance", "label": "Current funded balance", "value": "£8.9MM" }, ... ],
+  "monthly_change": { "loan_count_change": 40, "balance_change": 4695000.0,
+    "balance_change_pct": 111.5, "new_loans": 40, "exited_loans": 0 },
+  "warnings": [], "diagnostics": [] }
+```
+
+KPI tiles: current funded balance, loans funded, weighted-avg current/original
+LTV, average loan balance, weighted-avg interest rate / months on book /
+youngest age (when available), and month-on-month change (loan-count / balance /
+new / exited loans) vs the prior available run. When there is no prior run, the
+response carries `"No prior reporting date available for this portfolio."` in
+`diagnostics` rather than failing. See `mi_agent_api/snapshots.py`.
+
+### Warnings vs diagnostics
+
+Technical executor diagnostics (e.g. the percent-scale heuristic note, filter
+row counts, "no chart rendered") are **hidden from the main user-facing card**:
+`adapters.split_warnings` routes them to `metadata.diagnostics` (logged
+backend-side, optionally shown in an expandable "Technical details" panel), while
+business-facing warnings (missing data, unavailable dimension, validation
+failure, partial result) remain in `warnings`.
 
 ### Query response shape
 
@@ -32,10 +74,11 @@ Adapts the `run_mi_agent_query` dict into a React-friendly envelope:
   "validation": { "ok": true, "errors": [], "warnings": [], "resolved_fields": {} },
   "artifacts": [ { "type": "chart", "...": "..." }, { "type": "table", "...": "..." } ],
   "warnings": [],
+  "diagnostics": [ "percent-scale heuristically detected as 'fraction'; ..." ],
   "assumptions": [],
   "metadata": { "portfolioId": "...", "asOfDate": "...", "engine": "mi_agent",
                 "source": "python", "mock": false, "resultType": "table",
-                "rowCount": 10, "chartType": "bar" }
+                "rowCount": 10, "chartType": "bar", "diagnostics": [ "..." ] }
 }
 ```
 
