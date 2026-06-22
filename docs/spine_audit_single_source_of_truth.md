@@ -749,3 +749,74 @@ parsing, bucket availability, or display scale.
 - Tests: `mi_agent_api/tests/test_mi_dataset_contract.py` (12), frontend
   `lib/utils.test.ts` + `ChartArtifactView.test.tsx`. Full MI + onboarding suite:
   **239 passed**; frontend **55 passed**.
+
+---
+
+## 20. Closure status — finding → action → remaining risk
+
+Final status of every duplicated-authority / parallel-path finding from §0/§14,
+after the Stage 1–7 and Stage 8–13 consolidation. Read each row as *initial
+finding → consolidation action → remaining risk*.
+
+| # | Parallel path / finding (initial) | Consolidation action | Status |
+|---|---|---|---|
+| 1 | Production funded MI prep vs legacy Streamlit `analytics/mi_prep.py` | Production React/API path is `funded_prep.prepare_funded_mi_dataset` only; `mi_prep.py` is **legacy Streamlit-only** and not on the React path | **Ring-fenced.** Production single; legacy retirement deferred |
+| 2 | Shared `coerce_numeric` vs local `pd.to_numeric` | Production prep, executor, profiler-derivation and the review generator all use `analytics_lib.numeric.coerce_numeric`; `mi_prep.py`'s `pd.to_numeric` is Streamlit-only | **Fixed on production path.** Legacy Streamlit usage deferred |
+| 3 | Backend percent formatting vs React percent formatting | Single percent storage scale computed once in `mi_dataset_profile`; carried in the artifact `displayHints`/KPI; React `formatValue`/`toPercentPoints` and server `_format_kpi_value` both consume it | **Fixed** |
+| 4 | API real (`HttpAgentClient`) vs mock (`MockAgentClient`) | `createAgentClient` uses HTTP when `VITE_AGENT_API_URL` is set; `.env.development` sets it (`/` via Vite proxy) so `npm run dev` is live by default; mock requires explicit `VITE_AGENT_MODE=mock` | **Fixed (mock explicit-only)** |
+| 5 | Static review generator's own parser vs API/contract | `generate_dashboard_review.py::_num` delegates to `coerce_numeric`; summary numbers via the shared contract helper | **Fixed** |
+| 6 | Chart artifact schema vs React renderer assumptions (series-order, `yKey:null`) | Backend emits explicit `xKey`/`yKey`/`sizeKey` + labels + `displayHints`; React consumes them directly | **Fixed** |
+| 7 | Stage-3 header detection bypassed by promotion/enrichment loader | `central_tape_builder._read_df` and `file_profiler` now share `redetect_header` | **Fixed (production path)**; 3 non-production readers deferred (§16/§18) |
+| 8 | Period eligibility excluding October valuation from November | Enrichment cadence split from universe cadence (`_enrichment_period_match`, as-of ≤ run period) | **Fixed** |
+
+### Production sources of truth (post-consolidation)
+
+| Concern | Production module (single source) |
+|---|---|
+| Source-table read + header detection | `engine/onboarding_agent/source_table_loader.redetect_header` (via `central_tape_builder._read_df`, `file_profiler`) |
+| Period eligibility (funded vs enrichment cadence) | `engine/onboarding_agent/source_period_eligibility.py` |
+| Entity-key resolution / join | `engine/onboarding_agent/entity_key_resolver.py` |
+| Central tape promotion + snapshot | `engine/onboarding_agent/central_tape_builder.py` (one tape per run id) |
+| Funded MI preparation | `mi_agent_api/funded_prep.prepare_funded_mi_dataset` |
+| Numeric parsing | `analytics_lib/numeric.coerce_numeric` |
+| Bucketing | `analytics_lib/buckets` + `config/mi/buckets.yaml` |
+| Per-field metadata + storage scale + data validation | `mi_agent/mi_dataset_profile.py` |
+| API dataset contract (/health, review) | `mi_agent_api/mi_dataset_contract.py` |
+| Query parse → validate → execute | `mi_agent/llm_query_parser` (deterministic) → `mi_query_validator` + `mi_dataset_profile.validate_query_data` → `mi_query_executor` |
+| API artifact schema | `mi_agent_api/adapters.py` |
+| React rendering / display | `frontend/mi-agent-ui/src/components/artifacts/*` + `lib/utils.ts` |
+
+### Legacy / demo modules retained (NOT production paths)
+
+- `analytics/mi_prep.py`, `analytics/streamlit_app_erm.py` and the rest of
+  `analytics/` — the legacy Streamlit ERM dashboard. Not imported by the React MI
+  Agent path. Retained; retirement is out of scope here.
+- `frontend/.../api/MockAgentClient.ts` + `data/mockArtifacts.ts` /
+  `mockResponses.ts` — demo path, used only when `VITE_AGENT_MODE=mock` is set
+  explicitly.
+
+### Deferred follow-ups (intentionally NOT done in this work)
+
+1. Route the remaining non-production readers
+   (`onboarding_orchestrator`, `llm_assisted_mapping`, `compare_semantic_alignment`)
+   through the shared `redetect_header` (§16/§18).
+2. Fold the duplicate field-resolution heuristics in the two parser layers
+   (`mi_agent/interpreter/deterministic.py` vs the flat parser in
+   `mi_agent/llm_query_parser.py`) into one helper (§16 item).
+3. Retire / wrap legacy Streamlit `analytics/` prep so it consumes
+   `analytics_lib` + `funded_prep` (or freeze it formally as legacy).
+4. Declare percent storage scale in the registry contract itself (currently the
+   single scale is computed per-column by `mi_dataset_profile`).
+
+### Snapshot semantics (confirmed)
+
+One run id = one central lender tape snapshot = one reporting-period funded
+universe. `mi_2025_10` (33 loans / ≈£4.208MM) and `mi_2025_11` (73 loans /
+≈£8.903MM) are written to separate `…/<run_id>/output/central/` snapshots;
+November does not overwrite October. Funded universe is strict-period
+(`period == run period`); enrichment is as-of-period (latest valid source on or
+before the run period, never future); enrichment never seeds the universe and
+pipeline rows never create funded rows. The November LTV (73/73) is populated by
+the as-of October valuation enrichment (diagnostic: selected source period
+`2025-10`, eligible, key overlap 73/73) — proven by
+`spine_stage_1_7_report.json`, not by merging the two runs.
