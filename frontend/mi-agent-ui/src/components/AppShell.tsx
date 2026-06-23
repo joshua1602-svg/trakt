@@ -3,6 +3,9 @@ import { HeaderBar } from "@/components/HeaderBar";
 import { AgentChatPanel } from "@/components/AgentChatPanel";
 import { ArtifactCanvas } from "@/components/ArtifactCanvas";
 import { FundedSnapshotPanel } from "@/components/FundedSnapshotPanel";
+import { ForecastBridgeCard } from "@/components/ForecastBridgeCard";
+import { PipelineSnapshotPanel } from "@/components/PipelineSnapshotPanel";
+import { PipelineWatchlist } from "@/components/PipelineWatchlist";
 import { createAgentClient } from "@/api";
 import { useWorkspace } from "@/state/useWorkspace";
 
@@ -38,8 +41,15 @@ export function AppShell() {
         />
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {/* Deterministic funded snapshot — shown before any AI query. */}
-          <div className="px-6 pt-5">
+          <div className="space-y-4 px-6 pt-5">
             <FundedSnapshotPanel snapshot={ws.snapshot} loading={ws.snapshotLoading} />
+            {/* Governed pipeline SSoT + deterministic forecast bridge + watchlist. */}
+            <ForecastBridgeCard bridge={ws.forecast?.forecastBridge ?? null} />
+            <PipelineSnapshotPanel
+              snapshot={ws.forecast?.pipelineSnapshot ?? null}
+              loading={ws.forecastLoading}
+            />
+            <PipelineWatchlist items={ws.forecast?.watchlist ?? []} />
           </div>
           <ArtifactCanvas
             artifacts={ws.artifacts}

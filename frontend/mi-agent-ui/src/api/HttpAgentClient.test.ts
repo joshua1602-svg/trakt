@@ -80,6 +80,24 @@ describe("HttpAgentClient", () => {
     );
   });
 
+  it("fetches the forecast snapshot from /mi/forecast/snapshot", async () => {
+    const fc = {
+      ok: true,
+      portfolioId: "client_001/mi_2025_11",
+      forecastBridge: { forecastFundedBalance: 9_966_249.7, fundedBalance: 8_902_999.7, weightedExpectedFundedAmount: 1_063_250 },
+      pipelineSnapshot: { recordType: "pipeline", pipelineRowCount: 10 },
+      watchlist: [],
+    };
+    const spy = vi.fn(async () => new Response(JSON.stringify(fc), { status: 200 }));
+    vi.stubGlobal("fetch", spy);
+    const res = await new HttpAgentClient("http://localhost:8000").getForecastSnapshot("client_001/mi_2025_11");
+    expect(spy).toHaveBeenCalledWith(
+      "http://localhost:8000/mi/forecast/snapshot?portfolioId=client_001%2Fmi_2025_11",
+      expect.anything(),
+    );
+    expect(res.forecastBridge?.forecastFundedBalance).toBe(9_966_249.7);
+  });
+
   it("returns ok:false with a validation artifact for an invalid spec", async () => {
     const body = {
       ok: false,

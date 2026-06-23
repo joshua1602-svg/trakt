@@ -144,17 +144,29 @@ def load_prepared_pipeline(path: str | os.PathLike,
 
 def resolve_pipeline_source(root: str | os.PathLike, client_id: str,
                             run_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    """The pipeline source for a client (and run/reporting date if given)."""
+    """The pipeline source for a client (and run/reporting date if given).
+
+    ``run_id`` may be a pipeline run id (``pipeline_2025_11``), a reporting date
+    (``2025-11-01``) or a funded run id (``mi_2025_11``) — matched by year-month
+    so a funded run resolves to the pipeline cut for the same period.
+    """
     sources = discover_pipeline_sources(root, client_id=client_id)
     if not sources:
         return None
     if run_id:
-        match = next((s for s in sources if s["run_id"] == run_id
-                      or s["reporting_date"] == run_id
-                      or (s["reporting_date"] or "").startswith(str(run_id))), None)
-        if match:
-            return match
+        want_ym = _year_month(str(run_id))
+        for s in sources:
+            if (s["run_id"] == run_id or s["reporting_date"] == run_id
+                    or (s["reporting_date"] or "").startswith(str(run_id))
+                    or (want_ym and _year_month(s["reporting_date"] or "") == want_ym)
+                    or (want_ym and _year_month(s["run_id"]) == want_ym)):
+                return s
     return sources[-1]  # latest
+
+
+def _year_month(text: str) -> Optional[str]:
+    m = _MONTH_RE.search(text or "")
+    return f"{m.group(1)}-{m.group(2)}" if m else None
 
 
 # --------------------------------------------------------------------------- #
@@ -203,22 +215,33 @@ def _expected_completion_breakdown(df: pd.DataFrame) -> List[Dict[str, Any]]:
     return rows
 
 
-def _stage_breakdown(df: pd.DataFrame) -> List[Dict[str, Any]]:
-    if "pipeline_stage" not in df.columns:
+def _dimension_breakdown(df: pd.DataFrame, field: str,
+                         key_name: str = "key") -> List[Dict[str, Any]]:
+    """Backend-side ``[{key, caseCount, pipelineAmount, weightedExpected...}]`` for
+    one dimension (so the UI never aggregates). Ordered by amount desc."""
+    if field not in df.columns:
         return []
     rows: List[Dict[str, Any]] = []
-    for stage, sub in df.groupby(df["pipeline_stage"].astype(str), dropna=False):
+    for key, sub in df.groupby(df[field].astype(str), dropna=False):
+        if not str(key).strip() or str(key) in ("nan", "NaT", "None"):
+            continue
         amount = (coerce_numeric(sub["current_outstanding_balance"]).sum()
                   if "current_outstanding_balance" in sub.columns else 0.0)
         weighted = (coerce_numeric(sub["weighted_expected_funded_amount"]).sum()
                     if "weighted_expected_funded_amount" in sub.columns else None)
         rows.append({
-            "stage": stage,
+            key_name: str(key),
             "caseCount": int(len(sub)),
             "pipelineAmount": round(float(amount), 2),
             "weightedExpectedFundedAmount": (round(float(weighted), 2)
                                              if weighted is not None else None),
         })
+    rows.sort(key=lambda r: r["pipelineAmount"], reverse=True)
+    return rows
+
+
+def _stage_breakdown(df: pd.DataFrame) -> List[Dict[str, Any]]:
+    rows = _dimension_breakdown(df, "pipeline_stage", key_name="stage")
     rows.sort(key=lambda r: r["stage"])
     return rows
 
@@ -248,6 +271,8 @@ def compute_pipeline_snapshot(
         "weightedExpectedFundedAmount": weighted,
         "stageBreakdown": _stage_breakdown(df),
         "expectedCompletionBreakdown": _expected_completion_breakdown(df),
+        "brokerBreakdown": _dimension_breakdown(df, "broker_channel", key_name="key"),
+        "regionBreakdown": _dimension_breakdown(df, "geographic_region_obligor", key_name="key"),
         "availableMetrics": report.get("metrics_available", []),
         "availableDimensions": report.get("dimensions_available", []),
         "missingDimensions": report.get("missing_dimensions", []),

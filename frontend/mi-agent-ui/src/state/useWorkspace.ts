@@ -14,6 +14,7 @@ import type {
   AgentRequest,
   Artifact,
   ChatMessage,
+  ForecastSnapshot,
   FundedSnapshot,
   PortfolioContext,
   ReportingContext,
@@ -48,6 +49,9 @@ export interface Workspace {
   /** Deterministic landing-page funded snapshot for the selected run. */
   snapshot: FundedSnapshot | null;
   snapshotLoading: boolean;
+  /** Deterministic funded + pipeline forecast snapshot for the selected run. */
+  forecast: ForecastSnapshot | null;
+  forecastLoading: boolean;
   messages: ChatMessage[];
   artifacts: Artifact[];
   isWorking: boolean;
@@ -67,6 +71,8 @@ export function useWorkspace(client: AgentClient): Workspace {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(persisted?.runId ?? null);
   const [snapshot, setSnapshot] = useState<FundedSnapshot | null>(null);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
+  const [forecast, setForecast] = useState<ForecastSnapshot | null>(null);
+  const [forecastLoading, setForecastLoading] = useState(false);
 
   // Discover available portfolios / runs once; default to the latest run.
   useEffect(() => {
@@ -135,6 +141,28 @@ export function useWorkspace(client: AgentClient): Workspace {
       })
       .finally(() => {
         if (!cancelled) setSnapshotLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, portfolioId]);
+
+  // Fetch the deterministic forecast (funded + pipeline) for the same run, so the
+  // pipeline + forecast + watchlist sections move with the funded selection.
+  useEffect(() => {
+    if (!portfolioId) return;
+    let cancelled = false;
+    setForecastLoading(true);
+    client
+      .getForecastSnapshot(portfolioId)
+      .then((fc) => {
+        if (!cancelled) setForecast(fc);
+      })
+      .catch(() => {
+        if (!cancelled) setForecast(null);
+      })
+      .finally(() => {
+        if (!cancelled) setForecastLoading(false);
       });
     return () => {
       cancelled = true;
@@ -280,6 +308,8 @@ export function useWorkspace(client: AgentClient): Workspace {
     reporting,
     snapshot,
     snapshotLoading,
+    forecast,
+    forecastLoading,
     messages,
     artifacts,
     isWorking,

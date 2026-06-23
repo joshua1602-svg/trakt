@@ -6,7 +6,13 @@
  * (posting an AgentRequest to the MI Agent API) requires no component changes.
  */
 
-import type { AgentRequest, AgentResponse, FundedSnapshot, SnapshotIndex } from "@/domain";
+import type {
+  AgentRequest,
+  AgentResponse,
+  ForecastSnapshot,
+  FundedSnapshot,
+  SnapshotIndex,
+} from "@/domain";
 
 export interface AgentClient {
   /** Identifier surfaced in the UI (e.g. environment badge). */
@@ -22,6 +28,13 @@ export interface AgentClient {
 
   /** Deterministic funded-book snapshot for a `"<client_id>/<run_id>"` portfolio. */
   getSnapshot(portfolioId: string, signal?: AbortSignal): Promise<FundedSnapshot>;
+
+  /**
+   * Deterministic funded + pipeline forecast bridge (pipeline snapshot, forecast
+   * bridge and watchlist) for a `"<client_id>/<run_id>"` portfolio. The forecast
+   * is backend-derived — the UI only renders it.
+   */
+  getForecastSnapshot(portfolioId: string, signal?: AbortSignal): Promise<ForecastSnapshot>;
 }
 
 /** Error thrown by clients for transport/agent failures. */

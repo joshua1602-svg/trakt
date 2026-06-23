@@ -6,9 +6,16 @@
  * when the MI Agent API is available — the contract is identical.
  */
 
-import type { AgentRequest, AgentResponse, FundedSnapshot, SnapshotIndex } from "@/domain";
+import type {
+  AgentRequest,
+  AgentResponse,
+  ForecastSnapshot,
+  FundedSnapshot,
+  SnapshotIndex,
+} from "@/domain";
 import { buildAgentResponse } from "@/data/mockResponses";
 import { MOCK_SNAPSHOT_INDEX, mockSnapshot } from "@/data/mockSnapshots";
+import { mockForecastSnapshot } from "@/data/mockForecast";
 import { AgentError, type AgentClient } from "./AgentClient";
 
 export interface MockAgentClientOptions {
@@ -61,5 +68,9 @@ export class MockAgentClient implements AgentClient {
 
   getSnapshot(portfolioId: string): Promise<FundedSnapshot> {
     return Promise.resolve(mockSnapshot(portfolioId));
+  }
+
+  getForecastSnapshot(portfolioId: string): Promise<ForecastSnapshot> {
+    return Promise.resolve(mockForecastSnapshot(portfolioId));
   }
 }

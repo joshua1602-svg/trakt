@@ -32,6 +32,7 @@ from .data_source import (
 )
 from . import snapshots as snapshots_mod
 from . import pipeline_contract as pipeline_mod
+from . import forecast_bridge as forecast_mod
 
 logger = logging.getLogger("mi_agent_api")
 
@@ -92,7 +93,8 @@ def root() -> Dict[str, Any]:
         "service": "mi_agent_api",
         "version": app.version,
         "endpoints": ["/health", "/mi/catalogue", "/mi/snapshots", "/mi/snapshot",
-                      "/mi/pipeline/snapshots", "/mi/pipeline/snapshot", "/mi/query"],
+                      "/mi/pipeline/snapshots", "/mi/pipeline/snapshot",
+                      "/mi/forecast/snapshot", "/mi/query"],
         "hint": "GET /health for data-source status; POST /mi/query to ask a question.",
     }
 
@@ -238,6 +240,21 @@ def pipeline_snapshots(portfolioId: Optional[str] = None) -> Dict[str, Any]:
     return {"sources": sources, "source": root}
 
 
+def _resolve_pipeline_source(client_id: str, run_id: Optional[str]) -> Optional[Dict[str, Any]]:
+    """The governed pipeline source for a client/run (explicit env or discovery)."""
+    explicit = os.environ.get("MI_AGENT_PIPELINE_SOURCE")
+    if explicit:
+        from pathlib import Path as _Path
+        p = _Path(explicit)
+        if p.exists():
+            return {"client_id": client_id, "path": str(p), "run_id": run_id or p.stem,
+                    "reporting_date": pipeline_mod._infer_reporting_date(p)}
+    root = os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root()
+    if root:
+        return pipeline_mod.resolve_pipeline_source(root, client_id, run_id)
+    return None
+
+
 @app.get("/mi/pipeline/snapshot")
 def pipeline_snapshot(portfolioId: Optional[str] = None,
                       client_id: Optional[str] = None,
@@ -253,18 +270,7 @@ def pipeline_snapshot(portfolioId: Optional[str] = None,
         client_id, run_id = portfolioId.split("/", 1)
     client_id = client_id or "client_001"
 
-    root = os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root()
-    explicit = os.environ.get("MI_AGENT_PIPELINE_SOURCE")
-    source: Optional[Dict[str, Any]] = None
-    if explicit:
-        from pathlib import Path as _Path
-        p = _Path(explicit)
-        if p.exists():
-            source = {"client_id": client_id, "path": str(p), "run_id": run_id or p.stem,
-                      "reporting_date": pipeline_mod._infer_reporting_date(p)}
-    if source is None and root:
-        source = pipeline_mod.resolve_pipeline_source(root, client_id, run_id)
-
+    source = _resolve_pipeline_source(client_id, run_id)
     if source is None:
         return {"ok": False, "recordType": "pipeline",
                 "error": f"No governed pipeline source found for {client_id}.",
@@ -279,6 +285,55 @@ def pipeline_snapshot(portfolioId: Optional[str] = None,
         df, report, semantics, client_id=source.get("client_id", client_id),
         run_id=run_id or source.get("run_id", ""),
         reporting_date=source.get("reporting_date"))
+
+
+@app.get("/mi/forecast/snapshot")
+def forecast_snapshot(portfolioId: Optional[str] = None,
+                      client_id: Optional[str] = None,
+                      runId: Optional[str] = None,
+                      run_id: Optional[str] = None) -> Dict[str, Any]:
+    """Deterministic funded + pipeline forecast bridge for a selected run.
+
+    Composes the funded snapshot balance/count, the Phase 1 pipeline snapshot, and
+    the config stage probabilities into ``forecastBridge`` (+ embedded
+    ``pipelineSnapshot`` + ``watchlist``). Never 500s on a missing pipeline — it
+    returns the funded balance with a blocked forecast-readiness status.
+    """
+    run_id = runId or run_id
+    if portfolioId and "/" in portfolioId:
+        client_id, run_id = portfolioId.split("/", 1)
+    client_id = client_id or "client_001"
+    if not run_id:
+        return {"ok": False, "error": "portfolioId (client_id/run_id) is required",
+                "forecastBridge": None, "pipelineSnapshot": None, "watchlist": []}
+
+    semantics = load_mi_semantics(semantics_path())
+
+    # Funded side (reuse the funded resolution; never merged with pipeline).
+    root = _onboarding_output_root()
+    funded_df, _funded_report = _resolve_run_dataframe(client_id, run_id, root)
+    reporting_date = snapshots_mod.infer_reporting_date(run_id, funded_df)
+
+    # Pipeline side (Phase 1 prep + contract), matched to the run's period.
+    pipeline_df = pipeline_report = pipeline_snap = None
+    source = _resolve_pipeline_source(client_id, run_id)
+    if source is not None:
+        try:
+            pipeline_df, pipeline_report = pipeline_mod.load_prepared_pipeline(
+                source["path"], reporting_date=source.get("reporting_date"))
+            pipeline_snap = pipeline_mod.compute_pipeline_snapshot(
+                pipeline_df, pipeline_report, semantics,
+                client_id=source.get("client_id", client_id),
+                run_id=run_id, reporting_date=reporting_date or source.get("reporting_date"))
+        except Exception as exc:  # noqa: BLE001 - a bad pipeline must not 500
+            logger.warning("pipeline load failed for forecast [%s/%s]: %s",
+                           client_id, run_id, exc)
+            pipeline_df = pipeline_report = pipeline_snap = None
+
+    return forecast_mod.compute_forecast_bridge(
+        client_id=client_id, run_id=run_id, reporting_date=reporting_date,
+        funded_df=funded_df, pipeline_df=pipeline_df,
+        pipeline_report=pipeline_report, pipeline_snapshot=pipeline_snap)
 
 
 @app.post("/mi/query")
