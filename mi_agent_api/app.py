@@ -31,6 +31,7 @@ from .data_source import (
     semantics_path,
 )
 from . import snapshots as snapshots_mod
+from . import pipeline_contract as pipeline_mod
 
 logger = logging.getLogger("mi_agent_api")
 
@@ -90,7 +91,8 @@ def root() -> Dict[str, Any]:
     return {
         "service": "mi_agent_api",
         "version": app.version,
-        "endpoints": ["/health", "/mi/catalogue", "/mi/snapshots", "/mi/snapshot", "/mi/query"],
+        "endpoints": ["/health", "/mi/catalogue", "/mi/snapshots", "/mi/snapshot",
+                      "/mi/pipeline/snapshots", "/mi/pipeline/snapshot", "/mi/query"],
         "hint": "GET /health for data-source status; POST /mi/query to ask a question.",
     }
 
@@ -210,6 +212,73 @@ def snapshot(portfolioId: Optional[str] = None,
     for d in result.get("diagnostics", []):
         logger.info("snapshot diagnostic [%s/%s]: %s", client_id, run_id, d)
     return result
+
+
+def _pipeline_root() -> Optional[str]:
+    """Root to discover governed pipeline sources (18a tape / M2L KFI extracts)."""
+    for key in ("MI_AGENT_PIPELINE_ROOT", "MI_AGENT_ONBOARDING_OUTPUT_ROOT"):
+        root = os.environ.get(key)
+        if root:
+            return root
+    return _onboarding_output_root()
+
+
+@app.get("/mi/pipeline/snapshots")
+def pipeline_snapshots(portfolioId: Optional[str] = None) -> Dict[str, Any]:
+    """Data-driven discovery of governed pipeline sources and reporting dates."""
+    root = os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root()
+    if not root:
+        return {"sources": [], "source": "unavailable"}
+    client_id = portfolioId.split("/", 1)[0] if portfolioId else None
+    try:
+        sources = pipeline_mod.discover_pipeline_sources(root, client_id=client_id)
+    except Exception as exc:  # noqa: BLE001 - discovery must never 500
+        logger.warning("pipeline discovery failed: %s", exc)
+        return {"sources": [], "source": "error", "error": str(exc)}
+    return {"sources": sources, "source": root}
+
+
+@app.get("/mi/pipeline/snapshot")
+def pipeline_snapshot(portfolioId: Optional[str] = None,
+                      client_id: Optional[str] = None,
+                      runId: Optional[str] = None,
+                      run_id: Optional[str] = None) -> Dict[str, Any]:
+    """Deterministic pipeline single-source snapshot block for one reporting cut.
+
+    ``portfolioId`` is ``"<client_id>/<run_id>"`` (matching the funded contract);
+    ``client_id`` + ``runId``/``run_id`` may be passed separately instead.
+    """
+    run_id = runId or run_id
+    if portfolioId and "/" in portfolioId:
+        client_id, run_id = portfolioId.split("/", 1)
+    client_id = client_id or "client_001"
+
+    root = os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root()
+    explicit = os.environ.get("MI_AGENT_PIPELINE_SOURCE")
+    source: Optional[Dict[str, Any]] = None
+    if explicit:
+        from pathlib import Path as _Path
+        p = _Path(explicit)
+        if p.exists():
+            source = {"client_id": client_id, "path": str(p), "run_id": run_id or p.stem,
+                      "reporting_date": pipeline_mod._infer_reporting_date(p)}
+    if source is None and root:
+        source = pipeline_mod.resolve_pipeline_source(root, client_id, run_id)
+
+    if source is None:
+        return {"ok": False, "recordType": "pipeline",
+                "error": f"No governed pipeline source found for {client_id}.",
+                "portfolioId": f"{client_id}/{run_id or ''}",
+                "pipelineRowCount": 0, "stageBreakdown": [],
+                "availableMetrics": [], "availableDimensions": [], "dataQuality": []}
+
+    df, report = pipeline_mod.load_prepared_pipeline(
+        source["path"], reporting_date=source.get("reporting_date"))
+    semantics = load_mi_semantics(semantics_path())
+    return pipeline_mod.compute_pipeline_snapshot(
+        df, report, semantics, client_id=source.get("client_id", client_id),
+        run_id=run_id or source.get("run_id", ""),
+        reporting_date=source.get("reporting_date"))
 
 
 @app.post("/mi/query")
