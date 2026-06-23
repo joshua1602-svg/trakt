@@ -241,14 +241,24 @@ def pipeline_snapshots(portfolioId: Optional[str] = None) -> Dict[str, Any]:
 
 
 def _resolve_pipeline_source(client_id: str, run_id: Optional[str]) -> Optional[Dict[str, Any]]:
-    """The governed pipeline source for a client/run (explicit env or discovery)."""
+    """The governed pipeline scope for a client/run (explicit env or discovery).
+
+    Returns a scope dict with the separated date concepts (folder / extract /
+    as-of), never a single ambiguous reporting date.
+    """
     explicit = os.environ.get("MI_AGENT_PIPELINE_SOURCE")
     if explicit:
         from pathlib import Path as _Path
         p = _Path(explicit)
         if p.exists():
-            return {"client_id": client_id, "path": str(p), "run_id": run_id or p.stem,
-                    "reporting_date": pipeline_mod._infer_reporting_date(p)}
+            folder_date = pipeline_mod._folder_date(p.parent)
+            extract_date = pipeline_mod._extract_date(p)
+            return {"client_id": client_id, "source_file": str(p),
+                    "run_id": run_id or pipeline_mod._run_id_for(folder_date, extract_date, p),
+                    "pipeline_source_folder": str(p.parent),
+                    "pipeline_source_folder_date": folder_date,
+                    "pipeline_extract_date": extract_date,
+                    "pipeline_as_of_date": extract_date or folder_date}
     root = os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root()
     if root:
         return pipeline_mod.resolve_pipeline_source(root, client_id, run_id)
@@ -260,10 +270,11 @@ def pipeline_snapshot(portfolioId: Optional[str] = None,
                       client_id: Optional[str] = None,
                       runId: Optional[str] = None,
                       run_id: Optional[str] = None) -> Dict[str, Any]:
-    """Deterministic pipeline single-source snapshot block for one reporting cut.
+    """Deterministic pipeline single-source snapshot for the latest weekly cut.
 
     ``portfolioId`` is ``"<client_id>/<run_id>"`` (matching the funded contract);
-    ``client_id`` + ``runId``/``run_id`` may be passed separately instead.
+    ``client_id`` + ``runId``/``run_id`` may be passed separately instead. The
+    pipeline as-of/extract dates are exposed distinctly from the funded run date.
     """
     run_id = runId or run_id
     if portfolioId and "/" in portfolioId:
@@ -278,13 +289,11 @@ def pipeline_snapshot(portfolioId: Optional[str] = None,
                 "pipelineRowCount": 0, "stageBreakdown": [],
                 "availableMetrics": [], "availableDimensions": [], "dataQuality": []}
 
-    df, report = pipeline_mod.load_prepared_pipeline(
-        source["path"], reporting_date=source.get("reporting_date"))
+    df, report = pipeline_mod.load_prepared_pipeline(source)
     semantics = load_mi_semantics(semantics_path())
     return pipeline_mod.compute_pipeline_snapshot(
         df, report, semantics, client_id=source.get("client_id", client_id),
-        run_id=run_id or source.get("run_id", ""),
-        reporting_date=source.get("reporting_date"))
+        run_id=run_id or source.get("run_id", ""), source=source)
 
 
 @app.get("/mi/forecast/snapshot")
@@ -312,28 +321,29 @@ def forecast_snapshot(portfolioId: Optional[str] = None,
     # Funded side (reuse the funded resolution; never merged with pipeline).
     root = _onboarding_output_root()
     funded_df, _funded_report = _resolve_run_dataframe(client_id, run_id, root)
-    reporting_date = snapshots_mod.infer_reporting_date(run_id, funded_df)
+    funded_reporting_date = snapshots_mod.infer_reporting_date(run_id, funded_df)
 
-    # Pipeline side (Phase 1 prep + contract), matched to the run's period.
+    # Pipeline side (Phase 1 prep + contract): the LATEST weekly extract for the
+    # run's source scope. Its as-of/extract dates stay distinct from the funded date.
     pipeline_df = pipeline_report = pipeline_snap = None
     source = _resolve_pipeline_source(client_id, run_id)
     if source is not None:
         try:
-            pipeline_df, pipeline_report = pipeline_mod.load_prepared_pipeline(
-                source["path"], reporting_date=source.get("reporting_date"))
+            pipeline_df, pipeline_report = pipeline_mod.load_prepared_pipeline(source)
             pipeline_snap = pipeline_mod.compute_pipeline_snapshot(
                 pipeline_df, pipeline_report, semantics,
                 client_id=source.get("client_id", client_id),
-                run_id=run_id, reporting_date=reporting_date or source.get("reporting_date"))
+                run_id=run_id, source=source)
         except Exception as exc:  # noqa: BLE001 - a bad pipeline must not 500
             logger.warning("pipeline load failed for forecast [%s/%s]: %s",
                            client_id, run_id, exc)
             pipeline_df = pipeline_report = pipeline_snap = None
 
     return forecast_mod.compute_forecast_bridge(
-        client_id=client_id, run_id=run_id, reporting_date=reporting_date,
+        client_id=client_id, run_id=run_id, funded_reporting_date=funded_reporting_date,
         funded_df=funded_df, pipeline_df=pipeline_df,
-        pipeline_report=pipeline_report, pipeline_snapshot=pipeline_snap)
+        pipeline_report=pipeline_report, pipeline_snapshot=pipeline_snap,
+        pipeline_source=source)
 
 
 @app.post("/mi/query")

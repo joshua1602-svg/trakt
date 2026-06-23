@@ -52,15 +52,21 @@ def _bridge_for(funded_df, pipeline_df, pipeline_report, *, run_id="mi_2025_11")
     import yaml
     semantics = yaml.safe_load(
         (_REPO_ROOT / "mi_agent" / "mi_semantics_field_registry.yaml").read_text())
+    # Pipeline source scope carries the weekly extract date (distinct from the
+    # funded reporting date), modelling the Nov scope's latest weekly file.
+    source = {"pipeline_source_folder_date": "2025-11-01",
+              "pipeline_extract_date": "2025-12-01",
+              "pipeline_as_of_date": "2025-12-01"}
     snap = None
     if pipeline_df is not None:
         snap = pc.compute_pipeline_snapshot(
             pipeline_df, pipeline_report, semantics,
-            client_id="client_001", run_id=run_id, reporting_date="2025-11-30")
+            client_id="client_001", run_id=run_id, source=source)
     return fb.compute_forecast_bridge(
-        client_id="client_001", run_id=run_id, reporting_date="2025-11-30",
+        client_id="client_001", run_id=run_id, funded_reporting_date="2025-11-30",
         funded_df=funded_df, pipeline_df=pipeline_df,
-        pipeline_report=pipeline_report, pipeline_snapshot=snap)
+        pipeline_report=pipeline_report, pipeline_snapshot=snap,
+        pipeline_source=source)
 
 
 # --------------------------------------------------------------------------- #
@@ -238,6 +244,18 @@ class TestEndToEndApi(unittest.TestCase):
             b["forecastFundedBalance"],
             round(b["fundedBalance"] + b["weightedExpectedFundedAmount"], 2), places=2)
         self.assertIsNotNone(body["pipelineSnapshot"])
+
+    def test_bridge_distinguishes_funded_and_pipeline_dates(self):
+        body = self._client().get(
+            "/mi/forecast/snapshot",
+            params={"portfolioId": "client_001/mi_2025_11"}).json()
+        b = body["forecastBridge"]
+        # Funded reporting date is the month-end (Nov 30); pipeline as-of follows
+        # the latest weekly extract (Dec 1) — they are NOT conflated.
+        self.assertEqual(b["fundedReportingDate"], "2025-11-30")
+        self.assertEqual(b["pipelineAsOfDate"], "2025-12-01")
+        self.assertEqual(b["pipelineSourceFolderDate"], "2025-11-01")
+        self.assertNotIn("reportingDate", b)  # no single ambiguous field
 
     def test_funded_snapshot_endpoint_still_works(self):
         body = self._client().get(

@@ -49,6 +49,7 @@ from __future__ import annotations
 import csv
 import json
 import re
+import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -120,16 +121,20 @@ _PIPELINE_COLUMNS = [
 ]
 
 _PIPELINE_FIELD_PATTERNS: Dict[str, List[str]] = {
-    "application_id": ["application_id", "pipeline_id", "case_id", "app_id", "application_no"],
+    # Case key: explicit application id preferred; M2L KFI weekly extracts key on
+    # the KFI / account number instead (no application_id column).
+    "application_id": ["application_id", "pipeline_id", "case_id", "app_id",
+                       "application_no", "kfi_number", "kfi_no", "account_number"],
     "linked_loan_identifier": ["linked_loan_id", "linked_loan_identifier",
                                "funded_loan_id", "loan_identifier", "loan_id"],
     "broker_name": ["broker_name", "broker", "intermediary"],
     "pipeline_stage": ["pipeline_stage", "application_stage", "stage", "status"],
-    "application_date": ["application_date", "app_date", "offer_date"],
+    "application_date": ["application_date", "app_date", "application_submitted_date",
+                         "offer_date"],
     "expected_completion_date": ["expected_completion_date", "completion_date",
-                                 "expected_completion"],
+                                 "expected_completion", "date_funds_released"],
     "expected_funded_amount": ["expected_funding_amount", "expected_funded_amount",
-                               "requested_loan_amount", "expected_amount"],
+                               "requested_loan_amount", "expected_amount", "loan_amount"],
     "expected_ltv": ["expected_ltv", "anticipated_ltv"],
     "property_region": ["property_region", "collateral_region", "region"],
     "property_post_code": ["property_post_code", "post_code", "postcode"],
@@ -1434,6 +1439,7 @@ def _build_pipeline_tape(
 
     linked_count = 0
     application_only = 0
+    used_files: List[str] = []  # source paths that actually contributed rows
     for inv in pipeline_files:
         df = _read_df(inv.get("file_path", ""))
         if df is None:
@@ -1447,6 +1453,7 @@ def _build_pipeline_tape(
                     break
         if "application_id" not in field_cols:
             continue  # not a pipeline tape we can key
+        rows_before = len(rows)
         for _, r in df.iterrows():
             out = {c: "" for c in _PIPELINE_COLUMNS}
             for target, col in field_cols.items():
@@ -1469,14 +1476,53 @@ def _build_pipeline_tape(
                 out["linked_to_central_lender_tape"] = False
                 application_only += 1
             rows.append(out)
+        if len(rows) > rows_before:
+            used_files.append(str(inv.get("file_path", "")))
 
     summary = {
         "pipeline_count": len(rows),
         "linked_to_funded_loans": linked_count,
         "application_only_rows": application_only,
         "columns": _PIPELINE_COLUMNS + ["linked_to_central_lender_tape"],
+        "source_files": used_files,
     }
     return rows, lineage, summary
+
+
+def _materialise_pipeline_sources(source_files: List[str],
+                                  output_dir: Path) -> Dict[str, Any]:
+    """Copy the governed pipeline SOURCE files into ``output/pipeline/`` so the MI
+    layer has a discoverable, governed pipeline single source under the run output.
+
+    Only files that actually CONTRIBUTED pipeline rows (``source_files`` from
+    :func:`_build_pipeline_tape`) are materialised — never a funded loan file that
+    merely carried a pipeline domain tag. Pipeline files are weekly operational
+    extracts (rich M2L KFI schema); copying the source preserves all economic
+    fields the forecast needs (the thin 18a tape cannot). The source folder name
+    (often a date, e.g. ``2025-11-01``) is preserved as the scope folder so the MI
+    date model can separate folder vs extract dates. Pure file ops — no MI import.
+    """
+    pipeline_dir = Path(output_dir) / "pipeline"
+    copied: List[Dict[str, Any]] = []
+    for path in source_files:
+        src = Path(path)
+        if not src.exists() or not src.is_file():
+            continue
+        scope = src.parent.name or "current"
+        dest_dir = pipeline_dir / scope
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest = dest_dir / src.name
+        try:
+            shutil.copy2(src, dest)
+        except OSError:
+            continue
+        copied.append({"source_file": src.name, "scope_folder": scope, "dest": str(dest)})
+    if copied:
+        (pipeline_dir / "pipeline_source_manifest.json").write_text(
+            json.dumps({"materialised": True, "source_count": len(copied),
+                        "sources": copied}, indent=2, default=str), encoding="utf-8")
+    return {"pipeline_source_dir": str(pipeline_dir) if copied else "",
+            "pipeline_sources_materialised": len(copied)}
 
 
 # ---------------------------------------------------------------------------
@@ -1737,6 +1783,13 @@ def build_central_tapes(
             json.dumps(p_summary, indent=2, default=str), encoding="utf-8"
         )
 
+    # Materialise the governed pipeline SOURCE files under output/pipeline/ so the
+    # MI layer (pipeline_prep / pipeline_contract) can discover a rich, governed
+    # pipeline single source for this run — independent of the thin 18a tape. Only
+    # the files that actually contributed pipeline rows are copied.
+    pipeline_source_info = _materialise_pipeline_sources(
+        p_summary.get("source_files", []), central_dir.parent)
+
     return {
         "mode": mode,
         "central_lender_tape_created": bool(tape),
@@ -1747,6 +1800,8 @@ def build_central_tapes(
         "lender_summary": summary,
         "central_pipeline_tape_created": pipeline_created,
         "central_pipeline_tape_path": str(pipeline_tape_path) if pipeline_created else "",
+        "pipeline_source_dir": pipeline_source_info["pipeline_source_dir"],
+        "pipeline_sources_materialised": pipeline_source_info["pipeline_sources_materialised"],
         "pipeline_summary": p_summary,
         "loan_count": summary["loan_count"],
         "pipeline_count": p_summary["pipeline_count"],

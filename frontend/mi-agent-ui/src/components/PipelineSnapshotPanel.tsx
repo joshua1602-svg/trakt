@@ -96,8 +96,14 @@ export function PipelineSnapshotPanel({
           <div className="leading-tight">
             <h2 className="text-sm font-semibold text-ink-100">Pipeline Snapshot</h2>
             <p className="text-[11px] text-ink-400">
-              Origination pipeline (pre-funded) · governed single source ·{" "}
-              <span className="font-medium text-ink-300">{snapshot.reportingDate ?? snapshot.runId}</span>
+              Origination pipeline (pre-funded) · weekly operational view · as of{" "}
+              <span className="font-medium text-ink-300">
+                {snapshot.pipelineAsOfDate ?? snapshot.runId}
+              </span>
+              {snapshot.pipelineSourceFolderDate &&
+                snapshot.pipelineSourceFolderDate !== snapshot.pipelineAsOfDate && (
+                  <span className="text-ink-500"> · source folder {snapshot.pipelineSourceFolderDate}</span>
+                )}
             </p>
           </div>
         </div>

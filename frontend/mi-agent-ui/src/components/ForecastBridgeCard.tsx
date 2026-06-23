@@ -52,7 +52,12 @@ export function ForecastBridgeCard({ bridge }: { bridge: ForecastBridge | null }
           Completion probability basis ·{" "}
           <span className="font-medium text-ink-300">{bridge.completionProbabilityBasis}</span>
         </span>
-        {bridge.reportingDate && <span>Reporting date · {bridge.reportingDate}</span>}
+        {bridge.fundedReportingDate && (
+          <span>Funded reporting date · {bridge.fundedReportingDate}</span>
+        )}
+        {bridge.pipelineAsOfDate && (
+          <span>Pipeline as-of · {bridge.pipelineAsOfDate}</span>
+        )}
       </div>
 
       {readiness.warnings.length > 0 && (

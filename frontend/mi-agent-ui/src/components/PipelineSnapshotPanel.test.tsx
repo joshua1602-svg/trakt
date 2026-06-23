@@ -28,7 +28,8 @@ describe("PipelineSnapshotPanel", () => {
   it("renders the expected completion breakdown when months exist", () => {
     render(<PipelineSnapshotPanel snapshot={NOV} />);
     expect(screen.getByText("Weighted expected funded by completion month")).toBeInTheDocument();
-    expect(screen.getByText("2025-12")).toBeInTheDocument();
+    // 2025-12 appears in both the "next completions" tile and the month bar.
+    expect(screen.getAllByText("2025-12").length).toBeGreaterThanOrEqual(1);
   });
 
   it("hides technical diagnostics until expanded", () => {
