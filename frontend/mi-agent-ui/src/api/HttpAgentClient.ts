@@ -11,6 +11,7 @@ import type {
   AgentRequest,
   AgentResponse,
   Artifact,
+  ForecastSnapshot,
   FundedSnapshot,
   Intent,
   SnapshotIndex,
@@ -75,6 +76,13 @@ export class HttpAgentClient implements AgentClient {
   getSnapshot(portfolioId: string, signal?: AbortSignal): Promise<FundedSnapshot> {
     return this.getJson<FundedSnapshot>(
       `/mi/snapshot?portfolioId=${encodeURIComponent(portfolioId)}`,
+      signal,
+    );
+  }
+
+  getForecastSnapshot(portfolioId: string, signal?: AbortSignal): Promise<ForecastSnapshot> {
+    return this.getJson<ForecastSnapshot>(
+      `/mi/forecast/snapshot?portfolioId=${encodeURIComponent(portfolioId)}`,
       signal,
     );
   }
