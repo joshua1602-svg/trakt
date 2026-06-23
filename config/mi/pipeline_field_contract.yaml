@@ -1,0 +1,303 @@
+# =========================================================================
+# Pipeline MI canonical field contract (Pipeline MI — Phase 1).
+# =========================================================================
+#
+# The GOVERNED single source of truth for the pre-funded form of the lending
+# asset. Pipeline is treated as the pre-funded form of the SAME asset as the
+# funded book — not an unrelated dataset — so its economic fields deliberately
+# reuse the funded MI canonical field names (and the SAME bucket engine in
+# config/mi/buckets.yaml). This is what later lets funded + pipeline be
+# compared and forecast.
+#
+# This file declares ONLY contract metadata (names, source aliases, funded
+# correlation, availability class, forecast-readiness). No probabilities or
+# amounts are invented here; the prep layer (mi_agent_api/pipeline_prep.py)
+# parses/derives values, and stage->probability assumptions come from the
+# EXISTING config/client/pipeline_expected_funding.yaml.
+#
+# Separation guarantee: nothing in this contract merges pipeline rows into the
+# funded central lender tape (18_central_lender_tape.csv). The prepared pipeline
+# MI dataset is a SEPARATE artefact (20_prepared_pipeline_mi.csv) and every row
+# carries record_type == "pipeline".
+#
+# availability classes (per field):
+#   available             - present in the M2L KFI / pipeline source columns
+#   derived               - computed by the prep layer from available inputs
+#   unavailable           - no source today; reported honestly, never fabricated
+#   future_mapping        - a canonical target that needs a registry/alias add
+# -------------------------------------------------------------------------
+
+version: 0.1.0
+
+# The governed pipeline source(s). The prep layer reads ONLY these — never the
+# funded loan tape. Either the raw M2L KFI / pipeline extract OR the onboarding
+# central pipeline tape (18a_central_pipeline_tape.csv) is accepted.
+source:
+  record_type: pipeline
+  prepared_output: onboarding_output/<client_id>/<run_id>/output/pipeline/20_prepared_pipeline_mi.csv
+  governed_inputs:
+    - "18a_central_pipeline_tape.csv"     # onboarding-built central pipeline tape
+    - "M2L KFI*"                           # raw M2L KFI / pipeline extract (xlsx/csv)
+    - "*KFI*Pipeline*"
+
+# -------------------------------------------------------------------------
+# A. Funded-correlated economic fields.
+#    Stored under the funded MI canonical name so funded + pipeline correlate
+#    directly. `funded_correlation` lists the funded field(s) each compares to.
+# -------------------------------------------------------------------------
+funded_correlated_fields:
+
+  current_outstanding_balance:
+    role: metric
+    availability: available
+    description: Prospective loan / expected advance amount (the pipeline economic
+      amount). Reuses the funded balance canonical so it feeds ticket_bucket and
+      compares to the funded book.
+    funded_correlation: [current_outstanding_balance, original_principal_balance]
+    source_aliases:
+      - loan amount
+      - expected funded amount
+      - expected funding amount
+      - expected advance amount
+      - requested loan amount
+      - facility
+    bucket: ticket_bucket
+
+  current_valuation_amount:
+    role: metric
+    availability: available
+    description: Property valuation supporting the pipeline case.
+    funded_correlation: [current_valuation_amount, original_valuation_amount]
+    source_aliases:
+      - estimated value
+      - property value
+      - latest property value
+
+  current_loan_to_value:
+    role: metric
+    availability: derived
+    description: Pipeline LTV. Prefer an explicit value, else derive loan amount /
+      property value (same rule as funded prep).
+    funded_correlation: [current_loan_to_value, original_loan_to_value]
+    source_aliases:
+      - expected ltv
+      - anticipated ltv
+      - ltv
+    derive_from: {numerator: current_outstanding_balance, denominator: current_valuation_amount}
+    bucket: ltv_bucket
+
+  current_interest_rate:
+    role: metric
+    availability: available
+    description: Quoted / expected product rate.
+    funded_correlation: [current_interest_rate]
+    source_aliases:
+      - product rate
+      - rate
+      - expected rate
+      - interest rate
+    bucket: interest_rate_bucket
+
+  youngest_borrower_age:
+    role: metric
+    availability: derived
+    description: Youngest borrower age at the reporting date, derived from the
+      applicant DOBs (youngest borrower = latest DOB = minimum age).
+    funded_correlation: [youngest_borrower_age]
+    dob_source_aliases:
+      - dob app 1
+      - dob app 2
+      - date of birth
+    bucket: age_bucket
+
+  collateral_geography:
+    role: dimension
+    availability: available
+    description: Collateral region of the prospective property.
+    funded_correlation: [geographic_region_obligor, geographic_region_collateral, collateral_geography]
+    source_aliases:
+      - property region
+      - collateral region
+      - region
+    region_group_primary: geographic_region_obligor
+
+  broker_channel:
+    role: dimension
+    availability: available
+    description: Originating broker / intermediary channel.
+    funded_correlation: [broker_channel, origination_channel]
+    source_aliases:
+      - broker
+      - intermediary
+      - broker name
+      - channel
+    channel_group_primary: origination_channel
+
+  product_type:
+    role: dimension
+    availability: available
+    description: Product type quoted on the pipeline case.
+    funded_correlation: [erm_product_type, erm_sub_product_type]
+    source_aliases:
+      - product
+      - product name
+      - loan plan
+
+# -------------------------------------------------------------------------
+# B. Pipeline-specific fields (funnel position + timing + forecast inputs).
+# -------------------------------------------------------------------------
+pipeline_specific_fields:
+
+  pipeline_case_identifier:
+    role: identifier
+    availability: available
+    description: Unique pipeline case key.
+    source_aliases: [account number, case id, pipeline id, application no, app id]
+
+  application_identifier:
+    role: identifier
+    availability: available
+    description: KFI / application reference.
+    source_aliases: [kfi number, application id, kfi used for app, application_id]
+
+  pipeline_stage:
+    role: dimension
+    availability: available
+    semantic_registry_field: pipeline_stage
+    description: Normalised funnel stage (KFI / APPLICATION / OFFER / COMPLETED /
+      WITHDRAWN). Normalised against mi_agent.states.models stage vocabularies.
+    source_aliases: [status, application stage, stage, pipeline stage, dpr status]
+
+  pipeline_status:
+    role: dimension
+    availability: derived
+    semantic_registry_field: funded_status
+    description: funded / pipeline / withdrawn / unknown classification derived from
+      the stage (reuses the funded-status vocabulary).
+
+  pipeline_stage_date:
+    role: date
+    availability: derived
+    description: Most recent stage date for the case (max of kfi/application/offer).
+
+  kfi_date:
+    role: date
+    availability: available
+    source_aliases: [kfi submitted date, kfi date]
+
+  application_date:
+    role: date
+    availability: available
+    source_aliases: [application submitted date, application date, app date]
+
+  offer_date:
+    role: date
+    availability: available
+    source_aliases: [offer date]
+
+  expected_completion_date:
+    role: date
+    availability: derived
+    semantic_registry_field: forecast_funding_date
+    description: Funds-released date where present, else derived from the stage and
+      the config stage_days_to_fund assumption.
+    source_aliases: [date funds released, expected completion date, completion date]
+
+  completion_probability:
+    role: metric
+    availability: derived
+    semantic_registry_field: forecast_funding_probability
+    description: Stage conversion probability. Row-level where supplied, else the
+      config/client/pipeline_expected_funding.yaml stage_probabilities lookup.
+      Never invented.
+    source_aliases: [completion probability, conversion probability, funding probability]
+
+  stage_conversion_probability:
+    role: metric
+    availability: derived
+    description: Alias of completion_probability from the config stage->probability
+      assumption (kept distinct so a row-level probability can override it later).
+
+  expected_funded_amount:
+    role: metric
+    availability: derived
+    semantic_registry_field: forecast_funded_balance
+    description: Expected advance if the case completes (== the economic amount,
+      current_outstanding_balance). The unweighted forecast amount.
+
+  weighted_expected_funded_amount:
+    role: metric
+    availability: derived
+    semantic_registry_field: forecast_funded_balance
+    description: expected_funded_amount * completion_probability — the
+      probability-weighted contribution to forecast funded balance.
+
+  pipeline_case_age_days:
+    role: metric
+    availability: derived
+    description: Days from the earliest case date (kfi/application) to the
+      reporting date.
+
+  days_to_expected_completion:
+    role: metric
+    availability: derived
+    description: Days from the reporting date to expected_completion_date.
+
+  pipeline_source_file:
+    role: dimension
+    availability: derived
+    description: Source pipeline file the row was read from (provenance).
+
+  pipeline_reporting_date:
+    role: date
+    availability: derived
+    semantic_registry_field: pipeline_snapshot_date
+    description: Reporting / snapshot date for this pipeline cut.
+
+# -------------------------------------------------------------------------
+# Buckets reused from config/mi/buckets.yaml (NOT redefined here) plus the
+# pipeline-derived dimensions.
+# -------------------------------------------------------------------------
+buckets:
+  reused: [ltv_bucket, age_bucket, ticket_bucket, interest_rate_bucket]
+  pipeline_derived:
+    expected_completion_month:
+      source_field: expected_completion_date
+      description: Expected completion month (YYYY-MM) for completion forecasting.
+    pipeline_stage_bucket:
+      source_field: pipeline_stage
+      description: Coarse funnel grouping (early / mid / late / completed / withdrawn).
+
+# -------------------------------------------------------------------------
+# Part 3 — forecast-readiness / linkage to the funded book.
+#
+# forecast_funded_balance
+#     = current_funded_balance
+#     + sum(pipeline_expected_funded_amount * completion_probability)
+#
+# This contract makes the pipeline dataset forecast-ready; the scenario-query
+# logic itself is intentionally NOT built in this PR.
+# -------------------------------------------------------------------------
+forecast_readiness:
+  formula: "forecast_funded_balance = current_funded_balance + sum(expected_funded_amount * completion_probability)"
+  economic_amount_field: expected_funded_amount
+  baseline_completion_probability_field: completion_probability
+  expected_completion_date_field: expected_completion_date
+  expected_completion_month_field: expected_completion_month
+  stage_probability_config: config/client/pipeline_expected_funding.yaml
+  funded_state_assembler: mi_agent.states.assembler.total_forecast_funded
+  correlation_fields:
+    amount: current_outstanding_balance
+    ltv: current_loan_to_value
+    valuation: current_valuation_amount
+    region: geographic_region_obligor
+    broker_channel: broker_channel
+    rate: current_interest_rate
+    borrower_age: youngest_borrower_age
+    product: product_type
+  unique_key_candidates:
+    pipeline_case_id: pipeline_case_identifier
+    application_id: application_identifier
+    funded_link: linked_loan_identifier        # 18a tape link to a funded loan
+    borrower_property_match: [youngest_borrower_age, collateral_geography, current_valuation_amount]
+    source_reference: pipeline_case_identifier
