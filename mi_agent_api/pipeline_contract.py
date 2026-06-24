@@ -206,13 +206,26 @@ def discover_pipeline_sources(root: str | os.PathLike,
 
 
 def _collect_files(root: Path, globs: List[str]) -> List[Path]:
+    """Governed pipeline source files under ``root``.
+
+    Raw onboarding INPUT copies (under an ``input/`` path) are skipped — only the
+    governed ``output/pipeline/`` materialised sources (or a flat fixture pack) are
+    discovered, so a promoted run does not surface its own input twice.
+    """
     seen: set = set()
     out: List[Path] = []
     for pattern in globs:
         for path in sorted(root.glob(f"**/{pattern}")):
-            if path not in seen and path.is_file():
-                seen.add(path)
-                out.append(path)
+            if path in seen or not path.is_file():
+                continue
+            try:
+                rel_parts = {p.lower() for p in path.relative_to(root).parts[:-1]}
+            except ValueError:
+                rel_parts = {p.lower() for p in path.parts[:-1]}
+            if "input" in rel_parts:
+                continue  # raw onboarding input — not a governed pipeline source
+            seen.add(path)
+            out.append(path)
     return out
 
 
