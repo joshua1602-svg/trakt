@@ -3,8 +3,12 @@
  *
  * Mirror the real `GET /mi/forecast/snapshot` composition for `client_001`:
  * the funded balance (from the funded spine) + the Phase 1 pipeline snapshot of
- * the M2L KFI fixture pack + config stage probabilities. Numbers match the
- * committed pipeline fixtures (Nov: 10 cases, £1.755MM, weighted £1.06325MM).
+ * the M2L KFI fixture pack + config stage probabilities.
+ *
+ * Pipeline dates are weekly-operational and DISTINCT from the funded reporting
+ * date: the November scope (`pipelineSourceFolderDate` 2025-11-01) selects the
+ * latest weekly extract (`pipelineAsOfDate`/`pipelineExtractDate` 2025-12-01),
+ * while the funded book reports at month-end (`fundedReportingDate` 2025-11-30).
  * Served only via the mock client — NOT hardcoded prototype options.
  */
 
@@ -23,9 +27,8 @@ const NOV_STAGES: PipelineStageBucket[] = [
 ];
 
 const NOV_COMPLETION: ExpectedCompletionBucket[] = [
-  { month: "2025-10", caseCount: 2, expectedFundedAmount: 450_000, weightedExpectedFundedAmount: 450_000 },
   { month: "2025-12", caseCount: 6, expectedFundedAmount: 905_000, weightedExpectedFundedAmount: 533_250 },
-  { month: "2026-01", caseCount: 2, expectedFundedAmount: 400_000, weightedExpectedFundedAmount: 80_000 },
+  { month: "2026-01", caseCount: 4, expectedFundedAmount: 850_000, weightedExpectedFundedAmount: 530_000 },
 ];
 
 const NOV_PIPELINE: PipelineSnapshot = {
@@ -34,13 +37,27 @@ const NOV_PIPELINE: PipelineSnapshot = {
   portfolioId: "client_001/mi_2025_11",
   client_id: "client_001",
   runId: "mi_2025_11",
-  reportingDate: "2025-11-30",
+  pipelineAsOfDate: "2025-12-01",
+  pipelineExtractDate: "2025-12-01",
+  pipelineSourceFolderDate: "2025-11-01",
+  sourceFile: "M2L_KFI_and_Pipeline_2025_12_01_115711.csv",
   pipelineRowCount: 10,
   pipelineAmount: 1_755_000,
   expectedFundedAmount: 1_755_000,
   weightedExpectedFundedAmount: 1_063_250,
   stageBreakdown: NOV_STAGES,
   expectedCompletionBreakdown: NOV_COMPLETION,
+  brokerBreakdown: [
+    { key: "Broker Alpha", caseCount: 3, pipelineAmount: 530_000, weightedExpectedFundedAmount: 320_000 },
+    { key: "Broker Beta", caseCount: 3, pipelineAmount: 480_000, weightedExpectedFundedAmount: 300_000 },
+    { key: "Broker Gamma", caseCount: 2, pipelineAmount: 390_000, weightedExpectedFundedAmount: 220_000 },
+    { key: "Broker Delta", caseCount: 2, pipelineAmount: 355_000, weightedExpectedFundedAmount: 223_250 },
+  ],
+  regionBreakdown: [
+    { key: "South West", caseCount: 2, pipelineAmount: 420_000, weightedExpectedFundedAmount: 260_000 },
+    { key: "West Midlands", caseCount: 2, pipelineAmount: 410_000, weightedExpectedFundedAmount: 200_000 },
+    { key: "London", caseCount: 3, pipelineAmount: 480_000, weightedExpectedFundedAmount: 350_000 },
+  ],
   availableMetrics: ["current_outstanding_balance", "expected_funded_amount", "weighted_expected_funded_amount"],
   availableDimensions: ["pipeline_stage", "broker_channel", "geographic_region_obligor", "ltv_bucket"],
   missingDimensions: [],
@@ -57,7 +74,10 @@ const NOV_FORECAST: ForecastSnapshot = {
   portfolioId: "client_001/mi_2025_11",
   client_id: "client_001",
   runId: "mi_2025_11",
-  reportingDate: "2025-11-30",
+  fundedReportingDate: "2025-11-30",
+  pipelineAsOfDate: "2025-12-01",
+  pipelineExtractDate: "2025-12-01",
+  pipelineSourceFolderDate: "2025-11-01",
   fundedBalance: 8_902_999.7,
   fundedLoanCount: 73,
   pipelineAvailable: true,
@@ -66,7 +86,10 @@ const NOV_FORECAST: ForecastSnapshot = {
     portfolioId: "client_001/mi_2025_11",
     client_id: "client_001",
     runId: "mi_2025_11",
-    reportingDate: "2025-11-30",
+    fundedReportingDate: "2025-11-30",
+    pipelineAsOfDate: "2025-12-01",
+    pipelineExtractDate: "2025-12-01",
+    pipelineSourceFolderDate: "2025-11-01",
     fundedBalance: 8_902_999.7,
     fundedLoanCount: 73,
     pipelineAvailable: true,
@@ -97,7 +120,10 @@ const OCT_FORECAST: ForecastSnapshot = {
   portfolioId: "client_001/mi_2025_10",
   client_id: "client_001",
   runId: "mi_2025_10",
-  reportingDate: "2025-10-31",
+  fundedReportingDate: "2025-10-31",
+  pipelineAsOfDate: "2025-10-01",
+  pipelineExtractDate: "2025-10-01",
+  pipelineSourceFolderDate: "2025-10-01",
   fundedBalance: 4_207_999.95,
   fundedLoanCount: 33,
   pipelineAvailable: true,
@@ -105,7 +131,10 @@ const OCT_FORECAST: ForecastSnapshot = {
     ...NOV_PIPELINE,
     portfolioId: "client_001/mi_2025_10",
     runId: "mi_2025_10",
-    reportingDate: "2025-10-31",
+    pipelineAsOfDate: "2025-10-01",
+    pipelineExtractDate: "2025-10-01",
+    pipelineSourceFolderDate: "2025-10-01",
+    sourceFile: "M2L_KFI_and_Pipeline_2025_10_01.csv",
     pipelineRowCount: 8,
     pipelineAmount: 1_230_000,
     expectedFundedAmount: 1_230_000,
@@ -117,7 +146,10 @@ const OCT_FORECAST: ForecastSnapshot = {
     portfolioId: "client_001/mi_2025_10",
     client_id: "client_001",
     runId: "mi_2025_10",
-    reportingDate: "2025-10-31",
+    fundedReportingDate: "2025-10-31",
+    pipelineAsOfDate: "2025-10-01",
+    pipelineExtractDate: "2025-10-01",
+    pipelineSourceFolderDate: "2025-10-01",
     fundedBalance: 4_207_999.95,
     fundedLoanCount: 33,
     pipelineAvailable: true,

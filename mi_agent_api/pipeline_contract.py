@@ -47,14 +47,23 @@ _PIPELINE_SOURCE_GLOBS = [
     "*KFI*Pipeline*.csv", "*KFI*Pipeline*.xlsx",
 ]
 
-_DATE_DIR_RE = re.compile(r"(\d{4})[_\-.](\d{2})[_\-.](\d{2})")
+_FULL_DATE_RE = re.compile(r"(\d{4})[_\-.](\d{2})[_\-.](\d{2})")
 _MONTH_RE = re.compile(r"(\d{4})[_\-.](\d{2})")
 _NON_CLIENT_PARTS = {"output", "outputs", "runs", "onboarding", "central",
                      "pipeline", "mi", "fixtures", "tests", ""}
 
 
 # --------------------------------------------------------------------------- #
-# Source discovery
+# Date concepts (pipeline is a continuous weekly operational view — these are
+# deliberately DISTINCT from the funded reporting cut-off):
+#   pipeline_source_folder_date : the source/fixture folder date (e.g. the
+#                                 monthly scope ``pipeline/2025-11-01``);
+#   pipeline_extract_date       : the date parsed from the selected weekly file
+#                                 (e.g. ``...2025_12_01_115711`` -> 2025-12-01);
+#   pipeline_as_of_date         : operational as-of for the snapshot (== the
+#                                 latest selected weekly extract date);
+#   run_id                      : the funded MI run the scope aligns to, derived
+#                                 from the FOLDER month (e.g. ``mi_2025_11``).
 # --------------------------------------------------------------------------- #
 def _read_source(path: Path) -> Optional[pd.DataFrame]:
     try:
@@ -65,16 +74,40 @@ def _read_source(path: Path) -> Optional[pd.DataFrame]:
         return None
 
 
-def _infer_reporting_date(path: Path) -> Optional[str]:
-    """Reporting date from the path (``.../2025-11-01/...`` or ``...2025_11_01``)."""
-    for part in (path.name, *[p for p in path.parts]):
-        m = _DATE_DIR_RE.search(part)
+def _date_in(text: str) -> Optional[str]:
+    """A full ``YYYY-MM-DD`` date parsed from a single string token, else None."""
+    m = _FULL_DATE_RE.search(text or "")
+    if m:
+        return "-".join(m.groups())
+    m = _MONTH_RE.search(text or "")
+    return f"{m.group(1)}-{m.group(2)}-01" if m else None
+
+
+def _extract_date(file_path: Path) -> Optional[str]:
+    """The weekly extract date parsed from the FILE name only."""
+    return _date_in(file_path.name)
+
+
+def _folder_date(folder: Path) -> Optional[str]:
+    """The source-scope (folder) date parsed from the folder NAME only."""
+    return _date_in(folder.name)
+
+
+def _run_id_for(folder_date: Optional[str], scope_date: Optional[str],
+                path: Path) -> Optional[str]:
+    """The funded MI run id the scope aligns to.
+
+    Prefers an explicit ``mi_YYYY_MM`` path component (a promoted run dir); else
+    derives ``mi_<year>_<month>`` from the FOLDER month (never the weekly extract
+    month, which may roll into the next month)."""
+    for part in path.parts:
+        if re.fullmatch(r"mi_\d{4}_\d{2}", part):
+            return part
+    basis = folder_date or scope_date
+    if basis:
+        m = _MONTH_RE.search(basis)
         if m:
-            return "-".join(m.groups())
-    for part in (path.name, *[p for p in path.parts]):
-        m = _MONTH_RE.search(part)
-        if m:
-            return f"{m.group(1)}-{m.group(2)}-01"
+            return f"mi_{m.group(1)}_{m.group(2)}"
     return None
 
 
@@ -95,60 +128,135 @@ def _infer_client(path: Path, root: Path) -> Optional[str]:
 
 def discover_pipeline_sources(root: str | os.PathLike,
                               client_id: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Discover governed pipeline source files under ``root``.
+    """Discover governed weekly pipeline sources under ``root``, grouped by scope.
 
-    Returns a list of ``{client_id, reporting_date, run_id, path, row_count}``
-    ordered oldest -> newest by reporting date. Unreadable files are skipped.
+    Pipeline files are weekly operational extracts: a single source SCOPE (the
+    folder, e.g. ``pipeline/2025-11-01``) may contain several weekly files, and
+    the LATEST one (by extract date) represents that scope. One entry is returned
+    per (client, scope) with the date concepts kept separate — there is no single
+    ambiguous ``reporting_date``:
+
+        {client_id, run_id, pipeline_source_folder, pipeline_source_folder_date,
+         pipeline_extract_date, pipeline_as_of_date, source_file, row_count,
+         weekly_files}
+
+    Ordered oldest -> newest by folder/as-of date.
     """
     root = Path(root)
     if not root.exists():
         return []
-    seen: set = set()
+
+    # Collect candidate weekly files (rich M2L/KFI sources preferred; the thin
+    # 18a central pipeline tape is only a last-resort fallback when no source
+    # extract exists anywhere under the root).
+    source_globs = [g for g in _PIPELINE_SOURCE_GLOBS if g != _CENTRAL_PIPELINE_TAPE]
+    files = _collect_files(root, source_globs)
+    if not files:
+        files = _collect_files(root, [_CENTRAL_PIPELINE_TAPE])
+
+    # Group weekly files by (client, source folder) scope.
+    scopes: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for path in files:
+        cid = _infer_client(path, root) or (client_id or "client_001")
+        if client_id and cid != client_id:
+            continue
+        folder = path.parent
+        folder_date = _folder_date(folder)
+        extract_date = _extract_date(path)
+        key = (cid, str(folder))
+        scope = scopes.setdefault(key, {
+            "client_id": cid,
+            "pipeline_source_folder": str(folder),
+            "pipeline_source_folder_date": folder_date,
+            "weekly_files": [],
+            "_best": None,
+        })
+        entry = {"source_file": str(path), "pipeline_extract_date": extract_date}
+        scope["weekly_files"].append(entry)
+        # Latest weekly file by extract date (fallback to filename order).
+        best = scope["_best"]
+        if best is None or (extract_date or "") >= (best["pipeline_extract_date"] or ""):
+            scope["_best"] = entry
+
     found: List[Dict[str, Any]] = []
-    for pattern in _PIPELINE_SOURCE_GLOBS:
-        for path in sorted(root.glob(f"**/{pattern}")):
-            if path in seen:
-                continue
-            seen.add(path)
-            df = _read_source(path)
-            if df is None or df.empty:
-                continue
-            cid = _infer_client(path, root) or (client_id or "client_001")
-            if client_id and cid != client_id:
-                continue
-            reporting_date = _infer_reporting_date(path)
-            run_id = (f"pipeline_{reporting_date[:7].replace('-', '_')}"
-                      if reporting_date else path.stem)
-            found.append({
-                "client_id": cid,
-                "reporting_date": reporting_date,
-                "run_id": run_id,
-                "path": str(path),
-                "row_count": int(len(df)),
-            })
-    found.sort(key=lambda r: (r["reporting_date"] or "", r["path"]))
+    for scope in scopes.values():
+        best = scope.pop("_best")
+        if best is None:
+            continue
+        df = _read_source(Path(best["source_file"]))
+        if df is None or df.empty:
+            continue
+        folder_date = scope["pipeline_source_folder_date"]
+        extract_date = best["pipeline_extract_date"]
+        as_of = extract_date or folder_date
+        scope.update({
+            "run_id": _run_id_for(folder_date, as_of, Path(best["source_file"])),
+            "pipeline_extract_date": extract_date,
+            "pipeline_as_of_date": as_of,
+            "source_file": best["source_file"],
+            "row_count": int(len(df)),
+            "weekly_files": sorted(
+                scope["weekly_files"], key=lambda e: e["pipeline_extract_date"] or ""),
+        })
+        found.append(scope)
+
+    found.sort(key=lambda r: (r["pipeline_source_folder_date"] or "",
+                              r["pipeline_as_of_date"] or ""))
     return found
 
 
-def load_prepared_pipeline(path: str | os.PathLike,
-                           reporting_date: Optional[str] = None
+def _collect_files(root: Path, globs: List[str]) -> List[Path]:
+    """Governed pipeline source files under ``root``.
+
+    Raw onboarding INPUT copies (under an ``input/`` path) are skipped — only the
+    governed ``output/pipeline/`` materialised sources (or a flat fixture pack) are
+    discovered, so a promoted run does not surface its own input twice.
+    """
+    seen: set = set()
+    out: List[Path] = []
+    for pattern in globs:
+        for path in sorted(root.glob(f"**/{pattern}")):
+            if path in seen or not path.is_file():
+                continue
+            try:
+                rel_parts = {p.lower() for p in path.relative_to(root).parts[:-1]}
+            except ValueError:
+                rel_parts = {p.lower() for p in path.parts[:-1]}
+            if "input" in rel_parts:
+                continue  # raw onboarding input — not a governed pipeline source
+            seen.add(path)
+            out.append(path)
+    return out
+
+
+def load_prepared_pipeline(source: str | os.PathLike | Dict[str, Any],
+                           as_of_date: Optional[str] = None
                            ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
-    """Read a pipeline source and apply the pipeline MI preparation layer."""
-    p = Path(path)
+    """Read a pipeline source and apply the pipeline MI preparation layer.
+
+    ``source`` may be a path or a discovery scope dict (whose ``source_file`` and
+    ``pipeline_as_of_date`` are used). The as-of date is the weekly extract date,
+    NOT the funded reporting cut-off.
+    """
+    if isinstance(source, dict):
+        as_of_date = as_of_date or source.get("pipeline_as_of_date")
+        source = source.get("source_file", "")
+    p = Path(source)
     raw = _read_source(p)
     if raw is None:
         raise FileNotFoundError(f"cannot read pipeline source {p}")
-    rd = reporting_date or _infer_reporting_date(p)
-    return prepare_pipeline_mi_dataset(raw, reporting_date=rd, source_file=p.name)
+    rd = as_of_date or _extract_date(p)
+    return prepare_pipeline_mi_dataset(raw, as_of_date=rd, source_file=p.name)
 
 
 def resolve_pipeline_source(root: str | os.PathLike, client_id: str,
                             run_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    """The pipeline source for a client (and run/reporting date if given).
+    """The pipeline scope for a client/run, matched by the funded run's month.
 
-    ``run_id`` may be a pipeline run id (``pipeline_2025_11``), a reporting date
-    (``2025-11-01``) or a funded run id (``mi_2025_11``) — matched by year-month
-    so a funded run resolves to the pipeline cut for the same period.
+    ``run_id`` is the funded MI run (``mi_2025_11``); the matching pipeline scope
+    is the one whose source-folder month aligns. Matching uses the scope's
+    ``run_id`` and ``pipeline_source_folder_date`` (the monthly scope) — NOT the
+    weekly extract date, which may roll into the next month.
     """
     sources = discover_pipeline_sources(root, client_id=client_id)
     if not sources:
@@ -156,12 +264,11 @@ def resolve_pipeline_source(root: str | os.PathLike, client_id: str,
     if run_id:
         want_ym = _year_month(str(run_id))
         for s in sources:
-            if (s["run_id"] == run_id or s["reporting_date"] == run_id
-                    or (s["reporting_date"] or "").startswith(str(run_id))
-                    or (want_ym and _year_month(s["reporting_date"] or "") == want_ym)
-                    or (want_ym and _year_month(s["run_id"]) == want_ym)):
+            if (s.get("run_id") == run_id
+                    or (want_ym and _year_month(s.get("run_id") or "") == want_ym)
+                    or (want_ym and _year_month(s.get("pipeline_source_folder_date") or "") == want_ym)):
                 return s
-    return sources[-1]  # latest
+    return sources[-1]  # latest scope
 
 
 def _year_month(text: str) -> Optional[str]:
@@ -253,18 +360,29 @@ def compute_pipeline_snapshot(
     *,
     client_id: str,
     run_id: str,
-    reporting_date: Optional[str] = None,
+    source: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Deterministic pipeline snapshot block for one reporting cut."""
+    """Deterministic pipeline snapshot block for one weekly operational cut.
+
+    Dates are kept distinct: ``pipelineAsOfDate`` / ``pipelineExtractDate`` /
+    ``pipelineSourceFolderDate`` describe the weekly pipeline extract; they are
+    NOT the funded reporting date. There is deliberately no ``reportingDate`` key.
+    """
     contract = build_pipeline_dataset_contract(df, semantics, report)
     weighted = report.get("weighted_expected_funded_amount")
+    src = source or {}
+    as_of = src.get("pipeline_as_of_date") or report.get("pipeline_as_of_date")
     return {
         "ok": True,
         "recordType": "pipeline",
         "portfolioId": f"{client_id}/{run_id}",
         "client_id": client_id,
         "runId": run_id,
-        "reportingDate": reporting_date or report.get("reporting_date"),
+        "pipelineAsOfDate": as_of,
+        "pipelineExtractDate": src.get("pipeline_extract_date") or report.get("pipeline_as_of_date"),
+        "pipelineSourceFolderDate": src.get("pipeline_source_folder_date"),
+        "pipelineSourceFolder": src.get("pipeline_source_folder"),
+        "sourceFile": src.get("source_file"),
         "pipelineRowCount": int(report.get("row_count", len(df))),
         "pipelineAmount": report.get("total_pipeline_amount"),
         "expectedFundedAmount": report.get("expected_funded_amount"),

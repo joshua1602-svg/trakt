@@ -201,25 +201,38 @@ def compute_forecast_bridge(
     *,
     client_id: str,
     run_id: str,
-    reporting_date: Optional[str],
+    funded_reporting_date: Optional[str],
     funded_df: Optional[pd.DataFrame],
     pipeline_df: Optional[pd.DataFrame],
     pipeline_report: Optional[Dict[str, Any]],
     pipeline_snapshot: Optional[Dict[str, Any]],
+    pipeline_source: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Deterministically compose funded + pipeline into a forecast bridge.
 
+    Date concepts are kept distinct (the pipeline is a continuous weekly view, NOT
+    a monthly accounting cut-off): ``fundedReportingDate`` is the funded book's
+    cut-off for the run, while ``pipelineAsOfDate`` / ``pipelineExtractDate`` /
+    ``pipelineSourceFolderDate`` describe the selected weekly pipeline extract.
+    There is deliberately no single ambiguous ``reportingDate``.
+
     ``funded_df`` is the prepared funded MI dataset (loan-level, never merged with
-    pipeline). ``pipeline_df`` / ``pipeline_report`` / ``pipeline_snapshot`` come
-    from the Phase 1 pipeline prep + contract. Returns the full forecast-snapshot
-    envelope (funded headline + ``pipelineSnapshot`` + ``forecastBridge`` +
-    ``watchlist``). Never raises for a missing pipeline.
+    pipeline). Returns the full forecast-snapshot envelope (funded headline +
+    ``pipelineSnapshot`` + ``forecastBridge`` + ``watchlist``). Never raises for a
+    missing pipeline.
     """
     funded_balance = _num_sum(funded_df, "current_outstanding_balance") if funded_df is not None else 0.0
     funded_loan_count = int(len(funded_df)) if funded_df is not None else 0
 
     pipeline_available = pipeline_df is not None and pipeline_report is not None
     readiness = _forecast_readiness(pipeline_available, pipeline_report)
+    src = pipeline_source or {}
+    pipeline_dates = {
+        "pipelineAsOfDate": src.get("pipeline_as_of_date"),
+        "pipelineExtractDate": src.get("pipeline_extract_date"),
+        "pipelineSourceFolderDate": src.get("pipeline_source_folder_date"),
+        "sourceFile": src.get("source_file"),
+    }
 
     if pipeline_available:
         pipeline_amount = float(pipeline_report.get("total_pipeline_amount") or 0.0)
@@ -229,6 +242,8 @@ def compute_forecast_bridge(
         stage_breakdown = (pipeline_snapshot or {}).get("stageBreakdown", [])
         completion_breakdown = (pipeline_snapshot or {}).get("expectedCompletionBreakdown", [])
         watchlist = build_pipeline_watchlist(pipeline_df, pipeline_report, readiness)
+        if not pipeline_dates["pipelineAsOfDate"]:
+            pipeline_dates["pipelineAsOfDate"] = pipeline_report.get("pipeline_as_of_date")
     else:
         pipeline_amount = 0.0
         pipeline_case_count = 0
@@ -245,7 +260,8 @@ def compute_forecast_bridge(
         "portfolioId": f"{client_id}/{run_id}",
         "client_id": client_id,
         "runId": run_id,
-        "reportingDate": reporting_date,
+        "fundedReportingDate": funded_reporting_date,
+        **pipeline_dates,
         "fundedBalance": round(funded_balance, 2),
         "fundedLoanCount": funded_loan_count,
         "pipelineAvailable": pipeline_available,
@@ -266,7 +282,8 @@ def compute_forecast_bridge(
         "portfolioId": f"{client_id}/{run_id}",
         "client_id": client_id,
         "runId": run_id,
-        "reportingDate": reporting_date,
+        "fundedReportingDate": funded_reporting_date,
+        **pipeline_dates,
         "fundedBalance": round(funded_balance, 2),
         "fundedLoanCount": funded_loan_count,
         "pipelineAvailable": pipeline_available,

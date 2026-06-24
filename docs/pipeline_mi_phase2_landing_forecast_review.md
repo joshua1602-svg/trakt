@@ -19,11 +19,12 @@
 ## 2. Existing pipeline snapshot API (Phase 1)
 
 `GET /mi/pipeline/snapshot(s)` → `pipeline_contract.compute_pipeline_snapshot`
-returns `{ok, recordType:"pipeline", portfolioId, reportingDate, pipelineRowCount,
-pipelineAmount, expectedFundedAmount, weightedExpectedFundedAmount, stageBreakdown[],
+returns `{ok, recordType:"pipeline", portfolioId, pipelineAsOfDate,
+pipelineExtractDate, pipelineSourceFolderDate, pipelineRowCount, pipelineAmount,
+expectedFundedAmount, weightedExpectedFundedAmount, stageBreakdown[],
 expectedCompletionBreakdown[], availableMetrics[], availableDimensions[],
 missingDimensions[], dataQuality[], fieldCorrelationToFunded, forecastReadiness,
-datasetContract}`.
+datasetContract}` (see the date-model revision below — no ambiguous `reportingDate`).
 
 ## 3. Pipeline field contract + forecast-readiness (Phase 1)
 
@@ -99,3 +100,48 @@ separation), and references the assembler as the canonical formula source.
   `ForecastBridgeCard`, `PipelineWatchlist` rendered in `AppShell` below the funded
   panel; `useWorkspace` fetches the forecast snapshot on the same `portfolioId`
   effect; mock support for offline rendering.
+
+---
+
+## Revision — pipeline date model + runtime materialisation
+
+### Pipeline dates are weekly-operational, NOT funded reporting dates
+
+Pipeline files are weekly operational extracts; the pipeline is a
+continuous/latest-available view, **not** a monthly accounting cut-off. The
+date concepts are now kept strictly separate (no field called simply
+`reporting_date` ever refers to both):
+
+| Concept | Field | Example |
+| --- | --- | --- |
+| Selected MI run | `run_id` | `mi_2025_11` |
+| Funded book cut-off | `fundedReportingDate` | `2025-11-30` |
+| Pipeline source/scope folder | `pipelineSourceFolderDate` | `2025-11-01` |
+| Selected weekly file date | `pipelineExtractDate` | `2025-12-01` |
+| Operational as-of | `pipelineAsOfDate` | `2025-12-01` |
+| Selected file | `sourceFile` | `M2L KFI and Pipeline 2025_12_01_115711.xlsx` |
+
+`discover_pipeline_sources` now groups weekly files **by source folder (scope)**
+and selects the **latest weekly extract** per scope. So `mi_2025_11` may
+legitimately use the `2025_12_01` weekly file as its operational as-of date — but
+that date is never presented as the funded reporting date or the whole-run date.
+The funded run id stays `mi_2025_11` (derived from the folder month, never the
+weekly extract month). `/mi/pipeline/snapshot` and `/mi/forecast/snapshot`
+expose the funded and pipeline dates as distinct fields.
+
+### Runtime materialisation (governed pipeline output under `onboarding_output`)
+
+Two fixes so a clean E2E onboarding/promote produces governed pipeline outputs:
+
+1. `central_tape_builder._build_pipeline_tape` now recognises the M2L KFI key
+   columns (KFI / account number) and the M2L KFI field spellings (loan amount,
+   application/offer/funds-released dates), so the central pipeline tape is built
+   (was `Central pipeline tape: False (0 applications)`).
+2. `build_central_tapes` materialises the governed pipeline **source** files
+   (the rich weekly extracts that actually contributed pipeline rows — never a
+   funded loan file) under `output/pipeline/<source_folder>/`, with a manifest.
+   The MI layer discovers these for `/mi/pipeline/snapshot(s)` and
+   `/mi/forecast/snapshot`. Pure file ops — no `engine → mi_agent_api` import.
+
+The funded central lender tape schema and funded book behaviour are unchanged;
+pipeline rows are never merged into the funded book.

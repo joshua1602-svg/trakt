@@ -57,20 +57,37 @@ class TestPipelineSourceDiscovery(unittest.TestCase):
         self.assertTrue(_OCT.exists(), _OCT)
         self.assertTrue(_NOV.exists(), _NOV)
 
-    def test_discovers_both_reporting_dates(self):
+    def test_discovers_scopes_with_separated_dates(self):
         sources = pc.discover_pipeline_sources(_FIXTURE_PACK, client_id="client_001")
-        dates = [s["reporting_date"] for s in sources]
-        self.assertIn("2025-10-01", dates)
-        self.assertIn("2025-11-01", dates)
-        # ordered oldest -> newest, client inferred, non-empty.
-        self.assertEqual(dates, sorted(dates))
+        # One entry PER source folder (scope), not per weekly file.
+        folder_dates = [s["pipeline_source_folder_date"] for s in sources]
+        self.assertIn("2025-10-01", folder_dates)
+        self.assertIn("2025-11-01", folder_dates)
+        self.assertEqual(folder_dates, sorted(folder_dates))  # oldest -> newest
+        # No ambiguous single `reporting_date` field anywhere.
         for s in sources:
+            self.assertNotIn("reporting_date", s)
             self.assertEqual(s["client_id"], "client_001")
             self.assertGreater(s["row_count"], 0)
 
     def test_resolve_latest_source(self):
-        latest = pc.resolve_pipeline_source(_FIXTURE_PACK, "client_001")
-        self.assertEqual(latest["reporting_date"], "2025-11-01")
+        """The November scope selects the LATEST weekly extract (2025-12-01) without
+        pretending that is the funded reporting date — folder, extract, as-of and
+        run id are distinct."""
+        scope = pc.resolve_pipeline_source(_FIXTURE_PACK, "client_001", "mi_2025_11")
+        # Selected source scope is the November pipeline folder.
+        self.assertEqual(scope["pipeline_source_folder_date"], "2025-11-01")
+        self.assertTrue(scope["pipeline_source_folder"].endswith("pipeline/2025-11-01"))
+        # Selected file is the latest weekly extract (Dec 1), and as-of follows it.
+        self.assertIn("2025_12_01", Path(scope["source_file"]).name)
+        self.assertEqual(scope["pipeline_extract_date"], "2025-12-01")
+        self.assertEqual(scope["pipeline_as_of_date"], "2025-12-01")
+        # Funded/run metadata stays November — NOT 2025-12-01.
+        self.assertEqual(scope["run_id"], "mi_2025_11")
+        # No field called simply `reporting_date`.
+        self.assertNotIn("reporting_date", scope)
+        # The scope tracks both weekly files in the November folder.
+        self.assertEqual(len(scope["weekly_files"]), 2)
 
 
 # --------------------------------------------------------------------------- #
@@ -251,10 +268,14 @@ class TestPipelineApiMetadata(unittest.TestCase):
     def test_snapshot_returns_metrics_dimensions_and_data_quality(self):
         body = self._client().get(
             "/mi/pipeline/snapshot",
-            params={"portfolioId": "client_001/pipeline_2025_11"}).json()
+            params={"portfolioId": "client_001/mi_2025_11"}).json()
         self.assertTrue(body["ok"])
         self.assertEqual(body["recordType"], "pipeline")
-        self.assertEqual(body["reportingDate"], "2025-11-01")
+        # Pipeline dates are distinct from the funded reporting date: the latest
+        # weekly extract (Dec 1) drives the as-of; the source folder is November.
+        self.assertEqual(body["pipelineAsOfDate"], "2025-12-01")
+        self.assertEqual(body["pipelineSourceFolderDate"], "2025-11-01")
+        self.assertNotIn("reportingDate", body)  # no ambiguous field
         self.assertGreater(body["pipelineRowCount"], 0)
         self.assertGreater(body["pipelineAmount"], 0)
         self.assertIsNotNone(body["weightedExpectedFundedAmount"])
@@ -268,7 +289,7 @@ class TestPipelineApiMetadata(unittest.TestCase):
     def test_snapshot_exposes_field_correlation_to_funded(self):
         body = self._client().get(
             "/mi/pipeline/snapshot",
-            params={"portfolioId": "client_001/pipeline_2025_11"}).json()
+            params={"portfolioId": "client_001/mi_2025_11"}).json()
         corr = body["fieldCorrelationToFunded"]
         self.assertIn("geographic_region_obligor",
                       corr["collateral_geography"]["funded_correlation"])

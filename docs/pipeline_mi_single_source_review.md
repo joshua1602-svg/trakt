@@ -98,13 +98,13 @@ funded↔pipeline directly comparable for forecasting.
 stage_days_to_fund), `completion_probability` + `stage_conversion_probability`
 (config stage probability), `expected_funded_amount`,
 `weighted_expected_funded_amount`, `pipeline_case_age_days`,
-`days_to_expected_completion`, `pipeline_source_file`, `pipeline_reporting_date`;
+`days_to_expected_completion`, `pipeline_source_file`, `pipeline_as_of_date`;
 plus derived dimensions `expected_completion_month`, `pipeline_stage_bucket`.
 
 ## 5. Field classification
 
 - **Already in the semantic registry:** `pipeline_stage`, `pipeline_snapshot_date`
-  (↔ `pipeline_reporting_date`), `funded_status` (↔ `pipeline_status`),
+  (↔ `pipeline_as_of_date`), `funded_status` (↔ `pipeline_status`),
   `forecast_funded_balance`/`_date`/`_probability` (↔ `expected_funded_amount` /
   `expected_completion_date` / `completion_probability`), and every reused funded
   economic field.

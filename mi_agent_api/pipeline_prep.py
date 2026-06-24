@@ -174,8 +174,12 @@ def _parse_date(series: pd.Series) -> pd.Series:
     return pd.to_datetime(series, errors="coerce", dayfirst=False)
 
 
-def _reporting_date(df: pd.DataFrame, explicit: Optional[str],
-                    source_file: Optional[str]) -> Optional[pd.Timestamp]:
+def _as_of_date(df: pd.DataFrame, explicit: Optional[str],
+                source_file: Optional[str]) -> Optional[pd.Timestamp]:
+    """The operational as-of date for the pipeline snapshot: the explicit value
+    (the selected weekly extract date) if given, else parsed from the source file
+    name. This is the pipeline's own operational date — NOT the funded reporting
+    cut-off."""
     if explicit:
         ts = pd.to_datetime(explicit, errors="coerce")
         if pd.notna(ts):
@@ -200,10 +204,15 @@ def _reporting_date(df: pd.DataFrame, explicit: Optional[str],
 def prepare_pipeline_mi_dataset(
     df: pd.DataFrame,
     *,
-    reporting_date: Optional[str] = None,
+    as_of_date: Optional[str] = None,
     source_file: Optional[str] = None,
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
-    """Return ``(prepared_pipeline_df, report)`` for a raw pipeline extract."""
+    """Return ``(prepared_pipeline_df, report)`` for a raw pipeline extract.
+
+    ``as_of_date`` is the operational as-of date of this weekly pipeline extract
+    (e.g. the selected file's date). It is deliberately distinct from the funded
+    reporting cut-off and is used for case-age / days-to-completion derivations.
+    """
     mapping, unmatched = resolve_source_columns(df)
     out = pd.DataFrame(index=df.index)
     out["record_type"] = RECORD_TYPE
@@ -222,8 +231,8 @@ def prepare_pipeline_mi_dataset(
     # 3. LTV: prefer explicit, else derive balance / valuation (funded prep rule).
     ltv_basis = _derive_ltv(out, derived)
 
-    # 4. Youngest borrower age from DOBs, as of the reporting date.
-    rep_ts = _reporting_date(df, reporting_date, source_file)
+    # 4. Youngest borrower age from DOBs, as of the operational as-of date.
+    rep_ts = _as_of_date(df, as_of_date, source_file)
     _derive_youngest_age(df, out, rep_ts, derived)
 
     # 5. Normalise funnel stage + status.
@@ -245,9 +254,9 @@ def prepare_pipeline_mi_dataset(
     group_aliases = _apply_group_aliases(out)
     out["pipeline_source_file"] = source_file or ""
     if rep_ts is not None:
-        out["pipeline_reporting_date"] = rep_ts.date().isoformat()
-    if "pipeline_reporting_date" not in derived and "pipeline_reporting_date" in out.columns:
-        derived.append("pipeline_reporting_date")
+        out["pipeline_as_of_date"] = rep_ts.date().isoformat()
+    if "pipeline_as_of_date" not in derived and "pipeline_as_of_date" in out.columns:
+        derived.append("pipeline_as_of_date")
 
     # 10. Buckets via the existing engine + pipeline-derived dimensions.
     bucket_issues = _materialise_buckets(out)
@@ -545,7 +554,7 @@ def _build_report(out: pd.DataFrame, mapping: Dict[str, str], unmatched: List[st
         "derived_fields": derived,
         "ltv_derivation_basis": ltv_basis,
         "group_aliases": group_aliases,
-        "reporting_date": rep_ts.date().isoformat() if rep_ts is not None else None,
+        "pipeline_as_of_date": rep_ts.date().isoformat() if rep_ts is not None else None,
         "dimensions_available": dims_available,
         "metrics_available": metrics_available,
         "missing_dimensions": missing,

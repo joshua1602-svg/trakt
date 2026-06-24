@@ -47,7 +47,13 @@ export interface FieldCorrelation {
   available: boolean;
 }
 
-/** The Phase 1 pipeline snapshot block. */
+/** The Phase 1 pipeline snapshot block.
+ *
+ * Pipeline dates are weekly-operational and DISTINCT from the funded reporting
+ * date: `pipelineAsOfDate` follows the latest weekly extract, `pipelineExtractDate`
+ * is parsed from that file, and `pipelineSourceFolderDate` is the source scope
+ * folder (e.g. the monthly `2025-11-01`). There is no ambiguous `reportingDate`.
+ */
 export interface PipelineSnapshot {
   ok: boolean;
   recordType: "pipeline";
@@ -55,7 +61,11 @@ export interface PipelineSnapshot {
   portfolioId: string;
   client_id: string;
   runId: string;
-  reportingDate: string | null;
+  pipelineAsOfDate: string | null;
+  pipelineExtractDate: string | null;
+  pipelineSourceFolderDate: string | null;
+  pipelineSourceFolder?: string | null;
+  sourceFile?: string | null;
   pipelineRowCount: number;
   pipelineAmount: number | null;
   expectedFundedAmount: number | null;
@@ -86,12 +96,20 @@ export interface GroupedDataQuality {
   info: PipelineDiagnostic[];
 }
 
-/** The deterministic funded + pipeline forecast bridge. */
+/** The deterministic funded + pipeline forecast bridge.
+ *
+ * `fundedReportingDate` is the funded book's cut-off for the run; the pipeline
+ * dates describe the selected weekly extract. They are deliberately separate.
+ */
 export interface ForecastBridge {
   portfolioId: string;
   client_id: string;
   runId: string;
-  reportingDate: string | null;
+  fundedReportingDate: string | null;
+  pipelineAsOfDate: string | null;
+  pipelineExtractDate: string | null;
+  pipelineSourceFolderDate: string | null;
+  sourceFile?: string | null;
   fundedBalance: number;
   fundedLoanCount: number;
   pipelineAvailable: boolean;
@@ -124,7 +142,10 @@ export interface ForecastSnapshot {
   portfolioId: string;
   client_id: string;
   runId: string;
-  reportingDate: string | null;
+  fundedReportingDate: string | null;
+  pipelineAsOfDate: string | null;
+  pipelineExtractDate: string | null;
+  pipelineSourceFolderDate: string | null;
   fundedBalance: number;
   fundedLoanCount: number;
   pipelineAvailable: boolean;

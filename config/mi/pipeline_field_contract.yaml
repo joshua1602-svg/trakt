@@ -248,11 +248,14 @@ pipeline_specific_fields:
     availability: derived
     description: Source pipeline file the row was read from (provenance).
 
-  pipeline_reporting_date:
+  pipeline_as_of_date:
     role: date
     availability: derived
     semantic_registry_field: pipeline_snapshot_date
-    description: Reporting / snapshot date for this pipeline cut.
+    description: Operational as-of date for this weekly pipeline extract (the
+      selected file's date). Distinct from the funded reporting cut-off — pipeline
+      is a continuous/latest-available operational view, not a monthly accounting
+      cut-off.
 
 # -------------------------------------------------------------------------
 # Buckets reused from config/mi/buckets.yaml (NOT redefined here) plus the
