@@ -23,7 +23,7 @@ import pandas as pd
 
 from analytics_lib.numeric import coerce_numeric
 
-from .pipeline_prep import diagnostics_by_severity
+from .pipeline_prep import classify_forecast_gaps, diagnostics_by_severity
 
 # Deterministic watchlist thresholds (documented heuristics, not probabilities).
 CONCENTRATION_SHARE = 0.40   # top broker / region share of pipeline amount
@@ -141,27 +141,23 @@ def build_pipeline_watchlist(df: pd.DataFrame, pipeline_report: Dict[str, Any],
                             f"{amt_missing} pipeline case(s) missing an amount",
                             f"{amt_missing}/{n} rows have no parseable economic amount.",
                             count=amt_missing))
-    stage_missing = _missing("pipeline_stage")
-    if stage_missing:
-        items.append(_watch("missing_pipeline_stage",
-                            "blocker" if stage_missing == n else "warning",
-                            f"{stage_missing} pipeline case(s) missing a stage/status",
-                            f"{stage_missing}/{n} rows have no recognised stage.",
-                            count=stage_missing))
-    if "completion_probability" in df.columns:
-        prob_missing = int(coerce_numeric(df["completion_probability"]).isna().sum())
-        if prob_missing:
-            items.append(_watch("missing_completion_probability", "warning",
-                                f"{prob_missing} case(s) without a completion probability",
-                                f"{prob_missing}/{n} rows have no row or config stage "
-                                f"probability; excluded from weighted forecast.",
-                                count=prob_missing))
-    ecd_missing = _missing("expected_completion_date")
-    if ecd_missing and ecd_missing < n:
-        items.append(_watch("missing_expected_completion_date", "info",
-                            f"{ecd_missing} case(s) without an expected completion date",
-                            f"{ecd_missing}/{n} rows cannot be placed on the completion "
-                            f"timeline.", count=ecd_missing))
+    # Stage / completion-probability / expected-date gaps, classified by stage:
+    # withdrawn/inactive exclusions read as INFO; active gaps as WARNING.
+    stage_blank = int((df["pipeline_stage"].astype(str).isin(["", "nan", "None"])).sum()) \
+        if "pipeline_stage" in df.columns else n
+    if stage_blank == n and n:
+        items.append(_watch("missing_pipeline_stage", "blocker",
+                            "All pipeline cases are missing a stage/status",
+                            f"{n}/{n} rows have no stage value.", count=n))
+    for gap in classify_forecast_gaps(df):
+        by_stage = gap.get("by_stage", {})
+        stage_txt = ", ".join(f"{k}:{v}" for k, v in by_stage.items()) or "—"
+        excluded = gap.get("excluded")
+        detail = (f"{gap['detail']}. By stage [{stage_txt}]. "
+                  f"{'Intentionally excluded from weighted forecast.' if excluded else 'Affects weighted forecast / timing.'}")
+        items.append(_watch(gap["check"], gap["severity"], gap["detail"], detail,
+                            count=gap.get("count"), byStage=by_stage,
+                            excluded=bool(excluded), weighted=bool(gap.get("weighted"))))
 
     # Stale cases.
     if "pipeline_case_age_days" in df.columns:
@@ -234,6 +230,8 @@ def compute_forecast_bridge(
         "sourceFile": src.get("source_file"),
     }
 
+    prob_summary: Dict[str, Any] = {}
+    prob_basis = "none"
     if pipeline_available:
         pipeline_amount = float(pipeline_report.get("total_pipeline_amount") or 0.0)
         pipeline_case_count = int(pipeline_report.get("row_count") or len(pipeline_df))
@@ -242,6 +240,8 @@ def compute_forecast_bridge(
         stage_breakdown = (pipeline_snapshot or {}).get("stageBreakdown", [])
         completion_breakdown = (pipeline_snapshot or {}).get("expectedCompletionBreakdown", [])
         watchlist = build_pipeline_watchlist(pipeline_df, pipeline_report, readiness)
+        prob_summary = pipeline_report.get("completion_probability_summary", {}) or {}
+        prob_basis = pipeline_report.get("completion_probability_basis", "stage_config")
         if not pipeline_dates["pipelineAsOfDate"]:
             pipeline_dates["pipelineAsOfDate"] = pipeline_report.get("pipeline_as_of_date")
     else:
@@ -270,7 +270,15 @@ def compute_forecast_bridge(
         "weightedExpectedFundedAmount": round(weighted, 2),
         "forecastFundedBalance": round(forecast_balance, 2),
         "forecastLoanCount": forecast_loan_count,
-        "completionProbabilityBasis": COMPLETION_PROBABILITY_BASIS if pipeline_available else "none",
+        "completionProbabilityBasis": prob_basis,
+        # Governed probability disclosure (gross / excluded / how weighted).
+        "grossPipelineAmount": round(pipeline_amount, 2),
+        "excludedFromWeightingAmount": prob_summary.get("excluded_amount", 0.0),
+        "excludedCaseCount": prob_summary.get("excluded_count", 0),
+        "activeGrossPipelineAmount": prob_summary.get("active_gross_amount"),
+        "amountWeightedHistorical": prob_summary.get("amount_weighted_historical"),
+        "amountWeightedConfig": prob_summary.get("amount_weighted_config"),
+        "blendedWeightedConversion": prob_summary.get("blended_weighted_conversion"),
         "expectedCompletionBreakdown": completion_breakdown,
         "stageBreakdown": stage_breakdown,
         "forecastReadiness": readiness,

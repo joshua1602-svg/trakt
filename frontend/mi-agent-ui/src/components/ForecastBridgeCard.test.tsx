@@ -20,8 +20,15 @@ describe("ForecastBridgeCard", () => {
 
   it("shows the completion probability basis and readiness status", () => {
     render(<ForecastBridgeCard bridge={bridge} />);
-    expect(screen.getByText(/stage_config/)).toBeInTheDocument();
+    expect(screen.getByText(/mixed_historical_and_config/)).toBeInTheDocument();
     expect(screen.getByText(/Forecast ready/i)).toBeInTheDocument();
+  });
+
+  it("discloses blended weighted conversion and excluded amount", () => {
+    render(<ForecastBridgeCard bridge={bridge} />);
+    expect(screen.getByText(/Blended weighted conversion/i)).toBeInTheDocument();
+    expect(screen.getByText(/64\.1%/)).toBeInTheDocument();
+    expect(screen.getByText(/Excluded from weighting/i)).toBeInTheDocument();
   });
 
   it("surfaces readiness warnings for a partial forecast", () => {

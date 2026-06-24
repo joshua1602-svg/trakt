@@ -30,6 +30,10 @@ export interface DimensionBucket {
   caseCount: number;
   pipelineAmount: number;
   weightedExpectedFundedAmount: number | null;
+  /** Set on an aggregated "Other" row when a breakdown is capped to top 10. */
+  isOther?: boolean;
+  categoriesIncluded?: number;
+  sharePct?: number;
 }
 
 /** A backend data-quality diagnostic (blocker | warning | info). */
@@ -70,10 +74,17 @@ export interface PipelineSnapshot {
   pipelineAmount: number | null;
   expectedFundedAmount: number | null;
   weightedExpectedFundedAmount: number | null;
+  completionProbabilityBasis?: string;
+  completionProbabilitySummary?: Record<string, unknown>;
+  historicalCompletionModel?: Record<string, unknown>;
   stageBreakdown: PipelineStageBucket[];
   expectedCompletionBreakdown: ExpectedCompletionBucket[];
+  /** Capped to top 10 (+ Other) for the landing-page visual. */
   brokerBreakdown?: DimensionBucket[];
   regionBreakdown?: DimensionBucket[];
+  /** Uncapped detail (API / agent), present when the breakdown was capped. */
+  brokerBreakdownFull?: DimensionBucket[];
+  regionBreakdownFull?: DimensionBucket[];
   availableMetrics: string[];
   availableDimensions: string[];
   missingDimensions: { dimension: string; reason: string; detail: string }[];
@@ -119,6 +130,14 @@ export interface ForecastBridge {
   forecastFundedBalance: number;
   forecastLoanCount: number;
   completionProbabilityBasis: string;
+  /** Governed probability disclosure. */
+  grossPipelineAmount?: number;
+  excludedFromWeightingAmount?: number;
+  excludedCaseCount?: number;
+  activeGrossPipelineAmount?: number | null;
+  amountWeightedHistorical?: number | null;
+  amountWeightedConfig?: number | null;
+  blendedWeightedConversion?: number | null;
   expectedCompletionBreakdown: ExpectedCompletionBucket[];
   stageBreakdown: PipelineStageBucket[];
   forecastReadiness: ForecastReadiness;
@@ -132,6 +151,9 @@ export interface WatchlistItem {
   title: string;
   detail: string;
   count?: number;
+  byStage?: Record<string, number>;
+  excluded?: boolean;
+  weighted?: boolean;
   [k: string]: unknown;
 }
 

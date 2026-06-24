@@ -265,6 +265,21 @@ def _resolve_pipeline_source(client_id: str, run_id: Optional[str]) -> Optional[
     return None
 
 
+def _pipeline_history(client_id: str) -> Optional[Dict[str, Any]]:
+    """The historical completion-rate model from a client's weekly pipeline files
+    (None when only a single explicit source / no discovery root is configured)."""
+    if os.environ.get("MI_AGENT_PIPELINE_SOURCE"):
+        return None
+    root = os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root()
+    if not root:
+        return None
+    try:
+        return pipeline_mod.build_pipeline_history(root, client_id)
+    except Exception as exc:  # noqa: BLE001 - history is additive; never 500
+        logger.warning("pipeline history build failed for %s: %s", client_id, exc)
+        return None
+
+
 @app.get("/mi/pipeline/snapshot")
 def pipeline_snapshot(portfolioId: Optional[str] = None,
                       client_id: Optional[str] = None,
@@ -289,7 +304,8 @@ def pipeline_snapshot(portfolioId: Optional[str] = None,
                 "pipelineRowCount": 0, "stageBreakdown": [],
                 "availableMetrics": [], "availableDimensions": [], "dataQuality": []}
 
-    df, report = pipeline_mod.load_prepared_pipeline(source)
+    df, report = pipeline_mod.load_prepared_pipeline(
+        source, historical_model=_pipeline_history(source.get("client_id", client_id)))
     semantics = load_mi_semantics(semantics_path())
     return pipeline_mod.compute_pipeline_snapshot(
         df, report, semantics, client_id=source.get("client_id", client_id),
@@ -329,7 +345,8 @@ def forecast_snapshot(portfolioId: Optional[str] = None,
     source = _resolve_pipeline_source(client_id, run_id)
     if source is not None:
         try:
-            pipeline_df, pipeline_report = pipeline_mod.load_prepared_pipeline(source)
+            pipeline_df, pipeline_report = pipeline_mod.load_prepared_pipeline(
+                source, historical_model=_pipeline_history(source.get("client_id", client_id)))
             pipeline_snap = pipeline_mod.compute_pipeline_snapshot(
                 pipeline_df, pipeline_report, semantics,
                 client_id=source.get("client_id", client_id),

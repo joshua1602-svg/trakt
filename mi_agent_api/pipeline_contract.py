@@ -230,13 +230,15 @@ def _collect_files(root: Path, globs: List[str]) -> List[Path]:
 
 
 def load_prepared_pipeline(source: str | os.PathLike | Dict[str, Any],
-                           as_of_date: Optional[str] = None
+                           as_of_date: Optional[str] = None,
+                           historical_model: Optional[Dict[str, Any]] = None
                            ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """Read a pipeline source and apply the pipeline MI preparation layer.
 
     ``source`` may be a path or a discovery scope dict (whose ``source_file`` and
     ``pipeline_as_of_date`` are used). The as-of date is the weekly extract date,
-    NOT the funded reporting cut-off.
+    NOT the funded reporting cut-off. ``historical_model`` (from
+    :func:`build_pipeline_history`) supplies empirical stage completion rates.
     """
     if isinstance(source, dict):
         as_of_date = as_of_date or source.get("pipeline_as_of_date")
@@ -246,7 +248,27 @@ def load_prepared_pipeline(source: str | os.PathLike | Dict[str, Any],
     if raw is None:
         raise FileNotFoundError(f"cannot read pipeline source {p}")
     rd = as_of_date or _extract_date(p)
-    return prepare_pipeline_mi_dataset(raw, as_of_date=rd, source_file=p.name)
+    return prepare_pipeline_mi_dataset(raw, as_of_date=rd, source_file=p.name,
+                                       historical_model=historical_model)
+
+
+def collect_weekly_history(root: str | os.PathLike,
+                           client_id: str) -> List[Dict[str, Any]]:
+    """All governed weekly pipeline files for a client across every scope, in
+    chronological order (for the historical completion-rate model)."""
+    entries: List[Dict[str, Any]] = []
+    for scope in discover_pipeline_sources(root, client_id=client_id):
+        entries.extend(scope.get("weekly_files", []) or [])
+    entries.sort(key=lambda e: (e.get("pipeline_extract_date") or "",
+                                e.get("source_file") or ""))
+    return entries
+
+
+def build_pipeline_history(root: str | os.PathLike,
+                           client_id: str) -> Dict[str, Any]:
+    """Build the historical completion model from a client's weekly pipeline files."""
+    from .pipeline_history import build_historical_completion_model
+    return build_historical_completion_model(collect_weekly_history(root, client_id))
 
 
 def resolve_pipeline_source(root: str | os.PathLike, client_id: str,
@@ -353,6 +375,33 @@ def _stage_breakdown(df: pd.DataFrame) -> List[Dict[str, Any]]:
     return rows
 
 
+def cap_breakdown(rows: List[Dict[str, Any]], top_n: int = 10,
+                  key_name: str = "key") -> List[Dict[str, Any]]:
+    """Cap a long categorical breakdown to ``top_n`` rows: the top ``top_n - 1``
+    categories by amount plus an aggregated ``Other`` row. Totals reconcile to the
+    uncapped total. No-op when there are ``<= top_n`` categories.
+    """
+    if len(rows) <= top_n:
+        return rows
+    head = rows[: top_n - 1]
+    tail = rows[top_n - 1:]
+    total_amount = sum(r["pipelineAmount"] for r in rows) or 1.0
+    other_amount = round(sum(r["pipelineAmount"] for r in tail), 2)
+    weighted_vals = [r.get("weightedExpectedFundedAmount") for r in tail]
+    other_weighted = (round(sum(v for v in weighted_vals if v is not None), 2)
+                      if any(v is not None for v in weighted_vals) else None)
+    other = {
+        key_name: "Other",
+        "caseCount": sum(r["caseCount"] for r in tail),
+        "pipelineAmount": other_amount,
+        "weightedExpectedFundedAmount": other_weighted,
+        "isOther": True,
+        "categoriesIncluded": len(tail),
+        "sharePct": round(other_amount / total_amount * 100, 1),
+    }
+    return head + [other]
+
+
 def compute_pipeline_snapshot(
     df: pd.DataFrame,
     report: Dict[str, Any],
@@ -372,6 +421,10 @@ def compute_pipeline_snapshot(
     weighted = report.get("weighted_expected_funded_amount")
     src = source or {}
     as_of = src.get("pipeline_as_of_date") or report.get("pipeline_as_of_date")
+    # Long categorical breakdowns are capped to top 10 (+ Other) for the visual;
+    # the uncapped detail stays in ``*BreakdownFull`` for the API / agent.
+    broker_full = _dimension_breakdown(df, "broker_channel", key_name="key")
+    region_full = _dimension_breakdown(df, "geographic_region_obligor", key_name="key")
     return {
         "ok": True,
         "recordType": "pipeline",
@@ -387,10 +440,15 @@ def compute_pipeline_snapshot(
         "pipelineAmount": report.get("total_pipeline_amount"),
         "expectedFundedAmount": report.get("expected_funded_amount"),
         "weightedExpectedFundedAmount": weighted,
+        "completionProbabilityBasis": report.get("completion_probability_basis"),
+        "completionProbabilitySummary": report.get("completion_probability_summary", {}),
+        "historicalCompletionModel": report.get("historical_completion_model", {}),
         "stageBreakdown": _stage_breakdown(df),
         "expectedCompletionBreakdown": _expected_completion_breakdown(df),
-        "brokerBreakdown": _dimension_breakdown(df, "broker_channel", key_name="key"),
-        "regionBreakdown": _dimension_breakdown(df, "geographic_region_obligor", key_name="key"),
+        "brokerBreakdown": cap_breakdown(broker_full, 10),
+        "brokerBreakdownFull": broker_full,
+        "regionBreakdown": cap_breakdown(region_full, 10),
+        "regionBreakdownFull": region_full,
         "availableMetrics": report.get("metrics_available", []),
         "availableDimensions": report.get("dimensions_available", []),
         "missingDimensions": report.get("missing_dimensions", []),

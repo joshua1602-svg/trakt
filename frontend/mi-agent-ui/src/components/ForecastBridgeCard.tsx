@@ -52,6 +52,21 @@ export function ForecastBridgeCard({ bridge }: { bridge: ForecastBridge | null }
           Completion probability basis ·{" "}
           <span className="font-medium text-ink-300">{bridge.completionProbabilityBasis}</span>
         </span>
+        {bridge.blendedWeightedConversion != null && (
+          <span>
+            Blended weighted conversion ·{" "}
+            <span className="font-medium text-ink-300">
+              {(bridge.blendedWeightedConversion * 100).toFixed(1)}%
+            </span>
+            <span className="text-ink-600"> (weighted ÷ active gross)</span>
+          </span>
+        )}
+        {!!bridge.excludedFromWeightingAmount && bridge.excludedFromWeightingAmount > 0 && (
+          <span>
+            Excluded from weighting · {formatGBP(bridge.excludedFromWeightingAmount)}
+            {bridge.excludedCaseCount ? ` · ${bridge.excludedCaseCount} case(s)` : ""}
+          </span>
+        )}
         {bridge.fundedReportingDate && (
           <span>Funded reporting date · {bridge.fundedReportingDate}</span>
         )}

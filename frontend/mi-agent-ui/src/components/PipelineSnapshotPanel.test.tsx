@@ -32,6 +32,15 @@ describe("PipelineSnapshotPanel", () => {
     expect(screen.getAllByText("2025-12").length).toBeGreaterThanOrEqual(1);
   });
 
+  it("caps the broker/channel breakdown at top 10 with an Other row", () => {
+    render(<PipelineSnapshotPanel snapshot={NOV} />);
+    expect(screen.getByText("Pipeline amount by broker / channel")).toBeInTheDocument();
+    // The backend caps to 9 named brokers + Other (=10 rows max).
+    expect(NOV.brokerBreakdown!.length).toBeLessThanOrEqual(10);
+    expect(screen.getAllByText("Other").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Broker Alpha")).toBeInTheDocument();
+  });
+
   it("hides technical diagnostics until expanded", () => {
     const snap: PipelineSnapshot = {
       ...NOV,

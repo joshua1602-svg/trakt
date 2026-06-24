@@ -37,4 +37,23 @@ describe("PipelineWatchlist", () => {
     render(<PipelineWatchlist items={[]} />);
     expect(screen.getByText("No early warnings for this run.")).toBeInTheDocument();
   });
+
+  it("shows withdrawn exclusions as INFO with a clear business message", () => {
+    const items: WatchlistItem[] = [
+      {
+        category: "withdrawn_excluded_from_weighting",
+        severity: "info",
+        title: "106 withdrawn/inactive case(s) excluded from forecast probability weighting",
+        detail: "By stage [WITHDRAWN:106]. Intentionally excluded from weighted forecast.",
+        excluded: true,
+      },
+    ];
+    render(<PipelineWatchlist items={items} />);
+    // Business message is clear (not the old ambiguous "without a completion probability").
+    expect(screen.getByText(/withdrawn\/inactive case\(s\) excluded from forecast/i)).toBeInTheDocument();
+    expect(screen.queryByText(/without a completion probability/i)).not.toBeInTheDocument();
+    // Severity badge reads "info", not "warning".
+    expect(screen.getByText("info")).toBeInTheDocument();
+    expect(screen.queryByText("warning")).not.toBeInTheDocument();
+  });
 });
