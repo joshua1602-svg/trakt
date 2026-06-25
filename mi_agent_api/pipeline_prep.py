@@ -206,12 +206,17 @@ def prepare_pipeline_mi_dataset(
     *,
     as_of_date: Optional[str] = None,
     source_file: Optional[str] = None,
+    historical_model: Optional[Dict[str, Any]] = None,
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """Return ``(prepared_pipeline_df, report)`` for a raw pipeline extract.
 
     ``as_of_date`` is the operational as-of date of this weekly pipeline extract
     (e.g. the selected file's date). It is deliberately distinct from the funded
     reporting cut-off and is used for case-age / days-to-completion derivations.
+
+    ``historical_model`` (from ``pipeline_history``) supplies empirically-observed
+    stage completion rates; when a stage has sufficient history its rate is used
+    in preference to the configured stage probability.
     """
     mapping, unmatched = resolve_source_columns(df)
     out = pd.DataFrame(index=df.index)
@@ -243,9 +248,11 @@ def prepare_pipeline_mi_dataset(
     _parse_pipeline_dates(out, derived)
     _derive_expected_completion(out, rep_ts, days_to_fund, derived)
 
-    # 7. Completion probability + expected / weighted funded amount.
+    # 7. Completion probability (governed hierarchy) + weighted funded amount.
     stage_probs = _stage_probabilities()
-    _derive_probabilities_and_amounts(out, stage_probs, derived)
+    historical_rates = dict((historical_model or {}).get("stage_rates", {}) or {})
+    prob_basis = _derive_probabilities_and_amounts(
+        out, stage_probs, historical_rates, derived)
 
     # 8. Case-age / days-to-completion.
     _derive_durations(out, rep_ts, derived)
@@ -263,7 +270,8 @@ def prepare_pipeline_mi_dataset(
     _derive_pipeline_buckets(out, derived)
 
     report = _build_report(out, mapping, unmatched, derived, ltv_basis,
-                           group_aliases, bucket_issues, rep_ts)
+                           group_aliases, bucket_issues, rep_ts,
+                           prob_basis, historical_model)
     return out, report
 
 
@@ -312,11 +320,44 @@ def _derive_youngest_age(src: pd.DataFrame, out: pd.DataFrame,
             derived.append("youngest_borrower_age")
 
 
+def canonical_stage(value: Any) -> str:
+    """Normalise a raw stage/status value to the canonical funnel token
+    (KFI / APPLICATION / OFFER / COMPLETED / WITHDRAWN / UNKNOWN)."""
+    return _STAGE_CANON.get(_norm(value), "UNKNOWN")
+
+
+# Stages that are open and forecast-relevant (vs COMPLETED / WITHDRAWN / UNKNOWN).
+ACTIVE_STAGES = ("KFI", "APPLICATION", "OFFER")
+
+
+def case_stage_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Resolve ``[case_id, application_id, stage, completion_date]`` from a raw
+    weekly pipeline extract, reusing the contract aliases + stage normalisation.
+
+    Used by the historical completion-rate model to track a case across weekly
+    snapshots. Case identity prefers the pipeline case id, falling back to the
+    application/KFI reference."""
+    mapping, _ = resolve_source_columns(df)
+    out = pd.DataFrame(index=df.index)
+    cid_col = mapping.get("pipeline_case_identifier") or mapping.get("application_identifier")
+    app_col = mapping.get("application_identifier") or mapping.get("pipeline_case_identifier")
+    stage_col = mapping.get("pipeline_stage")
+    comp_col = mapping.get("expected_completion_date")  # funds-released date in M2L KFI
+    out["case_id"] = (df[cid_col].astype(str).str.strip() if cid_col
+                      else pd.Series("", index=df.index))
+    out["application_id"] = (df[app_col].astype(str).str.strip() if app_col
+                             else out["case_id"])
+    out["stage"] = (df[stage_col].map(canonical_stage) if stage_col
+                    else pd.Series("UNKNOWN", index=df.index))
+    out["completion_date"] = (_parse_date(df[comp_col]) if comp_col
+                              else pd.Series(pd.NaT, index=df.index))
+    return out
+
+
 def _normalise_stage(out: pd.DataFrame, derived: List[str]) -> None:
     if "pipeline_stage" not in out.columns:
         return
-    raw = out["pipeline_stage"].astype(str).map(_norm)
-    canon = raw.map(lambda v: _STAGE_CANON.get(v, "UNKNOWN" if v else "UNKNOWN"))
+    canon = out["pipeline_stage"].map(canonical_stage)
     out["pipeline_stage"] = canon
     # Pipeline status reuses funded-status semantics.
     def _status(stage: str) -> str:
@@ -372,21 +413,50 @@ def _derive_expected_completion(out: pd.DataFrame, rep_ts: Optional[pd.Timestamp
 
 
 def _derive_probabilities_and_amounts(out: pd.DataFrame, stage_probs: Dict[str, float],
-                                      derived: List[str]) -> None:
-    # Completion probability: row-level where present, else config stage lookup.
-    if "completion_probability" in out.columns:
-        prob = coerce_numeric(out["completion_probability"])
-    else:
-        prob = pd.Series(np.nan, index=out.index)
-    if stage_probs and "pipeline_stage" in out.columns:
-        stage_prob = out["pipeline_stage"].map(stage_probs)
-        prob = prob.where(prob.notna(), stage_prob)
-        out["stage_conversion_probability"] = out["pipeline_stage"].map(stage_probs)
-        if "stage_conversion_probability" not in derived:
-            derived.append("stage_conversion_probability")
+                                      historical_rates: Dict[str, float],
+                                      derived: List[str]) -> str:
+    """Assign ``completion_probability`` per the governed hierarchy and record the
+    row-level ``completion_probability_source``. Returns the overall basis.
+
+    Hierarchy (highest first):
+      1. row-level explicit probability (a real source value)  -> ``row_level``
+      2. empirical historical stage rate (sufficient history)  -> ``historical_stage_rate``
+      3. configured stage probability                          -> ``configured_stage_rate``
+      4. WITHDRAWN / inactive  -> excluded from weighting       -> ``excluded_withdrawn``
+      5. UNKNOWN / unmapped stage -> no probability             -> ``missing_stage``
+      6. otherwise no probability                               -> ``unavailable``
+    """
+    n = len(out)
+    explicit = (coerce_numeric(out["completion_probability"])
+                if "completion_probability" in out.columns
+                else pd.Series(np.nan, index=out.index))
+    stage = (out["pipeline_stage"].astype(str) if "pipeline_stage" in out.columns
+             else pd.Series("UNKNOWN", index=out.index))
+
+    prob = pd.Series(np.nan, index=out.index, dtype="float64")
+    source = pd.Series("unavailable", index=out.index, dtype="object")
+    for idx in out.index:
+        s = stage.loc[idx]
+        if pd.notna(explicit.loc[idx]):
+            prob.loc[idx] = float(explicit.loc[idx]); source.loc[idx] = "row_level"
+        elif s == "WITHDRAWN":
+            source.loc[idx] = "excluded_withdrawn"          # NaN -> not weighted
+        elif s in historical_rates:
+            prob.loc[idx] = float(historical_rates[s]); source.loc[idx] = "historical_stage_rate"
+        elif s in stage_probs:
+            prob.loc[idx] = float(stage_probs[s]); source.loc[idx] = "configured_stage_rate"
+        elif s in ("UNKNOWN", "", "nan", "None"):
+            source.loc[idx] = "missing_stage"
+        else:
+            source.loc[idx] = "unavailable"
+
     out["completion_probability"] = prob
-    if "completion_probability" not in derived:
-        derived.append("completion_probability")
+    out["completion_probability_source"] = source
+    out["stage_conversion_probability"] = stage.map(stage_probs)
+    for f in ("completion_probability", "completion_probability_source",
+              "stage_conversion_probability"):
+        if f not in derived:
+            derived.append(f)
 
     # Expected funded amount == the economic amount; weighted by probability.
     if "current_outstanding_balance" in out.columns:
@@ -396,6 +466,17 @@ def _derive_probabilities_and_amounts(out: pd.DataFrame, stage_probs: Dict[str, 
         for f in ("expected_funded_amount", "weighted_expected_funded_amount"):
             if f not in derived:
                 derived.append(f)
+
+    used = set(source.unique())
+    has_hist = "historical_stage_rate" in used
+    has_cfg = "configured_stage_rate" in used or "row_level" in used
+    if has_hist and has_cfg:
+        return "mixed_historical_and_config"
+    if has_hist:
+        return "historical_observed"
+    if has_cfg:
+        return "stage_config"
+    return "unavailable"
 
 
 def _derive_durations(out: pd.DataFrame, rep_ts: Optional[pd.Timestamp],
@@ -518,10 +599,51 @@ def forecast_readiness(out: Optional[pd.DataFrame] = None) -> Dict[str, Any]:
     return fr
 
 
+def completion_probability_summary(out: pd.DataFrame) -> Dict[str, Any]:
+    """Per-source counts + amounts for ``completion_probability_source``, plus the
+    gross / excluded / weighted totals used by the forecast disclosure."""
+    if "completion_probability_source" not in out.columns:
+        return {}
+    src = out["completion_probability_source"].astype(str)
+    amount = (coerce_numeric(out["current_outstanding_balance"])
+              if "current_outstanding_balance" in out.columns
+              else pd.Series(0.0, index=out.index))
+    weighted = (coerce_numeric(out["weighted_expected_funded_amount"])
+                if "weighted_expected_funded_amount" in out.columns
+                else pd.Series(np.nan, index=out.index))
+    by_source: Dict[str, Any] = {}
+    for s in sorted(src.unique()):
+        mask = src == s
+        by_source[s] = {"count": int(mask.sum()),
+                        "amount": round(float(amount[mask].sum()), 2)}
+    excluded_sources = {"excluded_withdrawn", "missing_stage", "unavailable"}
+    excluded_mask = src.isin(excluded_sources)
+    gross = float(amount.sum())
+    excluded_amount = float(amount[excluded_mask].sum())
+    active_gross = gross - excluded_amount
+    weighted_total = float(weighted.sum())
+    return {
+        "by_source": by_source,
+        "gross_pipeline_amount": round(gross, 2),
+        "excluded_amount": round(excluded_amount, 2),
+        "active_gross_amount": round(active_gross, 2),
+        "weighted_expected_funded_amount": round(weighted_total, 2),
+        "amount_weighted_historical": round(float(
+            amount[src == "historical_stage_rate"].sum()), 2),
+        "amount_weighted_config": round(float(
+            amount[src.isin({"configured_stage_rate", "row_level"})].sum()), 2),
+        "blended_weighted_conversion": (round(weighted_total / active_gross, 4)
+                                        if active_gross > 0 else None),
+        "excluded_count": int(excluded_mask.sum()),
+    }
+
+
 def _build_report(out: pd.DataFrame, mapping: Dict[str, str], unmatched: List[str],
                   derived: List[str], ltv_basis: Dict[str, Any],
                   group_aliases: List[str], bucket_issues: List[Dict[str, Any]],
-                  rep_ts: Optional[pd.Timestamp]) -> Dict[str, Any]:
+                  rep_ts: Optional[pd.Timestamp],
+                  prob_basis: str = "stage_config",
+                  historical_model: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     n = int(len(out))
     dims_available = sorted({d for d in _DIMENSION_FIELDS if _has_values(out, d)})
     metrics_available = sorted(
@@ -563,6 +685,9 @@ def _build_report(out: pd.DataFrame, mapping: Dict[str, str], unmatched: List[st
         "expected_funded_amount": round(expected_funded, 2),
         "weighted_expected_funded_amount": (round(weighted_expected, 2)
                                             if weighted_expected is not None else None),
+        "completion_probability_basis": prob_basis,
+        "completion_probability_summary": completion_probability_summary(out),
+        "historical_completion_model": historical_model or {"available": False},
         "bucket_errors": bucket_issues,
         "data_quality": validate_pipeline_dataset(out),
         "field_correlation_to_funded": field_correlation_to_funded(out),
@@ -577,6 +702,75 @@ def _diag(check: str, severity: str, detail: str, **extra: Any) -> Dict[str, Any
     d = {"check": check, "severity": severity, "detail": detail}
     d.update(extra)
     return d
+
+
+def _stage_breakdown_of(mask: pd.Series, stage: pd.Series) -> Dict[str, int]:
+    return {str(k): int(v) for k, v in stage[mask].value_counts().items()}
+
+
+def classify_forecast_gaps(out: pd.DataFrame) -> List[Dict[str, Any]]:
+    """Stage-classified forecast gaps (shared by validation + watchlist).
+
+    Distinguishes INTENTIONAL exclusions (withdrawn/inactive — INFO, not weighted)
+    from ACTIVE cases genuinely missing a probability or expected completion date
+    (WARNING), and UNKNOWN/unmapped stages (WARNING with the offending values).
+    Each item carries ``count``, ``by_stage``, ``excluded`` and ``weighted`` so the
+    UI can explain it. ``check`` doubles as the watchlist ``category``.
+    """
+    items: List[Dict[str, Any]] = []
+    if "pipeline_stage" not in out.columns or len(out) == 0:
+        return items
+    stage = out["pipeline_stage"].astype(str)
+    active = stage.isin(ACTIVE_STAGES)
+
+    # --- completion probability gaps ----------------------------------------- #
+    if "completion_probability" in out.columns:
+        prob_na = coerce_numeric(out["completion_probability"]).isna()
+        withdrawn = prob_na & (stage == "WITHDRAWN")
+        if withdrawn.any():
+            c = int(withdrawn.sum())
+            items.append(_diag(
+                "withdrawn_excluded_from_weighting", "info",
+                f"{c} withdrawn/inactive case(s) excluded from forecast probability weighting",
+                count=c, by_stage=_stage_breakdown_of(withdrawn, stage),
+                excluded=True, weighted=False))
+        active_missing = prob_na & active
+        if active_missing.any():
+            c = int(active_missing.sum())
+            items.append(_diag(
+                "active_missing_completion_probability", "warning",
+                f"{c} active case(s) missing completion probability",
+                count=c, by_stage=_stage_breakdown_of(active_missing, stage),
+                excluded=False, weighted=False))
+        unknown = prob_na & ~stage.isin(list(ACTIVE_STAGES) + ["WITHDRAWN", "COMPLETED"])
+        if unknown.any():
+            c = int(unknown.sum())
+            items.append(_diag(
+                "unknown_stage_no_probability", "warning",
+                f"{c} case(s) with an unknown/unmapped stage have no probability",
+                count=c, by_stage=_stage_breakdown_of(unknown, stage),
+                excluded=True, weighted=False))
+
+    # --- expected completion date gaps --------------------------------------- #
+    if "expected_completion_date" in out.columns:
+        ecd_na = out["expected_completion_date"].isna()
+        inactive_na = ecd_na & ~active
+        active_na = ecd_na & active
+        if inactive_na.any():
+            c = int(inactive_na.sum())
+            items.append(_diag(
+                "expected_completion_date_not_required", "info",
+                f"{c} withdrawn/inactive case(s) have no expected completion date",
+                count=c, by_stage=_stage_breakdown_of(inactive_na, stage),
+                excluded=True, weighted=False))
+        if active_na.any():
+            c = int(active_na.sum())
+            items.append(_diag(
+                "active_missing_expected_completion_date", "warning",
+                f"{c} active case(s) missing expected completion date",
+                count=c, by_stage=_stage_breakdown_of(active_na, stage),
+                excluded=False, weighted=True))
+    return items
 
 
 def validate_pipeline_dataset(out: pd.DataFrame) -> List[Dict[str, Any]]:
@@ -620,8 +814,7 @@ def validate_pipeline_dataset(out: pd.DataFrame) -> List[Dict[str, Any]]:
                            parsed=parsed, total=total))
 
     # Optional coverage checks (informational when partial, never blocking).
-    for fld, label in (("expected_completion_date", "expected completion date"),
-                       ("current_loan_to_value", "LTV"),
+    for fld, label in (("current_loan_to_value", "LTV"),
                        ("broker_channel", "broker/channel"),
                        ("geographic_region_obligor", "region")):
         if fld in out.columns:
@@ -638,11 +831,16 @@ def validate_pipeline_dataset(out: pd.DataFrame) -> List[Dict[str, Any]]:
             diags.append(_diag(f"absent_{fld}", "info",
                                f"{label} not present in this pipeline source"))
 
-    # Completion probability coverage (forecast input).
+    # Stage-classified forecast gaps (probability + expected completion date):
+    # withdrawn/inactive -> INFO (intentionally excluded); active -> WARNING.
+    diags.extend(classify_forecast_gaps(out))
+
+    # Completion probability coverage (only a real WARNING when NO active case is
+    # weightable at all — withdrawn-only exclusions are handled above as INFO).
     if "completion_probability" in out.columns:
         prob_cov, _ = _numeric_coverage(out, "completion_probability")
         if prob_cov == 0:
-            diags.append(_diag("missing_completion_probability", "warning",
+            diags.append(_diag("no_weightable_probability", "warning",
                                "no completion probability available (no row value and no "
                                "config stage probability) — forecast not yet weightable"))
     return diags
