@@ -90,6 +90,39 @@ const NOV_FORECAST: ForecastSnapshot = {
   fundedLoanCount: 73,
   pipelineAvailable: true,
   pipelineSnapshot: NOV_PIPELINE,
+  forecastBreakdowns: {
+    byRegion: [
+      { key: "London", fundedAmount: 3_100_000, weightedPipelineAmount: 350_000, forecastAmount: 3_450_000 },
+      { key: "South West", fundedAmount: 2_000_000, weightedPipelineAmount: 260_000, forecastAmount: 2_260_000 },
+      { key: "West Midlands", fundedAmount: 1_800_000, weightedPipelineAmount: 200_000, forecastAmount: 2_000_000 },
+    ],
+    byLtvBucket: [
+      { key: "40-50%", fundedAmount: 3_500_000, weightedPipelineAmount: 400_000, forecastAmount: 3_900_000 },
+      { key: "50-60%", fundedAmount: 4_000_000, weightedPipelineAmount: 500_000, forecastAmount: 4_500_000 },
+    ],
+    byCompletionMonth: [
+      { month: "2025-12", weightedExpectedFundedAmount: 533_250 },
+      { month: "2026-01", weightedExpectedFundedAmount: 530_000 },
+    ],
+    byRegionCapped: [
+      { key: "London", caseCount: 0, pipelineAmount: 3_450_000, weightedExpectedFundedAmount: 350_000 },
+      { key: "South West", caseCount: 0, pipelineAmount: 2_260_000, weightedExpectedFundedAmount: 260_000 },
+      { key: "West Midlands", caseCount: 0, pipelineAmount: 2_000_000, weightedExpectedFundedAmount: 200_000 },
+    ],
+    byLtvBucketCapped: [
+      { key: "50-60%", caseCount: 0, pipelineAmount: 4_500_000, weightedExpectedFundedAmount: 500_000 },
+      { key: "40-50%", caseCount: 0, pipelineAmount: 3_900_000, weightedExpectedFundedAmount: 400_000 },
+    ],
+  },
+  lineage: {
+    view: "forecast",
+    metric: "forecast_funded_balance",
+    formula: "forecast funded balance = funded balance + Σ(expected_funded_amount × completion_probability)",
+    fundedReportingDate: "2025-11-30",
+    pipelineAsOfDate: "2025-12-01",
+    completionProbabilityBasis: "mixed_historical_and_config",
+    explanation: "Deterministic bridge: funded actuals + probability-weighted pipeline.",
+  },
   forecastBridge: {
     portfolioId: "client_001/mi_2025_11",
     client_id: "client_001",

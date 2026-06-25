@@ -39,11 +39,17 @@ export interface AgentRequestOptions {
   topN?: number;
 }
 
+/** The active MI workspace view a question runs against. */
+export type WorkspaceView = "funded" | "pipeline" | "forecast";
+
 export interface AgentRequest {
   question: string;
   portfolio: PortfolioContext;
   reporting: ReportingContext;
   options?: AgentRequestOptions;
+  /** Active workspace view (funded | pipeline | forecast); explicit wording in
+   * the question can override it backend-side. */
+  datasetContext?: WorkspaceView;
 }
 
 export interface AgentResponse {

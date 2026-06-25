@@ -3,11 +3,38 @@ import { HeaderBar } from "@/components/HeaderBar";
 import { AgentChatPanel } from "@/components/AgentChatPanel";
 import { ArtifactCanvas } from "@/components/ArtifactCanvas";
 import { FundedSnapshotPanel } from "@/components/FundedSnapshotPanel";
-import { ForecastBridgeCard } from "@/components/ForecastBridgeCard";
 import { PipelineSnapshotPanel } from "@/components/PipelineSnapshotPanel";
 import { PipelineWatchlist } from "@/components/PipelineWatchlist";
+import { ForecastView } from "@/components/ForecastView";
+import { ViewToggle } from "@/components/ViewToggle";
+import { LineagePanel } from "@/components/LineagePanel";
+import type { ViewLineage } from "@/domain";
 import { createAgentClient } from "@/api";
 import { useWorkspace } from "@/state/useWorkspace";
+
+// Display-only lineage (mirrors backend workspace.lineage_for); no calculation.
+function fundedLineage(reportingDate: string | null): ViewLineage {
+  return {
+    view: "funded",
+    source: "18_central_lender_tape.csv",
+    metric: "current_outstanding_balance",
+    fundedReportingDate: reportingDate,
+    explanation: "Funded book actuals from the governed central lender tape.",
+  };
+}
+
+function pipelineLineage(forecast: ReturnType<typeof useWorkspace>["forecast"]): ViewLineage {
+  const snap = forecast?.pipelineSnapshot;
+  return {
+    view: "pipeline",
+    source: snap?.sourceFile ?? "governed weekly pipeline files",
+    metric: "expected_funded_amount",
+    weightedMetric: "expected_funded_amount × completion_probability",
+    pipelineAsOfDate: snap?.pipelineAsOfDate ?? null,
+    completionProbabilityBasis: forecast?.forecastBridge?.completionProbabilityBasis ?? null,
+    explanation: "Origination pipeline (pre-funded), governed weekly extract.",
+  };
+}
 
 export function AppShell() {
   // One client for the app lifetime; swap createAgentClient() for the real
@@ -40,16 +67,35 @@ export function AppShell() {
           onRetry={ws.retryLast}
         />
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-          {/* Deterministic funded snapshot — shown before any AI query. */}
-          <div className="space-y-4 px-6 pt-5">
-            <FundedSnapshotPanel snapshot={ws.snapshot} loading={ws.snapshotLoading} />
-            {/* Governed pipeline SSoT + deterministic forecast bridge + watchlist. */}
-            <ForecastBridgeCard bridge={ws.forecast?.forecastBridge ?? null} />
-            <PipelineSnapshotPanel
-              snapshot={ws.forecast?.pipelineSnapshot ?? null}
-              loading={ws.forecastLoading}
-            />
-            <PipelineWatchlist items={ws.forecast?.watchlist ?? []} />
+          {/* One coherent workspace: a view toggle selects which schema-aligned
+              view is foregrounded (no stacking of all sections at once). */}
+          <div className="flex items-center justify-between gap-3 px-6 pt-5">
+            <ViewToggle active={ws.activeView} onChange={ws.setActiveView} />
+            <span className="text-[11px] text-ink-500">
+              {ws.portfolio.name}
+              {ws.reporting.asOf ? ` · ${ws.reporting.asOf}` : ""}
+            </span>
+          </div>
+          <div className="space-y-4 px-6 pt-4">
+            {ws.activeView === "funded" && (
+              <>
+                <FundedSnapshotPanel snapshot={ws.snapshot} loading={ws.snapshotLoading} />
+                <LineagePanel lineage={fundedLineage(ws.snapshot?.portfolio.reporting_date ?? null)} />
+              </>
+            )}
+            {ws.activeView === "pipeline" && (
+              <>
+                <PipelineSnapshotPanel
+                  snapshot={ws.forecast?.pipelineSnapshot ?? null}
+                  loading={ws.forecastLoading}
+                />
+                <LineagePanel lineage={ws.forecast?.lineage ?? pipelineLineage(ws.forecast)} />
+                <PipelineWatchlist items={ws.forecast?.watchlist ?? []} />
+              </>
+            )}
+            {ws.activeView === "forecast" && (
+              <ForecastView forecast={ws.forecast} loading={ws.forecastLoading} />
+            )}
           </div>
           <ArtifactCanvas
             artifacts={ws.artifacts}

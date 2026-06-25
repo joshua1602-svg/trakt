@@ -54,6 +54,15 @@ describe("HttpAgentClient", () => {
     expect(res.artifacts[0].type).toBe("chart");
   });
 
+  it("includes the active datasetContext in the query body", async () => {
+    const spy = vi.fn(async () => new Response(JSON.stringify(apiBody), { status: 200 }));
+    vi.stubGlobal("fetch", spy);
+    await new HttpAgentClient("http://localhost:8000").ask({ ...request, datasetContext: "pipeline" });
+    const call = spy.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(call[1].body as string);
+    expect(body.datasetContext).toBe("pipeline");
+  });
+
   it("drops malformed artifacts via the type guard", async () => {
     const body = { ...apiBody, artifacts: [...apiBody.artifacts, { nope: true }] };
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(body), { status: 200 })));
