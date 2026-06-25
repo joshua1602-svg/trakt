@@ -98,6 +98,7 @@ export class HttpAgentClient implements AgentClient {
           portfolio: request.portfolio,
           portfolioId: request.portfolio.id,
           asOfDate: request.reporting.asOf,
+          datasetContext: request.datasetContext,
           filters: request.options?.topN ? { top_n: request.options.topN } : undefined,
         }),
         signal,

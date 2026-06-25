@@ -33,6 +33,7 @@ from .data_source import (
 from . import snapshots as snapshots_mod
 from . import pipeline_contract as pipeline_mod
 from . import forecast_bridge as forecast_mod
+from . import workspace as workspace_mod
 
 logger = logging.getLogger("mi_agent_api")
 
@@ -64,8 +65,11 @@ class QueryRequest(BaseModel):
     portfolioId: Optional[str] = None
     asOfDate: Optional[str] = None
     filters: Optional[Dict[str, Any]] = None
-    # Optional prior conversation turns (accepted, not yet used for context).
-    context: Optional[List[Dict[str, Any]]] = None
+    # Active workspace view the question runs against (funded | pipeline |
+    # forecast). Explicit wording in the question overrides this. ``context`` may
+    # also carry ``{"activeView": ...}``.
+    datasetContext: Optional[str] = None
+    context: Optional[Any] = None
 
 
 def _onboarding_output_root() -> Optional[str]:
@@ -94,7 +98,7 @@ def root() -> Dict[str, Any]:
         "version": app.version,
         "endpoints": ["/health", "/mi/catalogue", "/mi/snapshots", "/mi/snapshot",
                       "/mi/pipeline/snapshots", "/mi/pipeline/snapshot",
-                      "/mi/forecast/snapshot", "/mi/query"],
+                      "/mi/forecast/snapshot", "/mi/workspace/view", "/mi/query"],
         "hint": "GET /health for data-source status; POST /mi/query to ask a question.",
     }
 
@@ -356,42 +360,144 @@ def forecast_snapshot(portfolioId: Optional[str] = None,
                            client_id, run_id, exc)
             pipeline_df = pipeline_report = pipeline_snap = None
 
-    return forecast_mod.compute_forecast_bridge(
+    envelope = forecast_mod.compute_forecast_bridge(
         client_id=client_id, run_id=run_id, funded_reporting_date=funded_reporting_date,
         funded_df=funded_df, pipeline_df=pipeline_df,
         pipeline_report=pipeline_report, pipeline_snapshot=pipeline_snap,
         pipeline_source=source)
+    # Forecast-by-dimension breakdowns (funded actual + weighted pipeline), derived
+    # by aggregate composition — never a row merge.
+    envelope["forecastBreakdowns"] = workspace_mod.forecast_breakdowns(funded_df, pipeline_df)
+    envelope["lineage"] = workspace_mod.lineage_for(
+        "forecast", funded_reporting_date=funded_reporting_date,
+        pipeline_as_of_date=(source or {}).get("pipeline_as_of_date"),
+        completion_probability_basis=(pipeline_report or {}).get("completion_probability_basis"))
+    return envelope
+
+
+@app.get("/mi/workspace/view")
+def workspace_view(portfolioId: Optional[str] = None,
+                   client_id: Optional[str] = None,
+                   runId: Optional[str] = None,
+                   run_id: Optional[str] = None,
+                   view: Optional[str] = None) -> Dict[str, Any]:
+    """Unified workspace view-model composing the funded snapshot + pipeline
+    snapshot + forecast bridge for one portfolio/run. ``view`` (optional) marks the
+    active/foregrounded view; all three blocks are returned so the UI can switch
+    tabs without refetching. Composes existing endpoints — no duplicated logic.
+    """
+    run_id = runId or run_id
+    if portfolioId and "/" in portfolioId:
+        client_id, run_id = portfolioId.split("/", 1)
+    client_id = client_id or "client_001"
+    active = (view or workspace_mod.DEFAULT_VIEW).strip().lower()
+    if active not in workspace_mod.VIEWS:
+        active = workspace_mod.DEFAULT_VIEW
+    pid = f"{client_id}/{run_id}" if run_id else client_id
+
+    funded = snapshot(portfolioId=pid)
+    pipeline = pipeline_snapshot(portfolioId=pid)
+    forecast = forecast_snapshot(portfolioId=pid)
+
+    pipe_ok = bool(pipeline.get("ok"))
+    return {
+        "ok": True,
+        "portfolioId": pid,
+        "client_id": client_id,
+        "runId": run_id,
+        "activeView": active,
+        "views": list(workspace_mod.VIEWS),
+        "funded": funded,
+        "pipeline": pipeline,
+        "forecast": forecast,
+        "lineage": {
+            "funded": workspace_mod.lineage_for(
+                "funded", funded_reporting_date=(funded.get("portfolio") or {}).get("reporting_date")),
+            "pipeline": workspace_mod.lineage_for(
+                "pipeline", pipeline_as_of_date=pipeline.get("pipelineAsOfDate"),
+                completion_probability_basis=pipeline.get("completionProbabilityBasis"),
+                source_file=pipeline.get("sourceFile")) if pipe_ok else workspace_mod.lineage_for("pipeline"),
+            "forecast": forecast.get("lineage", workspace_mod.lineage_for("forecast")),
+        },
+    }
+
+
+def _query_dataset_context(req: QueryRequest) -> str:
+    ctx = req.datasetContext
+    if not ctx and isinstance(req.context, dict):
+        ctx = req.context.get("activeView") or req.context.get("datasetContext")
+    return workspace_mod.resolve_active_view(req.question, ctx)
+
+
+def _resolve_query_frame(view: str, portfolio_id: Optional[str]):
+    """``(df, error)`` for a tab-aware query. Funded keeps the existing active
+    dataset (unchanged); pipeline / forecast resolve the governed pipeline (and,
+    for forecast, a derived funded + weighted-pipeline frame)."""
+    client_id, run_id = "client_001", None
+    if portfolio_id and "/" in portfolio_id:
+        client_id, run_id = portfolio_id.split("/", 1)
+    elif portfolio_id:
+        client_id = portfolio_id
+
+    if view == "funded":
+        return get_dataframe(), None  # existing behaviour, unchanged
+
+    pipeline_df = None
+    source = _resolve_pipeline_source(client_id, run_id)
+    if source is not None:
+        try:
+            pipeline_df, _ = pipeline_mod.load_prepared_pipeline(
+                source, historical_model=_pipeline_history(source.get("client_id", client_id)))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("pipeline frame load failed for query: %s", exc)
+
+    if view == "pipeline":
+        if pipeline_df is None or not len(pipeline_df):
+            return None, "No governed pipeline data is available for the pipeline view."
+        return pipeline_df, None
+
+    # forecast — derived funded + weighted pipeline frame.
+    funded_df = None
+    if run_id:
+        funded_df, _ = _resolve_run_dataframe(client_id, run_id, _onboarding_output_root())
+    if funded_df is None:
+        try:
+            funded_df = get_dataframe()
+        except FileNotFoundError:
+            funded_df = None
+    frame = workspace_mod.build_forecast_view_frame(funded_df, pipeline_df)
+    if not len(frame):
+        return None, "No forecast data is available for the forecast view."
+    return frame, None
 
 
 @app.post("/mi/query")
 def query(req: QueryRequest) -> Dict[str, Any]:
     portfolio_id = req.portfolioId or (req.portfolio.id if req.portfolio else None)
+    view = _query_dataset_context(req)
 
-    try:
-        df = get_dataframe()
-    except FileNotFoundError as exc:
+    def _error(msg: str) -> Dict[str, Any]:
         return {
-            "ok": False,
-            "error": str(exc),
-            "question": req.question,
-            "answer": "No portfolio data is available to query.",
-            "interpreted": "",
-            "spec": {},
-            "validation": {"ok": False, "errors": [str(exc)], "warnings": [], "resolved_fields": {}},
-            "artifacts": [],
-            "warnings": [],
-            "assumptions": [],
-            "metadata": {"engine": "mi_agent", "source": "python", "mock": False},
+            "ok": False, "error": msg, "question": req.question,
+            "answer": msg, "interpreted": "", "spec": {},
+            "validation": {"ok": False, "errors": [msg], "warnings": [], "resolved_fields": {}},
+            "artifacts": [], "warnings": [], "assumptions": [],
+            "metadata": {"engine": "mi_agent", "source": "python", "mock": False,
+                         "datasetContext": view},
         }
 
+    try:
+        df, frame_error = _resolve_query_frame(view, portfolio_id)
+    except FileNotFoundError as exc:
+        return _error(str(exc))
+    if frame_error:
+        return _error(frame_error)
+
     workflow = run_mi_agent_query(
-        req.question,
-        df,
-        str(semantics_path()),
-        parser_mode="deterministic",
-    )
-    return adapt_workflow_result(
-        workflow,
-        portfolio_id=portfolio_id,
-        as_of=req.asOfDate,
-    )
+        req.question, df, str(semantics_path()), parser_mode="deterministic")
+    result = adapt_workflow_result(workflow, portfolio_id=portfolio_id, as_of=req.asOfDate)
+    # Surface which dataset/view answered (funded | pipeline | forecast).
+    meta = result.setdefault("metadata", {}) if isinstance(result, dict) else {}
+    if isinstance(meta, dict):
+        meta["datasetContext"] = view
+    return result

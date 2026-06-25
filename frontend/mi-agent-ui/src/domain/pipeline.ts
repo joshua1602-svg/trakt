@@ -157,6 +157,37 @@ export interface WatchlistItem {
   [k: string]: unknown;
 }
 
+/** One forecast-by-dimension row (funded actual + weighted pipeline). */
+export interface ForecastDimensionRow {
+  key: string;
+  fundedAmount: number;
+  weightedPipelineAmount: number;
+  forecastAmount: number;
+}
+
+/** Forecast-by-dimension breakdowns (derived: funded + weighted pipeline). */
+export interface ForecastBreakdowns {
+  byRegion: ForecastDimensionRow[];
+  byLtvBucket: ForecastDimensionRow[];
+  byCompletionMonth: { month: string; weightedExpectedFundedAmount: number }[];
+  byRegionCapped?: DimensionBucket[];
+  byLtvBucketCapped?: DimensionBucket[];
+}
+
+/** "How calculated" lineage for a view. */
+export interface ViewLineage {
+  view: string;
+  source?: string;
+  metric?: string;
+  weightedMetric?: string;
+  formula?: string;
+  fundedReportingDate?: string | null;
+  pipelineAsOfDate?: string | null;
+  completionProbabilityBasis?: string | null;
+  explanation?: string;
+  [k: string]: unknown;
+}
+
 /** The full forecast-snapshot envelope from `GET /mi/forecast/snapshot`. */
 export interface ForecastSnapshot {
   ok: boolean;
@@ -173,5 +204,7 @@ export interface ForecastSnapshot {
   pipelineAvailable: boolean;
   pipelineSnapshot: PipelineSnapshot | null;
   forecastBridge: ForecastBridge | null;
+  forecastBreakdowns?: ForecastBreakdowns;
+  lineage?: ViewLineage;
   watchlist: WatchlistItem[];
 }

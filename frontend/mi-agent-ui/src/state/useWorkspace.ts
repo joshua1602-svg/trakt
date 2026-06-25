@@ -20,6 +20,7 @@ import type {
   ReportingContext,
   SnapshotPortfolio,
   SnapshotRun,
+  WorkspaceView,
 } from "@/domain";
 import type { AgentClient } from "@/api";
 import { uid } from "@/lib/utils";
@@ -52,6 +53,9 @@ export interface Workspace {
   /** Deterministic funded + pipeline forecast snapshot for the selected run. */
   forecast: ForecastSnapshot | null;
   forecastLoading: boolean;
+  /** Active workspace view (funded | pipeline | forecast). */
+  activeView: WorkspaceView;
+  setActiveView: (view: WorkspaceView) => void;
   messages: ChatMessage[];
   artifacts: Artifact[];
   isWorking: boolean;
@@ -73,6 +77,14 @@ export function useWorkspace(client: AgentClient): Workspace {
   const [snapshotLoading, setSnapshotLoading] = useState(false);
   const [forecast, setForecast] = useState<ForecastSnapshot | null>(null);
   const [forecastLoading, setForecastLoading] = useState(false);
+  // Active view defaults to Funded. A ref mirrors it so runQuery reads the latest
+  // value without being re-created on every view change.
+  const [activeView, setActiveViewState] = useState<WorkspaceView>("funded");
+  const activeViewRef = useRef<WorkspaceView>("funded");
+  const setActiveView = useCallback((view: WorkspaceView) => {
+    activeViewRef.current = view;
+    setActiveViewState(view);
+  }, []);
 
   // Discover available portfolios / runs once; default to the latest run.
   useEffect(() => {
@@ -196,6 +208,9 @@ export function useWorkspace(client: AgentClient): Workspace {
         portfolio,
         reporting,
         options: { parserMode: "deterministic" },
+        // Tab-aware: the active view sets the dataset context (funded / pipeline
+        // / forecast); explicit wording in the question overrides it backend-side.
+        datasetContext: activeViewRef.current,
       };
       const controller = new AbortController();
       abortRef.current = controller;
@@ -310,6 +325,8 @@ export function useWorkspace(client: AgentClient): Workspace {
     snapshotLoading,
     forecast,
     forecastLoading,
+    activeView,
+    setActiveView,
     messages,
     artifacts,
     isWorking,
