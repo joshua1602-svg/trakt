@@ -48,6 +48,21 @@ export interface DimensionBucket {
   sharePct?: number;
 }
 
+/** Prior weekly pipeline snapshot aggregates, for week-on-week tile deltas.
+ *
+ * Additive + optional: present only when a genuine prior weekly extract exists.
+ * The UI must never synthesise a prior week — when this is absent the tiles show
+ * "No prior week". Each metric is independently optional so partial history
+ * degrades gracefully. */
+export interface PipelineWeeklyPrior {
+  /** The prior weekly extract date (ISO), for the "vs prior week" label. */
+  snapshotDate: string | null;
+  sourceFile?: string | null;
+  pipelineRowCount?: number | null;
+  pipelineAmount?: number | null;
+  weightedExpectedFundedAmount?: number | null;
+}
+
 /** A backend data-quality diagnostic (blocker | warning | info). */
 export interface PipelineDiagnostic {
   check: string;
@@ -97,6 +112,8 @@ export interface PipelineSnapshot {
   pipelineAmount: number | null;
   expectedFundedAmount: number | null;
   weightedExpectedFundedAmount: number | null;
+  /** Prior weekly extract aggregates for week-on-week tile deltas (optional). */
+  priorWeek?: PipelineWeeklyPrior | null;
   completionProbabilityBasis?: string;
   completionProbabilitySummary?: Record<string, unknown>;
   historicalCompletionModel?: Record<string, unknown>;
