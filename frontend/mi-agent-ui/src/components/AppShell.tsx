@@ -114,6 +114,8 @@ export function AppShell() {
             // Backend drill-through only when wired to a live backend; the mock
             // client keeps the client-side drill panel as the fallback.
             onDrill={client.mock ? undefined : ws.drill}
+            // Insight investigations re-ask through the context-aware flow.
+            onAsk={ws.ask}
           />
         </div>
       </div>
