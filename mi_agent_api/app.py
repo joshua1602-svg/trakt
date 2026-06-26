@@ -309,12 +309,13 @@ def pipeline_snapshot(portfolioId: Optional[str] = None,
                 "pipelineRowCount": 0, "stageBreakdown": [],
                 "availableMetrics": [], "availableDimensions": [], "dataQuality": []}
 
-    df, report = pipeline_mod.load_prepared_pipeline(
-        source, historical_model=_pipeline_history(source.get("client_id", client_id)))
+    history = _pipeline_history(source.get("client_id", client_id))
+    df, report = pipeline_mod.load_prepared_pipeline(source, historical_model=history)
     semantics = load_mi_semantics(semantics_path())
+    prior_week = pipeline_mod.compute_prior_week_aggregates(source, historical_model=history)
     return pipeline_mod.compute_pipeline_snapshot(
         df, report, semantics, client_id=source.get("client_id", client_id),
-        run_id=run_id or source.get("run_id", ""), source=source)
+        run_id=run_id or source.get("run_id", ""), source=source, prior_week=prior_week)
 
 
 @app.get("/mi/forecast/snapshot")
@@ -350,12 +351,15 @@ def forecast_snapshot(portfolioId: Optional[str] = None,
     source = _resolve_pipeline_source(client_id, run_id)
     if source is not None:
         try:
+            history = _pipeline_history(source.get("client_id", client_id))
             pipeline_df, pipeline_report = pipeline_mod.load_prepared_pipeline(
-                source, historical_model=_pipeline_history(source.get("client_id", client_id)))
+                source, historical_model=history)
+            prior_week = pipeline_mod.compute_prior_week_aggregates(
+                source, historical_model=history)
             pipeline_snap = pipeline_mod.compute_pipeline_snapshot(
                 pipeline_df, pipeline_report, semantics,
                 client_id=source.get("client_id", client_id),
-                run_id=run_id, source=source)
+                run_id=run_id, source=source, prior_week=prior_week)
         except Exception as exc:  # noqa: BLE001 - a bad pipeline must not 500
             logger.warning("pipeline load failed for forecast [%s/%s]: %s",
                            client_id, run_id, exc)
@@ -508,7 +512,8 @@ def query(req: QueryRequest) -> Dict[str, Any]:
         return _error(frame_error)
 
     workflow = run_mi_agent_query(
-        req.question, df, str(semantics_path()), parser_mode="deterministic")
+        req.question, df, str(semantics_path()), parser_mode="deterministic",
+        extra_filters=req.filters or None)
     result = adapt_workflow_result(workflow, portfolio_id=portfolio_id, as_of=req.asOfDate)
     # Surface which dataset/view answered (funded | pipeline | forecast).
     meta = result.setdefault("metadata", {}) if isinstance(result, dict) else {}
