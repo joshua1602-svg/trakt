@@ -17,14 +17,28 @@ export function LineagePanel({ lineage }: { lineage: ViewLineage | null | undefi
       ? lineage.formula
       : `Source: ${lineage.source ?? "—"} · Metric: ${lineage.metric ?? "—"}`;
 
+  const ev = lineage.historicalModelEvidence;
+  const fmt = (n: number) => n.toLocaleString("en-GB");
+  const basisLabel = (lineage.completionProbabilityBasis ?? ev?.completionProbabilityBasis ?? "")
+    .replace(/_/g, " ");
+
+  // Three distinct dates: funded reporting, pipeline as-of, observation window.
   const rows: [string, string | null | undefined][] = [
     ["Source", lineage.source],
     ["Metric", lineage.metric],
     ["Weighted metric", lineage.weightedMetric],
     ["Forecast basis", lineage.formula],
     ["Funded reporting date", lineage.fundedReportingDate],
-    ["Pipeline as-of", lineage.pipelineAsOfDate],
-    ["Probability basis", lineage.completionProbabilityBasis],
+    ["Pipeline snapshot as-of", lineage.pipelineAsOfDate],
+    ["Pipeline source folder", lineage.pipelineSourceFolderDate],
+    [
+      "Observation window",
+      lineage.observationWindowStart
+        ? `${lineage.observationWindowStart} to ${lineage.observationWindowEnd ?? "—"}`
+        : null,
+    ],
+    ["Probability basis", basisLabel || null],
+    ["Identifier", ev?.stableIdentifierUsed],
   ];
 
   return (
@@ -43,6 +57,21 @@ export function LineagePanel({ lineage }: { lineage: ViewLineage | null | undefi
           <ChevronDown size={13} className={cn("transition-transform", !open && "-rotate-90")} />
         </button>
       </div>
+
+      {ev && ev.weeklyFilesUsed > 0 && (
+        <div className="mt-1.5 rounded-md border border-[var(--color-line-soft)] bg-navy-850/50 px-2.5 py-1.5 text-[11px] text-ink-400">
+          <div className="font-medium text-ink-300">Completion model evidence</div>
+          <div className="mt-0.5 tabular-nums">
+            {fmt(ev.weeklyFilesUsed)} weekly files · {fmt(ev.historicalRowsUsed)} historical rows ·{" "}
+            {fmt(ev.trackedCaseCount)} tracked cases · {fmt(ev.observedCompletionCount)} observed completions
+          </div>
+          <div className="mt-0.5 text-ink-500">
+            Observation window: {ev.observationWindowStart ?? "—"} to {ev.observationWindowEnd ?? "—"}
+            {basisLabel ? ` · Basis: ${basisLabel}` : ""}
+            {ev.stableIdentifierUsed ? ` · Identifier: ${ev.stableIdentifierUsed}` : ""}
+          </div>
+        </div>
+      )}
       {open && (
         <dl className="mt-2 grid grid-cols-1 gap-x-6 gap-y-1 border-t border-[var(--color-line-soft)] pt-2 text-[11px] sm:grid-cols-2">
           {rows

@@ -35,6 +35,7 @@ from .pipeline_prep import (
     forecast_readiness,
     prepare_pipeline_mi_dataset,
 )
+from . import pipeline_history as _history
 
 _CENTRAL_PIPELINE_TAPE = "18a_central_pipeline_tape.csv"
 _PREPARED_PIPELINE_NAME = "20_prepared_pipeline_mi.csv"
@@ -205,12 +206,29 @@ def discover_pipeline_sources(root: str | os.PathLike,
     return found
 
 
+# Funded/funder source files that may be (mis)materialised under output/pipeline/
+# but are NOT governed pipeline/KFI sources — never counted for the model.
+_NON_PIPELINE_NAME_RE = re.compile(
+    r"(funder|principal[\s_]*and[\s_]*interest|central[\s_]*lender|loan[\s_]*extract|"
+    r"funded[\s_]*tape)", re.IGNORECASE)
+
+
+def _is_governed_pipeline_file(path: Path) -> bool:
+    """A governed pipeline/KFI source (not a funded/funder principal file)."""
+    name = path.name
+    if _NON_PIPELINE_NAME_RE.search(name):
+        return False
+    return True
+
+
 def _collect_files(root: Path, globs: List[str]) -> List[Path]:
     """Governed pipeline source files under ``root``.
 
     Raw onboarding INPUT copies (under an ``input/`` path) are skipped — only the
     governed ``output/pipeline/`` materialised sources (or a flat fixture pack) are
-    discovered, so a promoted run does not surface its own input twice.
+    discovered, so a promoted run does not surface its own input twice. Funded /
+    funder principal files that may sit alongside pipeline files are excluded by
+    name so they are never counted as weekly pipeline model evidence.
     """
     seen: set = set()
     out: List[Path] = []
@@ -224,6 +242,8 @@ def _collect_files(root: Path, globs: List[str]) -> List[Path]:
                 rel_parts = {p.lower() for p in path.parts[:-1]}
             if "input" in rel_parts:
                 continue  # raw onboarding input — not a governed pipeline source
+            if not _is_governed_pipeline_file(path):
+                continue  # funded/funder file — not a governed pipeline source
             seen.add(path)
             out.append(path)
     return out
@@ -344,6 +364,51 @@ def _expected_completion_breakdown(df: pd.DataFrame) -> List[Dict[str, Any]]:
     return rows
 
 
+def _expected_completion_summary(breakdown: List[Dict[str, Any]],
+                                 as_of: Optional[str]) -> Dict[str, Any]:
+    """Classify the (ascending) completion-month breakdown relative to the pipeline
+    as-of month so a PAST month is never labelled "next".
+
+      * overdue : month < as-of month
+      * current : month == as-of month
+      * next    : FIRST month > as-of month
+
+    ``expectedCompletionBreakdown`` itself is unchanged (still drives the chart)."""
+    as_of_month = (as_of or "")[:7]
+    overdue_count = current_count = 0
+    overdue_weighted = current_weighted = 0.0
+    next_month: Optional[str] = None
+    next_count = 0
+    next_weighted = 0.0
+
+    def _w(row: Dict[str, Any]) -> float:
+        return float(row.get("weightedExpectedFundedAmount") or 0.0)
+
+    for row in breakdown:  # ascending by month
+        month = row["month"]
+        if as_of_month and month < as_of_month:
+            overdue_count += row["caseCount"]
+            overdue_weighted += _w(row)
+        elif as_of_month and month == as_of_month:
+            current_count += row["caseCount"]
+            current_weighted += _w(row)
+        else:  # future (or no as-of month known)
+            if next_month is None:
+                next_month = month
+                next_count = row["caseCount"]
+                next_weighted = _w(row)
+    return {
+        "asOfMonth": as_of_month or None,
+        "overdueExpectedCompletionCount": overdue_count,
+        "overdueExpectedCompletionWeightedAmount": round(overdue_weighted, 2),
+        "currentMonthExpectedCompletionCount": current_count,
+        "currentMonthExpectedCompletionWeightedAmount": round(current_weighted, 2),
+        "nextExpectedCompletionMonth": next_month,
+        "nextExpectedCompletionCount": next_count,
+        "nextExpectedCompletionWeightedAmount": round(next_weighted, 2),
+    }
+
+
 def _dimension_breakdown(df: pd.DataFrame, field: str,
                          key_name: str = "key") -> List[Dict[str, Any]]:
     """Backend-side ``[{key, caseCount, pipelineAmount, weightedExpected...}]`` for
@@ -425,6 +490,8 @@ def compute_pipeline_snapshot(
     # the uncapped detail stays in ``*BreakdownFull`` for the API / agent.
     broker_full = _dimension_breakdown(df, "broker_channel", key_name="key")
     region_full = _dimension_breakdown(df, "geographic_region_obligor", key_name="key")
+    completion_breakdown = _expected_completion_breakdown(df)
+    completion_summary = _expected_completion_summary(completion_breakdown, as_of)
     return {
         "ok": True,
         "recordType": "pipeline",
@@ -443,8 +510,17 @@ def compute_pipeline_snapshot(
         "completionProbabilityBasis": report.get("completion_probability_basis"),
         "completionProbabilitySummary": report.get("completion_probability_summary", {}),
         "historicalCompletionModel": report.get("historical_completion_model", {}),
+        "historicalModelEvidence": _history.historical_model_evidence(
+            report.get("historical_completion_model"),
+            report.get("completion_probability_basis")),
         "stageBreakdown": _stage_breakdown(df),
-        "expectedCompletionBreakdown": _expected_completion_breakdown(df),
+        "expectedCompletionBreakdown": completion_breakdown,
+        "expectedCompletionSummary": completion_summary,
+        # Named diagnostics (relative to the pipeline as-of month).
+        "overdueExpectedCompletionCount": completion_summary["overdueExpectedCompletionCount"],
+        "overdueExpectedCompletionWeightedAmount": completion_summary["overdueExpectedCompletionWeightedAmount"],
+        "currentMonthExpectedCompletionCount": completion_summary["currentMonthExpectedCompletionCount"],
+        "nextExpectedCompletionMonth": completion_summary["nextExpectedCompletionMonth"],
         "brokerBreakdown": cap_breakdown(broker_full, 10),
         "brokerBreakdownFull": broker_full,
         "regionBreakdown": cap_breakdown(region_full, 10),
