@@ -120,6 +120,7 @@ def run_mi_agent_query(
     zero_cost_first: bool = True,
     provider: str = "anthropic",
     llm_callable=None,
+    extra_filters: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Run one MI question end to end.
 
@@ -131,6 +132,12 @@ def run_mi_agent_query(
     llm_enabled : enable the LLM parser path (else deterministic)
     parser_mode : "deterministic" | "llm" (LLM only used when also llm_enabled)
     llm_callable: optional injected callable(prompt)->str for testing
+    extra_filters: optional drill-through filters merged into the parsed spec's
+        ``filters`` (e.g. ``{"geographic_region_obligor": "South East"}``). They
+        are applied before aggregation by the executor, so the result reflects
+        the FULL underlying dataset narrowed to the selection — not just the rows
+        already on screen. An unknown filter field is rejected as a controlled
+        validation failure (never a 500).
 
     Returns a dict with: ok, error, parser_mode, spec, spec_obj, interpreted,
     validation, parse_metadata, query_result, chart_result, warnings, metadata.
@@ -190,6 +197,18 @@ def run_mi_agent_query(
     # granular detail (deterministic_zero_cost / llm / llm_repaired / validation_failed)
     result["parser_mode_detail"] = parse_meta.get("parser_mode_detail",
                                                   result["parser_mode"])
+    # ---- merge drill-through filters into the parsed spec -----------------
+    # Additive: caller-supplied filters (e.g. a UI drill into one region/broker/
+    # year/SPV/stage) combine with any the parser inferred. They are validated +
+    # applied by the executor before aggregation, against the full dataset.
+    if extra_filters:
+        merged = dict(spec.filters or {})
+        merged.update(extra_filters)
+        spec.filters = merged
+        warnings.append(
+            "drill-through filters applied: "
+            + ", ".join(f"{k}={v!r}" for k, v in extra_filters.items()))
+
     result["spec_obj"] = spec
     result["spec"] = spec.to_dict()
     result["parse_metadata"] = parse_meta

@@ -50,6 +50,11 @@ export interface AgentRequest {
   /** Active workspace view (funded | pipeline | forecast); explicit wording in
    * the question can override it backend-side. */
   datasetContext?: WorkspaceView;
+  /** Optional drill-through filters keyed by semantic field (e.g.
+   * `{ geographic_region_obligor: "South East" }`). Applied backend-side before
+   * aggregation against the full dataset; the client-side panel is the fallback
+   * when these are not dispatched. */
+  filters?: Record<string, unknown>;
 }
 
 export interface AgentResponse {

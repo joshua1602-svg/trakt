@@ -128,5 +128,50 @@ def test_empty_question_rejected():
     assert r.status_code == 422  # pydantic min_length
 
 
+def test_query_applies_drill_through_filters(monkeypatch):
+    # A drill-through filter passed on the request narrows the FULL dataset before
+    # aggregation, so the chart only contains the selected dimension value.
+    import pandas as pd
+    from mi_agent_api import app as app_module
+
+    regions = ["North", "South", "East"]
+    df = pd.DataFrame([{
+        "current_outstanding_balance": 100_000 + i * 1000,
+        "geographic_region_obligor": regions[i % 3],
+    } for i in range(30)])
+    monkeypatch.setattr(app_module, "get_dataframe", lambda: df)
+
+    r = client.post("/mi/query", json={
+        "question": "Show balance by region",
+        "filters": {"geographic_region_obligor": "South"},
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True, body.get("validation")
+    chart = next(a for a in body["artifacts"] if a["type"] == "chart")
+    xs = {row[chart["xKey"]] for row in chart["rows"]}
+    assert xs == {"South"}
+    assert body["spec"]["filters"].get("geographic_region_obligor") == "South"
+
+
+def test_query_invalid_drill_filter_field_rejected_safely(monkeypatch):
+    import pandas as pd
+    from mi_agent_api import app as app_module
+
+    df = pd.DataFrame([{
+        "current_outstanding_balance": 100_000 + i * 1000,
+        "geographic_region_obligor": ["North", "South", "East"][i % 3],
+    } for i in range(30)])
+    monkeypatch.setattr(app_module, "get_dataframe", lambda: df)
+
+    r = client.post("/mi/query", json={
+        "question": "Show balance by region",
+        "filters": {"not_a_real_field": "South"},
+    })
+    assert r.status_code == 200  # controlled, never a 500
+    body = r.json()
+    assert body["ok"] is False
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
