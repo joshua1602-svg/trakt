@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { formatUiTitle, formatValue, toFilenameStem, toPercentPoints } from "./utils";
+import { formatHeading, formatUiTitle, formatValue, toFilenameStem, toPercentPoints } from "./utils";
+
+describe("formatHeading", () => {
+  it("leaves curated prose titles untouched", () => {
+    expect(formatHeading("Pipeline Bridge to £100MM")).toBe("Pipeline Bridge to £100MM");
+    expect(formatHeading("Funded vs. Pipeline Volume")).toBe("Funded vs. Pipeline Volume");
+  });
+  it("polishes raw snake_case keys", () => {
+    expect(formatHeading("average_ltv_by_region")).toBe("Average LTV By Region");
+  });
+});
 
 describe("formatUiTitle", () => {
   it("title-cases snake_case and spaced input", () => {

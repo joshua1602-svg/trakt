@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { ChartArtifact } from "@/domain";
-import { cn, formatValue } from "@/lib/utils";
+import { cn, formatUiTitle, formatValue } from "@/lib/utils";
 
 /**
  * Native heatmap — a lightweight CSS-grid component (no charting dependency),
@@ -74,7 +74,7 @@ export function HeatmapArtifactView({ artifact }: { artifact: ChartArtifact }) {
           <thead>
             <tr>
               <th className="px-2 py-1 text-left text-[10px] font-semibold uppercase tracking-wider text-ink-500">
-                {yKey?.replace(/_/g, " ")} \ {xKey?.replace(/_/g, " ")}
+                {formatUiTitle(yKey)} \ {formatUiTitle(xKey)}
               </th>
               {xs.map((x) => (
                 <th key={x} className="px-1.5 py-1 text-center text-[10px] font-medium text-ink-400" style={{ maxWidth: 90 }}>
@@ -123,7 +123,7 @@ export function HeatmapArtifactView({ artifact }: { artifact: ChartArtifact }) {
           style={{ background: `linear-gradient(90deg, ${rgbAt(0)}, ${rgbAt(0.55)}, ${rgbAt(1)})` }}
         />
         <span>{formatValue(max, valueFormat)}</span>
-        <span className="ml-1">{valueKey?.replace(/_/g, " ")}</span>
+        <span className="ml-1">{formatUiTitle(valueKey)}</span>
       </div>
     </div>
   );

@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import type { Artifact, ArtifactType } from "@/domain";
 import { Badge, Card, IconButton } from "@/components/ui";
-import { cn, formatTime } from "@/lib/utils";
+import { cn, formatHeading, formatTime, toFilenameStem } from "@/lib/utils";
 import { ArtifactRenderer } from "@/components/artifacts/ArtifactRenderer";
 
 const KIND_ICON: Record<ArtifactType, typeof LayoutGrid> = {
@@ -54,7 +54,7 @@ export function ArtifactCard({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${artifact.id}.json`;
+    a.download = `${toFilenameStem(formatHeading(artifact.title))}_${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -67,7 +67,7 @@ export function ArtifactCard({
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h3 className="truncate text-sm font-semibold text-ink-100">{artifact.title}</h3>
+            <h3 className="truncate text-sm font-semibold text-ink-100">{formatHeading(artifact.title)}</h3>
             {artifact.pinned && <Pin size={12} className="shrink-0 fill-peri-400 text-peri-400" />}
             {artifact.mock && <Badge tone="amber">Mock</Badge>}
           </div>

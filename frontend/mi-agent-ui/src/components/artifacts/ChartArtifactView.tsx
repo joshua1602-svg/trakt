@@ -17,7 +17,7 @@ import {
 } from "recharts";
 import type { ChartArtifact, DisplayHint } from "@/domain";
 import { THEME } from "@/lib/theme";
-import { toPercentPoints } from "@/lib/utils";
+import { formatHeading, toPercentPoints } from "@/lib/utils";
 import { paddedDomain } from "@/lib/chartAxis";
 
 const AXIS = "#6b7493";
@@ -101,7 +101,7 @@ function Legend({ artifact }: { artifact: ChartArtifact }) {
           { label: "Fallout", color: THEME.negative },
           { label: "Forecast", color: THEME.positive },
         ]
-      : artifact.series.map((s) => ({ label: s.label, color: s.color }));
+      : artifact.series.map((s) => ({ label: formatHeading(s.label), color: s.color }));
   if (items.length < 2) return null;
   return (
     <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1">
@@ -203,8 +203,8 @@ function Body({ artifact }: { artifact: ChartArtifact }) {
     const xKey = artifact.xKey ?? artifact.series[0]?.key;
     const yKey = artifact.yKey ?? artifact.series[1]?.key;
     const sizeKey = artifact.sizeKey ?? artifact.series[2]?.key;
-    const xLabel = artifact.xLabel ?? artifact.series[0]?.label;
-    const yLabel = artifact.yLabel ?? artifact.series[1]?.label;
+    const xLabel = formatHeading(artifact.xLabel ?? artifact.series[0]?.label);
+    const yLabel = formatHeading(artifact.yLabel ?? artifact.series[1]?.label);
     const xFmt = hintFormatter(xKey ? hints[xKey] : undefined);
     const yFmt = hintFormatter(yKey ? hints[yKey] : undefined);
     // Population-aware axis framing: don't waste area below the population (e.g.

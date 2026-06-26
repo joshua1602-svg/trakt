@@ -69,6 +69,16 @@ export function formatUiTitle(input?: string): string {
 }
 
 /**
+ * Polish a heading/label that MIGHT already be human-written prose. Only
+ * transforms strings that still look like a raw key (contain an underscore),
+ * leaving curated titles like "Pipeline Bridge to £100MM" untouched.
+ */
+export function formatHeading(input?: string): string {
+  if (!input) return "";
+  return input.includes("_") ? formatUiTitle(input) : input;
+}
+
+/**
  * Slugify a title into a download-filename stem (snake_case, ascii-safe).
  * `Average LTV By Region` → `average_ltv_by_region`.
  */

@@ -3,7 +3,7 @@ import { LayoutList, Rows3 } from "lucide-react";
 import type { Artifact, ArtifactType } from "@/domain";
 import { ArtifactCard } from "@/components/ArtifactCard";
 import { EmptyState, LoadingState } from "@/components/states/States";
-import { cn } from "@/lib/utils";
+import { cn, formatHeading } from "@/lib/utils";
 
 type ViewMode = "stack" | "tabs";
 
@@ -104,7 +104,7 @@ export function ArtifactCanvas({
                     : "border-[var(--color-line)] text-ink-400 hover:text-ink-100",
                 )}
               >
-                {a.title}
+                {formatHeading(a.title)}
               </button>
             ))}
           </div>
