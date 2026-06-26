@@ -23,12 +23,14 @@ export function ArtifactCanvas({
   isWorking,
   portfolioName,
   onDrill,
+  onAsk,
 }: {
   artifacts: Artifact[];
   onTogglePin: (id: string) => void;
   isWorking: boolean;
   portfolioName: string;
   onDrill?: (artifact: Artifact, filters: Record<string, unknown>) => void;
+  onAsk?: (question: string) => void;
 }) {
   const [view, setView] = useState<ViewMode>("stack");
   const [activeTab, setActiveTab] = useState(0);
@@ -116,14 +118,14 @@ export function ArtifactCanvas({
           <div className="flex flex-col gap-4">
             {visible.map((a) => (
               <div key={a.id} id={`artifact-${a.id}`}>
-                <ArtifactCard artifact={a} onTogglePin={onTogglePin} onDrill={onDrill} />
+                <ArtifactCard artifact={a} onTogglePin={onTogglePin} onDrill={onDrill} onAsk={onAsk} />
               </div>
             ))}
           </div>
         ) : (
           active && (
             <div id={`artifact-${active.id}`}>
-              <ArtifactCard artifact={active} onTogglePin={onTogglePin} onDrill={onDrill} />
+              <ArtifactCard artifact={active} onTogglePin={onTogglePin} onDrill={onDrill} onAsk={onAsk} />
             </div>
           )
         )}

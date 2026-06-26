@@ -19,6 +19,7 @@ import { cn, formatHeading, formatTime, toFilenameStem } from "@/lib/utils";
 import { ArtifactRenderer } from "@/components/artifacts/ArtifactRenderer";
 import { DrillThroughPanel } from "@/components/DrillThroughPanel";
 import { ExportMenu } from "@/components/ExportMenu";
+import { InsightPanel } from "@/components/InsightPanel";
 import { isChartArtifact, isTableArtifact } from "@/domain";
 
 const KIND_ICON: Record<ArtifactType, typeof LayoutGrid> = {
@@ -35,10 +36,13 @@ export function ArtifactCard({
   artifact,
   onTogglePin,
   onDrill,
+  onAsk,
 }: {
   artifact: Artifact;
   onTogglePin: (id: string) => void;
   onDrill?: (artifact: Artifact, filters: Record<string, unknown>) => void;
+  /** Dispatch a follow-up question (insight investigations), routed via context. */
+  onAsk?: (question: string) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -117,10 +121,13 @@ export function ArtifactCard({
         <div className="p-4" ref={bodyRef}>
           <ArtifactRenderer artifact={artifact} />
           {(isChartArtifact(artifact) || isTableArtifact(artifact)) && (
-            <DrillThroughPanel
-              artifact={artifact}
-              onDrill={onDrill ? (filters) => onDrill(artifact, filters) : undefined}
-            />
+            <>
+              <InsightPanel artifact={artifact} onAsk={onAsk} />
+              <DrillThroughPanel
+                artifact={artifact}
+                onDrill={onDrill ? (filters) => onDrill(artifact, filters) : undefined}
+              />
+            </>
           )}
           {artifact.warnings && artifact.warnings.length > 0 && (
             <div className="mt-3 rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-[11px] text-amber-300/90">
