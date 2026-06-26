@@ -124,6 +124,31 @@ export function toPercentPoints(value: number, scale: PercentScale): number {
 }
 
 /**
+ * Normalise a percent of UNKNOWN storage scale to a fraction (0–1), used when
+ * the dataset contract did NOT tag the scale. Heuristic: a magnitude above 1.5
+ * is read as whole percentage points (56 → 0.56); otherwise it is already a
+ * fraction (0.56 → 0.56). This is the fallback for the contract-aware path and
+ * fixes the "0.6% for a 56% LTV" bug when no scale is supplied.
+ */
+export function normalisePercentValue(value: unknown): number | null {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  if (Math.abs(n) > 1.5) return n / 100;
+  return n;
+}
+
+/**
+ * Format a percent of UNKNOWN scale for display. 0.56 and 56 both render as
+ * "56.0%"; non-numeric input renders as "N/A". When the dataset contract scale
+ * IS known, prefer `formatValue(v, "pct", scale)` / `toPercentPoints`.
+ */
+export function formatPercent(value: unknown, decimals = 1): string {
+  const n = normalisePercentValue(value);
+  if (n === null) return "N/A";
+  return `${(n * 100).toFixed(decimals)}%`;
+}
+
+/**
  * Format a value by a domain ValueFormat tag, honouring the percent storage
  * scale from the dataset contract (so 0.51 displays as 51.0%, not 0.5%).
  */
@@ -139,7 +164,11 @@ export function formatValue(
     case "gbp":
       return formatGBP(value);
     case "pct":
-      return `${toPercentPoints(value, scale).toFixed(1)}%`;
+      // Contract scale is authoritative; without it, fall back to the heuristic
+      // so a fraction (0.56) doesn't render as 0.6%.
+      return scale === "percent_fraction" || scale === "percent_points"
+        ? `${toPercentPoints(value, scale).toFixed(1)}%`
+        : formatPercent(value, 1);
     case "decimal":
       return value.toFixed(2);
     case "number":

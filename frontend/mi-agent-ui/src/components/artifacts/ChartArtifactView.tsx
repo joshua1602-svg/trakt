@@ -17,7 +17,7 @@ import {
 } from "recharts";
 import type { ChartArtifact, DisplayHint } from "@/domain";
 import { THEME } from "@/lib/theme";
-import { formatHeading, toPercentPoints } from "@/lib/utils";
+import { formatHeading, formatPercent, toPercentPoints } from "@/lib/utils";
 import { paddedDomain } from "@/lib/chartAxis";
 
 const AXIS = "#6b7493";
@@ -32,7 +32,10 @@ function hintFormatter(hint?: DisplayHint, fallbackFmt?: Fmt, unit?: string) {
   return (v: number) => {
     if (typeof v !== "number") return String(v);
     if (fmt === "gbp") return `£${v}${unit ?? ""}`;
-    if (fmt === "pct") return `${toPercentPoints(v, scale).toFixed(1)}%`;
+    if (fmt === "pct")
+      return scale === "percent_fraction" || scale === "percent_points"
+        ? `${toPercentPoints(v, scale).toFixed(1)}%`
+        : formatPercent(v, 1);
     return v.toLocaleString();
   };
 }

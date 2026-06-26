@@ -1,5 +1,32 @@
 import { describe, expect, it } from "vitest";
-import { formatHeading, formatUiTitle, formatValue, toFilenameStem, toPercentPoints } from "./utils";
+import {
+  formatHeading,
+  formatPercent,
+  formatUiTitle,
+  formatValue,
+  normalisePercentValue,
+  toFilenameStem,
+  toPercentPoints,
+} from "./utils";
+
+describe("normalisePercentValue / formatPercent (unknown-scale fallback)", () => {
+  it("treats 0.56 and 56 both as 56%", () => {
+    expect(formatPercent(0.56)).toBe("56.0%");
+    expect(formatPercent(56)).toBe("56.0%");
+  });
+  it("never renders a 56% metric as 0.6%", () => {
+    expect(formatPercent(0.56)).not.toBe("0.6%");
+  });
+  it("returns N/A for non-numeric input", () => {
+    expect(formatPercent(undefined)).toBe("N/A");
+    expect(formatPercent("abc")).toBe("N/A");
+    expect(normalisePercentValue("abc")).toBeNull();
+  });
+  it("formatValue pct with no contract scale uses the heuristic", () => {
+    expect(formatValue(0.56, "pct")).toBe("56.0%");
+    expect(formatValue(56, "pct")).toBe("56.0%");
+  });
+});
 
 describe("formatHeading", () => {
   it("leaves curated prose titles untouched", () => {
