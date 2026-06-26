@@ -278,6 +278,37 @@ def run_accept_advice(args) -> int:
     return 0 if not summary.get("error") else 2
 
 
+def build_approve_non_blocking_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        description="Deterministically approve all NON-BLOCKING Gate 4 confirmations "
+        "for an MI-only demo/test run. Blocking decisions are never auto-approved. "
+        "Writes a real 34_target_first_decisions_approved.yaml with an audit trail."
+    )
+    p.add_argument("--project-dir", required=True,
+                   help="Existing onboarding output folder (holds 34_target_first_decisions.yaml).")
+    p.add_argument("--decisions", default="",
+                   help="34_target_first_decisions.yaml template (default: in project-dir).")
+    p.add_argument("--out", default="",
+                   help="Approved decisions output (default: "
+                        "<project-dir>/34_target_first_decisions_approved.yaml).")
+    p.add_argument("--approved-by", default="",
+                   help="Operator/automation name recorded on each auto-approved decision.")
+    return p
+
+
+def run_approve_non_blocking(args) -> int:
+    from engine.onboarding_agent.non_blocking_approval import (
+        approve_non_blocking_decisions, format_summary)
+    summary = approve_non_blocking_decisions(
+        args.project_dir,
+        decisions_path=(args.decisions or None),
+        out_path=(args.out or None),
+        approved_by=args.approved_by,
+    )
+    print(format_summary(summary))
+    return 0 if not summary.get("error") else 2
+
+
 def build_promote_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description="Dry-run Azure-ready promotion: build central tapes, lineage, "
@@ -396,7 +427,14 @@ def run_promote(args) -> int:
     print(f"Central pipeline tape: {tape_result['central_pipeline_tape_created']} "
           f"({tape_result['pipeline_count']} applications)")
     print(f"Conflicts: {tape_result['conflict_count']} · gaps: {tape_result['gap_count']}")
-    print(f"Readiness: {plan['readiness_status']}")
+    print(f"Readiness (overall pipeline handoff): {plan['readiness_status']}")
+    # Separated readiness — MI runtime is independent of governance approvals, so an
+    # MI-only run is not reported as wholesale "blocked" by non-blocking confirmations.
+    breakdown = plan.get("readiness_breakdown")
+    if breakdown:
+        from engine.onboarding_agent import readiness as _readiness_mod
+        for line in _readiness_mod.format_breakdown_lines(breakdown):
+            print(f"  {line}")
     print("Manifests:")
     for k in ("promotion_plan_path", "handoff_manifest_path", "readiness_path", "pipeline_trigger_path"):
         print(f"  - {plan[k]}")
@@ -609,6 +647,11 @@ def main(argv=None) -> int:
     if argv and argv[0] == "accept-target-advice":
         args = build_accept_advice_parser().parse_args(argv[1:])
         return run_accept_advice(args)
+
+    # Subcommand: approve-non-blocking-decisions (deterministic non-blocking Gate 4)
+    if argv and argv[0] == "approve-non-blocking-decisions":
+        args = build_approve_non_blocking_parser().parse_args(argv[1:])
+        return run_approve_non_blocking(args)
 
     # Subcommand: promote (Azure-ready dry-run handoff)
     if argv and argv[0] == "promote":
