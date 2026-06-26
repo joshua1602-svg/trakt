@@ -278,6 +278,32 @@ def run_accept_advice(args) -> int:
     return 0 if not summary.get("error") else 2
 
 
+def build_explain_blockers_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        description="Compact operator diagnostic: why is the MI pipeline blocked? "
+        "Summarises the blocking Gate 4 decisions, the source-pack composition and "
+        "the exact next action. Read-only; never mutates artefacts."
+    )
+    p.add_argument("--project-dir", required=True,
+                   help="Existing onboarding output folder (holds 28c_/01_ artefacts).")
+    p.add_argument("--output-root", default="",
+                   help="Consolidated output root, if separate from the project dir.")
+    p.add_argument("--json", action="store_true",
+                   help="Emit the structured blocker report as JSON instead of text.")
+    return p
+
+
+def run_explain_blockers(args) -> int:
+    import json as _json
+    from engine.onboarding_agent import blocker_diagnostics as bd
+    report = bd.load_blocker_report(args.project_dir, args.output_root or None)
+    if args.json:
+        print(_json.dumps(report, indent=2, default=str))
+    else:
+        print(bd.format_cli(report))
+    return 0
+
+
 def build_approve_non_blocking_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description="Deterministically approve all NON-BLOCKING Gate 4 confirmations "
@@ -652,6 +678,11 @@ def main(argv=None) -> int:
     if argv and argv[0] == "approve-non-blocking-decisions":
         args = build_approve_non_blocking_parser().parse_args(argv[1:])
         return run_approve_non_blocking(args)
+
+    # Subcommand: explain-blockers (compact operator "why blocked?" diagnostic)
+    if argv and argv[0] == "explain-blockers":
+        args = build_explain_blockers_parser().parse_args(argv[1:])
+        return run_explain_blockers(args)
 
     # Subcommand: promote (Azure-ready dry-run handoff)
     if argv and argv[0] == "promote":

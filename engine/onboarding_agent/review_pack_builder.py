@@ -47,6 +47,9 @@ tr:nth-child(even) td{background:#f8fafd}
 ul{margin:6px 0 6px 18px}
 li{margin:3px 0}
 .meta{font-size:12px;color:#5f6b7a;margin-bottom:8px}
+.whybox{border-top:4px solid #d23b3b}
+.whatnext{background:#f4f8ff;border:1px solid #d8e0ec;border-radius:6px;padding:10px 14px;margin-top:8px}
+.whatnext p{margin:6px 0 2px}
 """
 
 
@@ -602,6 +605,94 @@ def _decision_application_html(tf: dict) -> str:
             '<p class="meta">Approved Gate 4 decisions applied this run from '
             f'<code>{_esc(dlog.get("decisions_source",""))}</code>.</p>'
             + _table(["Metric", "Value"], [[_esc(a), _esc(b)] for a, b in rows]))
+
+
+def _why_blocked_html(tf: dict, project: OnboardingProject) -> str:
+    """Operator-first "Why blocked?" box — the FIRST screen of the pack.
+
+    Answers, without making the operator read the full matrix: what is blocked,
+    why, which file/domain is missing, the exact action to take, and whether the
+    central artifacts will render. Diagnostics only — reads 28c + the classified
+    source pack via :mod:`blocker_diagnostics`.
+    """
+    from . import blocker_diagnostics as bd
+
+    classifications = [getattr(i, "classification", "") for i in project.file_inventory]
+    dec = tf.get("decision")
+    if dec is None:
+        # No 28c — still show the source-pack composition so the operator gets the
+        # funded/pipeline picture, but do not assert a blocker we cannot see.
+        comp = bd.classify_source_pack(classifications)
+        warn = ("" if comp["funded_present"] else
+                '<div class="callout warn">No funded source files detected. Funded MI '
+                "central tape may not be renderable.</div>")
+        return ('<div class="callout warn">Compact decision queue (28c) not available '
+                "for this run — blocker status cannot be summarised.</div>"
+                + _pack_composition_html(comp) + warn)
+
+    report = bd.analyze_blockers(dec.get("rows", []), classifications)
+    comp = report["composition"]
+
+    if not report["is_blocked"]:
+        ok = ('<div class="callout pass"><strong>Not blocked.</strong> No blocking Gate 4 '
+              f"decision remains; {report['non_blocking_count']} non-blocking confirmation(s) "
+              "outstanding. Central artifacts can render.</div>")
+        return ok + _pack_composition_html(comp)
+
+    because = "".join(f"<li>{_esc(b)}</li>" for b in report["because"])
+    blocked_box = (f'<div class="callout block"><strong>BLOCKED because:</strong>'
+                   f"<ul>{because}</ul></div>")
+
+    actions_html = _what_to_do_next_html(report)
+
+    warn = ("" if comp["funded_present"] else
+            '<div class="callout warn"><strong>No funded source files detected.</strong> '
+            "Funded MI central tape may not be renderable.</div>")
+
+    render_line = (
+        '<p class="meta"><strong>Will artifacts render?</strong> '
+        + ("No — " + _esc(report["reason_not_rendered"]) if not report["central_artifacts_rendered"]
+           else "Yes.")
+        + " The central lender/pipeline tapes and the MI handoff only render once no "
+        "blocking Gate 4 decision remains.</p>")
+
+    return blocked_box + actions_html + _pack_composition_html(comp) + warn + render_line
+
+
+def _what_to_do_next_html(report: dict) -> str:
+    """The concrete A/B/C operator options for a blocked run."""
+    from . import blocker_diagnostics as bd
+    items = report["blocking_items"]
+    funded_field_block = any(
+        it["target_field"] in bd.FUNDED_BOOK_FIELDS for it in items)
+    fields = ", ".join(f"<code>{_esc(it['target_field'])}</code>" for it in items) or "the blocking field"
+    if funded_field_block and not report["composition"]["funded_present"]:
+        return f"""
+    <h4 class="chart-title">What to do next</h4>
+    <div class="whatnext">
+      <p><strong>Option A — Full MI:</strong> add funded source files under
+        <code>funding/YYYY-MM</code>:</p>
+      <ul><li>LoanExtract</li><li>PropertyExtract</li><li>Funder Principal / Interest</li></ul>
+      <p><strong>Option B — Pipeline-only:</strong> run pipeline-only onboarding, or mark the
+        funded-book field(s) ({fields}) as not applicable for pipeline-only mode.</p>
+      <p><strong>Option C — Manual mapping:</strong> map {fields} only if the operator
+        intentionally wants to use a pipeline date, e.g.
+        <code>Date Funds Released</code> / <code>Application Submitted Date</code> /
+        <code>KFI Submitted Date</code>.</p>
+    </div>"""
+    # Generic blocked case (not a funded-field/pipeline-only situation).
+    rows = "".join(
+        f"<li>{_esc(it['target_field'])}: {_esc(it['suggested_action'])}</li>" for it in items)
+    return f'<h4 class="chart-title">What to do next</h4><ul>{rows}</ul>'
+
+
+def _pack_composition_html(comp: dict) -> str:
+    """Source-pack composition table (counts by operator-facing file type)."""
+    from . import blocker_diagnostics as bd
+    rows = [[_esc(bd.PACK_LABELS[b]), _esc(comp["buckets"][b])]
+            for b in bd._DISPLAY_BUCKETS(comp)]
+    return ('<h4 class="chart-title">Source-pack composition</h4>'
+            + _table(["Classified file type", "Count"], rows))
 
 
 def _gate5_mi_handoff_status_html(tf: dict, n_block: int, n_decisions: int) -> str:
@@ -1340,7 +1431,10 @@ def build_review_pack(project: OnboardingProject, out_path: Path,
   <div class="card"><h2>6. Appendices / audit detail</h2>
     <div class="callout warn"><strong>Legacy / audit detail — superseded by target-first
       Gate 4 where 28c is available.</strong> These source-column diagnostics are NOT the
-      managed-service approval burden.</div>
+      managed-service approval burden. Collapsed by default — you do not need to read them
+      to understand what is blocked.</div>
+    <details><summary class="meta"><strong>Show full audit detail</strong> — target matrix,
+      residual source columns and source-column queue</summary>
     <h4 class="chart-title">Residual source fields</h4>{_residual_section_html(tf)}
     <h4 class="chart-title">Detailed source-column audit queue (33) — audit only, not the primary gate</h4>{_audit_queue_html(tf)}
     <h4 class="chart-title">Legacy / supporting gap questions</h4>{_legacy_note}{q_html}
@@ -1356,6 +1450,7 @@ def build_review_pack(project: OnboardingProject, out_path: Path,
     <h4 class="chart-title">Azure-ready run metadata</h4>{_azure_metadata_html(project)}
     <h4 class="chart-title">Detected reporting periods</h4>{periods_html}
     <h4 class="chart-title">Candidate keys</h4>{keys_html}
+    </details>
   </div>"""
     # Neutralise legacy red blocking styling in the appendix when 28c supersedes it.
     if tf_decision_present:
@@ -1372,6 +1467,13 @@ def build_review_pack(project: OnboardingProject, out_path: Path,
     <h1>Onboarding Review Pack</h1>
     <div class="sub">Client: {_esc(project.client_name)} &nbsp;·&nbsp; Project: {_esc(project.project_id)}
     &nbsp;·&nbsp; Mode: {_esc(mode_name)} &nbsp;·&nbsp; Status: {status_badge}</div>
+  </div>
+
+  <div class="card whybox"><h2>Why blocked? — operator summary</h2>
+    <p class="meta">Read this first. It answers what is blocked, why, which file/domain
+      is missing, the exact action to take, and whether artifacts will render — without
+      reading the full matrix or the source-column audit (both collapsed below).</p>
+    {_why_blocked_html(tf, project)}
   </div>
 
   <div class="card"><h2>1. Executive onboarding summary</h2>
