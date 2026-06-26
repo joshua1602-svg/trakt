@@ -73,12 +73,28 @@ export interface AgentResponse {
   spec?: Partial<MIQuerySpec>;
   /** Interpreter confidence 0–1 (retained for the Query Logic panel). */
   confidence?: number;
+  /** True when served from the client-side result cache (display-only flag). */
+  cacheHit?: boolean;
   error?: string;
 }
 
 /* ----------------------------- Chat model ---------------------------- */
 
 export type ChatRole = "user" | "assistant";
+
+/** A grounded follow-up suggestion offered after a successful result. */
+export type SuggestedActionKind =
+  | "refine"
+  | "drill"
+  | "compare"
+  | "change_measure"
+  | "change_dimension";
+
+export interface SuggestedAction {
+  label: string;
+  question: string;
+  kind: SuggestedActionKind;
+}
 
 export interface ArtifactRef {
   id: string;
@@ -103,4 +119,12 @@ export interface ChatMessage {
   spec?: Partial<MIQuerySpec>;
   /** Interpreter confidence 0–1, retained for the Query Logic panel. */
   confidence?: number;
+  /** True when a prior-context follow-up was resolved (shown in Query Logic). */
+  usedContext?: boolean;
+  /** Short note describing the context resolution (Query Logic only). */
+  contextNote?: string;
+  /** True when this result was served from the cache (Query Logic only). */
+  cacheHit?: boolean;
+  /** Grounded follow-up suggestions for this result. */
+  suggestions?: SuggestedAction[];
 }

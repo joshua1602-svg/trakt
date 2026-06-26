@@ -24,6 +24,13 @@ import type {
 } from "@/domain";
 import type { AgentClient } from "@/api";
 import { uid } from "@/lib/utils";
+import {
+  type AnalysisContext,
+  deriveContext,
+  looksLikeFollowUp,
+  resolveFollowUp,
+} from "@/lib/analysisContext";
+import { buildSuggestedActions } from "@/lib/suggestedActions";
 import { loadState, saveState } from "./persistence";
 
 function greeting(portfolioLabel: string, asOf: string | null): ChatMessage {
@@ -70,6 +77,10 @@ export interface Workspace {
   ask: (question: string) => void;
   /** Re-run an artifact's query with an added drill-through filter (backend). */
   drill: (artifact: Artifact, filters: Record<string, unknown>) => void;
+  /** Spec-level memory of the last successful query (null when inactive). */
+  context: AnalysisContext | null;
+  /** Clear the analysis context (back to standalone-question behaviour). */
+  clearContext: () => void;
   retryLast: () => void;
   togglePin: (id: string) => void;
   resetWorkspace: () => void;
@@ -197,8 +208,23 @@ export function useWorkspace(client: AgentClient): Workspace {
   );
   const [isWorking, setIsWorking] = useState(false);
 
+  // Analysis context: spec-level memory of the last successful query. A ref
+  // mirrors it so `ask` reads the latest value without being re-created.
+  const [context, setContextState] = useState<AnalysisContext | null>(null);
+  const contextRef = useRef<AnalysisContext | null>(null);
+  const setContext = useCallback((ctx: AnalysisContext | null) => {
+    contextRef.current = ctx;
+    setContextState(ctx);
+  }, []);
+  const clearContext = useCallback(() => setContext(null), [setContext]);
+
   const lastQuestion = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Switching portfolio / reporting run invalidates the prior analysis context.
+  useEffect(() => {
+    setContext(null);
+  }, [portfolioId, setContext]);
 
   useEffect(() => {
     saveState({
@@ -210,15 +236,29 @@ export function useWorkspace(client: AgentClient): Workspace {
   }, [selectedClientId, selectedRunId, messages, artifacts]);
 
   const runQuery = useCallback(
-    (question: string, pendingId: string) => {
+    (
+      params: {
+        /** Raw text the user typed (drives context + retry). */
+        display: string;
+        /** Question actually sent (may be a context-resolved rewrite). */
+        send: string;
+        filters?: Record<string, unknown>;
+        usedContext?: boolean;
+        contextNote?: string;
+        /** Retry once with the raw question if a resolved query fails. */
+        allowRawFallback?: boolean;
+      },
+      pendingId: string,
+    ) => {
       const request: AgentRequest = {
-        question,
+        question: params.send,
         portfolio,
         reporting,
         options: { parserMode: "deterministic" },
         // Tab-aware: the active view sets the dataset context (funded / pipeline
         // / forecast); explicit wording in the question overrides it backend-side.
         datasetContext: activeViewRef.current,
+        filters: params.filters,
       };
       const controller = new AbortController();
       abortRef.current = controller;
@@ -227,10 +267,18 @@ export function useWorkspace(client: AgentClient): Workspace {
       client
         .ask(request, controller.signal)
         .then((res) => {
+          // A context-resolved query that failed falls back ONCE to the raw
+          // question (the existing flow) so context never breaks a request.
+          if (!res.ok && params.allowRawFallback && params.send !== params.display) {
+            runQuery({ display: params.display, send: params.display, allowRawFallback: false }, pendingId);
+            return;
+          }
+          const primary = res.artifacts.find((a) => a.type === "chart" || a.type === "table");
+          const suggestions = res.ok && primary ? buildSuggestedActions(res.spec, primary) : undefined;
           setArtifacts((prev) => {
             const pinned = prev.filter((a) => a.pinned);
             const pinnedIds = new Set(pinned.map((a) => a.id));
-            const fresh = stampQuestion(res.artifacts.filter((a) => !pinnedIds.has(a.id)), question);
+            const fresh = stampQuestion(res.artifacts.filter((a) => !pinnedIds.has(a.id)), params.send);
             return [...pinned, ...fresh];
           });
           setMessages((prev) =>
@@ -248,11 +296,27 @@ export function useWorkspace(client: AgentClient): Workspace {
                     intent: res.intent,
                     spec: res.spec,
                     confidence: res.confidence,
+                    usedContext: params.usedContext,
+                    contextNote: params.usedContext ? params.contextNote : undefined,
+                    cacheHit: res.cacheHit,
+                    suggestions,
                     artifactRefs: res.artifacts.map((a) => ({ id: a.id, title: a.title, type: a.type })),
                   }
                 : m,
             ),
           );
+          // Update analysis context ONLY after a successful query.
+          if (res.ok) {
+            setContext(
+              deriveContext({
+                spec: res.spec,
+                question: params.display,
+                artifactId: primary?.id,
+                portfolioId: portfolio.id,
+                now: new Date().toISOString(),
+              }),
+            );
+          }
         })
         .catch((err: unknown) => {
           const message = err instanceof Error ? err.message : "The MI Agent could not complete this request.";
@@ -265,7 +329,7 @@ export function useWorkspace(client: AgentClient): Workspace {
           abortRef.current = null;
         });
     },
-    [client, portfolio, reporting],
+    [client, portfolio, reporting, setContext],
   );
 
   // Backend drill-through: re-run the artifact's originating query with an added
@@ -315,6 +379,27 @@ export function useWorkspace(client: AgentClient): Workspace {
       if (!text || isWorking) return;
       lastQuestion.current = text;
 
+      // Lightweight, guarded follow-up resolution: only when context is active
+      // AND the prompt looks like a follow-up. Any failure → send the raw text.
+      let send = text;
+      let filters: Record<string, unknown> | undefined;
+      let usedContext = false;
+      let contextNote: string | undefined;
+      try {
+        const ctx = contextRef.current;
+        if (ctx && looksLikeFollowUp(text, ctx)) {
+          const resolved = resolveFollowUp(text, ctx);
+          if (resolved) {
+            send = resolved.question;
+            filters = resolved.filters;
+            usedContext = true;
+            contextNote = resolved.note;
+          }
+        }
+      } catch {
+        send = text; // resolution failed → fall back to the raw question
+      }
+
       const userMsg: ChatMessage = {
         id: uid("msg"),
         role: "user",
@@ -330,7 +415,7 @@ export function useWorkspace(client: AgentClient): Workspace {
         createdAt: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, userMsg, pendingMsg]);
-      runQuery(text, pendingId);
+      runQuery({ display: text, send, filters, usedContext, contextNote, allowRawFallback: usedContext }, pendingId);
     },
     [isWorking, runQuery],
   );
@@ -342,7 +427,7 @@ export function useWorkspace(client: AgentClient): Workspace {
       ...prev,
       { id: pendingId, role: "assistant", content: "", pending: true, createdAt: new Date().toISOString() },
     ]);
-    runQuery(lastQuestion.current, pendingId);
+    runQuery({ display: lastQuestion.current, send: lastQuestion.current }, pendingId);
   }, [isWorking, runQuery]);
 
   const togglePin = useCallback((id: string) => {
@@ -363,7 +448,8 @@ export function useWorkspace(client: AgentClient): Workspace {
     abortRef.current?.abort();
     setMessages([greeting(activePortfolio?.label ?? "selected", activeRun?.reporting_date ?? null)]);
     setArtifacts([]);
-  }, [activePortfolio?.label, activeRun?.reporting_date]);
+    setContext(null);
+  }, [activePortfolio?.label, activeRun?.reporting_date, setContext]);
 
   return {
     portfolios,
@@ -385,6 +471,8 @@ export function useWorkspace(client: AgentClient): Workspace {
     setRun: setSelectedRunId,
     ask,
     drill,
+    context,
+    clearContext,
     retryLast,
     togglePin,
     resetWorkspace,

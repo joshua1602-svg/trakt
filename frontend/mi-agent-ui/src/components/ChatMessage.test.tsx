@@ -33,6 +33,25 @@ const answeredMessage: ChatMessageType = {
   diagnostics: ["resolved region via NUTS 2024"],
 };
 
+describe("ChatMessage suggestions", () => {
+  it("renders suggestion chips and dispatches the question on click", () => {
+    const onAsk = vi.fn();
+    const msg: ChatMessageType = {
+      id: "m3",
+      role: "assistant",
+      content: "Balance by region.",
+      createdAt: "2026-05-31T08:00:00Z",
+      suggestions: [
+        { label: "Split by Broker", question: "Balance by Broker", kind: "change_dimension" },
+        { label: "Drill into London", question: "only London", kind: "drill" },
+      ],
+    };
+    render(<ChatMessage message={msg} onAsk={onAsk} />);
+    fireEvent.click(screen.getByRole("button", { name: "Split by Broker" }));
+    expect(onAsk).toHaveBeenCalledWith("Balance by Broker");
+  });
+});
+
 describe("ChatMessage clean default view", () => {
   it("hides interpretation and technical details until Query logic is expanded", () => {
     render(<ChatMessage message={answeredMessage} />);

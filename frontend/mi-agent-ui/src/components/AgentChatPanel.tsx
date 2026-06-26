@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { CornerDownLeft, Sparkles } from "lucide-react";
+import { CornerDownLeft, History, Sparkles, X } from "lucide-react";
+import type { AnalysisContext } from "@/lib/analysisContext";
+import { contextSummary } from "@/lib/analysisContext";
 import type { ChatMessage as ChatMessageType } from "@/domain";
 import { ChatMessage } from "@/components/ChatMessage";
 import { PromptSuggestions } from "@/components/PromptSuggestions";
@@ -12,6 +14,8 @@ export function AgentChatPanel({
   onSubmit,
   onOpenArtifact,
   onRetry,
+  context,
+  onClearContext,
 }: {
   messages: ChatMessageType[];
   isWorking: boolean;
@@ -19,6 +23,8 @@ export function AgentChatPanel({
   onSubmit: (text: string) => void;
   onOpenArtifact: (id: string) => void;
   onRetry: () => void;
+  context?: AnalysisContext | null;
+  onClearContext?: () => void;
 }) {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -62,7 +68,7 @@ export function AgentChatPanel({
 
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
         {messages.map((m) => (
-          <ChatMessage key={m.id} message={m} onOpenArtifact={onOpenArtifact} onRetry={onRetry} />
+          <ChatMessage key={m.id} message={m} onOpenArtifact={onOpenArtifact} onRetry={onRetry} onAsk={onSubmit} />
         ))}
 
         {messages.length <= 1 && (
@@ -71,6 +77,25 @@ export function AgentChatPanel({
           </div>
         )}
       </div>
+
+      {contextSummary(context) && (
+        <div className="flex items-center gap-1.5 border-t border-[var(--color-line)] bg-navy-900/40 px-3 py-1.5">
+          <History size={12} className="shrink-0 text-peri-300" />
+          <span className="truncate text-[11px] text-ink-400">
+            <span className="text-ink-500">Context:</span> {contextSummary(context)}
+          </span>
+          {onClearContext && (
+            <button
+              type="button"
+              onClick={onClearContext}
+              aria-label="Clear context"
+              className="ml-auto inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] text-ink-500 transition-colors hover:text-ink-200"
+            >
+              <X size={11} /> Clear
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="border-t border-[var(--color-line)] p-3">
         <div className="rounded-xl border border-[var(--color-line)] bg-navy-950/60 focus-within:border-peri-400/50">
