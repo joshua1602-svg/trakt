@@ -205,5 +205,11 @@ def historical_model_evidence(model: Optional[Dict[str, Any]],
         "stagesUsingConfigFallback": m.get("stagesUsingConfigFallback", []),
         "excludedStageCounts": m.get("excludedStageCounts", {}),
         "completionProbabilityBasis": completion_probability_basis,
+        # Dedup provenance: distinguish files scanned from unique extracts used so a
+        # weekly file counted in two run folders is never double-counted as evidence.
+        "sourceFilesScanned": m.get("sourceFilesScanned", m.get("weeklyFilesUsed", 0)),
+        "uniqueWeeklyExtractsUsed": m.get("uniqueWeeklyExtractsUsed", m.get("weeklyFilesUsed", 0)),
+        "duplicatesExcluded": m.get("duplicatesExcluded", 0),
+        "primarySourcePreference": m.get("primarySourcePreference"),
         "available": bool(m.get("available")),
     }

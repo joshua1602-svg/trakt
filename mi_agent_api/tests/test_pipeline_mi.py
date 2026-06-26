@@ -71,23 +71,26 @@ class TestPipelineSourceDiscovery(unittest.TestCase):
             self.assertGreater(s["row_count"], 0)
 
     def test_resolve_latest_source(self):
-        """The November scope selects the LATEST weekly extract (2025-12-01) without
-        pretending that is the funded reporting date — folder, extract, as-of and
-        run id are distinct."""
+        """The current snapshot is the LATEST weekly extract (2025-12-01) across ALL
+        folders — without pretending that is the funded reporting date. Folder,
+        extract, as-of and run id stay distinct."""
         scope = pc.resolve_pipeline_source(_FIXTURE_PACK, "client_001", "mi_2025_11")
-        # Selected source scope is the November pipeline folder.
-        self.assertEqual(scope["pipeline_source_folder_date"], "2025-11-01")
-        self.assertTrue(scope["pipeline_source_folder"].endswith("pipeline/2025-11-01"))
         # Selected file is the latest weekly extract (Dec 1), and as-of follows it.
         self.assertIn("2025_12_01", Path(scope["source_file"]).name)
         self.assertEqual(scope["pipeline_extract_date"], "2025-12-01")
         self.assertEqual(scope["pipeline_as_of_date"], "2025-12-01")
+        self.assertEqual(scope["current_pipeline_snapshot_date"], "2025-12-01")
+        self.assertIn("2025_12_01", scope["current_pipeline_source_file"])
         # Funded/run metadata stays November — NOT 2025-12-01.
         self.assertEqual(scope["run_id"], "mi_2025_11")
         # No field called simply `reporting_date`.
         self.assertNotIn("reporting_date", scope)
-        # The scope tracks both weekly files in the November folder.
-        self.assertEqual(len(scope["weekly_files"]), 2)
+        # The historical window covers every unique extract up to the current snapshot
+        # (Oct, Nov, Dec) — distinct from the current snapshot date.
+        self.assertEqual(scope["historical_observation_window_start"], "2025-10-01")
+        self.assertEqual(scope["historical_observation_window_end"], "2025-12-01")
+        self.assertEqual(scope["unique_weekly_extracts_used"], 3)
+        self.assertEqual(len(scope["weekly_files"]), 3)
 
 
 # --------------------------------------------------------------------------- #

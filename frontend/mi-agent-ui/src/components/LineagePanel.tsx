@@ -22,19 +22,31 @@ export function LineagePanel({ lineage }: { lineage: ViewLineage | null | undefi
   const basisLabel = (lineage.completionProbabilityBasis ?? ev?.completionProbabilityBasis ?? "")
     .replace(/_/g, " ");
 
-  // Three distinct dates: funded reporting, pipeline as-of, observation window.
+  // Distinct concepts: funded reporting date, the CURRENT pipeline snapshot
+  // (latest weekly extract + its file), and the historical observation window —
+  // never collapsing the source-folder date into the as-of date.
+  const snapshotDate = lineage.currentPipelineSnapshotDate ?? lineage.pipelineAsOfDate;
+  const windowStart = lineage.historicalObservationWindowStart ?? lineage.observationWindowStart;
+  const windowEnd = lineage.historicalObservationWindowEnd ?? lineage.observationWindowEnd;
+  const uniqueUsed = lineage.uniqueWeeklyExtractsUsed ?? ev?.uniqueWeeklyExtractsUsed;
+  const scanned = lineage.sourceFilesScanned ?? ev?.sourceFilesScanned;
   const rows: [string, string | null | undefined][] = [
     ["Source", lineage.source],
     ["Metric", lineage.metric],
     ["Weighted metric", lineage.weightedMetric],
     ["Forecast basis", lineage.formula],
     ["Funded reporting date", lineage.fundedReportingDate],
-    ["Pipeline snapshot as-of", lineage.pipelineAsOfDate],
+    ["Pipeline snapshot as-of", snapshotDate],
+    ["Current source file", lineage.currentPipelineSourceFile],
     ["Pipeline source folder", lineage.pipelineSourceFolderDate],
     [
-      "Observation window",
-      lineage.observationWindowStart
-        ? `${lineage.observationWindowStart} to ${lineage.observationWindowEnd ?? "—"}`
+      "Historical window",
+      windowStart ? `${windowStart} to ${windowEnd ?? "—"}` : null,
+    ],
+    [
+      "Unique weekly extracts used",
+      uniqueUsed != null
+        ? `${fmt(uniqueUsed)}${scanned != null ? ` of ${fmt(scanned)} scanned` : ""}`
         : null,
     ],
     ["Probability basis", basisLabel || null],
@@ -62,11 +74,16 @@ export function LineagePanel({ lineage }: { lineage: ViewLineage | null | undefi
         <div className="mt-1.5 rounded-md border border-[var(--color-line-soft)] bg-navy-850/50 px-2.5 py-1.5 text-[11px] text-ink-400">
           <div className="font-medium text-ink-300">Completion model evidence</div>
           <div className="mt-0.5 tabular-nums">
-            {fmt(ev.weeklyFilesUsed)} weekly files · {fmt(ev.historicalRowsUsed)} historical rows ·{" "}
-            {fmt(ev.trackedCaseCount)} tracked cases · {fmt(ev.observedCompletionCount)} observed completions
+            {fmt(ev.uniqueWeeklyExtractsUsed ?? ev.weeklyFilesUsed)} unique weekly extracts ·{" "}
+            {fmt(ev.historicalRowsUsed)} historical rows · {fmt(ev.trackedCaseCount)} tracked cases ·{" "}
+            {fmt(ev.observedCompletionCount)} observed completions
+            {ev.duplicatesExcluded != null && ev.duplicatesExcluded > 0
+              ? ` · ${fmt(ev.duplicatesExcluded)} duplicate${ev.duplicatesExcluded > 1 ? "s" : ""} excluded`
+              : ""}
           </div>
           <div className="mt-0.5 text-ink-500">
-            Observation window: {ev.observationWindowStart ?? "—"} to {ev.observationWindowEnd ?? "—"}
+            Historical window: {ev.observationWindowStart ?? "—"} to {ev.observationWindowEnd ?? "—"}
+            {ev.sourceFilesScanned != null ? ` · ${fmt(ev.sourceFilesScanned)} files scanned` : ""}
             {basisLabel ? ` · Basis: ${basisLabel}` : ""}
             {ev.stableIdentifierUsed ? ` · Identifier: ${ev.stableIdentifierUsed}` : ""}
           </div>

@@ -82,6 +82,17 @@ export interface PipelineSnapshot {
   pipelineSourceFolderDate: string | null;
   pipelineSourceFolder?: string | null;
   sourceFile?: string | null;
+  /** CURRENT pipeline snapshot — the latest weekly extract — kept DISTINCT from
+   * the source-folder date and from the historical observation window. */
+  currentPipelineSnapshotDate?: string | null;
+  currentPipelineSourceFile?: string | null;
+  historicalObservationWindowStart?: string | null;
+  historicalObservationWindowEnd?: string | null;
+  uniqueWeeklyExtractsUsed?: number | null;
+  sourceFilesScanned?: number | null;
+  duplicatesExcluded?: number | null;
+  primarySourcePreference?: string | null;
+  sourceFoldersIncluded?: string[];
   pipelineRowCount: number;
   pipelineAmount: number | null;
   expectedFundedAmount: number | null;
@@ -208,6 +219,11 @@ export interface HistoricalModelEvidence {
   stagesUsingConfigFallback: string[];
   excludedStageCounts: Record<string, number>;
   completionProbabilityBasis: string | null;
+  /** Dedup provenance — files scanned vs unique weekly extracts actually used. */
+  sourceFilesScanned?: number;
+  uniqueWeeklyExtractsUsed?: number;
+  duplicatesExcluded?: number;
+  primarySourcePreference?: string | null;
   available: boolean;
 }
 
@@ -221,6 +237,12 @@ export interface ViewLineage {
   fundedReportingDate?: string | null;
   pipelineAsOfDate?: string | null;
   pipelineSourceFolderDate?: string | null;
+  currentPipelineSnapshotDate?: string | null;
+  currentPipelineSourceFile?: string | null;
+  historicalObservationWindowStart?: string | null;
+  historicalObservationWindowEnd?: string | null;
+  uniqueWeeklyExtractsUsed?: number | null;
+  sourceFilesScanned?: number | null;
   observationWindowStart?: string | null;
   observationWindowEnd?: string | null;
   completionProbabilityBasis?: string | null;

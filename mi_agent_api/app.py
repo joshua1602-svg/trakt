@@ -378,6 +378,8 @@ def forecast_snapshot(portfolioId: Optional[str] = None,
         "forecast", funded_reporting_date=funded_reporting_date,
         pipeline_as_of_date=(source or {}).get("pipeline_as_of_date"),
         pipeline_source_folder_date=(source or {}).get("pipeline_source_folder_date"),
+        current_pipeline_snapshot_date=(source or {}).get("current_pipeline_snapshot_date"),
+        current_pipeline_source_file=(source or {}).get("current_pipeline_source_file"),
         completion_probability_basis=basis, historical_model_evidence=evidence)
     return envelope
 
@@ -423,6 +425,8 @@ def workspace_view(portfolioId: Optional[str] = None,
             "pipeline": workspace_mod.lineage_for(
                 "pipeline", pipeline_as_of_date=pipeline.get("pipelineAsOfDate"),
                 pipeline_source_folder_date=pipeline.get("pipelineSourceFolderDate"),
+                current_pipeline_snapshot_date=pipeline.get("currentPipelineSnapshotDate"),
+                current_pipeline_source_file=pipeline.get("currentPipelineSourceFile"),
                 completion_probability_basis=pipeline.get("completionProbabilityBasis"),
                 source_file=pipeline.get("sourceFile"),
                 historical_model_evidence=pipeline.get("historicalModelEvidence"),

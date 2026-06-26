@@ -152,12 +152,14 @@ def lineage_for(view: str, *, funded_reporting_date: Optional[str] = None,
                 completion_probability_basis: Optional[str] = None,
                 source_file: Optional[str] = None,
                 pipeline_source_folder_date: Optional[str] = None,
+                current_pipeline_snapshot_date: Optional[str] = None,
+                current_pipeline_source_file: Optional[str] = None,
                 historical_model_evidence: Optional[Dict[str, Any]] = None
                 ) -> Dict[str, Any]:
     """Per-view "How calculated" lineage. The pipeline / forecast views carry the
-    historical completion-model evidence and keep THREE dates distinct: the funded
-    reporting date, the current pipeline snapshot as-of date, and the historical
-    probability observation window (start/end)."""
+    historical completion-model evidence and keep distinct concepts separate: the
+    funded reporting date, the CURRENT pipeline snapshot (latest weekly extract +
+    its file), and the historical probability observation window (start/end)."""
     if view == "funded":
         return {
             "view": "funded",
@@ -167,22 +169,35 @@ def lineage_for(view: str, *, funded_reporting_date: Optional[str] = None,
             "explanation": "Funded book actuals from the governed central lender tape.",
         }
     evidence = historical_model_evidence or {}
+    # The current snapshot date is the latest weekly extract; fall back to the as-of.
+    snapshot_date = current_pipeline_snapshot_date or pipeline_as_of_date
+    # Observation window: prefer the dedup inventory window, else the model evidence.
     window_start = evidence.get("observationWindowStart")
     window_end = evidence.get("observationWindowEnd")
+    common = {
+        "completionProbabilityBasis": completion_probability_basis,
+        # Current pipeline snapshot (latest weekly extract) — distinct from window.
+        "currentPipelineSnapshotDate": snapshot_date,
+        "currentPipelineSourceFile": current_pipeline_source_file
+            or (source_file.split("/")[-1] if source_file else None),
+        "pipelineSourceFolderDate": pipeline_source_folder_date,
+        # Historical probability observation window — distinct from the as-of date.
+        "historicalObservationWindowStart": window_start,
+        "historicalObservationWindowEnd": window_end,
+        "observationWindowStart": window_start,
+        "observationWindowEnd": window_end,
+        "uniqueWeeklyExtractsUsed": evidence.get("uniqueWeeklyExtractsUsed"),
+        "sourceFilesScanned": evidence.get("sourceFilesScanned"),
+        "historicalModelEvidence": evidence,
+    }
     if view == "pipeline":
         return {
             "view": "pipeline",
             "source": source_file or "governed weekly pipeline files",
             "metric": "expected_funded_amount",
             "weightedMetric": "expected_funded_amount × completion_probability",
-            # Current pipeline snapshot date (latest weekly extract).
-            "pipelineAsOfDate": pipeline_as_of_date,
-            "pipelineSourceFolderDate": pipeline_source_folder_date,
-            "completionProbabilityBasis": completion_probability_basis,
-            # Historical probability observation window — distinct from the as-of date.
-            "observationWindowStart": window_start,
-            "observationWindowEnd": window_end,
-            "historicalModelEvidence": evidence,
+            "pipelineAsOfDate": snapshot_date,
+            **common,
             "explanation": "Origination pipeline (pre-funded), governed weekly extract; "
                            "completion probabilities from the historical weekly-snapshot model.",
         }
@@ -191,11 +206,7 @@ def lineage_for(view: str, *, funded_reporting_date: Optional[str] = None,
         "metric": "forecast_funded_balance",
         "formula": "forecast funded balance = funded balance + Σ(expected_funded_amount × completion_probability)",
         "fundedReportingDate": funded_reporting_date,
-        "pipelineAsOfDate": pipeline_as_of_date,
-        "pipelineSourceFolderDate": pipeline_source_folder_date,
-        "completionProbabilityBasis": completion_probability_basis,
-        "observationWindowStart": window_start,
-        "observationWindowEnd": window_end,
-        "historicalModelEvidence": evidence,
+        "pipelineAsOfDate": snapshot_date,
+        **common,
         "explanation": "Deterministic bridge: funded actuals + probability-weighted pipeline.",
     }
