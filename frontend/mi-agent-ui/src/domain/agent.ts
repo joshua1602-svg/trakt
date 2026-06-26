@@ -66,6 +66,8 @@ export interface AgentResponse {
   /** Engineer-facing technical diagnostics, hidden behind a disclosure. */
   diagnostics?: string[];
   spec?: Partial<MIQuerySpec>;
+  /** Interpreter confidence 0–1 (retained for the Query Logic panel). */
+  confidence?: number;
   error?: string;
 }
 
@@ -92,4 +94,8 @@ export interface ChatMessage {
   warnings?: string[];
   diagnostics?: string[];
   intent?: Intent;
+  /** Parsed query spec, retained for the collapsed Query Logic panel. */
+  spec?: Partial<MIQuerySpec>;
+  /** Interpreter confidence 0–1, retained for the Query Logic panel. */
+  confidence?: number;
 }

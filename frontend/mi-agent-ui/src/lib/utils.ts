@@ -29,6 +29,58 @@ export function formatSignedPct(value: number, dp = 1): string {
   return `${value >= 0 ? "+" : ""}${value.toFixed(dp)}%`;
 }
 
+/** Domain acronyms that must stay fully capitalised in generated UI titles. */
+const TITLE_ACRONYMS: Record<string, string> = {
+  ltv: "LTV",
+  wa: "WA",
+  nneg: "NNEG",
+  abs: "ABS",
+  spv: "SPV",
+  uk: "UK",
+  id: "ID",
+  irr: "IRR",
+  moic: "MOIC",
+  dscr: "DSCR",
+  cpr: "CPR",
+  rag: "RAG",
+  kpi: "KPI",
+  ifrs9: "IFRS9",
+  esma: "ESMA",
+  nuts: "NUTS",
+};
+
+/**
+ * Polish a raw measure/dimension key into a presentation title.
+ * `average_ltv by region by age_bucket` → `Average LTV By Region By Age Bucket`.
+ * Snake_case becomes spaced Title Case; known acronyms stay capitalised.
+ */
+export function formatUiTitle(input?: string): string {
+  if (!input) return "";
+  return input
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .map((word) => {
+      const lower = word.toLowerCase();
+      return TITLE_ACRONYMS[lower] ?? lower.charAt(0).toUpperCase() + lower.slice(1);
+    })
+    .join(" ");
+}
+
+/**
+ * Slugify a title into a download-filename stem (snake_case, ascii-safe).
+ * `Average LTV By Region` → `average_ltv_by_region`.
+ */
+export function toFilenameStem(input?: string): string {
+  if (!input) return "export";
+  const stem = input
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return stem || "export";
+}
+
 /** Short, deterministic id for mock records. */
 export function uid(prefix = "id"): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;

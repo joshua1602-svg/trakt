@@ -238,6 +238,8 @@ export function useWorkspace(client: AgentClient): Workspace {
                     warnings: res.warnings,
                     diagnostics: res.diagnostics,
                     intent: res.intent,
+                    spec: res.spec,
+                    confidence: res.confidence,
                     artifactRefs: res.artifacts.map((a) => ({ id: a.id, title: a.title, type: a.type })),
                   }
                 : m,
