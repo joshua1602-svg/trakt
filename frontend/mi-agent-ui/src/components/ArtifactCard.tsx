@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Activity,
   BarChart3,
@@ -18,6 +18,7 @@ import { Badge, Card, IconButton } from "@/components/ui";
 import { cn, formatHeading, formatTime, toFilenameStem } from "@/lib/utils";
 import { ArtifactRenderer } from "@/components/artifacts/ArtifactRenderer";
 import { DrillThroughPanel } from "@/components/DrillThroughPanel";
+import { ExportMenu } from "@/components/ExportMenu";
 import { isChartArtifact, isTableArtifact } from "@/domain";
 
 const KIND_ICON: Record<ArtifactType, typeof LayoutGrid> = {
@@ -39,7 +40,9 @@ export function ArtifactCard({
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [copied, setCopied] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const Icon = KIND_ICON[artifact.type];
+  const exportable = isChartArtifact(artifact) || isTableArtifact(artifact);
 
   const copy = async () => {
     try {
@@ -95,9 +98,13 @@ export function ArtifactCard({
           <IconButton label={copied ? "Copied" : "Copy data"} onClick={copy}>
             {copied ? <Check size={14} className="text-mint-400" /> : <Copy size={14} />}
           </IconButton>
-          <IconButton label="Download JSON" onClick={download}>
-            <Download size={14} />
-          </IconButton>
+          {exportable ? (
+            <ExportMenu artifact={artifact} bodyRef={bodyRef} onJson={download} />
+          ) : (
+            <IconButton label="Download JSON" onClick={download}>
+              <Download size={14} />
+            </IconButton>
+          )}
           <IconButton label={collapsed ? "Expand" : "Collapse"} onClick={() => setCollapsed((c) => !c)}>
             <ChevronDown size={14} className={cn("transition-transform", collapsed && "-rotate-90")} />
           </IconButton>
@@ -105,7 +112,7 @@ export function ArtifactCard({
       </div>
 
       {!collapsed && (
-        <div className="p-4">
+        <div className="p-4" ref={bodyRef}>
           <ArtifactRenderer artifact={artifact} />
           {(isChartArtifact(artifact) || isTableArtifact(artifact)) && (
             <DrillThroughPanel artifact={artifact} />
