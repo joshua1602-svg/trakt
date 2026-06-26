@@ -32,6 +32,7 @@ from .data_source import (
 )
 from . import snapshots as snapshots_mod
 from . import pipeline_contract as pipeline_mod
+from . import pipeline_history
 from . import forecast_bridge as forecast_mod
 from . import workspace as workspace_mod
 
@@ -368,10 +369,16 @@ def forecast_snapshot(portfolioId: Optional[str] = None,
     # Forecast-by-dimension breakdowns (funded actual + weighted pipeline), derived
     # by aggregate composition — never a row merge.
     envelope["forecastBreakdowns"] = workspace_mod.forecast_breakdowns(funded_df, pipeline_df)
+    basis = (pipeline_report or {}).get("completion_probability_basis")
+    evidence = pipeline_history.historical_model_evidence(
+        (pipeline_report or {}).get("historical_completion_model"), basis)
+    envelope["historicalModelEvidence"] = evidence
+    envelope["completionProbabilityBasis"] = basis
     envelope["lineage"] = workspace_mod.lineage_for(
         "forecast", funded_reporting_date=funded_reporting_date,
         pipeline_as_of_date=(source or {}).get("pipeline_as_of_date"),
-        completion_probability_basis=(pipeline_report or {}).get("completion_probability_basis"))
+        pipeline_source_folder_date=(source or {}).get("pipeline_source_folder_date"),
+        completion_probability_basis=basis, historical_model_evidence=evidence)
     return envelope
 
 
@@ -415,8 +422,11 @@ def workspace_view(portfolioId: Optional[str] = None,
                 "funded", funded_reporting_date=(funded.get("portfolio") or {}).get("reporting_date")),
             "pipeline": workspace_mod.lineage_for(
                 "pipeline", pipeline_as_of_date=pipeline.get("pipelineAsOfDate"),
+                pipeline_source_folder_date=pipeline.get("pipelineSourceFolderDate"),
                 completion_probability_basis=pipeline.get("completionProbabilityBasis"),
-                source_file=pipeline.get("sourceFile")) if pipe_ok else workspace_mod.lineage_for("pipeline"),
+                source_file=pipeline.get("sourceFile"),
+                historical_model_evidence=pipeline.get("historicalModelEvidence"),
+            ) if pipe_ok else workspace_mod.lineage_for("pipeline"),
             "forecast": forecast.get("lineage", workspace_mod.lineage_for("forecast")),
         },
     }

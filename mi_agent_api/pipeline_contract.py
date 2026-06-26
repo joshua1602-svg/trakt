@@ -35,6 +35,7 @@ from .pipeline_prep import (
     forecast_readiness,
     prepare_pipeline_mi_dataset,
 )
+from . import pipeline_history as _history
 
 _CENTRAL_PIPELINE_TAPE = "18a_central_pipeline_tape.csv"
 _PREPARED_PIPELINE_NAME = "20_prepared_pipeline_mi.csv"
@@ -205,12 +206,29 @@ def discover_pipeline_sources(root: str | os.PathLike,
     return found
 
 
+# Funded/funder source files that may be (mis)materialised under output/pipeline/
+# but are NOT governed pipeline/KFI sources — never counted for the model.
+_NON_PIPELINE_NAME_RE = re.compile(
+    r"(funder|principal[\s_]*and[\s_]*interest|central[\s_]*lender|loan[\s_]*extract|"
+    r"funded[\s_]*tape)", re.IGNORECASE)
+
+
+def _is_governed_pipeline_file(path: Path) -> bool:
+    """A governed pipeline/KFI source (not a funded/funder principal file)."""
+    name = path.name
+    if _NON_PIPELINE_NAME_RE.search(name):
+        return False
+    return True
+
+
 def _collect_files(root: Path, globs: List[str]) -> List[Path]:
     """Governed pipeline source files under ``root``.
 
     Raw onboarding INPUT copies (under an ``input/`` path) are skipped — only the
     governed ``output/pipeline/`` materialised sources (or a flat fixture pack) are
-    discovered, so a promoted run does not surface its own input twice.
+    discovered, so a promoted run does not surface its own input twice. Funded /
+    funder principal files that may sit alongside pipeline files are excluded by
+    name so they are never counted as weekly pipeline model evidence.
     """
     seen: set = set()
     out: List[Path] = []
@@ -224,6 +242,8 @@ def _collect_files(root: Path, globs: List[str]) -> List[Path]:
                 rel_parts = {p.lower() for p in path.parts[:-1]}
             if "input" in rel_parts:
                 continue  # raw onboarding input — not a governed pipeline source
+            if not _is_governed_pipeline_file(path):
+                continue  # funded/funder file — not a governed pipeline source
             seen.add(path)
             out.append(path)
     return out
@@ -443,6 +463,9 @@ def compute_pipeline_snapshot(
         "completionProbabilityBasis": report.get("completion_probability_basis"),
         "completionProbabilitySummary": report.get("completion_probability_summary", {}),
         "historicalCompletionModel": report.get("historical_completion_model", {}),
+        "historicalModelEvidence": _history.historical_model_evidence(
+            report.get("historical_completion_model"),
+            report.get("completion_probability_basis")),
         "stageBreakdown": _stage_breakdown(df),
         "expectedCompletionBreakdown": _expected_completion_breakdown(df),
         "brokerBreakdown": cap_breakdown(broker_full, 10),

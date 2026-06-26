@@ -77,6 +77,7 @@ export interface PipelineSnapshot {
   completionProbabilityBasis?: string;
   completionProbabilitySummary?: Record<string, unknown>;
   historicalCompletionModel?: Record<string, unknown>;
+  historicalModelEvidence?: HistoricalModelEvidence;
   stageBreakdown: PipelineStageBucket[];
   expectedCompletionBreakdown: ExpectedCompletionBucket[];
   /** Capped to top 10 (+ Other) for the landing-page visual. */
@@ -174,6 +175,23 @@ export interface ForecastBreakdowns {
   byLtvBucketCapped?: DimensionBucket[];
 }
 
+/** Evidence for the historical completion-rate model (weekly snapshots used). */
+export interface HistoricalModelEvidence {
+  weeklyFilesUsed: number;
+  weeklyFileNames: string[];
+  observationWindowStart: string | null;
+  observationWindowEnd: string | null;
+  historicalRowsUsed: number;
+  trackedCaseCount: number;
+  observedCompletionCount: number;
+  stableIdentifierUsed: string | null;
+  stagesUsingHistoricalRates: string[];
+  stagesUsingConfigFallback: string[];
+  excludedStageCounts: Record<string, number>;
+  completionProbabilityBasis: string | null;
+  available: boolean;
+}
+
 /** "How calculated" lineage for a view. */
 export interface ViewLineage {
   view: string;
@@ -183,7 +201,11 @@ export interface ViewLineage {
   formula?: string;
   fundedReportingDate?: string | null;
   pipelineAsOfDate?: string | null;
+  pipelineSourceFolderDate?: string | null;
+  observationWindowStart?: string | null;
+  observationWindowEnd?: string | null;
   completionProbabilityBasis?: string | null;
+  historicalModelEvidence?: HistoricalModelEvidence;
   explanation?: string;
   [k: string]: unknown;
 }

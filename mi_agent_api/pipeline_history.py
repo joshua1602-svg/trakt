@@ -60,6 +60,9 @@ def build_historical_completion_model(
     timelines: Dict[str, Dict[str, Any]] = {}
     snapshots_used = 0
     dates: List[str] = []
+    file_names: List[str] = []
+    historical_rows = 0
+    stable_identifier: Optional[str] = None
 
     for entry in entries:
         df = _read(Path(entry.get("source_file", "")))
@@ -70,6 +73,10 @@ def build_historical_completion_model(
         if csf.empty:
             continue
         snapshots_used += 1
+        historical_rows += int(len(csf))
+        file_names.append(Path(entry.get("source_file", "")).name)
+        if stable_identifier is None:
+            stable_identifier = _identifier_used(df)
         if extract_date:
             dates.append(extract_date)
         for _, row in csf.iterrows():
@@ -128,11 +135,31 @@ def build_historical_completion_model(
         if sufficient and rate is not None:
             stage_rates[stage] = rate
 
+    # Evidence aggregates.
+    observed_completion_count = sum(1 for t in timelines.values() if COMPLETED in t["ever"])
+    excluded_stage_counts: Dict[str, int] = {}
+    for term in ("WITHDRAWN", "UNKNOWN"):
+        c = sum(1 for t in timelines.values() if term in t["ever"])
+        if c:
+            excluded_stage_counts[term] = c
+    stages_historical = sorted(stage_rates.keys())
+    stages_config_fallback = sorted(s for s in ACTIVE_STAGES
+                                    if observed[s] > 0 and s not in stage_rates)
+
     return {
         "available": bool(stage_rates),
         "minObservations": int(min_observations),
         "snapshotCount": snapshots_used,
+        "weeklyFilesUsed": snapshots_used,
+        "weeklyFileNames": file_names,
+        "historicalRowsUsed": historical_rows,
         "casesTracked": len(timelines),
+        "trackedCaseCount": len(timelines),
+        "observedCompletionCount": observed_completion_count,
+        "stableIdentifierUsed": stable_identifier,
+        "stagesUsingHistoricalRates": stages_historical,
+        "stagesUsingConfigFallback": stages_config_fallback,
+        "excludedStageCounts": excluded_stage_counts,
         "historicalCompletionRateByStage": rate_by_stage,
         "historicalCompletionTimingByStage": timing_by_stage,
         "historicalCompletionRateWindow": {
@@ -140,5 +167,43 @@ def build_historical_completion_model(
             "toDate": max(dates) if dates else None,
             "snapshotCount": snapshots_used,
         },
+        "observationWindowStart": min(dates) if dates else None,
+        "observationWindowEnd": max(dates) if dates else None,
         "stage_rates": stage_rates,
+    }
+
+
+def _identifier_used(df: pd.DataFrame) -> Optional[str]:
+    """Which stable identifier the model tracks cases by (KFI / account number)."""
+    from .pipeline_prep import resolve_source_columns
+    mapping, _ = resolve_source_columns(df)
+    for fld, label in (("pipeline_case_identifier", "account/case number"),
+                       ("application_identifier", "KFI/application reference")):
+        col = mapping.get(fld)
+        if col:
+            return f"{fld} ({col})"
+    return None
+
+
+def historical_model_evidence(model: Optional[Dict[str, Any]],
+                              completion_probability_basis: Optional[str] = None
+                              ) -> Dict[str, Any]:
+    """Flatten the historical model into the API ``historicalModelEvidence`` block
+    (the explicit evidence the UI lineage shows). Safe for a missing/empty model."""
+    m = model or {}
+    window = m.get("historicalCompletionRateWindow", {}) or {}
+    return {
+        "weeklyFilesUsed": m.get("weeklyFilesUsed", 0),
+        "weeklyFileNames": m.get("weeklyFileNames", []),
+        "observationWindowStart": m.get("observationWindowStart") or window.get("fromDate"),
+        "observationWindowEnd": m.get("observationWindowEnd") or window.get("toDate"),
+        "historicalRowsUsed": m.get("historicalRowsUsed", 0),
+        "trackedCaseCount": m.get("trackedCaseCount", m.get("casesTracked", 0)),
+        "observedCompletionCount": m.get("observedCompletionCount", 0),
+        "stableIdentifierUsed": m.get("stableIdentifierUsed"),
+        "stagesUsingHistoricalRates": m.get("stagesUsingHistoricalRates", []),
+        "stagesUsingConfigFallback": m.get("stagesUsingConfigFallback", []),
+        "excludedStageCounts": m.get("excludedStageCounts", {}),
+        "completionProbabilityBasis": completion_probability_basis,
+        "available": bool(m.get("available")),
     }

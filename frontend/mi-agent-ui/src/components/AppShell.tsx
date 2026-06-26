@@ -25,14 +25,21 @@ function fundedLineage(reportingDate: string | null): ViewLineage {
 
 function pipelineLineage(forecast: ReturnType<typeof useWorkspace>["forecast"]): ViewLineage {
   const snap = forecast?.pipelineSnapshot;
+  const ev = snap?.historicalModelEvidence;
   return {
     view: "pipeline",
     source: snap?.sourceFile ?? "governed weekly pipeline files",
     metric: "expected_funded_amount",
     weightedMetric: "expected_funded_amount × completion_probability",
     pipelineAsOfDate: snap?.pipelineAsOfDate ?? null,
-    completionProbabilityBasis: forecast?.forecastBridge?.completionProbabilityBasis ?? null,
-    explanation: "Origination pipeline (pre-funded), governed weekly extract.",
+    pipelineSourceFolderDate: snap?.pipelineSourceFolderDate ?? null,
+    observationWindowStart: ev?.observationWindowStart ?? null,
+    observationWindowEnd: ev?.observationWindowEnd ?? null,
+    completionProbabilityBasis:
+      snap?.completionProbabilityBasis ?? forecast?.forecastBridge?.completionProbabilityBasis ?? null,
+    historicalModelEvidence: ev,
+    explanation:
+      "Origination pipeline (pre-funded), governed weekly extract; completion probabilities from the historical weekly-snapshot model.",
   };
 }
 
