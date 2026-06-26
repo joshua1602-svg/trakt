@@ -489,7 +489,8 @@ def _coverage_block(before_n: int, before_bal: Optional[float],
 def _build_reconciliation(df: pd.DataFrame, work: pd.DataFrame,
                           balance_col: Optional[str], spec: MIQuerySpec,
                           coverage: Dict[str, Any], result_type: str,
-                          metadata: Dict[str, Any]) -> Dict[str, Any]:
+                          metadata: Dict[str, Any],
+                          measure_cols: Optional[List[str]] = None) -> Dict[str, Any]:
     """Assemble the reconciliation / coverage footer for any result.
 
     Reports the dataset universe, the effect of any filters, and how much of the
@@ -502,6 +503,23 @@ def _build_reconciliation(df: pd.DataFrame, work: pd.DataFrame,
     filtered_n = int(len(work))
     filtered_bal = _balance_sum(work, balance_col)
     filters_applied = bool(spec.filters)
+
+    # Missing-MEASURE disclosure: rows in the filtered universe whose metric value
+    # is null do not contribute to a sum/avg even when their dimension is known.
+    missing_measure_fields: List[str] = []
+    records_missing_measure = 0
+    balance_missing_measure: Optional[float] = None
+    for mcol in (measure_cols or []):
+        if mcol and mcol in work.columns:
+            miss = ~coerce_numeric(work[mcol]).notna()
+            n_miss = int(miss.sum())
+            if n_miss:
+                missing_measure_fields.append(mcol)
+                records_missing_measure = max(records_missing_measure, n_miss)
+                if balance_col and balance_col in work.columns:
+                    bal = float(coerce_numeric(work.loc[miss, balance_col]).sum())
+                    balance_missing_measure = (bal if balance_missing_measure is None
+                                               else balance_missing_measure + bal)
 
     if coverage:  # grouped path supplied precise included/excluded figures
         included_n = coverage["records_included"]
@@ -539,6 +557,10 @@ def _build_reconciliation(df: pd.DataFrame, work: pd.DataFrame,
         "balance_excluded_missing": excluded_bal,
         "missing_dimension_policy": policy,
         "missing_dimension_fields": missing_fields,
+        "missing_measure_fields": missing_measure_fields,
+        "records_missing_measure": records_missing_measure,
+        "balance_missing_measure": (round(balance_missing_measure, 2)
+                                    if balance_missing_measure is not None else None),
         "coverage_by_balance_pct": cov_pct,
         "balance_field": balance_col,
     }
@@ -1096,8 +1118,26 @@ def execute_mi_query(
 
     # Reconciliation / coverage footer — every artifact can be tied back to the
     # funded-book total and discloses any excluded balance.
+    measure_cols = []
+    for key in (spec.metric, spec.size, spec.x, spec.y):
+        if key and key in semantics.get("fields", {}):
+            ent = semantics["fields"][key]
+            if ent.get("role") == "metric" or ent.get("format") in (
+                    "currency", "percent", "integer", "decimal"):
+                col = ent.get("canonical_field", key)
+                if col not in measure_cols:
+                    measure_cols.append(col)
     metadata["reconciliation"] = _build_reconciliation(
-        df, work, balance_col, spec, coverage, result_type, metadata)
+        df, work, balance_col, spec, coverage, result_type, metadata,
+        measure_cols=measure_cols)
+
+    # Surface the governed derived-metric definition (e.g. "average loan balance"
+    # = sum(current_outstanding_balance)/count(loans)) so the computed figure is
+    # auditable against the registry — never an unexplained number.
+    for name, mdef in (semantics.get("metadata", {}).get("metric_definitions", {}) or {}).items():
+        if mdef.get("metric") == spec.metric and mdef.get("aggregation") == spec.aggregation:
+            metadata["metric_definition"] = {"name": name, **mdef}
+            break
 
     return MIQueryResult(
         spec=spec,

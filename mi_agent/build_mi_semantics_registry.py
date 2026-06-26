@@ -56,6 +56,22 @@ DEFAULT_OUTPUT = Path(__file__).resolve().parent / "mi_semantics_field_registry.
 
 VERSION = "0.3.0"
 
+# Governed DERIVED metric definitions (composed from base canonical fields). These
+# document the audited formula for a business phrase so the parser/executor compute
+# the SAME thing every time; they are not separate columns. Kept in the existing
+# registry metadata layer (no parallel framework).
+METRIC_DEFINITIONS = {
+    "average_loan_balance": {
+        "label": "Average Loan Balance",
+        "metric": "current_outstanding_balance",
+        "aggregation": "avg",
+        "formula": "sum(current_outstanding_balance) / count(loans)",
+        "context_fields": ["loan_count", "current_outstanding_balance_total"],
+        "synonyms": ["average loan balance", "avg loan balance", "mean loan balance",
+                     "average balance", "avg balance", "mean balance"],
+    },
+}
+
 CLEANUP_NOTES = [
     "numeric axis roles enabled",
     "weighted_avg defaults for rate/LTV fields",
@@ -235,7 +251,7 @@ CURATION: Dict[str, dict] = {
         "tier": "core", "business_name": "Borrower Age",
         "business_description": "Age of the youngest borrower on the loan.",
         "synonyms": ["age", "borrower age", "youngest borrower age",
-                     "applicant age"],
+                     "applicant age", "customer age", "youngest age"],
         "overrides": {"bucket_field": "age_bucket"},
     },
     # ---------------- CORE — portfolio dimensions ----------------
@@ -1252,6 +1268,7 @@ def build_registry(source: Path) -> dict:
         "missing_curated_fields": missing,
         "version": VERSION,
         "default_weight_field": weight_target,
+        "metric_definitions": dict(METRIC_DEFINITIONS),
         "cleanup_notes": list(CLEANUP_NOTES),
     }
 

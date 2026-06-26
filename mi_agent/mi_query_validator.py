@@ -219,6 +219,54 @@ def validate_mi_query(
     return result
 
 
+def recover_chart_spec(spec: MIQuerySpec, semantics: dict,
+                       available_columns: Optional[Set[str]] = None,
+                       ) -> Optional["MIQuerySpec"]:
+    """Use the validation rules as a RECOVERY/control layer.
+
+    When a spec fails ONLY because the chosen chart type is wrong for the plan, but
+    a safe alternative plan validates, return the corrected spec; otherwise None.
+    Currently recovers two cases (the rules in the task):
+
+      * KPI: a metric-only query (a metric but no grouping dimension) that was
+        proposed as a bar/line/treemap/heatmap -> a KPI/summary (no chart).
+      * Table: a grouped plan (a real dimension + metric) whose chart type is
+        structurally invalid -> a table.
+
+    It never invents fields and never relaxes the "field must exist / column must
+    be present" checks — a genuinely missing dimension still fails cleanly.
+    """
+    import dataclasses as _dc
+
+    fields = semantics.get("fields", {})
+
+    def _dimension(key: Optional[str]) -> bool:
+        return bool(key) and key in fields and _is_dimension_entry(fields[key])
+
+    grouping = [k for k in (spec.dimension, spec.x) if k] + \
+        list(spec.dimensions or []) + list(spec.hierarchy or [])
+    has_dimension = any(_dimension(k) for k in grouping)
+    metric_only = (
+        spec.chart_type in ("bar", "line", "treemap", "heatmap")
+        and (spec.metric or spec.aggregation in ("count", "count_distinct"))
+        and not has_dimension
+    )
+    if metric_only:
+        return _dc.replace(spec, intent="summary", chart_type="none",
+                           output_format="table",
+                           explanation=(spec.explanation or "") +
+                           " [auto-corrected: metric-only query -> KPI/table]")
+
+    # A valid grouped plan whose chart type is structurally wrong -> a table.
+    if spec.intent == "chart" and has_dimension and (spec.metric or
+                                                     spec.aggregation in ("count", "count_distinct")):
+        candidate = _dc.replace(spec, intent="table", chart_type="none",
+                                output_format="table")
+        if validate_mi_query(candidate, semantics, available_columns).ok:
+            return candidate
+    return None
+
+
 def _check_slot(result: ValidationResult, spec: MIQuerySpec, semantics: dict,
                 slot: str, allowed_roles: Set[str]) -> None:
     key = getattr(spec, slot)

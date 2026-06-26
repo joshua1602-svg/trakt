@@ -85,20 +85,32 @@ describe("ChatMessage embedded result", () => {
     ],
   };
 
-  it("renders the chart inline with a Chart/Table toggle and no debug text", () => {
-    const { container } = render(<ChatMessage message={msg} onTogglePin={vi.fn()} />);
+  it("shows a compact result in chat (no duplicated chart) that opens in the workspace", () => {
+    const onOpenArtifact = vi.fn();
+    const { container } = render(
+      <ChatMessage message={msg} onTogglePin={vi.fn()} onOpenArtifact={onOpenArtifact} />,
+    );
     // Conversational, in a teal-tinted assistant bubble.
     expect(screen.getByTestId("assistant-bubble").textContent).toMatch(/London has the largest balance/i);
     expect(screen.queryByText(/Parser|Validation: Passed|Aggregation/)).not.toBeInTheDocument();
-    // The chart renders directly in the conversation.
-    expect(container.querySelector(".recharts-responsive-container")).not.toBeNull();
-    // Chart/Table toggle present.
-    expect(screen.getByRole("button", { name: "Chart" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Table" })).toBeInTheDocument();
-    // Key observations embedded under the result.
-    expect(screen.getByText(/Key observations/i)).toBeInTheDocument();
+    // The full chart is NOT duplicated in the chat by default — it lives in the workspace.
+    expect(container.querySelector(".recharts-responsive-container")).toBeNull();
+    // Instead the chat offers links to open the chart/table in the workspace.
+    fireEvent.click(screen.getByRole("button", { name: /Open chart in workspace/i }));
+    expect(onOpenArtifact).toHaveBeenCalledWith("c1");
+    expect(screen.getByRole("button", { name: /Open table in workspace/i })).toBeInTheDocument();
     // The bare "CHART →" navigation links are NOT the only output.
     expect(screen.queryByText(/CHART →/)).not.toBeInTheDocument();
+  });
+
+  it("expands the full chart inline only when explicitly requested", () => {
+    const { container } = render(<ChatMessage message={msg} onTogglePin={vi.fn()} />);
+    expect(container.querySelector(".recharts-responsive-container")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Show here/i }));
+    // Now the full chart renders inline with the Chart/Table toggle.
+    expect(container.querySelector(".recharts-responsive-container")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Chart" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Table" })).toBeInTheDocument();
   });
 });
 

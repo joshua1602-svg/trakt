@@ -15,6 +15,7 @@ proposes an MIQuerySpec — it never executes anything or sees raw data):
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -29,7 +30,7 @@ from .mi_query_executor import (
     execute_mi_query,
 )
 from .mi_query_spec import MIQuerySpec
-from .mi_query_validator import load_mi_semantics, validate_mi_query
+from .mi_query_validator import load_mi_semantics, recover_chart_spec, validate_mi_query
 
 # Chart types the chart factory can render (others are table/summary only).
 _RENDERABLE = {"bar", "line", "scatter", "bubble", "heatmap", "treemap"}
@@ -216,8 +217,32 @@ def run_mi_agent_query(
     result["parse_metadata"] = parse_meta
     result["interpreted"] = describe_spec(spec, semantics, result["parser_mode"])
 
-    # ---- validate ---------------------------------------------------------
+    # ---- validate (with recovery) -----------------------------------------
+    # The validator is also a RECOVERY/control layer: when a spec fails only
+    # because the chart type is wrong for the plan (e.g. a metric-only query
+    # proposed as a bar), auto-correct to a safe KPI/table and re-validate rather
+    # than returning a validation failure.
     vr = validate_mi_query(spec, semantics, available_columns=available_columns)
+    # Recovery must NOT mask a query that explicitly asked to group ("... by X")
+    # but whose dimension could not be resolved — that must fail cleanly so the
+    # operator knows the breakdown is unavailable. Only metric-only questions
+    # (no grouping marker) are eligible for KPI/table auto-correction.
+    _grouping_marker = bool(re.search(r"\b(by|per|across|split|breakdown|grouped)\b",
+                                      (question or "").lower()))
+    if not vr.ok and not _grouping_marker:
+        recovered = recover_chart_spec(spec, semantics, available_columns)
+        if recovered is not None:
+            rvr = validate_mi_query(recovered, semantics, available_columns=available_columns)
+            if rvr.ok:
+                spec = recovered
+                vr = rvr
+                result["spec_obj"] = spec
+                result["spec"] = spec.to_dict()
+                result["interpreted"] = describe_spec(spec, semantics, result["parser_mode"])
+                result["recovered"] = True
+                warnings.append(
+                    "auto-corrected the plan to a KPI/table (the metric-only query "
+                    "did not need a chart dimension)")
     result["validation"] = vr.to_dict()
     warnings.extend(vr.warnings)
     if not vr.ok:

@@ -41,6 +41,12 @@ def _fields(semantics: dict) -> Dict[str, dict]:
     return semantics.get("fields", {})
 
 
+def _synonyms(entry: dict) -> List[str]:
+    """The governed business synonyms for a field. The registry uses ``synonyms``;
+    ``aliases`` is accepted as a fallback for forward-compatibility."""
+    return list(entry.get("synonyms") or entry.get("aliases") or [])
+
+
 def find_field(
     semantics: dict,
     role: Optional[str] = None,
@@ -82,30 +88,43 @@ def find_field(
     def is_preferred(entry: dict) -> bool:
         return entry.get("mi_tier") == prefer_tier
 
-    def keyword_hit(key: str, entry: dict) -> bool:
-        if not keywords:
-            return False
-        hay = " ".join([
-            key,
-            str(entry.get("display_name", "")),
-            str(entry.get("business_name", "")),
-        ]).lower()
-        return any(kw in hay for kw in keywords)
+    def primary_hit(key: str, entry: dict) -> bool:
+        # A hit on the field key or its display/business name — the strong signal.
+        hay = " ".join([key, str(entry.get("display_name", "")),
+                        str(entry.get("business_name", ""))]).lower()
+        return bool(keywords) and any(kw in hay for kw in keywords)
+
+    def synonym_hit(key: str, entry: dict) -> bool:
+        # A hit ONLY via the governed business synonyms ("customer age", "current
+        # ltv", "exposure") — accepted, but RANKED BELOW a primary name hit so an
+        # ambiguous keyword ("age") still prefers the field actually named for it
+        # (youngest_borrower_age) over one that merely lists it as a synonym
+        # (months_on_book / "loan age").
+        hay = " ".join(_synonyms(entry)).lower()
+        return bool(keywords) and any(kw in hay for kw in keywords)
 
     preferred_kw: Optional[str] = None
     fallback_kw: Optional[str] = None
+    preferred_syn: Optional[str] = None
+    fallback_syn: Optional[str] = None
     preferred_any: Optional[str] = None
     fallback_any: Optional[str] = None
 
     for key, entry in items.items():
         if not ok(key, entry):
             continue
-        if keyword_hit(key, entry):
+        if primary_hit(key, entry):
             if is_preferred(entry):
                 if preferred_kw is None:
                     preferred_kw = key
             elif fallback_kw is None:
                 fallback_kw = key
+        elif synonym_hit(key, entry):
+            if is_preferred(entry):
+                if preferred_syn is None:
+                    preferred_syn = key
+            elif fallback_syn is None:
+                fallback_syn = key
         if is_preferred(entry):
             if preferred_any is None:
                 preferred_any = key
@@ -113,8 +132,9 @@ def find_field(
             fallback_any = key
 
     if strict and keywords:
-        return preferred_kw or fallback_kw
-    return preferred_kw or fallback_kw or preferred_any or fallback_any
+        return preferred_kw or fallback_kw or preferred_syn or fallback_syn
+    return (preferred_kw or fallback_kw or preferred_syn or fallback_syn
+            or preferred_any or fallback_any)
 
 
 # Preferred balance/exposure fields (mirrors the executor's balance hierarchy).
@@ -133,7 +153,7 @@ def _concept_candidates(semantics: dict, role: Optional[str], fmt: Optional[str]
             continue
         hay = " ".join([key, str(entry.get("display_name", "")),
                         str(entry.get("business_name", "")),
-                        " ".join(entry.get("aliases", []) or [])]).lower()
+                        " ".join(_synonyms(entry))]).lower()
         if any(kw in hay for kw in keywords):
             out.append(key)
     return out
