@@ -51,6 +51,33 @@ export interface ArtifactSource {
   question?: string;
 }
 
+/** Reconciliation / coverage footer — ties a result back to the funded book and
+ * discloses any balance excluded due to missing dimensions/measures. */
+export interface Reconciliation {
+  dataset?: string | null;
+  run_id?: string | null;
+  total_records?: number;
+  total_balance?: number | null;
+  filters_applied?: boolean;
+  filters?: Record<string, unknown>;
+  records_after_filters?: number;
+  balance_after_filters?: number | null;
+  records_included?: number;
+  balance_included?: number | null;
+  records_excluded_missing?: number;
+  balance_excluded_missing?: number | null;
+  missing_dimension_policy?: string;
+  missing_dimension_fields?: string[];
+  coverage_by_balance_pct?: number | null;
+  balance_field?: string | null;
+}
+
+/** Provenance note for a field a query used (e.g. sourced from a pipeline/KFI file). */
+export interface SourceNote {
+  field: string;
+  note: string;
+}
+
 interface ArtifactBase {
   id: string;
   type: ArtifactType;
@@ -62,6 +89,10 @@ interface ArtifactBase {
   mock: boolean;
   warnings?: string[];
   pinned?: boolean;
+  /** Reconciliation / coverage footer (chart / table / kpi). */
+  reconciliation?: Reconciliation;
+  /** Field-provenance notes surfaced in the query lineage. */
+  sourceNotes?: SourceNote[];
 }
 
 /* ------------------------------- KPI -------------------------------- */

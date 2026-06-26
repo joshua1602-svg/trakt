@@ -68,6 +68,14 @@ _BALANCE_HIERARCHY = ("current_outstanding_balance", "current_principal_balance"
 _ADDITIVE_AGGS = {"sum", "balance_sum", "count", "count_distinct"}
 DEFAULT_MAX_LOAN_LEVEL_ROWS = 5000
 
+# Explicit bucket for rows whose grouping dimension is missing/blank. Such rows
+# are NOT silently dropped (which understates totals) — they are grouped here so
+# the result still reconciles to the funded book.
+MISSING_BUCKET_LABEL = "Unknown / Missing"
+# A group with fewer loans than this is statistically thin; an average over it is
+# flagged so the operator does not over-read a high "average" on 1–2 loans.
+LOW_GROUP_COUNT = 5
+
 
 # --------------------------------------------------------------------------- #
 # Errors / result schema
@@ -330,18 +338,42 @@ def _grouped_aggregate(work: pd.DataFrame, group_cols: List[str],
 # --------------------------------------------------------------------------- #
 
 
-def _exclude_missing(work: pd.DataFrame, cols: List[str]) -> Tuple[pd.DataFrame, int]:
-    """Drop rows whose value in any of ``cols`` is null/blank."""
-    mask = pd.Series(True, index=work.index)
+def _missing_mask(work: pd.DataFrame, cols: List[str]) -> pd.Series:
+    """Boolean mask of rows whose value in ANY of ``cols`` is null/blank."""
+    missing = pd.Series(False, index=work.index)
     for c in cols:
         col = work[c]
-        m = col.notna()
+        m = ~col.notna()
         if col.dtype == object or pd.api.types.is_string_dtype(col):
             s = col.astype(str).str.strip().str.lower()
-            m = m & (s != "") & (s != "nan") & (s != "none")
-        mask = mask & m
-    excluded = int((~mask).sum())
-    return work.loc[mask].copy(), excluded
+            m = m | (s == "") | (s == "nan") | (s == "none") | (s == "nat")
+        missing = missing | m
+    return missing
+
+
+def _exclude_missing(work: pd.DataFrame, cols: List[str]) -> Tuple[pd.DataFrame, int]:
+    """Drop rows whose value in any of ``cols`` is null/blank."""
+    missing = _missing_mask(work, cols)
+    excluded = int(missing.sum())
+    return work.loc[~missing].copy(), excluded
+
+
+def _bucket_missing(work: pd.DataFrame, cols: List[str],
+                    label: str = MISSING_BUCKET_LABEL) -> Tuple[pd.DataFrame, int]:
+    """Replace null/blank grouping values with an explicit ``Unknown / Missing``
+    bucket so the rows are KEPT (and the result reconciles), returning the count
+    of rows that were bucketed."""
+    work = work.copy()
+    bucketed = 0
+    for c in cols:
+        col = work[c]
+        m = ~col.notna()
+        if col.dtype == object or pd.api.types.is_string_dtype(col):
+            s = col.astype(str).str.strip().str.lower()
+            m = m | (s == "") | (s == "nan") | (s == "none") | (s == "nat")
+        work[c] = col.astype(object).where(~m, label)
+        bucketed = max(bucketed, int(m.sum()))
+    return work, bucketed
 
 
 def _stringify(work: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
@@ -427,6 +459,89 @@ def _apply_filters(work: pd.DataFrame, spec: MIQuerySpec, semantics: dict,
             work = work[col == value]
             warnings.append(f"filter {field_key}={value!r} kept {len(work)}/{before} rows")
     return work.copy()
+
+
+def _balance_sum(df: pd.DataFrame, balance_col: Optional[str]) -> Optional[float]:
+    if not balance_col or balance_col not in df.columns:
+        return None
+    return float(coerce_numeric(df[balance_col]).sum())
+
+
+def _coverage_block(before_n: int, before_bal: Optional[float],
+                    included_df: pd.DataFrame, balance_col: Optional[str],
+                    group_cols: List[str], policy: str) -> Dict[str, Any]:
+    """Included vs excluded records/balance for a grouped result."""
+    inc_n = int(len(included_df))
+    inc_bal = _balance_sum(included_df, balance_col)
+    return {
+        "records_eligible": int(before_n),
+        "balance_eligible": (round(before_bal, 2) if before_bal is not None else None),
+        "records_included": inc_n,
+        "balance_included": (round(inc_bal, 2) if inc_bal is not None else None),
+        "records_excluded_missing": int(before_n - inc_n),
+        "balance_excluded_missing": (None if before_bal is None or inc_bal is None
+                                     else round(before_bal - inc_bal, 2)),
+        "missing_dimension_policy": policy,
+        "missing_dimension_fields": list(group_cols),
+    }
+
+
+def _build_reconciliation(df: pd.DataFrame, work: pd.DataFrame,
+                          balance_col: Optional[str], spec: MIQuerySpec,
+                          coverage: Dict[str, Any], result_type: str,
+                          metadata: Dict[str, Any]) -> Dict[str, Any]:
+    """Assemble the reconciliation / coverage footer for any result.
+
+    Reports the dataset universe, the effect of any filters, and how much of the
+    funded book is actually covered by the result vs excluded due to missing
+    dimensions/measures. Every MI artifact carries this so a downloaded total can
+    always be reconciled against the funded-book snapshot.
+    """
+    total_n = int(len(df))
+    total_bal = _balance_sum(df, balance_col)
+    filtered_n = int(len(work))
+    filtered_bal = _balance_sum(work, balance_col)
+    filters_applied = bool(spec.filters)
+
+    if coverage:  # grouped path supplied precise included/excluded figures
+        included_n = coverage["records_included"]
+        included_bal = coverage["balance_included"]
+        excluded_n = coverage["records_excluded_missing"]
+        excluded_bal = coverage["balance_excluded_missing"]
+        missing_fields = coverage.get("missing_dimension_fields", [])
+        policy = coverage.get("missing_dimension_policy", "bucket")
+    else:
+        # Summary / line / loan-level: included = the filtered universe (loan-level
+        # axis drops are disclosed separately in metadata).
+        included_n = filtered_n
+        included_bal = filtered_bal
+        excluded_n = 0
+        excluded_bal = 0.0 if filtered_bal is not None else None
+        missing_fields = []
+        policy = "n/a"
+
+    cov_pct = None
+    if total_bal not in (None, 0) and included_bal is not None:
+        cov_pct = round(included_bal / total_bal * 100.0, 1)
+
+    return {
+        "dataset": metadata.get("dataset"),
+        "run_id": metadata.get("run_id"),
+        "total_records": total_n,
+        "total_balance": (round(total_bal, 2) if total_bal is not None else None),
+        "filters_applied": filters_applied,
+        "filters": dict(spec.filters or {}),
+        "records_after_filters": filtered_n,
+        "balance_after_filters": (round(filtered_bal, 2) if filtered_bal is not None else None),
+        "records_included": included_n,
+        "balance_included": included_bal,
+        "records_excluded_missing": excluded_n,
+        "balance_excluded_missing": excluded_bal,
+        "missing_dimension_policy": policy,
+        "missing_dimension_fields": missing_fields,
+        "coverage_by_balance_pct": cov_pct,
+        "balance_field": balance_col,
+    }
 
 
 def _group_sum(work: pd.DataFrame, group_cols: List[str], col: str) -> pd.Series:
@@ -558,8 +673,15 @@ def _execute_summary(spec, work, semantics, warnings, balance_col):
 
 def _execute_grouped(spec, work, semantics, warnings, balance_col,
                      group_field_keys, *, use_bucket, top_n_allowed,
-                     rank_priority, sort_for_date=False):
-    """Shared bar / table / treemap / heatmap grouped execution."""
+                     rank_priority, sort_for_date=False,
+                     missing_policy="bucket", coverage=None):
+    """Shared bar / table / treemap / heatmap grouped execution.
+
+    ``missing_policy``: ``bucket`` (default) keeps rows with a missing grouping
+    value under an explicit ``Unknown / Missing`` group so the result reconciles
+    to the funded book; ``exclude`` drops them (and discloses the excluded total).
+    ``coverage`` (a dict) is filled with included/excluded record + balance totals.
+    """
     group_cols: List[str] = []
     date_group = False
     for key in group_field_keys:
@@ -582,21 +704,46 @@ def _execute_grouped(spec, work, semantics, warnings, balance_col,
         value_col = None
         agg = "count"
         weight_col = None
-    bcol = balance_col if agg == "balance_sum" else balance_col
 
-    # exclude missing grouping values, then stringify keys for stable grouping
-    work, excluded = _exclude_missing(work, group_cols)
-    if excluded:
-        warnings.append(
-            f"excluded {excluded} row(s) with missing/blank grouping value(s) "
-            f"in {group_cols}"
-        )
+    # --- missing grouping values: bucket (default) or exclude --------------
+    before_n = int(len(work))
+    before_bal = _balance_sum(work, balance_col)
+    if missing_policy == "exclude":
+        work, excluded = _exclude_missing(work, group_cols)
+        if excluded:
+            warnings.append(
+                f"excluded {excluded} row(s) with missing/blank grouping value(s) "
+                f"in {group_cols} (missing data excluded as requested)")
+    else:
+        work, bucketed = _bucket_missing(work, group_cols)
+        if bucketed:
+            warnings.append(
+                f"{bucketed} row(s) with a missing/blank grouping value were grouped "
+                f"under {MISSING_BUCKET_LABEL!r} (not dropped) so totals reconcile")
     work = _stringify(work, group_cols)
+    if coverage is not None:
+        coverage.update(_coverage_block(before_n, before_bal, work, balance_col,
+                                        group_cols, missing_policy))
 
     out, metric_col = _grouped_aggregate(
         work, group_cols, value_col, agg, weight_col,
         balance_col if agg == "balance_sum" else None,
     )
+
+    # --- supporting columns for a single-dimension grouped table ----------
+    # An average is easy to misread without its denominator, so a single-dim
+    # grouped result carries loan_count (always) and, for an average, the total.
+    if len(group_cols) == 1:
+        sizes = work.groupby(group_cols[0], sort=False).size()
+        out["loan_count"] = _align(out, group_cols, sizes).astype(int).to_numpy()
+        if agg == "avg" and value_col:
+            totals = _group_sum(work, group_cols, value_col)
+            out[f"{value_col}_total"] = _align(out, group_cols, totals).to_numpy()
+        thin = out[out["loan_count"] < LOW_GROUP_COUNT]
+        if agg in ("avg", "weighted_avg") and not thin.empty:
+            warnings.append(
+                f"{len(thin)} group(s) have fewer than {LOW_GROUP_COUNT} loans; "
+                f"their {agg} is based on a thin sample and may be unstable")
 
     # ordering
     if sort_for_date and date_group:
@@ -801,14 +948,19 @@ def execute_mi_query(
     missing_dimension_policy: str = "exclude",
     top_n_rank_priority: Tuple[str, ...] = ("balance", "count", "concentration"),
     sample_seed: int = 42,
+    dataset: Optional[str] = None,
+    run_id: Optional[str] = None,
 ) -> MIQueryResult:
     """Execute a validated :class:`MIQuerySpec` against canonical data.
 
-    See module docstring for the v1 behaviour / assumptions.
+    ``missing_dimension_policy``: ``bucket`` (default) keeps rows with a missing
+    grouping value under an explicit ``Unknown / Missing`` group so totals
+    reconcile to the funded book; ``exclude`` drops them and discloses the excluded
+    balance. Every result carries a ``reconciliation`` block in metadata.
     """
-    if missing_dimension_policy != "exclude":
+    if missing_dimension_policy not in ("exclude", "bucket"):
         raise MIQueryExecutionError(
-            "v1 only supports missing_dimension_policy='exclude'"
+            "missing_dimension_policy must be 'bucket' or 'exclude'"
         )
 
     if isinstance(semantics, (str, Path)):
@@ -850,7 +1002,11 @@ def execute_mi_query(
         "top_n_rank_priority": list(top_n_rank_priority),
         "input_row_count": int(len(df)),
         "filtered_row_count": int(len(work)),
+        "dataset": dataset,
+        "run_id": run_id,
     }
+    # Filled by grouped paths with precise included/excluded record + balance totals.
+    coverage: Dict[str, Any] = {}
 
     # ---- dispatch -------------------------------------------------------- #
     if spec.intent == "summary" or (spec.intent == "chart" and spec.chart_type == "none"):
@@ -867,6 +1023,7 @@ def execute_mi_query(
             data_out, result_type = _execute_grouped(
                 spec, work, semantics, warnings, balance_col, keys,
                 use_bucket=False, top_n_allowed=True, rank_priority=top_n_rank_priority,
+                missing_policy=missing_dimension_policy, coverage=coverage,
             )
         else:
             data_out, result_type = _execute_summary(spec, work, semantics, warnings, balance_col)
@@ -879,6 +1036,7 @@ def execute_mi_query(
             spec, work, semantics, warnings, balance_col, keys,
             use_bucket=False, top_n_allowed=True, rank_priority=top_n_rank_priority,
             sort_for_date=True,
+            missing_policy=missing_dimension_policy, coverage=coverage,
         )
 
     elif spec.chart_type == "line":
@@ -897,6 +1055,7 @@ def execute_mi_query(
         data_out, result_type = _execute_grouped(
             spec, work, semantics, warnings, balance_col, keys,
             use_bucket=True, top_n_allowed=False, rank_priority=top_n_rank_priority,
+            missing_policy=missing_dimension_policy, coverage=coverage,
         )
 
     elif spec.chart_type == "treemap":
@@ -909,6 +1068,7 @@ def execute_mi_query(
         data_out, result_type = _execute_grouped(
             spec, work, semantics, warnings, balance_col, keys,
             use_bucket=True, top_n_allowed=True, rank_priority=top_n_rank_priority,
+            missing_policy=missing_dimension_policy, coverage=coverage,
         )
 
     else:
@@ -917,15 +1077,27 @@ def execute_mi_query(
             f"{spec.intent!r}/{spec.chart_type!r}"
         )
 
-    resolved = {
-        key: {
-            "canonical_field": resolve_semantic_field(key, semantics).get("canonical_field"),
-            "role": resolve_semantic_field(key, semantics).get("role"),
-            "format": resolve_semantic_field(key, semantics).get("format"),
+    resolved = {}
+    for key in spec.referenced_fields():
+        entry = semantics.get("fields", {}).get(key)
+        if entry is None:
+            continue
+        meta = {
+            "canonical_field": entry.get("canonical_field"),
+            "role": entry.get("role"),
+            "format": entry.get("format"),
+            "business_name": entry.get("business_name") or entry.get("display_name"),
         }
-        for key in spec.referenced_fields()
-        if key in semantics.get("fields", {})
-    }
+        # Optional governed provenance note ("sourced from pipeline/KFI; confirm
+        # authoritative for funded-book MI") — surfaced in the query lineage.
+        if entry.get("source_note"):
+            meta["source_note"] = entry.get("source_note")
+        resolved[key] = meta
+
+    # Reconciliation / coverage footer — every artifact can be tied back to the
+    # funded-book total and discloses any excluded balance.
+    metadata["reconciliation"] = _build_reconciliation(
+        df, work, balance_col, spec, coverage, result_type, metadata)
 
     return MIQueryResult(
         spec=spec,

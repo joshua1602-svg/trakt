@@ -121,6 +121,8 @@ def run_mi_agent_query(
     provider: str = "anthropic",
     llm_callable=None,
     extra_filters: Optional[Dict[str, Any]] = None,
+    dataset: Optional[str] = None,
+    run_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run one MI question end to end.
 
@@ -260,9 +262,20 @@ def run_mi_agent_query(
     result["interpreted"]["Validation"] = "Passed"
 
     # ---- execute ----------------------------------------------------------
+    # Missing grouping values are bucketed under "Unknown / Missing" by default so
+    # results reconcile to the funded book; the operator can opt out by asking to
+    # exclude missing data.
+    q_lower = (question or "").lower()
+    missing_policy = ("exclude"
+                      if any(p in q_lower for p in ("exclude missing", "excluding missing",
+                                                    "without missing", "drop missing",
+                                                    "ignore missing"))
+                      else "bucket")
     try:
         qres: MIQueryResult = execute_mi_query(
             spec, df, semantics, validate=False,
+            missing_dimension_policy=missing_policy,
+            dataset=dataset, run_id=run_id,
         )
     except MIQueryExecutionError as exc:
         result["error"] = f"Execution failed: {exc}"
@@ -283,6 +296,21 @@ def run_mi_agent_query(
         return result
     result["query_result"] = qres
     warnings.extend(qres.warnings)
+
+    # Reconciliation / coverage footer (every artifact). When some balance is
+    # excluded (e.g. the operator asked to exclude missing dims), say so plainly.
+    recon = (qres.metadata or {}).get("reconciliation")
+    if recon:
+        result["reconciliation"] = recon
+        excl = recon.get("balance_excluded_missing")
+        inc = recon.get("balance_included")
+        tot = recon.get("total_balance")
+        if excl and inc is not None and tot:
+            fields = recon.get("missing_dimension_fields") or []
+            because = (" because " + " and/or ".join(fields) + " was missing") if fields else ""
+            warnings.append(
+                f"This result covers £{inc:,.0f} of the £{tot:,.0f} funded book; "
+                f"£{excl:,.0f} was excluded{because}.")
 
     # A grouped / loan-level result with no rows after preparation is not a
     # "passed" query — surface it as a controlled validation failure with an
@@ -334,6 +362,7 @@ def run_mi_agent_query(
         "result_type": qres.result_type,
         "row_count": qres.row_count,
         "chart_type": spec.chart_type if chart_result else None,
+        "reconciliation": (qres.metadata or {}).get("reconciliation"),
     }
     return result
 
@@ -343,10 +372,44 @@ def run_mi_agent_query(
 # --------------------------------------------------------------------------- #
 
 
-def result_csv_bytes(query_result: MIQueryResult) -> bytes:
+def _reconciliation_footer_lines(recon: Dict[str, Any]) -> List[str]:
+    """Human-readable reconciliation/coverage footer lines for an export."""
+    if not recon:
+        return []
+
+    def _gbp(v):
+        return "" if v is None else f"£{float(v):,.2f}"
+
+    lines = [
+        "# --- Reconciliation / coverage ---",
+        f"# Dataset: {recon.get('dataset') or 'funded'}",
+        f"# Run: {recon.get('run_id') or ''}",
+        f"# Total records in dataset: {recon.get('total_records')}",
+        f"# Total balance in dataset: {_gbp(recon.get('total_balance'))}",
+        f"# Records included in this result: {recon.get('records_included')}",
+        f"# Balance included in this result: {_gbp(recon.get('balance_included'))}",
+        f"# Records excluded due to missing dimensions/measures: {recon.get('records_excluded_missing')}",
+        f"# Balance excluded due to missing dimensions/measures: {_gbp(recon.get('balance_excluded_missing'))}",
+        f"# Coverage by balance: {recon.get('coverage_by_balance_pct')}%",
+        f"# Filters applied: {recon.get('filters') or 'none'}",
+    ]
+    return lines
+
+
+def result_csv_bytes(query_result: MIQueryResult,
+                     include_reconciliation: bool = True) -> bytes:
+    """CSV of the result table, with a reconciliation/coverage footer appended so a
+    downloaded total can always be tied back to the funded-book snapshot. The data
+    rows are unchanged (the table/chart total == the CSV data total)."""
     if query_result is None or query_result.data is None:
         return b""
-    return query_result.data.to_csv(index=False).encode("utf-8")
+    csv_text = query_result.data.to_csv(index=False)
+    if include_reconciliation:
+        recon = (query_result.metadata or {}).get("reconciliation")
+        footer = _reconciliation_footer_lines(recon)
+        if footer:
+            csv_text = csv_text.rstrip("\n") + "\n\n" + "\n".join(footer) + "\n"
+    return csv_text.encode("utf-8")
 
 
 def chart_html_str(chart_result: Optional[MIChartResult]) -> Optional[str]:

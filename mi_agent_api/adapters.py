@@ -288,7 +288,10 @@ def _chart_artifact(
 
     def _value_column(exclude: List[str]) -> Optional[str]:
         cand = [c for c in columns if c not in exclude]
-        cand.sort(key=lambda c: (c.endswith("_pct") or "concentration" in c))
+        # Supporting columns (share %, the loan-count denominator, the avg total)
+        # are never the charted measure — push them to the end.
+        cand.sort(key=lambda c: (c.endswith("_pct") or "concentration" in c
+                                 or c == "loan_count" or c.endswith("_total")))
         return cand[0] if cand else None
 
     if chart_type in ("scatter", "bubble"):
@@ -316,6 +319,11 @@ def _chart_artifact(
         if primary is not None:
             series = [{"key": primary, "label": _label_for(primary, resolved), "color": _PALETTE[0]}]
             value_format = _hint(hints, primary).get("format") or _infer_col_format(primary, resolved)
+            value_key = primary
+            # High-cardinality bar: cap to Top 10 (+ Other) for the visual; the
+            # FULL detail stays in the table/export artifact alongside.
+            if chart_type == "bar" and x_key:
+                rows, capped = _cap_bar_rows(rows, x_key, primary, n=10)
     elif chart_type == "heatmap":
         # Native grid renderer needs two dimensions + an intensity measure.
         # Row/column convention: the bucket dimension is the COLUMN axis (xKey)
@@ -461,6 +469,57 @@ def _answer(interpreted: Any, qr: Optional[Dict[str, Any]], chart_type: Optional
     return "Here is the result for your query."
 
 
+def _cap_bar_rows(rows: List[Dict[str, Any]], x_key: str, value_key: str,
+                  n: int = 10) -> Tuple[List[Dict[str, Any]], bool]:
+    """Cap a bar chart to the top ``n`` categories by ``value_key``.
+
+    For an additive measure (``*_sum`` / ``count`` / ``*_total``) the remainder is
+    folded into an aggregated ``Other`` row so the chart still totals correctly;
+    for a non-additive measure (avg / weighted avg / share) the tail is dropped
+    from the VISUAL only (the full detail remains in the table/export). No-op when
+    there are ``<= n`` categories.
+    """
+    if not value_key or len(rows) <= n:
+        return rows, False
+
+    def _val(r: Dict[str, Any]) -> float:
+        v = r.get(value_key)
+        return float(v) if isinstance(v, (int, float)) else float("-inf")
+
+    ordered = sorted(rows, key=_val, reverse=True)
+    additive = (value_key.endswith("_sum") or value_key == "count"
+                or value_key.endswith("_total"))
+    if additive:
+        head, tail = ordered[: n - 1], ordered[n - 1:]
+        other: Dict[str, Any] = {x_key: "Other"}
+        for k in rows[0].keys():
+            if k == x_key:
+                continue
+            vals = [r.get(k) for r in tail if isinstance(r.get(k), (int, float))]
+            other[k] = sum(vals) if vals else None
+        return head + [other], True
+    # Non-additive measure: show the top n; full detail stays in the table.
+    return ordered[:n], True
+
+
+def _source_notes(qr: Optional[Dict[str, Any]], spec: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Provenance / authoritative-source notes for the fields a query used.
+
+    Surfaces any ``source_note`` declared on a referenced field's semantic-registry
+    entry (the governed hook for "this field is sourced from the pipeline/KFI file —
+    confirm it is authoritative for funded-book MI"). Empty when none apply.
+    """
+    if not qr:
+        return []
+    resolved = qr.get("resolved_fields", {}) or {}
+    notes: List[Dict[str, Any]] = []
+    for key, meta in resolved.items():
+        note = meta.get("source_note") if isinstance(meta, dict) else None
+        if note:
+            notes.append({"field": key, "note": str(note)})
+    return notes
+
+
 def adapt_workflow_result(
     workflow: Dict[str, Any],
     *,
@@ -487,6 +546,11 @@ def adapt_workflow_result(
     else:
         cr = cr_obj
 
+    # Reconciliation / coverage footer (every artifact) + provenance source notes.
+    reconciliation = (workflow.get("reconciliation")
+                      or (workflow.get("metadata") or {}).get("reconciliation"))
+    source_notes = _source_notes(qr, spec)
+
     artifacts: List[Dict[str, Any]] = []
     chart_type = cr.get("chart_type") if cr else None
     chart_emitted = False
@@ -503,6 +567,14 @@ def adapt_workflow_result(
                     chart_emitted = True
             artifacts.append(_table_artifact(qr, spec, ctx,
                                              cr.get("title") if cr else "Result", hints))
+
+    # Attach the reconciliation footer + source notes to every artifact so any
+    # surfaced artifact (chat or workspace) can show coverage / provenance.
+    for art in artifacts:
+        if reconciliation and art.get("type") in ("chart", "table", "kpi"):
+            art["reconciliation"] = reconciliation
+        if source_notes and art.get("type") in ("chart", "table", "kpi"):
+            art["sourceNotes"] = source_notes
 
     val_artifact = _validation_artifact(validation, spec, ctx)
     if val_artifact:
@@ -528,6 +600,8 @@ def adapt_workflow_result(
         "spec": spec,
         "validation": validation,
         "artifacts": artifacts,
+        "reconciliation": reconciliation,
+        "sourceNotes": source_notes,
         "warnings": warnings,
         "diagnostics": diagnostics,
         # The MI Agent does not emit narrative assumptions; kept for schema parity.
