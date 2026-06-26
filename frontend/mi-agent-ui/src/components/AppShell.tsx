@@ -72,6 +72,8 @@ export function AppShell() {
           onSubmit={ws.ask}
           onOpenArtifact={openArtifact}
           onRetry={ws.retryLast}
+          context={ws.context}
+          onClearContext={ws.clearContext}
         />
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {/* One coherent workspace: a view toggle selects which schema-aligned

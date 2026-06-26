@@ -7,10 +7,13 @@ export function ChatMessage({
   message,
   onOpenArtifact,
   onRetry,
+  onAsk,
 }: {
   message: ChatMessageType;
   onOpenArtifact?: (id: string) => void;
   onRetry?: () => void;
+  /** Dispatch a suggested follow-up question (routes through context). */
+  onAsk?: (question: string) => void;
 }) {
   const isUser = message.role === "user";
 
@@ -102,6 +105,22 @@ export function ChatMessage({
             ))}
           </div>
         )}
+
+        {!isUser && !message.pending && !message.error && message.suggestions && message.suggestions.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {message.suggestions.map((s) => (
+              <button
+                key={`${s.kind}:${s.question}`}
+                type="button"
+                onClick={() => onAsk?.(s.question)}
+                title={s.question}
+                className="inline-flex items-center rounded-full border border-[var(--color-line)] bg-navy-800/50 px-2.5 py-1 text-[11px] text-ink-300 transition-colors hover:border-peri-400/40 hover:text-ink-100"
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -136,7 +155,12 @@ function QueryLogicPanel({ message }: { message: ChatMessageType }) {
   const rows = specRows(message.spec);
   const diagnostics = message.diagnostics ?? [];
   const hasContent =
-    !!message.interpreted || rows.length > 0 || typeof message.confidence === "number" || diagnostics.length > 0;
+    !!message.interpreted ||
+    rows.length > 0 ||
+    typeof message.confidence === "number" ||
+    diagnostics.length > 0 ||
+    message.usedContext ||
+    message.cacheHit;
   if (!hasContent) return null;
 
   return (
@@ -152,6 +176,20 @@ function QueryLogicPanel({ message }: { message: ChatMessageType }) {
       </button>
       {open && (
         <div className="mt-1 space-y-2 rounded-lg border border-[var(--color-line-soft)] bg-navy-900/60 px-3 py-2.5">
+          {(message.usedContext || message.cacheHit) && (
+            <div className="flex flex-wrap gap-1.5">
+              {message.usedContext && (
+                <span className="rounded border border-peri-400/30 bg-peri-400/10 px-1.5 py-0.5 text-[10px] text-peri-200">
+                  Context used{message.contextNote ? ` · ${message.contextNote}` : ""}
+                </span>
+              )}
+              {message.cacheHit && (
+                <span className="rounded border border-mint-400/30 bg-mint-400/10 px-1.5 py-0.5 text-[10px] text-mint-300">
+                  Served from cache
+                </span>
+              )}
+            </div>
+          )}
           {message.interpreted && (
             <div className="font-mono text-[10px] text-ink-400">
               <span className="text-ink-500">Interpreted as · </span>
