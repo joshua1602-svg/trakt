@@ -74,6 +74,10 @@ export function AppShell() {
           onRetry={ws.retryLast}
           context={ws.context}
           onClearContext={ws.clearContext}
+          onTogglePin={ws.togglePin}
+          // Inline-result drill uses the backend when live; mock keeps the
+          // client-side drill fallback inside the embedded card.
+          onDrill={client.mock ? undefined : ws.drill}
         />
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {/* One coherent workspace: a view toggle selects which schema-aligned

@@ -84,6 +84,27 @@ describe("useWorkspace — analysis context", () => {
     expect(result.current.context?.activeMeasure).toBe("current_outstanding_balance");
   });
 
+  it("renders a conversational answer even when the backend returns parser/debug text", async () => {
+    const DEBUG = "Chart: Bar · Metric: Balance · Dimension: Region · Aggregation: Sum · Parser: deterministic · Validation: Passed — 3 group(s).";
+    const ask = vi.fn(async (req: AgentRequest) => ({ ...regionResult(req.question), narrative: DEBUG, interpreted: DEBUG }));
+    const { result } = renderHook(() => useWorkspace(makeClient(ask)));
+    await waitFor(() => expect(result.current.selectedRunId).toBe("mi_2025_11"));
+
+    act(() => result.current.ask("what is the concentration in London"));
+    await waitFor(() => expect(result.current.messages.some((m) => m.role === "assistant" && !m.pending && m.artifacts?.length)).toBe(true));
+
+    const answer = [...result.current.messages].reverse().find((m) => m.role === "assistant" && !m.pending)!;
+    // The visible content must be plain English, never the parser/validation dump.
+    expect(answer.content).not.toContain("Parser");
+    expect(answer.content).not.toContain("Validation");
+    expect(answer.content).not.toContain("Aggregation");
+    expect(answer.content.toLowerCase()).toContain("balance"); // conversational lead
+    // The result is embedded on the message for inline rendering.
+    expect(answer.artifacts?.[0]?.type).toBe("chart");
+    // The raw interpretation is still retained for the Query Logic disclosure.
+    expect(answer.interpreted).toBeDefined();
+  });
+
   it("resolves a follow-up against context and dispatches the rewritten query", async () => {
     const ask = vi.fn(async (req: AgentRequest) => regionResult(req.question));
     const { result } = renderHook(() => useWorkspace(makeClient(ask)));

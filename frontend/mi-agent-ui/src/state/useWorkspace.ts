@@ -31,6 +31,7 @@ import {
   resolveFollowUp,
 } from "@/lib/analysisContext";
 import { buildSuggestedActions } from "@/lib/suggestedActions";
+import { presentAnswer } from "@/lib/responsePresenter";
 import { loadState, saveState } from "./persistence";
 
 function greeting(portfolioLabel: string, asOf: string | null): ChatMessage {
@@ -230,7 +231,10 @@ export function useWorkspace(client: AgentClient): Workspace {
     saveState({
       clientId: selectedClientId ?? undefined,
       runId: selectedRunId ?? undefined,
-      messages,
+      // Strip the inline result artifacts from each message before persisting —
+      // they are kept in memory for the conversation and re-derivable from the
+      // canvas; persisting them would bloat localStorage.
+      messages: messages.map((m) => (m.artifacts ? { ...m, artifacts: undefined } : m)),
       artifacts,
     });
   }, [selectedClientId, selectedRunId, messages, artifacts]);
@@ -275,10 +279,19 @@ export function useWorkspace(client: AgentClient): Workspace {
           }
           const primary = res.artifacts.find((a) => a.type === "chart" || a.type === "table");
           const suggestions = res.ok && primary ? buildSuggestedActions(res.spec, primary) : undefined;
+          const stampedArtifacts = stampQuestion(res.artifacts, params.send);
+          const content = presentAnswer({
+            question: params.display,
+            ok: res.ok,
+            spec: res.spec,
+            artifacts: res.artifacts,
+            narrative: res.narrative,
+            error: res.error,
+          });
           setArtifacts((prev) => {
             const pinned = prev.filter((a) => a.pinned);
             const pinnedIds = new Set(pinned.map((a) => a.id));
-            const fresh = stampQuestion(res.artifacts.filter((a) => !pinnedIds.has(a.id)), params.send);
+            const fresh = stampedArtifacts.filter((a) => !pinnedIds.has(a.id));
             return [...pinned, ...fresh];
           });
           setMessages((prev) =>
@@ -287,8 +300,9 @@ export function useWorkspace(client: AgentClient): Workspace {
                 ? {
                     ...m,
                     pending: false,
-                    error: false,
-                    content: res.narrative,
+                    error: !res.ok && res.artifacts.length === 0,
+                    content,
+                    artifacts: stampedArtifacts,
                     interpreted: res.interpreted,
                     assumptions: res.assumptions,
                     warnings: res.warnings,

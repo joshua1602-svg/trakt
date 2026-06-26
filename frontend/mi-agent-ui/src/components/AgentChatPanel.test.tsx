@@ -19,6 +19,16 @@ const context: AnalysisContext = {
   activeFilters: { geographic_region_obligor: "South East" },
 };
 
+describe("AgentChatPanel surface", () => {
+  it("marks the chat as a distinct AI surface with teal styling", () => {
+    const { container } = render(<AgentChatPanel {...baseProps} context={null} />);
+    const surface = container.querySelector('[data-surface="ai-chat"]');
+    expect(surface).not.toBeNull();
+    // Distinct teal palette, not the navy analytics card colour.
+    expect(surface!.className).toMatch(/teal/);
+  });
+});
+
 describe("AgentChatPanel context indicator", () => {
   it("is hidden when no context is active", () => {
     render(<AgentChatPanel {...baseProps} context={null} />);

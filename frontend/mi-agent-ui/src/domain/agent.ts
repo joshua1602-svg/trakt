@@ -127,4 +127,7 @@ export interface ChatMessage {
   cacheHit?: boolean;
   /** Grounded follow-up suggestions for this result. */
   suggestions?: SuggestedAction[];
+  /** The result artifacts, embedded inline in the conversation (in-memory; not
+   * persisted — re-derivable from artifactRefs + the canvas). */
+  artifacts?: Artifact[];
 }
