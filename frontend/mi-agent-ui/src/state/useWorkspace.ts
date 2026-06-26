@@ -38,6 +38,12 @@ function greeting(portfolioLabel: string, asOf: string | null): ChatMessage {
   };
 }
 
+/** Stamp the originating question onto each artifact so a drill-through can
+ *  re-run the same query with an added filter. */
+function stampQuestion(artifacts: Artifact[], question: string): Artifact[] {
+  return artifacts.map((a) => ({ ...a, source: { ...a.source, question } }));
+}
+
 export interface Workspace {
   /** Discovered funded portfolios (data-driven dropdown source). */
   portfolios: SnapshotPortfolio[];
@@ -62,6 +68,8 @@ export interface Workspace {
   setPortfolio: (clientId: string) => void;
   setRun: (runId: string) => void;
   ask: (question: string) => void;
+  /** Re-run an artifact's query with an added drill-through filter (backend). */
+  drill: (artifact: Artifact, filters: Record<string, unknown>) => void;
   retryLast: () => void;
   togglePin: (id: string) => void;
   resetWorkspace: () => void;
@@ -222,7 +230,7 @@ export function useWorkspace(client: AgentClient): Workspace {
           setArtifacts((prev) => {
             const pinned = prev.filter((a) => a.pinned);
             const pinnedIds = new Set(pinned.map((a) => a.id));
-            const fresh = res.artifacts.filter((a) => !pinnedIds.has(a.id));
+            const fresh = stampQuestion(res.artifacts.filter((a) => !pinnedIds.has(a.id)), question);
             return [...pinned, ...fresh];
           });
           setMessages((prev) =>
@@ -258,6 +266,47 @@ export function useWorkspace(client: AgentClient): Workspace {
         });
     },
     [client, portfolio, reporting],
+  );
+
+  // Backend drill-through: re-run the artifact's originating query with an added
+  // filter so the result is computed from the FULL dataset (not just the rows on
+  // screen). Refreshes the unpinned artifacts in place; on any failure the
+  // current artifacts (and the client-side drill panel) are left untouched.
+  const drill = useCallback(
+    (artifact: Artifact, filters: Record<string, unknown>) => {
+      const question = artifact.source.question ?? lastQuestion.current;
+      if (!question || isWorking) return;
+      const request: AgentRequest = {
+        question,
+        portfolio,
+        reporting,
+        options: { parserMode: "deterministic" },
+        datasetContext: activeViewRef.current,
+        filters,
+      };
+      const controller = new AbortController();
+      abortRef.current = controller;
+      setIsWorking(true);
+      client
+        .ask(request, controller.signal)
+        .then((res) => {
+          if (!res.ok) return; // keep current artifacts; client-side panel remains
+          setArtifacts((prev) => {
+            const pinned = prev.filter((a) => a.pinned);
+            const pinnedIds = new Set(pinned.map((a) => a.id));
+            const fresh = stampQuestion(res.artifacts.filter((a) => !pinnedIds.has(a.id)), question);
+            return [...pinned, ...fresh];
+          });
+        })
+        .catch(() => {
+          /* leave artifacts untouched — the client-side drill fallback stays */
+        })
+        .finally(() => {
+          setIsWorking(false);
+          abortRef.current = null;
+        });
+    },
+    [client, portfolio, reporting, isWorking],
   );
 
   const ask = useCallback(
@@ -335,6 +384,7 @@ export function useWorkspace(client: AgentClient): Workspace {
     setPortfolio,
     setRun: setSelectedRunId,
     ask,
+    drill,
     retryLast,
     togglePin,
     resetWorkspace,

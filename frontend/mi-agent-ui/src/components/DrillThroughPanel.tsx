@@ -10,19 +10,51 @@ function measureText(value: number | null, m: DrillMeasure): string {
 }
 
 /**
- * Dynamic drill-through for a chart/table MI result. Reuses the artifact's own
- * rows: pick a dimension value (region, broker, year, SPV, product…) and see
- * the detailed metrics already present in the payload, plus a derived share of
- * total. Missing measures show N/A rather than erroring.
- *
- * The simplest robust pattern (a "Drill into" selector) works uniformly across
- * bar/line/heatmap/treemap charts and tables — no chart-library click wiring.
+ * The semantic field KEY for the drilled dimension — what the backend validator
+ * + executor expect as a filter key. The artifact's spec carries the registry
+ * dimension key the parser resolved (distinct from the data column name); we
+ * prefer it, falling back to the data column when the spec is unavailable.
  */
-export function DrillThroughPanel({ artifact }: { artifact: DrillArtifact }) {
+function drillFilterKey(artifact: DrillArtifact, columnKey: string): string {
+  const spec = artifact.source.spec;
+  if (spec) {
+    if (spec.dimensions && spec.dimensions.length === 1) return spec.dimensions[0];
+    if (spec.dimensions && spec.dimensions.includes(columnKey)) return columnKey;
+    if (spec.dimension) return spec.dimension;
+  }
+  return columnKey;
+}
+
+/**
+ * Dynamic drill-through for a chart/table MI result.
+ *
+ * When wired to a live backend (`onDrill`), selecting a dimension value
+ * (region, broker, year, SPV, product…) re-runs the query with that filter so
+ * the refreshed artifact is computed from the FULL dataset. The in-panel metric
+ * grid — derived from the artifact's own rows — always renders as immediate
+ * feedback and is the standalone fallback when no backend is wired.
+ *
+ * The "Drill into" selector works uniformly across bar/line/heatmap/treemap
+ * charts and tables — no chart-library click wiring.
+ */
+export function DrillThroughPanel({
+  artifact,
+  onDrill,
+}: {
+  artifact: DrillArtifact;
+  onDrill?: (filters: Record<string, unknown>) => void;
+}) {
   const model = useMemo(() => buildDrillModel(artifact), [artifact]);
   const [selected, setSelected] = useState<string>("");
 
   if (!model) return null;
+
+  const onSelect = (value: string) => {
+    setSelected(value);
+    // Re-run the query against the full dataset, keyed by the registry semantic
+    // field. The client-side grid below renders regardless (fallback).
+    if (value && onDrill) onDrill({ [drillFilterKey(artifact, model.dimensionKey)]: value });
+  };
 
   const agg = selected ? aggregateSelection(model, selected) : null;
   const primary = model.primary;
@@ -43,7 +75,7 @@ export function DrillThroughPanel({ artifact }: { artifact: DrillArtifact }) {
         <select
           aria-label={`Drill into ${model.dimensionLabel}`}
           value={selected}
-          onChange={(e) => setSelected(e.target.value)}
+          onChange={(e) => onSelect(e.target.value)}
           className="ml-auto rounded-md border border-[var(--color-line)] bg-navy-950/60 px-2 py-1 text-[11px] text-ink-200 focus:border-peri-400/50 focus:outline-none"
         >
           <option value="">Select a value…</option>
@@ -62,6 +94,9 @@ export function DrillThroughPanel({ artifact }: { artifact: DrillArtifact }) {
             {selected}
             {agg.records > 1 && (
               <span className="text-[11px] font-normal text-ink-500">· {agg.records} rows</span>
+            )}
+            {onDrill && (
+              <span className="text-[10px] font-normal text-ink-500">· refreshing from full dataset…</span>
             )}
           </div>
           <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">

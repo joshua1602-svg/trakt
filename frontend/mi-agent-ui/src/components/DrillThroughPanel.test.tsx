@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ChartArtifact } from "@/domain";
 import { buildDrillModel } from "@/lib/drill";
 import { DrillThroughPanel } from "./DrillThroughPanel";
@@ -56,5 +56,31 @@ describe("DrillThroughPanel", () => {
     expect(screen.getByText("80.0%")).toBeInTheDocument();
     // Fraction-scaled WA LTV renders as points, not 0.3%.
     expect(screen.getByText("33.0%")).toBeInTheDocument();
+  });
+
+  it("dispatches a backend drill keyed by the registry semantic field when wired", () => {
+    const onDrill = vi.fn();
+    const art = regionChart();
+    // The resolved spec carries the registry dimension key (distinct from xKey).
+    art.source.spec = { dimension: "geographic_region_obligor" };
+    render(<DrillThroughPanel artifact={art} onDrill={onDrill} />);
+    fireEvent.change(screen.getByLabelText(/Drill into Region/i), { target: { value: "South East" } });
+    expect(onDrill).toHaveBeenCalledWith({ geographic_region_obligor: "South East" });
+    // The in-panel client-side grid still renders as immediate feedback.
+    expect(screen.getByText("£100")).toBeInTheDocument();
+  });
+
+  it("falls back to the data column key when no spec dimension is present", () => {
+    const onDrill = vi.fn();
+    render(<DrillThroughPanel artifact={regionChart()} onDrill={onDrill} />);
+    fireEvent.change(screen.getByLabelText(/Drill into Region/i), { target: { value: "London" } });
+    expect(onDrill).toHaveBeenCalledWith({ region: "London" });
+  });
+
+  it("does not dispatch and keeps client-side drill when no backend is wired", () => {
+    render(<DrillThroughPanel artifact={regionChart()} />);
+    fireEvent.change(screen.getByLabelText(/Drill into Region/i), { target: { value: "London" } });
+    // Client-side metrics still render (fallback intact).
+    expect(screen.getByText("£400")).toBeInTheDocument();
   });
 });

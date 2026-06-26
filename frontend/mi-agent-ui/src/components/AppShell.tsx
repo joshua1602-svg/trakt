@@ -109,6 +109,9 @@ export function AppShell() {
             onTogglePin={ws.togglePin}
             isWorking={ws.isWorking}
             portfolioName={ws.portfolio.name}
+            // Backend drill-through only when wired to a live backend; the mock
+            // client keeps the client-side drill panel as the fallback.
+            onDrill={client.mock ? undefined : ws.drill}
           />
         </div>
       </div>
