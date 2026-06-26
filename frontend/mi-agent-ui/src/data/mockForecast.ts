@@ -56,6 +56,14 @@ const NOV_PIPELINE: PipelineSnapshot = {
   pipelineAmount: 1_755_000,
   expectedFundedAmount: 1_755_000,
   weightedExpectedFundedAmount: 1_063_250,
+  // Prior weekly extract (one week before the current as-of) for tile deltas.
+  priorWeek: {
+    snapshotDate: "2025-11-24",
+    sourceFile: "M2L KFI and Pipeline 2025_11_24_104233.xlsx",
+    pipelineRowCount: 9,
+    pipelineAmount: 1_635_000,
+    weightedExpectedFundedAmount: 1_010_000,
+  },
   completionProbabilityBasis: "mixed_historical_and_config",
   historicalModelEvidence: {
     weeklyFilesUsed: 10,

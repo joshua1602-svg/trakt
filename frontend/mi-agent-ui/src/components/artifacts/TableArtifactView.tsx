@@ -1,5 +1,5 @@
 import type { TableArtifact, TableColumn } from "@/domain";
-import { cn, formatValue } from "@/lib/utils";
+import { cn, formatHeading, formatValue } from "@/lib/utils";
 
 export function TableArtifactView({ artifact }: { artifact: TableArtifact }) {
   const maxByCol: Record<string, number> = {};
@@ -27,7 +27,7 @@ export function TableArtifactView({ artifact }: { artifact: TableArtifact }) {
                   col.align === "right" ? "text-right" : "text-left",
                 )}
               >
-                {col.label}
+                {formatHeading(col.label)}
               </th>
             ))}
           </tr>

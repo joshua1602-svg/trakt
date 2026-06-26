@@ -50,6 +50,11 @@ export interface AgentRequest {
   /** Active workspace view (funded | pipeline | forecast); explicit wording in
    * the question can override it backend-side. */
   datasetContext?: WorkspaceView;
+  /** Optional drill-through filters keyed by semantic field (e.g.
+   * `{ geographic_region_obligor: "South East" }`). Applied backend-side before
+   * aggregation against the full dataset; the client-side panel is the fallback
+   * when these are not dispatched. */
+  filters?: Record<string, unknown>;
 }
 
 export interface AgentResponse {
@@ -66,6 +71,8 @@ export interface AgentResponse {
   /** Engineer-facing technical diagnostics, hidden behind a disclosure. */
   diagnostics?: string[];
   spec?: Partial<MIQuerySpec>;
+  /** Interpreter confidence 0–1 (retained for the Query Logic panel). */
+  confidence?: number;
   error?: string;
 }
 
@@ -92,4 +99,8 @@ export interface ChatMessage {
   warnings?: string[];
   diagnostics?: string[];
   intent?: Intent;
+  /** Parsed query spec, retained for the collapsed Query Logic panel. */
+  spec?: Partial<MIQuerySpec>;
+  /** Interpreter confidence 0–1, retained for the Query Logic panel. */
+  confidence?: number;
 }

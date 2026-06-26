@@ -1,5 +1,70 @@
 import { describe, expect, it } from "vitest";
-import { formatValue, toPercentPoints } from "./utils";
+import {
+  formatHeading,
+  formatPercent,
+  formatUiTitle,
+  formatValue,
+  normalisePercentValue,
+  toFilenameStem,
+  toPercentPoints,
+} from "./utils";
+
+describe("normalisePercentValue / formatPercent (unknown-scale fallback)", () => {
+  it("treats 0.56 and 56 both as 56%", () => {
+    expect(formatPercent(0.56)).toBe("56.0%");
+    expect(formatPercent(56)).toBe("56.0%");
+  });
+  it("never renders a 56% metric as 0.6%", () => {
+    expect(formatPercent(0.56)).not.toBe("0.6%");
+  });
+  it("returns N/A for non-numeric input", () => {
+    expect(formatPercent(undefined)).toBe("N/A");
+    expect(formatPercent("abc")).toBe("N/A");
+    expect(normalisePercentValue("abc")).toBeNull();
+  });
+  it("formatValue pct with no contract scale uses the heuristic", () => {
+    expect(formatValue(0.56, "pct")).toBe("56.0%");
+    expect(formatValue(56, "pct")).toBe("56.0%");
+  });
+});
+
+describe("formatHeading", () => {
+  it("leaves curated prose titles untouched", () => {
+    expect(formatHeading("Pipeline Bridge to £100MM")).toBe("Pipeline Bridge to £100MM");
+    expect(formatHeading("Funded vs. Pipeline Volume")).toBe("Funded vs. Pipeline Volume");
+  });
+  it("polishes raw snake_case keys", () => {
+    expect(formatHeading("average_ltv_by_region")).toBe("Average LTV By Region");
+  });
+});
+
+describe("formatUiTitle", () => {
+  it("title-cases snake_case and spaced input", () => {
+    expect(formatUiTitle("average_ltv by region by age_bucket")).toBe("Average LTV By Region By Age Bucket");
+  });
+
+  it("keeps known acronyms capitalised", () => {
+    expect(formatUiTitle("wa_ltv")).toBe("WA LTV");
+    expect(formatUiTitle("spv_balance")).toBe("SPV Balance");
+    expect(formatUiTitle("nneg_loss")).toBe("NNEG Loss");
+  });
+
+  it("collapses whitespace and trims, returns empty for nullish", () => {
+    expect(formatUiTitle("  region   mix  ")).toBe("Region Mix");
+    expect(formatUiTitle(undefined)).toBe("");
+    expect(formatUiTitle("")).toBe("");
+  });
+});
+
+describe("toFilenameStem", () => {
+  it("slugifies a polished title to snake_case", () => {
+    expect(toFilenameStem("Average LTV By Region")).toBe("average_ltv_by_region");
+  });
+  it("falls back to a default stem", () => {
+    expect(toFilenameStem("")).toBe("export");
+    expect(toFilenameStem("***")).toBe("export");
+  });
+});
 
 describe("percent display honours the dataset contract scale", () => {
   it("formats a fraction (0.51) as 51.0%", () => {

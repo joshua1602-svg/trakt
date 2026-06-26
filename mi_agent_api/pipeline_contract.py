@@ -466,6 +466,90 @@ def _year_month(text: str) -> Optional[str]:
 
 
 # --------------------------------------------------------------------------- #
+# Prior-week selection + aggregation (week-on-week pipeline tile deltas)
+# --------------------------------------------------------------------------- #
+def _parse_iso_date(text: Optional[str]):
+    """Parse an ISO ``YYYY-MM-DD`` string to a ``date`` (None if unparseable)."""
+    if not text:
+        return None
+    from datetime import datetime
+    try:
+        return datetime.strptime(str(text)[:10], "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None
+
+
+def select_prior_week_extract(
+    weekly_files: List[Dict[str, Any]],
+    current_as_of: Optional[str],
+    *,
+    target_gap_days: int = 7,
+) -> Optional[Dict[str, Any]]:
+    """Pick the prior weekly extract strictly BEFORE ``current_as_of``.
+
+    Preference order (never fabricates a snapshot):
+      1. an extract exactly ``target_gap_days`` (default 7) before the current
+         as-of date;
+      2. otherwise the latest earlier extract that exists.
+    Returns the chosen weekly-file entry, or None when no earlier extract exists.
+    """
+    cur = _parse_iso_date(current_as_of)
+    earlier: List[Tuple[Any, Dict[str, Any]]] = []
+    for entry in weekly_files or []:
+        d = _parse_iso_date(entry.get("pipeline_extract_date"))
+        if d is None or cur is None:
+            continue
+        if d < cur:
+            earlier.append((d, entry))
+    if not earlier:
+        return None
+    from datetime import timedelta
+    target = cur - timedelta(days=target_gap_days)
+    for d, entry in earlier:
+        if d == target:
+            return entry
+    earlier.sort(key=lambda t: t[0])
+    return earlier[-1][1]
+
+
+def compute_prior_week_aggregates(
+    source: Optional[Dict[str, Any]],
+    *,
+    historical_model: Optional[Dict[str, Any]] = None,
+    target_gap_days: int = 7,
+) -> Optional[Dict[str, Any]]:
+    """Real prior-week aggregates for the pipeline tiles, or None when no earlier
+    governed weekly extract exists.
+
+    The prior extract is loaded and aggregated with the SAME preparation +
+    weighting as the current snapshot (so the delta is like-for-like). The shape
+    matches the frontend ``PipelineWeeklyPrior`` contract; the UI derives the
+    average ticket from ``pipelineAmount / pipelineRowCount``. Never fabricates —
+    a missing/unreadable prior file yields None.
+    """
+    src = source or {}
+    prior = select_prior_week_extract(
+        src.get("weekly_files") or [], src.get("pipeline_as_of_date"),
+        target_gap_days=target_gap_days)
+    if prior is None:
+        return None
+    extract_date = prior.get("pipeline_extract_date")
+    try:
+        df, report = load_prepared_pipeline(
+            prior, as_of_date=extract_date, historical_model=historical_model)
+    except Exception:  # noqa: BLE001 - a bad prior file must not break the snapshot
+        return None
+    cases = int(report.get("row_count", len(df)))
+    return {
+        "snapshotDate": extract_date or prior.get("pipeline_source_folder_date"),
+        "sourceFile": Path(prior.get("source_file", "")).name or None,
+        "pipelineRowCount": cases,
+        "pipelineAmount": report.get("total_pipeline_amount"),
+        "weightedExpectedFundedAmount": report.get("weighted_expected_funded_amount"),
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Dataset contract (per-field) + correlation/forecast metadata
 # --------------------------------------------------------------------------- #
 def build_pipeline_dataset_contract(
@@ -494,6 +578,10 @@ def _expected_completion_breakdown(df: pd.DataFrame) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     grp = df.groupby(df["expected_completion_month"].astype(str), dropna=False)
     for month, sub in grp:
+        # The groupby key can arrive as a non-str (e.g. a float NaN) depending on
+        # the pandas version; normalise to a string so the filter + sort below are
+        # always type-consistent.
+        month = str(month)
         if not month or month in ("nan", "NaT", "None"):
             continue
         weighted = (coerce_numeric(sub["weighted_expected_funded_amount"]).sum()
@@ -507,7 +595,7 @@ def _expected_completion_breakdown(df: pd.DataFrame) -> List[Dict[str, Any]]:
             "weightedExpectedFundedAmount": (round(float(weighted), 2)
                                              if weighted is not None else None),
         })
-    rows.sort(key=lambda r: r["month"])
+    rows.sort(key=lambda r: str(r["month"]))
     return rows
 
 
@@ -622,12 +710,18 @@ def compute_pipeline_snapshot(
     client_id: str,
     run_id: str,
     source: Optional[Dict[str, Any]] = None,
+    prior_week: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Deterministic pipeline snapshot block for one weekly operational cut.
 
     Dates are kept distinct: ``pipelineAsOfDate`` / ``pipelineExtractDate`` /
     ``pipelineSourceFolderDate`` describe the weekly pipeline extract; they are
     NOT the funded reporting date. There is deliberately no ``reportingDate`` key.
+
+    ``prior_week`` is an optional, additive block of prior weekly-extract
+    aggregates (see :func:`compute_prior_week_aggregates`) used by the frontend
+    for week-on-week tile deltas. It is emitted as ``priorWeek`` (null when no
+    prior weekly snapshot exists — the UI then shows "No prior week").
     """
     contract = build_pipeline_dataset_contract(df, semantics, report)
     weighted = report.get("weighted_expected_funded_amount")
@@ -666,6 +760,9 @@ def compute_pipeline_snapshot(
         "pipelineAmount": report.get("total_pipeline_amount"),
         "expectedFundedAmount": report.get("expected_funded_amount"),
         "weightedExpectedFundedAmount": weighted,
+        # Prior weekly extract aggregates for week-on-week tile deltas (null when
+        # no earlier weekly snapshot exists — the UI shows "No prior week").
+        "priorWeek": prior_week,
         "completionProbabilityBasis": report.get("completion_probability_basis"),
         "completionProbabilitySummary": report.get("completion_probability_summary", {}),
         "historicalCompletionModel": report.get("historical_completion_model", {}),

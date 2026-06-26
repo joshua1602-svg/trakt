@@ -2,8 +2,25 @@ import { useState } from "react";
 import { AlertTriangle, ChevronDown, GitBranch } from "lucide-react";
 import type { PipelineSnapshot } from "@/domain";
 import { Badge } from "@/components/ui";
-import { BarList, StatTile, type BarDatum } from "@/components/pipeline/bits";
+import { BarList, StatTile, type BarDatum, type DeltaIntent } from "@/components/pipeline/bits";
 import { cn, formatGBP } from "@/lib/utils";
+
+/**
+ * Week-on-week movement for a pipeline tile. Returns "No prior week" (neutral)
+ * when the prior weekly value is genuinely absent — the UI never synthesises a
+ * delta. Format controls how the magnitude is rendered (count vs GBP).
+ */
+function weeklyDelta(
+  current: number | null | undefined,
+  prior: number | null | undefined,
+  format: "count" | "gbp",
+): { delta: string; deltaIntent: DeltaIntent } {
+  if (current == null || prior == null) return { delta: "No prior week", deltaIntent: "neutral" };
+  const d = current - prior;
+  if (d === 0) return { delta: "No change vs prior week", deltaIntent: "neutral" };
+  const mag = format === "gbp" ? formatGBP(Math.abs(d)) : Math.abs(d).toLocaleString("en-GB");
+  return { delta: `${d > 0 ? "+" : "−"}${mag} vs prior week`, deltaIntent: d > 0 ? "positive" : "negative" };
+}
 
 function dataQualityStatus(snap: PipelineSnapshot): { label: string; tone: "mint" | "amber" | "rose" } {
   const blockers = snap.dataQuality.filter((d) => d.severity === "blocker").length;
@@ -57,6 +74,18 @@ export function PipelineSnapshotPanel({
   const cases = snapshot.pipelineRowCount;
   const weighted = snapshot.weightedExpectedFundedAmount ?? 0;
   const avg = cases > 0 ? amount / cases : 0;
+
+  // Week-on-week deltas from the prior weekly extract, when the backend supplies
+  // one. Average ticket prior is derived only when both prior count + amount exist.
+  const prior = snapshot.priorWeek ?? null;
+  const priorAvg =
+    prior && prior.pipelineAmount != null && prior.pipelineRowCount
+      ? prior.pipelineAmount / prior.pipelineRowCount
+      : null;
+  const casesDelta = weeklyDelta(cases, prior?.pipelineRowCount, "count");
+  const amountDelta = weeklyDelta(amount, prior?.pipelineAmount, "gbp");
+  const weightedDelta = weeklyDelta(weighted, prior?.weightedExpectedFundedAmount, "gbp");
+  const avgDelta = weeklyDelta(avg, priorAvg, "gbp");
   const topStage = [...snapshot.stageBreakdown].sort((a, b) => b.pipelineAmount - a.pipelineAmount)[0];
   // The "next" expected completion is the first FUTURE month (> pipeline as-of
   // month); a past month is overdue, not next. Classified backend-side.
@@ -119,11 +148,15 @@ export function PipelineSnapshotPanel({
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">
-        <StatTile label="Pipeline cases" value={cases.toLocaleString("en-GB")} />
-        <StatTile label="Total pipeline amount" value={formatGBP(amount)} />
+        <StatTile label="Pipeline cases" value={cases.toLocaleString("en-GB")}
+          delta={casesDelta.delta} deltaIntent={casesDelta.deltaIntent} />
+        <StatTile label="Total pipeline amount" value={formatGBP(amount)}
+          delta={amountDelta.delta} deltaIntent={amountDelta.deltaIntent} />
         <StatTile label="Weighted expected funded" value={formatGBP(weighted)}
+          delta={weightedDelta.delta} deltaIntent={weightedDelta.deltaIntent}
           hint="probability-weighted" />
-        <StatTile label="Average case amount" value={formatGBP(avg)} />
+        <StatTile label="Average case amount" value={formatGBP(avg)}
+          delta={avgDelta.delta} deltaIntent={avgDelta.deltaIntent} />
         {topStage && (
           <StatTile label="Top stage by amount" value={topStage.stage}
             hint={`${formatGBP(topStage.pipelineAmount)} · ${topStage.caseCount} cases`} />

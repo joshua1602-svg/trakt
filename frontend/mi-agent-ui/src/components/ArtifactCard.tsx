@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Activity,
   BarChart3,
@@ -15,8 +15,11 @@ import {
 } from "lucide-react";
 import type { Artifact, ArtifactType } from "@/domain";
 import { Badge, Card, IconButton } from "@/components/ui";
-import { cn, formatTime } from "@/lib/utils";
+import { cn, formatHeading, formatTime, toFilenameStem } from "@/lib/utils";
 import { ArtifactRenderer } from "@/components/artifacts/ArtifactRenderer";
+import { DrillThroughPanel } from "@/components/DrillThroughPanel";
+import { ExportMenu } from "@/components/ExportMenu";
+import { isChartArtifact, isTableArtifact } from "@/domain";
 
 const KIND_ICON: Record<ArtifactType, typeof LayoutGrid> = {
   kpi: LayoutGrid,
@@ -31,13 +34,17 @@ const KIND_ICON: Record<ArtifactType, typeof LayoutGrid> = {
 export function ArtifactCard({
   artifact,
   onTogglePin,
+  onDrill,
 }: {
   artifact: Artifact;
   onTogglePin: (id: string) => void;
+  onDrill?: (artifact: Artifact, filters: Record<string, unknown>) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [copied, setCopied] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const Icon = KIND_ICON[artifact.type];
+  const exportable = isChartArtifact(artifact) || isTableArtifact(artifact);
 
   const copy = async () => {
     try {
@@ -54,7 +61,7 @@ export function ArtifactCard({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${artifact.id}.json`;
+    a.download = `${toFilenameStem(formatHeading(artifact.title))}_${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -67,7 +74,7 @@ export function ArtifactCard({
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h3 className="truncate text-sm font-semibold text-ink-100">{artifact.title}</h3>
+            <h3 className="truncate text-sm font-semibold text-ink-100">{formatHeading(artifact.title)}</h3>
             {artifact.pinned && <Pin size={12} className="shrink-0 fill-peri-400 text-peri-400" />}
             {artifact.mock && <Badge tone="amber">Mock</Badge>}
           </div>
@@ -93,9 +100,13 @@ export function ArtifactCard({
           <IconButton label={copied ? "Copied" : "Copy data"} onClick={copy}>
             {copied ? <Check size={14} className="text-mint-400" /> : <Copy size={14} />}
           </IconButton>
-          <IconButton label="Download JSON" onClick={download}>
-            <Download size={14} />
-          </IconButton>
+          {exportable ? (
+            <ExportMenu artifact={artifact} bodyRef={bodyRef} onJson={download} />
+          ) : (
+            <IconButton label="Download JSON" onClick={download}>
+              <Download size={14} />
+            </IconButton>
+          )}
           <IconButton label={collapsed ? "Expand" : "Collapse"} onClick={() => setCollapsed((c) => !c)}>
             <ChevronDown size={14} className={cn("transition-transform", collapsed && "-rotate-90")} />
           </IconButton>
@@ -103,8 +114,14 @@ export function ArtifactCard({
       </div>
 
       {!collapsed && (
-        <div className="p-4">
+        <div className="p-4" ref={bodyRef}>
           <ArtifactRenderer artifact={artifact} />
+          {(isChartArtifact(artifact) || isTableArtifact(artifact)) && (
+            <DrillThroughPanel
+              artifact={artifact}
+              onDrill={onDrill ? (filters) => onDrill(artifact, filters) : undefined}
+            />
+          )}
           {artifact.warnings && artifact.warnings.length > 0 && (
             <div className="mt-3 rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-[11px] text-amber-300/90">
               {artifact.warnings.map((w, i) => (
