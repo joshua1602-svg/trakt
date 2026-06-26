@@ -24,6 +24,18 @@ export interface ExpectedCompletionBucket {
   weightedExpectedFundedAmount: number | null;
 }
 
+/** Completion-month classification relative to the pipeline as-of month. */
+export interface ExpectedCompletionSummary {
+  asOfMonth: string | null;
+  overdueExpectedCompletionCount: number;
+  overdueExpectedCompletionWeightedAmount: number;
+  currentMonthExpectedCompletionCount: number;
+  currentMonthExpectedCompletionWeightedAmount: number;
+  nextExpectedCompletionMonth: string | null;
+  nextExpectedCompletionCount: number;
+  nextExpectedCompletionWeightedAmount: number;
+}
+
 /** A generic dimension breakdown row (broker / region). */
 export interface DimensionBucket {
   key: string;
@@ -79,7 +91,14 @@ export interface PipelineSnapshot {
   historicalCompletionModel?: Record<string, unknown>;
   historicalModelEvidence?: HistoricalModelEvidence;
   stageBreakdown: PipelineStageBucket[];
+  /** Unchanged — drives the completion-month chart. */
   expectedCompletionBreakdown: ExpectedCompletionBucket[];
+  /** Completion months classified vs the as-of month (overdue / current / next). */
+  expectedCompletionSummary?: ExpectedCompletionSummary;
+  nextExpectedCompletionMonth?: string | null;
+  overdueExpectedCompletionCount?: number;
+  overdueExpectedCompletionWeightedAmount?: number;
+  currentMonthExpectedCompletionCount?: number;
   /** Capped to top 10 (+ Other) for the landing-page visual. */
   brokerBreakdown?: DimensionBucket[];
   regionBreakdown?: DimensionBucket[];

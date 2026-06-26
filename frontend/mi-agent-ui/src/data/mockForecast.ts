@@ -66,6 +66,21 @@ const NOV_PIPELINE: PipelineSnapshot = {
   },
   stageBreakdown: NOV_STAGES,
   expectedCompletionBreakdown: NOV_COMPLETION,
+  // As-of month 2025-12: 2025-12 is current, 2026-01 is the next (future) month.
+  expectedCompletionSummary: {
+    asOfMonth: "2025-12",
+    overdueExpectedCompletionCount: 0,
+    overdueExpectedCompletionWeightedAmount: 0,
+    currentMonthExpectedCompletionCount: 6,
+    currentMonthExpectedCompletionWeightedAmount: 533_250,
+    nextExpectedCompletionMonth: "2026-01",
+    nextExpectedCompletionCount: 4,
+    nextExpectedCompletionWeightedAmount: 530_000,
+  },
+  nextExpectedCompletionMonth: "2026-01",
+  overdueExpectedCompletionCount: 0,
+  overdueExpectedCompletionWeightedAmount: 0,
+  currentMonthExpectedCompletionCount: 6,
   // Capped to top 10 (+ Other) by the backend — 14 brokers -> 9 + Other.
   brokerBreakdown: [
     { key: "Broker Alpha", caseCount: 30, pipelineAmount: 530_000, weightedExpectedFundedAmount: 320_000 },

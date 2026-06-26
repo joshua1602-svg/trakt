@@ -52,6 +52,67 @@ describe("PipelineSnapshotPanel", () => {
     expect(screen.getByText(/economic amount parsed for 9\/10 rows/)).toBeInTheDocument();
   });
 
+  it("uses the first future month for 'Next expected completions', not a past month", () => {
+    // As-of 2025-11: 2025-10 is overdue, 2025-12 is the next (future) month.
+    const snap: PipelineSnapshot = {
+      ...NOV,
+      pipelineAsOfDate: "2025-11-01",
+      expectedCompletionBreakdown: [
+        { month: "2025-10", caseCount: 34, expectedFundedAmount: 5_000_000, weightedExpectedFundedAmount: 4_200_000 },
+        { month: "2025-11", caseCount: 12, expectedFundedAmount: 1_200_000, weightedExpectedFundedAmount: 900_000 },
+        { month: "2025-12", caseCount: 20, expectedFundedAmount: 2_000_000, weightedExpectedFundedAmount: 1_500_000 },
+      ],
+      expectedCompletionSummary: {
+        asOfMonth: "2025-11",
+        overdueExpectedCompletionCount: 34,
+        overdueExpectedCompletionWeightedAmount: 4_200_000,
+        currentMonthExpectedCompletionCount: 12,
+        currentMonthExpectedCompletionWeightedAmount: 900_000,
+        nextExpectedCompletionMonth: "2025-12",
+        nextExpectedCompletionCount: 20,
+        nextExpectedCompletionWeightedAmount: 1_500_000,
+      },
+      nextExpectedCompletionMonth: "2025-12",
+      overdueExpectedCompletionCount: 34,
+      overdueExpectedCompletionWeightedAmount: 4_200_000,
+    };
+    render(<PipelineSnapshotPanel snapshot={snap} />);
+    const nextTile = screen.getByText("Next expected completions").parentElement!;
+    // The next tile shows the FUTURE month 2025-12, never the overdue 2025-10.
+    expect(nextTile.textContent).toContain("2025-12");
+    expect(nextTile.textContent).not.toContain("2025-10");
+    // Overdue is exposed separately.
+    expect(screen.getByText("Overdue expected completions")).toBeInTheDocument();
+    expect(screen.getByText(/before as-of month/)).toBeInTheDocument();
+  });
+
+  it("shows 'None' when there are only past expected completions", () => {
+    const snap: PipelineSnapshot = {
+      ...NOV,
+      pipelineAsOfDate: "2025-11-01",
+      expectedCompletionBreakdown: [
+        { month: "2025-09", caseCount: 5, expectedFundedAmount: 100, weightedExpectedFundedAmount: 50 },
+        { month: "2025-10", caseCount: 3, expectedFundedAmount: 80, weightedExpectedFundedAmount: 40 },
+      ],
+      expectedCompletionSummary: {
+        asOfMonth: "2025-11",
+        overdueExpectedCompletionCount: 8,
+        overdueExpectedCompletionWeightedAmount: 90,
+        currentMonthExpectedCompletionCount: 0,
+        currentMonthExpectedCompletionWeightedAmount: 0,
+        nextExpectedCompletionMonth: null,
+        nextExpectedCompletionCount: 0,
+        nextExpectedCompletionWeightedAmount: 0,
+      },
+      nextExpectedCompletionMonth: null,
+      overdueExpectedCompletionCount: 8,
+    };
+    render(<PipelineSnapshotPanel snapshot={snap} />);
+    const nextTile = screen.getByText("Next expected completions").parentElement!;
+    expect(nextTile.textContent).toContain("None");
+    expect(screen.getByText("Overdue expected completions")).toBeInTheDocument();
+  });
+
   it("renders an unavailable state gracefully", () => {
     const snap = { ...NOV, ok: false, error: "No pipeline data for this reporting date." };
     render(<PipelineSnapshotPanel snapshot={snap} />);

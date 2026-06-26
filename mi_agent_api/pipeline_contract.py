@@ -364,6 +364,51 @@ def _expected_completion_breakdown(df: pd.DataFrame) -> List[Dict[str, Any]]:
     return rows
 
 
+def _expected_completion_summary(breakdown: List[Dict[str, Any]],
+                                 as_of: Optional[str]) -> Dict[str, Any]:
+    """Classify the (ascending) completion-month breakdown relative to the pipeline
+    as-of month so a PAST month is never labelled "next".
+
+      * overdue : month < as-of month
+      * current : month == as-of month
+      * next    : FIRST month > as-of month
+
+    ``expectedCompletionBreakdown`` itself is unchanged (still drives the chart)."""
+    as_of_month = (as_of or "")[:7]
+    overdue_count = current_count = 0
+    overdue_weighted = current_weighted = 0.0
+    next_month: Optional[str] = None
+    next_count = 0
+    next_weighted = 0.0
+
+    def _w(row: Dict[str, Any]) -> float:
+        return float(row.get("weightedExpectedFundedAmount") or 0.0)
+
+    for row in breakdown:  # ascending by month
+        month = row["month"]
+        if as_of_month and month < as_of_month:
+            overdue_count += row["caseCount"]
+            overdue_weighted += _w(row)
+        elif as_of_month and month == as_of_month:
+            current_count += row["caseCount"]
+            current_weighted += _w(row)
+        else:  # future (or no as-of month known)
+            if next_month is None:
+                next_month = month
+                next_count = row["caseCount"]
+                next_weighted = _w(row)
+    return {
+        "asOfMonth": as_of_month or None,
+        "overdueExpectedCompletionCount": overdue_count,
+        "overdueExpectedCompletionWeightedAmount": round(overdue_weighted, 2),
+        "currentMonthExpectedCompletionCount": current_count,
+        "currentMonthExpectedCompletionWeightedAmount": round(current_weighted, 2),
+        "nextExpectedCompletionMonth": next_month,
+        "nextExpectedCompletionCount": next_count,
+        "nextExpectedCompletionWeightedAmount": round(next_weighted, 2),
+    }
+
+
 def _dimension_breakdown(df: pd.DataFrame, field: str,
                          key_name: str = "key") -> List[Dict[str, Any]]:
     """Backend-side ``[{key, caseCount, pipelineAmount, weightedExpected...}]`` for
@@ -445,6 +490,8 @@ def compute_pipeline_snapshot(
     # the uncapped detail stays in ``*BreakdownFull`` for the API / agent.
     broker_full = _dimension_breakdown(df, "broker_channel", key_name="key")
     region_full = _dimension_breakdown(df, "geographic_region_obligor", key_name="key")
+    completion_breakdown = _expected_completion_breakdown(df)
+    completion_summary = _expected_completion_summary(completion_breakdown, as_of)
     return {
         "ok": True,
         "recordType": "pipeline",
@@ -467,7 +514,13 @@ def compute_pipeline_snapshot(
             report.get("historical_completion_model"),
             report.get("completion_probability_basis")),
         "stageBreakdown": _stage_breakdown(df),
-        "expectedCompletionBreakdown": _expected_completion_breakdown(df),
+        "expectedCompletionBreakdown": completion_breakdown,
+        "expectedCompletionSummary": completion_summary,
+        # Named diagnostics (relative to the pipeline as-of month).
+        "overdueExpectedCompletionCount": completion_summary["overdueExpectedCompletionCount"],
+        "overdueExpectedCompletionWeightedAmount": completion_summary["overdueExpectedCompletionWeightedAmount"],
+        "currentMonthExpectedCompletionCount": completion_summary["currentMonthExpectedCompletionCount"],
+        "nextExpectedCompletionMonth": completion_summary["nextExpectedCompletionMonth"],
         "brokerBreakdown": cap_breakdown(broker_full, 10),
         "brokerBreakdownFull": broker_full,
         "regionBreakdown": cap_breakdown(region_full, 10),

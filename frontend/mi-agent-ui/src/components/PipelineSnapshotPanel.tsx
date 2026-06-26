@@ -58,7 +58,15 @@ export function PipelineSnapshotPanel({
   const weighted = snapshot.weightedExpectedFundedAmount ?? 0;
   const avg = cases > 0 ? amount / cases : 0;
   const topStage = [...snapshot.stageBreakdown].sort((a, b) => b.pipelineAmount - a.pipelineAmount)[0];
-  const nextCompletion = snapshot.expectedCompletionBreakdown[0];
+  // The "next" expected completion is the first FUTURE month (> pipeline as-of
+  // month); a past month is overdue, not next. Classified backend-side.
+  const summary = snapshot.expectedCompletionSummary;
+  const nextMonth = summary?.nextExpectedCompletionMonth ?? null;
+  const nextCompletion = nextMonth
+    ? snapshot.expectedCompletionBreakdown.find((m) => m.month === nextMonth) ?? null
+    : null;
+  const overdueCount = summary?.overdueExpectedCompletionCount ?? 0;
+  const overdueWeighted = summary?.overdueExpectedCompletionWeightedAmount ?? 0;
   const dq = dataQualityStatus(snapshot);
 
   const stageByAmount: BarDatum[] = snapshot.stageBreakdown.map((s) => ({
@@ -120,9 +128,16 @@ export function PipelineSnapshotPanel({
           <StatTile label="Top stage by amount" value={topStage.stage}
             hint={`${formatGBP(topStage.pipelineAmount)} · ${topStage.caseCount} cases`} />
         )}
-        {nextCompletion && (
+        {nextCompletion ? (
           <StatTile label="Next expected completions" value={nextCompletion.month}
             hint={`${nextCompletion.caseCount} cases · ${formatGBP(nextCompletion.weightedExpectedFundedAmount ?? 0)} weighted`} />
+        ) : (
+          <StatTile label="Next expected completions" value="None"
+            hint="no future expected completions" />
+        )}
+        {overdueCount > 0 && (
+          <StatTile label="Overdue expected completions" value={overdueCount.toLocaleString("en-GB")}
+            hint={`${formatGBP(overdueWeighted)} weighted · before as-of month`} />
         )}
       </div>
 
