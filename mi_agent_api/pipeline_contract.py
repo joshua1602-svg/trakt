@@ -249,6 +249,109 @@ def _collect_files(root: Path, globs: List[str]) -> List[Path]:
     return out
 
 
+# --------------------------------------------------------------------------- #
+# Weekly-extract inventory: a FLAT list of governed weekly pipeline files across
+# ALL source folders, deduplicated by stable identity so the same weekly extract
+# is never counted twice (e.g. when it appears in two run folders, or as both an
+# .xlsx and a .csv). The current snapshot is then the latest extract across the
+# whole inventory — never just the latest file inside the earliest folder.
+# --------------------------------------------------------------------------- #
+# Governed primary source representation: prefer the .xlsx original over a .csv
+# re-export of the same weekly extract (and an .xls over a .csv).
+PRIMARY_SOURCE_PREFERENCE = "xlsx_over_csv"
+_EXT_PRIORITY = {".xlsx": 0, ".xls": 1, ".csv": 2}
+
+
+def _normalise_basename(path: Path) -> str:
+    """A normalised file identity (extension dropped, separators/casing collapsed)
+    so ``M2L_KFI_and_Pipeline_2025_12_01_115711.csv`` and
+    ``M2L KFI and Pipeline 2025_12_01_115711.xlsx`` resolve to the SAME extract."""
+    stem = re.sub(r"\.(csv|xlsx|xls)$", "", path.name, flags=re.IGNORECASE)
+    return re.sub(r"[\s_\-]+", " ", stem.strip().lower())
+
+
+def _collect_governed_extracts(root: str | os.PathLike,
+                               client_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """A flat list of every governed weekly pipeline file under ``root`` (for the
+    client, if given), each annotated with its parsed extract/folder dates, its
+    normalised identity and its representation extension. Not deduplicated."""
+    root = Path(root)
+    if not root.exists():
+        return []
+    source_globs = [g for g in _PIPELINE_SOURCE_GLOBS if g != _CENTRAL_PIPELINE_TAPE]
+    files = _collect_files(root, source_globs)
+    if not files:
+        files = _collect_files(root, [_CENTRAL_PIPELINE_TAPE])
+    out: List[Dict[str, Any]] = []
+    for path in files:
+        cid = _infer_client(path, root) or (client_id or "client_001")
+        if client_id and cid != client_id:
+            continue
+        folder = path.parent
+        out.append({
+            "client_id": cid,
+            "source_file": str(path),
+            "normalised_name": _normalise_basename(path),
+            "ext": path.suffix.lower(),
+            "pipeline_extract_date": _extract_date(path),
+            "pipeline_source_folder": str(folder),
+            "pipeline_source_folder_date": _folder_date(folder),
+        })
+    return out
+
+
+def _prefer(a: Dict[str, Any], b: Dict[str, Any]) -> bool:
+    """True if extract ``a`` is the better representation to keep over ``b`` for the
+    same stable identity: prefer the governed primary source (xlsx > xls > csv),
+    then the later source folder, then a stable path order."""
+    pa, pb = _EXT_PRIORITY.get(a["ext"], 9), _EXT_PRIORITY.get(b["ext"], 9)
+    if pa != pb:
+        return pa < pb
+    fa, fb = a["pipeline_source_folder_date"] or "", b["pipeline_source_folder_date"] or ""
+    if fa != fb:
+        return fa > fb
+    return a["source_file"] < b["source_file"]
+
+
+def _dedupe_extracts(extracts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Deduplicate weekly extracts by stable identity
+    ``(client_id, parsed_extract_date, normalised_source_file_name)`` — preferring
+    the governed primary representation. The same weekly file appearing in two run
+    folders, or as both .xlsx and .csv, collapses to a single extract. Ordered
+    oldest -> newest by extract date then identity."""
+    by_key: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
+    for e in extracts:
+        key = (e["client_id"], e["pipeline_extract_date"] or "", e["normalised_name"])
+        cur = by_key.get(key)
+        if cur is None or _prefer(e, cur):
+            by_key[key] = e
+    unique = list(by_key.values())
+    unique.sort(key=lambda e: (e["pipeline_extract_date"] or "", e["normalised_name"]))
+    return unique
+
+
+def weekly_extract_inventory(root: str | os.PathLike,
+                             client_id: str) -> Dict[str, Any]:
+    """The deduplicated weekly-extract inventory for a client across all source
+    folders. Exposes both what was scanned and what was actually used:
+
+        {extracts, sourceFilesScanned, uniqueWeeklyExtractsUsed,
+         duplicatesExcluded, primarySourcePreference, sourceFoldersIncluded}
+    """
+    scanned = _collect_governed_extracts(root, client_id=client_id)
+    unique = _dedupe_extracts(scanned)
+    folders = sorted({e["pipeline_source_folder_date"] for e in unique
+                      if e["pipeline_source_folder_date"]})
+    return {
+        "extracts": unique,
+        "sourceFilesScanned": len(scanned),
+        "uniqueWeeklyExtractsUsed": len(unique),
+        "duplicatesExcluded": len(scanned) - len(unique),
+        "primarySourcePreference": PRIMARY_SOURCE_PREFERENCE,
+        "sourceFoldersIncluded": folders,
+    }
+
+
 def load_prepared_pipeline(source: str | os.PathLike | Dict[str, Any],
                            as_of_date: Optional[str] = None,
                            historical_model: Optional[Dict[str, Any]] = None
@@ -274,43 +377,87 @@ def load_prepared_pipeline(source: str | os.PathLike | Dict[str, Any],
 
 def collect_weekly_history(root: str | os.PathLike,
                            client_id: str) -> List[Dict[str, Any]]:
-    """All governed weekly pipeline files for a client across every scope, in
-    chronological order (for the historical completion-rate model)."""
-    entries: List[Dict[str, Any]] = []
-    for scope in discover_pipeline_sources(root, client_id=client_id):
-        entries.extend(scope.get("weekly_files", []) or [])
-    entries.sort(key=lambda e: (e.get("pipeline_extract_date") or "",
-                                e.get("source_file") or ""))
-    return entries
+    """The UNIQUE governed weekly pipeline extracts for a client across every
+    source folder, in chronological order (for the historical completion-rate
+    model). Deduplicated by stable identity so the same weekly file is never
+    counted twice (cross-folder copies, or .xlsx/.csv of the same extract)."""
+    return weekly_extract_inventory(root, client_id)["extracts"]
 
 
 def build_pipeline_history(root: str | os.PathLike,
                            client_id: str) -> Dict[str, Any]:
-    """Build the historical completion model from a client's weekly pipeline files."""
+    """Build the historical completion model from a client's UNIQUE weekly pipeline
+    extracts, annotated with the dedup provenance (scanned vs used vs excluded)."""
     from .pipeline_history import build_historical_completion_model
-    return build_historical_completion_model(collect_weekly_history(root, client_id))
+    inv = weekly_extract_inventory(root, client_id)
+    model = build_historical_completion_model(inv["extracts"])
+    # Provenance: how many files were scanned vs how many unique extracts were used.
+    model["sourceFilesScanned"] = inv["sourceFilesScanned"]
+    model["uniqueWeeklyExtractsUsed"] = inv["uniqueWeeklyExtractsUsed"]
+    model["duplicatesExcluded"] = inv["duplicatesExcluded"]
+    model["primarySourcePreference"] = inv["primarySourcePreference"]
+    model["sourceFoldersIncluded"] = inv["sourceFoldersIncluded"]
+    return model
 
 
 def resolve_pipeline_source(root: str | os.PathLike, client_id: str,
                             run_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    """The pipeline scope for a client/run, matched by the funded run's month.
+    """The CURRENT pipeline snapshot for a client: the latest valid governed weekly
+    extract ordered by parsed extract date across ALL selected source folders —
+    NOT the latest file inside whichever folder happens to sort first.
 
-    ``run_id`` is the funded MI run (``mi_2025_11``); the matching pipeline scope
-    is the one whose source-folder month aligns. Matching uses the scope's
-    ``run_id`` and ``pipeline_source_folder_date`` (the monthly scope) — NOT the
-    weekly extract date, which may roll into the next month.
+    The funded ``run_id`` (``mi_2025_11``) stays the run-alignment label; it does
+    NOT constrain which weekly extract is current (the latest extract may roll into
+    the next month and live in a later folder). The returned scope keeps the date
+    concepts separate and exposes the historical observation window + dedup
+    provenance so the current snapshot date is never confused with the window start.
     """
-    sources = discover_pipeline_sources(root, client_id=client_id)
-    if not sources:
+    inv = weekly_extract_inventory(root, client_id)
+    unique = inv["extracts"]
+    if not unique:
         return None
-    if run_id:
-        want_ym = _year_month(str(run_id))
-        for s in sources:
-            if (s.get("run_id") == run_id
-                    or (want_ym and _year_month(s.get("run_id") or "") == want_ym)
-                    or (want_ym and _year_month(s.get("pipeline_source_folder_date") or "") == want_ym)):
-                return s
-    return sources[-1]  # latest scope
+
+    # Current snapshot = the latest VALID extract across the whole inventory.
+    current: Optional[Tuple[Dict[str, Any], int]] = None
+    for cand in reversed(unique):  # newest first
+        df = _read_source(Path(cand["source_file"]))
+        if df is not None and not df.empty:
+            current = (cand, int(len(df)))
+            break
+    if current is None:
+        return None
+    cand, row_count = current
+    as_of = cand["pipeline_extract_date"] or cand["pipeline_source_folder_date"]
+
+    # Historical observation window: every unique extract up to (incl.) the current
+    # snapshot date. The window START is the earliest extract — distinct from the
+    # current snapshot date (the window END).
+    window = [e for e in unique if (e["pipeline_extract_date"] or "") <= (as_of or "")]
+    window_start = window[0]["pipeline_extract_date"] if window else as_of
+
+    return {
+        "client_id": cand["client_id"],
+        "run_id": run_id or _run_id_for(cand["pipeline_source_folder_date"], as_of,
+                                        Path(cand["source_file"])),
+        "pipeline_source_folder": cand["pipeline_source_folder"],
+        "pipeline_source_folder_date": cand["pipeline_source_folder_date"],
+        "pipeline_extract_date": cand["pipeline_extract_date"],
+        "pipeline_as_of_date": as_of,
+        "source_file": cand["source_file"],
+        "row_count": row_count,
+        "weekly_files": window,
+        # Current pipeline snapshot — kept DISTINCT from the source-folder date and
+        # from the historical observation window.
+        "current_pipeline_snapshot_date": as_of,
+        "current_pipeline_source_file": Path(cand["source_file"]).name,
+        "historical_observation_window_start": window_start,
+        "historical_observation_window_end": as_of,
+        "unique_weekly_extracts_used": len(window),
+        "source_files_scanned": inv["sourceFilesScanned"],
+        "duplicates_excluded": inv["duplicatesExcluded"],
+        "primary_source_preference": inv["primarySourcePreference"],
+        "source_folders_included": inv["sourceFoldersIncluded"],
+    }
 
 
 def _year_month(text: str) -> Optional[str]:
@@ -503,6 +650,18 @@ def compute_pipeline_snapshot(
         "pipelineSourceFolderDate": src.get("pipeline_source_folder_date"),
         "pipelineSourceFolder": src.get("pipeline_source_folder"),
         "sourceFile": src.get("source_file"),
+        # Current pipeline snapshot vs historical observation window — kept distinct
+        # so the UI never uses the source-folder date as a proxy for the as-of date.
+        "currentPipelineSnapshotDate": src.get("current_pipeline_snapshot_date") or as_of,
+        "currentPipelineSourceFile": src.get("current_pipeline_source_file")
+            or (Path(src["source_file"]).name if src.get("source_file") else None),
+        "historicalObservationWindowStart": src.get("historical_observation_window_start"),
+        "historicalObservationWindowEnd": src.get("historical_observation_window_end") or as_of,
+        "uniqueWeeklyExtractsUsed": src.get("unique_weekly_extracts_used"),
+        "sourceFilesScanned": src.get("source_files_scanned"),
+        "duplicatesExcluded": src.get("duplicates_excluded"),
+        "primarySourcePreference": src.get("primary_source_preference"),
+        "sourceFoldersIncluded": src.get("source_folders_included", []),
         "pipelineRowCount": int(report.get("row_count", len(df))),
         "pipelineAmount": report.get("total_pipeline_amount"),
         "expectedFundedAmount": report.get("expected_funded_amount"),
