@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { AlertTriangle, ChevronDown, FileBarChart, RefreshCw, SlidersHorizontal, Sparkles, User } from "lucide-react";
-import type { ChatMessage as ChatMessageType, MIQuerySpec } from "@/domain";
+import type { Artifact, ChatMessage as ChatMessageType, MIQuerySpec } from "@/domain";
+import { ChatResult } from "@/components/ChatResult";
 import { cn, formatTime, formatUiTitle } from "@/lib/utils";
 
 export function ChatMessage({
@@ -8,25 +9,30 @@ export function ChatMessage({
   onOpenArtifact,
   onRetry,
   onAsk,
+  onTogglePin,
+  onDrill,
 }: {
   message: ChatMessageType;
   onOpenArtifact?: (id: string) => void;
   onRetry?: () => void;
   /** Dispatch a suggested follow-up question (routes through context). */
   onAsk?: (question: string) => void;
+  onTogglePin?: (id: string) => void;
+  onDrill?: (artifact: Artifact, filters: Record<string, unknown>) => void;
 }) {
   const isUser = message.role === "user";
+  const hasInlineResult = !isUser && !!message.artifacts && message.artifacts.length > 0;
 
   return (
-    <div className="animate-fade-in flex gap-2.5">
+    <div className="animate-fade-in flex gap-2.5" data-role={message.role}>
       <div
         className={cn(
-          "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
+          "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
           isUser
-            ? "bg-navy-700 text-ink-300"
+            ? "bg-slate-600/40 text-slate-200"
             : message.error
               ? "bg-rose-400/15 text-rose-400"
-              : "bg-gradient-to-br from-peri-400/30 to-navy-700 text-peri-200",
+              : "bg-gradient-to-br from-teal-500 to-emerald-600 text-white shadow-sm shadow-teal-900/40",
         )}
       >
         {isUser ? <User size={14} /> : message.error ? <AlertTriangle size={14} /> : <Sparkles size={14} />}
@@ -34,32 +40,39 @@ export function ChatMessage({
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-ink-200">{isUser ? "You" : "MI Agent"}</span>
+          <span className={cn("text-xs font-semibold", isUser ? "text-slate-300" : "text-teal-200")}>
+            {isUser ? "You" : "MI Agent"}
+          </span>
           <span className="text-[10px] text-ink-500">{formatTime(message.createdAt)}</span>
         </div>
 
         {message.pending ? (
-          <div className="mt-1.5 inline-flex items-center gap-1 rounded-lg bg-navy-800/60 px-3 py-2">
-            <span className="dot-1 h-1.5 w-1.5 rounded-full bg-peri-300" />
-            <span className="dot-2 h-1.5 w-1.5 rounded-full bg-peri-300" />
-            <span className="dot-3 h-1.5 w-1.5 rounded-full bg-peri-300" />
+          <div className="mt-1.5 inline-flex items-center gap-1 rounded-lg border border-teal-700/30 bg-teal-900/20 px-3 py-2">
+            <span className="dot-1 h-1.5 w-1.5 rounded-full bg-teal-300" />
+            <span className="dot-2 h-1.5 w-1.5 rounded-full bg-teal-300" />
+            <span className="dot-3 h-1.5 w-1.5 rounded-full bg-teal-300" />
           </div>
         ) : (
-          <p
+          <div
+            data-testid={isUser ? "user-bubble" : "assistant-bubble"}
             className={cn(
-              "mt-1 whitespace-pre-wrap text-[13px] leading-relaxed",
-              isUser ? "text-ink-200" : message.error ? "text-rose-300" : "text-ink-300",
+              "mt-1 whitespace-pre-wrap rounded-2xl rounded-tl-sm border px-3.5 py-2.5 text-[13px] leading-relaxed",
+              isUser
+                ? "border-slate-600/30 bg-slate-700/20 text-slate-100"
+                : message.error
+                  ? "border-rose-400/25 bg-rose-400/5 text-rose-200"
+                  : "border-teal-700/30 bg-teal-900/15 text-ink-100",
             )}
           >
             {message.content}
-          </p>
+          </div>
         )}
 
         {message.error && onRetry && (
           <button
             type="button"
             onClick={onRetry}
-            className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-navy-800 px-2.5 py-1 text-[11px] font-medium text-ink-200 transition-colors hover:border-peri-400/40 hover:text-ink-100"
+            className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-navy-800 px-2.5 py-1 text-[11px] font-medium text-ink-200 transition-colors hover:border-teal-400/40 hover:text-ink-100"
           >
             <RefreshCw size={12} />
             Retry
@@ -67,7 +80,7 @@ export function ChatMessage({
         )}
 
         {message.assumptions && message.assumptions.length > 0 && (
-          <div className="mt-2 rounded-lg border border-[var(--color-line-soft)] bg-navy-900/60 px-3 py-2">
+          <div className="mt-2 rounded-lg border border-[var(--color-line-soft)] bg-navy-900/50 px-3 py-2">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-500">Assumptions</div>
             <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px] leading-relaxed text-ink-400">
               {message.assumptions.map((a, i) => (
@@ -85,20 +98,26 @@ export function ChatMessage({
           </div>
         )}
 
+        {/* The result, embedded directly in the conversation. */}
+        {hasInlineResult && onTogglePin && (
+          <ChatResult artifacts={message.artifacts!} onTogglePin={onTogglePin} onDrill={onDrill} onAsk={onAsk} />
+        )}
+
         {!isUser && !message.pending && !message.error && <QueryLogicPanel message={message} />}
 
-        {message.artifactRefs && message.artifactRefs.length > 0 && (
+        {/* Fallback navigation links only when the result isn't embedded inline. */}
+        {!hasInlineResult && message.artifactRefs && message.artifactRefs.length > 0 && (
           <div className="mt-2 flex flex-col gap-1">
             {message.artifactRefs.map((ref) => (
               <button
                 key={ref.id}
                 type="button"
                 onClick={() => onOpenArtifact?.(ref.id)}
-                className="group inline-flex items-center gap-2 rounded-md border border-[var(--color-line)] bg-navy-800/50 px-2.5 py-1.5 text-left text-[11px] text-ink-300 transition-colors hover:border-peri-400/40 hover:text-ink-100"
+                className="group inline-flex items-center gap-2 rounded-md border border-[var(--color-line)] bg-navy-800/50 px-2.5 py-1.5 text-left text-[11px] text-ink-300 transition-colors hover:border-teal-400/40 hover:text-ink-100"
               >
-                <FileBarChart size={13} className="text-peri-300" />
+                <FileBarChart size={13} className="text-teal-300" />
                 <span className="truncate">{ref.title}</span>
-                <span className="ml-auto text-[10px] uppercase tracking-wider text-ink-500 group-hover:text-peri-300">
+                <span className="ml-auto text-[10px] uppercase tracking-wider text-ink-500 group-hover:text-teal-300">
                   {ref.type} →
                 </span>
               </button>
@@ -114,7 +133,7 @@ export function ChatMessage({
                 type="button"
                 onClick={() => onAsk?.(s.question)}
                 title={s.question}
-                className="inline-flex items-center rounded-full border border-[var(--color-line)] bg-navy-800/50 px-2.5 py-1 text-[11px] text-ink-300 transition-colors hover:border-peri-400/40 hover:text-ink-100"
+                className="inline-flex items-center rounded-full border border-teal-700/30 bg-teal-900/20 px-2.5 py-1 text-[11px] text-teal-100 transition-colors hover:border-teal-400/50 hover:bg-teal-800/30"
               >
                 {s.label}
               </button>

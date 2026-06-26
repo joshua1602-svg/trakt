@@ -446,11 +446,19 @@ def _interpreted_string(interpreted: Any) -> str:
 
 
 def _answer(interpreted: Any, qr: Optional[Dict[str, Any]], chart_type: Optional[str]) -> str:
-    desc = _interpreted_string(interpreted)
+    """A short, plain-English lead for the chat.
+
+    Deliberately does NOT echo the parser interpretation (metric / dimension /
+    aggregation / parser / validation) — that technical detail stays in the
+    ``interpreted`` field, surfaced only behind the UI's collapsed Query Logic
+    disclosure. The React response-presenter produces the grounded, data-aware
+    sentence; this is a safe neutral fallback for any other API consumer.
+    """
     n = qr.get("row_count") if qr else None
-    if desc and n is not None:
-        return f"{desc} — {n} group(s)."
-    return desc or "Query executed."
+    noun = "result" if chart_type in (None, "none") else chart_type
+    if n is not None:
+        return f"Here is the {noun} for your query, covering {n} group(s)."
+    return "Here is the result for your query."
 
 
 def adapt_workflow_result(
