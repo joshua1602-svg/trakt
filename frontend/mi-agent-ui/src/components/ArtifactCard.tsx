@@ -17,6 +17,8 @@ import type { Artifact, ArtifactType } from "@/domain";
 import { Badge, Card, IconButton } from "@/components/ui";
 import { cn, formatHeading, formatTime, toFilenameStem } from "@/lib/utils";
 import { ArtifactRenderer } from "@/components/artifacts/ArtifactRenderer";
+import { DrillThroughPanel } from "@/components/DrillThroughPanel";
+import { isChartArtifact, isTableArtifact } from "@/domain";
 
 const KIND_ICON: Record<ArtifactType, typeof LayoutGrid> = {
   kpi: LayoutGrid,
@@ -105,6 +107,9 @@ export function ArtifactCard({
       {!collapsed && (
         <div className="p-4">
           <ArtifactRenderer artifact={artifact} />
+          {(isChartArtifact(artifact) || isTableArtifact(artifact)) && (
+            <DrillThroughPanel artifact={artifact} />
+          )}
           {artifact.warnings && artifact.warnings.length > 0 && (
             <div className="mt-3 rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-[11px] text-amber-300/90">
               {artifact.warnings.map((w, i) => (
