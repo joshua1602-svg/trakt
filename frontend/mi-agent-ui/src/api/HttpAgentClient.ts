@@ -99,7 +99,15 @@ export class HttpAgentClient implements AgentClient {
           portfolioId: request.portfolio.id,
           asOfDate: request.reporting.asOf,
           datasetContext: request.datasetContext,
-          filters: request.options?.topN ? { top_n: request.options.topN } : undefined,
+          // Merge the top_n hint with any drill-through filters; send undefined
+          // when neither is present so the contract stays additive.
+          filters: ((): Record<string, unknown> | undefined => {
+            const merged: Record<string, unknown> = {
+              ...(request.options?.topN ? { top_n: request.options.topN } : {}),
+              ...(request.filters ?? {}),
+            };
+            return Object.keys(merged).length ? merged : undefined;
+          })(),
         }),
         signal,
       });

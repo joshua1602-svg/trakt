@@ -46,6 +46,9 @@ export interface ArtifactSource {
   nativeChartType?: MIChartType;
   /** Raw Plotly figure JSON from the chart factory, when present. */
   figure?: unknown;
+  /** Originating NL question (stamped client-side) so a drill-through can
+   * re-run the same query with an added filter against the full dataset. */
+  question?: string;
 }
 
 interface ArtifactBase {

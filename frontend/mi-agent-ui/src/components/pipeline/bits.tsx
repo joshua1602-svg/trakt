@@ -1,11 +1,17 @@
 /** Small shared building blocks for the pipeline + forecast landing-page sections. */
 import type { ReactNode } from "react";
+import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import { cn, formatGBP } from "@/lib/utils";
 
 export type Severity = "blocker" | "warning" | "info";
+export type DeltaIntent = "positive" | "negative" | "neutral";
 
 export function severityTone(sev: Severity): "rose" | "amber" | "navy" {
   return sev === "blocker" ? "rose" : sev === "warning" ? "amber" : "navy";
+}
+
+function deltaColour(intent: DeltaIntent) {
+  return intent === "positive" ? "text-mint-400" : intent === "negative" ? "text-rose-400" : "text-ink-500";
 }
 
 /** A compact KPI tile (matches the funded-snapshot tile look). */
@@ -14,16 +20,28 @@ export function StatTile({
   value,
   hint,
   dim,
+  delta,
+  deltaIntent = "neutral",
 }: {
   label: string;
   value: string;
   hint?: ReactNode;
   dim?: boolean;
+  /** Week-on-week movement, e.g. "+156 vs prior week" or "No prior week". */
+  delta?: ReactNode;
+  deltaIntent?: DeltaIntent;
 }) {
+  const Icon = deltaIntent === "positive" ? ArrowUpRight : deltaIntent === "negative" ? ArrowDownRight : Minus;
   return (
     <div className={cn("rounded-lg border border-[var(--color-line-soft)] bg-navy-850/60 p-3.5", dim && "opacity-60")}>
       <div className="text-[11px] font-medium uppercase tracking-wider text-ink-400">{label}</div>
       <div className="mt-1.5 font-mono text-2xl font-semibold tabular-nums text-ink-100">{value}</div>
+      {delta != null && (
+        <div className={cn("mt-1.5 inline-flex items-center gap-0.5 text-xs font-medium", deltaColour(deltaIntent))}>
+          {deltaIntent !== "neutral" && <Icon size={13} strokeWidth={2.5} />}
+          {delta}
+        </div>
+      )}
       {hint && <div className="mt-1.5 text-[11px] text-ink-500">{hint}</div>}
     </div>
   );

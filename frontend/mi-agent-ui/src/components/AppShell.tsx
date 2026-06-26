@@ -72,6 +72,12 @@ export function AppShell() {
           onSubmit={ws.ask}
           onOpenArtifact={openArtifact}
           onRetry={ws.retryLast}
+          context={ws.context}
+          onClearContext={ws.clearContext}
+          onTogglePin={ws.togglePin}
+          // Inline-result drill uses the backend when live; mock keeps the
+          // client-side drill fallback inside the embedded card.
+          onDrill={client.mock ? undefined : ws.drill}
         />
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {/* One coherent workspace: a view toggle selects which schema-aligned
@@ -109,6 +115,11 @@ export function AppShell() {
             onTogglePin={ws.togglePin}
             isWorking={ws.isWorking}
             portfolioName={ws.portfolio.name}
+            // Backend drill-through only when wired to a live backend; the mock
+            // client keeps the client-side drill panel as the fallback.
+            onDrill={client.mock ? undefined : ws.drill}
+            // Insight investigations re-ask through the context-aware flow.
+            onAsk={ws.ask}
           />
         </div>
       </div>

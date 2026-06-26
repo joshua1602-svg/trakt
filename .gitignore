@@ -92,3 +92,6 @@ onboarding_output/
 # MI runtime — committed synthetic multi-artefact fixtures (subdirectories)
 !tests/fixtures/**/*.csv
 portfolio_test/
+
+# Stray root-level node_modules (e.g. vitest .vite cache)
+node_modules/

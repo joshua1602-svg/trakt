@@ -380,8 +380,19 @@ def _apply_filters(work: pd.DataFrame, spec: MIQuerySpec, semantics: dict,
         return work
     from .mi_dataset_profile import PERCENT_FRACTION, percent_storage_scale
     for field_key, value in spec.filters.items():
-        entry = resolve_semantic_field(field_key, semantics)
-        canonical = entry.get("canonical_field", field_key)
+        # Resolve a semantic field key to its canonical column. A drill-through
+        # filter may instead arrive keyed by the artifact's own data column
+        # (already canonical); tolerate that when the column exists, so the UI can
+        # pass either the semantic key or the column name. An unknown key that is
+        # neither re-raises -> controlled validation failure (never a 500).
+        try:
+            entry = resolve_semantic_field(field_key, semantics)
+            canonical = entry.get("canonical_field", field_key)
+        except MIQueryExecutionError:
+            if field_key in work.columns:
+                entry, canonical = {}, field_key
+            else:
+                raise
         _require_column(work, canonical, field_key)
         before = len(work)
         col = work[canonical]

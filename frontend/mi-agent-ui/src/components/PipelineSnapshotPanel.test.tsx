@@ -113,6 +113,21 @@ describe("PipelineSnapshotPanel", () => {
     expect(screen.getByText("Overdue expected completions")).toBeInTheDocument();
   });
 
+  it("shows week-on-week deltas on pipeline tiles when a prior week exists", () => {
+    render(<PipelineSnapshotPanel snapshot={NOV} />);
+    // Pipeline cases 10 vs prior 9 → +1 vs prior week.
+    expect(screen.getByText(/\+1 vs prior week/)).toBeInTheDocument();
+    // Pipeline amount delta is GBP-formatted.
+    expect(screen.getAllByText(/vs prior week/).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("shows 'No prior week' and never invents a delta when prior data is absent", () => {
+    const snap: PipelineSnapshot = { ...NOV, priorWeek: null };
+    render(<PipelineSnapshotPanel snapshot={snap} />);
+    expect(screen.getAllByText("No prior week").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText(/vs prior week/)).not.toBeInTheDocument();
+  });
+
   it("renders an unavailable state gracefully", () => {
     const snap = { ...NOV, ok: false, error: "No pipeline data for this reporting date." };
     render(<PipelineSnapshotPanel snapshot={snap} />);

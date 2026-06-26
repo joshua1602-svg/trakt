@@ -29,6 +29,68 @@ export function formatSignedPct(value: number, dp = 1): string {
   return `${value >= 0 ? "+" : ""}${value.toFixed(dp)}%`;
 }
 
+/** Domain acronyms that must stay fully capitalised in generated UI titles. */
+const TITLE_ACRONYMS: Record<string, string> = {
+  ltv: "LTV",
+  wa: "WA",
+  nneg: "NNEG",
+  abs: "ABS",
+  spv: "SPV",
+  uk: "UK",
+  id: "ID",
+  irr: "IRR",
+  moic: "MOIC",
+  dscr: "DSCR",
+  cpr: "CPR",
+  rag: "RAG",
+  kpi: "KPI",
+  ifrs9: "IFRS9",
+  esma: "ESMA",
+  nuts: "NUTS",
+};
+
+/**
+ * Polish a raw measure/dimension key into a presentation title.
+ * `average_ltv by region by age_bucket` → `Average LTV By Region By Age Bucket`.
+ * Snake_case becomes spaced Title Case; known acronyms stay capitalised.
+ */
+export function formatUiTitle(input?: string): string {
+  if (!input) return "";
+  return input
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .map((word) => {
+      const lower = word.toLowerCase();
+      return TITLE_ACRONYMS[lower] ?? lower.charAt(0).toUpperCase() + lower.slice(1);
+    })
+    .join(" ");
+}
+
+/**
+ * Polish a heading/label that MIGHT already be human-written prose. Only
+ * transforms strings that still look like a raw key (contain an underscore),
+ * leaving curated titles like "Pipeline Bridge to £100MM" untouched.
+ */
+export function formatHeading(input?: string): string {
+  if (!input) return "";
+  return input.includes("_") ? formatUiTitle(input) : input;
+}
+
+/**
+ * Slugify a title into a download-filename stem (snake_case, ascii-safe).
+ * `Average LTV By Region` → `average_ltv_by_region`.
+ */
+export function toFilenameStem(input?: string): string {
+  if (!input) return "export";
+  const stem = input
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return stem || "export";
+}
+
 /** Short, deterministic id for mock records. */
 export function uid(prefix = "id"): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
@@ -62,6 +124,31 @@ export function toPercentPoints(value: number, scale: PercentScale): number {
 }
 
 /**
+ * Normalise a percent of UNKNOWN storage scale to a fraction (0–1), used when
+ * the dataset contract did NOT tag the scale. Heuristic: a magnitude above 1.5
+ * is read as whole percentage points (56 → 0.56); otherwise it is already a
+ * fraction (0.56 → 0.56). This is the fallback for the contract-aware path and
+ * fixes the "0.6% for a 56% LTV" bug when no scale is supplied.
+ */
+export function normalisePercentValue(value: unknown): number | null {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  if (Math.abs(n) > 1.5) return n / 100;
+  return n;
+}
+
+/**
+ * Format a percent of UNKNOWN scale for display. 0.56 and 56 both render as
+ * "56.0%"; non-numeric input renders as "N/A". When the dataset contract scale
+ * IS known, prefer `formatValue(v, "pct", scale)` / `toPercentPoints`.
+ */
+export function formatPercent(value: unknown, decimals = 1): string {
+  const n = normalisePercentValue(value);
+  if (n === null) return "N/A";
+  return `${(n * 100).toFixed(decimals)}%`;
+}
+
+/**
  * Format a value by a domain ValueFormat tag, honouring the percent storage
  * scale from the dataset contract (so 0.51 displays as 51.0%, not 0.5%).
  */
@@ -77,7 +164,11 @@ export function formatValue(
     case "gbp":
       return formatGBP(value);
     case "pct":
-      return `${toPercentPoints(value, scale).toFixed(1)}%`;
+      // Contract scale is authoritative; without it, fall back to the heuristic
+      // so a fraction (0.56) doesn't render as 0.6%.
+      return scale === "percent_fraction" || scale === "percent_points"
+        ? `${toPercentPoints(value, scale).toFixed(1)}%`
+        : formatPercent(value, 1);
     case "decimal":
       return value.toFixed(2);
     case "number":
