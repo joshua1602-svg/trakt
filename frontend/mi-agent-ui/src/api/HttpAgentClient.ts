@@ -12,11 +12,14 @@ import type {
   AgentResponse,
   Artifact,
   ForecastEvolution,
+  ForecastExtrapolation,
   ForecastSnapshot,
   FundedEvolution,
   FundedSnapshot,
   Intent,
   PipelineEvolution,
+  PipelineFunnelEvolution,
+  RiskLimitsSnapshot,
   SnapshotIndex,
 } from "@/domain";
 import { isArtifact } from "@/domain";
@@ -103,6 +106,21 @@ export class HttpAgentClient implements AgentClient {
   getForecastEvolution(portfolioId: string, signal?: AbortSignal): Promise<ForecastEvolution> {
     return this.getJson<ForecastEvolution>(
       `/mi/evolution/forecast?portfolioId=${encodeURIComponent(portfolioId)}`, signal);
+  }
+
+  getFunnelEvolution(portfolioId: string, signal?: AbortSignal): Promise<PipelineFunnelEvolution> {
+    return this.getJson<PipelineFunnelEvolution>(
+      `/mi/evolution/funnel?portfolioId=${encodeURIComponent(portfolioId)}`, signal);
+  }
+
+  getRiskLimits(portfolioId: string, signal?: AbortSignal): Promise<RiskLimitsSnapshot> {
+    return this.getJson<RiskLimitsSnapshot>(
+      `/mi/risk-limits?portfolioId=${encodeURIComponent(portfolioId)}`, signal);
+  }
+
+  getForecastExtrapolation(portfolioId: string, signal?: AbortSignal): Promise<ForecastExtrapolation> {
+    return this.getJson<ForecastExtrapolation>(
+      `/mi/forecast/extrapolation?portfolioId=${encodeURIComponent(portfolioId)}`, signal);
   }
 
   async ask(request: AgentRequest, signal?: AbortSignal): Promise<AgentResponse> {

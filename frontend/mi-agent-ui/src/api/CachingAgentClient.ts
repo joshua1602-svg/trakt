@@ -64,5 +64,9 @@ export function withCache(client: AgentClient): AgentClient {
     getFundedEvolution: (portfolioId, signal) => client.getFundedEvolution(portfolioId, signal),
     getPipelineEvolution: (portfolioId, signal) => client.getPipelineEvolution(portfolioId, signal),
     getForecastEvolution: (portfolioId, signal) => client.getForecastEvolution(portfolioId, signal),
+    getFunnelEvolution: (portfolioId, signal) => client.getFunnelEvolution(portfolioId, signal),
+    getRiskLimits: (portfolioId, signal) => client.getRiskLimits(portfolioId, signal),
+    getForecastExtrapolation: (portfolioId, signal) =>
+      client.getForecastExtrapolation(portfolioId, signal),
   };
 }

@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend,
+  CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip,
+  XAxis, YAxis, Legend,
 } from "recharts";
-import { Activity } from "lucide-react";
+import { Activity, ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import type { AgentClient } from "@/api";
 import type {
   FundedEvolution,
   PipelineEvolution,
   ForecastEvolution,
+  PipelineFunnelEvolution,
   StagePoint,
 } from "@/domain";
 import { cn, formatGBP } from "@/lib/utils";
 
-type EvoView = "funded" | "pipeline" | "forecast";
+type EvoView = "funded" | "pipeline" | "forecast" | "origination";
 
 const PALETTE = ["#7c9cf0", "#5ec6b8", "#e0a458", "#c98bdb", "#6fcf97", "#eb6f6f"];
 
@@ -84,6 +86,90 @@ function pivotStage(rows: StagePoint[]): {
   return { data, stages };
 }
 
+function trendIcon(trend: "up" | "down" | "flat") {
+  if (trend === "up") return <ArrowUpRight size={13} className="text-mint-300" />;
+  if (trend === "down") return <ArrowDownRight size={13} className="text-rose-300" />;
+  return <Minus size={13} className="text-ink-500" />;
+}
+
+/** One origination-funnel stage: weekly value chart + 5-week avg line + summary. */
+function FunnelStageCard({
+  stage, label, points, summary,
+}: {
+  stage: string;
+  label: string;
+  points: { week: string | null; value: number | null; count: number }[];
+  summary: PipelineFunnelEvolution["summary"][string] | undefined;
+}) {
+  const data = points.map((p) => ({ week: p.week ?? "", value: p.value, count: p.count }));
+  const avg = summary?.fiveWeekAvgValue ?? null;
+  return (
+    <div className="rounded-xl border border-[var(--color-line)] bg-navy-900/40 p-4"
+      data-testid={`funnel-stage-${stage}`}>
+      <div className="mb-1 flex items-center justify-between">
+        <div className="text-[12px] font-semibold text-ink-200">{label}</div>
+        <div className="flex items-center gap-1 text-[11px] text-ink-400">
+          {summary && trendIcon(summary.trend)}
+          <span>{summary?.weeksObserved ?? 0} wks</span>
+        </div>
+      </div>
+      {data.length === 0 ? (
+        <p className="py-8 text-center text-[12px] text-ink-500">No weekly extracts available.</p>
+      ) : (
+        <div style={{ width: "100%", height: 150 }}>
+          <ResponsiveContainer>
+            <LineChart data={data} margin={{ top: 6, right: 12, bottom: 4, left: 4 }}>
+              <CartesianGrid stroke="#23304d" strokeDasharray="3 3" />
+              <XAxis dataKey="week" tick={{ fill: "#8a97ad", fontSize: 10 }} />
+              <YAxis tickFormatter={gbpCompact} tick={{ fill: "#8a97ad", fontSize: 10 }} width={56} />
+              <Tooltip
+                formatter={(v: number) => gbpCompact(Number(v))}
+                contentStyle={{ background: "#0f1626", border: "1px solid #23304d", fontSize: 12 }} />
+              {avg != null && (
+                <ReferenceLine y={avg} stroke="#e0a458" strokeDasharray="4 3"
+                  label={{ value: "5-wk avg", fill: "#e0a458", fontSize: 9, position: "insideTopRight" }} />
+              )}
+              <Line type="monotone" dataKey="value" name="Weekly value"
+                stroke="#7c9cf0" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+      {summary && (
+        <div className="mt-2 grid grid-cols-3 gap-2 text-[10px]">
+          <div>
+            <div className="text-ink-500">Latest week</div>
+            <div className="text-ink-200">
+              {summary.latestValue != null ? gbpCompact(summary.latestValue) : "—"}
+              <span className="text-ink-500"> · {summary.latestCount} cases</span>
+            </div>
+          </div>
+          <div>
+            <div className="text-ink-500">5-week avg</div>
+            <div className="text-ink-200">
+              {summary.fiveWeekAvgValue != null ? gbpCompact(summary.fiveWeekAvgValue) : "—"}
+              <span className="text-ink-500">
+                {" "}· {summary.fiveWeekAvgCount != null ? Math.round(summary.fiveWeekAvgCount) : "—"}
+              </span>
+            </div>
+          </div>
+          <div>
+            <div className="text-ink-500">Δ vs prior wk</div>
+            <div className="text-ink-200">
+              {summary.deltaValue != null ? gbpCompact(summary.deltaValue) : "—"}
+              <span className="text-ink-500">
+                {" "}· {summary.deltaCount != null
+                  ? `${summary.deltaCount >= 0 ? "+" : ""}${summary.deltaCount}`
+                  : "—"}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Evolution view — funded / pipeline / forecast metrics over time. Reads the
  * governed monthly funded runs and weekly pipeline extracts via the evolution
@@ -99,6 +185,7 @@ export function EvolutionPanel({
   const [funded, setFunded] = useState<FundedEvolution | null>(null);
   const [pipeline, setPipeline] = useState<PipelineEvolution | null>(null);
   const [forecast, setForecast] = useState<ForecastEvolution | null>(null);
+  const [funnel, setFunnel] = useState<PipelineFunnelEvolution | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -108,6 +195,7 @@ export function EvolutionPanel({
       try {
         if (view === "funded") setFunded(await client.getFundedEvolution(portfolioId));
         else if (view === "pipeline") setPipeline(await client.getPipelineEvolution(portfolioId));
+        else if (view === "origination") setFunnel(await client.getFunnelEvolution(portfolioId));
         else setForecast(await client.getForecastEvolution(portfolioId));
       } catch {
         /* keep prior state; charts show empty */
@@ -136,6 +224,7 @@ export function EvolutionPanel({
   const single =
     (view === "funded" && funded?.singlePeriod) ||
     (view === "pipeline" && pipeline?.singlePeriod) ||
+    (view === "origination" && funnel?.singlePeriod) ||
     (view === "forecast" && forecast?.singlePeriod);
 
   return (
@@ -146,7 +235,7 @@ export function EvolutionPanel({
         </div>
         <div role="tablist" aria-label="Evolution series"
           className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] bg-navy-900/60 p-1">
-          {(["funded", "pipeline", "forecast"] as EvoView[]).map((v) => (
+          {(["funded", "pipeline", "origination", "forecast"] as EvoView[]).map((v) => (
             <button key={v} type="button" role="tab" aria-selected={view === v}
               onClick={() => setView(v)}
               className={cn(
@@ -199,6 +288,30 @@ export function EvolutionPanel({
           <EvoLineChart title="Pipeline by stage over time" data={stagePivot.data}
             lines={stagePivot.stages.map((s) => ({ key: s, label: s }))} valueFormat="gbp"
             source="weekly pipeline extracts" />
+        </div>
+      )}
+
+      {view === "origination" && (
+        <div className="space-y-3" data-testid="origination-funnel">
+          <p className="text-[11px] text-ink-400">
+            Weekly origination funnel — KFI → Application → Offer → Completion value and
+            count per governed weekly extract, with a 5-week trailing average and the
+            week-on-week movement.
+          </p>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {(funnel?.stages ?? []).map((stage) => (
+              <FunnelStageCard key={stage} stage={stage}
+                label={funnel?.stageLabels?.[stage] ?? stage}
+                points={funnel?.series?.[stage] ?? []}
+                summary={funnel?.summary?.[stage]} />
+            ))}
+          </div>
+          {funnel?.sourceFiles?.length ? (
+            <p className="text-[10px] text-ink-500">
+              Source: {funnel.uniqueWeeklyExtractsUsed ?? funnel.sourceFiles.length} governed
+              weekly extract(s). 5-week average = trailing mean of up to the last 5 weeks.
+            </p>
+          ) : null}
         </div>
       )}
 

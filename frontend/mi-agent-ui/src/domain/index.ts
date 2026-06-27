@@ -5,3 +5,5 @@ export * from "./snapshot";
 export * from "./pipeline";
 export * from "./guards";
 export * from "./evolution";
+export * from "./riskLimits";
+export * from "./forecastExtrapolation";

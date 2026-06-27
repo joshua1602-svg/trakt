@@ -64,3 +64,41 @@ export interface ForecastEvolution {
   singlePeriod: boolean;
   error?: string;
 }
+
+// --------------------------------------------------------------------------- //
+// Weekly origination funnel trends — KFI / Application / Offer / Completion
+// value + count per governed weekly extract (mirrors evolution.pipeline_funnel).
+// --------------------------------------------------------------------------- //
+export interface FunnelPoint {
+  week: string | null;
+  value: number | null;
+  count: number;
+}
+
+export interface FunnelStageSummary {
+  label: string;
+  latestValue: number | null;
+  latestCount: number;
+  fiveWeekAvgValue: number | null;
+  fiveWeekAvgCount: number | null;
+  deltaValue: number | null;
+  deltaCount: number | null;
+  trend: "up" | "down" | "flat";
+  weeksObserved: number;
+}
+
+export interface PipelineFunnelEvolution {
+  dataset: "pipeline_funnel";
+  portfolioId: string;
+  toRunId: string | null;
+  stages: string[];
+  stageLabels: Record<string, string>;
+  weeks: (string | null)[];
+  sourceFiles: string[];
+  uniqueWeeklyExtractsUsed?: number | null;
+  series: Record<string, FunnelPoint[]>;
+  summary: Record<string, FunnelStageSummary>;
+  lineage?: Record<string, unknown>;
+  singlePeriod: boolean;
+  error?: string;
+}

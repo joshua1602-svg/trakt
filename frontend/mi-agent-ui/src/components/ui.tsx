@@ -5,12 +5,15 @@ import { cn } from "@/lib/utils";
 export function Card({
   className,
   children,
+  testId,
 }: {
   className?: string;
   children: ReactNode;
+  testId?: string;
 }) {
   return (
     <div
+      data-testid={testId}
       className={cn(
         "rounded-xl border border-[var(--color-line)] bg-navy-900/70 backdrop-blur-sm",
         className,

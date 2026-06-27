@@ -10,10 +10,13 @@ import type {
   AgentRequest,
   AgentResponse,
   ForecastEvolution,
+  ForecastExtrapolation,
   ForecastSnapshot,
   FundedEvolution,
   FundedSnapshot,
   PipelineEvolution,
+  PipelineFunnelEvolution,
+  RiskLimitsSnapshot,
   SnapshotIndex,
 } from "@/domain";
 import { buildAgentResponse } from "@/data/mockResponses";
@@ -24,6 +27,9 @@ import {
   mockPipelineEvolution,
   mockForecastEvolution,
 } from "@/data/mockEvolution";
+import { mockFunnelEvolution } from "@/data/mockFunnel";
+import { mockRiskLimits } from "@/data/mockRiskLimits";
+import { mockForecastExtrapolation } from "@/data/mockForecastExtrapolation";
 import { AgentError, type AgentClient } from "./AgentClient";
 
 export interface MockAgentClientOptions {
@@ -92,5 +98,17 @@ export class MockAgentClient implements AgentClient {
 
   getForecastEvolution(portfolioId: string): Promise<ForecastEvolution> {
     return Promise.resolve(mockForecastEvolution(portfolioId));
+  }
+
+  getFunnelEvolution(portfolioId: string): Promise<PipelineFunnelEvolution> {
+    return Promise.resolve(mockFunnelEvolution(portfolioId));
+  }
+
+  getRiskLimits(portfolioId: string): Promise<RiskLimitsSnapshot> {
+    return Promise.resolve(mockRiskLimits(portfolioId));
+  }
+
+  getForecastExtrapolation(portfolioId: string): Promise<ForecastExtrapolation> {
+    return Promise.resolve(mockForecastExtrapolation(portfolioId));
   }
 }
