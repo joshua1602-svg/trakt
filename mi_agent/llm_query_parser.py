@@ -1053,7 +1053,8 @@ def _deterministic_parse(question: str, semantics: dict,
 
     # ---- line (trend over time) -------------------------------------------
     is_line = ("over time" in q or "trend" in q or "monthly" in q
-               or "by month" in q or "vintage_year" in dim_keys)
+               or "by month" in q or "evolution" in q or "by reporting date" in q
+               or "over the months" in q or "vintage_year" in dim_keys)
     # Resolve the metric from the phrase BEFORE the first "by" (the metric side),
     # so "<metric> by <dimension>" never picks the grouping term as the metric
     # (e.g. "balance by ltv" -> metric=balance, not LTV). Fall back to the dim-
