@@ -3,6 +3,7 @@ import { AlertTriangle, ChevronDown, FileBarChart, RefreshCw, SlidersHorizontal,
 import type { Artifact, ChatMessage as ChatMessageType, MIQuerySpec } from "@/domain";
 import { ChatResult } from "@/components/ChatResult";
 import { cn, formatTime, formatUiTitle } from "@/lib/utils";
+import { formatPredicate } from "@/lib/filters";
 
 export function ChatMessage({
   message,
@@ -165,7 +166,35 @@ function specRows(spec?: Partial<MIQuerySpec>): Array<[string, string]> {
   if (typeof spec.topN === "number") rows.push(["Top N", String(spec.topN)]);
   const filters = spec.filters && Object.keys(spec.filters);
   if (filters && filters.length) {
-    rows.push(["Filters", filters.map((k) => `${formatUiTitle(k)} = ${String(spec.filters![k])}`).join(", ")]);
+    rows.push(["Filters applied",
+      filters.map((k) => formatPredicate(k, spec.filters![k])).join(" · ")]);
+  }
+  // Predicates the user asked for that could not be applied (never silently
+  // dropped). Backend spec carries snake_case ``unavailable_filters``.
+  const unavailable = (spec as { unavailable_filters?: string[] }).unavailable_filters;
+  if (unavailable && unavailable.length) {
+    rows.push(["Filters unavailable", unavailable.join(" · ")]);
+  }
+  return rows;
+}
+
+/** Coverage / source / validation rows from the message's first data artifact. */
+function auditRows(message: ChatMessageType): Array<[string, string]> {
+  const rows: Array<[string, string]> = [];
+  const art = (message.artifacts ?? []).find(
+    (a) => a.type === "chart" || a.type === "table" || a.type === "kpi");
+  const recon = (art as { reconciliation?: Record<string, unknown> } | undefined)?.reconciliation;
+  if (recon) {
+    const inc = recon.records_included ?? recon.records_after_filters;
+    const tot = recon.total_records;
+    if (inc != null && tot != null) rows.push(["Rows included", `${inc} / ${tot}`]);
+    const cov = recon.coverage_by_balance_pct;
+    if (cov != null) rows.push(["Coverage", `${cov}% of balance`]);
+  }
+  if (message.warnings && message.warnings.some((w) => /not applied/i.test(w))) {
+    rows.push(["Validation", "some predicates unavailable"]);
+  } else if (message.spec) {
+    rows.push(["Validation", "passed"]);
   }
   return rows;
 }
@@ -177,7 +206,7 @@ function specRows(spec?: Partial<MIQuerySpec>): Array<[string, string]> {
  */
 function QueryLogicPanel({ message }: { message: ChatMessageType }) {
   const [open, setOpen] = useState(false);
-  const rows = specRows(message.spec);
+  const rows = [...specRows(message.spec), ...auditRows(message)];
   const diagnostics = message.diagnostics ?? [];
   const hasContent =
     !!message.interpreted ||
