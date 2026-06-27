@@ -18,8 +18,39 @@ type EvoView = "funded" | "pipeline" | "forecast" | "origination";
 
 const PALETTE = ["#7c9cf0", "#5ec6b8", "#e0a458", "#c98bdb", "#6fcf97", "#eb6f6f"];
 
+// Explicit funnel process order. WITHDRAWN sits after the main funnel; UNKNOWN
+// last. Synonyms (COMPLETION/COMPLETED) and case are normalised first.
+export const STAGE_ORDER = ["KFI", "APPLICATION", "OFFER", "COMPLETED", "WITHDRAWN", "UNKNOWN"];
+
+export function normaliseStage(stage: string): string {
+  const s = stage.trim().toUpperCase();
+  if (s === "COMPLETION" || s === "COMPLETE") return "COMPLETED";
+  if (s === "APP") return "APPLICATION";
+  return s;
+}
+
+/** Order stage keys by the funnel process order; unknown stages keep their
+ * relative order at the end (before UNKNOWN). */
+export function orderStages(stages: string[]): string[] {
+  return [...stages].sort((a, b) => {
+    const ia = STAGE_ORDER.indexOf(normaliseStage(a));
+    const ib = STAGE_ORDER.indexOf(normaliseStage(b));
+    return (ia === -1 ? STAGE_ORDER.length - 0.5 : ia)
+      - (ib === -1 ? STAGE_ORDER.length - 0.5 : ib);
+  });
+}
+
 function gbpCompact(v: number): string {
   return formatGBP(v, { compact: true });
+}
+
+/** The x-axis label for a weekly pipeline period: the DAY-LEVEL extract date
+ * (week / extract_date) in preference to the YYYY-MM month, so multiple weekly
+ * points within a month are distinguishable rather than sharing one label. */
+export function pipelineXValue(
+  p: { week?: string | null; extract_date?: string | null; period: string },
+): string {
+  return p.week ?? p.extract_date ?? p.period;
 }
 
 /** A single labelled line chart over periods, with a source/coverage footer. */
@@ -74,8 +105,8 @@ function EvoLineChart({
 function pivotStage(rows: StagePoint[]): {
   data: Array<Record<string, number | string>>; stages: string[];
 } {
-  const periods = Array.from(new Set(rows.map((r) => r.period)));
-  const stages = Array.from(new Set(rows.map((r) => r.stage)));
+  const periods = Array.from(new Set(rows.map((r) => r.period))).sort();
+  const stages = orderStages(Array.from(new Set(rows.map((r) => r.stage))));
   const data = periods.map((p) => {
     const row: Record<string, number | string> = { period: p };
     for (const s of stages) {
@@ -92,14 +123,30 @@ function trendIcon(trend: "up" | "down" | "flat") {
   return <Minus size={13} className="text-ink-500" />;
 }
 
+/** Conversion of a stage relative to KFI (count + value), divide-by-zero safe. */
+export function stageConversion(
+  stage: PipelineFunnelEvolution["summary"][string] | undefined,
+  kfi: PipelineFunnelEvolution["summary"][string] | undefined,
+): { countPct: number | null; valuePct: number | null; numerCount: number; denomCount: number } | null {
+  if (!stage || !kfi) return null;
+  const denomCount = kfi.latestCount ?? 0;
+  const numerCount = stage.latestCount ?? 0;
+  const countPct = denomCount > 0 ? (numerCount / denomCount) * 100 : null;
+  const denomVal = kfi.latestValue ?? 0;
+  const valuePct = denomVal > 0 && stage.latestValue != null
+    ? (stage.latestValue / denomVal) * 100 : null;
+  return { countPct, valuePct, numerCount, denomCount };
+}
+
 /** One origination-funnel stage: weekly value chart + 5-week avg line + summary. */
 function FunnelStageCard({
-  stage, label, points, summary,
+  stage, label, points, summary, conversion,
 }: {
   stage: string;
   label: string;
   points: { week: string | null; value: number | null; count: number }[];
   summary: PipelineFunnelEvolution["summary"][string] | undefined;
+  conversion?: ReturnType<typeof stageConversion>;
 }) {
   const data = points.map((p) => ({ week: p.week ?? "", value: p.value, count: p.count }));
   const avg = summary?.fiveWeekAvgValue ?? null;
@@ -166,6 +213,21 @@ function FunnelStageCard({
           </div>
         </div>
       )}
+      {conversion && (
+        <div className="mt-2 rounded-md border border-[var(--color-line-soft)] bg-navy-900/50 px-2 py-1 text-[10px]"
+          data-testid={`funnel-conversion-${stage}`}
+          title={`Conversion vs KFI (latest week): ${conversion.numerCount} ${label} / `
+            + `${conversion.denomCount} KFI`}>
+          <span className="text-ink-500">Conversion vs KFI: </span>
+          <span className="font-semibold text-mint-300">
+            {conversion.countPct != null ? `${conversion.countPct.toFixed(1)}%` : "n/a"}
+          </span>
+          <span className="text-ink-500"> by count</span>
+          {conversion.valuePct != null && (
+            <span className="text-ink-500"> · {conversion.valuePct.toFixed(1)}% by value</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -212,7 +274,12 @@ export function EvolutionPanel({
     [funded],
   );
   const pipelineSeries = useMemo(
-    () => (pipeline?.periods ?? []).map((p) => ({ period: p.period, ...p.metrics })),
+    // Weekly extracts: label by the day-level extract date (not the YYYY-MM
+    // month, which collapsed multiple weekly points onto one indistinguishable
+    // label). Sorted chronologically by the actual date string (ISO sorts).
+    () => (pipeline?.periods ?? [])
+      .map((p) => ({ period: pipelineXValue(p), ...p.metrics }))
+      .sort((a, b) => String(a.period).localeCompare(String(b.period))),
     [pipeline],
   );
   const stagePivot = useMemo(() => pivotStage(pipeline?.byStage ?? []), [pipeline]);
@@ -276,13 +343,13 @@ export function EvolutionPanel({
 
       {view === "pipeline" && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <EvoLineChart title="Pipeline amount by week/month" data={pipelineSeries}
+          <EvoLineChart title="Pipeline amount by week" data={pipelineSeries}
             lines={[{ key: "pipeline_amount", label: "Pipeline amount" }]} valueFormat="gbp"
             source={pipeline?.sourceFiles?.[0]} />
-          <EvoLineChart title="Weighted expected funded by month" data={pipelineSeries}
+          <EvoLineChart title="Weighted expected funded by week" data={pipelineSeries}
             lines={[{ key: "weighted_expected_funded_amount", label: "Weighted expected" }]}
             valueFormat="gbp" source="weekly pipeline extracts" />
-          <EvoLineChart title="Pipeline case count over time" data={pipelineSeries}
+          <EvoLineChart title="Pipeline case count by week" data={pipelineSeries}
             lines={[{ key: "pipeline_case_count", label: "Cases" }]} valueFormat="count"
             source="weekly pipeline extracts" />
           <EvoLineChart title="Pipeline by stage over time" data={stagePivot.data}
@@ -299,11 +366,14 @@ export function EvolutionPanel({
             week-on-week movement.
           </p>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {(funnel?.stages ?? []).map((stage) => (
+            {orderStages(funnel?.stages ?? []).map((stage) => (
               <FunnelStageCard key={stage} stage={stage}
                 label={funnel?.stageLabels?.[stage] ?? stage}
                 points={funnel?.series?.[stage] ?? []}
-                summary={funnel?.summary?.[stage]} />
+                summary={funnel?.summary?.[stage]}
+                conversion={normaliseStage(stage) === "KFI"
+                  ? null
+                  : stageConversion(funnel?.summary?.[stage], funnel?.summary?.["KFI"])} />
             ))}
           </div>
           {funnel?.sourceFiles?.length ? (

@@ -230,8 +230,10 @@ def pipeline_evolution(pipeline_root: str | os.PathLike, client_id: str,
                 df["pipeline_stage"].astype(str)).sum()
             for stage, val in grp.items():
                 if str(stage).strip() and str(stage) not in ("nan", "None"):
-                    by_stage.append({"period": (edate or "")[:7], "stage": str(stage),
-                                     "value": round(float(val), 2)})
+                    # Day-level period (the weekly extract date) so weekly stage
+                    # points are distinguishable, not collapsed to a month label.
+                    by_stage.append({"period": (edate or ""), "week": edate,
+                                     "stage": str(stage), "value": round(float(val), 2)})
 
     return {
         "dataset": "pipeline",
