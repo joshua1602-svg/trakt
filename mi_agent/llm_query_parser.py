@@ -577,7 +577,11 @@ _FORECAST_SCALE_RE = re.compile(
     r"(?:downside|upside|base) forecast|securitisation scale|"
     r"how much pipeline is needed|completion rate is assumed|what conversion rate|"
     r"funded balance extrapolation|annualised completion|"
-    r"what happens if .*run.?rate|milestone")
+    r"what happens if .*run.?rate|milestone|"
+    # A "forecast curve" / "projection curve" / "balance curve" is a request for
+    # the forward funded-balance line, not a point-in-time KPI.
+    r"forecast curve|projection curve|balance curve|"
+    r"(?:forecast|projected|project).{0,20}curve|curve.{0,20}(?:forecast|funded balance)")
 
 
 def _forecast_target_value(q: str) -> Optional[float]:
@@ -645,6 +649,27 @@ _RISK_LIMIT_RE = re.compile(
     r"exceed(?:s|ed)? (?:the )?limits?|against (?:the )?limits?|schedule 8|"
     r"limit status|limit utilis|which limits|are we within")
 
+# Natural-language risk-limit category -> the category key used by the risk
+# monitor (``risk_limits.testsByCategory``). Order matters (most specific first).
+_RISK_LIMIT_CATEGORY_TERMS: List[Tuple[str, str]] = [
+    (r"top\s*\d*\s*broker|broker|intermediary|introducer", "broker_concentration"),
+    (r"geograph|region|location|area|nuts", "geographic_concentration"),
+    (r"large loan|loan size|single loan|big loan", "large_loan_concentration"),
+    (r"\bltv\b|loan to value|valuation", "ltv_limit"),
+    (r"variable rate|interest rate|\bwac\b|coupon", "interest_rate_limit"),
+    (r"joint borrower|joint lives", "joint_borrower_limit"),
+    (r"single borrower|per borrower|borrower concentration", "borrower_concentration"),
+    (r"aged|age limit|over 85", "age_limit"),
+]
+
+
+def _risk_limit_category(q: str) -> Optional[str]:
+    """The specific risk-limit category a question scopes to, or None for all."""
+    for pattern, cat in _RISK_LIMIT_CATEGORY_TERMS:
+        if re.search(pattern, q):
+            return cat
+    return None
+
 
 def _risk_limit_recognizer(q: str, title: str
                            ) -> Optional[Tuple[MIQuerySpec, dict]]:
@@ -652,15 +677,18 @@ def _risk_limit_recognizer(q: str, title: str
     ``risk_monitor_mode='concentration'`` plan (resolved by /mi/risk-limits)."""
     if not _RISK_LIMIT_RE.search(q):
         return None
+    category = _risk_limit_category(q)
     spec = MIQuerySpec(
         intent="summary", chart_type="none", metric=None, aggregation="count",
         execution_mode="risk", risk_monitor_mode="concentration",
-        risk_limit_query=True, output_format="table", title=title,
+        risk_limit_query=True, risk_limit_category=category,
+        output_format="table", title=title,
         explanation=("Governed risk-limit / concentration monitor: actual exposure "
                      "vs Schedule 8 limit, headroom, pass/warn/fail status, source and "
                      "movement; controlled needs-review / unavailable when a limit or "
                      "field is missing."))
-    return spec, _det_meta("high", False, ["risk_limits"], note="risk_limit")
+    return spec, _det_meta("high", False, ["risk_limits"],
+                           note=f"risk_limit:{category or 'all'}")
 
 
 def _det_meta(confidence: str, explicit: bool, terms: List[str],

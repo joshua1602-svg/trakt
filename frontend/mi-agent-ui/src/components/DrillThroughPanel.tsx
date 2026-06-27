@@ -53,7 +53,18 @@ export function DrillThroughPanel({
     setSelected(value);
     // Re-run the query against the full dataset, keyed by the registry semantic
     // field. The client-side grid below renders regardless (fallback).
-    if (value && onDrill) onDrill({ [drillFilterKey(artifact, model.dimensionKey)]: value });
+    if (!value || !onDrill) return;
+    const key = drillFilterKey(artifact, model.dimensionKey);
+    // "Other" is a capped bucket, not a real category — drill it as NOT IN the
+    // shown top-N categories so the underlying rows are recovered.
+    const other = (artifact as { otherCategories?: Record<string, string[]> | null })
+      .otherCategories;
+    const shown = other?.[model.dimensionKey];
+    if (value === "Other" && shown && shown.length) {
+      onDrill({ [key]: { op: "not_in", value: shown } });
+      return;
+    }
+    onDrill({ [key]: value });
   };
 
   const agg = selected ? aggregateSelection(model, selected) : null;
