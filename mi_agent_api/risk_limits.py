@@ -45,12 +45,40 @@ _AMBER_FRACTION = 0.9  # amber when actual >= 90% of the limit (matches Schedule
 # --------------------------------------------------------------------------- #
 def load_extracted_limits(client_id: str, *, search_roots: Optional[List[str]] = None
                           ) -> Dict[str, Any]:
-    """Load the governed extracted limits for a client.
+    """Load the governed extracted limits for a client, with an explicit SOURCE.
 
-    Preference: a committed ``config/clients/<client>/risk_limits_extracted.yaml``;
-    else extract live from a located Schedule 8 document; else controlled
-    unavailable (never fabricated).
+    Precedence (each clearly labelled so the UI never shows placeholders silently):
+      1. a Schedule 8 document in the client MI-pack ``docs`` folder — parsed live
+         (``limits_source = "Schedule 8 document"``);
+      2. a non-text Schedule 8 doc found but not machine-readable — controlled
+         ``needs_review`` with ingestion diagnostics (NOT a silent placeholder);
+      3. a committed ``config/clients/<client>/risk_limits_extracted.yaml`` —
+         ``limits_source = "config fallback"``;
+      4. nothing — ``limits_source = "placeholder / missing source"`` (unavailable).
     """
+    # 1/2 — a Schedule 8 document in the client's MI-pack docs folder.
+    doc = extractor.locate_client_schedule8(client_id, pack_roots=search_roots)
+    if doc is not None:
+        if doc.suffix.lower() in extractor._READABLE_SUFFIXES:
+            out = extractor.extract_from_file(doc, portfolio_id=client_id)
+            out["limits_source"] = "Schedule 8 document"
+            out["source_document_path"] = str(doc)
+            return out
+        # Found but not machine-readable (pdf/docx) — diagnostics, not a placeholder.
+        return {
+            "portfolio_id": client_id, "available": False, "status": "needs_review",
+            "reason": (f"Schedule 8 document found ({doc.name}) but it is not "
+                       "machine-readable (PDF/DOCX). Convert to text or add a parser; "
+                       "limits are not being read from a placeholder."),
+            "limits_source": "Schedule 8 document (unparsed)",
+            "source_document_path": str(doc),
+            "ingestion_diagnostics": {
+                "found": str(doc), "suffix": doc.suffix.lower(),
+                "supportedTextSuffixes": list(extractor._READABLE_SUFFIXES),
+            },
+            "limits": [], "limit_count": 0, "needs_review_count": 0, "categories": []}
+
+    # 3 — committed config fallback.
     cfg = Path("config") / "clients" / client_id / "risk_limits_extracted.yaml"
     if cfg.exists():
         try:
@@ -58,19 +86,23 @@ def load_extracted_limits(client_id: str, *, search_roots: Optional[List[str]] =
             data.setdefault("available", bool(data.get("limits")))
             data.setdefault("status", "needs_review" if data.get("needs_review_count")
                             else ("ok" if data.get("limits") else "unavailable"))
-            data["limits_source"] = "config (extracted)"
+            data["limits_source"] = "config fallback"
             return data
-        except Exception:  # noqa: BLE001 - fall through to live extraction
+        except Exception:  # noqa: BLE001
             pass
-    located = extractor.locate_schedule8(*(search_roots or []))
-    if located is not None:
-        out = extractor.extract_from_file(located, portfolio_id=client_id)
-        out["limits_source"] = "Schedule 8 extracted (live)"
-        return out
+
+    # 4 — nothing available (explicit roots only, no cross-client leakage).
+    if search_roots:
+        located = extractor.locate_schedule8_any(*search_roots, include_defaults=False)
+        if located is not None and located.suffix.lower() in extractor._READABLE_SUFFIXES:
+            out = extractor.extract_from_file(located, portfolio_id=client_id)
+            out["limits_source"] = "Schedule 8 document"
+            out["source_document_path"] = str(located)
+            return out
     return {"portfolio_id": client_id, "available": False, "status": "unavailable",
             "reason": "No Schedule 8 limits available — extraction required.",
-            "limits_source": "unavailable", "limits": [], "limit_count": 0,
-            "needs_review_count": 0, "categories": []}
+            "limits_source": "placeholder / missing source", "limits": [],
+            "limit_count": 0, "needs_review_count": 0, "categories": []}
 
 
 # --------------------------------------------------------------------------- #

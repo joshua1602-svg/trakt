@@ -131,3 +131,53 @@ def test_unavailable_limits_controlled_when_no_config(tmp_path, monkeypatch):
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+# --------------------------------------------------------------------------- #
+# A6 — Schedule 8 docs-folder ingestion + explicit source metadata
+# --------------------------------------------------------------------------- #
+def test_docs_schedule8_is_picked_up_with_source_label(monkeypatch):
+    monkeypatch.chdir(_REPO_ROOT)
+    out = rl.load_extracted_limits("client_001")
+    assert out["available"] is True
+    assert out["limits_source"] == "Schedule 8 document"
+    assert "docs" in out.get("source_document_path", "")
+    assert out["limit_count"] >= 12
+
+
+def test_missing_source_is_placeholder_not_silent(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)  # no client pack, no config
+    out = rl.load_extracted_limits("client_404")
+    assert out["available"] is False
+    assert out["limits_source"] == "placeholder / missing source"
+
+
+def test_non_readable_doc_yields_ingestion_diagnostics(monkeypatch, tmp_path):
+    # A Schedule 8 PDF in the client docs folder -> needs_review + diagnostics,
+    # NOT a silent placeholder.
+    docs = tmp_path / "tests" / "fixtures" / "client_077_mi_pack" / "docs"
+    docs.mkdir(parents=True)
+    (docs / "Schedule 8 Concentration.pdf").write_bytes(b"%PDF-1.7\x00binary")
+    monkeypatch.chdir(tmp_path)
+    out = rl.load_extracted_limits("client_077")
+    assert out["available"] is False
+    assert out["status"] == "needs_review"
+    assert out["limits_source"] == "Schedule 8 document (unparsed)"
+    assert out["ingestion_diagnostics"]["suffix"] == ".pdf"
+
+
+def test_config_fallback_when_no_doc(monkeypatch, tmp_path):
+    # A client with a committed config YAML but no docs folder -> "config fallback".
+    cfg = tmp_path / "config" / "clients" / "client_cfg" / "risk_limits_extracted.yaml"
+    cfg.parent.mkdir(parents=True)
+    import yaml as _yaml
+    cfg.write_text(_yaml.safe_dump({
+        "limits": [{"limit_id": "geo_x", "category": "geographic_concentration",
+                    "limit_value": 30.0, "unit": "percent", "direction": "max",
+                    "confidence": "high", "needs_review": False}],
+        "limit_count": 1, "needs_review_count": 0,
+        "categories": ["geographic_concentration"]}), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    out = rl.load_extracted_limits("client_cfg")
+    assert out["limits_source"] == "config fallback"
+    assert out["available"] is True
