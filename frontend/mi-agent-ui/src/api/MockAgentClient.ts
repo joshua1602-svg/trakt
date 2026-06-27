@@ -9,13 +9,21 @@
 import type {
   AgentRequest,
   AgentResponse,
+  ForecastEvolution,
   ForecastSnapshot,
+  FundedEvolution,
   FundedSnapshot,
+  PipelineEvolution,
   SnapshotIndex,
 } from "@/domain";
 import { buildAgentResponse } from "@/data/mockResponses";
 import { MOCK_SNAPSHOT_INDEX, mockSnapshot } from "@/data/mockSnapshots";
 import { mockForecastSnapshot } from "@/data/mockForecast";
+import {
+  mockFundedEvolution,
+  mockPipelineEvolution,
+  mockForecastEvolution,
+} from "@/data/mockEvolution";
 import { AgentError, type AgentClient } from "./AgentClient";
 
 export interface MockAgentClientOptions {
@@ -72,5 +80,17 @@ export class MockAgentClient implements AgentClient {
 
   getForecastSnapshot(portfolioId: string): Promise<ForecastSnapshot> {
     return Promise.resolve(mockForecastSnapshot(portfolioId));
+  }
+
+  getFundedEvolution(portfolioId: string): Promise<FundedEvolution> {
+    return Promise.resolve(mockFundedEvolution(portfolioId));
+  }
+
+  getPipelineEvolution(portfolioId: string): Promise<PipelineEvolution> {
+    return Promise.resolve(mockPipelineEvolution(portfolioId));
+  }
+
+  getForecastEvolution(portfolioId: string): Promise<ForecastEvolution> {
+    return Promise.resolve(mockForecastEvolution(portfolioId));
   }
 }

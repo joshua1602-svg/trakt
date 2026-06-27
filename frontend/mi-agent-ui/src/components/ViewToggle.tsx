@@ -1,4 +1,4 @@
-import { GitBranch, Landmark, TrendingUp } from "lucide-react";
+import { Activity, GitBranch, Landmark, TrendingUp } from "lucide-react";
 import type { WorkspaceView } from "@/domain";
 import { cn } from "@/lib/utils";
 
@@ -6,6 +6,7 @@ const VIEWS: { id: WorkspaceView; label: string; icon: typeof Landmark }[] = [
   { id: "funded", label: "Funded", icon: Landmark },
   { id: "pipeline", label: "Pipeline", icon: GitBranch },
   { id: "forecast", label: "Forecast", icon: TrendingUp },
+  { id: "evolution", label: "Evolution", icon: Activity },
 ];
 
 /** Segmented control selecting the active MI workspace view. */

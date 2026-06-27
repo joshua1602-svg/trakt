@@ -6,6 +6,7 @@ import { FundedSnapshotPanel } from "@/components/FundedSnapshotPanel";
 import { PipelineSnapshotPanel } from "@/components/PipelineSnapshotPanel";
 import { PipelineWatchlist } from "@/components/PipelineWatchlist";
 import { ForecastView } from "@/components/ForecastView";
+import { EvolutionPanel } from "@/components/EvolutionPanel";
 import { ViewToggle } from "@/components/ViewToggle";
 import { LineagePanel } from "@/components/LineagePanel";
 import type { ViewLineage } from "@/domain";
@@ -108,6 +109,16 @@ export function AppShell() {
             )}
             {ws.activeView === "forecast" && (
               <ForecastView forecast={ws.forecast} loading={ws.forecastLoading} />
+            )}
+            {ws.activeView === "evolution" && (
+              <EvolutionPanel
+                client={client}
+                portfolioId={
+                  ws.selectedRunId
+                    ? `${ws.selectedClientId ?? ""}/${ws.selectedRunId}`
+                    : (ws.selectedClientId ?? "")
+                }
+              />
             )}
           </div>
           <ArtifactCanvas
