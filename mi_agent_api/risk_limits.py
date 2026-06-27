@@ -29,6 +29,7 @@ import yaml
 from analytics_lib.concentration import group_shares, top_n_concentration
 from analytics_lib.numeric import coerce_numeric
 from mi_agent.risk_monitor import schedule8_extractor as extractor
+from mi_agent.risk_monitor import risk_limits_contract as contract
 
 from . import snapshots as snap
 
@@ -43,19 +44,72 @@ _AMBER_FRACTION = 0.9  # amber when actual >= 90% of the limit (matches Schedule
 # --------------------------------------------------------------------------- #
 # Limit loading
 # --------------------------------------------------------------------------- #
-def load_extracted_limits(client_id: str, *, search_roots: Optional[List[str]] = None
-                          ) -> Dict[str, Any]:
-    """Load the governed extracted limits for a client, with an explicit SOURCE.
+# Map a precedence branch to the production-contract source metadata so the API
+# response and UI are self-describing (never a silent placeholder/fallback).
+def _attach_meta(out: Dict[str, Any], *, source_type: str, extraction_status: str,
+                 is_placeholder: bool, source_file: Optional[str] = None) -> Dict[str, Any]:
+    out["source_type"] = source_type
+    out["extraction_status"] = extraction_status
+    out["is_placeholder"] = is_placeholder
+    if source_file is not None:
+        out.setdefault("source_file", source_file)
+        out.setdefault("source_document", source_file)
+    return out
 
-    Precedence (each clearly labelled so the UI never shows placeholders silently):
-      1. a Schedule 8 document in the client MI-pack ``docs`` folder — parsed live
-         (``limits_source = "Schedule 8 document"``);
+
+def _from_run_config(config: Dict[str, Any], client_id: str) -> Dict[str, Any]:
+    """Adapt a production ``risk_limits_config.yaml`` contract into the extractor
+    output shape the monitor consumes, preserving its source metadata."""
+    limits = contract.config_to_internal_limits(config)
+    needs_review = sum(1 for l in limits if l.get("needs_review"))
+    src = config.get("source_type", contract.SOURCE_SCHEDULE_8)
+    label = {
+        contract.SOURCE_SCHEDULE_8: "Schedule 8 document",
+        contract.SOURCE_ONBOARDING_CONFIG: "onboarding config",
+        contract.SOURCE_FALLBACK_CONFIG: "fallback config",
+        contract.SOURCE_PLACEHOLDER: "placeholder / missing source",
+    }.get(src, "Schedule 8 document")
+    out = {
+        "portfolio_id": client_id,
+        "available": bool(limits),
+        "status": "needs_review" if needs_review else ("ok" if limits else "unavailable"),
+        "limits_source": f"{label} (run config)",
+        "source_document_path": config.get("source_file"),
+        "extraction_method": config.get("extraction_method", "deterministic"),
+        "limits": limits,
+        "limit_count": len(limits),
+        "needs_review_count": needs_review,
+        "categories": sorted({l["category"] for l in limits if l.get("category")}),
+    }
+    return _attach_meta(out, source_type=src,
+                        extraction_status=config.get("extraction_status",
+                                                     contract.STATUS_SUCCESS),
+                        is_placeholder=bool(config.get("is_placeholder")),
+                        source_file=config.get("source_file"))
+
+
+def load_extracted_limits(client_id: str, *, search_roots: Optional[List[str]] = None,
+                          run_config_path: Optional[Any] = None) -> Dict[str, Any]:
+    """Load the governed limits for a client, with an explicit production SOURCE.
+
+    Precedence (each branch self-describes via source_type / extraction_status /
+    is_placeholder so the UI never shows placeholders or fallbacks silently):
+      0. the governed run config ``output/risk/risk_limits_config.yaml`` emitted
+         by onboarding (``source_type: schedule_8_doc`` etc.) — used when it
+         carries real limits;
+      1. a Schedule 8 document in the client MI-pack ``docs`` folder — parsed live;
       2. a non-text Schedule 8 doc found but not machine-readable — controlled
          ``needs_review`` with ingestion diagnostics (NOT a silent placeholder);
-      3. a committed ``config/clients/<client>/risk_limits_extracted.yaml`` —
-         ``limits_source = "config fallback"``;
-      4. nothing — ``limits_source = "placeholder / missing source"`` (unavailable).
+      3. a committed ``config/clients/<client>/risk_limits_extracted.yaml`` fallback;
+      4. nothing — placeholder / missing source (unavailable).
     """
+    # 0 — the governed run config emitted by onboarding (highest precedence when
+    # it carries real, non-placeholder limits).
+    if run_config_path is not None:
+        cfg = contract.load_config(run_config_path)
+        if cfg is not None and cfg.get("limits") and not cfg.get("is_placeholder"):
+            return _from_run_config(cfg, client_id)
+
     # 1/2 — a Schedule 8 document in the client's MI-pack docs folder.
     doc = extractor.locate_client_schedule8(client_id, pack_roots=search_roots)
     if doc is not None:
@@ -63,9 +117,13 @@ def load_extracted_limits(client_id: str, *, search_roots: Optional[List[str]] =
             out = extractor.extract_from_file(doc, portfolio_id=client_id)
             out["limits_source"] = "Schedule 8 document"
             out["source_document_path"] = str(doc)
-            return out
+            status = (contract.STATUS_PARTIAL if out.get("needs_review_count")
+                      else contract.STATUS_SUCCESS)
+            return _attach_meta(out, source_type=contract.SOURCE_SCHEDULE_8,
+                                extraction_status=status, is_placeholder=False,
+                                source_file=str(doc))
         # Found but not machine-readable (pdf/docx) — diagnostics, not a placeholder.
-        return {
+        out = {
             "portfolio_id": client_id, "available": False, "status": "needs_review",
             "reason": (f"Schedule 8 document found ({doc.name}) but it is not "
                        "machine-readable (PDF/DOCX). Convert to text or add a parser; "
@@ -77,6 +135,9 @@ def load_extracted_limits(client_id: str, *, search_roots: Optional[List[str]] =
                 "supportedTextSuffixes": list(extractor._READABLE_SUFFIXES),
             },
             "limits": [], "limit_count": 0, "needs_review_count": 0, "categories": []}
+        return _attach_meta(out, source_type=contract.SOURCE_SCHEDULE_8,
+                            extraction_status=contract.STATUS_FAILED,
+                            is_placeholder=False, source_file=str(doc))
 
     # 3 — committed config fallback.
     cfg = Path("config") / "clients" / client_id / "risk_limits_extracted.yaml"
@@ -87,7 +148,11 @@ def load_extracted_limits(client_id: str, *, search_roots: Optional[List[str]] =
             data.setdefault("status", "needs_review" if data.get("needs_review_count")
                             else ("ok" if data.get("limits") else "unavailable"))
             data["limits_source"] = "config fallback"
-            return data
+            status = (contract.STATUS_PARTIAL if data.get("needs_review_count")
+                      else contract.STATUS_SUCCESS)
+            return _attach_meta(data, source_type=contract.SOURCE_FALLBACK_CONFIG,
+                                extraction_status=status, is_placeholder=False,
+                                source_file=str(cfg))
         except Exception:  # noqa: BLE001
             pass
 
@@ -98,11 +163,18 @@ def load_extracted_limits(client_id: str, *, search_roots: Optional[List[str]] =
             out = extractor.extract_from_file(located, portfolio_id=client_id)
             out["limits_source"] = "Schedule 8 document"
             out["source_document_path"] = str(located)
-            return out
-    return {"portfolio_id": client_id, "available": False, "status": "unavailable",
-            "reason": "No Schedule 8 limits available — extraction required.",
-            "limits_source": "placeholder / missing source", "limits": [],
-            "limit_count": 0, "needs_review_count": 0, "categories": []}
+            status = (contract.STATUS_PARTIAL if out.get("needs_review_count")
+                      else contract.STATUS_SUCCESS)
+            return _attach_meta(out, source_type=contract.SOURCE_SCHEDULE_8,
+                                extraction_status=status, is_placeholder=False,
+                                source_file=str(located))
+    out = {"portfolio_id": client_id, "available": False, "status": "unavailable",
+           "reason": "No Schedule 8 limits available — extraction required.",
+           "limits_source": "placeholder / missing source", "limits": [],
+           "limit_count": 0, "needs_review_count": 0, "categories": []}
+    return _attach_meta(out, source_type=contract.SOURCE_PLACEHOLDER,
+                        extraction_status=contract.STATUS_NOT_FOUND,
+                        is_placeholder=True)
 
 
 # --------------------------------------------------------------------------- #
@@ -418,9 +490,6 @@ def _observations(tests: List[Dict[str, Any]], summary: Dict[str, Any]) -> List[
 def compute_risk_limits(output_root, client_id: str, to_run_id: Optional[str],
                         *, search_roots: Optional[List[str]] = None) -> Dict[str, Any]:
     """Full risk-limit monitor envelope for a client/run."""
-    extracted = load_extracted_limits(client_id, search_roots=search_roots)
-    limits_source = extracted.get("limits_source", "Schedule 8 extracted")
-
     # Resolve funded df for the run (and the prior run for movement), reusing the
     # governed snapshot loaders. Never 500s — returns observed concentrations even
     # when limits are unavailable.
@@ -439,6 +508,15 @@ def compute_risk_limits(output_root, client_id: str, to_run_id: Optional[str],
                     runs = runs[: cut + 1]
         except Exception:  # noqa: BLE001
             runs = []
+
+    # The governed run config (emitted by onboarding) takes precedence when it
+    # carries real limits — resolve its path for the target run.
+    target_run_id = runs[-1]["run_id"] if runs else to_run_id
+    run_cfg_path = (contract.run_config_path(output_root, client_id, target_run_id)
+                    if (output_root and target_run_id) else None)
+    extracted = load_extracted_limits(client_id, search_roots=search_roots,
+                                      run_config_path=run_cfg_path)
+    limits_source = extracted.get("limits_source", "Schedule 8 extracted")
     if runs:
         tape = snap.resolve_tape_path(output_root, client_id, runs[-1]["run_id"])
         if tape is not None:
@@ -475,6 +553,12 @@ def compute_risk_limits(output_root, client_id: str, to_run_id: Optional[str],
         "limitsStatus": extracted.get("status", "unavailable"),
         "limitsSource": limits_source,
         "limitsReason": extracted.get("reason"),
+        # Production config-contract metadata (self-describing source, never silent).
+        "sourceType": extracted.get("source_type", "placeholder"),
+        "sourceFile": extracted.get("source_file") or extracted.get("source_document_path"),
+        "extractionStatus": extracted.get("extraction_status", "not_found"),
+        "isPlaceholder": bool(extracted.get("is_placeholder", not limits)),
+        "diagnostics": extracted.get("ingestion_diagnostics") or extracted.get("diagnostics"),
         "fundedDataAvailable": not df.empty,
         "summary": summary,
         "testsByCategory": by_category,
@@ -482,7 +566,10 @@ def compute_risk_limits(output_root, client_id: str, to_run_id: Optional[str],
         "observations": _observations(tests, summary),
         "lineage": {
             "limitSource": limits_source,
-            "sourceDocument": extracted.get("source_document"),
+            "sourceType": extracted.get("source_type", "placeholder"),
+            "sourceDocument": extracted.get("source_file") or extracted.get("source_document"),
+            "extractionStatus": extracted.get("extraction_status", "not_found"),
+            "runConfigPath": str(run_cfg_path) if run_cfg_path else None,
             "dataSource": "governed central lender tape (18_central_lender_tape.csv)",
             "exposureBasis": "funded",
             "reportingDate": reporting_date,
