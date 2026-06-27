@@ -44,6 +44,15 @@ function gbpCompact(v: number): string {
   return formatGBP(v, { compact: true });
 }
 
+// Evolution sub-tab semantics (A3 / A10): make stock vs funnel-flow vs forecast
+// unambiguous.
+const EVO_SUBTITLES: Record<EvoView, string> = {
+  funded: "Funded book actuals by reporting month (balance, loan count, WA LTV, WA rate).",
+  pipeline: "Stock of open pipeline exposure per weekly extract — amount, case count and weighted expected funded balance.",
+  origination: "Funnel flow per week — KFI → Application → Offer → Completion value/count, 5-week average and conversion vs KFI.",
+  forecast: "Forecast evolution — funded balance + weighted expected pipeline across reporting extracts (not the scenario engine).",
+};
+
 /** The x-axis label for a weekly pipeline period: the DAY-LEVEL extract date
  * (week / extract_date) in preference to the YYYY-MM month, so multiple weekly
  * points within a month are distinguishable rather than sharing one label. */
@@ -314,6 +323,10 @@ export function EvolutionPanel({
           ))}
         </div>
       </div>
+
+      <p className="text-[11px] text-ink-500" data-testid="evo-subtitle">
+        {EVO_SUBTITLES[view]}
+      </p>
 
       {single && (
         <div className="rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-[11px] text-amber-300/90">

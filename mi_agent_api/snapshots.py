@@ -276,6 +276,51 @@ def _has_values(df: pd.DataFrame, col: str) -> bool:
     return col in df.columns and _num(df[col]).notna().any()
 
 
+def portfolio_risk_type(df: pd.DataFrame) -> str:
+    """``"erm"`` (equity release / lifetime mortgage) vs ``"standard"`` amortising.
+
+    ERM is detected from product/plan text; this deployment defaults to ERM."""
+    for col in ("erm_product_type", "product", "product_type", "loan_plan"):
+        if col in df.columns:
+            v = df[col].astype(str).str.lower()
+            if v.str.contains(
+                    r"lifetime|equity[ -]?release|\berm\b|drawdown|lump sum|roll[ -]?up",
+                    regex=True, na=False).any():
+                return "erm"
+    return "erm"
+
+
+def _risk_tile(df: pd.DataFrame) -> Dict[str, Any]:
+    """Portfolio-type-aware risk tile (replaces the duplicate loan-movement tile).
+
+    ERM -> a current-NNEG exposure proxy (balance above current valuation); a
+    standard book -> arrears balance. When the inputs are missing, a controlled
+    "unavailable" tile lists exactly which fields are absent (never fabricated)."""
+    if portfolio_risk_type(df) == "erm":
+        bal_col, val_col = "current_outstanding_balance", "current_valuation_amount"
+        missing = [c for c in (bal_col, val_col) if not _has_values(df, c)]
+        if missing:
+            return _kpi("nneg_risk", "NNEG exposure (current)", "Unavailable",
+                        fmt="text", raw=None, available=False, delta_intent="neutral",
+                        hint="missing inputs: " + ", ".join(missing))
+        bal, val = _num(df[bal_col]), _num(df[val_col])
+        mask = (bal > val) & bal.notna() & val.notna()
+        nneg = float((bal[mask] - val[mask]).sum())
+        cnt = int(mask.sum())
+        return _kpi("nneg_risk", "NNEG exposure (current)", _fmt_gbp(nneg), fmt="gbp",
+                    raw=round(nneg, 2),
+                    delta_intent="negative" if nneg > 0 else "positive",
+                    hint=f"{cnt} loan(s) with balance above current valuation")
+    # standard amortising book -> arrears
+    if not _has_values(df, "arrears_balance"):
+        return _kpi("arrears_risk", "Arrears balance", "Unavailable", fmt="text",
+                    raw=None, available=False, delta_intent="neutral",
+                    hint="missing inputs: arrears_balance / days_in_arrears")
+    tot = float(_num(df["arrears_balance"]).sum())
+    return _kpi("arrears_risk", "Arrears balance", _fmt_gbp(tot), fmt="gbp",
+                raw=round(tot, 2), delta_intent="negative" if tot > 0 else "neutral")
+
+
 def _loan_ids(df: pd.DataFrame) -> set:
     if "loan_identifier" not in df.columns:
         return set()
@@ -400,8 +445,9 @@ def compute_funded_snapshot(
                          delta_intent="positive" if bal_delta >= 0 else "negative",
                          hint=_fmt_pct_points(bal_delta_pct, signed=True) if bal_delta_pct is not None else None))
         if ids_identifiable:
-            kpis.append(_kpi("new_loans", "New loans since prior run", _fmt_int(new_loans),
-                             fmt="number", raw=new_loans, delta_intent="positive"))
+            # The net "Monthly change · loans" tile already conveys loan movement;
+            # the old "New loans since prior run" duplicated it. Keep exited/redeemed
+            # (genuinely distinct) and surface new-loans in the monthly_change block.
             kpis.append(_kpi("exited_loans", "Exited / redeemed loans", _fmt_int(exited_loans),
                              fmt="number", raw=exited_loans,
                              delta_intent="negative" if (exited_loans or 0) > 0 else "neutral"))
@@ -410,6 +456,10 @@ def compute_funded_snapshot(
                                "(no loan_identifier on one of the runs).")
     else:
         diagnostics.append("No prior reporting date available for this portfolio.")
+
+    # Portfolio-type-aware risk tile (replaces the duplicate loan-movement tile):
+    # ERM -> NNEG exposure; standard -> arrears; controlled "unavailable" otherwise.
+    kpis.append(_risk_tile(df))
 
     # Surface genuinely-missing core dimensions as business warnings (not noise).
     for miss in (prep_report or {}).get("missing_dimensions", []) or []:

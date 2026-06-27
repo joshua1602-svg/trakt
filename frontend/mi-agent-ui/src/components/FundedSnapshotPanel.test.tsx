@@ -19,7 +19,10 @@ describe("FundedSnapshotPanel", () => {
     expect(screen.getByText("Monthly change · loans")).toBeInTheDocument();
     // "+40" appears as both the loans-funded delta and the dedicated tile value.
     expect(screen.getAllByText("+40").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("New loans since prior run")).toBeInTheDocument();
+    // The duplicate "New loans since prior run" tile is replaced by a
+    // portfolio-aware risk tile (NNEG for ERM).
+    expect(screen.queryByText("New loans since prior run")).toBeNull();
+    expect(screen.getByText("NNEG exposure (current)")).toBeInTheDocument();
     expect(screen.getByText(/vs prior run · 2025-10-31/)).toBeInTheDocument();
   });
 
