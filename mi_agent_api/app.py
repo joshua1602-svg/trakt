@@ -36,6 +36,7 @@ from . import pipeline_history
 from . import forecast_bridge as forecast_mod
 from . import workspace as workspace_mod
 from . import evolution as evolution_mod
+from . import chat_routing as chat_routing_mod
 
 logger = logging.getLogger("mi_agent_api")
 
@@ -672,6 +673,29 @@ def query(req: QueryRequest) -> Dict[str, Any]:
             "metadata": {"engine": "mi_agent", "source": "python", "mock": False,
                          "datasetContext": view},
         }
+
+    # ---- governed-intent routing (compare / evolution / forecast / risk) ----
+    # The new analytical intents are served by the internal evolution /
+    # temporal-compare / forecast-extrapolation / risk-limit services and shaped
+    # into the existing artifact union. Normal point-in-time questions return
+    # None here and fall through to the unchanged MI Agent path below.
+    try:
+        cid, _rid = (portfolio_id.split("/", 1) + [None])[:2] if (portfolio_id and "/" in portfolio_id) \
+            else ((portfolio_id or "client_001"), None)
+        routed = chat_routing_mod.try_route(
+            req.question, portfolio_id=portfolio_id, view=view,
+            output_root=_onboarding_output_root(),
+            pipeline_root=os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root(),
+            semantics=load_mi_semantics(semantics_path()),
+            history_model=_pipeline_history(cid), as_of=req.asOfDate)
+    except Exception as exc:  # noqa: BLE001 - routing must never break the chat
+        logger.warning("chat routing failed; using point-in-time path: %s", exc)
+        routed = None
+    if routed is not None:
+        meta = routed.setdefault("metadata", {})
+        if isinstance(meta, dict):
+            meta["datasetContext"] = view
+        return routed
 
     try:
         df, frame_error = _resolve_query_frame(view, portfolio_id)
