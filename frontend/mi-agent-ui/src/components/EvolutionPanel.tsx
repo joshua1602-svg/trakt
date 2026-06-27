@@ -50,7 +50,15 @@ const EVO_SUBTITLES: Record<EvoView, string> = {
   funded: "Funded book actuals by reporting month (balance, loan count, WA LTV, WA rate).",
   pipeline: "Stock of open pipeline exposure per weekly extract — amount, case count and weighted expected funded balance.",
   origination: "Funnel flow per week — KFI → Application → Offer → Completion value/count, 5-week average and conversion vs KFI.",
-  forecast: "Forecast evolution — funded balance + weighted expected pipeline across reporting extracts (not the scenario engine).",
+  // D: distinct from the main Forecast tab (which is the forward projection from
+  // the latest run). This is the HISTORY of the forecast across reporting runs.
+  forecast: "Forecast Evolution — historical movement in forecast metrics across reporting runs (how the forecast changed over time, and actual funded vs the prior run's forecast). For the forward projection from the latest run, use the main Forecast tab.",
+};
+
+// Sub-tab button labels (the "forecast" view reads as "Forecast Evolution").
+const EVO_TAB_LABEL: Record<EvoView, string> = {
+  funded: "Funded", pipeline: "Pipeline", origination: "Origination",
+  forecast: "Forecast Evolution",
 };
 
 /** Data-quality annotation for a weekly pipeline series (A2): flags a sharp
@@ -380,6 +388,17 @@ export function EvolutionPanel({
     () => (forecast?.periods ?? []).map((p) => ({ period: p.period, ...p.metrics })),
     [forecast],
   );
+  // D: actual funded THIS run vs the PRIOR run's forecast — "did the forecast hold?".
+  const forecastVariance = useMemo(() => {
+    const periods = forecast?.periods ?? [];
+    return periods.map((p, i) => ({
+      period: p.period,
+      actual_funded: (p.metrics?.funded_balance as number) ?? null,
+      prior_forecast: i > 0
+        ? ((periods[i - 1].metrics?.forecast_funded_balance as number) ?? null) : null,
+    })).filter((r) => r.prior_forecast != null);
+  }, [forecast],
+  );
 
   const single =
     (view === "funded" && funded?.singlePeriod) ||
@@ -399,10 +418,10 @@ export function EvolutionPanel({
             <button key={v} type="button" role="tab" aria-selected={view === v}
               onClick={() => setView(v)}
               className={cn(
-                "rounded-md px-3 py-1 text-[12px] font-medium capitalize transition-colors",
+                "rounded-md px-3 py-1 text-[12px] font-medium transition-colors",
                 view === v ? "bg-navy-700/80 text-ink-100" : "text-ink-400 hover:text-ink-200",
               )}>
-              {v}
+              {EVO_TAB_LABEL[v]}
             </button>
           ))}
         </div>
@@ -535,13 +554,34 @@ export function EvolutionPanel({
       )}
 
       {view === "forecast" && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <EvoLineChart title="Forecast funded balance over time" data={forecastSeries}
-            lines={[
-              { key: "funded_balance", label: "Funded" },
-              { key: "weighted_expected_pipeline", label: "Weighted pipeline" },
-              { key: "forecast_funded_balance", label: "Forecast" },
-            ]} valueFormat="gbp" source="funded tapes + weighted pipeline" />
+        <div className="space-y-3" data-testid="forecast-evolution">
+          {forecastSeries.length < 2 && (
+            <div className="rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-[11px] text-amber-300/90"
+              data-testid="forecast-evolution-insufficient">
+              Only {forecastSeries.length} reporting run available — forecast history needs at
+              least two runs to show how the forecast has changed. Showing what is available.
+            </div>
+          )}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <EvoLineChart title="Forecast funded balance by reporting run" data={forecastSeries}
+              lines={[
+                { key: "funded_balance", label: "Funded actual" },
+                { key: "weighted_expected_pipeline", label: "Weighted pipeline" },
+                { key: "forecast_funded_balance", label: "Forecast (funded + pipeline)" },
+              ]} valueFormat="gbp" source="funded tapes + weighted pipeline" />
+            {forecastVariance.length > 0 && (
+              <EvoLineChart title="Actual funded vs prior-run forecast" data={forecastVariance}
+                lines={[
+                  { key: "prior_forecast", label: "Prior-run forecast" },
+                  { key: "actual_funded", label: "Actual funded" },
+                ]} valueFormat="gbp" source="this run's actual vs the prior run's forecast" />
+            )}
+          </div>
+          <p className="text-[10px] text-ink-500" data-testid="forecast-evolution-lineage">
+            Runs: {(forecast?.periods ?? []).map((p) => p.run_id ?? p.period).join(", ") || "—"}.
+            {" "}Forecast basis: funded balance + Σ(weighted expected pipeline) per run.
+            {" "}Actual-vs-forecast: {forecastVariance.length > 0 ? "available" : "needs a prior run"}.
+          </p>
         </div>
       )}
     </section>

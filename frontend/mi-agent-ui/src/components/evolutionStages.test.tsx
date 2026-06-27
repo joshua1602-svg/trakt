@@ -79,7 +79,7 @@ describe("EvolutionPanel origination conversion footers", () => {
   it("shows a conversion-vs-KFI footer on Application/Offer/Completion (not KFI)", async () => {
     render(<EvolutionPanel client={client()} portfolioId="client_001" />);
     await screen.findByText("Funded balance by month");
-    fireEvent.click(screen.getByRole("tab", { name: "origination" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Origination" }));
     await screen.findByTestId("origination-funnel");
     expect(screen.getByTestId("funnel-conversion-APPLICATION")).toBeInTheDocument();
     expect(screen.getByTestId("funnel-conversion-OFFER")).toBeInTheDocument();
@@ -191,7 +191,7 @@ describe("EvolutionPanel stage mode toggle (C)", () => {
   it("switches the by-stage chart between Amount, Count and Conversion", async () => {
     render(<EvolutionPanel client={client()} portfolioId="client_001" />);
     await screen.findByText("Funded balance by month");
-    fireEvent.click(screen.getByRole("tab", { name: "pipeline" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Pipeline" }));
     await screen.findByText("Pipeline by stage over time");
     fireEvent.click(screen.getByRole("tab", { name: "Count" }));
     expect(screen.getByTestId("stage-mode-note").textContent).toMatch(/Case count/);

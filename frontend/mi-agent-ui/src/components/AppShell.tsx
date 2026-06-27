@@ -50,7 +50,7 @@ function pipelineLineage(forecast: ReturnType<typeof useWorkspace>["forecast"]):
 const VIEW_SUBTITLES: Record<string, string> = {
   funded: "Funded book — latest funded-loan snapshot as of the selected reporting date (governed central lender tape).",
   pipeline: "Pipeline — latest open-pipeline snapshot (weighted expected funded balance) as of the selected reporting date.",
-  forecast: "Scenario / portfolio forecast — forward projection (funded balance + weighted pipeline, run-rate scale-up).",
+  forecast: "Scenario / portfolio forecast — forward-looking projection from the latest selected run (funded balance + weighted pipeline + run-rate scale-up). For how the forecast changed across runs, see Evolution → Forecast Evolution.",
   evolution: "Evolution — time-series movement across multiple reporting extracts (funded / pipeline / origination funnel / forecast).",
   risk_limits: "Risk Limits — Schedule 8 concentration limits vs funded actual exposure, headroom and status.",
 };
