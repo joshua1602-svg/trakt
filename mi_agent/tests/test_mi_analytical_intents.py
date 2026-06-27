@@ -172,6 +172,43 @@ def test_company_name_with_limited_is_not_a_risk_limit(semantics):
 
 
 # --------------------------------------------------------------------------- #
+# Sprint "Chatbot End-to-End Routing v1" — the exact questions that must compile
+# to the right governed plan so POST /mi/query can route them.
+# --------------------------------------------------------------------------- #
+def test_routing_questions_compile_to_expected_plans(semantics):
+    def plan(s):
+        if s.temporal_mode == "compare":
+            return "compare"
+        if s.forecast_mode == "extrapolation":
+            return "forecast"
+        if s.risk_limit_query:
+            return "risk"
+        if s.chart_type == "line":
+            return "evolution"
+        return "point_in_time"
+
+    cases = {
+        "Show loan count evolution by month.": "evolution",
+        "Show pipeline case count evolution by week.": "evolution",
+        "Compare October and November funded balance.": "compare",
+        "Compare latest pipeline with prior pipeline.": "compare",
+        "When do we reach £50m funded balance?": "forecast",
+        "Show the funded balance extrapolation curve.": "forecast",
+        "What is the current completion run rate?": "forecast",
+        "Show risk limit breaches.": "risk",
+        "Which concentration limit is closest to breach?": "risk",
+        "Show geographic concentration limits.": "risk",
+    }
+    for q, expected in cases.items():
+        assert plan(_parse(q, semantics)) == expected, q
+
+
+def test_pipeline_case_count_evolution_is_count(semantics):
+    s = _parse("Show pipeline case count evolution by week.", semantics)
+    assert s.chart_type == "line" and s.aggregation == "count" and s.metric is None
+
+
+# --------------------------------------------------------------------------- #
 # No hallucinated fields across all new intents
 # --------------------------------------------------------------------------- #
 def test_new_intents_reference_no_hallucinated_fields(semantics):
