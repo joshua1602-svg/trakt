@@ -253,6 +253,108 @@ def pipeline_evolution(pipeline_root: str | os.PathLike, client_id: str,
 
 
 # --------------------------------------------------------------------------- #
+# Weekly origination funnel trends (KFI / Application / Offer / Completion)
+# --------------------------------------------------------------------------- #
+_FUNNEL_STAGES = ("KFI", "APPLICATION", "OFFER", "COMPLETED")
+_FUNNEL_LABELS = {"KFI": "KFIs", "APPLICATION": "Applications",
+                  "OFFER": "Offers", "COMPLETED": "Completions"}
+
+
+def _trailing_avg(values: List[Optional[float]], window: int = 5) -> Optional[float]:
+    vals = [v for v in values if v is not None]
+    if not vals:
+        return None
+    use = vals[-window:]
+    return round(sum(use) / len(use), 2)
+
+
+def _trend(values: List[Optional[float]]) -> str:
+    vals = [v for v in values if v is not None]
+    if len(vals) < 2:
+        return "flat"
+    delta = vals[-1] - vals[-2]
+    return "up" if delta > 0 else ("down" if delta < 0 else "flat")
+
+
+def pipeline_funnel_evolution(pipeline_root: str | os.PathLike, client_id: str,
+                              to_run_id: Optional[str] = None) -> Dict[str, Any]:
+    """Weekly origination funnel: KFI / Application / Offer / Completion value AND
+    count per governed weekly extract, with a 5-week trailing average, latest
+    week value/count and the delta vs the prior week. Reuses the governed weekly
+    pipeline extracts (same source as ``pipeline_evolution``)."""
+    inv = pipeline_mod.weekly_extract_inventory(pipeline_root, client_id)
+    extracts = inv.get("extracts", [])
+    cut_ym = pipeline_mod._year_month(str(to_run_id)) if to_run_id else None
+
+    weeks: List[Optional[str]] = []
+    sources: List[str] = []
+    # series[stage] = [{week, value, count}]
+    series: Dict[str, List[Dict[str, Any]]] = {s: [] for s in _FUNNEL_STAGES}
+
+    for ext in extracts:
+        edate = ext.get("pipeline_extract_date")
+        if cut_ym and edate and edate[:7] > cut_ym:
+            continue
+        try:
+            df, _report = pipeline_mod.load_prepared_pipeline(ext)
+        except Exception:  # noqa: BLE001
+            continue
+        weeks.append(edate)
+        sources.append(ext.get("source_file", ""))
+        stage_col = df["pipeline_stage"].astype(str) if "pipeline_stage" in df.columns else None
+        bal = coerce_numeric(df[_BALANCE]) if _BALANCE in df.columns else None
+        for stage in _FUNNEL_STAGES:
+            if stage_col is None:
+                series[stage].append({"week": edate, "value": None, "count": 0})
+                continue
+            mask = stage_col.str.upper() == stage
+            value = round(float(bal[mask].sum()), 2) if bal is not None else None
+            series[stage].append({"week": edate, "value": value, "count": int(mask.sum())})
+
+    summary: Dict[str, Any] = {}
+    for stage in _FUNNEL_STAGES:
+        pts = series[stage]
+        values = [p["value"] for p in pts]
+        counts = [float(p["count"]) for p in pts]
+        latest_value = values[-1] if values else None
+        latest_count = pts[-1]["count"] if pts else 0
+        prior_value = values[-2] if len(values) >= 2 else None
+        prior_count = pts[-2]["count"] if len(pts) >= 2 else None
+        summary[stage] = {
+            "label": _FUNNEL_LABELS[stage],
+            "latestValue": latest_value,
+            "latestCount": latest_count,
+            "fiveWeekAvgValue": _trailing_avg(values, 5),
+            "fiveWeekAvgCount": _trailing_avg(counts, 5),
+            "deltaValue": (round(latest_value - prior_value, 2)
+                           if latest_value is not None and prior_value is not None else None),
+            "deltaCount": (latest_count - prior_count
+                           if prior_count is not None else None),
+            "trend": _trend(values),
+            "weeksObserved": len([v for v in values if v is not None]),
+        }
+
+    return {
+        "dataset": "pipeline_funnel",
+        "portfolioId": client_id,
+        "toRunId": to_run_id,
+        "stages": list(_FUNNEL_STAGES),
+        "stageLabels": _FUNNEL_LABELS,
+        "weeks": weeks,
+        "sourceFiles": sources,
+        "uniqueWeeklyExtractsUsed": inv.get("uniqueWeeklyExtractsUsed"),
+        "series": series,
+        "summary": summary,
+        "lineage": {
+            "source": "governed weekly pipeline extracts (deduplicated)",
+            "metric": "weekly KFI / Application / Offer / Completion value and count",
+            "fiveWeekAverage": "trailing mean of up to the last 5 weekly extracts",
+        },
+        "singlePeriod": len(weeks) <= 1,
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Forecast bridge evolution (funded balance + weighted pipeline, per funded run)
 # --------------------------------------------------------------------------- #
 def forecast_evolution(output_root: str | os.PathLike,

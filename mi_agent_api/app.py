@@ -438,6 +438,27 @@ def pipeline_evolution(portfolioId: Optional[str] = None, client_id: Optional[st
                 "periods": [], "byStage": [], "singlePeriod": True, "error": str(exc)}
 
 
+@app.get("/mi/evolution/funnel")
+def funnel_evolution(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
+                     toRunId: Optional[str] = None, to_run_id: Optional[str] = None
+                     ) -> Dict[str, Any]:
+    """Weekly origination funnel trends (KFI / Application / Offer / Completion
+    value + count, 5-week average, latest week, delta vs prior week). Never 500s."""
+    cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
+    root = os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root()
+    if not root:
+        return {"dataset": "pipeline_funnel", "portfolioId": cid, "toRunId": trid,
+                "stages": [], "weeks": [], "series": {}, "summary": {},
+                "singlePeriod": True, "error": "no pipeline root configured"}
+    try:
+        return evolution_mod.pipeline_funnel_evolution(root, cid, trid)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("funnel evolution failed: %s", exc)
+        return {"dataset": "pipeline_funnel", "portfolioId": cid, "toRunId": trid,
+                "stages": [], "weeks": [], "series": {}, "summary": {},
+                "singlePeriod": True, "error": str(exc)}
+
+
 @app.get("/mi/evolution/forecast")
 def forecast_evolution(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
                        toRunId: Optional[str] = None, to_run_id: Optional[str] = None
@@ -456,6 +477,37 @@ def forecast_evolution(portfolioId: Optional[str] = None, client_id: Optional[st
         logger.warning("forecast evolution failed: %s", exc)
         return {"dataset": "forecast", "portfolioId": cid, "toRunId": trid,
                 "periods": [], "singlePeriod": True, "error": str(exc)}
+
+
+@app.get("/mi/forecast/extrapolation")
+def forecast_extrapolation(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
+                           toRunId: Optional[str] = None, to_run_id: Optional[str] = None
+                           ) -> Dict[str, Any]:
+    """Securitisation scale-up forecast: completion run-rate + KFI-conversion
+    extrapolation with downside/base/upside bands and milestone dates to funding
+    thresholds, plus the existing point-in-time weighted-pipeline forecast.
+    Never 500s — returns controlled insufficient-history caveats."""
+    from . import forecast_extrapolation as fx_mod
+    cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
+    root = _onboarding_output_root()
+    proot = os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root()
+    if not root:
+        return {"portfolioId": cid, "toRunId": trid, "currentFundedBalance": 0.0,
+                "completionRunRateForecast": {"available": False,
+                                              "status": "insufficient_data",
+                                              "caveat": "no onboarding output root configured"},
+                "dataSufficiency": "insufficient_data"}
+    try:
+        history = _pipeline_history(cid)
+        return fx_mod.build_extrapolation(root, proot or root, cid, trid,
+                                          history_model=history)
+    except Exception as exc:  # noqa: BLE001 - forecast must never 500
+        logger.warning("forecast extrapolation failed: %s", exc)
+        return {"portfolioId": cid, "toRunId": trid, "currentFundedBalance": 0.0,
+                "completionRunRateForecast": {"available": False,
+                                              "status": "insufficient_data",
+                                              "caveat": str(exc)},
+                "dataSufficiency": "insufficient_data", "error": str(exc)}
 
 
 @app.get("/mi/risk-limits")
