@@ -183,6 +183,13 @@ class MIQuerySpec:
     forecast_question: Optional[str] = None      # reach_threshold|run_rate|run_rate_annualised|scenario|conversion|pipeline_needed|compare_models|extrapolation_curve
     forecast_target_value: Optional[float] = None
     risk_limit_query: Optional[bool] = None
+    # Risk-limit category filter ("geographic concentration limits" -> only the
+    # geographic category). None = all categories.
+    risk_limit_category: Optional[str] = None
+    # Human-readable predicates the user asked for that COULD NOT be applied
+    # (e.g. a joint-borrower filter when no borrower-structure field exists). These
+    # are surfaced in warnings + the query-audit panel and NEVER silently dropped.
+    unavailable_filters: List[str] = field(default_factory=list)
 
     # ------------------------------------------------------------------ #
     # Serialisation

@@ -279,6 +279,12 @@ def run_mi_agent_query(
     result["parse_metadata"] = parse_meta
     result["interpreted"] = describe_spec(spec, semantics, result["parser_mode"])
 
+    # Predicates the user asked for that could not be applied (e.g. a joint-borrower
+    # filter when no borrower-structure field exists) are surfaced as warnings —
+    # never silently dropped. They also flow into the API query-audit panel.
+    for note in getattr(spec, "unavailable_filters", None) or []:
+        warnings.append(f"Filter not applied (field unavailable): {note}")
+
     # ---- validate (with recovery) -----------------------------------------
     # The validator is also a RECOVERY/control layer: when a spec fails only
     # because the chart type is wrong for the plan (e.g. a metric-only query
