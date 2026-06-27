@@ -306,12 +306,19 @@ def _percent_scale(result: MIQueryResult) -> Optional[str]:
 
 
 def _split_columns(data: pd.DataFrame) -> Tuple[List[str], Optional[str]]:
-    """Return (group_columns, value_column) for a grouped/table result."""
-    reserved = {"concentration_pct"}
+    """Return (group_columns, value_column) for a grouped/table result.
+
+    ``loan_count`` and ``*_total`` are SUPPORTING columns (the denominator / total
+    behind an average) — they enrich the table but are never the charted measure,
+    so they are reserved out of value-column selection.
+    """
+    reserved = {"concentration_pct", "loan_count"}
     value_candidates = [c for c in data.columns
-                        if c not in reserved and pd.api.types.is_numeric_dtype(data[c])]
+                        if c not in reserved and not str(c).endswith("_total")
+                        and pd.api.types.is_numeric_dtype(data[c])]
     group_cols = [c for c in data.columns
-                  if c not in reserved and c not in value_candidates]
+                  if c not in reserved and not str(c).endswith("_total")
+                  and c not in value_candidates]
     value_col = value_candidates[-1] if value_candidates else None
     return group_cols, value_col
 

@@ -29,6 +29,22 @@ metadata:
   missing_curated_fields: []
   version: 0.3.0
   default_weight_field: current_outstanding_balance
+  metric_definitions:
+    average_loan_balance:
+      label: Average Loan Balance
+      metric: current_outstanding_balance
+      aggregation: avg
+      formula: sum(current_outstanding_balance) / count(loans)
+      context_fields:
+      - loan_count
+      - current_outstanding_balance_total
+      synonyms:
+      - average loan balance
+      - avg loan balance
+      - mean loan balance
+      - average balance
+      - avg balance
+      - mean balance
   cleanup_notes:
   - numeric axis roles enabled
   - weighted_avg defaults for rate/LTV fields
@@ -3113,6 +3129,8 @@ fields:
     - borrower age
     - youngest borrower age
     - applicant age
+    - customer age
+    - youngest age
     source_criteria:
     - layer:product
     role: metric

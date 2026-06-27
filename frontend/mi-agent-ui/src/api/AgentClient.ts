@@ -9,8 +9,11 @@
 import type {
   AgentRequest,
   AgentResponse,
+  ForecastEvolution,
   ForecastSnapshot,
+  FundedEvolution,
   FundedSnapshot,
+  PipelineEvolution,
   SnapshotIndex,
 } from "@/domain";
 
@@ -35,6 +38,15 @@ export interface AgentClient {
    * is backend-derived — the UI only renders it.
    */
   getForecastSnapshot(portfolioId: string, signal?: AbortSignal): Promise<ForecastSnapshot>;
+
+  /** Funded time series (per-month metrics + breakdowns) up to the selected run. */
+  getFundedEvolution(portfolioId: string, signal?: AbortSignal): Promise<FundedEvolution>;
+
+  /** Pipeline time series (weekly amount/cases + by-stage over time). */
+  getPipelineEvolution(portfolioId: string, signal?: AbortSignal): Promise<PipelineEvolution>;
+
+  /** Forecast bridge over time (funded balance + weighted pipeline per run). */
+  getForecastEvolution(portfolioId: string, signal?: AbortSignal): Promise<ForecastEvolution>;
 }
 
 /** Error thrown by clients for transport/agent failures. */

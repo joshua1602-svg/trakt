@@ -4,3 +4,4 @@ export * from "./agent";
 export * from "./snapshot";
 export * from "./pipeline";
 export * from "./guards";
+export * from "./evolution";

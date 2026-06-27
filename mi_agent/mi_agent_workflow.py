@@ -15,6 +15,7 @@ proposes an MIQuerySpec — it never executes anything or sees raw data):
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -29,7 +30,7 @@ from .mi_query_executor import (
     execute_mi_query,
 )
 from .mi_query_spec import MIQuerySpec
-from .mi_query_validator import load_mi_semantics, validate_mi_query
+from .mi_query_validator import load_mi_semantics, recover_chart_spec, validate_mi_query
 
 # Chart types the chart factory can render (others are table/summary only).
 _RENDERABLE = {"bar", "line", "scatter", "bubble", "heatmap", "treemap"}
@@ -107,6 +108,54 @@ def describe_spec(spec: MIQuerySpec, semantics: dict,
 # --------------------------------------------------------------------------- #
 
 
+# Governed concept -> canonical field. When a question names one of these
+# concepts but the field's column is absent from the data, the agent returns a
+# CONTROLLED unsupported response (never a hallucinated/fallback answer). When the
+# field IS present (a future client pack), the query is processed normally.
+_UNSUPPORTED_CONCEPTS = [
+    (r"\bdays?\s+in\s+arrears\b|\bin\s+arrears\b|\barrears\b", "arrears",
+     ["arrears_balance", "days_in_arrears"]),
+    (r"\bdefault(ed|s)?\b", "default", ["default_amount"]),
+    (r"\brecover(y|ies)\b", "recoveries", ["recoveries_in_period"]),
+    (r"\b(losses|loss amount|allocated loss)\b", "losses", ["allocated_losses"]),
+    (r"\bnneg\b|\bnegative equity\b|\bno[- ]negative[- ]equity\b", "NNEG",
+     ["nneg_flag"]),
+    (r"\bindexed\s+(ltv|value|valuation|loan to value)\b", "indexed valuation",
+     ["indexed_loan_to_value", "indexed_valuation_amount"]),
+    (r"\bcredit score\b", "credit score", ["credit_score"]),
+    (r"\bprotected equity\b", "protected equity", ["protected_equity_flag"]),
+    (r"\b(roll[- ]?up interest|accrued interest|interest roll[- ]?up)\b",
+     "accrued interest", ["accrued_interest"]),
+]
+
+
+def _detect_unsupported_concept(question, semantics, available_columns):
+    """Return ``{concept, missing_fields, message}`` when the question names a
+    governed concept whose field is absent from this dataset, else None."""
+    q = (question or "").lower()
+    fields = semantics.get("fields", {}) if isinstance(semantics, dict) else {}
+    for pattern, concept, candidate_fields in _UNSUPPORTED_CONCEPTS:
+        if not re.search(pattern, q):
+            continue
+        # A field is "present" if its canonical column exists in the data.
+        present = []
+        for key in candidate_fields:
+            canonical = (fields.get(key, {}) or {}).get("canonical_field", key)
+            if canonical in available_columns or key in available_columns:
+                present.append(key)
+        if present:
+            return None  # the field IS available -> process normally
+        return {
+            "concept": concept,
+            "missing_fields": candidate_fields,
+            "message": (f"'{concept}' is not available in this dataset. The MI book "
+                        f"for this client does not include {', '.join(candidate_fields)}. "
+                        "This field is not reported, so the question cannot be answered "
+                        "from the current data (no value was fabricated)."),
+        }
+    return None
+
+
 def run_mi_agent_query(
     question: str,
     data,
@@ -121,6 +170,8 @@ def run_mi_agent_query(
     provider: str = "anthropic",
     llm_callable=None,
     extra_filters: Optional[Dict[str, Any]] = None,
+    dataset: Optional[str] = None,
+    run_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run one MI question end to end.
 
@@ -177,6 +228,20 @@ def run_mi_agent_query(
 
     available_columns = set(df.columns)
 
+    # ---- controlled-unsupported guard -------------------------------------
+    # If the question asks for a governed concept whose field is NOT in this
+    # dataset (e.g. arrears / default / NNEG / credit score on an ERE pack that
+    # lacks them), return a CONTROLLED unsupported response instead of silently
+    # falling back to a different metric (which would be a misleading answer).
+    unsupported = _detect_unsupported_concept(question, semantics, available_columns)
+    if unsupported:
+        result["controlled_unsupported"] = True
+        result["missing_fields"] = unsupported["missing_fields"]
+        result["error"] = unsupported["message"]
+        result["answer"] = unsupported["message"]
+        result["warnings"] = [unsupported["message"]]
+        return result
+
     # ---- parse (deterministic or LLM, with repair) ------------------------
     effective_llm = bool(llm_enabled) and parser_mode == "llm"
     try:
@@ -214,8 +279,32 @@ def run_mi_agent_query(
     result["parse_metadata"] = parse_meta
     result["interpreted"] = describe_spec(spec, semantics, result["parser_mode"])
 
-    # ---- validate ---------------------------------------------------------
+    # ---- validate (with recovery) -----------------------------------------
+    # The validator is also a RECOVERY/control layer: when a spec fails only
+    # because the chart type is wrong for the plan (e.g. a metric-only query
+    # proposed as a bar), auto-correct to a safe KPI/table and re-validate rather
+    # than returning a validation failure.
     vr = validate_mi_query(spec, semantics, available_columns=available_columns)
+    # Recovery must NOT mask a query that explicitly asked to group ("... by X")
+    # but whose dimension could not be resolved — that must fail cleanly so the
+    # operator knows the breakdown is unavailable. Only metric-only questions
+    # (no grouping marker) are eligible for KPI/table auto-correction.
+    _grouping_marker = bool(re.search(r"\b(by|per|across|split|breakdown|grouped)\b",
+                                      (question or "").lower()))
+    if not vr.ok and not _grouping_marker:
+        recovered = recover_chart_spec(spec, semantics, available_columns)
+        if recovered is not None:
+            rvr = validate_mi_query(recovered, semantics, available_columns=available_columns)
+            if rvr.ok:
+                spec = recovered
+                vr = rvr
+                result["spec_obj"] = spec
+                result["spec"] = spec.to_dict()
+                result["interpreted"] = describe_spec(spec, semantics, result["parser_mode"])
+                result["recovered"] = True
+                warnings.append(
+                    "auto-corrected the plan to a KPI/table (the metric-only query "
+                    "did not need a chart dimension)")
     result["validation"] = vr.to_dict()
     warnings.extend(vr.warnings)
     if not vr.ok:
@@ -260,9 +349,20 @@ def run_mi_agent_query(
     result["interpreted"]["Validation"] = "Passed"
 
     # ---- execute ----------------------------------------------------------
+    # Missing grouping values are bucketed under "Unknown / Missing" by default so
+    # results reconcile to the funded book; the operator can opt out by asking to
+    # exclude missing data.
+    q_lower = (question or "").lower()
+    missing_policy = ("exclude"
+                      if any(p in q_lower for p in ("exclude missing", "excluding missing",
+                                                    "without missing", "drop missing",
+                                                    "ignore missing"))
+                      else "bucket")
     try:
         qres: MIQueryResult = execute_mi_query(
             spec, df, semantics, validate=False,
+            missing_dimension_policy=missing_policy,
+            dataset=dataset, run_id=run_id,
         )
     except MIQueryExecutionError as exc:
         result["error"] = f"Execution failed: {exc}"
@@ -283,6 +383,21 @@ def run_mi_agent_query(
         return result
     result["query_result"] = qres
     warnings.extend(qres.warnings)
+
+    # Reconciliation / coverage footer (every artifact). When some balance is
+    # excluded (e.g. the operator asked to exclude missing dims), say so plainly.
+    recon = (qres.metadata or {}).get("reconciliation")
+    if recon:
+        result["reconciliation"] = recon
+        excl = recon.get("balance_excluded_missing")
+        inc = recon.get("balance_included")
+        tot = recon.get("total_balance")
+        if excl and inc is not None and tot:
+            fields = recon.get("missing_dimension_fields") or []
+            because = (" because " + " and/or ".join(fields) + " was missing") if fields else ""
+            warnings.append(
+                f"This result covers £{inc:,.0f} of the £{tot:,.0f} funded book; "
+                f"£{excl:,.0f} was excluded{because}.")
 
     # A grouped / loan-level result with no rows after preparation is not a
     # "passed" query — surface it as a controlled validation failure with an
@@ -334,6 +449,7 @@ def run_mi_agent_query(
         "result_type": qres.result_type,
         "row_count": qres.row_count,
         "chart_type": spec.chart_type if chart_result else None,
+        "reconciliation": (qres.metadata or {}).get("reconciliation"),
     }
     return result
 
@@ -343,10 +459,44 @@ def run_mi_agent_query(
 # --------------------------------------------------------------------------- #
 
 
-def result_csv_bytes(query_result: MIQueryResult) -> bytes:
+def _reconciliation_footer_lines(recon: Dict[str, Any]) -> List[str]:
+    """Human-readable reconciliation/coverage footer lines for an export."""
+    if not recon:
+        return []
+
+    def _gbp(v):
+        return "" if v is None else f"£{float(v):,.2f}"
+
+    lines = [
+        "# --- Reconciliation / coverage ---",
+        f"# Dataset: {recon.get('dataset') or 'funded'}",
+        f"# Run: {recon.get('run_id') or ''}",
+        f"# Total records in dataset: {recon.get('total_records')}",
+        f"# Total balance in dataset: {_gbp(recon.get('total_balance'))}",
+        f"# Records included in this result: {recon.get('records_included')}",
+        f"# Balance included in this result: {_gbp(recon.get('balance_included'))}",
+        f"# Records excluded due to missing dimensions/measures: {recon.get('records_excluded_missing')}",
+        f"# Balance excluded due to missing dimensions/measures: {_gbp(recon.get('balance_excluded_missing'))}",
+        f"# Coverage by balance: {recon.get('coverage_by_balance_pct')}%",
+        f"# Filters applied: {recon.get('filters') or 'none'}",
+    ]
+    return lines
+
+
+def result_csv_bytes(query_result: MIQueryResult,
+                     include_reconciliation: bool = True) -> bytes:
+    """CSV of the result table, with a reconciliation/coverage footer appended so a
+    downloaded total can always be tied back to the funded-book snapshot. The data
+    rows are unchanged (the table/chart total == the CSV data total)."""
     if query_result is None or query_result.data is None:
         return b""
-    return query_result.data.to_csv(index=False).encode("utf-8")
+    csv_text = query_result.data.to_csv(index=False)
+    if include_reconciliation:
+        recon = (query_result.metadata or {}).get("reconciliation")
+        footer = _reconciliation_footer_lines(recon)
+        if footer:
+            csv_text = csv_text.rstrip("\n") + "\n\n" + "\n".join(footer) + "\n"
+    return csv_text.encode("utf-8")
 
 
 def chart_html_str(chart_result: Optional[MIChartResult]) -> Optional[str]:

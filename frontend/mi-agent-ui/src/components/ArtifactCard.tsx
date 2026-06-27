@@ -20,6 +20,7 @@ import { ArtifactRenderer } from "@/components/artifacts/ArtifactRenderer";
 import { DrillThroughPanel } from "@/components/DrillThroughPanel";
 import { ExportMenu } from "@/components/ExportMenu";
 import { InsightPanel } from "@/components/InsightPanel";
+import { ReconciliationFooter } from "@/components/ReconciliationFooter";
 import { isChartArtifact, isTableArtifact } from "@/domain";
 
 const KIND_ICON: Record<ArtifactType, typeof LayoutGrid> = {
@@ -129,6 +130,7 @@ export function ArtifactCard({
               />
             </>
           )}
+          <ReconciliationFooter artifact={artifact} />
           {artifact.warnings && artifact.warnings.length > 0 && (
             <div className="mt-3 rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-[11px] text-amber-300/90">
               {artifact.warnings.map((w, i) => (

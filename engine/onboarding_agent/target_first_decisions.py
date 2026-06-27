@@ -172,6 +172,15 @@ def approved_decisions(decisions_doc: Optional[Dict[str, Any]]) -> List[Dict[str
     return out
 
 
+def is_real_approval(decisions_doc: Optional[Dict[str, Any]]) -> bool:
+    """True iff at least one decision is actually ``status: approved``.
+
+    A copied pending template (every decision still ``pending``) is NOT a real
+    approval — governance must not treat it as one.
+    """
+    return bool(approved_decisions(decisions_doc))
+
+
 # ---------------------------------------------------------------------------
 # Deterministic application
 # ---------------------------------------------------------------------------

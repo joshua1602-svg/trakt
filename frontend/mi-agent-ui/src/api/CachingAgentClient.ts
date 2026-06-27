@@ -61,5 +61,8 @@ export function withCache(client: AgentClient): AgentClient {
     getSnapshots: (signal) => client.getSnapshots(signal),
     getSnapshot: (portfolioId, signal) => client.getSnapshot(portfolioId, signal),
     getForecastSnapshot: (portfolioId, signal) => client.getForecastSnapshot(portfolioId, signal),
+    getFundedEvolution: (portfolioId, signal) => client.getFundedEvolution(portfolioId, signal),
+    getPipelineEvolution: (portfolioId, signal) => client.getPipelineEvolution(portfolioId, signal),
+    getForecastEvolution: (portfolioId, signal) => client.getForecastEvolution(portfolioId, signal),
   };
 }

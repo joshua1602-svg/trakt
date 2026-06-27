@@ -41,6 +41,12 @@ def _fields(semantics: dict) -> Dict[str, dict]:
     return semantics.get("fields", {})
 
 
+def _synonyms(entry: dict) -> List[str]:
+    """The governed business synonyms for a field. The registry uses ``synonyms``;
+    ``aliases`` is accepted as a fallback for forward-compatibility."""
+    return list(entry.get("synonyms") or entry.get("aliases") or [])
+
+
 def find_field(
     semantics: dict,
     role: Optional[str] = None,
@@ -82,30 +88,43 @@ def find_field(
     def is_preferred(entry: dict) -> bool:
         return entry.get("mi_tier") == prefer_tier
 
-    def keyword_hit(key: str, entry: dict) -> bool:
-        if not keywords:
-            return False
-        hay = " ".join([
-            key,
-            str(entry.get("display_name", "")),
-            str(entry.get("business_name", "")),
-        ]).lower()
-        return any(kw in hay for kw in keywords)
+    def primary_hit(key: str, entry: dict) -> bool:
+        # A hit on the field key or its display/business name — the strong signal.
+        hay = " ".join([key, str(entry.get("display_name", "")),
+                        str(entry.get("business_name", ""))]).lower()
+        return bool(keywords) and any(kw in hay for kw in keywords)
+
+    def synonym_hit(key: str, entry: dict) -> bool:
+        # A hit ONLY via the governed business synonyms ("customer age", "current
+        # ltv", "exposure") — accepted, but RANKED BELOW a primary name hit so an
+        # ambiguous keyword ("age") still prefers the field actually named for it
+        # (youngest_borrower_age) over one that merely lists it as a synonym
+        # (months_on_book / "loan age").
+        hay = " ".join(_synonyms(entry)).lower()
+        return bool(keywords) and any(kw in hay for kw in keywords)
 
     preferred_kw: Optional[str] = None
     fallback_kw: Optional[str] = None
+    preferred_syn: Optional[str] = None
+    fallback_syn: Optional[str] = None
     preferred_any: Optional[str] = None
     fallback_any: Optional[str] = None
 
     for key, entry in items.items():
         if not ok(key, entry):
             continue
-        if keyword_hit(key, entry):
+        if primary_hit(key, entry):
             if is_preferred(entry):
                 if preferred_kw is None:
                     preferred_kw = key
             elif fallback_kw is None:
                 fallback_kw = key
+        elif synonym_hit(key, entry):
+            if is_preferred(entry):
+                if preferred_syn is None:
+                    preferred_syn = key
+            elif fallback_syn is None:
+                fallback_syn = key
         if is_preferred(entry):
             if preferred_any is None:
                 preferred_any = key
@@ -113,8 +132,9 @@ def find_field(
             fallback_any = key
 
     if strict and keywords:
-        return preferred_kw or fallback_kw
-    return preferred_kw or fallback_kw or preferred_any or fallback_any
+        return preferred_kw or fallback_kw or preferred_syn or fallback_syn
+    return (preferred_kw or fallback_kw or preferred_syn or fallback_syn
+            or preferred_any or fallback_any)
 
 
 # Preferred balance/exposure fields (mirrors the executor's balance hierarchy).
@@ -122,25 +142,71 @@ _PREFERRED_BALANCE = ("current_outstanding_balance", "current_principal_balance"
                       "original_principal_balance")
 
 
-def _balance_metric(semantics) -> Optional[str]:
+def _concept_candidates(semantics: dict, role: Optional[str], fmt: Optional[str],
+                        keywords: Tuple[str, ...]) -> List[str]:
+    """All semantic keys matching role/format whose key/name mentions a keyword."""
+    out: List[str] = []
+    for key, entry in _fields(semantics).items():
+        if role and entry.get("role") != role:
+            continue
+        if fmt and entry.get("format") != fmt:
+            continue
+        hay = " ".join([key, str(entry.get("display_name", "")),
+                        str(entry.get("business_name", "")),
+                        " ".join(_synonyms(entry))]).lower()
+        if any(kw in hay for kw in keywords):
+            out.append(key)
+    return out
+
+
+def _prefer_present(semantics: dict, default: Optional[str],
+                    candidates: List[str], available_columns) -> Optional[str]:
+    """Pick the field whose canonical column is actually present in the dataset.
+
+    Keeps alias resolution CONSISTENT and avoids a first-attempt validation
+    failure: when the registry default (e.g. ``youngest_borrower_age``) is absent
+    from the data but a synonymous field is present, resolve to the present one.
+    """
+    if available_columns is None:
+        return default
+    cols = set(available_columns)
+    ordered = ([default] if default else []) + [c for c in candidates if c != default]
+    for key in ordered:
+        if key and _fields(semantics).get(key, {}).get("canonical_field", key) in cols:
+            return key
+    return default
+
+
+def _balance_metric(semantics, available_columns=None) -> Optional[str]:
     # Prefer the canonical balance hierarchy so "balance" resolves to the
     # primary exposure field rather than an alphabetically-earlier keyword hit
     # such as ``arrears_balance``.
     fields = _fields(semantics)
-    for key in _PREFERRED_BALANCE:
-        if key in fields:
-            return key
-    return find_field(semantics, role="metric", fmt="currency",
+    default = next((k for k in _PREFERRED_BALANCE if k in fields), None) \
+        or find_field(semantics, role="metric", fmt="currency",
                       keywords=("balance", "outstanding", "principal"))
+    cand = list(_PREFERRED_BALANCE) + _concept_candidates(
+        semantics, "metric", "currency", ("balance", "outstanding", "principal"))
+    return _prefer_present(semantics, default, cand, available_columns)
 
 
-def _ltv_metric(semantics) -> Optional[str]:
-    return find_field(semantics, role="metric", fmt="percent",
-                      keywords=("ltv", "loan_to_value"))
+def _ltv_metric(semantics, available_columns=None) -> Optional[str]:
+    default = find_field(semantics, role="metric", fmt="percent",
+                         keywords=("ltv", "loan_to_value"))
+    cand = _concept_candidates(semantics, "metric", "percent", ("ltv", "loan_to_value"))
+    return _prefer_present(semantics, default, cand, available_columns)
 
 
-def _age_metric(semantics) -> Optional[str]:
-    return find_field(semantics, role="metric", fmt="integer", keywords=("age",))
+def _age_metric(semantics, available_columns=None) -> Optional[str]:
+    default = find_field(semantics, role="metric", fmt="integer", keywords=("age",))
+    cand = _concept_candidates(semantics, "metric", "integer", ("age",))
+    return _prefer_present(semantics, default, cand, available_columns)
+
+
+def _rate_metric(semantics, available_columns=None) -> Optional[str]:
+    default = find_field(semantics, role="metric", fmt="percent", keywords=("rate",))
+    cand = _concept_candidates(semantics, "metric", "percent", ("rate", "coupon"))
+    return _prefer_present(semantics, default, cand, available_columns)
 
 
 def _dimension(semantics, keywords=(), exclude=()) -> Optional[str]:
@@ -339,12 +405,68 @@ def _resolve_metric(token: str, semantics: dict) -> Tuple[Optional[str], str]:
     return None, "sum"
 
 
+# Aggregation-intent qualifiers in a metric phrase. Distinguishes:
+#   total / sum / aggregate            -> sum
+#   weighted average / weighted avg    -> weighted_avg
+#   simple / unweighted average        -> avg (forced unweighted)
+#   average / avg / mean               -> avg_generic (resolved by metric format)
+_WEIGHTED_AVG_RE = re.compile(r"\bweighted\s+(?:average|avg|mean)\b")
+_SIMPLE_AVG_RE = re.compile(r"\b(?:simple|unweighted|plain|straight)\s+(?:average|avg|mean)\b")
+_AVG_RE = re.compile(r"\b(?:average|avg|mean)\b")
+_TOTAL_RE = re.compile(r"\b(?:total|sum of|aggregate|overall)\b")
+
+
+def _aggregation_intent(text: str) -> Optional[str]:
+    """Explicit aggregation qualifier in ``text``:
+    'weighted_avg' | 'avg' | 'avg_generic' | 'sum' | None."""
+    if _WEIGHTED_AVG_RE.search(text):
+        return "weighted_avg"
+    if _SIMPLE_AVG_RE.search(text):
+        return "avg"
+    if _AVG_RE.search(text):
+        return "avg_generic"
+    if _TOTAL_RE.search(text):
+        return "sum"
+    return None
+
+
+def _apply_agg_intent(metric_key: Optional[str], default_agg: str,
+                      intent: Optional[str], semantics: dict) -> str:
+    """Resolve the aggregation given an explicit qualifier and the metric format.
+
+    'average loan balance' -> avg (mean = sum/count); 'weighted average ltv' ->
+    weighted_avg; a bare 'average' on a percent metric defaults to the balance-
+    weighted average (the MI convention) while currency/integer use a plain mean.
+    """
+    if not intent:
+        return default_agg
+    fmt = _fields(semantics).get(metric_key, {}).get("format") if metric_key else None
+    if intent == "weighted_avg":
+        return "weighted_avg"
+    if intent == "avg":
+        return "avg"
+    if intent == "avg_generic":
+        return "weighted_avg" if fmt == "percent" else "avg"
+    if intent == "sum":
+        # Never coerce a percent metric to a (meaningless) raw sum.
+        return default_agg if fmt == "percent" else "sum"
+    return default_agg
+
+
 def _detect_metric(text: str, semantics: dict) -> Tuple[Optional[str], str, List[str]]:
-    """Return (metric_key, aggregation, matched_terms) from free text."""
+    """Return (metric_key, aggregation, matched_terms) from free text.
+
+    An explicit aggregation qualifier ("average"/"weighted average"/"total") in the
+    same phrase overrides the metric's default aggregation, so "average loan
+    balance" means the mean balance, not the total.
+    """
     matched: List[str] = []
+    intent = _aggregation_intent(text)
     for term, token in _METRIC_TERMS:
         if re.search(r"\b" + re.escape(term) + r"\b", text):
             key, agg = _resolve_metric(token, semantics)
+            if token != "count":
+                agg = _apply_agg_intent(key, agg, intent, semantics)
             matched.append(term)
             return key, agg, matched
     return None, "sum", matched
@@ -382,16 +504,21 @@ _FILTER_COMPARATORS: List[Tuple[str, str]] = [
 ]
 
 
-def _filter_field_of(q: str, semantics: dict) -> Optional[str]:
+def _filter_field_of(q: str, semantics: dict, available_columns=None) -> Optional[str]:
     """Resolve the field a numeric threshold applies to from the question text."""
     if "ltv" in q or "loan to value" in q:
-        return _ltv_metric(semantics)
-    if "age" in q or "youngest" in q:
-        return _age_metric(semantics)
-    if "rate" in q or "interest" in q:
-        return find_field(semantics, role="metric", fmt="percent", keywords=("rate",))
+        return _ltv_metric(semantics, available_columns)
+    # Age threshold: "age", "youngest", "aged", "borrower(s)", "years"/"yrs",
+    # "year old" — all imply the borrower-age field in a numeric-threshold clause.
+    if re.search(r"\b(age|aged|youngest|borrowers?|years?|yrs?|year[- ]?old|older)\b", q):
+        return _age_metric(semantics, available_columns)
+    if "rate" in q or "interest" in q or "coupon" in q:
+        return _rate_metric(semantics, available_columns)
     if "balance" in q or "outstanding" in q or "exposure" in q:
-        return _balance_metric(semantics)
+        return _balance_metric(semantics, available_columns)
+    if "valuation" in q or "value" in q:
+        return find_field(semantics, role="metric", fmt="currency",
+                          keywords=("valuation", "value"))
     return None
 
 
@@ -456,16 +583,16 @@ _NUMERIC_AXIS_BUCKET = {
 }
 
 
-def _resolve_numeric_axis(term: str, semantics: dict) -> Optional[str]:
+def _resolve_numeric_axis(term: str, semantics: dict, available_columns=None) -> Optional[str]:
     """The numeric (measure) field for a bare axis term (bubble axis)."""
     if "ltv" in term or "loan to value" in term:
-        return _ltv_metric(semantics)
+        return _ltv_metric(semantics, available_columns)
     if "age" in term:
-        return _age_metric(semantics)
+        return _age_metric(semantics, available_columns)
     if "rate" in term or "interest" in term:
-        return find_field(semantics, role="metric", fmt="percent", keywords=("rate",))
+        return _rate_metric(semantics, available_columns)
     if "balance" in term or "outstanding" in term or "exposure" in term:
-        return _balance_metric(semantics)
+        return _balance_metric(semantics, available_columns)
     return None
 
 
@@ -507,7 +634,7 @@ def _classify_segment(seg: str, semantics: dict, available_columns=None
     for term, bucket in sorted(_NUMERIC_AXIS_BUCKET.items(), key=lambda kv: len(kv[0]),
                                reverse=True):
         if re.search(r"\b" + re.escape(term) + r"\b", seg):
-            return ("numeric", _resolve_numeric_axis(term, semantics), bucket)
+            return ("numeric", _resolve_numeric_axis(term, semantics, available_columns), bucket)
     return None
 
 
@@ -563,9 +690,60 @@ def _parse_categorical_filter(clause: str, semantics: dict, available_columns=No
     return field, value.title()
 
 
+# Borrower-structure intent ("joint" / "sole" borrowers). Resolved to a
+# borrower_structure value filter when that field is present, else to a
+# number_of_borrowers numeric filter as a documented fallback.
+_BORROWER_STRUCTURE_TERMS = (
+    ("joint borrowers", "joint"), ("joint borrower", "joint"), ("joint", "joint"),
+    ("sole borrower", "sole"), ("single borrower", "sole"), ("sole", "sole"),
+)
+_BORROWER_STRUCTURE_VALUE = {"joint": "Joint", "sole": "Sole"}
+
+
+def _borrower_structure_filter(q: str, semantics: dict, available_columns=None
+                               ) -> Optional[Tuple[Dict[str, Any], str]]:
+    """Detect a 'joint'/'sole' borrower intent and resolve it to a filter.
+
+    Returns ``(filters, note)`` or None. Prefers a ``borrower_structure`` value
+    filter; falls back to a ``number_of_borrowers`` threshold (>=2 joint / ==1
+    sole) and notes the substitution; if neither field exists, returns an empty
+    filter set with a note suggesting number_of_borrowers.
+    """
+    fields = _fields(semantics)
+    kind = None
+    for term, k in _BORROWER_STRUCTURE_TERMS:
+        if re.search(r"\b" + re.escape(term) + r"\b", q):
+            kind = k
+            break
+    if kind is None:
+        return None
+    cols = set(available_columns) if available_columns is not None else None
+    has = lambda key: key in fields and (cols is None or
+                                         fields[key].get("canonical_field", key) in cols)
+    if has("borrower_structure"):
+        return {"borrower_structure": _BORROWER_STRUCTURE_VALUE[kind]}, \
+            f"borrower_structure = {_BORROWER_STRUCTURE_VALUE[kind]}"
+    if has("number_of_borrowers"):
+        cond = {"op": "ge", "value": 2} if kind == "joint" else {"op": "eq", "value": 1}
+        return {"number_of_borrowers": cond}, \
+            (f"borrower_structure not available; used number_of_borrowers "
+             f"{'>= 2' if kind == 'joint' else '== 1'} as a proxy for {kind}")
+    return {}, ("borrower_structure is not in this dataset; consider mapping "
+                "number_of_borrowers to identify joint vs sole borrowers")
+
+
+# Postfix comparators where the NUMBER precedes the operator, e.g. "70+",
+# "aged 70 or above", "75 or older", "60 or below". (Prefix comparators in
+# _FILTER_COMPARATORS cover "above 70", "between 20 and 40", etc.)
+_POSTFIX_COMPARATORS: List[Tuple[str, str]] = [
+    (r"(-?\d+(?:\.\d+)?)\s*(?:years?|yrs?)?\s*(?:\+|\bor (?:above|over|older|more|greater)\b|\band (?:above|over|older)\b)", "ge"),
+    (r"(-?\d+(?:\.\d+)?)\s*(?:years?|yrs?)?\s*(?:\bor (?:below|under|younger|less|fewer)\b|\band (?:below|under|younger)\b)", "le"),
+]
+
+
 def _parse_filters(q: str, semantics: dict, available_columns=None) -> Dict[str, Any]:
-    """Parse one or more filters joined by ``and`` (numeric thresholds and a
-    categorical region value). Returns ``{field_key: condition}``."""
+    """Parse one or more filters joined by ``and`` / ``with`` (numeric thresholds —
+    prefix OR postfix — and a categorical region value). ``{field_key: condition}``."""
     filters: Dict[str, Any] = {}
     work_q = q
     # Parse a 'between A and B' first so its 'and' is not used as a clause split.
@@ -577,21 +755,32 @@ def _parse_filters(q: str, semantics: dict, available_columns=None) -> Dict[str,
                               "value": [float(bm.group(1)), float(bm.group(2))]}
         work_q = work_q[:bm.start()] + " " + work_q[bm.end():]
 
-    for clause in re.split(r"\band\b", work_q):
+    # Split into clauses on 'and' / 'with' so "<age> 70+ with LTV above 50" yields
+    # two independent thresholds.
+    for clause in re.split(r"\band\b|\bwith\b", work_q):
         clause = clause.strip()
         if not clause:
             continue
-        matched_numeric = False
+        field = _filter_field_of(clause, semantics)
+        # Postfix first ("70+", "70 or above") — a number-before-operator phrase.
+        matched = False
+        for pattern, op in _POSTFIX_COMPARATORS:
+            m = re.search(pattern, clause)
+            if m and field:
+                filters[field] = {"op": op, "value": float(m.group(1))}
+                matched = True
+                break
+        if matched:
+            continue
         for pattern, op in _FILTER_COMPARATORS[1:]:  # skip 'between' (done above)
             m = re.search(pattern, clause)
             if not m:
                 continue
-            field = _filter_field_of(clause, semantics)
             if field:
                 filters[field] = {"op": op, "value": float(m.group(1))}
-                matched_numeric = True
+                matched = True
             break
-        if matched_numeric:
+        if matched:
             continue
         cat = _parse_categorical_filter(clause, semantics, available_columns)
         if cat:
@@ -626,9 +815,13 @@ def _build_ranking_spec(q: str, title: str, rank_dir: str, rank_limit: Optional[
     fields = _fields(semantics)
     rmetric, ragg, _ = _detect_metric(q, semantics)
     # The ranked measure: prefer balance whenever it is explicitly named so that
-    # "largest balance by ltv" ranks balance, not the LTV grouping term.
+    # "largest balance by ltv" ranks balance, not the LTV grouping term. Respect an
+    # explicit aggregation qualifier so "highest AVERAGE loan balance by broker"
+    # ranks the mean balance, not the total.
     if re.search(r"\b(balance|outstanding|exposure)\b", q):
-        rmetric, ragg = _balance_metric(semantics), "sum"
+        rmetric = _balance_metric(semantics)
+        intent = _aggregation_intent(q)
+        ragg = _apply_agg_intent(rmetric, "sum", intent, semantics) if intent else "sum"
     if rmetric is None:
         rmetric, ragg = _balance_metric(semantics), "sum"
 
@@ -695,11 +888,29 @@ def _deterministic_parse(question: str, semantics: dict,
     # with youngest age more than 70" answers a number.
     is_count_q = bool(re.search(r"\bhow many\b|\bnumber of\b|\bcount of\b", q))
     is_balance_q = bool(re.search(r"\bhow much\b|\btotal balance\b", q))
+    wants_balance_too = bool(re.search(r"\b(balance|exposure|outstanding)\b", q))
     if is_count_q or is_balance_q:
         # Support one OR MORE filters joined by "and" (numeric thresholds and a
         # categorical region value), e.g. "youngest age more than 70 and
         # geographic region south west".
         filters = _parse_filters(q, semantics, available_columns)
+        # Borrower-structure intent ("how many joint borrowers"): resolve joint/sole
+        # to a filter and (when "balance" is also asked) return count + balance.
+        bstruct = _borrower_structure_filter(q, semantics, available_columns)
+        bnote = ""
+        if bstruct is not None:
+            bfilters, bnote = bstruct
+            filters.update(bfilters)
+            if is_count_q and wants_balance_too:
+                metric = _balance_metric(semantics, available_columns)
+                spec = MIQuerySpec(
+                    intent="summary", chart_type="none", metric=metric,
+                    aggregation="sum", filters=filters, title=title,
+                    explanation=("Filtered loan count and balance (with share of the "
+                                 "funded book) for the selected borrowers. " + bnote),
+                    output_format="table")
+                return spec, _det_meta("high", True, sorted(filters) or ["borrower_structure"],
+                                       note="filtered_count_and_balance: " + bnote)
         if filters:
             if is_balance_q:
                 metric = _balance_metric(semantics)
@@ -716,6 +927,27 @@ def _deterministic_parse(question: str, semantics: dict,
                     output_format="table")
             return spec, _det_meta("high", True, sorted(filters),
                                    note=f"filtered_{'balance' if is_balance_q else 'count'}")
+
+    # ---- "show/list loans where <filter>" drill-through -------------------
+    # A filtered loan-level drill (NOT a grouped breakdown): "show loans with LTV
+    # above 50%", "show loans where balance is below 50000". Routed to a filtered
+    # loan-level table so the operator sees the matching records.
+    is_show_loans = (bool(re.search(r"\b(show|list|display|drill)\b", q))
+                     and bool(re.search(r"\bloans?\b", q)) and " by " not in q)
+    if is_show_loans:
+        d_filters = _parse_filters(q, semantics, available_columns)
+        bstruct = _borrower_structure_filter(q, semantics, available_columns)
+        if bstruct is not None:
+            d_filters.update(bstruct[0])
+        if d_filters:
+            rmetric = _balance_metric(semantics, available_columns)
+            spec = MIQuerySpec(
+                intent="table", chart_type="none", metric=rmetric,
+                aggregation="loan_level", ranking_mode="loan_level", sort_by=rmetric,
+                sort_direction="desc", filters=d_filters, limit=(top_n or 50),
+                output_format="table", title=title,
+                explanation="Filtered loan-level drill-through.")
+            return spec, _det_meta("high", True, sorted(d_filters), note="drill_filtered")
 
     dim_keys, dim_terms, remaining = _explicit_dimensions(q, semantics, available_columns=available_columns)
     explicit = bool(dim_keys)
@@ -781,9 +1013,11 @@ def _deterministic_parse(question: str, semantics: dict,
     # (that is a heatmap, handled above).
     by_parts = [p.strip() for p in re.split(r"\bby\b", q) if p.strip()]
     if "bubble" in q or "sized by" in q or numeric_bubble:
-        x = _age_metric(semantics) if "age" in q else _balance_metric(semantics)
-        y = _ltv_metric(semantics) if "ltv" in q else _balance_metric(semantics)
-        size = _balance_metric(semantics)
+        x = (_age_metric(semantics, available_columns) if "age" in q
+             else _balance_metric(semantics, available_columns))
+        y = (_ltv_metric(semantics, available_columns) if "ltv" in q
+             else _balance_metric(semantics, available_columns))
+        size = _balance_metric(semantics, available_columns)
         # If the heuristic collapsed the two axes onto one field, recover the two
         # distinct numeric axes from the classified grouping segments.
         if numeric_bubble and x == y:
@@ -805,11 +1039,11 @@ def _deterministic_parse(question: str, semantics: dict,
     # ---- scatter ----------------------------------------------------------
     if "scatter" in q or " vs " in q:
         if "ltv" in q and "rate" in q:
-            x, y = _ltv_metric(semantics), find_field(
-                semantics, role="metric", fmt="percent", keywords=("rate",))
+            x, y = _ltv_metric(semantics, available_columns), _rate_metric(
+                semantics, available_columns)
         else:
-            x = _ltv_metric(semantics)
-            y = _age_metric(semantics)
+            x = _ltv_metric(semantics, available_columns)
+            y = _age_metric(semantics, available_columns)
         return (MIQuerySpec(
             intent="chart", chart_type="scatter", x=x, y=y,
             aggregation="loan_level", title=title,
@@ -819,7 +1053,8 @@ def _deterministic_parse(question: str, semantics: dict,
 
     # ---- line (trend over time) -------------------------------------------
     is_line = ("over time" in q or "trend" in q or "monthly" in q
-               or "by month" in q or "vintage_year" in dim_keys)
+               or "by month" in q or "evolution" in q or "by reporting date" in q
+               or "over the months" in q or "vintage_year" in dim_keys)
     # Resolve the metric from the phrase BEFORE the first "by" (the metric side),
     # so "<metric> by <dimension>" never picks the grouping term as the metric
     # (e.g. "balance by ltv" -> metric=balance, not LTV). Fall back to the dim-
@@ -883,8 +1118,28 @@ def _deterministic_parse(question: str, semantics: dict,
             output_format="text"),
             _det_meta("low", explicit, dim_terms))
 
+    # ---- single-metric KPI (a metric with NO grouping dimension) ----------
+    # A bare metric ("interest rate", "total balance") is a single number — a
+    # KPI/card, NEVER a one-bar chart (which would fail "bar requires a dimension"
+    # and mislead the operator). Render it as a summary card + supporting table.
+    #
+    # Only when NO grouping was requested. If the user DID ask to group ("... by
+    # region") but the dimension could not be resolved (e.g. region absent from the
+    # data), fall through to the bar path so validation fails cleanly instead of
+    # silently collapsing the request to a single KPI.
+    grouping_requested = bool(re.search(r"\bby\b", q)) or bool(dim_terms)
+    if dimension is None and metric is not None and not grouping_requested:
+        weight = _default_weight(semantics, metric) if agg == "weighted_avg" else None
+        return (MIQuerySpec(
+            intent="summary", chart_type="none", metric=metric, aggregation=agg,
+            weight_field=weight, title=title,
+            explanation=f"{agg} of {metric} (single KPI; no grouping dimension "
+                        "requested).",
+            output_format="table"),
+            _det_meta("medium" if explicit else "low", explicit, dim_terms))
+
     if metric is None:
-        metric, agg = _balance_metric(semantics), "sum"
+        metric, agg = _balance_metric(semantics, available_columns), "sum"
     weight = _default_weight(semantics, metric) if agg == "weighted_avg" else None
     conf = "high" if explicit else ("medium" if not generic else "low")
     return (MIQuerySpec(

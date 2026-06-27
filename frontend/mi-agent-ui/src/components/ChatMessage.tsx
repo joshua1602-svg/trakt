@@ -100,7 +100,13 @@ export function ChatMessage({
 
         {/* The result, embedded directly in the conversation. */}
         {hasInlineResult && onTogglePin && (
-          <ChatResult artifacts={message.artifacts!} onTogglePin={onTogglePin} onDrill={onDrill} onAsk={onAsk} />
+          <ChatResult
+            artifacts={message.artifacts!}
+            onTogglePin={onTogglePin}
+            onDrill={onDrill}
+            onAsk={onAsk}
+            onOpenArtifact={onOpenArtifact}
+          />
         )}
 
         {!isUser && !message.pending && !message.error && <QueryLogicPanel message={message} />}

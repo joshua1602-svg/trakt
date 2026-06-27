@@ -26,6 +26,9 @@ function fakeClient(response: AgentResponse): { client: AgentClient; ask: Return
     getSnapshots: vi.fn(),
     getSnapshot: vi.fn(),
     getForecastSnapshot: vi.fn(),
+    getFundedEvolution: vi.fn(),
+    getPipelineEvolution: vi.fn(),
+    getForecastEvolution: vi.fn(),
   };
   return { client, ask };
 }

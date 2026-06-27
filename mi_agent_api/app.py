@@ -35,6 +35,7 @@ from . import pipeline_contract as pipeline_mod
 from . import pipeline_history
 from . import forecast_bridge as forecast_mod
 from . import workspace as workspace_mod
+from . import evolution as evolution_mod
 
 logger = logging.getLogger("mi_agent_api")
 
@@ -386,6 +387,75 @@ def forecast_snapshot(portfolioId: Optional[str] = None,
         current_pipeline_source_file=(source or {}).get("current_pipeline_source_file"),
         completion_probability_basis=basis, historical_model_evidence=evidence)
     return envelope
+
+
+def _evo_ids(portfolioId, client_id, toRunId, to_run_id):
+    """Resolve (client_id, to_run_id) from a portfolioId or explicit params."""
+    if portfolioId and "/" in portfolioId:
+        client_id, to_run_id = portfolioId.split("/", 1)
+    elif portfolioId:
+        client_id = portfolioId
+    return (client_id or "client_001"), (toRunId or to_run_id)
+
+
+@app.get("/mi/evolution/funded")
+def funded_evolution(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
+                     toRunId: Optional[str] = None, to_run_id: Optional[str] = None
+                     ) -> Dict[str, Any]:
+    """Funded time series across monthly runs up to ``toRunId`` (per-period
+    reconciliation + lineage). Never 500s — returns an empty series on no data."""
+    cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
+    root = _onboarding_output_root()
+    if not root:
+        return {"dataset": "funded", "portfolioId": cid, "toRunId": trid,
+                "periods": [], "breakdowns": {}, "singlePeriod": True,
+                "error": "no onboarding output root configured"}
+    try:
+        return evolution_mod.funded_evolution(root, cid, trid)
+    except Exception as exc:  # noqa: BLE001 - evolution must never 500
+        logger.warning("funded evolution failed: %s", exc)
+        return {"dataset": "funded", "portfolioId": cid, "toRunId": trid,
+                "periods": [], "breakdowns": {}, "singlePeriod": True, "error": str(exc)}
+
+
+@app.get("/mi/evolution/pipeline")
+def pipeline_evolution(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
+                       toRunId: Optional[str] = None, to_run_id: Optional[str] = None
+                       ) -> Dict[str, Any]:
+    """Pipeline time series across governed weekly extracts (amount / cases / by
+    stage over time), with per-period reconciliation + lineage."""
+    cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
+    root = os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root()
+    if not root:
+        return {"dataset": "pipeline", "portfolioId": cid, "toRunId": trid,
+                "periods": [], "byStage": [], "singlePeriod": True,
+                "error": "no pipeline root configured"}
+    try:
+        return evolution_mod.pipeline_evolution(root, cid, trid)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("pipeline evolution failed: %s", exc)
+        return {"dataset": "pipeline", "portfolioId": cid, "toRunId": trid,
+                "periods": [], "byStage": [], "singlePeriod": True, "error": str(exc)}
+
+
+@app.get("/mi/evolution/forecast")
+def forecast_evolution(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
+                       toRunId: Optional[str] = None, to_run_id: Optional[str] = None
+                       ) -> Dict[str, Any]:
+    """Forecast bridge over time (funded balance + weighted pipeline per run)."""
+    cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
+    root = _onboarding_output_root()
+    proot = os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root()
+    if not root:
+        return {"dataset": "forecast", "portfolioId": cid, "toRunId": trid,
+                "periods": [], "singlePeriod": True,
+                "error": "no onboarding output root configured"}
+    try:
+        return evolution_mod.forecast_evolution(root, proot or root, cid, trid)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("forecast evolution failed: %s", exc)
+        return {"dataset": "forecast", "portfolioId": cid, "toRunId": trid,
+                "periods": [], "singlePeriod": True, "error": str(exc)}
 
 
 @app.get("/mi/workspace/view")

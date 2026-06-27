@@ -39,8 +39,10 @@ export interface AgentRequestOptions {
   topN?: number;
 }
 
-/** The active MI workspace view a question runs against. */
-export type WorkspaceView = "funded" | "pipeline" | "forecast";
+/** The active MI workspace view a question runs against.
+ * ``evolution`` is a presentation tab (time series); the backend treats it as the
+ * default dataset for free-form queries. */
+export type WorkspaceView = "funded" | "pipeline" | "forecast" | "evolution";
 
 export interface AgentRequest {
   question: string;

@@ -50,6 +50,8 @@ from . import target_first_decisions as tfd
 
 _DECISIONS_NAME = "34_target_first_decisions.yaml"
 _RECS_NAME = "36_target_first_llm_recommendations.json"
+_RAW_RESPONSE_NAME = "36_target_first_llm_raw_response.json"
+_USAGE_NAME = "36_target_first_llm_usage_summary.json"
 _DEFAULT_OUT = "34_target_first_decisions_approved.yaml"
 _COVERAGE_NAME = "28a_target_coverage_matrix.json"
 
@@ -95,6 +97,38 @@ def _load_recommendations(path: Path) -> List[Dict[str, Any]]:
     else:
         rows = []
     return [r for r in rows if isinstance(r, dict)]
+
+
+def _parse_diagnostics(pdir: Path) -> Dict[str, Any]:
+    """Surface the advisor's parse status / error and the raw-response artefact
+    path so a parse failure is explained, not silently swallowed."""
+    raw_path = pdir / _RAW_RESPONSE_NAME
+    usage_path = pdir / _USAGE_NAME
+    parse_status = ""
+    parse_error = ""
+    recs_parsed: Optional[int] = None
+    for p in (raw_path, usage_path):
+        if not p.exists():
+            continue
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if isinstance(data, dict):
+            parse_status = parse_status or str(data.get("parse_status", "") or "")
+            parse_error = parse_error or str(data.get("parse_error", "") or "")
+            if recs_parsed is None and data.get("recommendations_parsed") is not None:
+                try:
+                    recs_parsed = int(data.get("recommendations_parsed"))
+                except (TypeError, ValueError):
+                    recs_parsed = None
+    return {
+        "parse_status": parse_status or None,
+        "parse_error": parse_error or None,
+        "recommendations_parsed": recs_parsed,
+        "raw_response_path": str(raw_path) if raw_path.exists() else None,
+        "usage_path": str(usage_path) if usage_path.exists() else None,
+    }
 
 
 def _allowed_columns_by_field(coverage_path: Path) -> Dict[str, set]:
@@ -258,11 +292,18 @@ def accept_target_advice(
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(yaml.safe_dump(out_doc, sort_keys=False), encoding="utf-8")
 
+    # If anything was skipped because the advice could not be parsed, surface the
+    # parse status/error and the raw-response artefact path (never a silent skip).
+    parse_skips = sum(1 for s in skipped if str(s["reason"]).startswith("advice_status=parse_failed"))
+    diagnostics = _parse_diagnostics(pdir) if parse_skips else {}
+
     return {
         "out_path": str(out),
         "approved": approved,
         "pending": pending,
         "skipped": skipped,
+        "parse_failed_skips": parse_skips,
+        "parse_diagnostics": diagnostics,
         "decisions_total": len(decisions),
         "recommendations_total": len(recs),
         "source_decisions": str(dec_path),
@@ -323,6 +364,24 @@ def _resolve_action(
     return False, f"unhandled_action={action}", patch
 
 
+def _humanise_skip(reason: str) -> str:
+    """Operator-facing wording for a skip reason. A parse failure must NOT imply
+    the field is missing from MI output — only that the advice could not be parsed."""
+    r = str(reason or "")
+    if r.startswith("advice_status=parse_failed"):
+        return ("Target decision pending because LLM advice could not be parsed. "
+                "Field may still be present in MI output.")
+    if r.startswith("advice_status="):
+        return f"Pending — advisor status {r.split('=', 1)[1]} is not auto-approvable."
+    if r == "no_recommendation":
+        return "Pending — no advisor recommendation for this decision."
+    if r.endswith("_requires_operator_review"):
+        return "Pending — advisor action needs operator review."
+    if r.endswith("_source_not_in_candidates"):
+        return "Pending — advised source is not among the allowed candidates."
+    return f"Pending — {r}."
+
+
 def format_summary(summary: Dict[str, Any]) -> str:
     """Human-readable console summary."""
     if summary.get("error"):
@@ -338,11 +397,23 @@ def format_summary(summary: Dict[str, Any]) -> str:
         f"  Decisions pending  : {summary['pending']}",
         f"  Decisions skipped  : {len(summary['skipped'])}",
     ]
+    diag = summary.get("parse_diagnostics") or {}
+    if summary.get("parse_failed_skips"):
+        lines.append("")
+        lines.append(f"  ! {summary['parse_failed_skips']} decision(s) pending because the LLM "
+                     "advice could not be parsed into recommendations.")
+        if diag.get("parse_status"):
+            lines.append(f"    parse_status : {diag['parse_status']}")
+        if diag.get("parse_error"):
+            lines.append(f"    parse_error  : {diag['parse_error']}")
+        if diag.get("raw_response_path"):
+            lines.append(f"    raw response : {diag['raw_response_path']}")
+        lines.append("    These fields may still be present in the prepared MI output.")
     if summary["skipped"]:
         lines.append("")
         lines.append("  Skipped (kept pending):")
         for s in summary["skipped"][:50]:
-            lines.append(f"    - {s['decision_id']} [{s['target_field']}]: {s['reason']}")
+            lines.append(f"    - {s['decision_id']} [{s['target_field']}]: {_humanise_skip(s['reason'])}")
     lines.append("")
     lines.append("  Next: re-run onboarding with "
                  f"--target-first-decisions {summary['out_path']}")

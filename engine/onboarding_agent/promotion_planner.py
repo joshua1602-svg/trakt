@@ -150,6 +150,11 @@ def build_promotion_plan(
     readiness = _readiness(
         mode, regulatory_reporting_enabled, tape_result, coverage, approved_config_present
     )
+    # Separated readiness concepts (MI runtime vs governance vs XML delivery) so an
+    # MI-only run is not reported as wholesale "blocked" by non-blocking confirmations.
+    from . import readiness as _readiness_mod
+    readiness_breakdown = _readiness_mod.compute_readiness_breakdown(
+        project_dir, tape_result, coverage, mode, regulatory_reporting_enabled)
 
     domains_detected = sorted({
         c.domain for c in coverage if c.status in (dc.COVERED, dc.PARTIAL)
@@ -204,6 +209,7 @@ def build_promotion_plan(
             "the downstream Trakt pipeline with 23_pipeline_trigger.json."
         ),
         "readiness_status": readiness_status,
+        "readiness_breakdown": readiness_breakdown,
         "blocking_items": readiness["blocking_items"],
         "warnings": readiness["warnings"],
         "out_of_scope_items": out_of_scope_items,
@@ -236,6 +242,7 @@ def build_promotion_plan(
         "client_id": client_id,
         "run_id": run_id,
         **readiness,
+        "readiness_breakdown": readiness_breakdown,
     }
 
     # ---- 23 pipeline trigger JSON (Azure / Event-Grid friendly) ----
@@ -298,5 +305,6 @@ def build_promotion_plan(
         "readiness_status": readiness_status,
         "ready": ready,
         "readiness": readiness_json,
+        "readiness_breakdown": readiness_breakdown,
         "trigger": trigger,
     }

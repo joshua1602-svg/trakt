@@ -77,7 +77,14 @@ For EACH decision:
  4. State whether human confirmation is still required.
  5. NEVER invent a source file/column not present in candidate_source_columns.
 
-Return STRICT JSON of this exact shape and nothing else:
+OUTPUT FORMAT — READ CAREFULLY:
+ * Respond with a SINGLE JSON object and NOTHING ELSE.
+ * Do NOT wrap the JSON in markdown code fences. Do NOT add any prose, preamble,
+   explanation, or trailing text. The very first character of your response MUST
+   be '{' and the very last character MUST be '}'.
+ * Use the EXACT key names below. Echo every decision_id verbatim. Emit one object
+   per decision under the "recommendations" array.
+
 {"recommendations": [
   {"decision_id": "...", "recommended_action": "confirm_selected|choose_alternative|
     merge_or_reconcile|configure_static_value|confirm_default_or_nd|mark_not_applicable|
@@ -88,8 +95,52 @@ Return STRICT JSON of this exact shape and nothing else:
    "alternative_assessment": "", "operator_note": "",
    "requires_human_confirmation": true}
 ]}
-Echo each decision_id exactly.
 """
+
+# Container keys an LLM might use for the per-decision recommendation list.
+_REC_LIST_KEYS = ("recommendations", "rows", "results", "decisions", "advice", "items")
+
+
+def _extract_recommendations(raw_text: Any) -> Tuple[List[Dict[str, Any]], str, str]:
+    """Robustly pull the list of per-decision recommendation objects from an LLM
+    response. Tolerates prose, markdown fences, an alternate container key, a bare
+    array, a dict keyed by decision_id, or JSON-lines. Never raises.
+
+    Returns ``(recommendations, parse_status, parse_error)`` — an empty list means
+    nothing recommendation-shaped could be parsed.
+    """
+    from .llm_json import extract_json, extract_json_list, PARSE_FAILED as _PF
+
+    def _coerce(obj: Any) -> List[Dict[str, Any]]:
+        if isinstance(obj, list):
+            return [r for r in obj if isinstance(r, dict)]
+        if isinstance(obj, dict):
+            for key in _REC_LIST_KEYS:
+                value = obj.get(key)
+                if isinstance(value, list):
+                    return [r for r in value if isinstance(r, dict)]
+            # A dict keyed by decision_id whose values are recommendation dicts.
+            values = list(obj.values())
+            if values and all(isinstance(v, dict) for v in values):
+                out: List[Dict[str, Any]] = []
+                for did, value in obj.items():
+                    row = dict(value)
+                    row.setdefault("decision_id", did)
+                    out.append(row)
+                return out
+        return []
+
+    obj, status, err = extract_json(raw_text)
+    recs = _coerce(obj)
+    if recs:
+        return recs, status, err
+    # Fallback: scan for standalone objects (JSON-lines / concatenated).
+    items, status2, err2 = extract_json_list(raw_text)
+    recs = [r for r in items
+            if isinstance(r, dict) and (r.get("decision_id") or r.get("id"))]
+    if recs:
+        return recs, status2 or status, err2 or err
+    return [], _PF, (err or err2 or "no recommendation objects found in response")
 
 _RECOMMENDATION_COLUMNS = [
     "decision_id", "target_field", "decision_type", "llm_recommended_action",
@@ -328,19 +379,41 @@ def run_target_advisor(
 
     usage["calls_completed"] = 1
     usage["estimated_cost_gbp"] = round(cost_per_call_gbp, 6)
-    raw_response = {"llm_batch_id": batch_id, "raw_response": raw_text}
 
-    # Parse the response.
-    from .llm_json import extract_json
-    obj, parse_status, _err = extract_json(raw_text)
-    results: List[Dict[str, Any]] = []
-    if isinstance(obj, dict) and isinstance(obj.get("recommendations"), list):
-        results = [r for r in obj["recommendations"] if isinstance(r, dict)]
-    elif isinstance(obj, list):
-        results = [r for r in obj if isinstance(r, dict)]
-    by_id = {str(r.get("decision_id", "")): r for r in results}
+    # Parse the response (robust to fences / prose / alternate container keys).
+    results, parse_status, parse_error = _extract_recommendations(raw_text)
+    by_id: Dict[str, Dict[str, Any]] = {}
+    for r in results:
+        rid = str(r.get("decision_id", r.get("id", "")) or "").strip()
+        if rid and rid not in by_id:
+            by_id[rid] = r
+    # Positional fallback: the model returned the right COUNT of objects but did not
+    # echo decision_ids — match by order against the sent packets (last resort).
+    positional: Optional[List[Dict[str, Any]]] = None
+    if not by_id and len(results) == len(sent_packets) and results:
+        positional = results
+    pos_index = {p["decision_id"]: i for i, p in enumerate(sent_packets)}
 
     parse_failed_all = not results
+    raw_response = {
+        "llm_batch_id": batch_id,
+        "raw_response": raw_text,
+        "parse_status": parse_status,
+        "parse_error": parse_error,
+        "recommendations_parsed": len(results),
+    }
+    usage["parse_status"] = parse_status
+    usage["parse_error"] = parse_error
+    usage["recommendations_parsed"] = len(results)
+    usage["raw_response_artifact"] = "36_target_first_llm_raw_response.json"
+    # A clear, honest reason an operator/automation can surface verbatim.
+    _parse_fail_reason = (
+        "LLM advice could not be parsed into recommendations "
+        f"(parse_status={parse_status}"
+        + (f"; {parse_error}" if parse_error else "")
+        + "); see 36_target_first_llm_raw_response.json. "
+        "Field may still be present in MI output.")
+
     recs: List[Dict[str, Any]] = []
     for d in decision_rows:
         did = d.get("decision_id", "")
@@ -351,17 +424,20 @@ def run_target_advisor(
                                   rationale="not sent (per-call item cap)"))
             continue
         usage["decision_rows_reviewed"] += 1
-        res = by_id.get(did)
+        res = by_id.get(str(did).strip())
+        if res is None and positional is not None and did in pos_index:
+            res = positional[pos_index[did]]
         if parse_failed_all or res is None:
             usage["decision_rows_parse_failed"] += 1
             recs.append(_base_row(d, PARSE_FAILED,
                                   action="requires_operator_review",
-                                  rationale="no parseable recommendation for this decision"))
+                                  rationale=_parse_fail_reason,
+                                  operator_note=_parse_fail_reason))
             continue
-        action = _norm(res.get("recommended_action")).replace(" ", "_")
-        rec_file = str(res.get("recommended_source_file", "") or "")
-        rec_col = str(res.get("recommended_source_column", "") or "")
-        conf = _coerce_conf(res.get("confidence"))
+        action = _norm(res.get("recommended_action", res.get("action"))).replace(" ", "_")
+        rec_file = str(res.get("recommended_source_file", res.get("source_file", "")) or "")
+        rec_col = str(res.get("recommended_source_column", res.get("source_column", "")) or "")
+        conf = _coerce_conf(res.get("confidence", res.get("llm_confidence")))
         rationale = str(res.get("rationale", "") or "")
         alt = str(res.get("alternative_assessment", "") or "")
         note = str(res.get("operator_note", "") or "")
@@ -392,8 +468,10 @@ def run_target_advisor(
             configured_value=cfg_val, default_conf=default_conf, not_applicable=not_app,
             alt_assessment=alt, operator_note=note))
 
+    overall_status = ADVISED if results else PARSE_FAILED
     return {"recommendations": recs, "usage": usage, "raw_response": raw_response,
-            "advice_status": ADVISED}
+            "advice_status": overall_status, "parse_status": parse_status,
+            "parse_error": parse_error}
 
 
 # ---------------------------------------------------------------------------
