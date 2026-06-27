@@ -64,6 +64,12 @@ function makeClient(ask: (req: AgentRequest) => Promise<AgentResponse>): AgentCl
     getPipelineEvolution: async () => ({}) as any,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     getForecastEvolution: async () => ({}) as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    getFunnelEvolution: async () => ({}) as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    getRiskLimits: async () => ({}) as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    getForecastExtrapolation: async () => ({}) as any,
   };
 }
 

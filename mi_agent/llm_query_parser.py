@@ -477,6 +477,192 @@ def _detect_top_n(q: str) -> Optional[int]:
     return int(m.group(1)) if m else None
 
 
+# --------------------------------------------------------------------------- #
+# ERE securitisation sprint — analytical-intent recognition.
+# These run FIRST in the deterministic parser so a cross-period comparison,
+# a securitisation scale-up / run-rate forecast, or a risk-limit question is
+# never silently collapsed to a point-in-time KPI. Each emits a governed spec
+# (no hallucinated fields) that the runtime / API layer resolves against the
+# governed evolution / forecast / risk-monitor data.
+# --------------------------------------------------------------------------- #
+
+# A "count of things" intent that the legacy metric grammar does not surface as a
+# metric token (e.g. "number of loans"). Used to keep loan/case COUNT evolutions
+# as a count metric instead of defaulting to balance/sum.
+_COUNT_INTENT_RE = re.compile(
+    r"\b(loan count|case count|number of (?:loans|cases|mortgages|accounts|deals|"
+    r"pipeline cases)|how many (?:loans|cases|borrowers|mortgages|accounts)|"
+    r"count of (?:loans|cases)|loan numbers|case numbers|deal count)\b")
+
+
+def _wants_count(q: str) -> bool:
+    return bool(_COUNT_INTENT_RE.search(q)) or bool(re.search(r"\bcount\b", q))
+
+
+# Period tokens for cross-period comparison. Only FULL month names and a small
+# set of unambiguous abbreviations are matched (never bare "may"/"mar"/"jun"
+# which are common words), plus explicit relative-period phrases.
+_MONTH_NAMES = ("january", "february", "march", "april", "may", "june", "july",
+                "august", "september", "october", "november", "december")
+_SAFE_MONTH_ABBR = {"oct": "October", "nov": "November", "dec": "December",
+                    "jan": "January", "feb": "February", "sept": "September"}
+_RELATIVE_PERIOD_TERMS = ("last week", "prior week", "previous week", "last month",
+                          "prior month", "previous month", "prior pipeline",
+                          "prior run", "prior period")
+
+
+def _detect_periods(q: str) -> List[str]:
+    """Ordered, de-duplicated period tokens mentioned in ``q`` (months only —
+    the relative-period fallback is handled by the compare recogniser)."""
+    found: List[Tuple[int, str]] = []
+    for name in _MONTH_NAMES:
+        for mt in re.finditer(r"\b" + name + r"\b", q):
+            found.append((mt.start(), name.capitalize()))
+    for ab, full in _SAFE_MONTH_ABBR.items():
+        for mt in re.finditer(r"\b" + ab + r"\b", q):
+            found.append((mt.start(), full))
+    found.sort(key=lambda t: t[0])
+    out: List[str] = []
+    seen = set()
+    for _, p in found:
+        if p.lower() not in seen:
+            seen.add(p.lower())
+            out.append(p)
+    return out
+
+
+_COMPARE_TRIGGER_RE = re.compile(
+    r"\bcompare[ds]?\b|change (?:from|between)|how did .+ change|"
+    r"compared (?:to|with)|versus")
+
+
+def _compare_recognizer(q: str, title: str, semantics: dict
+                        ) -> Optional[Tuple[MIQuerySpec, dict]]:
+    """Cross-period comparison → governed ``temporal_mode='compare'`` plan.
+
+    Resolves the comparison metric and exactly two period tokens (A vs B). The
+    runtime / API layer fills value A, value B, absolute + % delta, source
+    periods and a controlled insufficient-data response from evolution data.
+    """
+    if not _COMPARE_TRIGGER_RE.search(q):
+        return None
+    periods = _detect_periods(q)
+    if len(periods) < 2:
+        rel = next((rp for rp in _RELATIVE_PERIOD_TERMS if rp in q), None)
+        if rel:
+            periods = ([periods[0], rel] if periods else ["latest", rel])
+        else:
+            return None
+    metric, agg, matched = _detect_metric(q, semantics)
+    if _wants_count(q):
+        metric, agg = None, "count"
+    elif metric is None:
+        agg = "sum"  # money compare (funded / pipeline amount); no field referenced
+    spec = MIQuerySpec(
+        intent="summary", chart_type="none", metric=metric, aggregation=agg,
+        execution_mode="temporal", temporal_mode="compare",
+        compare_periods=periods[:2], output_format="table", title=title,
+        explanation=("Governed cross-period comparison (period A vs period B) over "
+                     "governed evolution data: value A, value B, absolute and % "
+                     "delta, source periods and a controlled insufficient-data "
+                     "response when a period is unavailable."))
+    return spec, _det_meta("high", False, [metric] if metric else ["temporal_compare"],
+                           note="temporal_compare")
+
+
+_FORECAST_SCALE_RE = re.compile(
+    r"run[\s-]?rate|extrapolat|scale[\s-]?up|"
+    r"when (?:do|does|will|can) (?:we|the book|it|the portfolio) reach|"
+    r"time to (?:reach|securitisation|scale)|reach £?\s?\d|"
+    r"(?:downside|upside|base) forecast|securitisation scale|"
+    r"how much pipeline is needed|completion rate is assumed|what conversion rate|"
+    r"funded balance extrapolation|annualised completion|"
+    r"what happens if .*run.?rate|milestone")
+
+
+def _forecast_target_value(q: str) -> Optional[float]:
+    m = re.search(r"£?\s*(\d+(?:\.\d+)?)\s*m(?:illion)?\b", q)
+    if m:
+        return float(m.group(1)) * 1_000_000
+    m2 = re.search(r"£\s*([\d,]{4,})", q)
+    if m2:
+        try:
+            return float(m2.group(1).replace(",", ""))
+        except ValueError:
+            return None
+    return None
+
+
+def _forecast_question_kind(q: str) -> str:
+    if "compare" in q and ("forecast" in q or "extrapolat" in q or "run" in q):
+        return "compare_models"
+    if "how much pipeline" in q and "reach" in q:
+        return "pipeline_needed"
+    if "reach" in q and ("when" in q or re.search(r"£?\s?\d+\s*m", q)):
+        return "reach_threshold"
+    if "what happens if" in q:
+        return "scenario"
+    if "downside" in q:
+        return "scenario_downside"
+    if "upside" in q:
+        return "scenario_upside"
+    if "completion rate is assumed" in q or "what conversion rate" in q:
+        return "conversion"
+    if "annualised" in q:
+        return "run_rate_annualised"
+    if re.search(r"run[\s-]?rate", q):
+        return "run_rate"
+    if "compare" in q and ("forecast" in q or "extrapolat" in q):
+        return "compare_models"
+    if "extrapolat" in q:
+        return "extrapolation_curve"
+    return "extrapolation_curve"
+
+
+def _forecast_scale_recognizer(q: str, title: str
+                               ) -> Optional[Tuple[MIQuerySpec, dict]]:
+    """Securitisation scale-up / run-rate question → governed
+    ``forecast_mode='extrapolation'`` plan (resolved by /mi/forecast/extrapolation)."""
+    if not _FORECAST_SCALE_RE.search(q):
+        return None
+    kind = _forecast_question_kind(q)
+    spec = MIQuerySpec(
+        intent="summary", chart_type="none", metric=None, aggregation="sum",
+        execution_mode="state", forecast_mode="extrapolation",
+        forecast_question=kind, forecast_target_value=_forecast_target_value(q),
+        output_format="table", title=title,
+        explanation=("Securitisation scale-up forecast (completion run-rate / KFI "
+                     "conversion extrapolation) with downside/base/upside scenario "
+                     "bands and milestone dates to funding thresholds. Distinct from "
+                     "the point-in-time weighted-pipeline forecast."))
+    return spec, _det_meta("high", False, ["forecast_extrapolation"],
+                           note="forecast_scale:" + kind)
+
+
+_RISK_LIMIT_RE = re.compile(
+    r"\brisk limits?\b|concentration limit|\blimit breach|\bbreach(?:ed|es)?\b|"
+    r"\bheadroom\b|within (?:the |our )?limits?|over (?:the )?limits?|"
+    r"exceed(?:s|ed)? (?:the )?limits?|against (?:the )?limits?|schedule 8|"
+    r"limit status|limit utilis|which limits|are we within")
+
+
+def _risk_limit_recognizer(q: str, title: str
+                           ) -> Optional[Tuple[MIQuerySpec, dict]]:
+    """Risk-limit / concentration question → governed
+    ``risk_monitor_mode='concentration'`` plan (resolved by /mi/risk-limits)."""
+    if not _RISK_LIMIT_RE.search(q):
+        return None
+    spec = MIQuerySpec(
+        intent="summary", chart_type="none", metric=None, aggregation="count",
+        execution_mode="risk", risk_monitor_mode="concentration",
+        risk_limit_query=True, output_format="table", title=title,
+        explanation=("Governed risk-limit / concentration monitor: actual exposure "
+                     "vs Schedule 8 limit, headroom, pass/warn/fail status, source and "
+                     "movement; controlled needs-review / unavailable when a limit or "
+                     "field is missing."))
+    return spec, _det_meta("high", False, ["risk_limits"], note="risk_limit")
+
+
 def _det_meta(confidence: str, explicit: bool, terms: List[str],
               substituted: bool = False, note: str = "") -> dict:
     return {
@@ -882,6 +1068,20 @@ def _deterministic_parse(question: str, semantics: dict,
     title = question.strip()
     top_n = _detect_top_n(q)
 
+    # ---- ERE analytical intents (checked first; emit governed plans) --------
+    # A scale-up / run-rate forecast, a cross-period comparison, or a risk-limit
+    # question must never fall through to a point-in-time KPI. Forecast is checked
+    # before compare so "compare ... run-rate extrapolation" routes to forecast.
+    fc = _forecast_scale_recognizer(q, title)
+    if fc is not None:
+        return fc
+    cmp_spec = _compare_recognizer(q, title, semantics)
+    if cmp_spec is not None:
+        return cmp_spec
+    rl = _risk_limit_recognizer(q, title)
+    if rl is not None:
+        return rl
+
     # ---- filtered count / balance ("how many loans with <field> <op> N") ---
     # A counting/aggregating question with a numeric threshold routes to a
     # filtered summary (count or balance), NOT a bar chart, so "how many loans
@@ -1054,7 +1254,10 @@ def _deterministic_parse(question: str, semantics: dict,
     # ---- line (trend over time) -------------------------------------------
     is_line = ("over time" in q or "trend" in q or "monthly" in q
                or "by month" in q or "evolution" in q or "by reporting date" in q
-               or "over the months" in q or "vintage_year" in dim_keys)
+               or "over the months" in q or "by reporting month" in q
+               or "reporting month" in q or "by week" in q or "per week" in q
+               or "weekly" in q or "by reporting period" in q
+               or "vintage_year" in dim_keys)
     # Resolve the metric from the phrase BEFORE the first "by" (the metric side),
     # so "<metric> by <dimension>" never picks the grouping term as the metric
     # (e.g. "balance by ltv" -> metric=balance, not LTV). Fall back to the dim-
@@ -1067,11 +1270,16 @@ def _deterministic_parse(question: str, semantics: dict,
              else None)
         if "vintage_year" in dim_keys:
             x = "vintage_year"
-        if metric is None:
+        # Loan/case COUNT evolutions stay a COUNT metric (not balance/sum): "loan
+        # count evolution", "number of loans by reporting month", "case count by
+        # week" all resolve to a governed count time-series.
+        if _wants_count(q) or agg == "count":
+            metric, agg = None, "count"
+        elif metric is None:
             metric, agg = _balance_metric(semantics), "sum"
         return (MIQuerySpec(
             intent="chart", chart_type="line", x=x, metric=metric,
-            aggregation=agg if agg != "count" else "sum", title=title,
+            aggregation=agg, title=title,
             explanation="Line chart of a metric over time.",
             output_format="chart"),
             _det_meta("medium" if x else "low", explicit, dim_terms))

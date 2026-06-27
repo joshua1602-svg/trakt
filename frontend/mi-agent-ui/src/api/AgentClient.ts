@@ -10,10 +10,13 @@ import type {
   AgentRequest,
   AgentResponse,
   ForecastEvolution,
+  ForecastExtrapolation,
   ForecastSnapshot,
   FundedEvolution,
   FundedSnapshot,
   PipelineEvolution,
+  PipelineFunnelEvolution,
+  RiskLimitsSnapshot,
   SnapshotIndex,
 } from "@/domain";
 
@@ -47,6 +50,15 @@ export interface AgentClient {
 
   /** Forecast bridge over time (funded balance + weighted pipeline per run). */
   getForecastEvolution(portfolioId: string, signal?: AbortSignal): Promise<ForecastEvolution>;
+
+  /** Weekly origination funnel trends (KFI / Application / Offer / Completion). */
+  getFunnelEvolution(portfolioId: string, signal?: AbortSignal): Promise<PipelineFunnelEvolution>;
+
+  /** Governed risk-limit / concentration monitor (Schedule 8 vs funded actuals). */
+  getRiskLimits(portfolioId: string, signal?: AbortSignal): Promise<RiskLimitsSnapshot>;
+
+  /** Securitisation scale-up forecast (run-rate / KFI extrapolation + milestones). */
+  getForecastExtrapolation(portfolioId: string, signal?: AbortSignal): Promise<ForecastExtrapolation>;
 }
 
 /** Error thrown by clients for transport/agent failures. */

@@ -36,6 +36,7 @@ from . import pipeline_history
 from . import forecast_bridge as forecast_mod
 from . import workspace as workspace_mod
 from . import evolution as evolution_mod
+from . import chat_routing as chat_routing_mod
 
 logger = logging.getLogger("mi_agent_api")
 
@@ -438,6 +439,27 @@ def pipeline_evolution(portfolioId: Optional[str] = None, client_id: Optional[st
                 "periods": [], "byStage": [], "singlePeriod": True, "error": str(exc)}
 
 
+@app.get("/mi/evolution/funnel")
+def funnel_evolution(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
+                     toRunId: Optional[str] = None, to_run_id: Optional[str] = None
+                     ) -> Dict[str, Any]:
+    """Weekly origination funnel trends (KFI / Application / Offer / Completion
+    value + count, 5-week average, latest week, delta vs prior week). Never 500s."""
+    cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
+    root = os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root()
+    if not root:
+        return {"dataset": "pipeline_funnel", "portfolioId": cid, "toRunId": trid,
+                "stages": [], "weeks": [], "series": {}, "summary": {},
+                "singlePeriod": True, "error": "no pipeline root configured"}
+    try:
+        return evolution_mod.pipeline_funnel_evolution(root, cid, trid)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("funnel evolution failed: %s", exc)
+        return {"dataset": "pipeline_funnel", "portfolioId": cid, "toRunId": trid,
+                "stages": [], "weeks": [], "series": {}, "summary": {},
+                "singlePeriod": True, "error": str(exc)}
+
+
 @app.get("/mi/evolution/forecast")
 def forecast_evolution(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
                        toRunId: Optional[str] = None, to_run_id: Optional[str] = None
@@ -456,6 +478,84 @@ def forecast_evolution(portfolioId: Optional[str] = None, client_id: Optional[st
         logger.warning("forecast evolution failed: %s", exc)
         return {"dataset": "forecast", "portfolioId": cid, "toRunId": trid,
                 "periods": [], "singlePeriod": True, "error": str(exc)}
+
+
+@app.get("/mi/forecast/extrapolation")
+def forecast_extrapolation(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
+                           toRunId: Optional[str] = None, to_run_id: Optional[str] = None
+                           ) -> Dict[str, Any]:
+    """Securitisation scale-up forecast: completion run-rate + KFI-conversion
+    extrapolation with downside/base/upside bands and milestone dates to funding
+    thresholds, plus the existing point-in-time weighted-pipeline forecast.
+    Never 500s — returns controlled insufficient-history caveats."""
+    from . import forecast_extrapolation as fx_mod
+    cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
+    root = _onboarding_output_root()
+    proot = os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root()
+    if not root:
+        return {"portfolioId": cid, "toRunId": trid, "currentFundedBalance": 0.0,
+                "completionRunRateForecast": {"available": False,
+                                              "status": "insufficient_data",
+                                              "caveat": "no onboarding output root configured"},
+                "dataSufficiency": "insufficient_data"}
+    try:
+        history = _pipeline_history(cid)
+        return fx_mod.build_extrapolation(root, proot or root, cid, trid,
+                                          history_model=history)
+    except Exception as exc:  # noqa: BLE001 - forecast must never 500
+        logger.warning("forecast extrapolation failed: %s", exc)
+        return {"portfolioId": cid, "toRunId": trid, "currentFundedBalance": 0.0,
+                "completionRunRateForecast": {"available": False,
+                                              "status": "insufficient_data",
+                                              "caveat": str(exc)},
+                "dataSufficiency": "insufficient_data", "error": str(exc)}
+
+
+@app.get("/mi/risk-limits")
+def risk_limits(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
+                toRunId: Optional[str] = None, to_run_id: Optional[str] = None
+                ) -> Dict[str, Any]:
+    """Governed risk-limit / concentration monitor: Schedule 8 extracted limits
+    vs funded actual exposure, headroom, pass/warn/fail status, source, confidence
+    and movement vs the prior run. Never 500s — returns controlled
+    unavailable / needs-review states when limits or fields are missing."""
+    from . import risk_limits as risk_mod
+    cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
+    root = _onboarding_output_root()
+    try:
+        return risk_mod.compute_risk_limits(root, cid, trid)
+    except Exception as exc:  # noqa: BLE001 - risk monitor must never 500
+        logger.warning("risk-limits failed: %s", exc)
+        return {"portfolioId": cid, "toRunId": trid, "available": False,
+                "limitsStatus": "unavailable", "limitsSource": "error",
+                "summary": {"testsPassed": 0, "warnings": 0, "breaches": 0,
+                            "needsReview": 0, "unavailable": 0, "total": 0,
+                            "closestHeadroom": None, "largestConcentration": None},
+                "testsByCategory": {}, "tests": [], "observations": [],
+                "error": str(exc)}
+
+
+@app.get("/mi/evolution/compare")
+def evolution_compare(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
+                      toRunId: Optional[str] = None, to_run_id: Optional[str] = None,
+                      dataset: str = "funded", metric: Optional[str] = None,
+                      aggregation: str = "sum", periodA: str = "prior",
+                      periodB: str = "latest") -> Dict[str, Any]:
+    """Governed cross-period comparison (period A vs period B) over the evolution
+    series: value A/B, absolute + % delta, source periods, reconciliation, and a
+    controlled insufficient-data response. Never 500s."""
+    from . import temporal_compare as compare_mod
+    cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
+    root = _onboarding_output_root()
+    proot = os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root()
+    try:
+        return compare_mod.run_temporal_compare(
+            root, proot or root, cid, trid, dataset=dataset, metric=metric,
+            aggregation=aggregation, period_a=periodA, period_b=periodB)
+    except Exception as exc:  # noqa: BLE001 - comparison must never 500
+        logger.warning("evolution compare failed: %s", exc)
+        return {"available": False, "status": "insufficient_data", "dataset": dataset,
+                "portfolioId": cid, "toRunId": trid, "reason": str(exc)}
 
 
 @app.get("/mi/workspace/view")
@@ -573,6 +673,29 @@ def query(req: QueryRequest) -> Dict[str, Any]:
             "metadata": {"engine": "mi_agent", "source": "python", "mock": False,
                          "datasetContext": view},
         }
+
+    # ---- governed-intent routing (compare / evolution / forecast / risk) ----
+    # The new analytical intents are served by the internal evolution /
+    # temporal-compare / forecast-extrapolation / risk-limit services and shaped
+    # into the existing artifact union. Normal point-in-time questions return
+    # None here and fall through to the unchanged MI Agent path below.
+    try:
+        cid, _rid = (portfolio_id.split("/", 1) + [None])[:2] if (portfolio_id and "/" in portfolio_id) \
+            else ((portfolio_id or "client_001"), None)
+        routed = chat_routing_mod.try_route(
+            req.question, portfolio_id=portfolio_id, view=view,
+            output_root=_onboarding_output_root(),
+            pipeline_root=os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root(),
+            semantics=load_mi_semantics(semantics_path()),
+            history_model=_pipeline_history(cid), as_of=req.asOfDate)
+    except Exception as exc:  # noqa: BLE001 - routing must never break the chat
+        logger.warning("chat routing failed; using point-in-time path: %s", exc)
+        routed = None
+    if routed is not None:
+        meta = routed.setdefault("metadata", {})
+        if isinstance(meta, dict):
+            meta["datasetContext"] = view
+        return routed
 
     try:
         df, frame_error = _resolve_query_frame(view, portfolio_id)

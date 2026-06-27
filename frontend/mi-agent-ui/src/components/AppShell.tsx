@@ -6,7 +6,9 @@ import { FundedSnapshotPanel } from "@/components/FundedSnapshotPanel";
 import { PipelineSnapshotPanel } from "@/components/PipelineSnapshotPanel";
 import { PipelineWatchlist } from "@/components/PipelineWatchlist";
 import { ForecastView } from "@/components/ForecastView";
+import { ForecastExtrapolationPanel } from "@/components/ForecastExtrapolationPanel";
 import { EvolutionPanel } from "@/components/EvolutionPanel";
+import { RiskLimitsPanel } from "@/components/RiskLimitsPanel";
 import { ViewToggle } from "@/components/ViewToggle";
 import { LineagePanel } from "@/components/LineagePanel";
 import type { ViewLineage } from "@/domain";
@@ -49,6 +51,12 @@ export function AppShell() {
   // backend later with zero component changes.
   const client = useMemo(() => createAgentClient(), []);
   const ws = useWorkspace(client);
+
+  // The `"<client_id>/<run_id>"` id used by the evolution / risk / extrapolation
+  // panels (falls back to the client when no run is selected).
+  const workspacePortfolioId = ws.selectedRunId
+    ? `${ws.selectedClientId ?? ""}/${ws.selectedRunId}`
+    : (ws.selectedClientId ?? "");
 
   const openArtifact = useCallback((id: string) => {
     document.getElementById(`artifact-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -108,17 +116,16 @@ export function AppShell() {
               </>
             )}
             {ws.activeView === "forecast" && (
-              <ForecastView forecast={ws.forecast} loading={ws.forecastLoading} />
+              <>
+                <ForecastView forecast={ws.forecast} loading={ws.forecastLoading} />
+                <ForecastExtrapolationPanel client={client} portfolioId={workspacePortfolioId} />
+              </>
             )}
             {ws.activeView === "evolution" && (
-              <EvolutionPanel
-                client={client}
-                portfolioId={
-                  ws.selectedRunId
-                    ? `${ws.selectedClientId ?? ""}/${ws.selectedRunId}`
-                    : (ws.selectedClientId ?? "")
-                }
-              />
+              <EvolutionPanel client={client} portfolioId={workspacePortfolioId} />
+            )}
+            {ws.activeView === "risk_limits" && (
+              <RiskLimitsPanel client={client} portfolioId={workspacePortfolioId} />
             )}
           </div>
           <ArtifactCanvas

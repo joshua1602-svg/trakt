@@ -7,6 +7,9 @@ import {
   mockPipelineEvolution,
   mockForecastEvolution,
 } from "@/data/mockEvolution";
+import { mockFunnelEvolution } from "@/data/mockFunnel";
+import { mockRiskLimits } from "@/data/mockRiskLimits";
+import { mockForecastExtrapolation } from "@/data/mockForecastExtrapolation";
 
 // recharts needs a non-zero layout in jsdom; stub ResponsiveContainer dimensions.
 vi.mock("recharts", async () => {
@@ -30,6 +33,9 @@ function client(over: Partial<AgentClient> = {}): AgentClient {
     getFundedEvolution: vi.fn(async () => mockFundedEvolution("client_001")),
     getPipelineEvolution: vi.fn(async () => mockPipelineEvolution("client_001")),
     getForecastEvolution: vi.fn(async () => mockForecastEvolution("client_001")),
+    getFunnelEvolution: vi.fn(async () => mockFunnelEvolution("client_001")),
+    getRiskLimits: vi.fn(async () => mockRiskLimits("client_001")),
+    getForecastExtrapolation: vi.fn(async () => mockForecastExtrapolation("client_001")),
     ...over,
   };
 }
@@ -53,6 +59,22 @@ describe("EvolutionPanel", () => {
     expect(screen.getByText("Pipeline by stage over time")).toBeInTheDocument();
     expect(screen.getByText("Weighted expected funded by month")).toBeInTheDocument();
     expect(c.getPipelineEvolution).toHaveBeenCalled();
+  });
+
+  it("renders the weekly origination funnel (KFI/Application/Offer/Completion)", async () => {
+    const c = client();
+    render(<EvolutionPanel client={c} portfolioId="client_001" />);
+    await screen.findByText("Funded balance by month");
+    fireEvent.click(screen.getByRole("tab", { name: "origination" }));
+    expect(await screen.findByTestId("origination-funnel")).toBeInTheDocument();
+    expect(screen.getByText("KFIs")).toBeInTheDocument();
+    expect(screen.getByText("Applications")).toBeInTheDocument();
+    expect(screen.getByText("Offers")).toBeInTheDocument();
+    expect(screen.getByText("Completions")).toBeInTheDocument();
+    // 5-week average + latest week + delta summary present per stage.
+    expect(screen.getAllByText("5-week avg").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Latest week").length).toBeGreaterThan(0);
+    expect(c.getFunnelEvolution).toHaveBeenCalled();
   });
 
   it("handles a single-period series with a clear notice", async () => {
