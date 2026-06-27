@@ -458,6 +458,30 @@ def forecast_evolution(portfolioId: Optional[str] = None, client_id: Optional[st
                 "periods": [], "singlePeriod": True, "error": str(exc)}
 
 
+@app.get("/mi/risk-limits")
+def risk_limits(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
+                toRunId: Optional[str] = None, to_run_id: Optional[str] = None
+                ) -> Dict[str, Any]:
+    """Governed risk-limit / concentration monitor: Schedule 8 extracted limits
+    vs funded actual exposure, headroom, pass/warn/fail status, source, confidence
+    and movement vs the prior run. Never 500s — returns controlled
+    unavailable / needs-review states when limits or fields are missing."""
+    from . import risk_limits as risk_mod
+    cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
+    root = _onboarding_output_root()
+    try:
+        return risk_mod.compute_risk_limits(root, cid, trid)
+    except Exception as exc:  # noqa: BLE001 - risk monitor must never 500
+        logger.warning("risk-limits failed: %s", exc)
+        return {"portfolioId": cid, "toRunId": trid, "available": False,
+                "limitsStatus": "unavailable", "limitsSource": "error",
+                "summary": {"testsPassed": 0, "warnings": 0, "breaches": 0,
+                            "needsReview": 0, "unavailable": 0, "total": 0,
+                            "closestHeadroom": None, "largestConcentration": None},
+                "testsByCategory": {}, "tests": [], "observations": [],
+                "error": str(exc)}
+
+
 @app.get("/mi/evolution/compare")
 def evolution_compare(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
                       toRunId: Optional[str] = None, to_run_id: Optional[str] = None,
