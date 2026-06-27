@@ -172,6 +172,19 @@ class MIQuerySpec:
     strict_mode: Optional[bool] = None
 
     # ------------------------------------------------------------------ #
+    # ERE securitisation sprint — analytical intents (ADDITIVE; optional).
+    # These are NOT semantic-field slots: they carry period tokens, target
+    # values and a question-kind, never registry field names, so they are
+    # excluded from referenced_fields()/validation. They mark a governed
+    # temporal-compare, forecast-extrapolation or risk-limit plan that the
+    # runtime / API layer resolves against evolution / risk-monitor data.
+    # ------------------------------------------------------------------ #
+    compare_periods: List[str] = field(default_factory=list)
+    forecast_question: Optional[str] = None      # reach_threshold|run_rate|run_rate_annualised|scenario|conversion|pipeline_needed|compare_models|extrapolation_curve
+    forecast_target_value: Optional[float] = None
+    risk_limit_query: Optional[bool] = None
+
+    # ------------------------------------------------------------------ #
     # Serialisation
     # ------------------------------------------------------------------ #
     def to_dict(self) -> Dict[str, Any]:

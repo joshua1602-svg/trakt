@@ -12,6 +12,7 @@ categories:
 - data_quality
 - drill_through
 - forecast
+- forecast_scale
 - funded_breakdown_1d
 - funded_crosstab_2d
 - funded_evolution
@@ -21,6 +22,7 @@ categories:
 - pipeline
 - pipeline_evolution
 - ranking_concentration
+- risk_limits
 - vintage_cohort
 controlled_unsupported_categories:
 - arrears_default
@@ -1812,6 +1814,286 @@ questions:
   question: Show forecast balance by broker and stage.
   dataset: forecast
   expected_intent: grouped
+  must_reconcile: true
+  supported: true
+- id: forecast_scale_001
+  category: forecast_scale
+  question: When do we reach £25m funded balance?
+  dataset: forecast
+  expected_intent: forecast_scale
+  must_reconcile: true
+  supported: true
+- id: forecast_scale_002
+  category: forecast_scale
+  question: When do we reach £50m funded balance?
+  dataset: forecast
+  expected_intent: forecast_scale
+  must_reconcile: true
+  supported: true
+- id: forecast_scale_003
+  category: forecast_scale
+  question: When do we reach £75m funded balance?
+  dataset: forecast
+  expected_intent: forecast_scale
+  must_reconcile: true
+  supported: true
+- id: forecast_scale_004
+  category: forecast_scale
+  question: When do we reach £100m funded balance?
+  dataset: forecast
+  expected_intent: forecast_scale
+  must_reconcile: true
+  supported: true
+- id: forecast_scale_005
+  category: forecast_scale
+  question: When do we reach £150m funded balance?
+  dataset: forecast
+  expected_intent: forecast_scale
+  must_reconcile: true
+  supported: true
+- id: forecast_scale_006
+  category: forecast_scale
+  question: What is the current completion run rate?
+  dataset: forecast
+  expected_intent: forecast_scale
+  must_reconcile: true
+  supported: true
+- id: forecast_scale_007
+  category: forecast_scale
+  question: What is the annualised completion run rate?
+  dataset: forecast
+  expected_intent: forecast_scale
+  must_reconcile: true
+  supported: true
+- id: forecast_scale_008
+  category: forecast_scale
+  question: Show the funded balance extrapolation curve.
+  dataset: forecast
+  expected_intent: forecast_scale
+  must_reconcile: true
+  supported: true
+- id: forecast_scale_009
+  category: forecast_scale
+  question: Show the scale-up forecast.
+  dataset: forecast
+  expected_intent: forecast_scale
+  must_reconcile: true
+  supported: true
+- id: forecast_scale_010
+  category: forecast_scale
+  question: What is the downside forecast?
+  dataset: forecast
+  expected_intent: forecast_scale
+  must_reconcile: true
+  supported: true
+- id: forecast_scale_011
+  category: forecast_scale
+  question: What is the base forecast?
+  dataset: forecast
+  expected_intent: forecast_scale
+  must_reconcile: true
+  supported: true
+- id: forecast_scale_012
+  category: forecast_scale
+  question: What is the upside forecast?
+  dataset: forecast
+  expected_intent: forecast_scale
+  must_reconcile: true
+  supported: true
+- id: forecast_scale_013
+  category: forecast_scale
+  question: How much pipeline is needed to reach £100m?
+  dataset: forecast
+  expected_intent: forecast_scale
+  must_reconcile: true
+  supported: true
+- id: forecast_scale_014
+  category: forecast_scale
+  question: What happens if completion run rate falls by 25%?
+  dataset: forecast
+  expected_intent: forecast_scale
+  must_reconcile: true
+  supported: true
+- id: forecast_scale_015
+  category: forecast_scale
+  question: What completion rate is assumed from KFI to completion?
+  dataset: forecast
+  expected_intent: forecast_scale
+  must_reconcile: true
+  supported: true
+- id: forecast_scale_016
+  category: forecast_scale
+  question: What is the expected time to securitisation scale?
+  dataset: forecast
+  expected_intent: forecast_scale
+  must_reconcile: true
+  supported: true
+- id: forecast_scale_017
+  category: forecast_scale
+  question: Show milestone dates to funding thresholds.
+  dataset: forecast
+  expected_intent: forecast_scale
+  must_reconcile: true
+  supported: true
+- id: forecast_scale_018
+  category: forecast_scale
+  question: Compare current weighted pipeline forecast with run-rate extrapolation.
+  dataset: forecast
+  expected_intent: forecast_scale
+  must_reconcile: true
+  supported: true
+- id: forecast_scale_019
+  category: forecast_scale
+  question: What is the 8-week completion run rate?
+  dataset: forecast
+  expected_intent: forecast_scale
+  must_reconcile: true
+  supported: true
+- id: forecast_scale_020
+  category: forecast_scale
+  question: What is the 12-week completion run rate?
+  dataset: forecast
+  expected_intent: forecast_scale
+  must_reconcile: true
+  supported: true
+- id: forecast_scale_021
+  category: forecast_scale
+  question: Project funded balance over the next twelve months.
+  dataset: forecast
+  expected_intent: forecast_scale
+  must_reconcile: true
+  supported: true
+- id: forecast_scale_022
+  category: forecast_scale
+  question: When does the book reach scale?
+  dataset: forecast
+  expected_intent: forecast_scale
+  must_reconcile: true
+  supported: true
+- id: risk_limits_001
+  category: risk_limits
+  question: Are we within our concentration limits?
+  dataset: funded
+  expected_intent: risk_limit
+  must_reconcile: true
+  supported: true
+- id: risk_limits_002
+  category: risk_limits
+  question: Which limits are breached?
+  dataset: funded
+  expected_intent: risk_limit
+  must_reconcile: true
+  supported: true
+- id: risk_limits_003
+  category: risk_limits
+  question: Show risk limit headroom.
+  dataset: funded
+  expected_intent: risk_limit
+  must_reconcile: true
+  supported: true
+- id: risk_limits_004
+  category: risk_limits
+  question: Show the Schedule 8 concentration tests.
+  dataset: funded
+  expected_intent: risk_limit
+  must_reconcile: true
+  supported: true
+- id: risk_limits_005
+  category: risk_limits
+  question: What is the largest geographic concentration versus limit?
+  dataset: funded
+  expected_intent: risk_limit
+  must_reconcile: true
+  supported: true
+- id: risk_limits_006
+  category: risk_limits
+  question: Show geographic concentration against limits.
+  dataset: funded
+  expected_intent: risk_limit
+  must_reconcile: true
+  supported: true
+- id: risk_limits_007
+  category: risk_limits
+  question: Show broker concentration against limits.
+  dataset: funded
+  expected_intent: risk_limit
+  must_reconcile: true
+  supported: true
+- id: risk_limits_008
+  category: risk_limits
+  question: Which concentration test is closest to breach?
+  dataset: funded
+  expected_intent: risk_limit
+  must_reconcile: true
+  supported: true
+- id: risk_limits_009
+  category: risk_limits
+  question: Show the single largest loan against the large-loan limit.
+  dataset: funded
+  expected_intent: risk_limit
+  must_reconcile: true
+  supported: true
+- id: risk_limits_010
+  category: risk_limits
+  question: Are any regional limits breached?
+  dataset: funded
+  expected_intent: risk_limit
+  must_reconcile: true
+  supported: true
+- id: risk_limits_011
+  category: risk_limits
+  question: Show limit utilisation by category.
+  dataset: funded
+  expected_intent: risk_limit
+  must_reconcile: true
+  supported: true
+- id: risk_limits_012
+  category: risk_limits
+  question: What is the headroom on the London concentration limit?
+  dataset: funded
+  expected_intent: risk_limit
+  must_reconcile: true
+  supported: true
+- id: risk_limits_013
+  category: risk_limits
+  question: Show concentration limit status.
+  dataset: funded
+  expected_intent: risk_limit
+  must_reconcile: true
+  supported: true
+- id: risk_limits_014
+  category: risk_limits
+  question: Which risk limits need review?
+  dataset: funded
+  expected_intent: risk_limit
+  must_reconcile: true
+  supported: true
+- id: risk_limits_015
+  category: risk_limits
+  question: Show concentration breaches.
+  dataset: funded
+  expected_intent: risk_limit
+  must_reconcile: true
+  supported: true
+- id: risk_limits_016
+  category: risk_limits
+  question: Are we over any limit?
+  dataset: funded
+  expected_intent: risk_limit
+  must_reconcile: true
+  supported: true
+- id: risk_limits_017
+  category: risk_limits
+  question: Show the risk limit pass/warn/fail summary.
+  dataset: funded
+  expected_intent: risk_limit
+  must_reconcile: true
+  supported: true
+- id: risk_limits_018
+  category: risk_limits
+  question: What is the nearest limit breach?
+  dataset: funded
+  expected_intent: risk_limit
   must_reconcile: true
   supported: true
 - id: data_quality_001

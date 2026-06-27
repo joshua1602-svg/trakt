@@ -458,6 +458,29 @@ def forecast_evolution(portfolioId: Optional[str] = None, client_id: Optional[st
                 "periods": [], "singlePeriod": True, "error": str(exc)}
 
 
+@app.get("/mi/evolution/compare")
+def evolution_compare(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
+                      toRunId: Optional[str] = None, to_run_id: Optional[str] = None,
+                      dataset: str = "funded", metric: Optional[str] = None,
+                      aggregation: str = "sum", periodA: str = "prior",
+                      periodB: str = "latest") -> Dict[str, Any]:
+    """Governed cross-period comparison (period A vs period B) over the evolution
+    series: value A/B, absolute + % delta, source periods, reconciliation, and a
+    controlled insufficient-data response. Never 500s."""
+    from . import temporal_compare as compare_mod
+    cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
+    root = _onboarding_output_root()
+    proot = os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root()
+    try:
+        return compare_mod.run_temporal_compare(
+            root, proot or root, cid, trid, dataset=dataset, metric=metric,
+            aggregation=aggregation, period_a=periodA, period_b=periodB)
+    except Exception as exc:  # noqa: BLE001 - comparison must never 500
+        logger.warning("evolution compare failed: %s", exc)
+        return {"available": False, "status": "insufficient_data", "dataset": dataset,
+                "portfolioId": cid, "toRunId": trid, "reason": str(exc)}
+
+
 @app.get("/mi/workspace/view")
 def workspace_view(portfolioId: Optional[str] = None,
                    client_id: Optional[str] = None,
