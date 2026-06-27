@@ -135,3 +135,45 @@ describe("pipeline data quality (A2)", () => {
     expect(dq).toBeNull();  // no fabricated zero-drop
   });
 });
+
+// --------------------------------------------------------------------------- //
+// A7 — by-stage chart view modes (absolute / indexed / conversion)
+// --------------------------------------------------------------------------- //
+import { transformStageData } from "./EvolutionPanel";
+
+describe("stage view modes (A7)", () => {
+  const data = [
+    { period: "w1", KFI: 1000, APPLICATION: 500, OFFER: 200 },
+    { period: "w2", KFI: 1200, APPLICATION: 600, OFFER: 300 },
+  ];
+  const stages = ["KFI", "APPLICATION", "OFFER"];
+
+  it("absolute mode returns the raw values", () => {
+    expect(transformStageData(data, stages, "absolute")).toEqual(data);
+  });
+
+  it("indexed mode rebases each stage to 100 at the start", () => {
+    const out = transformStageData(data, stages, "indexed");
+    expect(out[0]).toMatchObject({ KFI: 100, APPLICATION: 100, OFFER: 100 });
+    expect(out[1]).toMatchObject({ KFI: 120, APPLICATION: 120, OFFER: 150 });
+  });
+
+  it("conversion mode expresses each stage as a % of KFI", () => {
+    const out = transformStageData(data, stages, "conversion");
+    expect(out[0]).toMatchObject({ KFI: 100, APPLICATION: 50, OFFER: 20 });
+    expect(out[1]).toMatchObject({ APPLICATION: 50, OFFER: 25 });
+  });
+});
+
+describe("EvolutionPanel stage mode toggle", () => {
+  it("switches the by-stage chart between absolute, indexed and conversion", async () => {
+    render(<EvolutionPanel client={client()} portfolioId="client_001" />);
+    await screen.findByText("Funded balance by month");
+    fireEvent.click(screen.getByRole("tab", { name: "pipeline" }));
+    await screen.findByText("Pipeline by stage over time");
+    fireEvent.click(screen.getByRole("tab", { name: "indexed" }));
+    expect(screen.getByTestId("stage-mode-note").textContent).toMatch(/Indexed/);
+    fireEvent.click(screen.getByRole("tab", { name: "conversion" }));
+    expect(screen.getByTestId("stage-mode-note").textContent).toMatch(/% of KFI/);
+  });
+});

@@ -147,6 +147,46 @@ function pivotStage(rows: StagePoint[]): {
   return { data, stages };
 }
 
+export type StageViewMode = "absolute" | "indexed" | "conversion";
+
+/** Re-base a by-stage pivot so smaller stages are readable next to KFI (A7):
+ *  - absolute   : raw values (£);
+ *  - indexed    : each stage starts at 100 (movement, scale-free);
+ *  - conversion : each stage as a % of KFI in the same period. */
+export function transformStageData(
+  data: Array<Record<string, number | string>>,
+  stages: string[],
+  mode: StageViewMode,
+): Array<Record<string, number | string>> {
+  if (mode === "absolute") return data;
+  if (mode === "indexed") {
+    const base: Record<string, number> = {};
+    for (const s of stages) {
+      const first = data.find((r) => typeof r[s] === "number" && (r[s] as number) !== 0);
+      base[s] = first ? (first[s] as number) : 0;
+    }
+    return data.map((r) => {
+      const out: Record<string, number | string> = { period: r.period };
+      for (const s of stages) {
+        const v = r[s] as number;
+        out[s] = base[s] ? Math.round((v / base[s]) * 1000) / 10 : 0;
+      }
+      return out;
+    });
+  }
+  // conversion: each stage as % of KFI in the same period.
+  const kfiKey = stages.find((s) => normaliseStage(s) === "KFI");
+  return data.map((r) => {
+    const out: Record<string, number | string> = { period: r.period };
+    const kfi = kfiKey ? (r[kfiKey] as number) : 0;
+    for (const s of stages) {
+      const v = r[s] as number;
+      out[s] = kfi ? Math.round((v / kfi) * 1000) / 10 : 0;
+    }
+    return out;
+  });
+}
+
 function trendIcon(trend: "up" | "down" | "flat") {
   if (trend === "up") return <ArrowUpRight size={13} className="text-mint-300" />;
   if (trend === "down") return <ArrowDownRight size={13} className="text-rose-300" />;
@@ -279,6 +319,7 @@ export function EvolutionPanel({
   const [forecast, setForecast] = useState<ForecastEvolution | null>(null);
   const [funnel, setFunnel] = useState<PipelineFunnelEvolution | null>(null);
   const [loading, setLoading] = useState(false);
+  const [stageMode, setStageMode] = useState<StageViewMode>("absolute");
 
   useEffect(() => {
     let cancelled = false;
@@ -398,9 +439,37 @@ export function EvolutionPanel({
           <EvoLineChart title="Pipeline case count by week" data={pipelineSeries}
             lines={[{ key: "pipeline_case_count", label: "Cases" }]} valueFormat="count"
             source="weekly pipeline extracts" />
-          <EvoLineChart title="Pipeline by stage over time" data={stagePivot.data}
-            lines={stagePivot.stages.map((s) => ({ key: s, label: s }))} valueFormat="gbp"
-            source="weekly pipeline extracts" />
+          <div className="rounded-xl border border-[var(--color-line)] bg-navy-900/40 p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="text-[12px] font-semibold text-ink-200">Pipeline by stage over time</div>
+              <div role="tablist" aria-label="Stage view mode"
+                className="inline-flex items-center gap-0.5 rounded-lg border border-[var(--color-line)] bg-navy-900/60 p-0.5">
+                {(["absolute", "indexed", "conversion"] as StageViewMode[]).map((m) => (
+                  <button key={m} type="button" role="tab" aria-selected={stageMode === m}
+                    onClick={() => setStageMode(m)}
+                    className={cn("rounded-md px-2 py-0.5 text-[10px] font-medium capitalize transition-colors",
+                      stageMode === m ? "bg-navy-700/80 text-ink-100" : "text-ink-400 hover:text-ink-200")}>
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <EvoLineChart
+              title={stageMode === "absolute" ? "Absolute value (£)"
+                : stageMode === "indexed" ? "Indexed (each stage = 100 at start)"
+                : "Conversion (% of KFI)"}
+              data={transformStageData(stagePivot.data, stagePivot.stages, stageMode)}
+              lines={stagePivot.stages.map((s) => ({ key: s, label: s }))}
+              valueFormat={stageMode === "absolute" ? "gbp" : "count"}
+              source="weekly pipeline extracts" />
+            <p className="mt-1 text-[10px] text-ink-500" data-testid="stage-mode-note">
+              {stageMode === "absolute"
+                ? "Absolute £ — KFI dominates the scale; switch to Indexed/Conversion to read smaller stages."
+                : stageMode === "indexed"
+                  ? "Indexed movement — each stage rebased to 100 at its first week (scale-free)."
+                  : "Conversion — each stage as a % of KFI in the same week."}
+            </p>
+          </div>
         </div>
       )}
 
