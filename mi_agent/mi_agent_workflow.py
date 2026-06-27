@@ -108,6 +108,54 @@ def describe_spec(spec: MIQuerySpec, semantics: dict,
 # --------------------------------------------------------------------------- #
 
 
+# Governed concept -> canonical field. When a question names one of these
+# concepts but the field's column is absent from the data, the agent returns a
+# CONTROLLED unsupported response (never a hallucinated/fallback answer). When the
+# field IS present (a future client pack), the query is processed normally.
+_UNSUPPORTED_CONCEPTS = [
+    (r"\bdays?\s+in\s+arrears\b|\bin\s+arrears\b|\barrears\b", "arrears",
+     ["arrears_balance", "days_in_arrears"]),
+    (r"\bdefault(ed|s)?\b", "default", ["default_amount"]),
+    (r"\brecover(y|ies)\b", "recoveries", ["recoveries_in_period"]),
+    (r"\b(losses|loss amount|allocated loss)\b", "losses", ["allocated_losses"]),
+    (r"\bnneg\b|\bnegative equity\b|\bno[- ]negative[- ]equity\b", "NNEG",
+     ["nneg_flag"]),
+    (r"\bindexed\s+(ltv|value|valuation|loan to value)\b", "indexed valuation",
+     ["indexed_loan_to_value", "indexed_valuation_amount"]),
+    (r"\bcredit score\b", "credit score", ["credit_score"]),
+    (r"\bprotected equity\b", "protected equity", ["protected_equity_flag"]),
+    (r"\b(roll[- ]?up interest|accrued interest|interest roll[- ]?up)\b",
+     "accrued interest", ["accrued_interest"]),
+]
+
+
+def _detect_unsupported_concept(question, semantics, available_columns):
+    """Return ``{concept, missing_fields, message}`` when the question names a
+    governed concept whose field is absent from this dataset, else None."""
+    q = (question or "").lower()
+    fields = semantics.get("fields", {}) if isinstance(semantics, dict) else {}
+    for pattern, concept, candidate_fields in _UNSUPPORTED_CONCEPTS:
+        if not re.search(pattern, q):
+            continue
+        # A field is "present" if its canonical column exists in the data.
+        present = []
+        for key in candidate_fields:
+            canonical = (fields.get(key, {}) or {}).get("canonical_field", key)
+            if canonical in available_columns or key in available_columns:
+                present.append(key)
+        if present:
+            return None  # the field IS available -> process normally
+        return {
+            "concept": concept,
+            "missing_fields": candidate_fields,
+            "message": (f"'{concept}' is not available in this dataset. The MI book "
+                        f"for this client does not include {', '.join(candidate_fields)}. "
+                        "This field is not reported, so the question cannot be answered "
+                        "from the current data (no value was fabricated)."),
+        }
+    return None
+
+
 def run_mi_agent_query(
     question: str,
     data,
@@ -179,6 +227,20 @@ def run_mi_agent_query(
         return result
 
     available_columns = set(df.columns)
+
+    # ---- controlled-unsupported guard -------------------------------------
+    # If the question asks for a governed concept whose field is NOT in this
+    # dataset (e.g. arrears / default / NNEG / credit score on an ERE pack that
+    # lacks them), return a CONTROLLED unsupported response instead of silently
+    # falling back to a different metric (which would be a misleading answer).
+    unsupported = _detect_unsupported_concept(question, semantics, available_columns)
+    if unsupported:
+        result["controlled_unsupported"] = True
+        result["missing_fields"] = unsupported["missing_fields"]
+        result["error"] = unsupported["message"]
+        result["answer"] = unsupported["message"]
+        result["warnings"] = [unsupported["message"]]
+        return result
 
     # ---- parse (deterministic or LLM, with repair) ------------------------
     effective_llm = bool(llm_enabled) and parser_mode == "llm"

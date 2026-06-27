@@ -504,16 +504,21 @@ _FILTER_COMPARATORS: List[Tuple[str, str]] = [
 ]
 
 
-def _filter_field_of(q: str, semantics: dict) -> Optional[str]:
+def _filter_field_of(q: str, semantics: dict, available_columns=None) -> Optional[str]:
     """Resolve the field a numeric threshold applies to from the question text."""
     if "ltv" in q or "loan to value" in q:
-        return _ltv_metric(semantics)
-    if "age" in q or "youngest" in q:
-        return _age_metric(semantics)
-    if "rate" in q or "interest" in q:
-        return find_field(semantics, role="metric", fmt="percent", keywords=("rate",))
+        return _ltv_metric(semantics, available_columns)
+    # Age threshold: "age", "youngest", "aged", "borrower(s)", "years"/"yrs",
+    # "year old" — all imply the borrower-age field in a numeric-threshold clause.
+    if re.search(r"\b(age|aged|youngest|borrowers?|years?|yrs?|year[- ]?old|older)\b", q):
+        return _age_metric(semantics, available_columns)
+    if "rate" in q or "interest" in q or "coupon" in q:
+        return _rate_metric(semantics, available_columns)
     if "balance" in q or "outstanding" in q or "exposure" in q:
-        return _balance_metric(semantics)
+        return _balance_metric(semantics, available_columns)
+    if "valuation" in q or "value" in q:
+        return find_field(semantics, role="metric", fmt="currency",
+                          keywords=("valuation", "value"))
     return None
 
 
@@ -727,9 +732,18 @@ def _borrower_structure_filter(q: str, semantics: dict, available_columns=None
                 "number_of_borrowers to identify joint vs sole borrowers")
 
 
+# Postfix comparators where the NUMBER precedes the operator, e.g. "70+",
+# "aged 70 or above", "75 or older", "60 or below". (Prefix comparators in
+# _FILTER_COMPARATORS cover "above 70", "between 20 and 40", etc.)
+_POSTFIX_COMPARATORS: List[Tuple[str, str]] = [
+    (r"(-?\d+(?:\.\d+)?)\s*(?:years?|yrs?)?\s*(?:\+|\bor (?:above|over|older|more|greater)\b|\band (?:above|over|older)\b)", "ge"),
+    (r"(-?\d+(?:\.\d+)?)\s*(?:years?|yrs?)?\s*(?:\bor (?:below|under|younger|less|fewer)\b|\band (?:below|under|younger)\b)", "le"),
+]
+
+
 def _parse_filters(q: str, semantics: dict, available_columns=None) -> Dict[str, Any]:
-    """Parse one or more filters joined by ``and`` (numeric thresholds and a
-    categorical region value). Returns ``{field_key: condition}``."""
+    """Parse one or more filters joined by ``and`` / ``with`` (numeric thresholds —
+    prefix OR postfix — and a categorical region value). ``{field_key: condition}``."""
     filters: Dict[str, Any] = {}
     work_q = q
     # Parse a 'between A and B' first so its 'and' is not used as a clause split.
@@ -741,21 +755,32 @@ def _parse_filters(q: str, semantics: dict, available_columns=None) -> Dict[str,
                               "value": [float(bm.group(1)), float(bm.group(2))]}
         work_q = work_q[:bm.start()] + " " + work_q[bm.end():]
 
-    for clause in re.split(r"\band\b", work_q):
+    # Split into clauses on 'and' / 'with' so "<age> 70+ with LTV above 50" yields
+    # two independent thresholds.
+    for clause in re.split(r"\band\b|\bwith\b", work_q):
         clause = clause.strip()
         if not clause:
             continue
-        matched_numeric = False
+        field = _filter_field_of(clause, semantics)
+        # Postfix first ("70+", "70 or above") — a number-before-operator phrase.
+        matched = False
+        for pattern, op in _POSTFIX_COMPARATORS:
+            m = re.search(pattern, clause)
+            if m and field:
+                filters[field] = {"op": op, "value": float(m.group(1))}
+                matched = True
+                break
+        if matched:
+            continue
         for pattern, op in _FILTER_COMPARATORS[1:]:  # skip 'between' (done above)
             m = re.search(pattern, clause)
             if not m:
                 continue
-            field = _filter_field_of(clause, semantics)
             if field:
                 filters[field] = {"op": op, "value": float(m.group(1))}
-                matched_numeric = True
+                matched = True
             break
-        if matched_numeric:
+        if matched:
             continue
         cat = _parse_categorical_filter(clause, semantics, available_columns)
         if cat:
@@ -902,6 +927,27 @@ def _deterministic_parse(question: str, semantics: dict,
                     output_format="table")
             return spec, _det_meta("high", True, sorted(filters),
                                    note=f"filtered_{'balance' if is_balance_q else 'count'}")
+
+    # ---- "show/list loans where <filter>" drill-through -------------------
+    # A filtered loan-level drill (NOT a grouped breakdown): "show loans with LTV
+    # above 50%", "show loans where balance is below 50000". Routed to a filtered
+    # loan-level table so the operator sees the matching records.
+    is_show_loans = (bool(re.search(r"\b(show|list|display|drill)\b", q))
+                     and bool(re.search(r"\bloans?\b", q)) and " by " not in q)
+    if is_show_loans:
+        d_filters = _parse_filters(q, semantics, available_columns)
+        bstruct = _borrower_structure_filter(q, semantics, available_columns)
+        if bstruct is not None:
+            d_filters.update(bstruct[0])
+        if d_filters:
+            rmetric = _balance_metric(semantics, available_columns)
+            spec = MIQuerySpec(
+                intent="table", chart_type="none", metric=rmetric,
+                aggregation="loan_level", ranking_mode="loan_level", sort_by=rmetric,
+                sort_direction="desc", filters=d_filters, limit=(top_n or 50),
+                output_format="table", title=title,
+                explanation="Filtered loan-level drill-through.")
+            return spec, _det_meta("high", True, sorted(d_filters), note="drill_filtered")
 
     dim_keys, dim_terms, remaining = _explicit_dimensions(q, semantics, available_columns=available_columns)
     explicit = bool(dim_keys)
