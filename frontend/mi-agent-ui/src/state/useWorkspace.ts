@@ -82,6 +82,10 @@ export interface Workspace {
   context: AnalysisContext | null;
   /** Clear the analysis context (back to standalone-question behaviour). */
   clearContext: () => void;
+  /** Declutter controls (view-only resets; never destroy loaded MI data). */
+  clearArtifacts: () => void;
+  clearChat: () => void;
+  clearAll: () => void;
   retryLast: () => void;
   togglePin: (id: string) => void;
   resetWorkspace: () => void;
@@ -218,6 +222,19 @@ export function useWorkspace(client: AgentClient): Workspace {
     setContextState(ctx);
   }, []);
   const clearContext = useCallback(() => setContext(null), [setContext]);
+
+  // Declutter controls (A8). Clearing artifacts/chat is a VIEW reset only — it
+  // never touches the loaded portfolio/run data or the active dataset.
+  const clearArtifacts = useCallback(() => setArtifacts([]), []);
+  const clearChat = useCallback(() => {
+    setMessages([greeting("selected", null)]);
+    setArtifacts((prev) => prev);  // keep workspace artifacts; chat is independent
+  }, []);
+  const clearAll = useCallback(() => {
+    setArtifacts([]);
+    setMessages([greeting("selected", null)]);
+    setContext(null);
+  }, [setContext]);
 
   const lastQuestion = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -487,6 +504,9 @@ export function useWorkspace(client: AgentClient): Workspace {
     drill,
     context,
     clearContext,
+    clearArtifacts,
+    clearChat,
+    clearAll,
     retryLast,
     togglePin,
     resetWorkspace,

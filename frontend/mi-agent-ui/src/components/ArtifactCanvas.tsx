@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { LayoutList, Rows3 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronDown, LayoutList, Rows3, Trash2 } from "lucide-react";
 import type { Artifact, ArtifactType } from "@/domain";
 import { ArtifactCard } from "@/components/ArtifactCard";
 import { EmptyState, LoadingState } from "@/components/states/States";
@@ -24,6 +24,7 @@ export function ArtifactCanvas({
   portfolioName,
   onDrill,
   onAsk,
+  onClear,
 }: {
   artifacts: Artifact[];
   onTogglePin: (id: string) => void;
@@ -31,10 +32,21 @@ export function ArtifactCanvas({
   portfolioName: string;
   onDrill?: (artifact: Artifact, filters: Record<string, unknown>) => void;
   onAsk?: (question: string) => void;
+  /** Clear the workspace artifacts (view-only; loaded MI data is untouched). */
+  onClear?: () => void;
 }) {
   const [view, setView] = useState<ViewMode>("stack");
   const [activeTab, setActiveTab] = useState(0);
   const [filter, setFilter] = useState<ArtifactType | "all">("all");
+  // Collapse state persists across sessions (declutter, A8).
+  const [collapsed, setCollapsed] = useState<boolean>(
+    () => (typeof localStorage !== "undefined"
+      && localStorage.getItem("mi.artifactWorkspace.collapsed") === "1"));
+  useEffect(() => {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("mi.artifactWorkspace.collapsed", collapsed ? "1" : "0");
+    }
+  }, [collapsed]);
 
   // Pinned float to the top; then apply the type filter.
   const ordered = useMemo(
@@ -79,9 +91,35 @@ export function ArtifactCanvas({
               {m.label}
             </button>
           ))}
+          {onClear && artifacts.length > 0 && (
+            <button
+              type="button"
+              onClick={onClear}
+              aria-label="Clear artifacts"
+              title="Clear artifacts (loaded MI data is untouched)"
+              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-ink-400 hover:text-rose-300"
+            >
+              <Trash2 size={13} /> Clear
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setCollapsed((c) => !c)}
+            aria-label={collapsed ? "Expand artifact workspace" : "Collapse artifact workspace"}
+            aria-expanded={!collapsed}
+            className="inline-flex items-center rounded-md px-1.5 py-1 text-ink-400 hover:text-ink-100"
+          >
+            <ChevronDown size={15} className={cn("transition-transform", collapsed && "-rotate-90")} />
+          </button>
         </div>
       </header>
 
+      {collapsed ? (
+        <p className="px-6 py-3 text-[11px] text-ink-500">
+          Workspace collapsed — {artifacts.length} artifact{artifacts.length === 1 ? "" : "s"} hidden.
+        </p>
+      ) : (
+      <>
       {presentTypes.length > 1 && (
         <div className="flex flex-wrap items-center gap-1.5 border-b border-[var(--color-line-soft)] px-6 py-2">
           <FilterChip label="All" active={filter === "all"} onClick={() => setFilter("all")} />
@@ -137,6 +175,8 @@ export function ArtifactCanvas({
           />
         )}
       </div>
+      </>
+      )}
     </section>
   );
 }

@@ -53,6 +53,27 @@ const EVO_SUBTITLES: Record<EvoView, string> = {
   forecast: "Forecast evolution — funded balance + weighted expected pipeline across reporting extracts (not the scenario engine).",
 };
 
+/** Data-quality annotation for a weekly pipeline series (A2): flags a sharp
+ * week-on-week discontinuity (|Δ| over the threshold) so a real drop is explained
+ * rather than smoothed away. Missing weeks are absent (null), never zero-filled. */
+export function pipelineDataQuality(
+  series: Array<{ period: string; pipeline_amount?: number | null }>,
+  thresholdPct = 30,
+): { period: string; changePct: number } | null {
+  let worst: { period: string; changePct: number } | null = null;
+  for (let i = 1; i < series.length; i++) {
+    const prev = series[i - 1]?.pipeline_amount;
+    const cur = series[i]?.pipeline_amount;
+    if (prev == null || cur == null || prev === 0) continue;
+    const changePct = ((cur - prev) / Math.abs(prev)) * 100;
+    if (Math.abs(changePct) >= thresholdPct
+        && (!worst || Math.abs(changePct) > Math.abs(worst.changePct))) {
+      worst = { period: series[i].period, changePct: Math.round(changePct * 10) / 10 };
+    }
+  }
+  return worst;
+}
+
 /** The x-axis label for a weekly pipeline period: the DAY-LEVEL extract date
  * (week / extract_date) in preference to the YYYY-MM month, so multiple weekly
  * points within a month are distinguishable rather than sharing one label. */
@@ -353,6 +374,18 @@ export function EvolutionPanel({
             source="central lender tapes" />
         </div>
       )}
+
+      {view === "pipeline" && (() => {
+        const dq = pipelineDataQuality(pipelineSeries as Array<{ period: string; pipeline_amount?: number | null }>);
+        return dq ? (
+          <div className="rounded-lg border border-amber-400/30 bg-amber-400/5 px-3 py-2 text-[11px] text-amber-300/90"
+            data-testid="pipeline-dq-badge">
+            ⚠ Sharp movement: {dq.changePct > 0 ? "+" : ""}{dq.changePct}% in pipeline amount at {dq.period}.
+            Verify weekly extract completeness — missing weeks are shown as gaps (not zero), so a real
+            drop is not smoothed away.
+          </div>
+        ) : null;
+      })()}
 
       {view === "pipeline" && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

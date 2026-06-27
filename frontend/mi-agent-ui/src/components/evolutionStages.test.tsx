@@ -104,3 +104,34 @@ describe("weekly pipeline labels (A1)", () => {
     expect(pipelineXValue({ period: "2025-10" })).toBe("2025-10");
   });
 });
+
+// --------------------------------------------------------------------------- //
+// A2 — pipeline data-quality annotation (sharp week-on-week movement)
+// --------------------------------------------------------------------------- //
+import { pipelineDataQuality } from "./EvolutionPanel";
+
+describe("pipeline data quality (A2)", () => {
+  it("flags the worst sharp week-on-week movement above the threshold", () => {
+    const dq = pipelineDataQuality([
+      { period: "2025-10-06", pipeline_amount: 300 },
+      { period: "2025-10-13", pipeline_amount: 120 },  // -60%
+      { period: "2025-10-20", pipeline_amount: 130 },
+    ]);
+    expect(dq).toEqual({ period: "2025-10-13", changePct: -60 });
+  });
+
+  it("returns null when movements are within the threshold", () => {
+    expect(pipelineDataQuality([
+      { period: "a", pipeline_amount: 100 }, { period: "b", pipeline_amount: 110 },
+    ])).toBeNull();
+  });
+
+  it("ignores missing (null) weeks rather than treating them as zero", () => {
+    const dq = pipelineDataQuality([
+      { period: "a", pipeline_amount: 100 },
+      { period: "b", pipeline_amount: null },
+      { period: "c", pipeline_amount: 105 },
+    ]);
+    expect(dq).toBeNull();  // no fabricated zero-drop
+  });
+});

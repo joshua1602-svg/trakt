@@ -92,6 +92,7 @@ export function AppShell() {
           onRetry={ws.retryLast}
           context={ws.context}
           onClearContext={ws.clearContext}
+          onClearChat={ws.clearChat}
           onTogglePin={ws.togglePin}
           // Inline-result drill uses the backend when live; mock keeps the
           // client-side drill fallback inside the embedded card.
@@ -150,6 +151,8 @@ export function AppShell() {
             onDrill={client.mock ? undefined : ws.drill}
             // Insight investigations re-ask through the context-aware flow.
             onAsk={ws.ask}
+            // Declutter: clear workspace artifacts (loaded MI data untouched).
+            onClear={ws.clearArtifacts}
           />
         </div>
       </div>
