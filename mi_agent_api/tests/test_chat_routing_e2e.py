@@ -200,6 +200,30 @@ def test_geographic_concentration_limits_e2e():
     assert any(a["type"] in ("risk", "table") for a in r["artifacts"])
 
 
+def test_geographic_limits_returns_only_geographic_category():
+    # The known miss: "show geographic concentration limits" must NOT return all
+    # categories — only the geographic ones.
+    r = _ask("Show geographic concentration limits.")
+    assert r["ok"] is True and r["metadata"]["route"] == "risk_limits"
+    tbl = next(a for a in r["artifacts"] if a["type"] == "table")
+    # Every row in the comprehensive table is a geographic-concentration test.
+    assert tbl["rows"], "expected geographic limit rows"
+    assert r["answer"].lower().startswith("geographic concentration")
+    # A broker-scoped query, by contrast, returns broker rows.
+    rb = _ask("Show broker concentration limits.")
+    assert rb["answer"].lower().startswith("broker")
+
+
+def test_funded_balance_forecast_curve_returns_line_chart():
+    # The known miss: "forecast curve" returned only a summary. It must now route
+    # to the forecast extrapolation and return a projected line chart.
+    r = _ask("Show the funded balance forecast curve.")
+    assert r["ok"] is True and r["metadata"]["route"] == "forecast_extrapolation"
+    chart = next((a for a in r["artifacts"] if a["type"] == "chart"), None)
+    assert chart is not None and chart["chartType"] == "line"
+    assert {"downside", "base", "upside"} <= {s["key"] for s in chart["series"]}
+
+
 # --------------------------------------------------------------------------- #
 # E. Existing point-in-time behaviour must NOT regress (not routed)
 # --------------------------------------------------------------------------- #

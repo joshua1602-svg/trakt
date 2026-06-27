@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CornerDownLeft, History, Sparkles, X } from "lucide-react";
+import { CornerDownLeft, Eraser, History, Sparkles, X } from "lucide-react";
 import type { AnalysisContext } from "@/lib/analysisContext";
 import { contextSummary } from "@/lib/analysisContext";
 import type { Artifact, ChatMessage as ChatMessageType } from "@/domain";
@@ -16,6 +16,7 @@ export function AgentChatPanel({
   onRetry,
   context,
   onClearContext,
+  onClearChat,
   onTogglePin,
   onDrill,
 }: {
@@ -27,6 +28,8 @@ export function AgentChatPanel({
   onRetry: () => void;
   context?: AnalysisContext | null;
   onClearContext?: () => void;
+  /** Reset the conversation to the greeting (loaded MI data is untouched). */
+  onClearChat?: () => void;
   onTogglePin?: (id: string) => void;
   onDrill?: (artifact: Artifact, filters: Record<string, unknown>) => void;
 }) {
@@ -71,6 +74,17 @@ export function AgentChatPanel({
           <span className={cn("h-1.5 w-1.5 rounded-full", mock ? "bg-amber-400" : "bg-emerald-400")} />
           {mock ? "Demo data" : "Online"}
         </span>
+        {onClearChat && messages.length > 1 && (
+          <button
+            type="button"
+            onClick={onClearChat}
+            aria-label="Clear chat"
+            title="Clear the conversation (loaded MI data is untouched)"
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-teal-200/70 hover:text-rose-300"
+          >
+            <Eraser size={13} /> Clear
+          </button>
+        )}
       </header>
 
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">

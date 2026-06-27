@@ -149,6 +149,12 @@ export interface ChartArtifact extends ArtifactBase {
   sizeLabel?: string;
   /** Per-column {format, scale} so the renderer formats without guessing. */
   displayHints?: Record<string, DisplayHint>;
+  /**
+   * For a bar capped to top-N + "Other", the shown category values per x-column.
+   * A drill on "Other" is executed as `<dim> NOT IN [these]`, recovering the
+   * underlying rows rather than matching an opaque "Other" label.
+   */
+  otherCategories?: Record<string, string[]> | null;
 }
 
 /* ------------------------------ Table ------------------------------- */

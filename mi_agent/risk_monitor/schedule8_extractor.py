@@ -227,20 +227,63 @@ def extract_from_file(path: str | Path, *, portfolio_id: Optional[str] = None
     return out
 
 
+_DOC_PATTERNS = ("*schedule*8*", "*schedule_8*", "*Schedule 8*", "*sched*8*",
+                 "*concentration*")
+_READABLE_SUFFIXES = (".txt", ".md", ".csv")
+# Non-text Schedule 8 documents we can DETECT but not parse without extra tooling —
+# surfaced as an ingestion diagnostic (needs_review), never silently ignored.
+_UNPARSEABLE_SUFFIXES = (".pdf", ".docx", ".doc", ".rtf")
+
+
 def locate_schedule8(*search_roots: str | Path) -> Optional[Path]:
-    """Find a Schedule 8 document under the given roots (and common fixtures)."""
-    roots = list(search_roots) + [
-        "tests/fixtures/client_001_mi_pack", "tests/fixtures", "portfolio_test",
-        "config/clients/client_001",
-    ]
-    patterns = ("*schedule*8*", "*schedule_8*", "*Schedule 8*", "*concentration*")
+    """Find a machine-readable (text) Schedule 8 document under the given roots."""
+    found = locate_schedule8_any(*search_roots)
+    return found if (found and found.suffix.lower() in _READABLE_SUFFIXES) else None
+
+
+def locate_schedule8_any(*search_roots: str | Path, include_defaults: bool = True
+                         ) -> Optional[Path]:
+    """Find a Schedule 8 document of ANY supported/known type (text OR a known
+    non-text format) under the given roots. A readable text file is preferred; a
+    non-text doc (pdf/docx) is returned so the caller can raise an ingestion
+    diagnostic rather than silently falling back to a placeholder.
+
+    ``include_defaults=False`` searches ONLY the given roots (used for a
+    client-scoped lookup so one client never picks up another's document)."""
+    roots = list(search_roots)
+    if include_defaults:
+        roots += [
+            "tests/fixtures/client_001_mi_pack/docs", "tests/fixtures/client_001_mi_pack",
+            "tests/fixtures", "portfolio_test", "config/clients/client_001",
+        ]
+    fallback: Optional[Path] = None
     for root in roots:
         rp = Path(root)
         if not rp.exists():
             continue
-        for pat in patterns:
-            hits = sorted(rp.glob(f"**/{pat}"))
-            hits = [h for h in hits if h.suffix.lower() in (".txt", ".md", ".csv")]
-            if hits:
-                return hits[0]
-    return None
+        for pat in _DOC_PATTERNS:
+            for hit in sorted(rp.glob(f"**/{pat}")):
+                suf = hit.suffix.lower()
+                if suf in _READABLE_SUFFIXES:
+                    return hit  # readable text wins immediately
+                if suf in _UNPARSEABLE_SUFFIXES and fallback is None:
+                    fallback = hit
+    return fallback
+
+
+def locate_client_schedule8(client_id: str, *, pack_roots: Optional[List[str]] = None
+                            ) -> Optional[Path]:
+    """Locate a Schedule 8 document in a client's MI-pack ``docs`` folder (or pack
+    root). Prefers an explicit ``MI_AGENT_CLIENT_DOCS_ROOT`` env override."""
+    roots: List[str] = []
+    import os
+    env_root = os.environ.get("MI_AGENT_CLIENT_DOCS_ROOT")
+    if env_root:
+        roots += [env_root, str(Path(env_root) / "docs")]
+    roots += list(pack_roots or [])
+    roots += [
+        f"tests/fixtures/{client_id}_mi_pack/docs",
+        f"tests/fixtures/{client_id}_mi_pack",
+        f"config/clients/{client_id}/docs",
+    ]
+    return locate_schedule8_any(*roots, include_defaults=False)

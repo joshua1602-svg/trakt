@@ -55,9 +55,9 @@ describe("EvolutionPanel", () => {
     render(<EvolutionPanel client={c} portfolioId="client_001" />);
     await screen.findByText("Funded balance by month");
     fireEvent.click(screen.getByRole("tab", { name: "pipeline" }));
-    expect(await screen.findByText("Pipeline amount by week/month")).toBeInTheDocument();
+    expect(await screen.findByText("Pipeline amount by week")).toBeInTheDocument();
     expect(screen.getByText("Pipeline by stage over time")).toBeInTheDocument();
-    expect(screen.getByText("Weighted expected funded by month")).toBeInTheDocument();
+    expect(screen.getByText("Weighted expected funded by week")).toBeInTheDocument();
     expect(c.getPipelineEvolution).toHaveBeenCalled();
   });
 

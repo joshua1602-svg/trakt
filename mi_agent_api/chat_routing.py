@@ -496,6 +496,7 @@ def _route_risk(question, spec, spec_dict, *, client_id, run_id, output_root,
     rl = risk_mod.compute_risk_limits(output_root, client_id, run_id)
     summ = rl.get("summary", {})
     tests = rl.get("tests", [])
+    category = getattr(spec, "risk_limit_category", None)
 
     if not rl.get("available"):
         answer = (f"Contractual risk limits are unavailable for this portfolio "
@@ -505,9 +506,25 @@ def _route_risk(question, spec, spec_dict, *, client_id, run_id, output_root,
                          artifacts=[], route="risk_limits",
                          warnings=["limits unavailable / needs review."])
 
+    # Scope to a single category when asked ("geographic concentration limits").
+    cat_label = ""
+    if category:
+        scoped = [t for t in tests if t.get("category") == category]
+        if scoped:
+            tests = scoped
+            summ = risk_mod._summary(tests)
+            cat_label = category.replace("_", " ") + ": "
+        else:
+            return _envelope(
+                ok=True, question=question, spec=spec_dict, artifacts=[],
+                route="risk_limits",
+                answer=(f"No {category.replace('_', ' ')} limits are configured for this "
+                        "portfolio."),
+                warnings=[f"no tests in category '{category}'."])
+
     closest = summ.get("closestHeadroom")
     largest = summ.get("largestConcentration")
-    answer = (f"{summ.get('testsPassed', 0)} passed, {summ.get('warnings', 0)} warning(s), "
+    answer = (f"{cat_label}{summ.get('testsPassed', 0)} passed, {summ.get('warnings', 0)} warning(s), "
               f"{summ.get('breaches', 0)} breach(es), {summ.get('needsReview', 0)} need review, "
               f"{summ.get('unavailable', 0)} unavailable.")
     if closest:

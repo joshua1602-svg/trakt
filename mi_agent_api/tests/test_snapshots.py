@@ -250,3 +250,52 @@ class TestSnapshotEndpoints(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+# --------------------------------------------------------------------------- #
+# A9 — portfolio-type-aware risk tile (replaces the duplicate loan-movement tile)
+# --------------------------------------------------------------------------- #
+import pandas as _pd  # noqa: E402
+from mi_agent_api.snapshots import _risk_tile, portfolio_risk_type  # noqa: E402
+
+
+def test_erm_nneg_tile_when_valuation_present():
+    df = _pd.DataFrame({
+        "current_outstanding_balance": [100_000.0, 250_000.0, 80_000.0],
+        "current_valuation_amount": [300_000.0, 200_000.0, 90_000.0],  # loan 2 in neg equity
+        "erm_product_type": ["Lifetime Mortgage", "Lifetime Mortgage", "Lifetime Mortgage"],
+    })
+    assert portfolio_risk_type(df) == "erm"
+    tile = _risk_tile(df)
+    assert tile["id"] == "nneg_risk" and tile["available"] is True
+    # NNEG exposure = balance above valuation for loan 2 = 250k - 200k = 50k.
+    assert tile["raw"] == 50_000.0
+    assert "1 loan" in tile["hint"]
+
+
+def test_erm_nneg_unavailable_lists_missing_inputs():
+    df = _pd.DataFrame({
+        "current_outstanding_balance": [100_000.0],
+        "erm_product_type": ["Lifetime Mortgage Drawdown"],
+    })  # no current_valuation_amount
+    tile = _risk_tile(df)
+    assert tile["id"] == "nneg_risk" and tile["available"] is False
+    assert "current_valuation_amount" in tile["hint"]
+
+
+def test_funded_snapshot_drops_duplicate_new_loans_tile():
+    # A built snapshot no longer carries the duplicate "New loans since prior run"
+    # tile, but DOES carry the risk tile.
+    df = _pd.DataFrame({
+        "loan_identifier": ["a", "b"],
+        "current_outstanding_balance": [100_000.0, 200_000.0],
+        "current_valuation_amount": [300_000.0, 400_000.0],
+        "current_loan_to_value": [33.0, 50.0],
+        "erm_product_type": ["Lifetime Mortgage", "Lifetime Mortgage"],
+    })
+    from mi_agent.mi_query_validator import load_mi_semantics
+    sem = load_mi_semantics(_REPO_ROOT / "mi_agent" / "mi_semantics_field_registry.yaml")
+    out = S.compute_funded_snapshot(df, sem, client_id="c", run_id="r")
+    labels = {k["label"] for k in out["kpis"]}
+    assert "New loans since prior run" not in labels
+    assert "NNEG exposure (current)" in labels

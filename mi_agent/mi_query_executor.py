@@ -391,6 +391,8 @@ _OP_ALIASES = {
     "==": "eq", "eq": "eq", "=": "eq", "is": "eq",
     "!=": "ne", "ne": "ne",
     "between": "between",
+    # Categorical membership (used by the "Other" bar-bucket drill-through).
+    "in": "in", "not_in": "not_in", "nin": "not_in", "not in": "not_in",
 }
 
 
@@ -433,6 +435,15 @@ def _apply_filters(work: pd.DataFrame, spec: MIQuerySpec, semantics: dict,
             # Structured numeric comparison filter: {"op": ">", "value": 70}.
             op = _OP_ALIASES.get(str(value.get("op", "eq")).strip().lower(), "eq")
             raw = value.get("value", value.get("min", value.get("max")))
+            # Categorical membership (the "Other" bar bucket drills as NOT IN the
+            # shown top-N categories, so the underlying rows are recovered).
+            if op in ("in", "not_in"):
+                members = raw if isinstance(raw, (list, tuple, set)) else [raw]
+                vals = [str(v).strip().casefold() for v in members]
+                member_mask = col.astype(str).str.strip().str.casefold().isin(vals)
+                work = work[member_mask if op == "in" else ~member_mask]
+                warnings.append(f"filter {field_key} {op} {list(members)!r} kept {len(work)}/{before} rows")
+                continue
             # Scale-aware: a percent threshold (e.g. "ltv over 80") is compared in
             # the column's own storage scale. If the column stores fractions
             # (0.51) but the threshold reads as points (80), convert once here —

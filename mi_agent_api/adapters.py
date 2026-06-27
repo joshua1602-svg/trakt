@@ -285,6 +285,7 @@ def _chart_artifact(
     size_label: Optional[str] = None
     series: List[Dict[str, Any]] = []
     value_format = "number"
+    other_categories: Dict[str, List[str]] = {}
 
     def _value_column(exclude: List[str]) -> Optional[str]:
         cand = [c for c in columns if c not in exclude]
@@ -324,6 +325,13 @@ def _chart_artifact(
             # FULL detail stays in the table/export artifact alongside.
             if chart_type == "bar" and x_key:
                 rows, capped = _cap_bar_rows(rows, x_key, primary, n=10)
+                if capped:
+                    # The "Other" bucket carries the SHOWN top-N category values so a
+                    # drill on "Other" can be executed as <dim> NOT IN [those values]
+                    # (recovering the underlying rows instead of matching a label).
+                    other_categories[x_key] = [
+                        str(r[x_key]) for r in rows
+                        if str(r.get(x_key)) != "Other"]
     elif chart_type == "heatmap":
         # Native grid renderer needs two dimensions + an intensity measure.
         # Row/column convention: the bucket dimension is the COLUMN axis (xKey)
@@ -406,6 +414,8 @@ def _chart_artifact(
         "rows": rows,
         "valueFormat": value_format,
         "displayHints": display_hints,
+        # Drill metadata for the capped "Other" bucket (NOT IN the shown categories).
+        "otherCategories": other_categories or None,
         # User-visible card carries business-facing warnings only; technical
         # diagnostics live in ``source.diagnostics``.
         "warnings": chart_warnings,

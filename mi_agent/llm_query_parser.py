@@ -577,7 +577,11 @@ _FORECAST_SCALE_RE = re.compile(
     r"(?:downside|upside|base) forecast|securitisation scale|"
     r"how much pipeline is needed|completion rate is assumed|what conversion rate|"
     r"funded balance extrapolation|annualised completion|"
-    r"what happens if .*run.?rate|milestone")
+    r"what happens if .*run.?rate|milestone|"
+    # A "forecast curve" / "projection curve" / "balance curve" is a request for
+    # the forward funded-balance line, not a point-in-time KPI.
+    r"forecast curve|projection curve|balance curve|"
+    r"(?:forecast|projected|project).{0,20}curve|curve.{0,20}(?:forecast|funded balance)")
 
 
 def _forecast_target_value(q: str) -> Optional[float]:
@@ -645,6 +649,27 @@ _RISK_LIMIT_RE = re.compile(
     r"exceed(?:s|ed)? (?:the )?limits?|against (?:the )?limits?|schedule 8|"
     r"limit status|limit utilis|which limits|are we within")
 
+# Natural-language risk-limit category -> the category key used by the risk
+# monitor (``risk_limits.testsByCategory``). Order matters (most specific first).
+_RISK_LIMIT_CATEGORY_TERMS: List[Tuple[str, str]] = [
+    (r"top\s*\d*\s*broker|broker|intermediary|introducer", "broker_concentration"),
+    (r"geograph|region|location|area|nuts", "geographic_concentration"),
+    (r"large loan|loan size|single loan|big loan", "large_loan_concentration"),
+    (r"\bltv\b|loan to value|valuation", "ltv_limit"),
+    (r"variable rate|interest rate|\bwac\b|coupon", "interest_rate_limit"),
+    (r"joint borrower|joint lives", "joint_borrower_limit"),
+    (r"single borrower|per borrower|borrower concentration", "borrower_concentration"),
+    (r"aged|age limit|over 85", "age_limit"),
+]
+
+
+def _risk_limit_category(q: str) -> Optional[str]:
+    """The specific risk-limit category a question scopes to, or None for all."""
+    for pattern, cat in _RISK_LIMIT_CATEGORY_TERMS:
+        if re.search(pattern, q):
+            return cat
+    return None
+
 
 def _risk_limit_recognizer(q: str, title: str
                            ) -> Optional[Tuple[MIQuerySpec, dict]]:
@@ -652,15 +677,18 @@ def _risk_limit_recognizer(q: str, title: str
     ``risk_monitor_mode='concentration'`` plan (resolved by /mi/risk-limits)."""
     if not _RISK_LIMIT_RE.search(q):
         return None
+    category = _risk_limit_category(q)
     spec = MIQuerySpec(
         intent="summary", chart_type="none", metric=None, aggregation="count",
         execution_mode="risk", risk_monitor_mode="concentration",
-        risk_limit_query=True, output_format="table", title=title,
+        risk_limit_query=True, risk_limit_category=category,
+        output_format="table", title=title,
         explanation=("Governed risk-limit / concentration monitor: actual exposure "
                      "vs Schedule 8 limit, headroom, pass/warn/fail status, source and "
                      "movement; controlled needs-review / unavailable when a limit or "
                      "field is missing."))
-    return spec, _det_meta("high", False, ["risk_limits"], note="risk_limit")
+    return spec, _det_meta("high", False, ["risk_limits"],
+                           note=f"risk_limit:{category or 'all'}")
 
 
 def _det_meta(confidence: str, explicit: bool, terms: List[str],
@@ -680,14 +708,57 @@ def _det_meta(confidence: str, explicit: bool, terms: List[str],
 
 
 # Numeric comparison phrases -> canonical operator (longest match first).
+# A finance value: optional currency prefix (£/$/€), digits with optional
+# thousands commas, optional decimal, an optional k/m/bn multiplier and an
+# optional trailing %.  Captures (number, suffix).  Examples it accepts:
+#   "40", "40%", "200000", "100,000", "£100k", "£0.2m", "$1.5bn", "£200K"
+_VALUE = r"(?:£|\$|€)?\s*(-?\d[\d,]*(?:\.\d+)?)\s*(k|m|bn|b|K|M|BN|B)?\s*%?"
+_MULTIPLIER = {"k": 1e3, "m": 1e6, "b": 1e9, "bn": 1e9}
+
+
+def _amount(num: str, suffix: Optional[str]) -> float:
+    """Coerce a captured (number, suffix) into a float, applying k/m/bn and
+    stripping thousands separators. ``"100,000" -> 100000``, ``"£0.2m" -> 200000``."""
+    value = float(str(num).replace(",", ""))
+    if suffix:
+        value *= _MULTIPLIER.get(suffix.lower(), 1.0)
+    return value
+
+
+# (regex, op).  Each non-``between`` pattern captures (number, suffix); ``between``
+# captures (n1, s1, n2, s2).  Order matters: the two-word operators come first so
+# "greater than or equal to" is not shadowed by "greater than".
 _FILTER_COMPARATORS: List[Tuple[str, str]] = [
-    (r"between\s+(-?\d+(?:\.\d+)?)\s+and\s+(-?\d+(?:\.\d+)?)", "between"),
-    (r"(?:greater than or equal to|at least|no less than|>=)\s*(-?\d+(?:\.\d+)?)", "ge"),
-    (r"(?:less than or equal to|at most|no more than|>=)\s*(-?\d+(?:\.\d+)?)", "le"),
-    (r"(?:more than|greater than|over|above|>)\s*(-?\d+(?:\.\d+)?)", "gt"),
-    (r"(?:less than|under|below|fewer than|<)\s*(-?\d+(?:\.\d+)?)", "lt"),
-    (r"(?:equal to|equals|exactly|=)\s*(-?\d+(?:\.\d+)?)", "eq"),
+    (rf"between\s+{_VALUE}\s+and\s+{_VALUE}", "between"),
+    (rf"(?:greater than or equal to|at least|no less than|>=)\s*{_VALUE}", "ge"),
+    (rf"(?:less than or equal to|at most|no more than|<=)\s*{_VALUE}", "le"),
+    (rf"(?:more than|greater than|over|above|>)\s*{_VALUE}", "gt"),
+    (rf"(?:less than|under|below|fewer than|<)\s*{_VALUE}", "lt"),
+    (rf"(?:equal to|equals|exactly|=)\s*{_VALUE}", "eq"),
 ]
+
+
+def _amount_from_match(m: "re.Match", op: str):
+    """Value(s) for a comparator match, applying currency/k-m/comma coercion."""
+    if op == "between":
+        return [_amount(m.group(1), m.group(2)), _amount(m.group(3), m.group(4))]
+    return _amount(m.group(1), m.group(2))
+
+
+# Age stated WITHOUT an explicit comparator: "60 year old", "aged 60", "age 60",
+# "60-year-old", "60 yo", "60 years of age". Resolved to an equality on the
+# borrower-age field (only when no comparator/postfix clause already matched).
+_AGE_EQUALITY_RE = re.compile(
+    r"\b(\d{2,3})\s*[- ]?\s*(?:year[- ]?old|years?\s*old|yo|years?\s+of\s+age)\b"
+    r"|\b(?:aged|age)\s+(\d{2,3})\b")
+
+
+def _age_equality_value(clause: str) -> Optional[float]:
+    m = _AGE_EQUALITY_RE.search(clause)
+    if not m:
+        return None
+    raw = m.group(1) or m.group(2)
+    return float(raw) if raw else None
 
 
 def _filter_field_of(q: str, semantics: dict, available_columns=None) -> Optional[str]:
@@ -696,7 +767,7 @@ def _filter_field_of(q: str, semantics: dict, available_columns=None) -> Optiona
         return _ltv_metric(semantics, available_columns)
     # Age threshold: "age", "youngest", "aged", "borrower(s)", "years"/"yrs",
     # "year old" — all imply the borrower-age field in a numeric-threshold clause.
-    if re.search(r"\b(age|aged|youngest|borrowers?|years?|yrs?|year[- ]?old|older)\b", q):
+    if re.search(r"\b(age|aged|youngest|borrowers?|years?|yrs?|yo|year[- ]?old|older)\b", q):
         return _age_metric(semantics, available_columns)
     if "rate" in q or "interest" in q or "coupon" in q:
         return _rate_metric(semantics, available_columns)
@@ -720,9 +791,7 @@ def _parse_numeric_filter(q: str, semantics: dict) -> Optional[Tuple[str, Dict[s
         field = _filter_field_of(q, semantics)
         if not field:
             return None
-        if op == "between":
-            return field, {"op": "between", "value": [float(m.group(1)), float(m.group(2))]}
-        return field, {"op": op, "value": float(m.group(1))}
+        return field, {"op": op, "value": _amount_from_match(m, op)}
     return None
 
 
@@ -937,8 +1006,7 @@ def _parse_filters(q: str, semantics: dict, available_columns=None) -> Dict[str,
     if bm:
         field = _filter_field_of(work_q[max(0, bm.start() - 40):bm.end()], semantics)
         if field:
-            filters[field] = {"op": "between",
-                              "value": [float(bm.group(1)), float(bm.group(2))]}
+            filters[field] = {"op": "between", "value": _amount_from_match(bm, "between")}
         work_q = work_q[:bm.start()] + " " + work_q[bm.end():]
 
     # Split into clauses on 'and' / 'with' so "<age> 70+ with LTV above 50" yields
@@ -963,11 +1031,18 @@ def _parse_filters(q: str, semantics: dict, available_columns=None) -> Dict[str,
             if not m:
                 continue
             if field:
-                filters[field] = {"op": op, "value": float(m.group(1))}
+                filters[field] = {"op": op, "value": _amount_from_match(m, op)}
                 matched = True
             break
         if matched:
             continue
+        # Age stated without a comparator ("60 year old", "aged 60") -> equality.
+        age_field = _age_metric(semantics, available_columns)
+        if field == age_field and age_field:
+            age_val = _age_equality_value(clause)
+            if age_val is not None:
+                filters[age_field] = {"op": "eq", "value": age_val}
+                continue
         cat = _parse_categorical_filter(clause, semantics, available_columns)
         if cat:
             filters[cat[0]] = cat[1]
@@ -1095,38 +1170,38 @@ def _deterministic_parse(question: str, semantics: dict,
         # geographic region south west".
         filters = _parse_filters(q, semantics, available_columns)
         # Borrower-structure intent ("how many joint borrowers"): resolve joint/sole
-        # to a filter and (when "balance" is also asked) return count + balance.
-        bstruct = _borrower_structure_filter(q, semantics, available_columns)
+        # to a filter. When the field is unavailable, record the predicate as
+        # UNAVAILABLE (never silently dropped).
+        unavailable: List[str] = []
         bnote = ""
+        bstruct = _borrower_structure_filter(q, semantics, available_columns)
         if bstruct is not None:
             bfilters, bnote = bstruct
-            filters.update(bfilters)
-            if is_count_q and wants_balance_too:
+            if bfilters:
+                filters.update(bfilters)
+            else:
+                unavailable.append(bnote)
+        if filters or unavailable:
+            if is_balance_q or (is_count_q and wants_balance_too):
                 metric = _balance_metric(semantics, available_columns)
                 spec = MIQuerySpec(
                     intent="summary", chart_type="none", metric=metric,
                     aggregation="sum", filters=filters, title=title,
-                    explanation=("Filtered loan count and balance (with share of the "
-                                 "funded book) for the selected borrowers. " + bnote),
+                    unavailable_filters=unavailable,
+                    explanation=("Filtered balance (and loan count / share of the funded "
+                                 "book) over loans matching the criteria. " + bnote).strip(),
                     output_format="table")
-                return spec, _det_meta("high", True, sorted(filters) or ["borrower_structure"],
-                                       note="filtered_count_and_balance: " + bnote)
-        if filters:
-            if is_balance_q:
-                metric = _balance_metric(semantics)
-                spec = MIQuerySpec(
-                    intent="summary", chart_type="none", metric=metric,
-                    aggregation="sum", filters=filters, title=title,
-                    explanation="Filtered balance over loans matching the criteria.",
-                    output_format="table")
+                base_note = "filtered_count_and_balance" if is_count_q else "filtered_balance"
             else:
                 spec = MIQuerySpec(
                     intent="summary", chart_type="none", aggregation="count",
-                    filters=filters, title=title,
+                    filters=filters, title=title, unavailable_filters=unavailable,
                     explanation="Filtered loan count over one or more criteria.",
                     output_format="table")
-            return spec, _det_meta("high", True, sorted(filters),
-                                   note=f"filtered_{'balance' if is_balance_q else 'count'}")
+                base_note = "filtered_count"
+            note = f"{base_note}: {bnote}" if bnote else base_note
+            return spec, _det_meta("high", True, sorted(filters) or ["filtered"],
+                                   note=note)
 
     # ---- "show/list loans where <filter>" drill-through -------------------
     # A filtered loan-level drill (NOT a grouped breakdown): "show loans with LTV

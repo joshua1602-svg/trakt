@@ -46,6 +46,15 @@ function pipelineLineage(forecast: ReturnType<typeof useWorkspace>["forecast"]):
   };
 }
 
+// Tab semantics (A3 / A10): what each top-level view represents and its source.
+const VIEW_SUBTITLES: Record<string, string> = {
+  funded: "Funded book — latest funded-loan snapshot as of the selected reporting date (governed central lender tape).",
+  pipeline: "Pipeline — latest open-pipeline snapshot (weighted expected funded balance) as of the selected reporting date.",
+  forecast: "Scenario / portfolio forecast — forward projection (funded balance + weighted pipeline, run-rate scale-up).",
+  evolution: "Evolution — time-series movement across multiple reporting extracts (funded / pipeline / origination funnel / forecast).",
+  risk_limits: "Risk Limits — Schedule 8 concentration limits vs funded actual exposure, headroom and status.",
+};
+
 export function AppShell() {
   // One client for the app lifetime; swap createAgentClient() for the real
   // backend later with zero component changes.
@@ -83,6 +92,7 @@ export function AppShell() {
           onRetry={ws.retryLast}
           context={ws.context}
           onClearContext={ws.clearContext}
+          onClearChat={ws.clearChat}
           onTogglePin={ws.togglePin}
           // Inline-result drill uses the backend when live; mock keeps the
           // client-side drill fallback inside the embedded card.
@@ -98,6 +108,9 @@ export function AppShell() {
               {ws.reporting.asOf ? ` · ${ws.reporting.asOf}` : ""}
             </span>
           </div>
+          <p className="px-6 pt-1 text-[11px] text-ink-500" data-testid="view-subtitle">
+            {VIEW_SUBTITLES[ws.activeView]}
+          </p>
           <div className="space-y-4 px-6 pt-4">
             {ws.activeView === "funded" && (
               <>
@@ -138,6 +151,8 @@ export function AppShell() {
             onDrill={client.mock ? undefined : ws.drill}
             // Insight investigations re-ask through the context-aware flow.
             onAsk={ws.ask}
+            // Declutter: clear workspace artifacts (loaded MI data untouched).
+            onClear={ws.clearArtifacts}
           />
         </div>
       </div>
