@@ -107,9 +107,13 @@ def test_pipeline_evolution_from_weekly_extracts():
         assert p["metrics"]["pipeline_amount"] is not None
         assert p["metrics"]["pipeline_case_count"] >= 0
         assert p["source_file"]
-    # by-stage series is populated over time.
+    # by-stage series is populated over time, day-level, with amount AND count.
     assert out["byStage"]
-    assert {"period", "stage", "value"} <= set(out["byStage"][0])
+    assert {"period", "week", "stage", "value", "count"} <= set(out["byStage"][0])
+    # Day-level period (not a YYYY-MM month) so weekly points are distinguishable.
+    import re as _re
+    assert _re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(out["byStage"][0]["period"]))
+    assert all(isinstance(r["count"], int) for r in out["byStage"])
 
 
 def test_pipeline_evolution_dedups_extracts():

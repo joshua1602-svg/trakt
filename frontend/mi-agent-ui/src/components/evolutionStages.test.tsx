@@ -137,43 +137,65 @@ describe("pipeline data quality (A2)", () => {
 });
 
 // --------------------------------------------------------------------------- //
-// A7 — by-stage chart view modes (absolute / indexed / conversion)
+// C — by-stage chart: amount / count pivots, KFI-optional, conversion excludes KFI
 // --------------------------------------------------------------------------- //
-import { transformStageData } from "./EvolutionPanel";
+import { pivotStage, funnelLineStages, stageConversionSeries } from "./EvolutionPanel";
+import type { StagePoint } from "@/domain";
 
-describe("stage view modes (A7)", () => {
-  const data = [
-    { period: "w1", KFI: 1000, APPLICATION: 500, OFFER: 200 },
-    { period: "w2", KFI: 1200, APPLICATION: 600, OFFER: 300 },
-  ];
-  const stages = ["KFI", "APPLICATION", "OFFER"];
+const STAGE_ROWS: StagePoint[] = [
+  { period: "2025-10-01", week: "2025-10-01", stage: "KFI", value: 1000, count: 20 },
+  { period: "2025-10-01", week: "2025-10-01", stage: "APPLICATION", value: 500, count: 10 },
+  { period: "2025-10-01", week: "2025-10-01", stage: "OFFER", value: 200, count: 6 },
+  { period: "2025-10-01", week: "2025-10-01", stage: "COMPLETED", value: 90, count: 4 },
+  { period: "2025-10-01", week: "2025-10-01", stage: "WITHDRAWN", value: 30, count: 2 },
+  { period: "2025-11-01", week: "2025-11-01", stage: "KFI", value: 1200, count: 24 },
+  { period: "2025-11-01", week: "2025-11-01", stage: "APPLICATION", value: 600, count: 12 },
+  { period: "2025-11-01", week: "2025-11-01", stage: "OFFER", value: 300, count: 6 },
+];
 
-  it("absolute mode returns the raw values", () => {
-    expect(transformStageData(data, stages, "absolute")).toEqual(data);
+describe("by-stage pivots (C)", () => {
+  it("pivots amount and count over day-level extract dates, stage-ordered", () => {
+    const amt = pivotStage(STAGE_ROWS, "value");
+    expect(amt.data.map((r) => r.period)).toEqual(["2025-10-01", "2025-11-01"]);
+    expect(amt.stages).toEqual(["KFI", "APPLICATION", "OFFER", "COMPLETED", "WITHDRAWN"]);
+    expect(amt.data[0]).toMatchObject({ KFI: 1000, APPLICATION: 500, COMPLETED: 90 });
+    const cnt = pivotStage(STAGE_ROWS, "count");
+    expect(cnt.data[0]).toMatchObject({ KFI: 20, APPLICATION: 10, OFFER: 6 });
   });
 
-  it("indexed mode rebases each stage to 100 at the start", () => {
-    const out = transformStageData(data, stages, "indexed");
-    expect(out[0]).toMatchObject({ KFI: 100, APPLICATION: 100, OFFER: 100 });
-    expect(out[1]).toMatchObject({ KFI: 120, APPLICATION: 120, OFFER: 150 });
+  it("funnel lines exclude Withdrawn/Unknown and can drop KFI", () => {
+    const stages = ["KFI", "APPLICATION", "OFFER", "COMPLETED", "WITHDRAWN"];
+    expect(funnelLineStages(stages, true)).toEqual(["KFI", "APPLICATION", "OFFER", "COMPLETED"]);
+    expect(funnelLineStages(stages, false)).toEqual(["APPLICATION", "OFFER", "COMPLETED"]);
   });
 
-  it("conversion mode expresses each stage as a % of KFI", () => {
-    const out = transformStageData(data, stages, "conversion");
-    expect(out[0]).toMatchObject({ KFI: 100, APPLICATION: 50, OFFER: 20 });
-    expect(out[1]).toMatchObject({ APPLICATION: 50, OFFER: 25 });
+  it("conversion excludes KFI (no KFI/KFI=100%): Application/Offer/Completion vs KFI", () => {
+    const conv = stageConversionSeries(STAGE_ROWS);
+    expect(conv.stages).toEqual(["APPLICATION", "OFFER", "COMPLETED"]);
+    expect(conv.stages).not.toContain("KFI");
+    // count ratios vs KFI in the same week: App 10/20=50%, Offer 6/20=30%, Completed 4/20=20%.
+    expect(conv.data[0]).toMatchObject({ APPLICATION: 50, OFFER: 30, COMPLETED: 20 });
+    expect((conv.data[0] as Record<string, unknown>).KFI).toBeUndefined();
+  });
+
+  it("conversion is divide-by-zero safe when a week has no KFI", () => {
+    const rows: StagePoint[] = [
+      { period: "w", stage: "APPLICATION", value: 5, count: 5 },
+      { period: "w", stage: "OFFER", value: 2, count: 2 },
+    ];
+    expect(stageConversionSeries(rows).data[0]).toMatchObject({ APPLICATION: 0, OFFER: 0 });
   });
 });
 
-describe("EvolutionPanel stage mode toggle", () => {
-  it("switches the by-stage chart between absolute, indexed and conversion", async () => {
+describe("EvolutionPanel stage mode toggle (C)", () => {
+  it("switches the by-stage chart between Amount, Count and Conversion", async () => {
     render(<EvolutionPanel client={client()} portfolioId="client_001" />);
     await screen.findByText("Funded balance by month");
     fireEvent.click(screen.getByRole("tab", { name: "pipeline" }));
     await screen.findByText("Pipeline by stage over time");
-    fireEvent.click(screen.getByRole("tab", { name: "indexed" }));
-    expect(screen.getByTestId("stage-mode-note").textContent).toMatch(/Indexed/);
-    fireEvent.click(screen.getByRole("tab", { name: "conversion" }));
-    expect(screen.getByTestId("stage-mode-note").textContent).toMatch(/% of KFI/);
+    fireEvent.click(screen.getByRole("tab", { name: "Count" }));
+    expect(screen.getByTestId("stage-mode-note").textContent).toMatch(/Case count/);
+    fireEvent.click(screen.getByRole("tab", { name: "Conversion" }));
+    expect(screen.getByTestId("stage-mode-note").textContent).toMatch(/% of KFIs/);
   });
 });
