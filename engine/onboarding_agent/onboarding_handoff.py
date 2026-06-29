@@ -881,8 +881,26 @@ def build_handoff_package(
         {"target_contract_id": contract_id, "rows": lineage},
         indent=2, default=str), encoding="utf-8")
 
+    # --- governed risk-limits config contract (output/risk/risk_limits_config.yaml) ---
+    # Discover the client's Schedule 8 doc, parse it deterministically and emit the
+    # production config the MI Risk Limits panel reads. Best-effort + self-describing
+    # (source_type / extraction_status / is_placeholder); never fabricates limits and
+    # never breaks the handoff.
+    risk_config_path = ""
+    try:
+        from mi_agent.risk_monitor import risk_limits_contract as _rlc
+        _risk_cfg = _rlc.build_config(
+            client_id or "client",
+            search_roots=[str(project_dir), str(project_dir / "docs"),
+                          str(project_dir / "input"), str(project_dir / "input" / "docs")],
+            extracted_at=_now())
+        risk_config_path = str(_rlc.write_config_to_output_dir(output_root, _risk_cfg))
+    except Exception:  # noqa: BLE001 — additive, must never fail the handoff
+        risk_config_path = ""
+
     return {
         "manifest": manifest,
+        "risk_limits_config_path": risk_config_path,
         "readiness": readiness_doc,
         "manifest_json_path": str(manifest_json),
         "manifest_yaml_path": str(manifest_yaml),

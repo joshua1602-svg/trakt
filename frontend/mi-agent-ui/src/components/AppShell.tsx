@@ -1,4 +1,5 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronDown, Eraser, LayoutDashboard, Trash2 } from "lucide-react";
 import { HeaderBar } from "@/components/HeaderBar";
 import { AgentChatPanel } from "@/components/AgentChatPanel";
 import { ArtifactCanvas } from "@/components/ArtifactCanvas";
@@ -50,10 +51,45 @@ function pipelineLineage(forecast: ReturnType<typeof useWorkspace>["forecast"]):
 const VIEW_SUBTITLES: Record<string, string> = {
   funded: "Funded book — latest funded-loan snapshot as of the selected reporting date (governed central lender tape).",
   pipeline: "Pipeline — latest open-pipeline snapshot (weighted expected funded balance) as of the selected reporting date.",
-  forecast: "Scenario / portfolio forecast — forward projection (funded balance + weighted pipeline, run-rate scale-up).",
+  forecast: "Scenario / portfolio forecast — forward-looking projection from the latest selected run (funded balance + weighted pipeline + run-rate scale-up). For how the forecast changed across runs, see Evolution → Forecast Evolution.",
   evolution: "Evolution — time-series movement across multiple reporting extracts (funded / pipeline / origination funnel / forecast).",
   risk_limits: "Risk Limits — Schedule 8 concentration limits vs funded actual exposure, headroom and status.",
 };
+
+/** Declutter cluster (A): clear chat / artifacts / both in one place. Each is a
+ * VIEW reset only — the loaded portfolio / run / dataset is never touched. */
+function DeclutterControls({
+  onClearChat, onClearArtifacts, onClearBoth,
+}: {
+  onClearChat: () => void;
+  onClearArtifacts: () => void;
+  onClearBoth: () => void;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="Clear workspace"
+      data-testid="declutter-controls"
+      className="inline-flex items-center gap-0.5 rounded-lg border border-[var(--color-line)] bg-navy-900/60 p-0.5"
+    >
+      <button type="button" onClick={onClearChat}
+        title="Clear the conversation (loaded MI data is untouched)"
+        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-ink-400 hover:text-rose-300">
+        <Eraser size={12} /> Clear chat
+      </button>
+      <button type="button" onClick={onClearArtifacts}
+        title="Clear the artifact workspace (loaded MI data is untouched)"
+        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-ink-400 hover:text-rose-300">
+        <Trash2 size={12} /> Clear artifacts
+      </button>
+      <button type="button" onClick={onClearBoth}
+        title="Clear chat and artifacts (loaded MI data is untouched)"
+        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-ink-400 hover:text-rose-300">
+        Clear both
+      </button>
+    </div>
+  );
+}
 
 export function AppShell() {
   // One client for the app lifetime; swap createAgentClient() for the real
@@ -70,6 +106,17 @@ export function AppShell() {
   const openArtifact = useCallback((id: string) => {
     document.getElementById(`artifact-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, []);
+
+  // A — core-dashboard collapse (persisted), distinct from the artifact-workspace
+  // collapse owned by ArtifactCanvas. Clearing never touches loaded MI data.
+  const [dashCollapsed, setDashCollapsed] = useState<boolean>(
+    () => (typeof localStorage !== "undefined"
+      && localStorage.getItem("mi.coreDashboard.collapsed") === "1"));
+  useEffect(() => {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("mi.coreDashboard.collapsed", dashCollapsed ? "1" : "0");
+    }
+  }, [dashCollapsed]);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
@@ -98,62 +145,106 @@ export function AppShell() {
           // client-side drill fallback inside the embedded card.
           onDrill={client.mock ? undefined : ws.drill}
         />
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-          {/* One coherent workspace: a view toggle selects which schema-aligned
-              view is foregrounded (no stacking of all sections at once). */}
-          <div className="flex items-center justify-between gap-3 px-6 pt-5">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[var(--color-navy-950)]">
+          {/* Top bar: view toggle + portfolio context + declutter controls. */}
+          <div className="flex flex-wrap items-center justify-between gap-3 px-6 pt-5">
             <ViewToggle active={ws.activeView} onChange={ws.setActiveView} />
-            <span className="text-[11px] text-ink-500">
-              {ws.portfolio.name}
-              {ws.reporting.asOf ? ` · ${ws.reporting.asOf}` : ""}
-            </span>
+            <div className="flex items-center gap-3">
+              <DeclutterControls
+                onClearChat={ws.clearChat}
+                onClearArtifacts={ws.clearArtifacts}
+                onClearBoth={ws.clearAll}
+              />
+              <span className="text-[11px] text-ink-500">
+                {ws.portfolio.name}
+                {ws.reporting.asOf ? ` · ${ws.reporting.asOf}` : ""}
+              </span>
+            </div>
           </div>
           <p className="px-6 pt-1 text-[11px] text-ink-500" data-testid="view-subtitle">
             {VIEW_SUBTITLES[ws.activeView]}
           </p>
-          <div className="space-y-4 px-6 pt-4">
-            {ws.activeView === "funded" && (
-              <>
-                <FundedSnapshotPanel snapshot={ws.snapshot} loading={ws.snapshotLoading} />
-                <LineagePanel lineage={fundedLineage(ws.snapshot?.portfolio.reporting_date ?? null)} />
-              </>
+
+          {/* Region 3/4 — CORE DASHBOARD: neutral panel, distinct from the faint
+              blue artifact workspace below. Collapsible to focus the chart area. */}
+          <section
+            data-testid="core-dashboard"
+            className="mx-6 mt-4 rounded-2xl border border-[var(--surface-dashboard-line)] bg-[var(--surface-dashboard)] shadow-sm"
+          >
+            <header className="flex items-center justify-between gap-3 border-b border-[var(--surface-dashboard-line)] px-4 py-2.5">
+              <div className="flex items-center gap-2 text-[12px] font-semibold text-ink-200">
+                <LayoutDashboard size={14} className="text-peri-300" /> Core dashboard
+              </div>
+              <button
+                type="button"
+                onClick={() => setDashCollapsed((c) => !c)}
+                aria-label={dashCollapsed ? "Expand core dashboard" : "Collapse core dashboard"}
+                aria-expanded={!dashCollapsed}
+                data-testid="core-dashboard-toggle"
+                className="inline-flex items-center rounded-md px-1.5 py-1 text-ink-400 hover:text-ink-100"
+              >
+                <ChevronDown size={15} className={dashCollapsed ? "-rotate-90 transition-transform" : "transition-transform"} />
+              </button>
+            </header>
+            {dashCollapsed ? (
+              <p className="px-4 py-3 text-[11px] text-ink-500">
+                Core dashboard collapsed — expand to show the {ws.activeView} view.
+              </p>
+            ) : (
+              <div className="space-y-4 p-4">
+                {ws.activeView === "funded" && (
+                  <>
+                    <FundedSnapshotPanel snapshot={ws.snapshot} loading={ws.snapshotLoading} />
+                    <LineagePanel lineage={fundedLineage(ws.snapshot?.portfolio.reporting_date ?? null)} />
+                  </>
+                )}
+                {ws.activeView === "pipeline" && (
+                  <>
+                    <PipelineSnapshotPanel
+                      snapshot={ws.forecast?.pipelineSnapshot ?? null}
+                      loading={ws.forecastLoading}
+                    />
+                    <LineagePanel lineage={ws.forecast?.lineage ?? pipelineLineage(ws.forecast)} />
+                    <PipelineWatchlist items={ws.forecast?.watchlist ?? []} />
+                  </>
+                )}
+                {ws.activeView === "forecast" && (
+                  <>
+                    <ForecastView forecast={ws.forecast} loading={ws.forecastLoading} />
+                    <ForecastExtrapolationPanel client={client} portfolioId={workspacePortfolioId} />
+                  </>
+                )}
+                {ws.activeView === "evolution" && (
+                  <EvolutionPanel client={client} portfolioId={workspacePortfolioId} />
+                )}
+                {ws.activeView === "risk_limits" && (
+                  <RiskLimitsPanel client={client} portfolioId={workspacePortfolioId} />
+                )}
+              </div>
             )}
-            {ws.activeView === "pipeline" && (
-              <>
-                <PipelineSnapshotPanel
-                  snapshot={ws.forecast?.pipelineSnapshot ?? null}
-                  loading={ws.forecastLoading}
-                />
-                <LineagePanel lineage={ws.forecast?.lineage ?? pipelineLineage(ws.forecast)} />
-                <PipelineWatchlist items={ws.forecast?.watchlist ?? []} />
-              </>
-            )}
-            {ws.activeView === "forecast" && (
-              <>
-                <ForecastView forecast={ws.forecast} loading={ws.forecastLoading} />
-                <ForecastExtrapolationPanel client={client} portfolioId={workspacePortfolioId} />
-              </>
-            )}
-            {ws.activeView === "evolution" && (
-              <EvolutionPanel client={client} portfolioId={workspacePortfolioId} />
-            )}
-            {ws.activeView === "risk_limits" && (
-              <RiskLimitsPanel client={client} portfolioId={workspacePortfolioId} />
-            )}
+          </section>
+
+          {/* Region 2 — ARTIFACT WORKSPACE: faint blue-grey surface + accent rail,
+              clearly divided from the core dashboard above. */}
+          <div
+            data-testid="artifact-region"
+            className="mx-6 mb-6 mt-4 rounded-2xl border border-[var(--surface-artifact-line)] border-l-2 border-l-[var(--surface-artifact-accent)] bg-[var(--surface-artifact)] shadow-sm"
+            style={{ backgroundImage: "linear-gradient(var(--surface-artifact-tint), var(--surface-artifact-tint))" }}
+          >
+            <ArtifactCanvas
+              artifacts={ws.artifacts}
+              onTogglePin={ws.togglePin}
+              isWorking={ws.isWorking}
+              portfolioName={ws.portfolio.name}
+              // Backend drill-through only when wired to a live backend; the mock
+              // client keeps the client-side drill panel as the fallback.
+              onDrill={client.mock ? undefined : ws.drill}
+              // Insight investigations re-ask through the context-aware flow.
+              onAsk={ws.ask}
+              // Declutter: clear workspace artifacts (loaded MI data untouched).
+              onClear={ws.clearArtifacts}
+            />
           </div>
-          <ArtifactCanvas
-            artifacts={ws.artifacts}
-            onTogglePin={ws.togglePin}
-            isWorking={ws.isWorking}
-            portfolioName={ws.portfolio.name}
-            // Backend drill-through only when wired to a live backend; the mock
-            // client keeps the client-side drill panel as the fallback.
-            onDrill={client.mock ? undefined : ws.drill}
-            // Insight investigations re-ask through the context-aware flow.
-            onAsk={ws.ask}
-            // Declutter: clear workspace artifacts (loaded MI data untouched).
-            onClear={ws.clearArtifacts}
-          />
         </div>
       </div>
     </div>

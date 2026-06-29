@@ -224,16 +224,21 @@ def pipeline_evolution(pipeline_root: str | os.PathLike, client_id: str,
             },
             "source_file": ext.get("source_file", ""),
         })
-        # Pipeline amount by stage for this extract (stacked/multi-line over time).
-        if "pipeline_stage" in df.columns and _BALANCE in df.columns:
-            grp = coerce_numeric(df[_BALANCE]).groupby(
-                df["pipeline_stage"].astype(str)).sum()
-            for stage, val in grp.items():
+        # Pipeline amount AND case count by stage for this extract (multi-line over
+        # time, day-level dates). Both metrics are emitted so the UI can chart
+        # amount or count, and derive Application/Offer/Completion conversion.
+        if "pipeline_stage" in df.columns:
+            stage_str = df["pipeline_stage"].astype(str)
+            amt = (coerce_numeric(df[_BALANCE]).groupby(stage_str).sum()
+                   if _BALANCE in df.columns else None)
+            cnt = stage_str.groupby(stage_str).size()
+            for stage, n in cnt.items():
                 if str(stage).strip() and str(stage) not in ("nan", "None"):
-                    # Day-level period (the weekly extract date) so weekly stage
-                    # points are distinguishable, not collapsed to a month label.
-                    by_stage.append({"period": (edate or ""), "week": edate,
-                                     "stage": str(stage), "value": round(float(val), 2)})
+                    val = float(amt.get(stage, 0.0)) if amt is not None else None
+                    by_stage.append({
+                        "period": (edate or ""), "week": edate, "stage": str(stage),
+                        "value": (round(val, 2) if val is not None else None),
+                        "count": int(n)})
 
     return {
         "dataset": "pipeline",

@@ -69,7 +69,11 @@ export function mockRiskLimits(portfolioId: string): RiskLimitsSnapshot {
     reportingDate: "2025-11-30",
     available: true,
     limitsStatus: "needs_review",
-    limitsSource: "Schedule 8 extracted",
+    limitsSource: "Schedule 8 document (run config)",
+    sourceType: "schedule_8_doc",
+    sourceFile: "tests/fixtures/client_001_mi_pack/docs/Schedule 8 - Concentration Limits.txt",
+    extractionStatus: "partial",
+    isPlaceholder: false,
     fundedDataAvailable: true,
     summary: {
       testsPassed: tests.filter((x) => x.status === "green").length,

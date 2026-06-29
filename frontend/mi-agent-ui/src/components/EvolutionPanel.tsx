@@ -50,7 +50,15 @@ const EVO_SUBTITLES: Record<EvoView, string> = {
   funded: "Funded book actuals by reporting month (balance, loan count, WA LTV, WA rate).",
   pipeline: "Stock of open pipeline exposure per weekly extract — amount, case count and weighted expected funded balance.",
   origination: "Funnel flow per week — KFI → Application → Offer → Completion value/count, 5-week average and conversion vs KFI.",
-  forecast: "Forecast evolution — funded balance + weighted expected pipeline across reporting extracts (not the scenario engine).",
+  // D: distinct from the main Forecast tab (which is the forward projection from
+  // the latest run). This is the HISTORY of the forecast across reporting runs.
+  forecast: "Forecast Evolution — historical movement in forecast metrics across reporting runs (how the forecast changed over time, and actual funded vs the prior run's forecast). For the forward projection from the latest run, use the main Forecast tab.",
+};
+
+// Sub-tab button labels (the "forecast" view reads as "Forecast Evolution").
+const EVO_TAB_LABEL: Record<EvoView, string> = {
+  funded: "Funded", pipeline: "Pipeline", origination: "Origination",
+  forecast: "Forecast Evolution",
 };
 
 /** Data-quality annotation for a weekly pipeline series (A2): flags a sharp
@@ -90,14 +98,15 @@ function EvoLineChart({
   title: string;
   data: Array<Record<string, number | string | null>>;
   lines: { key: string; label: string }[];
-  valueFormat?: "gbp" | "count" | "pct";
+  valueFormat?: "gbp" | "count" | "pct" | "pct_points";
   source?: string | null;
   asOf?: string | null;
 }) {
   const fmt = (v: number) =>
     valueFormat === "gbp" ? gbpCompact(v)
       : valueFormat === "pct" ? `${(v * 100).toFixed(1)}%`
-        : v.toLocaleString("en-GB");
+        : valueFormat === "pct_points" ? `${v.toFixed(1)}%`
+          : v.toLocaleString("en-GB");
   return (
     <div className="rounded-xl border border-[var(--color-line)] bg-navy-900/40 p-4">
       <div className="mb-2 text-[12px] font-semibold text-ink-200">{title}</div>
@@ -132,59 +141,62 @@ function EvoLineChart({
   );
 }
 
-function pivotStage(rows: StagePoint[]): {
+export type StageMetric = "value" | "count";
+export type StageViewMode = "amount" | "count" | "conversion";
+
+// The "Withdrawn" / "Unknown" stages are NOT part of the linear KFI→Completion
+// funnel — kept out of the main funnel lines and conversion, shown separately.
+const MAIN_FUNNEL = ["KFI", "APPLICATION", "OFFER", "COMPLETED"];
+const STAGE_LABEL: Record<string, string> = {
+  KFI: "KFIs", APPLICATION: "Applications", OFFER: "Offers",
+  COMPLETED: "Completions", WITHDRAWN: "Withdrawn", UNKNOWN: "Unknown",
+};
+
+/** Pivot raw stage points to one row per extract date with a column per stage,
+ * summing the chosen metric (`value` = £ amount, `count` = cases). */
+export function pivotStage(rows: StagePoint[], metric: StageMetric = "value"): {
   data: Array<Record<string, number | string>>; stages: string[];
 } {
   const periods = Array.from(new Set(rows.map((r) => r.period))).sort();
   const stages = orderStages(Array.from(new Set(rows.map((r) => r.stage))));
+  const pick = (r: StagePoint) =>
+    metric === "count" ? (r.count ?? 0) : (typeof r.value === "number" ? r.value : 0);
   const data = periods.map((p) => {
     const row: Record<string, number | string> = { period: p };
     for (const s of stages) {
-      row[s] = rows.filter((r) => r.period === p && r.stage === s).reduce((a, r) => a + r.value, 0);
+      row[s] = rows.filter((r) => r.period === p && r.stage === s).reduce((a, r) => a + pick(r), 0);
     }
     return row;
   });
   return { data, stages };
 }
 
-export type StageViewMode = "absolute" | "indexed" | "conversion";
+/** The funnel-stage line keys for the amount/count views, in process order.
+ * `includeKfi=false` drops KFI so the smaller downstream stages are readable. */
+export function funnelLineStages(stages: string[], includeKfi: boolean): string[] {
+  return orderStages(stages.filter((s) =>
+    MAIN_FUNNEL.includes(normaliseStage(s)) && (includeKfi || normaliseStage(s) !== "KFI")));
+}
 
-/** Re-base a by-stage pivot so smaller stages are readable next to KFI (A7):
- *  - absolute   : raw values (£);
- *  - indexed    : each stage starts at 100 (movement, scale-free);
- *  - conversion : each stage as a % of KFI in the same period. */
-export function transformStageData(
-  data: Array<Record<string, number | string>>,
-  stages: string[],
-  mode: StageViewMode,
-): Array<Record<string, number | string>> {
-  if (mode === "absolute") return data;
-  if (mode === "indexed") {
-    const base: Record<string, number> = {};
-    for (const s of stages) {
-      const first = data.find((r) => typeof r[s] === "number" && (r[s] as number) !== 0);
-      base[s] = first ? (first[s] as number) : 0;
-    }
-    return data.map((r) => {
-      const out: Record<string, number | string> = { period: r.period };
-      for (const s of stages) {
-        const v = r[s] as number;
-        out[s] = base[s] ? Math.round((v / base[s]) * 1000) / 10 : 0;
-      }
-      return out;
-    });
-  }
-  // conversion: each stage as % of KFI in the same period.
-  const kfiKey = stages.find((s) => normaliseStage(s) === "KFI");
-  return data.map((r) => {
+/** Conversion-vs-KFI series (COUNT based): Application/Offer/Completion only —
+ * KFI is the denominator (KFI/KFI = 100% is dropped). Divide-by-zero safe. */
+export function stageConversionSeries(rows: StagePoint[]): {
+  data: Array<Record<string, number | string>>; stages: string[];
+} {
+  const { data: countPivot } = pivotStage(rows, "count");
+  const present = orderStages(Array.from(new Set(rows.map((r) => r.stage))));
+  const stages = present.filter((s) =>
+    ["APPLICATION", "OFFER", "COMPLETED"].includes(normaliseStage(s)));
+  const data = countPivot.map((r) => {
     const out: Record<string, number | string> = { period: r.period };
-    const kfi = kfiKey ? (r[kfiKey] as number) : 0;
+    const kfi = (r.KFI as number) || 0;
     for (const s of stages) {
       const v = r[s] as number;
       out[s] = kfi ? Math.round((v / kfi) * 1000) / 10 : 0;
     }
     return out;
   });
+  return { data, stages };
 }
 
 function trendIcon(trend: "up" | "down" | "flat") {
@@ -319,7 +331,8 @@ export function EvolutionPanel({
   const [forecast, setForecast] = useState<ForecastEvolution | null>(null);
   const [funnel, setFunnel] = useState<PipelineFunnelEvolution | null>(null);
   const [loading, setLoading] = useState(false);
-  const [stageMode, setStageMode] = useState<StageViewMode>("absolute");
+  const [stageMode, setStageMode] = useState<StageViewMode>("amount");
+  const [includeKfi, setIncludeKfi] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -353,10 +366,38 @@ export function EvolutionPanel({
       .sort((a, b) => String(a.period).localeCompare(String(b.period))),
     [pipeline],
   );
-  const stagePivot = useMemo(() => pivotStage(pipeline?.byStage ?? []), [pipeline]);
+  // By-stage chart data for the selected mode. Conversion uses count ratios vs
+  // KFI (Application/Offer/Completion only); amount/count pivot the chosen metric
+  // and chart the main funnel stages (KFI optional), Withdrawn/Unknown excluded.
+  const stageChart = useMemo(() => {
+    const rows = pipeline?.byStage ?? [];
+    if (stageMode === "conversion") {
+      const conv = stageConversionSeries(rows);
+      return { data: conv.data, lines: conv.stages, format: "pct" as const };
+    }
+    const piv = pivotStage(rows, stageMode === "count" ? "count" : "value");
+    const lines = funnelLineStages(piv.stages, includeKfi);
+    return { data: piv.data, lines,
+      format: (stageMode === "count" ? "count" : "gbp") as "count" | "gbp" };
+  }, [pipeline, stageMode, includeKfi]);
+  const hasWithdrawn = useMemo(
+    () => (pipeline?.byStage ?? []).some((r) => normaliseStage(r.stage) === "WITHDRAWN"),
+    [pipeline],
+  );
   const forecastSeries = useMemo(
     () => (forecast?.periods ?? []).map((p) => ({ period: p.period, ...p.metrics })),
     [forecast],
+  );
+  // D: actual funded THIS run vs the PRIOR run's forecast — "did the forecast hold?".
+  const forecastVariance = useMemo(() => {
+    const periods = forecast?.periods ?? [];
+    return periods.map((p, i) => ({
+      period: p.period,
+      actual_funded: (p.metrics?.funded_balance as number) ?? null,
+      prior_forecast: i > 0
+        ? ((periods[i - 1].metrics?.forecast_funded_balance as number) ?? null) : null,
+    })).filter((r) => r.prior_forecast != null);
+  }, [forecast],
   );
 
   const single =
@@ -377,10 +418,10 @@ export function EvolutionPanel({
             <button key={v} type="button" role="tab" aria-selected={view === v}
               onClick={() => setView(v)}
               className={cn(
-                "rounded-md px-3 py-1 text-[12px] font-medium capitalize transition-colors",
+                "rounded-md px-3 py-1 text-[12px] font-medium transition-colors",
                 view === v ? "bg-navy-700/80 text-ink-100" : "text-ink-400 hover:text-ink-200",
               )}>
-              {v}
+              {EVO_TAB_LABEL[v]}
             </button>
           ))}
         </div>
@@ -439,35 +480,47 @@ export function EvolutionPanel({
           <EvoLineChart title="Pipeline case count by week" data={pipelineSeries}
             lines={[{ key: "pipeline_case_count", label: "Cases" }]} valueFormat="count"
             source="weekly pipeline extracts" />
-          <div className="rounded-xl border border-[var(--color-line)] bg-navy-900/40 p-4">
-            <div className="mb-2 flex items-center justify-between">
+          <div className="rounded-xl border border-[var(--color-line)] bg-navy-900/40 p-4 lg:col-span-2"
+            data-testid="pipeline-by-stage">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <div className="text-[12px] font-semibold text-ink-200">Pipeline by stage over time</div>
-              <div role="tablist" aria-label="Stage view mode"
-                className="inline-flex items-center gap-0.5 rounded-lg border border-[var(--color-line)] bg-navy-900/60 p-0.5">
-                {(["absolute", "indexed", "conversion"] as StageViewMode[]).map((m) => (
-                  <button key={m} type="button" role="tab" aria-selected={stageMode === m}
-                    onClick={() => setStageMode(m)}
-                    className={cn("rounded-md px-2 py-0.5 text-[10px] font-medium capitalize transition-colors",
-                      stageMode === m ? "bg-navy-700/80 text-ink-100" : "text-ink-400 hover:text-ink-200")}>
-                    {m}
-                  </button>
-                ))}
+              <div className="flex items-center gap-2">
+                {stageMode !== "conversion" && (
+                  <label className="flex items-center gap-1 text-[10px] text-ink-400">
+                    <input type="checkbox" checked={includeKfi}
+                      onChange={(e) => setIncludeKfi(e.target.checked)}
+                      aria-label="Include KFI" />
+                    Include KFI
+                  </label>
+                )}
+                <div role="tablist" aria-label="Stage view mode"
+                  className="inline-flex items-center gap-0.5 rounded-lg border border-[var(--color-line)] bg-navy-900/60 p-0.5">
+                  {([["amount", "Amount"], ["count", "Count"], ["conversion", "Conversion"]] as const).map(
+                    ([m, label]) => (
+                      <button key={m} type="button" role="tab" aria-selected={stageMode === m}
+                        onClick={() => setStageMode(m)}
+                        className={cn("rounded-md px-2 py-0.5 text-[10px] font-medium transition-colors",
+                          stageMode === m ? "bg-navy-700/80 text-ink-100" : "text-ink-400 hover:text-ink-200")}>
+                        {label}
+                      </button>
+                    ))}
+                </div>
               </div>
             </div>
             <EvoLineChart
-              title={stageMode === "absolute" ? "Absolute value (£)"
-                : stageMode === "indexed" ? "Indexed (each stage = 100 at start)"
-                : "Conversion (% of KFI)"}
-              data={transformStageData(stagePivot.data, stagePivot.stages, stageMode)}
-              lines={stagePivot.stages.map((s) => ({ key: s, label: s }))}
-              valueFormat={stageMode === "absolute" ? "gbp" : "count"}
+              title={stageMode === "amount" ? "Pipeline amount by stage (£)"
+                : stageMode === "count" ? "Pipeline case count by stage"
+                : "Conversion vs KFI (Application / Offer / Completion)"}
+              data={stageChart.data}
+              lines={stageChart.lines.map((s) => ({ key: s, label: STAGE_LABEL[normaliseStage(s)] ?? s }))}
+              valueFormat={stageChart.format === "pct" ? "pct_points" : stageChart.format}
               source="weekly pipeline extracts" />
             <p className="mt-1 text-[10px] text-ink-500" data-testid="stage-mode-note">
-              {stageMode === "absolute"
-                ? "Absolute £ — KFI dominates the scale; switch to Indexed/Conversion to read smaller stages."
-                : stageMode === "indexed"
-                  ? "Indexed movement — each stage rebased to 100 at its first week (scale-free)."
-                  : "Conversion — each stage as a % of KFI in the same week."}
+              {stageMode === "conversion"
+                ? "Conversion = each stage as a % of KFIs in the same week (count). KFI is the denominator and is not charted."
+                : `${stageMode === "amount" ? "Amount (£)" : "Case count"} for the main funnel`
+                  + ` (KFI → Application → Offer → Completion).${hasWithdrawn ? " Withdrawn is tracked separately, not in the funnel." : ""}`
+                  + " Toggle 'Include KFI' off to read the smaller downstream stages."}
             </p>
           </div>
         </div>
@@ -501,13 +554,34 @@ export function EvolutionPanel({
       )}
 
       {view === "forecast" && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <EvoLineChart title="Forecast funded balance over time" data={forecastSeries}
-            lines={[
-              { key: "funded_balance", label: "Funded" },
-              { key: "weighted_expected_pipeline", label: "Weighted pipeline" },
-              { key: "forecast_funded_balance", label: "Forecast" },
-            ]} valueFormat="gbp" source="funded tapes + weighted pipeline" />
+        <div className="space-y-3" data-testid="forecast-evolution">
+          {forecastSeries.length < 2 && (
+            <div className="rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-[11px] text-amber-300/90"
+              data-testid="forecast-evolution-insufficient">
+              Only {forecastSeries.length} reporting run available — forecast history needs at
+              least two runs to show how the forecast has changed. Showing what is available.
+            </div>
+          )}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <EvoLineChart title="Forecast funded balance by reporting run" data={forecastSeries}
+              lines={[
+                { key: "funded_balance", label: "Funded actual" },
+                { key: "weighted_expected_pipeline", label: "Weighted pipeline" },
+                { key: "forecast_funded_balance", label: "Forecast (funded + pipeline)" },
+              ]} valueFormat="gbp" source="funded tapes + weighted pipeline" />
+            {forecastVariance.length > 0 && (
+              <EvoLineChart title="Actual funded vs prior-run forecast" data={forecastVariance}
+                lines={[
+                  { key: "prior_forecast", label: "Prior-run forecast" },
+                  { key: "actual_funded", label: "Actual funded" },
+                ]} valueFormat="gbp" source="this run's actual vs the prior run's forecast" />
+            )}
+          </div>
+          <p className="text-[10px] text-ink-500" data-testid="forecast-evolution-lineage">
+            Runs: {(forecast?.periods ?? []).map((p) => p.run_id ?? p.period).join(", ") || "—"}.
+            {" "}Forecast basis: funded balance + Σ(weighted expected pipeline) per run.
+            {" "}Actual-vs-forecast: {forecastVariance.length > 0 ? "available" : "needs a prior run"}.
+          </p>
         </div>
       )}
     </section>

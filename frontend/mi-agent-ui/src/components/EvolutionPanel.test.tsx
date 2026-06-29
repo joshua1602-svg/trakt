@@ -54,7 +54,7 @@ describe("EvolutionPanel", () => {
     const c = client();
     render(<EvolutionPanel client={c} portfolioId="client_001" />);
     await screen.findByText("Funded balance by month");
-    fireEvent.click(screen.getByRole("tab", { name: "pipeline" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Pipeline" }));
     expect(await screen.findByText("Pipeline amount by week")).toBeInTheDocument();
     expect(screen.getByText("Pipeline by stage over time")).toBeInTheDocument();
     expect(screen.getByText("Weighted expected funded by week")).toBeInTheDocument();
@@ -65,7 +65,7 @@ describe("EvolutionPanel", () => {
     const c = client();
     render(<EvolutionPanel client={c} portfolioId="client_001" />);
     await screen.findByText("Funded balance by month");
-    fireEvent.click(screen.getByRole("tab", { name: "origination" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Origination" }));
     expect(await screen.findByTestId("origination-funnel")).toBeInTheDocument();
     expect(screen.getByText("KFIs")).toBeInTheDocument();
     expect(screen.getByText("Applications")).toBeInTheDocument();
@@ -75,6 +75,40 @@ describe("EvolutionPanel", () => {
     expect(screen.getAllByText("5-week avg").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Latest week").length).toBeGreaterThan(0);
     expect(c.getFunnelEvolution).toHaveBeenCalled();
+  });
+
+  // D — Forecast Evolution is distinct from the main Forecast tab: it shows the
+  // HISTORY of the forecast across runs (+ actual funded vs the prior forecast).
+  it("renders the Forecast Evolution sub-tab with distinct label, subtitle and lineage", async () => {
+    const c = client();
+    render(<EvolutionPanel client={c} portfolioId="client_001/mi_2025_11" />);
+    await screen.findByText("Funded balance by month");
+    // Sub-tab reads "Forecast Evolution", not a bare "forecast".
+    fireEvent.click(screen.getByRole("tab", { name: "Forecast Evolution" }));
+    expect(await screen.findByTestId("forecast-evolution")).toBeInTheDocument();
+    // Distinct subtitle clarifies this is the forecast HISTORY, not the projection.
+    expect(screen.getByTestId("evo-subtitle").textContent).toMatch(/historical movement/i);
+    expect(screen.getByText("Forecast funded balance by reporting run")).toBeInTheDocument();
+    // Actual-vs-prior-forecast chart present (mock has >1 run) + lineage caption.
+    expect(screen.getByText("Actual funded vs prior-run forecast")).toBeInTheDocument();
+    expect(screen.getByTestId("forecast-evolution-lineage").textContent).toMatch(/Forecast basis/i);
+    expect(c.getForecastEvolution).toHaveBeenCalled();
+  });
+
+  it("flags insufficient forecast history when only one run is available", async () => {
+    const single = client({
+      getForecastEvolution: vi.fn(async () => ({
+        ...mockForecastEvolution("client_001"),
+        periods: [mockForecastEvolution("client_001").periods[0]],
+        singlePeriod: true,
+      })),
+    });
+    render(<EvolutionPanel client={single} portfolioId="client_001/mi_2025_11" />);
+    await screen.findByText("Funded balance by month");
+    fireEvent.click(screen.getByRole("tab", { name: "Forecast Evolution" }));
+    expect(await screen.findByTestId("forecast-evolution-insufficient")).toBeInTheDocument();
+    // With a single run there is no prior forecast to compare against.
+    expect(screen.queryByText("Actual funded vs prior-run forecast")).toBeNull();
   });
 
   it("handles a single-period series with a clear notice", async () => {

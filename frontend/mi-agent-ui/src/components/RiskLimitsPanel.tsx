@@ -46,6 +46,70 @@ function movementIcon(m: number | null) {
     : <ArrowDownRight size={12} className="text-mint-300" />;
 }
 
+// Human-facing label for each production source_type.
+const SOURCE_LABEL: Record<string, string> = {
+  schedule_8_doc: "Schedule 8 document",
+  onboarding_config: "onboarding config",
+  fallback_config: "fallback config",
+  placeholder: "no source (placeholder)",
+};
+const EXTRACTION_LABEL: Record<string, string> = {
+  success: "parsed successfully",
+  partial: "parsed with items to review",
+  failed: "parse failed",
+  not_found: "not found",
+};
+
+/** Source provenance banner: states where the limits came from and warns clearly
+ * whenever they are a fallback / placeholder rather than the client's Schedule 8. */
+function SourceBanner({ data }: { data: RiskLimitsSnapshot }) {
+  const type = data.sourceType ?? (data.isPlaceholder ? "placeholder" : undefined);
+  const label = type ? SOURCE_LABEL[type] ?? type : data.limitsSource;
+  const isSchedule8 = type === "schedule_8_doc" && !data.isPlaceholder;
+  const isWarn = !isSchedule8; // fallback / placeholder / unknown → warn
+  const status = data.extractionStatus;
+  const diag = data.diagnostics as { reason?: string; suffix?: string } | null | undefined;
+  return (
+    <Card
+      className={isWarn ? "border-amber-400/30 bg-amber-400/5 p-3" : "p-3"}
+      testId="risk-source-banner"
+    >
+      <div className="flex flex-wrap items-center gap-2 text-[12px]">
+        <span className="text-ink-500">Source:</span>
+        <span className={isWarn ? "font-semibold text-amber-300" : "font-semibold text-ink-100"}>
+          {label}
+        </span>
+        {status && (
+          <Badge tone={status === "success" ? "mint" : status === "partial" ? "amber" : "rose"}>
+            {EXTRACTION_LABEL[status] ?? status}
+          </Badge>
+        )}
+        {isWarn && (
+          <Badge tone="amber">{data.isPlaceholder ? "Placeholder" : "Fallback"}</Badge>
+        )}
+      </div>
+      {data.sourceFile && (
+        <div className="mt-1 truncate text-[10px] text-ink-500" title={data.sourceFile}>
+          File: {data.sourceFile}
+        </div>
+      )}
+      {isWarn && (
+        <p className="mt-1 text-[11px] text-amber-300/90">
+          {data.isPlaceholder
+            ? "Schedule 8 not found in the client docs folder — no governed limits are loaded. "
+              + "Add a Schedule 8 document to the onboarding pack to monitor real limits."
+            : "These limits are not from the client's Schedule 8 document. Verify before relying on them."}
+        </p>
+      )}
+      {status && status !== "success" && diag?.reason && (
+        <p className="mt-1 text-[10px] text-ink-500" data-testid="risk-source-diagnostics">
+          Diagnostics: {diag.reason}
+        </p>
+      )}
+    </Card>
+  );
+}
+
 function SummaryCard({ label, value, tone }: { label: string; value: string | number; tone?: string }) {
   return (
     <div className="rounded-lg border border-[var(--color-line-soft)] bg-navy-900/50 p-3">
@@ -129,12 +193,18 @@ export function RiskLimitsPanel({
 
       {loading && !data && <p className="text-[12px] text-ink-500">Loading risk limits…</p>}
 
+      {data && <SourceBanner data={data} />}
+
       {data && !data.available && (
-        <Card className="p-4">
-          <div className="text-[13px] font-medium text-amber-300">Limits unavailable — extraction required</div>
+        <Card className="p-4" testId="risk-limits-unavailable">
+          <div className="text-[13px] font-medium text-amber-300">
+            {data.isPlaceholder
+              ? "Schedule 8 not found in docs folder"
+              : "Limits unavailable — extraction required"}
+          </div>
           <p className="mt-1 text-[12px] text-ink-400">
             {data.limitsReason ?? "No Schedule 8 limits are available for this portfolio."}
-            {" "}Observed concentrations are still shown where data exists.
+            {" "}No fabricated limits are shown. Observed concentrations are still shown where data exists.
           </p>
         </Card>
       )}

@@ -24,7 +24,11 @@ export interface BreakdownPoint {
 export interface StagePoint {
   period: string;
   stage: string;
-  value: number;
+  value: number | null;
+  /** Case count for this stage/extract (drives the count + conversion views). */
+  count?: number;
+  /** Day-level extract date (preferred x label over a month period). */
+  week?: string | null;
 }
 
 export interface FundedEvolution {
