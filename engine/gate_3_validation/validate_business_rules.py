@@ -132,6 +132,60 @@ def _coerce_types_for_rules(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+# ------------------------------------------------------------------
+# Source-portfolio provenance helpers (PROV* rules)
+# ------------------------------------------------------------------
+# These run with required_columns=[] so they fire even when the provenance
+# column is ABSENT (a tape with no source tag must fail, not be skipped).
+# Each helper returns either a row-level Series (True = pass) or a scalar
+# bool (portfolio-level pass/fail).
+
+def _col_blank_mask(df: pd.DataFrame, col: str) -> pd.Series:
+    s = df[col]
+    return s.isna() | (s.astype(str).str.strip().isin(["", "nan", "None"]))
+
+
+def _prov_id_present(df: pd.DataFrame):
+    """source_portfolio_id must exist and be non-null on every row."""
+    if "source_portfolio_id" not in df.columns:
+        return False  # column absent → portfolio-level failure
+    return ~_col_blank_mask(df, "source_portfolio_id")
+
+
+def _prov_cohort_present(df: pd.DataFrame):
+    if "portfolio_cohort" not in df.columns:
+        return False
+    return ~_col_blank_mask(df, "portfolio_cohort")
+
+
+def _prov_type_valid(df: pd.DataFrame):
+    if "source_portfolio_type" not in df.columns:
+        return False
+    vals = df["source_portfolio_type"].astype(str).str.strip().str.lower()
+    return vals.isin(["direct", "acquired"])
+
+
+def _prov_acq_required_for_acquired(df: pd.DataFrame):
+    """Acquired rows must carry an acquisition_date (blank allowed only via
+    the onboarding override, which leaves the field genuinely empty — that is a
+    deliberate, surfaced choice rather than a silent gap, so we warn there)."""
+    if "source_portfolio_type" not in df.columns:
+        return True  # presence handled by PROV002
+    is_acq = df["source_portfolio_type"].astype(str).str.strip().str.lower() == "acquired"
+    if "acquisition_date" not in df.columns:
+        return ~is_acq  # acquired rows fail when the column is entirely absent
+    has_date = ~_col_blank_mask(df, "acquisition_date")
+    return ~is_acq | has_date
+
+
+def _prov_acq_blank_for_direct(df: pd.DataFrame):
+    if "source_portfolio_type" not in df.columns or "acquisition_date" not in df.columns:
+        return True
+    is_direct = df["source_portfolio_type"].astype(str).str.strip().str.lower() == "direct"
+    has_date = ~_col_blank_mask(df, "acquisition_date")
+    return ~(is_direct & has_date)
+
+
 # ==================================================================
 # RULE DEFINITIONS – this will grow to 200–300 rules
 # ==================================================================
@@ -600,6 +654,70 @@ RULES = [
         "required_columns": ["current_principal_balance"],
         "test": lambda df: df["current_principal_balance"].isna().mean() <= 0.01 if len(df) > 0 else True,
         "fail_message": lambda row, col: "Missing current_principal_balance exceeds 1% of portfolio.",
+    },
+
+    # ==========================================================
+    # SOURCE-PORTFOLIO PROVENANCE (run-level onboarding metadata)
+    # required_columns=[] so a tape with NO provenance fails closed.
+    # ==========================================================
+    {
+        "rule_id": "PROV001",
+        "regimes": ["all"],
+        "severity": "error",
+        "description": "source_portfolio_id must be present and non-null on every loan "
+                       "(direct_001 / acquired_001 / …). Provenance must be stamped at "
+                       "onboarding; Trakt never assigns 'unknown'.",
+        "required_columns": [],
+        "test": _prov_id_present,
+        "fail_message": lambda row, col: (
+            "Missing source_portfolio_id — loan has no source-portfolio provenance. "
+            "Re-run onboarding with --source-portfolio-id."
+        ),
+    },
+    {
+        "rule_id": "PROV002",
+        "regimes": ["all"],
+        "severity": "error",
+        "description": "source_portfolio_type must be present and one of {direct, acquired}.",
+        "required_columns": [],
+        "test": _prov_type_valid,
+        "fail_message": lambda row, col: (
+            f"Invalid/missing source_portfolio_type: {None if row is None else row.get('source_portfolio_type')}."
+        ),
+    },
+    {
+        "rule_id": "PROV003",
+        "regimes": ["all"],
+        "severity": "warning",
+        "description": "Acquired portfolios should carry an acquisition_date "
+                       "(blank only when onboarded with --allow-unknown-acquisition-date).",
+        "required_columns": [],
+        "test": _prov_acq_required_for_acquired,
+        "fail_message": lambda row, col: (
+            f"Acquired loan {None if row is None else row.get('source_portfolio_id')} "
+            "has no acquisition_date."
+        ),
+    },
+    {
+        "rule_id": "PROV004",
+        "regimes": ["all"],
+        "severity": "warning",
+        "description": "Direct/originated books should not carry an acquisition_date.",
+        "required_columns": [],
+        "test": _prov_acq_blank_for_direct,
+        "fail_message": lambda row, col: (
+            f"Direct loan {None if row is None else row.get('source_portfolio_id')} "
+            f"has an acquisition_date {None if row is None else row.get('acquisition_date')}."
+        ),
+    },
+    {
+        "rule_id": "PROV005",
+        "regimes": ["all"],
+        "severity": "error",
+        "description": "portfolio_cohort must be present and non-null (defaults to source_portfolio_id).",
+        "required_columns": [],
+        "test": _prov_cohort_present,
+        "fail_message": lambda row, col: "Missing portfolio_cohort — provenance not carried through transformation.",
     },
 ]
 def run_rules(df: pd.DataFrame, regime: str) -> pd.DataFrame:

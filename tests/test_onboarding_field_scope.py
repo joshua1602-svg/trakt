@@ -59,7 +59,11 @@ class TestRegistryKey(unittest.TestCase):
         # 316 includes collateral_unique_identifier (Annex 2 RREC1), added to
         # close the fields_registry ESMA_Annex2 mapping gap.
         self.assertEqual(len(reg), 316)
-        self.assertEqual(len(ana), 156)
+        # 183 analytics = 177 prior + 6 source-portfolio provenance fields
+        # (source_portfolio_id/type/label, acquisition_date, seller_name,
+        # portfolio_cohort). The prior literal (156) was already stale vs the
+        # registry before provenance was added.
+        self.assertEqual(len(ana), 183)
 
     def test_regulatory_core_field_example(self):
         # current_principal_balance is regulatory + core -> stays in MI-only scope.

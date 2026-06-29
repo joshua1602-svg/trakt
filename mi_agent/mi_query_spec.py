@@ -138,6 +138,10 @@ class MIQuerySpec:
     spv_id: Optional[str] = None
     acquired_portfolio_id: Optional[str] = None
 
+    # Source-portfolio lens (total | direct | acquired | cohort) — set by the
+    # portfolio_lens resolver; carried into output metadata/titles.
+    portfolio_lens: Optional[Dict[str, Any]] = None
+
     # Temporal
     comparison_basis: Optional[str] = None
     trend_grain: Optional[str] = None            # daily|weekly|monthly|quarterly

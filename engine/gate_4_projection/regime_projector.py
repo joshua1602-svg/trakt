@@ -47,6 +47,62 @@ except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     from engine.enum_agent.enum_mapping_agent import resolve_enums_for_field
 
+from engine import provenance as _provenance
+
+
+def write_provenance_companion(
+    df_canonical: "pd.DataFrame",
+    out_dir: Path,
+    stem: str,
+    regime: str,
+) -> Optional[Dict[str, Any]]:
+    """Write a companion file linking each regime row back to its source cohort.
+
+    The official ESMA regime output stays template-clean (provenance fields have
+    no ESMA code, so the projector never emits them). This companion CSV +
+    manifest preserve traceability: every regulatory row maps back to
+    source_portfolio_id / source_portfolio_type / portfolio_cohort and the
+    original loan identifier. Row order matches the projected CSV.
+    """
+    if "source_portfolio_id" not in df_canonical.columns:
+        return None  # nothing to trace (legacy un-stamped run)
+
+    id_col = next(
+        (c for c in ("unique_identifier", "loan_identifier", "underlying_exposure_identifier")
+         if c in df_canonical.columns),
+        None,
+    )
+    cols: List[str] = []
+    if id_col:
+        cols.append(id_col)
+    cols += [c for c in _provenance.PROVENANCE_FIELDS if c in df_canonical.columns]
+
+    companion = df_canonical[cols].copy()
+    companion.insert(0, "row_index", range(len(companion)))
+    if id_col and id_col != "loan_identifier":
+        companion = companion.rename(columns={id_col: "loan_identifier"})
+
+    out_csv = out_dir / f"{stem}_{regime}_provenance.csv"
+    companion.to_csv(out_csv, index=False)
+
+    cohorts = (
+        companion["portfolio_cohort"].dropna().astype(str).value_counts().to_dict()
+        if "portfolio_cohort" in companion.columns else {}
+    )
+    manifest = {
+        "regime": regime,
+        "companion_file": out_csv.name,
+        "note": "Provenance companion to the official ESMA regime output. ESMA "
+                "template fields are NOT contaminated; this links each regulatory "
+                "row to its source portfolio cohort and original loan identifier.",
+        "row_count": int(len(companion)),
+        "rows_by_cohort": cohorts,
+        "fields": list(companion.columns),
+    }
+    out_manifest = out_dir / f"{stem}_{regime}_provenance_manifest.json"
+    out_manifest.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return manifest
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -948,9 +1004,17 @@ def main() -> None:
     
     df_regime.to_csv(out_csv, index=False)
     out_json.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    
+
     logging.info(f"Wrote: {out_csv}")
     logging.info(f"Wrote: {out_json}")
+
+    # Provenance companion — keeps the ESMA output template-clean while
+    # preserving source-cohort traceability for IB / legal / rating-agency packs.
+    prov_manifest = write_provenance_companion(df_canonical, out_dir, stem, args.regime)
+    if prov_manifest:
+        logging.info(f"Wrote: {out_dir / prov_manifest['companion_file']}")
+        report["provenance_companion"] = prov_manifest
+        out_json.write_text(json.dumps(report, indent=2), encoding="utf-8")
     
     # Summary
     print("\n" + "=" * 60)
