@@ -80,6 +80,16 @@ export class MockAgentClient implements AgentClient {
     return Promise.resolve(MOCK_SNAPSHOT_INDEX);
   }
 
+  getSourcePortfolios() {
+    return Promise.resolve({
+      available: false,
+      source: "mock",
+      lenses: [
+        { id: "total", kind: "total" as const, label: "Total", filters: {}, funded_only: false },
+      ],
+    });
+  }
+
   getSnapshot(portfolioId: string): Promise<FundedSnapshot> {
     return Promise.resolve(mockSnapshot(portfolioId));
   }

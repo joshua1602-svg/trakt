@@ -20,6 +20,7 @@ import type {
   ReportingContext,
   SnapshotPortfolio,
   SnapshotRun,
+  SourcePortfolioLens,
   WorkspaceView,
 } from "@/domain";
 import type { AgentClient } from "@/api";
@@ -70,6 +71,11 @@ export interface Workspace {
   /** Active workspace view (funded | pipeline | forecast). */
   activeView: WorkspaceView;
   setActiveView: (view: WorkspaceView) => void;
+  sourceLenses: SourcePortfolioLens[];
+  selectedLens: string;
+  setSelectedLens: (id: string) => void;
+  lensFundedOnly: boolean;
+  disabledViews: WorkspaceView[];
   messages: ChatMessage[];
   artifacts: Artifact[];
   isWorking: boolean;
@@ -109,6 +115,51 @@ export function useWorkspace(client: AgentClient): Workspace {
     activeViewRef.current = view;
     setActiveViewState(view);
   }, []);
+
+  // ---- Source-portfolio lens (Total / Direct / Acquired / cohort) ----------
+  // Independent axis from the dataset view. Options are data-driven; a ref
+  // mirrors the selection so runQuery reads the latest value.
+  const [sourceLenses, setSourceLenses] = useState<SourcePortfolioLens[]>([]);
+  const [selectedLens, setSelectedLensState] = useState<string>("total");
+  const selectedLensRef = useRef<string>("total");
+  const setSelectedLens = useCallback((id: string) => {
+    selectedLensRef.current = id;
+    setSelectedLensState(id);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    client
+      .getSourcePortfolios()
+      .then((idx) => {
+        if (!cancelled) setSourceLenses(idx.lenses ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setSourceLenses([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
+
+  const activeLens = useMemo(
+    () => sourceLenses.find((l) => l.id === selectedLens) ?? null,
+    [sourceLenses, selectedLens],
+  );
+  // Acquired back books have no origination pipeline → only the Funded view.
+  const lensFundedOnly = !!activeLens?.funded_only;
+  const disabledViews = useMemo<WorkspaceView[]>(
+    () => (lensFundedOnly ? ["pipeline", "forecast"] : []),
+    [lensFundedOnly],
+  );
+
+  // If an acquired-only scope is selected while on Pipeline/Forecast, snap back
+  // to Funded (those views are not applicable for an acquired book).
+  useEffect(() => {
+    if (lensFundedOnly && (activeView === "pipeline" || activeView === "forecast")) {
+      setActiveView("funded");
+    }
+  }, [lensFundedOnly, activeView, setActiveView]);
 
   // Discover available portfolios / runs once; default to the latest run.
   useEffect(() => {
@@ -280,6 +331,9 @@ export function useWorkspace(client: AgentClient): Workspace {
         // / forecast); explicit wording in the question overrides it backend-side.
         datasetContext: activeViewRef.current,
         filters: params.filters,
+        // Source-portfolio scope (the dropdown default); a portfolio named in
+        // the question overrides it backend-side.
+        sourceLens: selectedLensRef.current,
       };
       const controller = new AbortController();
       abortRef.current = controller;
@@ -378,6 +432,7 @@ export function useWorkspace(client: AgentClient): Workspace {
         options: { parserMode: "deterministic" },
         datasetContext: activeViewRef.current,
         filters,
+        sourceLens: selectedLensRef.current,
       };
       const controller = new AbortController();
       abortRef.current = controller;
@@ -495,6 +550,11 @@ export function useWorkspace(client: AgentClient): Workspace {
     forecastLoading,
     activeView,
     setActiveView,
+    sourceLenses,
+    selectedLens,
+    setSelectedLens,
+    lensFundedOnly,
+    disabledViews,
     messages,
     artifacts,
     isWorking,

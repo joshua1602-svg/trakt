@@ -73,6 +73,10 @@ class QueryRequest(BaseModel):
     # also carry ``{"activeView": ...}``.
     datasetContext: Optional[str] = None
     context: Optional[Any] = None
+    # Selected source-portfolio lens: "total" | "direct" | "acquired" | a cohort
+    # id ("direct_001" / "acquired_001"). Acts as the default scope; a portfolio
+    # named in the question overrides it. Realised as a provenance filter.
+    sourcePortfolioLens: Optional[str] = None
 
 
 def _onboarding_output_root() -> Optional[str]:
@@ -135,6 +139,39 @@ def health() -> Dict[str, Any]:
 @app.get("/mi/catalogue")
 def catalogue() -> Dict[str, Any]:
     return build_catalogue()
+
+
+@app.get("/mi/source-portfolios")
+def source_portfolios() -> Dict[str, Any]:
+    """Discover the source-portfolio lenses present in the active dataset.
+
+    Returns Total, Direct / Acquired (when present), and one entry per source
+    cohort (direct_001 / acquired_001 / …) — the options for the UI dropdown.
+    Each lens carries ``funded_only`` so the UI hides Pipeline / Forecast for
+    acquired-only scopes. When the active dataset carries no provenance, only
+    Total is returned (``available=false``).
+    """
+    from mi_agent import portfolio_lens as plens
+    try:
+        df = get_dataframe()
+    except Exception as exc:  # never 500 the dropdown
+        return {"available": False, "lenses": plens.available_lenses([]),
+                "source": "unavailable", "error": str(exc)}
+
+    cols = set(df.columns)
+    if "source_portfolio_id" not in cols and "source_portfolio_type" not in cols:
+        return {"available": False, "lenses": plens.available_lenses([]),
+                "source": data_source_label()}
+
+    keep = [c for c in ("source_portfolio_id", "source_portfolio_type",
+                        "source_portfolio_label") if c in cols]
+    records = (df[keep].drop_duplicates().to_dict("records")) if keep else []
+    lenses = plens.available_lenses(records)
+    return {
+        "available": len(lenses) > 1,
+        "lenses": lenses,
+        "source": data_source_label(),
+    }
 
 
 @app.get("/mi/snapshots")
@@ -706,10 +743,14 @@ def query(req: QueryRequest) -> Dict[str, Any]:
 
     workflow = run_mi_agent_query(
         req.question, df, str(semantics_path()), parser_mode="deterministic",
-        extra_filters=req.filters or None)
+        extra_filters=req.filters or None,
+        source_portfolio_lens=req.sourcePortfolioLens or None)
     result = adapt_workflow_result(workflow, portfolio_id=portfolio_id, as_of=req.asOfDate)
-    # Surface which dataset/view answered (funded | pipeline | forecast).
+    # Surface which dataset/view answered (funded | pipeline | forecast) and the
+    # active source-portfolio lens (total | direct | acquired | cohort).
     meta = result.setdefault("metadata", {}) if isinstance(result, dict) else {}
     if isinstance(meta, dict):
         meta["datasetContext"] = view
+        if workflow.get("portfolio_lens"):
+            meta["portfolioLens"] = workflow["portfolio_lens"]
     return result

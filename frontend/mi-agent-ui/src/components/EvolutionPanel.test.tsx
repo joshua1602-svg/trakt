@@ -28,6 +28,7 @@ function client(over: Partial<AgentClient> = {}): AgentClient {
     mock: true,
     ask: vi.fn(),
     getSnapshots: vi.fn(),
+    getSourcePortfolios: vi.fn(),
     getSnapshot: vi.fn(),
     getForecastSnapshot: vi.fn(),
     getFundedEvolution: vi.fn(async () => mockFundedEvolution("client_001")),

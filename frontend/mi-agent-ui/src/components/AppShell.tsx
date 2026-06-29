@@ -10,6 +10,7 @@ import { ForecastExtrapolationPanel } from "@/components/ForecastExtrapolationPa
 import { EvolutionPanel } from "@/components/EvolutionPanel";
 import { RiskLimitsPanel } from "@/components/RiskLimitsPanel";
 import { ViewToggle } from "@/components/ViewToggle";
+import { SourcePortfolioSelector } from "@/components/SourcePortfolioSelector";
 import { LineagePanel } from "@/components/LineagePanel";
 import type { ViewLineage } from "@/domain";
 import { createAgentClient } from "@/api";
@@ -102,7 +103,20 @@ export function AppShell() {
           {/* One coherent workspace: a view toggle selects which schema-aligned
               view is foregrounded (no stacking of all sections at once). */}
           <div className="flex items-center justify-between gap-3 px-6 pt-5">
-            <ViewToggle active={ws.activeView} onChange={ws.setActiveView} />
+            <div className="flex items-center gap-3">
+              <ViewToggle
+                active={ws.activeView}
+                onChange={ws.setActiveView}
+                disabledViews={ws.disabledViews}
+              />
+              {ws.sourceLenses.length > 1 && (
+                <SourcePortfolioSelector
+                  lenses={ws.sourceLenses}
+                  value={ws.selectedLens}
+                  onChange={ws.setSelectedLens}
+                />
+              )}
+            </div>
             <span className="text-[11px] text-ink-500">
               {ws.portfolio.name}
               {ws.reporting.asOf ? ` · ${ws.reporting.asOf}` : ""}

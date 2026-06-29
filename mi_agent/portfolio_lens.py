@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 SOURCE_TYPE_FIELD = "source_portfolio_type"
 SOURCE_ID_FIELD = "source_portfolio_id"
@@ -187,3 +187,99 @@ def apply_lens(spec, lens: PortfolioLens):
 def resolve_and_apply(spec, text: Optional[str]):
     """Convenience: resolve the lens from text and apply it to the spec."""
     return apply_lens(spec, resolve_lens(text))
+
+
+def mentions_portfolio(text: Optional[str]) -> bool:
+    """True if the text refers to a source-portfolio scope (any lens family)."""
+    if not text:
+        return False
+    low = " " + str(text).strip().lower() + " "
+    if _COHORT_ID_RE.search(low):
+        return True
+    return _contains_any(low, _DIRECT_TERMS + _ACQUIRED_TERMS + _TOTAL_TERMS)
+
+
+def lens_from_selection(value: Any) -> PortfolioLens:
+    """Build a lens from an explicit UI/API selection.
+
+    Accepts ``None`` / ``"total"`` → total; ``"direct"`` / ``"acquired"`` →
+    the type lens; an exact cohort id (``direct_001`` / ``acquired_002``) → the
+    cohort lens. A dict like ``{"id": "acquired_001"}`` is also accepted.
+    Unrecognised selections fall back to *total* (never an error).
+    """
+    if isinstance(value, Mapping):
+        value = value.get("id") or value.get("lens") or value.get("value")
+    if value is None:
+        return total_lens()
+    sel = str(value).strip().lower()
+    if sel in ("", "total", "all", "whole_book", "whole-book"):
+        return total_lens()
+    if sel == LENS_DIRECT:
+        return _type_lens(LENS_DIRECT)
+    if sel == LENS_ACQUIRED:
+        return _type_lens(LENS_ACQUIRED)
+    if _COHORT_ID_RE.fullmatch(sel) or _COHORT_ID_RE.search(" " + sel + " "):
+        return _cohort_lens(sel)
+    return total_lens()
+
+
+def resolve_lens_with_default(
+    text: Optional[str], default: Optional[PortfolioLens] = None
+) -> PortfolioLens:
+    """Resolve the effective lens: a portfolio scope named in ``text`` wins
+    (natural-language override); otherwise the ``default`` (e.g. the dropdown
+    selection); otherwise *total*."""
+    if mentions_portfolio(text):
+        return resolve_lens(text)
+    return default or total_lens()
+
+
+def is_acquired_only(lens: PortfolioLens) -> bool:
+    """True when the lens covers acquired books only (no funding pipeline)."""
+    if lens.name == LENS_ACQUIRED:
+        return True
+    if lens.name == LENS_COHORT and (lens.cohort_id or "").startswith("acquired_"):
+        return True
+    return False
+
+
+def available_lenses(records: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
+    """Build the selectable lens list from distinct provenance records.
+
+    ``records`` are distinct ``{source_portfolio_id, source_portfolio_type,
+    source_portfolio_label}`` rows from the active central canonical. Returns
+    Total, the Direct / Acquired type lenses that are actually present, and one
+    cohort lens per ``source_portfolio_id``. Each entry carries ``funded_only``
+    so the UI can hide Pipeline / Forecast for acquired-only scopes.
+    """
+    out: List[Dict[str, Any]] = [{
+        "id": LENS_TOTAL, "kind": LENS_TOTAL, "label": "Total",
+        "filters": {}, "funded_only": False,
+    }]
+    types = {str(r.get("source_portfolio_type", "")).strip().lower()
+             for r in records if r.get("source_portfolio_type")}
+    if LENS_DIRECT in types:
+        out.append({"id": LENS_DIRECT, "kind": "type", "label": "Direct",
+                    "filters": {SOURCE_TYPE_FIELD: LENS_DIRECT}, "funded_only": False})
+    if LENS_ACQUIRED in types:
+        out.append({"id": LENS_ACQUIRED, "kind": "type", "label": "Acquired",
+                    "filters": {SOURCE_TYPE_FIELD: LENS_ACQUIRED}, "funded_only": True})
+
+    seen: set = set()
+    cohorts: List[Dict[str, Any]] = []
+    for r in records:
+        pid = str(r.get("source_portfolio_id", "")).strip()
+        if not pid or pid in seen:
+            continue
+        seen.add(pid)
+        ptype = str(r.get("source_portfolio_type", "")).strip().lower()
+        label = r.get("source_portfolio_label")
+        cohorts.append({
+            "id": pid, "kind": LENS_COHORT,
+            "label": str(label).strip() if label and str(label).strip() else pid,
+            "source_portfolio_type": ptype or None,
+            "filters": {SOURCE_ID_FIELD: pid},
+            "funded_only": ptype == LENS_ACQUIRED,
+        })
+    out.extend(sorted(cohorts, key=lambda c: c["id"]))
+    return out

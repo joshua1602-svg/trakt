@@ -24,6 +24,7 @@ function fakeClient(response: AgentResponse): { client: AgentClient; ask: Return
     mock: true,
     ask,
     getSnapshots: vi.fn(),
+    getSourcePortfolios: vi.fn(),
     getSnapshot: vi.fn(),
     getForecastSnapshot: vi.fn(),
     getFundedEvolution: vi.fn(),

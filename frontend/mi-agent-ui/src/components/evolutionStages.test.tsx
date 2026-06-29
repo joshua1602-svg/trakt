@@ -19,7 +19,7 @@ vi.mock("recharts", async () => {
 
 function client(over: Partial<AgentClient> = {}): AgentClient {
   return {
-    id: "test", mock: true, ask: vi.fn(), getSnapshots: vi.fn(), getSnapshot: vi.fn(),
+    id: "test", mock: true, ask: vi.fn(), getSnapshots: vi.fn(), getSourcePortfolios: vi.fn(), getSnapshot: vi.fn(),
     getForecastSnapshot: vi.fn(),
     getFundedEvolution: vi.fn(async () => mockFundedEvolution("client_001")),
     getPipelineEvolution: vi.fn(async () => mockPipelineEvolution("client_001")),

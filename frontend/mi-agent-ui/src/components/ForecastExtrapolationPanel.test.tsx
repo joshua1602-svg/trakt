@@ -17,7 +17,7 @@ vi.mock("recharts", async () => {
 function client(getForecastExtrapolation: AgentClient["getForecastExtrapolation"]): AgentClient {
   return {
     id: "test", mock: true,
-    ask: vi.fn(), getSnapshots: vi.fn(), getSnapshot: vi.fn(),
+    ask: vi.fn(), getSnapshots: vi.fn(), getSourcePortfolios: vi.fn(), getSnapshot: vi.fn(),
     getForecastSnapshot: vi.fn(), getFundedEvolution: vi.fn(),
     getPipelineEvolution: vi.fn(), getForecastEvolution: vi.fn(),
     getFunnelEvolution: vi.fn(), getRiskLimits: vi.fn(),

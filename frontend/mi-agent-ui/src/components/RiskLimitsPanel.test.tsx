@@ -7,7 +7,7 @@ import { mockRiskLimits } from "@/data/mockRiskLimits";
 function client(getRiskLimits: AgentClient["getRiskLimits"]): AgentClient {
   return {
     id: "test", mock: true,
-    ask: vi.fn(), getSnapshots: vi.fn(), getSnapshot: vi.fn(),
+    ask: vi.fn(), getSnapshots: vi.fn(), getSourcePortfolios: vi.fn(), getSnapshot: vi.fn(),
     getForecastSnapshot: vi.fn(), getFundedEvolution: vi.fn(),
     getPipelineEvolution: vi.fn(), getForecastEvolution: vi.fn(),
     getFunnelEvolution: vi.fn(), getForecastExtrapolation: vi.fn(),
