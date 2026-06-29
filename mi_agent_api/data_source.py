@@ -40,13 +40,42 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SEMANTICS = _REPO_ROOT / "mi_agent" / "mi_semantics_field_registry.yaml"
 
 _CENTRAL_TAPE_NAME = "18_central_lender_tape.csv"
+_PLATFORM_CANONICAL_NAME = "platform_canonical_typed.csv"
 
 # Source kinds (surfaced on /health).
 KIND_PREPARED = "funded_mi_prepared_dataset"
 KIND_FUNDED_RAW = "funded_central_lender_tape_raw"
 KIND_EXPLICIT_CSV = "explicit_csv"
 KIND_SYNTHETIC_DEMO = "synthetic_demo"
+KIND_PLATFORM_CANONICAL = "platform_canonical"
 KIND_UNAVAILABLE = "unavailable"
+
+
+def _resolve_platform_canonical() -> Optional[Path]:
+    """Resolve the combined platform canonical, if one has been assembled.
+
+    The platform canonical (``engine.platform_assembler``) is the current
+    managed-portfolio view across all onboarded books. Resolved by, in order:
+      1. MI_AGENT_PLATFORM_CANONICAL  — explicit file path;
+      2. MI_AGENT_PLATFORM_DIR/platform_canonical_typed.csv;
+      3. the conventional ``out_platform/platform_canonical_typed.csv`` next to
+         the repo root or the current working directory.
+    Returns ``None`` when no platform canonical exists, so the MI Agent falls
+    back to exactly today's resolution.
+    """
+    explicit = os.environ.get("MI_AGENT_PLATFORM_CANONICAL")
+    if explicit:
+        p = Path(explicit)
+        return p if p.exists() else None
+    pdir = os.environ.get("MI_AGENT_PLATFORM_DIR")
+    if pdir:
+        p = Path(pdir) / _PLATFORM_CANONICAL_NAME
+        return p if p.exists() else None
+    for base in (_REPO_ROOT, Path.cwd()):
+        p = base / "out_platform" / _PLATFORM_CANONICAL_NAME
+        if p.exists():
+            return p
+    return None
 
 
 def _prep_disabled() -> bool:
@@ -104,6 +133,11 @@ def resolve_data_source() -> Tuple[Optional[Path], str]:
         p = Path(ds)
         if p.exists():
             return p, "prepared_explicit"
+    # The combined platform canonical (latest per portfolio) is the default
+    # managed-portfolio view when present; absent it, behaviour is unchanged.
+    platform = _resolve_platform_canonical()
+    if platform is not None:
+        return platform, "platform_canonical"
     tape = _resolve_central_tape()
     if tape is not None:
         return tape, "central_tape"
@@ -185,6 +219,14 @@ def _active() -> Tuple[pd.DataFrame, Dict[str, Any]]:
         avail, missing = _present_dimensions(df)
         info.update(kind=KIND_PREPARED, preparation_applied=True, derived_fields=[],
                     dimensions_available=avail, missing_dimensions=missing)
+    elif base == "platform_canonical":
+        # Combined latest-per-portfolio canonical; treated like a typed canonical
+        # (bucket materialisation only, no funded-tape prep).
+        df = _materialise_mi_buckets(raw)
+        avail, missing = _present_dimensions(df)
+        info.update(kind=KIND_PLATFORM_CANONICAL, preparation_applied=False,
+                    derived_fields=[], dimensions_available=avail,
+                    missing_dimensions=missing)
     else:  # explicit_csv | synthetic_demo
         df = _materialise_mi_buckets(raw)
         avail, missing = _present_dimensions(df)
