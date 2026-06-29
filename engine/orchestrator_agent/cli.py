@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from .adapters import PortfolioSpec, RealAgentAdapters
-from .orchestrator import VALID_TARGETS, run_orchestration
+from .orchestrator import VALID_TARGETS, onboarding_mode_for_target, run_orchestration
 from .state import RunState, STEP_DONE, STEP_HALTED
 
 
@@ -64,10 +64,16 @@ def _print_summary(state: RunState) -> None:
     print("=" * 64)
     print(f"Orchestration {state.run_id} — status: {state.status}")
     print(f"  client: {state.client_id}  target: {state.target}")
+    from .orchestrator import steps_for_target
     for p in state.portfolios:
-        steps = " ".join(f"{n}:{p.step(n).status}" for n in ("onboard", "transform", "validate", "stamp"))
+        steps = " ".join(f"{n}:{p.step(n).status}" for n in steps_for_target(state.target))
         print(f"  - {p.source_portfolio_id:14} [{p.status}]  {steps}")
-    print(f"  assemble: {state.assemble.status}  route: {state.route.status}")
+    tail = f"  assemble: {state.assemble.status}"
+    if state.target in ("mi", "all"):
+        tail += f"  route: {state.route.status}"
+    if state.target in ("regime", "all"):
+        tail += f"  project: {state.project.status}"
+    print(tail)
     if state.central_canonical_path:
         print(f"  central canonical: {state.central_canonical_path}")
     if state.blockers:
@@ -98,16 +104,19 @@ def main(argv=None) -> int:
     ap.add_argument("--allow-unknown-acquisition-date", action="store_true")
     ap.add_argument("--client-name", default="", help="Lender display name for onboarding.")
     ap.add_argument("--registry", default="config/system/fields_registry.yaml")
-    ap.add_argument("--onboarding-mode", default="mi_only")
+    ap.add_argument("--onboarding-mode", default="",
+                    help="Override onboarding mode (default derived from --target: "
+                         "mi→mi_only, regime/all→regulatory_mi).")
     args = ap.parse_args(argv)
 
-    adapters = RealAgentAdapters(
-        registry=args.registry, client_name=args.client_name or None,
-        onboarding_mode=args.onboarding_mode)
     created_at = datetime.now(timezone.utc).isoformat()
 
     if args.resume:
         state = RunState.load(args.resume)
+        mode = args.onboarding_mode or onboarding_mode_for_target(state.target)
+        adapters = RealAgentAdapters(registry=args.registry,
+                                     client_name=args.client_name or None,
+                                     onboarding_mode=mode)
         state = run_orchestration(
             state.client_id, [], target=state.target, out_root=state.out_root,
             adapters=adapters, created_at=created_at, regime=args.regime,
@@ -115,6 +124,10 @@ def main(argv=None) -> int:
     else:
         if not args.client or not args.portfolio:
             ap.error("--client and at least one --portfolio are required (or use --resume).")
+        mode = args.onboarding_mode or onboarding_mode_for_target(args.target)
+        adapters = RealAgentAdapters(registry=args.registry,
+                                     client_name=args.client_name or None,
+                                     onboarding_mode=mode)
         specs = _build_specs(args)
         state = run_orchestration(
             args.client, specs, target=args.target, out_root=args.out_dir,

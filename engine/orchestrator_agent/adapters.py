@@ -18,6 +18,9 @@ No agent internals, canonical/MI calculations or Regime logic are modified here.
 
 from __future__ import annotations
 
+import glob
+import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
@@ -133,6 +136,33 @@ class AgentAdapters:
                     "(set MI_AGENT_PLATFORM_CANONICAL or place under out_platform/).",
         )
 
+    def project(self, central_canonical: str, out_dir: Path,
+                regime: str) -> StepResult:
+        """Project the central canonical to the regime (ESMA Annex 2) via the
+        EXISTING regime projector — orchestration only, projector unchanged. The
+        ESMA output stays template-clean; the projector emits the provenance
+        companion linking each row to source_portfolio_id / portfolio_cohort."""
+        out_dir = Path(out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        cmd = _assembler_agent.build_regime_command(
+            central_canonical, out_dir, regime,
+            output_prefix="central", allow_unreviewed=True)
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        projected = glob.glob(str(out_dir / f"*{regime}_projected.csv"))
+        companion = glob.glob(str(out_dir / f"*{regime}_provenance.csv"))
+        ok = proc.returncode == 0 and bool(projected)
+        if not ok:
+            return StepResult(
+                ok=False, blocking=True,
+                blockers=[f"regime projection failed (rc={proc.returncode})"],
+                message=(proc.stderr or "")[-1500:])
+        return StepResult(
+            ok=True, output_path=projected[0],
+            readiness={"projected_csv": projected[0],
+                       "provenance_companion": (companion[0] if companion else None),
+                       "regime": regime},
+            message=f"projected → {projected[0]}")
+
 
 class RealAgentAdapters(AgentAdapters):
     """Wires the real Onboarding / Transformation / Validation agents."""
@@ -147,44 +177,62 @@ class RealAgentAdapters(AgentAdapters):
         self.aliases_dir = aliases_dir
 
     def onboard(self, spec: PortfolioSpec, work_dir: Path) -> StepResult:
-        """Run onboarding (pack → promote → handoff) for one portfolio and
-        return the 24_onboarding_handoff_manifest, gated on
-        ``ready_for_transformation_validation``."""
-        from engine.onboarding_agent.onboarding_orchestrator import run_onboarding
-        from engine.onboarding_agent import storage_paths, central_tape_builder, onboarding_handoff
-        import json as _json
+        """Run onboarding for one portfolio. The ``mode`` is the MI-vs-regime
+        field-requirement lever and selects the output:
 
-        project_dir = work_dir / spec.source_portfolio_id
+          * ``mi_only`` → builds the lean central lender tape (18_…), returned as
+            the MI canonical (``output_path``);
+          * ``regulatory_mi`` → builds the governed handoff package (24_…) with
+            the full ESMA Annex 2 target contract, returned for the Transformation
+            Agent (``manifest_path``), gated on ready_for_transformation_validation.
+        """
+        import json as _json
+        from engine.onboarding_agent import workflow as _wf, storage_paths, central_tape_builder
+
+        project_dir = Path(work_dir)
         project_dir.mkdir(parents=True, exist_ok=True)
-        run_onboarding(
+        _wf.run_operator_workflow(
             input_dir=spec.input,
             client_name=self.client_name or spec.source_portfolio_id,
-            output_dir=str(project_dir),
-            registry_path=self.registry or "config/system/fields_registry.yaml",
-            aliases_dir=self.aliases_dir,
-            mode=self.onboarding_mode,
-        )
-        run_paths = storage_paths.resolve_run_paths(
-            project_dir=str(project_dir), input_dir=spec.input, output_root=None,
-            client_id=spec.source_portfolio_id, run_id="run", storage_backend="local",
-            input_uri="", output_uri="")
-        central_tape_builder.build_central_tapes(
-            str(project_dir), run_paths, self.registry or "config/system/fields_registry.yaml",
-            mode=self.onboarding_mode)
-        handoff = onboarding_handoff.build_handoff_package(
-            str(project_dir), Path(run_paths.output_root),
-            client_id=spec.source_portfolio_id, client_name=self.client_name or spec.source_portfolio_id,
-            run_id="run", mode=self.onboarding_mode,
-            registry=self.registry or "config/system/fields_registry.yaml")
-        manifest_path = handoff["manifest_json_path"]
-        ready = bool(handoff["manifest"].get("ready_for_transformation_validation"))
+            client_id=spec.source_portfolio_id, run_id="run",
+            project_dir=str(project_dir), mode=self.onboarding_mode,
+            registry=self.registry or "config/system/fields_registry.yaml",
+            aliases_dir=self.aliases_dir)
+
+        if self.onboarding_mode == "mi_only":
+            # MI path: build + return the central lender tape (the MI canonical).
+            run_paths = storage_paths.resolve_run_paths(
+                project_dir=str(project_dir), input_dir=spec.input, output_root=None,
+                client_id=spec.source_portfolio_id, run_id="run",
+                storage_backend="local", input_uri="", output_uri="")
+            res = central_tape_builder.build_central_tapes(
+                str(project_dir), run_paths,
+                self.registry or "config/system/fields_registry.yaml", mode="mi_only")
+            tape = res.get("central_lender_tape_path")
+            ok = bool(res.get("central_lender_tape_created")) and bool(tape)
+            return StepResult(
+                ok=ok, blocking=not ok, output_path=tape,
+                readiness={"central_lender_tape": tape, "loan_count": res.get("loan_count")},
+                blockers=[] if ok else ["onboarding did not produce a central lender tape"],
+                message=f"central tape: {tape}")
+
+        # Regulatory path: the governed handoff package.
+        handoff = project_dir / "output" / "handoff" / "24_onboarding_handoff_manifest.json"
+        if not handoff.exists():
+            return StepResult(ok=False, blocking=True,
+                              blockers=["onboarding did not produce a handoff package "
+                                        "(24_onboarding_handoff_manifest.json)"],
+                              message="no handoff manifest")
+        manifest = _json.loads(handoff.read_text(encoding="utf-8"))
+        ready = bool(manifest.get("ready_for_transformation_validation"))
         return StepResult(
-            ok=ready, blocking=not ready, manifest_path=manifest_path,
-            readiness={k: handoff["manifest"].get(k) for k in
-                       ("ready_for_transformation_validation", "ready_for_projection")},
+            ok=ready, blocking=not ready, manifest_path=str(handoff),
+            readiness={k: manifest.get(k) for k in
+                       ("ready_for_transformation_validation", "ready_for_projection",
+                        "target_contract_id")},
             blockers=[] if ready else ["onboarding not ready_for_transformation_validation "
                                        "(mapping review / blocking decision pending)"],
-            message=f"handoff: {manifest_path}")
+            message=f"handoff: {handoff}")
 
     def transform(self, spec: PortfolioSpec, handoff_manifest: str, work_dir: Path) -> StepResult:
         from engine.transformation_agent.transformation_agent import build_transformation_package

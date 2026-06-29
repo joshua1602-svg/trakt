@@ -1,11 +1,20 @@
 """engine.orchestrator_agent.orchestrator — the governed conductor.
 
-Drives the existing agents in a fixed DAG with per-portfolio fan-out and a
-governed auto-halt gate policy: non-blocking steps proceed automatically; a step
-whose agent reports a False readiness flag / blocking exception / mapping review
-HALTS the run with a resumable state + blocker report. After the operator
-resolves it out-of-band (the existing approve/accept CLIs), the run is resumed
-and continues from the halted step.
+Two target-aware per-portfolio pipelines (the MI and regulatory canonicals
+genuinely differ — regime carries the fuller ESMA Annex 2 field set with
+mandatory fields, MI uses the lean central tape):
+
+  * target = mi      : Onboarding(mi_only) ─▶ central tape ─▶ stamp
+  * target = regime  : Onboarding(regulatory_mi) ─▶ Transformation ─▶ Validation ─▶ stamp
+  * target = all     : the regulatory pipeline (its canonical is a superset that
+                       also serves MI)
+
+then, across portfolios: Assembler ─▶ central canonical ─▶ MI route and/or
+Projection (ESMA Annex 2 + provenance companion).
+
+Governed auto-halt: non-blocking steps proceed; the first step whose agent
+reports a False readiness flag / blocking exception / mapping review HALTS the
+run with resumable state. Resume continues from the halted step.
 """
 
 from __future__ import annotations
@@ -15,7 +24,6 @@ from typing import List, Optional, Sequence
 
 from .adapters import AgentAdapters, PortfolioSpec, StepResult
 from .state import (
-    PORTFOLIO_STEPS,
     PortfolioState,
     RunState,
     STEP_DONE,
@@ -26,6 +34,21 @@ from .state import (
 )
 
 VALID_TARGETS = ("mi", "regime", "all")
+
+# Per-portfolio step sequence by target. MI uses the central tape directly;
+# regime/all run the regulatory Transformation + Validation agents.
+_STEPS_MI = ("onboard", "stamp")
+_STEPS_REG = ("onboard", "transform", "validate", "stamp")
+
+
+def steps_for_target(target: str) -> Sequence[str]:
+    return _STEPS_MI if target == "mi" else _STEPS_REG
+
+
+def onboarding_mode_for_target(target: str) -> str:
+    """MI keeps the lean active schema; regime/all activate the full Annex 2
+    target contract (mandatory regulatory fields)."""
+    return "mi_only" if target == "mi" else "regulatory_mi"
 
 
 def new_run_id(client_id: str, stamp: str) -> str:
@@ -49,33 +72,12 @@ def _apply(step: StepState, r: StepResult) -> None:
 
 def _spec_from_portfolio(p: PortfolioState) -> PortfolioSpec:
     return PortfolioSpec(
-        source_portfolio_id=p.source_portfolio_id,
-        input=p.input,
+        source_portfolio_id=p.source_portfolio_id, input=p.input,
         source_portfolio_type=p.source_portfolio_type,
         source_portfolio_label=p.source_portfolio_label,
-        acquisition_date=p.acquisition_date,
-        seller_name=p.seller_name,
+        acquisition_date=p.acquisition_date, seller_name=p.seller_name,
         allow_unknown_acquisition_date=p.allow_unknown_acquisition_date,
     )
-
-
-def _init_state(client_id: str, specs: Sequence[PortfolioSpec], target: str,
-                out_root: str, run_id: str, created_at: str) -> RunState:
-    state = RunState(run_id=run_id, client_id=client_id, target=target,
-                     out_root=out_root, created_at=created_at)
-    for s in specs:
-        ptype = (s.source_portfolio_type
-                 or _safe_derive_type(s.source_portfolio_id))
-        state.portfolios.append(PortfolioState(
-            source_portfolio_id=s.source_portfolio_id,
-            source_portfolio_type=ptype or "",
-            source_portfolio_label=s.source_portfolio_label,
-            acquisition_date=s.acquisition_date,
-            seller_name=s.seller_name,
-            allow_unknown_acquisition_date=s.allow_unknown_acquisition_date,
-            input=s.input,
-        ))
-    return state
 
 
 def _safe_derive_type(pid: str) -> Optional[str]:
@@ -83,21 +85,40 @@ def _safe_derive_type(pid: str) -> Optional[str]:
     return derive_portfolio_type(pid)
 
 
-# Per-portfolio step → adapter call. Each returns a StepResult.
-def _run_portfolio_step(adapters: AgentAdapters, p: PortfolioState, step_name: str,
-                        work_dir: Path) -> StepResult:
+def _init_state(client_id, specs, target, out_root, run_id, created_at) -> RunState:
+    state = RunState(run_id=run_id, client_id=client_id, target=target,
+                     out_root=out_root, created_at=created_at)
+    for s in specs:
+        state.portfolios.append(PortfolioState(
+            source_portfolio_id=s.source_portfolio_id,
+            source_portfolio_type=(s.source_portfolio_type
+                                   or _safe_derive_type(s.source_portfolio_id) or ""),
+            source_portfolio_label=s.source_portfolio_label,
+            acquisition_date=s.acquisition_date, seller_name=s.seller_name,
+            allow_unknown_acquisition_date=s.allow_unknown_acquisition_date,
+            input=s.input))
+    return state
+
+
+def _canonical_for_stamp(p: PortfolioState) -> Optional[str]:
+    """The canonical fed to provenance stamping: the validated regulatory tape
+    when present, else the MI central tape from onboarding."""
+    v = p.step("validate")
+    if v.done and v.output_path:
+        return v.output_path
+    return p.step("onboard").output_path
+
+
+def _run_portfolio_step(adapters, p, step_name, work_dir) -> StepResult:
     spec = _spec_from_portfolio(p)
     if step_name == "onboard":
         return adapters.onboard(spec, work_dir)
     if step_name == "transform":
-        handoff = p.step("onboard").manifest_path
-        return adapters.transform(spec, handoff, work_dir)
+        return adapters.transform(spec, p.step("onboard").manifest_path, work_dir)
     if step_name == "validate":
-        tx_manifest = p.step("transform").manifest_path
-        return adapters.validate(spec, tx_manifest, work_dir)
+        return adapters.validate(spec, p.step("transform").manifest_path, work_dir)
     if step_name == "stamp":
-        validated = p.step("validate").output_path
-        return adapters.stamp_provenance(spec, validated, work_dir / "stamped")
+        return adapters.stamp_provenance(spec, _canonical_for_stamp(p), work_dir / "stamped")
     raise ValueError(f"unknown step {step_name!r}")  # pragma: no cover
 
 
@@ -113,13 +134,11 @@ def run_orchestration(
     regime: Optional[str] = None,
     resume_state: Optional[RunState] = None,
 ) -> RunState:
-    """Run (or resume) the governed orchestration. Returns the final RunState.
-
-    Governed auto-halt: the first blocking step halts the run (state saved);
-    re-invoke with ``resume_state`` after the operator resolves the blocker.
-    """
+    """Run (or resume) the governed orchestration. Returns the final RunState."""
     if target not in VALID_TARGETS:
         raise ValueError(f"target must be one of {VALID_TARGETS}")
+    if target in ("regime", "all") and not regime:
+        regime = "ESMA_Annex2"
 
     state = resume_state or _init_state(
         client_id, portfolios, target, out_root,
@@ -130,13 +149,14 @@ def run_orchestration(
     state.save()
 
     run_dir = Path(state.out_root) / state.run_id
+    steps = steps_for_target(state.target)
 
-    # ---- per-portfolio fan-out (onboard → transform → validate → stamp) ----
+    # ---- per-portfolio fan-out -------------------------------------------
     for p in state.portfolios:
         if p.status == STEP_DONE:
             continue
         work_dir = run_dir / "portfolios" / p.source_portfolio_id
-        for step_name in PORTFOLIO_STEPS:
+        for step_name in steps:
             step = p.step(step_name)
             if step.done:
                 continue
@@ -144,7 +164,7 @@ def run_orchestration(
             state.save()
             try:
                 r = _run_portfolio_step(adapters, p, step_name, work_dir)
-            except Exception as exc:  # hard failure — record + halt
+            except Exception as exc:
                 step.status = STEP_FAILED
                 step.message = f"{type(exc).__name__}: {exc}"
                 step.blockers = [step.message]
@@ -156,7 +176,6 @@ def run_orchestration(
             _apply(step, r)
             state.save()
             if step.status != STEP_DONE:
-                # Blocking gate (or failure) — halt the whole run, resumable.
                 p.status = step.status
                 state.status = STEP_HALTED if step.status == STEP_HALTED else STEP_FAILED
                 state.blockers.append(
@@ -167,7 +186,7 @@ def run_orchestration(
         p.status = STEP_DONE
         state.save()
 
-    # ---- consolidate (Assembler) ------------------------------------------
+    # ---- consolidate (Assembler) -----------------------------------------
     if not state.assemble.done:
         stamped = [p.step("stamp").output_path for p in state.portfolios]
         state.assemble.status = STEP_RUNNING
@@ -189,9 +208,22 @@ def run_orchestration(
     if state.target in ("mi", "all") and not state.route.done:
         state.route.status = STEP_RUNNING
         state.save()
-        r = adapters.route_mi(state.central_canonical_path)
-        _apply(state.route, r)
+        _apply(state.route, adapters.route_mi(state.central_canonical_path))
         state.save()
+
+    # ---- project to Regime (ESMA Annex 2 + companion) --------------------
+    if state.target in ("regime", "all") and not state.project.done:
+        state.project.status = STEP_RUNNING
+        state.save()
+        r = adapters.project(state.central_canonical_path, run_dir / "out_regime", regime)
+        _apply(state.project, r)
+        state.save()
+        if state.project.status != STEP_DONE:
+            state.status = STEP_HALTED if state.project.status == STEP_HALTED else STEP_FAILED
+            state.blockers.append("project: " + ("; ".join(state.project.blockers)
+                                                 or state.project.message))
+            state.save()
+            return state
 
     state.status = STEP_DONE
     state.save()

@@ -114,6 +114,7 @@ class RunState:
     portfolios: List[PortfolioState] = field(default_factory=list)
     assemble: StepState = field(default_factory=lambda: StepState("assemble"))
     route: StepState = field(default_factory=lambda: StepState("route"))
+    project: StepState = field(default_factory=lambda: StepState("project"))
     central_canonical_path: Optional[str] = None
     blockers: List[str] = field(default_factory=list)
 
@@ -131,6 +132,7 @@ class RunState:
             "portfolios": [p.to_dict() for p in self.portfolios],
             "assemble": self.assemble.to_dict(),
             "route": self.route.to_dict(),
+            "project": self.project.to_dict(),
         }
 
     @classmethod
@@ -147,6 +149,8 @@ class RunState:
             rs.assemble = StepState.from_dict(d["assemble"])
         if d.get("route"):
             rs.route = StepState.from_dict(d["route"])
+        if d.get("project"):
+            rs.project = StepState.from_dict(d["project"])
         return rs
 
     def save(self) -> Path:

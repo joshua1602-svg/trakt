@@ -421,9 +421,22 @@ python -m engine.orchestrator_agent \
 python -m engine.orchestrator_agent --resume orchestration_out/<run_id>/run_state.json
 ```
 
-Targets: `mi` (wired), `regime` / `all` (the Assembler routes to the Projection
-Agent; full Regime/Annex 2 wiring is the next phase). Agent internals,
-canonical/MI calculations and Regime logic are unchanged.
+**Two target-aware pipelines** — the MI and regime canonicals genuinely differ
+(regime carries the fuller ESMA Annex 2 field set with mandatory fields):
+
+| `--target` | Per-portfolio pipeline | Canonical | Terminal |
+|---|---|---|---|
+| `mi` | Onboarding **(mi_only)** → central tape → stamp | lean central tape | MI route |
+| `regime` | Onboarding **(regulatory_mi)** → Transformation → Validation → stamp | full Annex 2 contract (mandatory fields) | Projection → ESMA Annex 2 + provenance companion |
+| `all` | regulatory pipeline (its canonical is a superset that also serves MI) | full | MI route **and** Projection |
+
+The onboarding **mode** is the field-requirement lever: `mi_only` keeps the lean
+active schema; `regulatory_mi` activates the full ESMA Annex 2 target contract,
+so a portfolio that is missing mandatory regulatory fields **halts at the
+Transformation/Validation gate** (governed auto-halt) rather than silently
+producing a non-compliant regulatory tape. Agent internals, canonical/MI
+calculations and Regime/Annex 2 logic are unchanged — regime projection runs the
+existing projector on the assembled central canonical.
 
 ## Configuration
 
