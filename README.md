@@ -329,6 +329,59 @@ instead writes a **companion** (`*_<regime>_provenance.csv` +
 original loan identifier — so IB / legal / rating-agency packs retain full
 traceability without contaminating the template.
 
+## Assembler Agent
+
+The **Assembler Agent** (`engine/assembler_agent.py`) sits between the Onboarding
+Agent and the downstream MI / Regime agents. It consolidates the validated
+per-portfolio canonical files into **one central consolidated canonical** and
+routes it to the selected pipeline. It reads canonical outputs only — it never
+re-runs onboarding, re-transforms data, or changes canonical / MI / ESMA logic.
+
+```
+Onboarding Agent  →  per-portfolio *_canonical_typed.csv
+                  →  Assembler Agent  →  central canonical (platform_canonical_typed.csv)
+                  →  MI Agent  /  Regime Projection Agent  /  future consumers
+```
+
+It selects only the **latest accepted snapshot per `source_portfolio_id`**
+(older snapshots are excluded, with the reason recorded), rejects duplicate
+latest snapshots and duplicate composite keys
+(`source_portfolio_id + loan_identifier`), preserves all provenance unchanged,
+and writes a lineage **manifest** (`platform_canonical_manifest.json`) recording
+`assembler_run_id`, `client_id`, `pipeline`, `regime`, the included portfolios
+(with snapshot date, row count, balance and `input_file_hash`), excluded
+candidates, and the central canonical's `content_sha256` — the audit trail that
+proves *which* per-portfolio canonicals fed the central canonical.
+
+Valid `--pipeline` scopes: `mi`, `regime` (wired today), `all`, and the accepted
+future scopes `submission_pack` / `eligibility` (central canonical is produced;
+routing not yet wired). It also works for a **single portfolio**.
+
+```bash
+# MI assembly — central canonical for the MI Agent
+python -m engine.assembler_agent \
+  --client-id ERE --pipeline mi \
+  --root <canonical-root> --out-dir out_platform
+
+# Regime assembly — central canonical for the Regime Projection Agent
+python -m engine.assembler_agent \
+  --client-id ERE --pipeline regime --regime ESMA_Annex2 \
+  --root <canonical-root> --out-dir out_platform [--run-regime]
+```
+
+- **→ MI**: the central canonical is `platform_canonical_typed.csv`, which the MI
+  data source already resolves first (via `MI_AGENT_PLATFORM_CANONICAL`,
+  `MI_AGENT_PLATFORM_DIR`, or a default `out_platform/`). Absent it, MI behaviour
+  is unchanged; an explicit `MI_AGENT_ANALYTICS_DATASET` still wins.
+- **→ Regime**: the agent passes the central canonical path into the *existing*
+  regime projector (`--run-regime`, or use the `command` in the manifest/routing).
+  ESMA output stays template-clean and the projector emits the provenance
+  companion linking each row to `source_portfolio_id` / `portfolio_cohort`.
+
+**Azure blob orchestration**: after a successful onboarding promote (and before
+an MI or Regime run), invoke the Assembler Agent over the client's canonical
+output root, then point the MI / Regime step at the central canonical it returns.
+
 ## Configuration
 
 | File | Role |

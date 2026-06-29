@@ -26,10 +26,11 @@ Contract:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import pandas as pd
 
@@ -47,8 +48,27 @@ PLATFORM_MANIFEST_NAME = "platform_canonical_manifest.json"
 SNAPSHOT_DATE_FIELDS = ("reporting_date", "data_cut_off_date", "cut_off_date")
 # Loan-level identifier used for the composite platform key (first present).
 LOAN_KEY_FIELDS = ("loan_identifier", "unique_identifier")
+# Balance field used for lineage totals (first present); optional.
+BALANCE_FIELDS = ("current_outstanding_balance", "current_principal_balance")
 # Additive column carrying the platform composite identity.
 PLATFORM_KEY_COLUMN = "platform_loan_key"
+
+
+def _total_balance(df: pd.DataFrame) -> Optional[float]:
+    """Sum the first available balance column; ``None`` if none present."""
+    for f in BALANCE_FIELDS:
+        if f in df.columns:
+            vals = pd.to_numeric(df[f], errors="coerce").dropna()
+            return float(vals.sum()) if len(vals) else 0.0
+    return None
+
+
+def _file_sha256(path: Path) -> str:
+    return "sha256:" + hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def _content_sha256(text: str) -> str:
+    return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 class PlatformAssemblyError(ValueError):
@@ -181,6 +201,25 @@ def select_latest_per_portfolio(
     return chosen
 
 
+def select_latest_per_portfolio_with_exclusions(
+    snapshots: Sequence[PortfolioSnapshot],
+) -> Tuple[Dict[str, PortfolioSnapshot], List[Dict[str, Any]]]:
+    """Like :func:`select_latest_per_portfolio`, also returning the excluded
+    older snapshots with a reason (for lineage transparency)."""
+    chosen = select_latest_per_portfolio(snapshots)
+    excluded: List[Dict[str, Any]] = []
+    for s in snapshots:
+        winner = chosen.get(s.source_portfolio_id)
+        if winner is not None and s.path != winner.path:
+            excluded.append({
+                "path": str(s.path),
+                "source_portfolio_id": s.source_portfolio_id,
+                "snapshot_date": s.snapshot_date,
+                "reason": f"superseded_by_latest_snapshot ({winner.snapshot_date})",
+            })
+    return chosen, excluded
+
+
 # --------------------------------------------------------------------------- #
 # Assembly
 # --------------------------------------------------------------------------- #
@@ -204,11 +243,15 @@ def assemble_platform_canonical(
     out_dir: Optional[Union[str, Path]] = None,
     *,
     write: bool = True,
+    manifest_extra: Optional[Dict[str, Any]] = None,
 ) -> AssemblyResult:
     """Assemble the latest canonical per portfolio into one platform dataset.
 
     ``inputs`` may be a directory (globbed for ``*_canonical_typed.csv``) or an
-    explicit list of canonical output paths.
+    explicit list of canonical output paths. ``manifest_extra`` (when provided)
+    is merged into the manifest so the Assembler Agent can record run-level
+    lineage (assembler_run_id, client_id, pipeline, …) without duplicating the
+    consolidation logic.
     """
     # 1. Resolve input file list (reads only; never re-runs onboarding).
     if isinstance(inputs, (str, Path)) and Path(inputs).is_dir():
@@ -222,7 +265,7 @@ def assemble_platform_canonical(
 
     # 2. Read per-file metadata and pick the latest snapshot per portfolio.
     snapshots = [read_portfolio_snapshot(p) for p in paths]
-    chosen = select_latest_per_portfolio(snapshots)
+    chosen, excluded_candidates = select_latest_per_portfolio_with_exclusions(snapshots)
 
     # Validation: each source_portfolio_id appears exactly once in the assembly.
     if len(chosen) != len({s.source_portfolio_id for s in chosen.values()}):  # pragma: no cover
@@ -256,9 +299,12 @@ def assemble_platform_canonical(
             "source_portfolio_label": (str(df["source_portfolio_label"].iloc[0])
                                        if len(df) and pd.notna(df["source_portfolio_label"].iloc[0]) else None),
             "snapshot_date": snap.snapshot_date,
+            "selected_canonical_path": str(snap.path),
             "source_file": str(snap.path),
             "loan_key_field": loan_field,
             "row_count": int(len(df)),
+            "total_balance": _total_balance(df),
+            "input_file_hash": _file_sha256(snap.path),
         })
 
     combined = pd.concat(frames, ignore_index=True, sort=False)
@@ -273,17 +319,25 @@ def assemble_platform_canonical(
             f"{' …' if len(dups) > 20 else ''}"
         )
 
+    combined_csv_text = combined.to_csv(index=False)
+
     manifest: Dict[str, Any] = {
         "artifact": "platform_canonical",
         "note": "Combined latest-per-portfolio canonical. Source of truth for "
-                "downstream MI; individual portfolio canonicals are unchanged.",
+                "downstream MI / Regime; individual portfolio canonicals are unchanged.",
         "composite_key": "source_portfolio_id + loan_identifier",
         "composite_key_column": PLATFORM_KEY_COLUMN,
         "portfolio_count": len(per_portfolio),
         "total_rows": int(len(combined)),
+        "output_total_balance": _total_balance(combined),
+        "content_sha256": _content_sha256(combined_csv_text),
         "portfolios": per_portfolio,
+        "included_portfolios": per_portfolio,
+        "excluded_candidates": excluded_candidates,
         "candidate_files_scanned": [str(p) for p in paths],
     }
+    if manifest_extra:
+        manifest.update(manifest_extra)
 
     output_csv = output_manifest = None
     if write:
@@ -293,8 +347,9 @@ def assemble_platform_canonical(
         out_dir.mkdir(parents=True, exist_ok=True)
         output_csv = out_dir / PLATFORM_CANONICAL_NAME
         output_manifest = out_dir / PLATFORM_MANIFEST_NAME
-        combined.to_csv(output_csv, index=False)
+        output_csv.write_text(combined_csv_text, encoding="utf-8")
         manifest["output_csv"] = str(output_csv)
+        manifest["output_canonical_path"] = str(output_csv)
         output_manifest.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
     return AssemblyResult(combined, manifest, output_csv, output_manifest)
