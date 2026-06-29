@@ -398,19 +398,35 @@ def run_mi_query(spec: MIQuerySpec, *, semantics, data=None, store=None,
     mode = infer_execution_mode(spec)
 
     if mode == "flat":
-        return _run_flat(spec, data, semantics, build_chart=build_chart)
-    if mode == "state":
-        return _run_state(spec, semantics, store, store_root,
-                          routes_dir=routes_dir,
-                          stage_probabilities=stage_probabilities)
-    if mode == "temporal":
-        return _run_temporal(spec, semantics, store, store_root,
-                             routes_dir=routes_dir,
-                             stage_probabilities=stage_probabilities)
-    if mode == "risk":
-        return _run_risk(spec, semantics, store, store_root, routes_dir=routes_dir,
-                         config=risk_config, allow_mna_risk=allow_mna_risk,
-                         stage_probabilities=stage_probabilities)
-    return RuntimeResult(mode, "table", pd.DataFrame(),
-                         [make_issue("unknown_execution_mode", ERROR,
-                                     f"unknown execution_mode {mode!r}")])
+        result = _run_flat(spec, data, semantics, build_chart=build_chart)
+    elif mode == "state":
+        result = _run_state(spec, semantics, store, store_root,
+                            routes_dir=routes_dir,
+                            stage_probabilities=stage_probabilities)
+    elif mode == "temporal":
+        result = _run_temporal(spec, semantics, store, store_root,
+                               routes_dir=routes_dir,
+                               stage_probabilities=stage_probabilities)
+    elif mode == "risk":
+        result = _run_risk(spec, semantics, store, store_root, routes_dir=routes_dir,
+                           config=risk_config, allow_mna_risk=allow_mna_risk,
+                           stage_probabilities=stage_probabilities)
+    else:
+        return RuntimeResult(mode, "table", pd.DataFrame(),
+                             [make_issue("unknown_execution_mode", ERROR,
+                                         f"unknown execution_mode {mode!r}")])
+
+    # Surface the active source-portfolio lens in the result metadata + title so
+    # every table/chart/card states which book it covers (Total/Direct/Acquired/
+    # specific cohort).
+    lens = getattr(spec, "portfolio_lens", None)
+    if lens:
+        result.metadata["portfolio_lens"] = lens
+        label = lens.get("label")
+        if label and lens.get("name") != "total":
+            existing = result.metadata.get("title")
+            if existing and label not in str(existing):
+                result.metadata["title"] = f"{existing} — {label}"
+            elif not existing:
+                result.metadata["portfolio_lens_label"] = label
+    return result

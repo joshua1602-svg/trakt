@@ -755,12 +755,50 @@ CURATION: Dict[str, dict] = {
         "overrides": {"role": "dimension", "format": "string"},
     },
     "acquisition_date": {
-        "tier": "core", "virtual": True, "source_criteria": ["snapshot_metadata"],
+        "tier": "core", "virtual": False, "source_criteria": ["segmentation_key"],
         "business_name": "Acquisition Date",
-        "business_description": "Date the loan/portfolio was acquired "
-                               "(cohorting; snapshot/state layer).",
+        "business_description": "Date the acquired portfolio was acquired "
+                               "(cohorting; null for direct books).",
         "synonyms": ["acquisition date", "date acquired", "purchase date"],
         "overrides": {"role": "date", "format": "date", "chartable": True},
+    },
+    # --- Source-portfolio provenance (materialised loan-level fields) ---------
+    # Stamped on every loan at onboarding (see config/system/fields_registry.yaml
+    # and engine/provenance.py). First-class MI dimensions so the portfolio-lens
+    # resolver can filter/group direct vs acquired books and specific cohorts.
+    "source_portfolio_id": {
+        "tier": "core", "virtual": False, "source_criteria": ["segmentation_key"],
+        "business_name": "Source Portfolio",
+        "business_description": "Stable source-cohort id stamped at onboarding "
+                               "(direct_001 / acquired_001 / acquired_002).",
+        "synonyms": ["source portfolio", "source portfolio id", "cohort id",
+                     "source cohort", "book id", "portfolio cohort id"],
+        "overrides": {"role": "dimension", "format": "string"},
+    },
+    "source_portfolio_type": {
+        "tier": "core", "virtual": False, "source_criteria": ["segmentation_key"],
+        "business_name": "Source Portfolio Type",
+        "business_description": "Whether the loan is from the direct/originated "
+                               "book (direct) or an acquired back book (acquired).",
+        "synonyms": ["source portfolio type", "portfolio type (source)",
+                     "direct or acquired", "origination type", "book type"],
+        "overrides": {"role": "dimension", "format": "string"},
+    },
+    "source_portfolio_label": {
+        "tier": "extended", "virtual": False, "source_criteria": ["segmentation_key"],
+        "business_name": "Source Portfolio Label",
+        "business_description": "Human-readable source-portfolio label "
+                               "(e.g. Direct Book, Acquired Portfolio 1).",
+        "synonyms": ["source portfolio label", "portfolio label", "book name"],
+        "overrides": {"role": "dimension", "format": "string"},
+    },
+    "portfolio_cohort": {
+        "tier": "core", "virtual": False, "source_criteria": ["segmentation_key"],
+        "business_name": "Portfolio Cohort",
+        "business_description": "Source-cohort grouping key used by MI lenses "
+                               "(defaults to source_portfolio_id).",
+        "synonyms": ["portfolio cohort", "cohort", "source cohort key"],
+        "overrides": {"role": "dimension", "format": "string"},
     },
     "spv_transfer_date": {
         "tier": "extended", "virtual": True, "source_criteria": ["snapshot_metadata"],

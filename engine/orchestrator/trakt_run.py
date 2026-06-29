@@ -68,6 +68,12 @@ from typing import Optional, Dict, Any, Tuple, List
 import pandas as pd
 import yaml
 
+try:
+    from engine import provenance as _provenance
+except ModuleNotFoundError:  # pragma: no cover - path bootstrap
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from engine import provenance as _provenance
+
 _log = logging.getLogger(__name__)
 
 
@@ -175,6 +181,28 @@ def _script(name: str) -> str:
     if not path.exists():
         raise FileNotFoundError(f"Script not found: {path}")
     return str(path)
+
+
+def _provenance_cli_passthrough(args) -> List[str]:
+    """Re-emit the provenance flags so the canonical_transform subprocess stamps
+    the same source-cohort tag the orchestrator validated."""
+    out: List[str] = []
+    sid = getattr(args, "source_portfolio_id", "") or ""
+    if not sid:
+        return out
+    out += ["--source-portfolio-id", sid]
+    for flag, attr in (
+        ("--source-portfolio-type", "source_portfolio_type"),
+        ("--source-portfolio-label", "source_portfolio_label"),
+        ("--acquisition-date", "acquisition_date"),
+        ("--seller-name", "seller_name"),
+    ):
+        val = getattr(args, attr, "") or ""
+        if val:
+            out += [flag, val]
+    if getattr(args, "allow_unknown_acquisition_date", False):
+        out += ["--allow-unknown-acquisition-date"]
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -412,14 +440,16 @@ def run_common_gates(py: str, args, input_path: Path, out_dir: Path, val_dir: Pa
         print("[Loan Engine] Loan ledger enrichment....... OK")
 
     # -- Transform (typing / derivations) ----------------------------------
-    _run([
+    transform_cmd = [
         py, _script("canonical_transform"),
         str(source_for_transform),
         "--registry", args.registry,
         "--portfolio-type", args.portfolio_type,
         "--config", args.master_config,
         "--output-dir", str(out_dir),
-    ])
+    ]
+    transform_cmd += _provenance_cli_passthrough(args)
+    _run(transform_cmd)
     stage_path.append("canonical_transform_frozen")
 
     if not canonical_typed.exists():
@@ -973,6 +1003,15 @@ examples:
                           "lender tape (18_central_lender_tape.csv) as raw Gate 1 input. "
                           "Only use for a genuinely raw tape that shares the name.")
 
+    # Source-portfolio provenance (stamped onto canonical truth set)
+    _provenance.add_cli_arguments(ap)
+    ap.add_argument(
+        "--allow-missing-provenance", dest="allow_missing_provenance",
+        action="store_true",
+        help="Legacy escape hatch: run without source-portfolio provenance "
+             "(otherwise the run fails closed). Not for managed-service runs.",
+    )
+
     # Common config
     ap.add_argument("--portfolio-type", default="equity_release")
     ap.add_argument("--output-schema", choices=["active", "full"], default="active")
@@ -1025,6 +1064,19 @@ examples:
     ap.set_defaults(loan_engine_enabled=None, mi_enabled=None, esma_enabled=None)
 
     args = ap.parse_args()
+
+    # -- Resolve + validate source-portfolio provenance (fail closed) -------
+    try:
+        provenance = _provenance.provenance_from_args(
+            args, required=not args.allow_missing_provenance
+        )
+    except _provenance.ProvenanceError as exc:
+        ap.error(str(exc))
+    if provenance is not None:
+        print(f"[Provenance] source_portfolio_id={provenance.source_portfolio_id} "
+              f"type={provenance.source_portfolio_type} "
+              f"cohort={provenance.portfolio_cohort}")
+
     flags = _derive_runtime_flags(args)
 
     master_cfg = _load_yaml(args.master_config)

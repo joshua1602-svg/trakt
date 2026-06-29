@@ -5739,3 +5739,57 @@ fields:
     portfolio_type: common
     layer: product
     core_canonical: false
+  # --- Source-portfolio provenance (run-level onboarding metadata) ----------
+  # Stamped on every loan at onboarding so direct originations can be split
+  # from acquired back books for securitisation MI. These are analytics
+  # metadata fields, NOT ESMA-mapped and NOT the asset-class `portfolio_type`.
+  # Mandatoriness is enforced by the provenance validation rules (PROV*), not
+  # by core_canonical (which is reserved for source-mapped Gate-1 fields).
+  source_portfolio_id:  # Stable source-cohort id, e.g. direct_001 / acquired_001 / acquired_002. Mandatory on every onboarded row.
+    allowed_values: null
+    category: analytics
+    format: string
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+    meaning: "Stable source-cohort identifier stamped at onboarding; primary key for portfolio-lens filtering and grouping (direct vs acquired books)."
+  source_portfolio_type:  # direct | acquired. Derived from source_portfolio_id prefix when not given.
+    allowed_values: null
+    category: analytics
+    format: string
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+    meaning: "Whether the loan came from the direct/originated book (direct) or an acquired back book (acquired)."
+  source_portfolio_label:  # Human-readable label, e.g. "Direct Book", "Acquired Portfolio 1".
+    allowed_values: null
+    category: analytics
+    format: string
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+    meaning: "Human-readable display label for the source portfolio."
+  acquisition_date:  # Date an acquired portfolio was acquired (YYYY-MM-DD). Null for direct books.
+    allowed_values: null
+    category: analytics
+    format: date
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+    meaning: "Date the acquired portfolio was acquired; null/blank for direct originations."
+  seller_name:  # Seller / vendor of an acquired book. Nullable.
+    allowed_values: null
+    category: analytics
+    format: string
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+    meaning: "Name of the seller/vendor for an acquired portfolio (nullable; useful for acquired books)."
+  portfolio_cohort:  # Cohort key used by MI for source-cohort filtering; defaults to source_portfolio_id.
+    allowed_values: null
+    category: analytics
+    format: string
+    portfolio_type: common
+    layer: core
+    core_canonical: false
+    meaning: "Source-cohort grouping key used by the MI Agent; defaults to source_portfolio_id."

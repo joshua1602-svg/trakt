@@ -4,7 +4,7 @@
 # Do NOT edit by hand without also updating the build script (CURATION),
 # or your changes will be overwritten on the next regeneration.
 metadata:
-  generated_at: '2026-06-20T08:58:36.860119+00:00'
+  generated_at: '2026-06-29T15:02:12.804232+00:00'
   source_registry: /home/user/trakt/config/system/fields_registry.yaml
   selection_approach: curated MI-first allowlist (see CURATION in build script)
   selection_rules:
@@ -21,11 +21,11 @@ metadata:
   mi_tiers:
   - core
   - extended
-  field_count: 100
-  core_field_count: 68
-  extended_field_count: 32
+  field_count: 104
+  core_field_count: 71
+  extended_field_count: 33
   derived_field_count: 14
-  virtual_field_count: 16
+  virtual_field_count: 15
   missing_curated_fields: []
   version: 0.3.0
   default_weight_field: current_outstanding_balance
@@ -120,14 +120,14 @@ fields:
     mi_tier: core
     business_name: Acquisition Date
     display_name: Acquisition Date
-    business_description: Date the loan/portfolio was acquired (cohorting; snapshot/state layer).
+    business_description: Date the acquired portfolio was acquired (cohorting; null for direct books).
     description: ''
     synonyms:
     - acquisition date
     - date acquired
     - purchase date
     source_criteria:
-    - snapshot_metadata
+    - segmentation_key
     role: date
     format: date
     chartable: true
@@ -142,7 +142,6 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
-    virtual: true
   age_bucket:
     canonical_field: age_bucket
     mi_tier: core
@@ -2614,6 +2613,35 @@ fields:
     bucket_field: null
     notes: ''
     virtual: true
+  portfolio_cohort:
+    canonical_field: portfolio_cohort
+    mi_tier: core
+    business_name: Portfolio Cohort
+    display_name: Portfolio Cohort
+    business_description: Source-cohort grouping key used by MI lenses (defaults to source_portfolio_id).
+    description: ''
+    synonyms:
+    - portfolio cohort
+    - cohort
+    - source cohort key
+    source_criteria:
+    - segmentation_key
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
   portfolio_id:
     canonical_field: portfolio_id
     mi_tier: core
@@ -2872,6 +2900,100 @@ fields:
     bucket_field: null
     notes: ''
     virtual: true
+  source_portfolio_id:
+    canonical_field: source_portfolio_id
+    mi_tier: core
+    business_name: Source Portfolio
+    display_name: Source Portfolio ID
+    business_description: Stable source-cohort id stamped at onboarding (direct_001 / acquired_001 / acquired_002).
+    description: ''
+    synonyms:
+    - source portfolio
+    - source portfolio id
+    - cohort id
+    - source cohort
+    - book id
+    - portfolio cohort id
+    source_criteria:
+    - segmentation_key
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+  source_portfolio_label:
+    canonical_field: source_portfolio_label
+    mi_tier: extended
+    business_name: Source Portfolio Label
+    display_name: Source Portfolio Label
+    business_description: Human-readable source-portfolio label (e.g. Direct Book, Acquired Portfolio
+      1).
+    description: ''
+    synonyms:
+    - source portfolio label
+    - portfolio label
+    - book name
+    source_criteria:
+    - segmentation_key
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+  source_portfolio_type:
+    canonical_field: source_portfolio_type
+    mi_tier: core
+    business_name: Source Portfolio Type
+    display_name: Source Portfolio Type
+    business_description: Whether the loan is from the direct/originated book (direct) or an acquired
+      back book (acquired).
+    description: ''
+    synonyms:
+    - source portfolio type
+    - portfolio type (source)
+    - direct or acquired
+    - origination type
+    - book type
+    source_criteria:
+    - segmentation_key
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
   spv_id:
     canonical_field: spv_id
     mi_tier: core

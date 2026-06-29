@@ -28,6 +28,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from engine import provenance as _provenance
 from engine.onboarding_agent.answer_ingestion import ingest_answers
 from engine.onboarding_agent.mode_policy import VALID_MODES
 from engine.onboarding_agent.onboarding_orchestrator import run_onboarding
@@ -213,6 +214,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="",
         help="LLM budget profile: off (default) | low | standard.",
     )
+    _provenance.add_cli_arguments(p)
     return p
 
 
@@ -362,6 +364,7 @@ def build_promote_parser() -> argparse.ArgumentParser:
     p.add_argument("--output-uri", default="", help="Optional azure:// URI for the output root.")
     p.add_argument("--enable-regulatory-reporting", action="store_true",
                    help="Activate regulatory fields in scope (warehouse mode).")
+    _provenance.add_cli_arguments(p)
     return p
 
 
@@ -386,6 +389,17 @@ def run_promote(args) -> int:
     run_id = args.run_id or run_summary.get("run_id", "") or "run"
     client_name = run_summary.get("client_name", client_id)
     input_dir = args.input_dir or run_summary.get("input_dir", "")
+
+    # Resolve source-portfolio provenance: explicit CLI flags win, else reuse
+    # what onboarding persisted on the run summary. Fail closed on bad combos.
+    provenance_row = run_summary.get("source_portfolio_provenance") or None
+    try:
+        prov = _provenance.provenance_from_args(args, required=False)
+    except _provenance.ProvenanceError as exc:
+        print(f"[promote] {exc}")
+        return 2
+    if prov is not None:
+        provenance_row = prov.as_row()
 
     if args.approved_only:
         missing = [n for n in ("10_approved_onboarding_project.yaml", "11_approved_config.yaml")
@@ -418,6 +432,7 @@ def run_promote(args) -> int:
     tape_result = central_tape_builder.build_central_tapes(
         project_dir, run_paths, args.registry, mode=mode,
         regulatory_reporting_enabled=args.enable_regulatory_reporting,
+        provenance=provenance_row,
     )
     plan = promotion_planner.build_promotion_plan(
         project_dir, run_paths, tape_result, coverage, mode,
@@ -780,6 +795,23 @@ def main(argv=None) -> int:
         llm_target_advisor_callable=(_shared_llm if args.enable_llm_target_advisor else None),
         llm_target_advisor_model=(_advisor_model if args.enable_llm_target_advisor else ""),
     )
+
+    # Persist source-portfolio provenance onto the run summary (09) so the
+    # promote step stamps the central tape with the same source cohort. Fail
+    # closed on inconsistent flags.
+    try:
+        _prov = _provenance.provenance_from_args(args, required=False)
+    except _provenance.ProvenanceError as exc:
+        build_parser().error(str(exc))
+    if _prov is not None:
+        import json as _json
+        rs_path = Path(args.output_dir) / "09_onboarding_run_summary.json"
+        if rs_path.exists():
+            _rs = _json.loads(rs_path.read_text(encoding="utf-8"))
+            _rs["source_portfolio_provenance"] = _prov.as_row()
+            rs_path.write_text(_json.dumps(_rs, indent=2), encoding="utf-8")
+            print(f"[provenance] stamped run summary: {_prov.source_portfolio_id} "
+                  f"({_prov.source_portfolio_type})")
 
     print("=" * 64)
     print(f"Onboarding pack generated for: {project.client_name}")

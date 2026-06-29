@@ -234,6 +234,101 @@ Key agent configuration (`config/system/config_agent.yaml`):
 | `max_batch_size` | `10` | Headers per API call |
 | `max_api_calls_per_session` | `10` | Budget cap |
 
+## Source-portfolio provenance
+
+For securitisation readiness every loan carries a **source-cohort tag** so
+management, the IB, legal counsel and rating agencies can split direct
+originations from acquired back books. Provenance is supplied once, at
+onboarding, as run-level metadata and is stamped onto **every loan row** before
+canonical creation — it then survives canonical transformation, regime
+projection and MI querying. The single source of truth is
+[`engine/provenance.py`](engine/provenance.py).
+
+### Fields (canonical)
+
+| Field | Meaning |
+|-------|---------|
+| `source_portfolio_id` | Stable source-cohort id, **mandatory** on every row (e.g. `direct_001`, `acquired_001`, `acquired_002`). |
+| `source_portfolio_type` | `direct` or `acquired`. Derived from the id prefix when not given. |
+| `source_portfolio_label` | Human-readable label, e.g. `Direct Book`, `Acquired Portfolio 1`. |
+| `acquisition_date` | Date an acquired portfolio was acquired; null for direct books. |
+| `seller_name` | Seller/vendor of an acquired book (nullable). |
+| `portfolio_cohort` | Cohort key used by MI; defaults to `source_portfolio_id`. |
+
+> These are **analytics provenance fields**, separate from the canonical
+> `portfolio_type` (which means asset class: equity_release / sme / cre …).
+
+**Naming convention:** `direct_NNN` for directly originated books and
+`acquired_NNN` for acquired portfolios (`direct_001`, `acquired_001`,
+`acquired_002`, …). The `direct_`/`acquired_` prefix auto-derives
+`source_portfolio_type`; any other prefix requires an explicit
+`--source-portfolio-type`.
+
+### Onboarding with provenance
+
+The current book (direct originations):
+
+```bash
+python -m engine.onboarding_agent.cli \
+  --input-dir direct_book/ \
+  --client-name "ERE Funding" \
+  --output-dir onboarding_output/direct_001 \
+  --source-portfolio-id direct_001 \
+  --source-portfolio-type direct \
+  --source-portfolio-label "Direct Book"
+# then: python -m engine.onboarding_agent.cli promote --project-dir onboarding_output/direct_001
+```
+
+A first acquired back book:
+
+```bash
+python -m engine.onboarding_agent.cli \
+  --input-dir acquired_book_1/ \
+  --client-name "ERE Funding" \
+  --output-dir onboarding_output/acquired_001 \
+  --source-portfolio-id acquired_001 \
+  --source-portfolio-type acquired \
+  --source-portfolio-label "Acquired Portfolio 1" \
+  --acquisition-date 2026-08-15 \
+  --seller-name "Seller A"
+```
+
+The same flags work on the live pipeline orchestrator
+(`engine/orchestrator/trakt_run.py --mode mi|regulatory … --source-portfolio-id …`),
+which stamps `*_canonical_typed.csv` directly.
+
+**Fail closed:** a run with no `--source-portfolio-id` is rejected (the pipeline
+never assigns `unknown`). An acquired portfolio with no `--acquisition-date`
+fails unless `--allow-unknown-acquisition-date` is set. The canonical
+validation gate enforces the same rules (`PROV001`–`PROV005`).
+
+### MI Agent portfolio lenses
+
+The MI Agent ([`mi_agent/portfolio_lens.py`](mi_agent/portfolio_lens.py))
+answers through three lenses plus exact cohorts, resolved from natural language:
+
+| Says… | Lens | Filter |
+|-------|------|--------|
+| "total", "whole book", "all loans" | **total** | _(none)_ |
+| "direct", "originated", "current book", "organic" | **direct** | `source_portfolio_type = direct` |
+| "acquired", "back book", "purchased book" | **acquired** | `source_portfolio_type = acquired` |
+| `direct_001` / `acquired_001` / `acquired_002` | **cohort** | `source_portfolio_id = …` |
+
+The selected lens is echoed in the result metadata and chart/table/card title
+(e.g. *Portfolio Summary — Acquired*, *LTV Stratification — acquired_001*).
+"Compare direct vs acquired" / "direct_001 vs acquired_001" resolve to
+side-by-side aggregations.
+
+### Regime outputs (ESMA Annex 2)
+
+The official ESMA output stays **template-clean** — provenance fields have no
+ESMA code and are never emitted into the regime CSV/XML. The regime projector
+instead writes a **companion** (`*_<regime>_provenance.csv` +
+`*_<regime>_provenance_manifest.json`) that links each regulatory row back to
+`source_portfolio_id` / `source_portfolio_type` / `portfolio_cohort` and the
+original loan identifier — so IB / legal / rating-agency packs retain full
+traceability without contaminating the template.
+
 ## Configuration
 
 | File | Role |

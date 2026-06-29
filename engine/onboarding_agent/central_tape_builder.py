@@ -57,6 +57,7 @@ import pandas as pd
 import yaml
 
 from engine.gate_1_alignment.semantic_alignment import load_field_registry
+from engine import provenance as _provenance
 from . import domain_coverage as dc
 from . import run_context as _rc
 from . import source_period_eligibility as spe
@@ -1550,11 +1551,20 @@ def build_central_tapes(
     registry_path: str | Path,
     mode: str = "",
     regulatory_reporting_enabled: bool = False,
+    provenance: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Build the central lender + pipeline tapes from approved artefacts."""
+    """Build the central lender + pipeline tapes from approved artefacts.
+
+    ``provenance`` (when supplied) is the resolved source-portfolio record
+    (engine.provenance.Provenance.as_row()) stamped on every central-tape row
+    so the canonical truth set carries its source cohort from onboarding.
+    """
     project_dir = Path(project_dir)
     run_summary = _load_json(project_dir / "09_onboarding_run_summary.json") or {}
     mode = mode or run_summary.get("onboarding_mode", "regulatory_mi")
+    # Provenance may be passed explicitly or persisted on the run summary.
+    if provenance is None:
+        provenance = run_summary.get("source_portfolio_provenance") or None
 
     mapping_candidates = _load_json(project_dir / "05_mapping_candidates.json") or []
     overrides = _load_yaml(project_dir / "12_approved_mapping_overrides.yaml") or {}
@@ -1658,6 +1668,42 @@ def build_central_tapes(
     run_paths.guard(gaps_dir)
 
     cols = summary["columns"]
+
+    # Stamp source-portfolio provenance on every loan row (run-level metadata,
+    # authoritative). Keeps the central tape carrying its source cohort through
+    # to canonical / regime / MI — no later MI-only enrichment.
+    if provenance:
+        prov_row = {f: provenance.get(f) for f in _provenance.PROVENANCE_FIELDS}
+        for f in _provenance.PROVENANCE_FIELDS:
+            if f not in cols:
+                cols.append(f)
+        loan_key = summary.get("loan_key_column") or "loan_identifier"
+        for row in tape:
+            row.update(prov_row)
+            lid = row.get(loan_key) or row.get("loan_identifier") or ""
+            for f in _provenance.PROVENANCE_FIELDS:
+                lineage.append({
+                    "loan_identifier": lid,
+                    "canonical_field": f,
+                    "value": prov_row.get(f),
+                    "source_file": "run_metadata",
+                    "source_sheet": "",
+                    "source_column": "",
+                    "source_value": prov_row.get(f),
+                    "mapping_method": "run_metadata",
+                    "source_resolution_basis": "onboarding_operator_provenance",
+                    "confidence": 1.0,
+                    "domain": "provenance",
+                    "source_precedence_applied": "",
+                    "validation_sources": "",
+                    "alternate_values": "",
+                    "conflict_status": "",
+                    "enum_decision_applied": "",
+                    "review_required": "",
+                    "notes": "Source-portfolio provenance stamped from run metadata.",
+                })
+        summary["source_portfolio_provenance"] = dict(prov_row)
+
     tape_path = central_dir / "18_central_lender_tape.csv"
     lineage_path = lineage_dir / "18b_central_tape_lineage.csv"
     gaps_path = gaps_dir / "18c_central_tape_gaps.csv"

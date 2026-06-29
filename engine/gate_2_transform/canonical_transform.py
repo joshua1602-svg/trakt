@@ -29,6 +29,13 @@ from datetime import datetime
 import pandas as pd
 import yaml
 
+try:
+    from engine import provenance as _provenance
+except ModuleNotFoundError:  # pragma: no cover - path bootstrap for subprocess use
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from engine import provenance as _provenance
+
 
 ND_PATTERN = re.compile(r"^ND\d+$", re.IGNORECASE)
 MULTISPACE = re.compile(r"\s+")
@@ -717,6 +724,7 @@ def main() -> None:
     ap.add_argument("--output-prefix", default=None)
     ap.add_argument("--no-derivations", action="store_true")
     ap.add_argument("--config", default=None)
+    _provenance.add_cli_arguments(ap)
     args = ap.parse_args()
 
     config = {}
@@ -788,23 +796,37 @@ def main() -> None:
     # 6. Defaults
     defaults_report = apply_config_defaults(df, config)
 
+    # 7. Source-portfolio provenance — stamp every row from run-level metadata.
+    # Authoritative: overwrites any provenance columns so the canonical truth set
+    # always carries a clean source-cohort tag. Optional here for back-compat;
+    # the validation gate (PROV*) fails closed when provenance is absent.
+    provenance_report: Dict[str, Any] = {}
+    prov = _provenance.provenance_from_args(args, required=False)
+    if prov is not None:
+        _provenance.stamp_dataframe(df, prov)
+        provenance_report = {
+            "provenance": prov.to_dict(),
+            "provenance_lineage": _provenance.lineage_entries(prov),
+        }
+
     # Output
     stem = args.output_prefix or in_path.stem.replace("_canonical_full", "")
     out_csv = out_dir / f"{stem}_canonical_typed.csv"
     out_json = out_dir / f"{stem}_transform_report.json"
 
     df.to_csv(out_csv, index=False)
-    
+
     report = {
-        "input": str(in_path.name), 
-        "output": str(out_csv.name), 
-        **type_report, 
-        **nuts_report, 
-        **deriv_report, 
+        "input": str(in_path.name),
+        "output": str(out_csv.name),
+        **type_report,
+        **nuts_report,
+        **deriv_report,
         **enum_norm_report,
-        **defaults_report
+        **defaults_report,
+        **provenance_report,
     }
-    
+
     out_json.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(f"Wrote: {out_csv}")
     print(f"Wrote: {out_json}")
