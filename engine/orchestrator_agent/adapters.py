@@ -170,11 +170,18 @@ class RealAgentAdapters(AgentAdapters):
     def __init__(self, *, registry: Optional[str] = None,
                  client_name: Optional[str] = None,
                  onboarding_mode: str = "mi_only",
-                 aliases_dir: str = "config/system"):
+                 aliases_dir: str = "config/system",
+                 processing_mode: str = "source_onboarding",
+                 mapping_config_path: Optional[str] = None):
         self.registry = registry
         self.client_name = client_name
         self.onboarding_mode = onboarding_mode
         self.aliases_dir = aliases_dir
+        # processing_mode is the discovery lever the blob trigger sets:
+        #   "source_onboarding" — run source discovery/mapping (new/changed source);
+        #   "deterministic"     — skip discovery, apply the saved approved mapping.
+        self.processing_mode = processing_mode
+        self.mapping_config_path = mapping_config_path
 
     def onboard(self, spec: PortfolioSpec, work_dir: Path) -> StepResult:
         """Run onboarding for one portfolio. The ``mode`` is the MI-vs-regime
@@ -191,13 +198,19 @@ class RealAgentAdapters(AgentAdapters):
 
         project_dir = Path(work_dir)
         project_dir.mkdir(parents=True, exist_ok=True)
+        # Deterministic processing (known source) skips source discovery / mapping
+        # review and applies the saved approved decisions; source onboarding (new /
+        # changed source) runs discovery. Both stay deterministic-first (LLM off).
+        deterministic = self.processing_mode == "deterministic"
         _wf.run_operator_workflow(
             input_dir=spec.input,
             client_name=self.client_name or spec.source_portfolio_id,
             client_id=spec.source_portfolio_id, run_id="run",
             project_dir=str(project_dir), mode=self.onboarding_mode,
             registry=self.registry or "config/system/fields_registry.yaml",
-            aliases_dir=self.aliases_dir)
+            aliases_dir=self.aliases_dir,
+            enable_mapping_review=not deterministic,
+            target_first_decisions=(self.mapping_config_path if deterministic else ""))
 
         if self.onboarding_mode == "mi_only":
             # MI path: build + return the central lender tape (the MI canonical).
