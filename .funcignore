@@ -1,3 +1,11 @@
+# Azure Functions deployment ignore.
+#
+# The deployed entrypoint is the root function_app.py (a thin shim that
+# re-exports apps.blob_trigger_app.function_app:app). Keep the runtime packages
+# it needs — engine/, mi_agent/, mi_agent_api/, config/, apps/blob_trigger_app/
+# — they are intentionally NOT excluded here.
+
+# --- VCS / tooling / caches ---
 .git
 .github
 .gitignore
@@ -5,7 +13,36 @@
 venv
 __pycache__
 *.pyc
-analytics/
-due_diligence/
-*.md
 *.zip
+*.md
+
+# --- legacy Streamlit MI app (replaced; not used by the Functions host) ---
+ui/
+docker/
+Dockerfile.streamlit
+deploy-streamlit.sh
+
+# --- frontend (React dashboard, deployed separately) ---
+frontend/
+
+# --- docs / demos / tests / due diligence / analysis-only ---
+docs/
+demo/
+tests/
+due_diligence/
+analytics/
+snapshot/
+
+# --- generated / scratch outputs (regenerated at runtime) ---
+artifacts/
+output/
+onboarding_output/
+out_validation/
+
+# --- sample / reference data files at repo ROOT only (not runtime deps) ---
+# Leading "/" anchors to the repo root so nested runtime data (e.g.
+# config/system/*.xsd, engine reference tables) is NOT excluded.
+/*.csv
+/*.xml
+/*.xsd
+/*.xlsx
