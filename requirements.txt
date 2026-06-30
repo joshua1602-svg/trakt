@@ -14,3 +14,10 @@ anthropic>=0.40.0
 azure-functions>=1.17
 azure-storage-blob>=12.19
 azure-identity>=1.15
+
+# --- MI Agent API server (trakt-mi-api Azure App Service) ---
+# Installed by Oryx for the App Service code deploy; unused by the Function App.
+fastapi>=0.110
+uvicorn[standard]>=0.27
+gunicorn>=21.2
+uvicorn-worker>=0.2
