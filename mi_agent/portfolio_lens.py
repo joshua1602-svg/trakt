@@ -273,10 +273,15 @@ def available_lenses(records: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any
             continue
         seen.add(pid)
         ptype = str(r.get("source_portfolio_type", "")).strip().lower()
+        ptype = "" if ptype in ("nan", "none", "nat", "<na>") else ptype
         label = r.get("source_portfolio_label")
+        label_str = "" if label is None else str(label).strip()
+        # Blank / NaN labels (pandas yields the string "nan") fall back to the id.
+        if label_str.lower() in ("", "nan", "none", "nat", "<na>"):
+            label_str = pid
         cohorts.append({
             "id": pid, "kind": LENS_COHORT,
-            "label": str(label).strip() if label and str(label).strip() else pid,
+            "label": label_str,
             "source_portfolio_type": ptype or None,
             "filters": {SOURCE_ID_FIELD: pid},
             "funded_only": ptype == LENS_ACQUIRED,
