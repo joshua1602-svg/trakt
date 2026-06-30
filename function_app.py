@@ -23,7 +23,10 @@ App settings (see local.settings.example.json):
     TRAKT_BLOB_CONNECTION   storage connection (app-setting name, not the string)
     TRAKT_PACK_MARKER       completion marker filename (default ``_READY.json``)
     TRAKT_SOURCE_REGISTRY   source registry path (default config/source_registry.yaml)
-    TRAKT_TRIGGER_OUT       event-log + run output dir (default out/blob_trigger)
+    TRAKT_TRIGGER_OUT       writable runtime output root (event log, orchestrator
+                            state, accepted/platform canonicals). Azure-safe
+                            default: /tmp/trakt/blob_trigger in Azure,
+                            out/blob_trigger locally.
 """
 
 from __future__ import annotations
@@ -38,6 +41,7 @@ import azure.functions as func  # type: ignore
 from apps.blob_trigger_app import azure_io
 from apps.blob_trigger_app.eventgrid import classify_blob_event
 from apps.blob_trigger_app.router import handle_blob_event
+from apps.blob_trigger_app.runtime_paths import resolve_output_root
 from apps.blob_trigger_app.schema_fingerprint import fingerprint_pack
 from apps.blob_trigger_app.source_registry import SourceRegistry
 
@@ -46,7 +50,11 @@ app = func.FunctionApp()
 _CONTAINER = os.environ.get("TRAKT_BLOB_CONTAINER", "raw")
 _PACK_MARKER = os.environ.get("TRAKT_PACK_MARKER", "_READY.json")
 _REGISTRY_PATH = os.environ.get("TRAKT_SOURCE_REGISTRY", "config/source_registry.yaml")
-_OUT_DIR = os.environ.get("TRAKT_TRIGGER_OUT", "out/blob_trigger")
+# Writable runtime output root — Azure-safe (defaults to /tmp/trakt/blob_trigger
+# in Azure, out/blob_trigger locally; TRAKT_TRIGGER_OUT overrides). Everything
+# downstream (event manifests, orchestrator state, accepted/platform canonicals)
+# derives from this single root, so nothing writes under read-only wwwroot.
+_OUT_DIR = resolve_output_root()
 
 
 @app.event_grid_trigger(arg_name="event")
