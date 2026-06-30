@@ -1,6 +1,9 @@
-# MI Agent API (server-only) — in addition to the repo's requirements.txt
+# MI Agent API server deps (in addition to the repo's root requirements.txt).
+# These are the web-server libraries for the trakt-mi-api Azure App Service.
 fastapi>=0.110
 uvicorn[standard]>=0.27
+gunicorn>=21.2
+uvicorn-worker>=0.2          # gunicorn worker class (uvicorn_worker.UvicornWorker)
 # httpx + pytest are needed only for the API tests
 httpx>=0.27
 pytest>=8.0

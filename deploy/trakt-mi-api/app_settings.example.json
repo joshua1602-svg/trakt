@@ -1,0 +1,14 @@
+[
+  { "name": "MI_AGENT_PLATFORM_URI", "value": "blob://processed-v2/platform/ERE/latest/platform_canonical_typed.csv" },
+  { "name": "TRAKT_BLOB_CONNECTION", "value": "<storage-connection-string>" },
+  { "name": "TRAKT_STORAGE_BACKEND", "value": "blob" },
+  { "name": "TRAKT_PROCESSED_CONTAINER", "value": "processed-v2" },
+
+  { "name": "SCM_DO_BUILD_DURING_DEPLOYMENT", "value": "true" },
+  { "name": "WEBSITES_PORT", "value": "8000" },
+
+  { "name": "MI_API_WORKERS", "value": "2" },
+  { "name": "MI_API_TIMEOUT", "value": "120" },
+  { "name": "MI_AGENT_SCRATCH", "value": "/tmp/trakt/mi_platform" },
+  { "name": "MI_AGENT_CORS_ORIGINS", "value": "https://<your-react-app-host>" }
+]

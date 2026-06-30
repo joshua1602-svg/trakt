@@ -1,0 +1,37 @@
+name: Deploy trakt-mi-api (App Service)
+
+# Deploys the FastAPI MI Agent API to the Azure App Service `trakt-mi-api`.
+# Requires repo secret AZURE_MI_API_PUBLISH_PROFILE (Get publish profile from the
+# App Service). Manual by default; enable the push trigger if you want CI deploys.
+
+on:
+  workflow_dispatch: {}
+  # push:
+  #   branches: [ main ]
+  #   paths: [ 'mi_agent_api/**', 'mi_agent/**', 'requirements.txt', 'startup.sh' ]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Smoke-check the app imports
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -c "from mi_agent_api.app import app; print('import OK:', app.title)"
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: trakt-mi-api
+          publish-profile: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+          # Oryx builds requirements.txt and runs the configured startup command.

@@ -1,0 +1,28 @@
+# Keep the container build context lean. Runtime packages (mi_agent_api, mi_agent,
+# apps, engine, config) are intentionally NOT excluded.
+.git
+.github
+.gitignore
+**/__pycache__
+**/*.pyc
+.venv
+venv
+.localblob
+
+# Frontend (React) — not part of the API image
+frontend
+node_modules
+
+# Generated / scratch outputs (regenerated at runtime)
+out
+out_validation
+output
+onboarding_output
+artifacts
+snapshot
+
+# Tests + docs + diligence (not needed at runtime)
+**/tests
+docs
+due_diligence
+*.zip
