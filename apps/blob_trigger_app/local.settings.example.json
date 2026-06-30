@@ -3,10 +3,20 @@
   "Values": {
     "FUNCTIONS_WORKER_RUNTIME": "python",
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+
     "TRAKT_BLOB_CONNECTION": "<storage-connection-string>",
     "TRAKT_BLOB_CONTAINER": "raw-v2",
     "TRAKT_PACK_MARKER": "_READY.json",
-    "TRAKT_SOURCE_REGISTRY": "config/source_registry.yaml",
-    "TRAKT_TRIGGER_OUT": "out/blob_trigger"
+
+    "TRAKT_RAW_CONTAINER": "raw-v2",
+    "TRAKT_STATE_CONTAINER": "trakt-state",
+    "TRAKT_PROCESSED_CONTAINER": "processed-v2",
+    "TRAKT_SOURCE_REGISTRY_URI": "blob://trakt-state/registry/source_registry.yaml",
+
+    "TRAKT_STORAGE_BACKEND": "blob",
+    "TRAKT_TRIGGER_OUT": "/tmp/trakt/blob_trigger",
+
+    "_comment_local": "For local dev set TRAKT_STORAGE_BACKEND=file and TRAKT_LOCAL_BLOB_ROOT=.localblob to emulate blob:// containers on disk; leave TRAKT_BLOB_CONNECTION blank.",
+    "TRAKT_LOCAL_BLOB_ROOT": ".localblob"
   }
 }

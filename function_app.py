@@ -40,21 +40,27 @@ import azure.functions as func  # type: ignore
 
 from apps.blob_trigger_app import azure_io
 from apps.blob_trigger_app.eventgrid import classify_blob_event
+from apps.blob_trigger_app.layout import Layout
+from apps.blob_trigger_app.persistence import ProductionPersistence
+from apps.blob_trigger_app.regime_runner import default_regime_runner
 from apps.blob_trigger_app.router import handle_blob_event
 from apps.blob_trigger_app.runtime_paths import resolve_output_root
 from apps.blob_trigger_app.schema_fingerprint import fingerprint_pack
-from apps.blob_trigger_app.source_registry import SourceRegistry
+from apps.blob_trigger_app.storage import open_storage
 
 app = func.FunctionApp()
 
 _CONTAINER = os.environ.get("TRAKT_BLOB_CONTAINER", "raw")
 _PACK_MARKER = os.environ.get("TRAKT_PACK_MARKER", "_READY.json")
-_REGISTRY_PATH = os.environ.get("TRAKT_SOURCE_REGISTRY", "config/source_registry.yaml")
-# Writable runtime output root — Azure-safe (defaults to /tmp/trakt/blob_trigger
-# in Azure, out/blob_trigger locally; TRAKT_TRIGGER_OUT overrides). Everything
-# downstream (event manifests, orchestrator state, accepted/platform canonicals)
-# derives from this single root, so nothing writes under read-only wwwroot.
+# Writable runtime SCRATCH root — Azure-safe (defaults to /tmp/trakt/blob_trigger
+# in Azure, out/blob_trigger locally; TRAKT_TRIGGER_OUT overrides). Final
+# artifacts are uploaded to durable Blob Storage via ProductionPersistence.
 _OUT_DIR = resolve_output_root()
+
+
+def _persistence() -> ProductionPersistence:
+    """Durable persistence facade (Blob in Azure, filesystem locally)."""
+    return ProductionPersistence(storage=open_storage(), layout=Layout.from_env())
 
 
 @app.event_grid_trigger(arg_name="event")
@@ -69,14 +75,15 @@ def on_raw_blob_event(event: func.EventGridEvent) -> None:
 
     blob_path = ref.blob_path                       # path within the container
     filename = blob_path.rsplit("/", 1)[-1]
-    registry = SourceRegistry(_REGISTRY_PATH)
+    persistence = _persistence()
+    registry = persistence.load_registry()          # durable registry (Blob/state)
     logging.info("event grid: container=%s blob=%s", ref.container, blob_path)
 
     # Data-file event → acknowledge as a pack member; do NOT start the pipeline.
     if filename != _PACK_MARKER:
         manifest = handle_blob_event(
             blob_path, registry=registry, out_dir=_OUT_DIR,
-            container=ref.container, pack_marker=_PACK_MARKER)
+            container=ref.container, pack_marker=_PACK_MARKER, persistence=persistence)
         logging.info("pack member received: %s (status=%s)", blob_path, manifest.get("status"))
         return
 
@@ -94,7 +101,8 @@ def on_raw_blob_event(event: func.EventGridEvent) -> None:
         blob_path, registry=registry, out_dir=_OUT_DIR, container=ref.container,
         pack_marker=_PACK_MARKER, input_dir_override=str(pack_dir),
         local_input_path=primary, schema_info=schema,
-        marker_metadata=marker_meta, pack_files=pack_names)
+        marker_metadata=marker_meta, pack_files=pack_names,
+        persistence=persistence, regime_runner=default_regime_runner)
     logging.info(
         "pack complete → decision=%s status=%s target=%s central=%s",
         manifest.get("event_decision"), manifest.get("status"),

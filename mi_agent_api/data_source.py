@@ -51,6 +51,28 @@ KIND_PLATFORM_CANONICAL = "platform_canonical"
 KIND_UNAVAILABLE = "unavailable"
 
 
+def _resolve_platform_uri(uri: str) -> Optional[Path]:
+    """Resolve MI_AGENT_PLATFORM_URI via the storage abstraction.
+
+    A ``blob://`` URI may point at the file or its containing ``latest/`` dir; a
+    Blob source is downloaded to a local scratch dir. Returns ``None`` if absent.
+    """
+    try:
+        from apps.blob_trigger_app.storage import open_storage
+    except Exception:  # noqa: BLE001 — storage module unavailable → skip
+        return None
+    storage = open_storage()
+    candidate = uri if uri.endswith(".csv") else f"{uri.rstrip('/')}/{_PLATFORM_CANONICAL_NAME}"
+    if not storage.exists(candidate):
+        return None
+    local = storage._local_path(candidate)
+    if Path(str(local)).exists():
+        return Path(str(local))
+    scratch_root = os.environ.get("MI_AGENT_SCRATCH", "/tmp/trakt/mi_platform")
+    dest = Path(scratch_root) / _PLATFORM_CANONICAL_NAME
+    return storage.download_file(candidate, dest)
+
+
 def _resolve_platform_canonical() -> Optional[Path]:
     """Resolve the combined platform canonical, if one has been assembled.
 
@@ -63,6 +85,15 @@ def _resolve_platform_canonical() -> Optional[Path]:
     Returns ``None`` when no platform canonical exists, so the MI Agent falls
     back to exactly today's resolution.
     """
+    # Durable persisted platform canonical (production). MI_AGENT_PLATFORM_URI may
+    # be a blob:// URI or local path; resolved via the storage abstraction and
+    # (for Blob) downloaded to a local scratch. Off unless the env is set, so
+    # local/test resolution below is unchanged.
+    uri = os.environ.get("MI_AGENT_PLATFORM_URI")
+    if uri:
+        resolved = _resolve_platform_uri(uri)
+        if resolved is not None:
+            return resolved
     explicit = os.environ.get("MI_AGENT_PLATFORM_CANONICAL")
     if explicit:
         p = Path(explicit)

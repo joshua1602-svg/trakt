@@ -635,5 +635,385 @@ class TestTriggerOutPropagation(unittest.TestCase):
             self.assertTrue((Path(out_dir) / f"{m['event_id']}.json").exists())
 
 
+# --------------------------------------------------------------------------- #
+# 16. Production folder structure (7-seg with source_book_type + legacy 6-seg)
+# --------------------------------------------------------------------------- #
+
+class TestSmokeBehaviourPreserved(unittest.TestCase):
+    """Requirement #1: the confirmed smoke path still stops as pending_review."""
+
+    def test_first_time_source_stops_pending_review(self):
+        for blob in (
+            # documented 6-seg smoke path …
+            "raw-v2/ERE/funded/monthly/direct_001/2025-11-30/_READY.json",
+            # … and the new 7-seg production path
+            "raw-v2/ERE/direct/funded/monthly/direct_001/2025-11-30/_READY.json",
+        ):
+            with tempfile.TemporaryDirectory() as td:
+                reg = SourceRegistry(Path(td) / "r.json")
+                m = R.handle_blob_event(
+                    blob, registry=reg, out_dir=td, container="raw-v2",
+                    pack_marker="_READY.json", schema_info=_fp(),
+                    orchestrator_invoker=RecordingInvoker(status="halted"), now=_NOW)
+                self.assertEqual(m["decision"], "source_onboarding", blob)
+                self.assertEqual(m["status"], "pending_review", blob)
+                self.assertEqual(m["event_decision"], "new_source_pending_review", blob)
+
+
+class TestFolderStructure(unittest.TestCase):
+
+    def test_direct_funded_monthly(self):
+        p = parse_blob_path(
+            "raw-v2/ERE/direct/funded/monthly/direct_001/2025-11-30/LoanExtract.csv",
+            container="raw-v2")
+        self.assertEqual((p.client_id, p.source_book_type, p.dataset, p.frequency),
+                         ("ERE", "direct", "funded", "monthly"))
+        self.assertEqual(p.source_portfolio_id, "direct_001")
+        self.assertFalse(p.is_legacy_path)
+
+    def test_direct_pipeline_weekly(self):
+        p = parse_blob_path(
+            "raw-v2/ERE/direct/pipeline/weekly/direct_001/2025-W48/Pipe.csv",
+            container="raw-v2")
+        self.assertEqual((p.source_book_type, p.dataset, p.frequency, p.reporting_period),
+                         ("direct", "pipeline", "weekly", "2025-W48"))
+
+    def test_acquired_funded_monthly(self):
+        p = parse_blob_path(
+            "raw-v2/ERE/acquired/funded/monthly/acquired_001/2025-11-30/Loan.csv",
+            container="raw-v2")
+        self.assertEqual(p.source_book_type, "acquired")
+        self.assertEqual(p.source_portfolio_id, "acquired_001")
+
+    def test_acquired_ad_hoc(self):
+        p = parse_blob_path(
+            "raw-v2/ERE/acquired/funded/ad_hoc/acquired_001/2025-11-30/Loan.csv",
+            container="raw-v2")
+        self.assertEqual((p.source_book_type, p.frequency), ("acquired", "ad_hoc"))
+
+    def test_invalid_source_book_type_rejected(self):
+        with self.assertRaises(PathParseError):
+            parse_blob_path(
+                "raw-v2/ERE/wholesale/funded/monthly/direct_001/2025-11-30/x.csv",
+                container="raw-v2")
+
+    def test_invalid_dataset_and_frequency_rejected(self):
+        for bad in (
+            "raw-v2/ERE/direct/BADSET/monthly/direct_001/2025-11-30/x.csv",
+            "raw-v2/ERE/direct/funded/yearly/direct_001/2025-11-30/x.csv",
+            "raw-v2/ERE/direct/funded/monthly/direct_001/not-a-date/x.csv",
+        ):
+            with self.assertRaises(PathParseError, msg=bad):
+                parse_blob_path(bad, container="raw-v2")
+
+    def test_book_type_pid_inconsistency_rejected(self):
+        with self.assertRaises(PathParseError):
+            parse_blob_path(
+                "raw-v2/ERE/direct/funded/monthly/acquired_001/2025-11-30/x.csv",
+                container="raw-v2")
+
+    def test_legacy_six_segment_still_supported(self):
+        p = parse_blob_path("raw/ERE/funded/monthly/direct_001/2026-09-30/x.csv")
+        self.assertTrue(p.is_legacy_path)
+        self.assertEqual(p.source_book_type, "direct")   # derived from pid
+
+
+# --------------------------------------------------------------------------- #
+# 17. Storage abstraction + registry persistence
+# --------------------------------------------------------------------------- #
+
+from apps.blob_trigger_app.storage import Storage, open_storage, split_blob_uri
+from apps.blob_trigger_app.layout import Layout
+from apps.blob_trigger_app.persistence import ProductionPersistence
+from apps.blob_trigger_app import approvals as APP
+
+
+class TestStorage(unittest.TestCase):
+
+    def test_blob_uri_roundtrip_on_filesystem(self):
+        with tempfile.TemporaryDirectory() as td:
+            s = Storage(local_root=td)
+            uri = "blob://trakt-state/registry/source_registry.yaml"
+            s.write_text(uri, "sources: []\n")
+            self.assertTrue(s.exists(uri))
+            self.assertEqual(s.read_text(uri), "sources: []\n")
+            self.assertEqual(split_blob_uri(uri),
+                             ("trakt-state", "registry/source_registry.yaml"))
+            self.assertIn(uri, s.list("blob://trakt-state/registry"))
+
+    def test_registry_read_write_via_storage(self):
+        with tempfile.TemporaryDirectory() as td:
+            s = Storage(local_root=td)
+            uri = "blob://trakt-state/registry/source_registry.yaml"
+            reg = SourceRegistry(uri, storage=s)
+            reg.upsert(SourceRecord(
+                client_id="ERE", source_portfolio_id="direct_001", dataset="funded",
+                frequency="monthly", approved_mapping_id="m1", status=STATUS_ACTIVE,
+                expected_schema_fingerprint="sha256:abc"))
+            # fresh instance reads it back through storage
+            reg2 = SourceRegistry(uri, storage=s)
+            rec = reg2.lookup("ERE", "direct_001", "funded", "monthly")
+            self.assertIsNotNone(rec)
+            self.assertEqual(rec.approved_mapping_id, "m1")
+
+
+# --------------------------------------------------------------------------- #
+# 18. Approval workflow + persistence wiring (end-to-end on filesystem store)
+# --------------------------------------------------------------------------- #
+
+class WritingRefresher:
+    """Refresher stub that writes accepted + platform files like the real one."""
+    def __init__(self, out_dir):
+        self.out_dir = Path(out_dir)
+        self.calls = []
+
+    def __call__(self, *, client_id, source_portfolio_id, canonical_path,
+                 accepted_root, platform_out_dir, target, run_regime, regime):
+        self.calls.append(locals())
+        acc = Path(accepted_root) / client_id / f"{source_portfolio_id}_canonical_typed.csv"
+        acc.parent.mkdir(parents=True, exist_ok=True)
+        acc.write_text("source_portfolio_id\n" + source_portfolio_id + "\n")
+        plat = Path(platform_out_dir) / "platform_canonical_typed.csv"
+        plat.parent.mkdir(parents=True, exist_ok=True)
+        plat.write_text("source_portfolio_id\n" + source_portfolio_id + "\n")
+        return {"central_canonical_path": str(plat),
+                "portfolios": [source_portfolio_id], "assembler_run_id": "asm_t"}
+
+
+def _stub_regime_runner(*, central_canonical_path, client_id, period, regime, out_dir):
+    d = Path(out_dir) / client_id / period
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "ESMA_Annex2_underlying_exposures.csv").write_text("clean_esma\n")
+    (d / "provenance_companion.csv").write_text("provenance\n")
+    return {"output_dir": str(d), "ok": True}
+
+
+class TestApprovalAndPersistence(unittest.TestCase):
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = self._tmp.name
+        self.out = str(Path(self.root) / "scratch")
+        self.storage = Storage(local_root=str(Path(self.root) / "blobstore"))
+        self.layout = Layout()           # blob://trakt-state, processed-v2 defaults
+        self.persistence = ProductionPersistence(self.storage, self.layout)
+        self.registry = self.persistence.load_registry()
+        self.fp = _fp()
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _marker(self, container, blob, inv, *, meta=None, refresher=None,
+                regime_runner=None):
+        return R.handle_blob_event(
+            blob, registry=self.registry, out_dir=self.out, container=container,
+            pack_marker="_READY.json", schema_info=self.fp, marker_metadata=meta,
+            orchestrator_invoker=inv, assembler_refresher=(refresher or RecordingRefresher()),
+            persistence=self.persistence, regime_runner=regime_runner, now=_NOW)
+
+    def test_new_source_creates_pending_approval_artifact(self):
+        inv = RecordingInvoker(status="halted")
+        m = self._marker(
+            "raw-v2", "raw-v2/ERE/acquired/funded/ad_hoc/acquired_001/2025-11-30/_READY.json",
+            inv, meta={"acquisition_date": "2025-10-31", "seller_name": "BigBank"})
+        self.assertEqual(m["event_decision"], "new_source_pending_review")
+        self.assertIsNotNone(m["approval_id"])
+        pend = APP.list_pending(self.storage, self.layout)
+        self.assertEqual(len(pend), 1)
+        art = pend[0]
+        self.assertEqual(art["kind"], "new_source")
+        self.assertEqual(art["schema_fingerprint"], self.fp.fingerprint)
+        self.assertEqual(art["source_book_type"], "acquired")
+        self.assertEqual(art["source_metadata"]["seller_name"], "BigBank")
+        # event manifest persisted durably
+        self.assertTrue(self.storage.exists(self.layout.event_uri(m["event_id"])))
+
+    def test_schema_drift_creates_pending_approval_with_both_fingerprints(self):
+        self.registry.upsert(SourceRecord(
+            client_id="ERE", source_portfolio_id="direct_001", dataset="funded",
+            frequency="monthly", source_portfolio_type="direct", approved_mapping_id="m1",
+            mapping_config_path="config/m1.yaml",
+            expected_schema_fingerprint="sha256:OLD", status=STATUS_ACTIVE))
+        inv = RecordingInvoker()
+        m = self._marker(
+            "raw-v2", "raw-v2/ERE/direct/funded/monthly/direct_001/2025-11-30/_READY.json", inv)
+        self.assertEqual(m["event_decision"], "schema_drift_pending_review")
+        art = APP.show(self.storage, self.layout, m["approval_id"])
+        self.assertEqual(art["kind"], "schema_drift")
+        self.assertEqual(art["prior_schema_fingerprint"], "sha256:OLD")
+        self.assertEqual(art["schema_fingerprint"], self.fp.fingerprint)
+        self.assertEqual(len(inv.calls), 0)              # never processed
+
+    def test_approve_promote_reject_and_deterministic_only_after_approval(self):
+        blob = "raw-v2/ERE/acquired/funded/ad_hoc/acquired_001/2025-11-30/_READY.json"
+        # 1) new source → pending, not processed
+        inv = RecordingInvoker(status="halted")
+        m1 = self._marker("raw-v2", blob, inv)
+        self.assertEqual(m1["status"], "pending_review")
+        approval_id = m1["approval_id"]
+        # 2) approve + promote → active registry entry
+        APP.approve(self.storage, self.layout, approval_id,
+                    mapping_id="ere_acq1_v1", mapping_config_path="config/acq1.yaml")
+        rec = APP.promote(self.storage, self.layout, self.registry, approval_id)
+        self.assertEqual(rec.status, STATUS_ACTIVE)
+        self.assertEqual(rec.expected_schema_fingerprint, self.fp.fingerprint)
+        # 3) re-trigger (force, since the first pending run recorded the pack)
+        inv2 = RecordingInvoker(status="done")
+        ref = WritingRefresher(self.out)
+        m2 = self._marker("raw-v2", blob, inv2,
+                          meta={"force_reprocess": True}, refresher=ref,
+                          regime_runner=_stub_regime_runner)
+        self.assertEqual(m2["decision"], "deterministic")
+        self.assertEqual(m2["status"], "processed")
+        self.assertEqual(inv2.calls[0]["mapping_config_path"], "config/acq1.yaml")
+        # accepted + platform canonical persisted durably
+        self.assertTrue(self.storage.exists(self.layout.accepted_uri("ERE", "acquired_001")))
+        self.assertTrue(self.storage.exists(self.layout.platform_latest_uri("ERE")))
+        self.assertTrue(self.storage.exists(
+            self.layout.platform_period_uri("ERE", "2025-11-30")))
+
+    def test_reject_marks_rejected(self):
+        blob = "raw-v2/ERE/acquired/funded/ad_hoc/acquired_002/2025-11-30/_READY.json"
+        m = self._marker("raw-v2", blob, RecordingInvoker(status="halted"))
+        APP.reject(self.storage, self.layout, m["approval_id"], reason="seller unverified")
+        art = APP.show(self.storage, self.layout, m["approval_id"])
+        self.assertEqual(art["status"], "rejected")
+        self.assertEqual(art["reject_reason"], "seller unverified")
+        # promoting a rejected approval is refused
+        with self.assertRaises(ValueError):
+            APP.promote(self.storage, self.layout, self.registry, m["approval_id"])
+
+    def test_regime_outputs_persisted_for_funded_all(self):
+        self.registry.upsert(SourceRecord(
+            client_id="ERE", source_portfolio_id="direct_001", dataset="funded",
+            frequency="monthly", source_portfolio_type="direct", approved_mapping_id="m1",
+            mapping_config_path="config/m1.yaml",
+            expected_schema_fingerprint=self.fp.fingerprint, regime_required=True,
+            status=STATUS_ACTIVE))
+        ref = WritingRefresher(self.out)
+        m = self._marker(
+            "raw-v2", "raw-v2/ERE/direct/funded/monthly/direct_001/2025-11-30/_READY.json",
+            RecordingInvoker(status="done"), refresher=ref, regime_runner=_stub_regime_runner)
+        self.assertEqual(m["selected_target"]["target"], "all")
+        regime_uris = m["persisted"]["regime_uris"]
+        self.assertTrue(any("ESMA_Annex2" in u for u in regime_uris))
+        self.assertTrue(any("provenance_companion" in u for u in regime_uris))
+        # under the regime prefix for the period
+        for u in regime_uris:
+            self.assertIn("processed-v2/regime/ERE/2025-11-30", u)
+
+    def test_mi_locator_reads_latest_platform_canonical(self):
+        # persist a platform canonical, then resolve it through the MI locator
+        self.registry.upsert(SourceRecord(
+            client_id="ERE", source_portfolio_id="direct_001", dataset="funded",
+            frequency="monthly", source_portfolio_type="direct", approved_mapping_id="m1",
+            expected_schema_fingerprint=self.fp.fingerprint, status=STATUS_ACTIVE))
+        ref = WritingRefresher(self.out)
+        self._marker(
+            "raw-v2", "raw-v2/ERE/direct/funded/monthly/direct_001/2025-11-30/_READY.json",
+            RecordingInvoker(status="done"), refresher=ref)
+        local = self.persistence.mi_latest_platform_path("ERE")
+        self.assertIsNotNone(local)
+        self.assertTrue(Path(local).exists())
+        self.assertIn("platform_canonical_typed.csv", local)
+
+
+# --------------------------------------------------------------------------- #
+# 19. MI API resolution of the persisted platform canonical (env-gated)
+# --------------------------------------------------------------------------- #
+
+class TestMIPlatformResolution(unittest.TestCase):
+
+    def test_mi_resolves_platform_uri_via_storage(self):
+        from mi_agent_api import data_source as DS
+        with tempfile.TemporaryDirectory() as td:
+            blobroot = Path(td) / "blobstore"
+            s = Storage(local_root=str(blobroot))
+            layout = Layout()
+            uri = layout.platform_latest_uri("ERE")
+            s.write_text(uri, "source_portfolio_id\ndirect_001\n")
+            env = {k: v for k, v in os.environ.items()
+                   if not k.startswith("MI_AGENT_") and k != "WEBSITE_INSTANCE_ID"}
+            env["TRAKT_LOCAL_BLOB_ROOT"] = str(blobroot)
+            env["MI_AGENT_PLATFORM_URI"] = uri          # blob:// dir or file
+            with mock.patch.dict(os.environ, env, clear=True):
+                resolved = DS._resolve_platform_canonical()
+            self.assertIsNotNone(resolved)
+            self.assertTrue(Path(resolved).exists())
+
+
+# --------------------------------------------------------------------------- #
+# 20. Historical backfill (independent dated folders, idempotency, periods)
+# --------------------------------------------------------------------------- #
+
+class TestBackfill(unittest.TestCase):
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = self._tmp.name
+        self.out = str(Path(self.root) / "scratch")
+        self.storage = Storage(local_root=str(Path(self.root) / "blobstore"))
+        self.layout = Layout()
+        self.persistence = ProductionPersistence(self.storage, self.layout)
+        self.registry = self.persistence.load_registry()
+        self.fp = _fp()
+        self.registry.upsert(SourceRecord(
+            client_id="ERE", source_portfolio_id="direct_001", dataset="funded",
+            frequency="monthly", source_portfolio_type="direct", approved_mapping_id="m1",
+            expected_schema_fingerprint=self.fp.fingerprint, status=STATUS_ACTIVE))
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_twelve_monthly_folders_process_independently_and_keep_periods(self):
+        inv = RecordingInvoker(status="done")
+        months = [f"2025-{m:02d}-28" for m in range(1, 13)]
+        for period in months:
+            ref = WritingRefresher(self.out)
+            blob = f"raw-v2/ERE/direct/funded/monthly/direct_001/{period}/_READY.json"
+            m = R.handle_blob_event(
+                blob, registry=self.registry, out_dir=self.out, container="raw-v2",
+                pack_marker="_READY.json", schema_info=self.fp, orchestrator_invoker=inv,
+                assembler_refresher=ref, persistence=self.persistence, now=_NOW)
+            self.assertEqual(m["status"], "processed")
+        self.assertEqual(len(inv.calls), 12)             # one run per dated folder
+        # period-level platform artifacts preserved (not only latest)
+        for period in months:
+            self.assertTrue(self.storage.exists(
+                self.layout.platform_period_uri("ERE", period)))
+        self.assertTrue(self.storage.exists(self.layout.platform_latest_uri("ERE")))
+
+    def test_duplicate_marker_idempotent(self):
+        blob = "raw-v2/ERE/direct/funded/monthly/direct_001/2025-06-30/_READY.json"
+        inv = RecordingInvoker(status="done")
+        ref = WritingRefresher(self.out)
+        common = dict(registry=self.registry, out_dir=self.out, container="raw-v2",
+                      pack_marker="_READY.json", schema_info=self.fp,
+                      orchestrator_invoker=inv, assembler_refresher=ref,
+                      persistence=self.persistence, now=_NOW)
+        R.handle_blob_event(blob, **common)
+        m2 = R.handle_blob_event(blob, **common)
+        self.assertEqual(m2["status"], "already_processed")
+        self.assertEqual(len(inv.calls), 1)
+
+    def test_weekly_pipeline_independent_no_regime(self):
+        self.registry.upsert(SourceRecord(
+            client_id="ERE", source_portfolio_id="direct_001", dataset="pipeline",
+            frequency="weekly", source_portfolio_type="direct", approved_mapping_id="m1",
+            expected_schema_fingerprint=self.fp.fingerprint, status=STATUS_ACTIVE))
+        inv = RecordingInvoker(status="done")
+        ref = WritingRefresher(self.out)
+        m = R.handle_blob_event(
+            "raw-v2/ERE/direct/pipeline/weekly/direct_001/2025-W48/_READY.json",
+            registry=self.registry, out_dir=self.out, container="raw-v2",
+            pack_marker="_READY.json", schema_info=self.fp,
+            orchestrator_invoker=inv, assembler_refresher=ref,
+            persistence=self.persistence, regime_runner=_stub_regime_runner, now=_NOW)
+        self.assertFalse(m["selected_target"]["run_regime"])
+        self.assertEqual(len(ref.calls), 0)              # pipeline → no platform refresh
+        # no regime persisted
+        self.assertNotIn("regime_uris", (m.get("persisted") or {}))
+
+
 if __name__ == "__main__":
     unittest.main()
