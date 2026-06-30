@@ -37,25 +37,37 @@ class ParsedPath:
         return f"{self.client_id}/{self.source_portfolio_id}/{self.dataset}/{self.frequency}"
 
 
-def _segments(blob_path: str) -> List[str]:
-    # Tolerate leading container names / slashes; require the 'raw' anchor.
+#: Default container the trigger watches (overridable via TRAKT_BLOB_CONTAINER).
+DEFAULT_CONTAINER = "raw"
+
+
+def _segments(blob_path: str, container: str) -> List[str]:
+    """Return the 6 path segments after the container.
+
+    Works whether or not the path is prefixed with the container name (the Azure
+    blob trigger may surface ``blob.name`` with or without it): if the configured
+    container appears as a segment, everything after it is returned; otherwise the
+    path is assumed to already be the inner segments.
+    """
     parts = [p for p in re.split(r"[\\/]+", blob_path.strip()) if p]
-    if "raw" not in parts:
-        raise PathParseError(
-            f"path does not contain a 'raw/' root: {blob_path!r}")
-    i = parts.index("raw")
-    return parts[i + 1:]
+    if container in parts:
+        return parts[parts.index(container) + 1:]
+    return parts
 
 
-def parse_blob_path(blob_path: str) -> ParsedPath:
-    """Parse the raw blob path or raise :class:`PathParseError` (fail closed)."""
+def parse_blob_path(blob_path: str, container: str = DEFAULT_CONTAINER) -> ParsedPath:
+    """Parse the raw blob path or raise :class:`PathParseError` (fail closed).
+
+    ``container`` is the configured blob container (default ``raw``; set via the
+    ``TRAKT_BLOB_CONTAINER`` app setting, e.g. ``raw-v2``)."""
     if not blob_path or not str(blob_path).strip():
         raise PathParseError("empty blob path")
-    seg = _segments(blob_path)
+    seg = _segments(blob_path, container)
     if len(seg) != 6:
         raise PathParseError(
-            "expected raw/{client_id}/{dataset}/{frequency}/{source_portfolio_id}/"
-            f"{{reporting_period}}/{{filename}} (6 segments after 'raw'), got {len(seg)}: {seg}")
+            f"expected {container}/{{client_id}}/{{dataset}}/{{frequency}}/"
+            "{source_portfolio_id}/{reporting_period}/{filename} "
+            f"(6 segments after the container {container!r}), got {len(seg)}: {seg}")
     client_id, dataset, frequency, source_portfolio_id, reporting_period, filename = seg
 
     if dataset not in VALID_DATASETS:

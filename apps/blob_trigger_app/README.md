@@ -5,9 +5,15 @@ uploaded to Blob Storage. It does **routing/inference only** — the Orchestrato
 Agent does the work.
 
 ```
-raw/{client_id}/{dataset}/{frequency}/{source_portfolio_id}/{reporting_period}/{filename}
+{container}/{client_id}/{dataset}/{frequency}/{source_portfolio_id}/{reporting_period}/{filename}
   e.g. raw/ERE/funded/monthly/direct_001/2026-09-30/loan_tape.xlsx
 ```
+
+The watched **container is configurable** via the `TRAKT_BLOB_CONTAINER` app
+setting (default `raw`; e.g. `raw-v2`). It is referenced as
+`%TRAKT_BLOB_CONTAINER%` in the trigger binding path *and* read in code to anchor
+the path parser — so set it once. (`%…%` is resolved by the Functions host, so
+the setting must be present; the example settings ship it defaulted to `raw`.)
 
 On each upload it:
 1. parses the path (fail closed if it doesn't match the convention);

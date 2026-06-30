@@ -10,6 +10,10 @@ Path convention:
     raw/{client_id}/{dataset}/{frequency}/{source_portfolio_id}/{reporting_period}/{filename}
 
 App settings (see local.settings.example.json):
+    TRAKT_BLOB_CONTAINER    blob container watched (default raw; e.g. raw-v2).
+                            Referenced as %TRAKT_BLOB_CONTAINER% in the binding
+                            path AND read in code to anchor the path parser.
+    TRAKT_BLOB_CONNECTION   storage connection (app-setting name, not the string)
     TRAKT_SOURCE_REGISTRY   path to the source registry (default config/source_registry.yaml)
     TRAKT_TRIGGER_OUT       event-log + run output dir (default out/blob_trigger)
 """
@@ -30,9 +34,12 @@ app = func.FunctionApp()
 
 _REGISTRY_PATH = os.environ.get("TRAKT_SOURCE_REGISTRY", "config/source_registry.yaml")
 _OUT_DIR = os.environ.get("TRAKT_TRIGGER_OUT", "out/blob_trigger")
+# Read in code to anchor the path parser; the host resolves %TRAKT_BLOB_CONTAINER%
+# in the binding path below from the SAME app setting.
+_CONTAINER = os.environ.get("TRAKT_BLOB_CONTAINER", "raw")
 
 
-@app.blob_trigger(arg_name="blob", path="raw/{name}",
+@app.blob_trigger(arg_name="blob", path="%TRAKT_BLOB_CONTAINER%/{name}",
                   connection="TRAKT_BLOB_CONNECTION")
 def on_raw_blob_upload(blob: func.InputStream) -> None:
     blob_path = blob.name  # e.g. "raw/ERE/funded/monthly/direct_001/2026-09-30/loan_tape.xlsx"
@@ -46,7 +53,7 @@ def on_raw_blob_upload(blob: func.InputStream) -> None:
 
     registry = SourceRegistry(_REGISTRY_PATH)
     manifest = handle_blob_event(
-        blob_path, registry=registry, out_dir=_OUT_DIR,
+        blob_path, registry=registry, out_dir=_OUT_DIR, container=_CONTAINER,
         local_input_path=str(local_path))
     logging.info("trigger decision: status=%s decision=%s target=%s",
                  manifest.get("status"), manifest.get("decision"),

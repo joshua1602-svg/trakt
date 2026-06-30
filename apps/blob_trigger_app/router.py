@@ -41,6 +41,7 @@ def handle_blob_event(
     *,
     registry: SourceRegistry,
     out_dir: str | Path,
+    container: str = "raw",
     local_input_path: Optional[str] = None,
     schema_info: Optional[SchemaInfo] = None,
     orchestrator_invoker: OrchestratorInvoker = default_orchestrator_invoker,
@@ -68,7 +69,7 @@ def handle_blob_event(
 
     # 1) Parse path (fail closed) -----------------------------------------
     try:
-        parsed: ParsedPath = parse_blob_path(blob_path)
+        parsed: ParsedPath = parse_blob_path(blob_path, container)
     except PathParseError as exc:
         manifest["status"] = STATUS_FAILED
         manifest["error"] = f"path_parse_error: {exc}"

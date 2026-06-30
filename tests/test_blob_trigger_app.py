@@ -73,13 +73,42 @@ class TestPathParsing(unittest.TestCase):
         p = parse_blob_path("/somecontainer/raw/ERE/funded/monthly/direct_001/2026-09-30/x.csv")
         self.assertEqual(p.client_id, "ERE")
 
+    def test_configurable_container(self):
+        # A non-default container (e.g. raw-v2) parses when configured.
+        p = parse_blob_path(
+            "raw-v2/ERE/funded/monthly/direct_001/2026-09-30/loan_tape.xlsx",
+            container="raw-v2")
+        self.assertEqual(p.client_id, "ERE")
+        self.assertEqual(p.source_portfolio_id, "direct_001")
+        # Wrong container fails closed (raw-v2 path under default 'raw').
+        with self.assertRaises(PathParseError):
+            parse_blob_path(
+                "raw-v2/ERE/funded/monthly/direct_001/2026-09-30/loan_tape.xlsx")
+        # Inner-only path (no container prefix) also parses.
+        p2 = parse_blob_path(
+            "ERE/funded/monthly/direct_001/2026-09-30/loan_tape.xlsx", container="raw-v2")
+        self.assertEqual(p2.client_id, "ERE")
+
+    def test_router_honours_container(self):
+        import tempfile
+        from apps.blob_trigger_app.source_registry import SourceRegistry
+        with tempfile.TemporaryDirectory() as td:
+            reg = SourceRegistry(Path(td) / "r.json")
+            m = R.handle_blob_event(
+                "raw-v2/ERE/funded/monthly/acquired_001/2026-09-30/loan_tape.xlsx",
+                registry=reg, out_dir=td, container="raw-v2",
+                schema_info=_fp(), orchestrator_invoker=RecordingInvoker(status="halted"),
+                now=_NOW)
+            self.assertEqual(m["client_id"], "ERE")
+            self.assertEqual(m["decision"], "source_onboarding")  # parsed + routed
+
     def test_fail_closed(self):
         for bad in ("raw/ERE/funded/monthly/direct_001/loan.xlsx",            # too few
                     "raw/ERE/BADSET/monthly/direct_001/2026-09-30/x.xlsx",     # bad dataset
                     "raw/ERE/funded/yearly/direct_001/2026-09-30/x.xlsx",      # bad frequency
                     "raw/ERE/funded/monthly/direct_001/not-a-period/x.xlsx",   # bad period
                     "raw/ERE/funded/monthly/direct_001/2026-09-30/noext",      # no extension
-                    "ERE/funded/monthly/direct_001/2026-09-30/x.xlsx"):        # no raw root
+                    "raw/ERE/extra/funded/monthly/direct_001/2026-09-30/x.xlsx"):  # too many
             with self.assertRaises(PathParseError, msg=bad):
                 parse_blob_path(bad)
 
