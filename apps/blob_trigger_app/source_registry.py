@@ -9,9 +9,13 @@ contract (:meth:`SourceRegistry.lookup`) stays the same.
 from __future__ import annotations
 
 import json
+import logging
+import traceback
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger("trakt.blob_trigger.source_registry")
 
 STATUS_ACTIVE = "active"
 STATUS_PENDING_REVIEW = "pending_review"
@@ -95,17 +99,23 @@ class SourceRegistry:
             self._records[r.key] = r
 
     def save(self) -> None:
-        data = {"sources": [r.to_dict() for r in self._records.values()]}
-        if self._is_yaml():
-            import yaml
-            text = yaml.safe_dump(data, sort_keys=True)
-        else:
-            text = json.dumps(data, indent=2, sort_keys=True)
-        if self.storage is not None:
-            self.storage.write_text(self.uri, text)
-        else:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            self.path.write_text(text, encoding="utf-8")
+        try:
+            data = {"sources": [r.to_dict() for r in self._records.values()]}
+            if self._is_yaml():
+                import yaml
+                text = yaml.safe_dump(data, sort_keys=True)
+            else:
+                text = json.dumps(data, indent=2, sort_keys=True)
+            if self.storage is not None:
+                self.storage.write_text(self.uri, text)
+            else:
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                self.path.write_text(text, encoding="utf-8")
+        except Exception:  # noqa: BLE001 — log uri + traceback, re-raise
+            logger.error("REGISTRY SAVE FAILED uri=%s storage=%s\n%s",
+                         self.uri, type(self.storage).__name__ if self.storage else "filesystem",
+                         traceback.format_exc())
+            raise
 
     # -- lookup / mutation -------------------------------------------------- #
     def lookup(self, client_id: str, source_portfolio_id: str,

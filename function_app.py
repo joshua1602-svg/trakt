@@ -65,6 +65,17 @@ def _persistence() -> ProductionPersistence:
 
 @app.event_grid_trigger(arg_name="event")
 def on_raw_blob_event(event: func.EventGridEvent) -> None:
+    """Event Grid entrypoint. Wraps dispatch so any uncaught exception is logged
+    with its full traceback (and the subject) before propagating — otherwise
+    Azure reports only 'Executed (Failed)' with no diagnostics."""
+    try:
+        _dispatch(event)
+    except Exception:
+        logging.exception("BLOB-TRIGGER HANDLER FAILED subject=%s", getattr(event, "subject", None))
+        raise
+
+
+def _dispatch(event: func.EventGridEvent) -> None:
     subject = event.subject or ""
     ref = classify_blob_event(subject, _CONTAINER)
 

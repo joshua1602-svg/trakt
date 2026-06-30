@@ -10,6 +10,9 @@ fetches blobs and calls in here.
 
 from __future__ import annotations
 
+import functools
+import logging
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
@@ -62,10 +65,29 @@ EVT_BOOK_TYPE_MISMATCH = "book_type_mismatch"
 EVT_FAILED = "failed"
 
 
+logger = logging.getLogger("trakt.blob_trigger.router")
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _log_router_failures(fn):
+    """Wrap the whole router so ANY uncaught exception is logged with its full
+    traceback and the blob path before propagating — turns a silent Azure
+    'Executed (Failed)' into a diagnosable error."""
+    @functools.wraps(fn)
+    def wrapper(blob_path, **kwargs):
+        try:
+            return fn(blob_path, **kwargs)
+        except Exception:  # noqa: BLE001 — log then re-raise (preserve Failed status)
+            logger.error("BLOB-TRIGGER ROUTER FAILED blob_path=%s\n%s",
+                         blob_path, traceback.format_exc())
+            raise
+    return wrapper
+
+
+@_log_router_failures
 def handle_blob_event(
     blob_path: str,
     *,
