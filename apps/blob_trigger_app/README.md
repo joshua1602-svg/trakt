@@ -1,47 +1,113 @@
 # Trakt Blob Trigger app
 
-A thin Azure Functions blob trigger that starts the Trakt pipeline when a file is
-uploaded to Blob Storage. It does **routing/inference only** — the Orchestrator
-Agent does the work.
+Starts the Trakt pipeline when files are uploaded to Blob Storage. The **Azure
+event source is Event Grid**: an Event Grid subscription on the storage account
+delivers blob-created events to the **root `function_app.py`** Event Grid
+handler, which delegates to the Azure-free **router** here. It does
+**routing/inference only** — the Orchestrator and Assembler Agents do the work.
+
+```
+Blob uploaded to raw-v2
+   → Event Grid → root function_app.py (Event Grid handler)
+   → apps/blob_trigger_app/router
+   → pack completeness (_READY.json) → source registry decision
+   → Orchestrator Agent → Onboarding / deterministic processing
+   → Assembler Agent → MI / Regime / All
+```
 
 ```
 {container}/{client_id}/{dataset}/{frequency}/{source_portfolio_id}/{reporting_period}/{filename}
-  e.g. raw/ERE/funded/monthly/direct_001/2026-09-30/loan_tape.xlsx
+  monthly funded:  raw-v2/ERE/funded/monthly/direct_001/2026-01-31/LoanExtract.csv
+  weekly pipeline: raw-v2/ERE/pipeline/weekly/direct_001/2026-W05/PipelineExtract.csv
+  acquired ad-hoc: raw-v2/ERE/funded/ad_hoc/acquired_001/2026-01-31/LoanExtract.csv
 ```
 
-The watched **container is configurable** via the `TRAKT_BLOB_CONTAINER` app
-setting (default `raw`; e.g. `raw-v2`). It is referenced as
-`%TRAKT_BLOB_CONTAINER%` in the trigger binding path *and* read in code to anchor
-the path parser — so set it once. (`%…%` is resolved by the Functions host, so
-the setting must be present; the example settings ship it defaulted to `raw`.)
+The accepted **container is configurable** via the `TRAKT_BLOB_CONTAINER` app
+setting (default `raw`; **production `raw-v2`**). The Event Grid handler reads it
+and **rejects only blobs outside that container** — there is no hardcoded
+`inbound` (the old skip-`raw-v2` bug).
 
-## Pack completion (READY sentinel)
+## Pack completion (`_READY.json` marker)
 
-A reporting pack is usually several files (loan + cashflow + collateral …). The
-trigger fires **per blob**, so to avoid starting on the first file (against an
-incomplete pack) or running once per file, processing is gated on a **completion
-marker**: the uploader writes the data files, then writes a marker file
-**last** — `…/{reporting_period}/_READY` (name configurable via
-`TRAKT_PACK_MARKER`, default `_READY`).
+A reporting pack is usually several files (loan + property + funder …) and Event
+Grid fires **per blob**. To avoid starting on the first file (incomplete pack) or
+once per file, processing is gated on a **completion marker**: upload the data
+files first, then upload `…/{reporting_period}/_READY.json` **last** (name
+configurable via `TRAKT_PACK_MARKER`, default `_READY.json`).
 
-- **Data-file events** are acknowledged and logged (`status: awaiting_pack`) — the
-  Orchestrator is **not** started.
-- **The marker event** lists + fingerprints the now-complete folder and starts the
-  Orchestrator **exactly once** against the whole pack.
-- **Idempotency:** a folder-level processed marker (`out/.../_packs/{pack_key}.json`)
-  records the run; a duplicate/re-fired marker with the same schema is skipped
-  (`status: already_processed`). New data (different fingerprint) is *not* skipped.
+- **Data-file events** are acknowledged and logged
+  (`event_decision: ignored_data_file_waiting_for_ready`) — the Orchestrator is
+  **not** started.
+- **The marker event** lists + downloads the now-complete folder, fingerprints
+  **all data files** (never the marker), and starts the Orchestrator **exactly
+  once** against the whole pack.
+- **Idempotency:** a folder-level processed record (`out/.../_packs/{pack_key}.json`);
+  a re-fired marker with the same schema is skipped
+  (`event_decision: duplicate_ready_ignored`) **unless** the marker carries
+  `force_reprocess: true`.
 
-On each upload it:
+The `_READY.json` body may carry pack metadata (all optional):
+
+```json
+{
+  "expected_files": ["LoanExtract.csv", "PropertyExtract.csv", "Funder.csv"],
+  "regime_required": true,
+  "target": "all",
+  "force_reprocess": false,
+  "source_portfolio_type": "acquired",
+  "acquisition_date": "2025-11-30",
+  "seller_name": "BigBank plc"
+}
+```
+
+If `expected_files` is present and any are missing from the folder, the pack
+**fails closed** (`event_decision: incomplete_pack_pending_review`).
+
+On the marker event it:
 1. parses the path (fail closed if it doesn't match the convention);
-1a. **completion gate** — only the `_READY` marker starts processing; data files
-   are logged as pack members;
-2. computes a **schema fingerprint** (column names/order, Excel sheet names, file
-   type — never cell values);
-3. looks the source up in the **source registry**;
-4. decides **source onboarding** vs **deterministic processing**;
-5. invokes the **Orchestrator Agent** (never the individual agents);
-6. writes an **event manifest** to the output/log folder.
+2. **completeness** — checks `expected_files` if declared;
+3. computes a **pack schema fingerprint** (column names/order, sheet names, file
+   type — never cell values; across all data files, not the marker);
+4. **idempotency** — skips a duplicate marker unless `force_reprocess`;
+5. looks the source up in the **source registry**;
+6. decides **source onboarding** vs **deterministic processing**;
+7. invokes the **Orchestrator Agent** (never the individual agents);
+8. on a successful **funded** pack, refreshes the **central platform canonical**
+   via the **Assembler Agent**;
+9. writes an **event manifest** to the output/log folder.
+
+## Event manifest / audit (`event_decision`)
+
+Every event writes a manifest carrying `event_id`, `blob_path`, `container`,
+`pack_folder`, `event_type` (`data_file`|`ready_marker`), `client_id`,
+`dataset_type`, `frequency`, `source_portfolio_id`, `reporting_date`, `target`,
+`orchestrator_run_id`, `central_canonical_path`, `error`, and the audit
+**`event_decision`**, one of:
+
+`ignored_data_file_waiting_for_ready` · `invalid_path` ·
+`new_source_pending_review` · `known_source_processed` ·
+`schema_drift_pending_review` · `duplicate_ready_ignored` ·
+`incomplete_pack_pending_review` · `known_source_halted` · `failed`.
+
+## Assembler refresh (central platform canonical)
+
+After a **funded** pack processes successfully, the trigger publishes that
+portfolio's accepted canonical into a per-client store
+(`out/.../_accepted/{client_id}/{source_portfolio_id}_canonical_typed.csv`) and
+re-runs the **Assembler Agent** over the store. The Assembler consolidates the
+**latest accepted canonical per `source_portfolio_id`** — so the central platform
+canonical grows `direct_001` → `direct_001 + acquired_001` → `+ acquired_002`
+**without reprocessing any raw files**. Pipeline/forecast packs are MI-only and do
+**not** trigger a platform refresh.
+
+## Historical backfill
+
+Day 1 can upload many months of weekly pipeline / monthly funded packs. Each
+folder is made ready **independently** by its own `_READY.json`, so each pack is
+one processing event (never one run per file). The accepted store keeps the
+latest snapshot per portfolio, so re-running the Assembler over 12 monthly funded
+packs yields a central canonical at the latest reporting date per portfolio. A
+re-fired marker is idempotent unless `force_reprocess: true`.
 
 ## New source vs known source
 
@@ -55,9 +121,12 @@ On each upload it:
 
 | dataset | frequency | target | Regime/ESMA |
 |---|---|---|---|
-| funded | monthly | `mi`, or `all` if `regime_required` on the source record | only when `all` |
+| funded | monthly / ad_hoc | `mi`, or `all` if `regime_required` (registry **or** `_READY.json`) | only when `all` |
 | pipeline | weekly | `mi` | never |
 | forecast | * | `mi` | never |
+
+A `_READY.json` `target` override is honoured **only for funded** packs; a
+pipeline/forecast override that asks for Regime is ignored (MI-only is enforced).
 
 ## Source registry
 
@@ -71,27 +140,27 @@ successful run/period, `regime_required`, and `status`
 
 ## Deployment entrypoint
 
-Azure Functions loads the Function App from the **root** `function_app.py`. That
-file is a **thin shim** — it contains no logic and simply re-exports this app:
+- **Azure event source: Event Grid.** An Event Grid subscription on the storage
+  account delivers blob-created events to the **root `function_app.py`**, which
+  is the deployed Function App entrypoint (the Functions host scans the root).
+- The root handler is an **`@app.event_grid_trigger`**; it parses the event
+  subject, accepts only the configured container, and **delegates to the blob
+  trigger router** (`apps/blob_trigger_app/router.py`). All routing/inference
+  lives in this package; the root file does Azure I/O + delegation only.
+- **`TRAKT_BLOB_CONTAINER=raw-v2`** controls which container is accepted. The
+  previous legacy root handler hardcoded the `inbound` container and silently
+  skipped `raw-v2`; the accepted container is now configuration, not a constant.
+- **Upload data files first; upload `_READY.json` last** to trigger processing.
+  Use **one `_READY.json` per reporting pack**.
 
-```python
-# /function_app.py  (repo root)
-from apps.blob_trigger_app.function_app import app
-```
-
-So the host discovers the trigger here (`apps/blob_trigger_app/function_app.py`)
-via delegation; all routing/inference lives in this package and its Azure-free
-decision core (`router.py`).
-
-> **Why:** the previous root `function_app.py` was a legacy Event Grid trigger
-> bound to the `inbound` container. While it was the deployed entrypoint, uploads
-> to the current `raw-v2` container were silently skipped. The shim makes the
-> blob-trigger app the live entrypoint, with the watched container configurable
-> via `%TRAKT_BLOB_CONTAINER%`.
+> The native `@app.blob_trigger` variant in
+> `apps/blob_trigger_app/function_app.py` is **not deployed** (kept for local
+> `func start`); it is not imported by the root entrypoint, so only the Event
+> Grid trigger is active in production. Both delegate to the same router core.
 
 `.funcignore` (repo root) excludes legacy/unneeded files (the legacy Streamlit
 app, `frontend/`, docs, tests, generated outputs, root-level sample data) but
-**keeps the runtime packages** the shim imports: `engine/`, `mi_agent/`,
+**keeps the runtime packages** the handler imports: `engine/`, `mi_agent/`,
 `mi_agent_api/`, `config/`, and `apps/blob_trigger_app/`. Root-level sample-data
 globs are anchored with a leading `/` so nested runtime data (e.g.
 `config/system/*.xsd`) is preserved.

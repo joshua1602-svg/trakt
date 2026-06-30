@@ -30,6 +30,8 @@ def default_orchestrator_invoker(
     run_regime: bool,
     mapping_config_path: Optional[str],
     out_dir: str,
+    acquisition_date: Optional[str] = None,   # acquired portfolios (from _READY.json/registry)
+    seller_name: Optional[str] = None,        # acquired portfolios (from _READY.json/registry)
     regime: str = "ESMA_Annex2",
 ) -> Dict[str, Any]:
     """Invoke the real Orchestrator Agent. Onboarding mode (mi_only vs
@@ -47,7 +49,11 @@ def default_orchestrator_invoker(
     spec = PortfolioSpec(
         source_portfolio_id=source_portfolio_id, input=input_path,
         source_portfolio_type=source_portfolio_type,
-        allow_unknown_acquisition_date=True,
+        acquisition_date=acquisition_date,
+        seller_name=seller_name,
+        # If the acquisition_date is supplied (acquired packs), require it; only
+        # tolerate "unknown" when none was provided (direct books).
+        allow_unknown_acquisition_date=(acquisition_date is None),
     )
     state = run_orchestration(
         client_id, [spec], target=target, regime=(regime if run_regime else None),

@@ -339,5 +339,197 @@ class TestPackCompletion(unittest.TestCase):
         self.assertEqual(m["decision"], "schema_drift")
 
 
+# --------------------------------------------------------------------------- #
+# 13. Event Grid entrypoint (subject parsing + configurable container)
+# --------------------------------------------------------------------------- #
+
+from apps.blob_trigger_app.eventgrid import classify_blob_event, parse_blob_subject
+
+
+class TestEventGridEntrypoint(unittest.TestCase):
+
+    def _subject(self, container, blob):
+        return f"/blobServices/default/containers/{container}/blobs/{blob}"
+
+    def test_raw_v2_accepted_when_configured(self):
+        ref = classify_blob_event(
+            self._subject("raw-v2", "ERE/funded/monthly/direct_001/2026-01-31/_READY.json"),
+            "raw-v2")
+        self.assertTrue(ref.accepted)
+        self.assertEqual(ref.container, "raw-v2")
+        self.assertEqual(ref.blob_path, "ERE/funded/monthly/direct_001/2026-01-31/_READY.json")
+
+    def test_other_container_skipped(self):
+        ref = classify_blob_event(self._subject("inbound", "x.csv"), "raw-v2")
+        self.assertFalse(ref.accepted)
+        ref2 = classify_blob_event(self._subject("outbound", "y.csv"), "raw-v2")
+        self.assertFalse(ref2.accepted)
+
+    def test_subject_parse(self):
+        c, b = parse_blob_subject(self._subject("raw-v2", "a/b/c.csv"))
+        self.assertEqual((c, b), ("raw-v2", "a/b/c.csv"))
+
+    def test_legacy_inbound_hardcoding_removed(self):
+        # The deployed root entrypoint must be an Event Grid handler with NO
+        # hardcoded 'inbound' container check.
+        root = (_REPO / "function_app.py").read_text()
+        self.assertIn("event_grid_trigger", root)
+        self.assertNotIn('container != "inbound"', root)
+        self.assertIn("TRAKT_BLOB_CONTAINER", root)
+
+
+# --------------------------------------------------------------------------- #
+# 14. _READY.json pack triggering, completeness, force_reprocess, metadata
+# --------------------------------------------------------------------------- #
+
+class RecordingRefresher:
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, **kw):
+        self.calls.append(kw)
+        return {"central_canonical_path": "/platform/central_canonical.csv",
+                "portfolios": ["direct_001", "acquired_001"], "assembler_run_id": "asm_x"}
+
+
+class TestReadyJsonAndAcquired(unittest.TestCase):
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.out = self._tmp.name
+        self.registry = SourceRegistry(Path(self.out) / "r.json")
+        self.fp = _fp()
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _seed_active(self, *, pid, dataset="funded", frequency="monthly",
+                     ptype="direct", regime_required=False, fingerprint=None):
+        self.registry.upsert(SourceRecord(
+            client_id="ERE", source_portfolio_id=pid, dataset=dataset, frequency=frequency,
+            source_portfolio_type=ptype, approved_mapping_id="m1",
+            mapping_config_path="config/m1.yaml",
+            expected_schema_fingerprint=(fingerprint or self.fp.fingerprint),
+            regime_required=regime_required, status=STATUS_ACTIVE))
+
+    def _ev(self, blob, inv, *, schema=None, meta=None, pack_files=None, refresher=None):
+        return R.handle_blob_event(
+            blob, registry=self.registry, out_dir=self.out, pack_marker="_READY.json",
+            schema_info=schema, marker_metadata=meta, pack_files=pack_files,
+            orchestrator_invoker=inv,
+            assembler_refresher=(refresher or RecordingRefresher()), now=_NOW)
+
+    # ---- 3-file monthly funded pack routes as ONE pack ---------------------
+    def test_three_file_pack_one_run(self):
+        self._seed_active(pid="direct_001")
+        inv = RecordingInvoker()
+        folder = "raw/ERE/funded/monthly/direct_001/2026-01-31"
+        for f in ("LoanExtract.csv", "PropertyExtract.csv", "Funder.csv"):
+            m = self._ev(f"{folder}/{f}", inv)
+            self.assertEqual(m["status"], "awaiting_pack")
+            self.assertEqual(m["event_decision"], "ignored_data_file_waiting_for_ready")
+        m = self._ev(f"{folder}/_READY.json", inv, schema=self.fp)
+        self.assertEqual(m["decision"], "deterministic")
+        self.assertEqual(m["status"], "processed")
+        self.assertEqual(m["event_decision"], "known_source_processed")
+        self.assertEqual(len(inv.calls), 1)            # exactly one pack run
+
+    # ---- missing expected files halts (pending review) ---------------------
+    def test_missing_expected_files_pending_review(self):
+        self._seed_active(pid="direct_001")
+        inv = RecordingInvoker()
+        meta = {"expected_files": ["LoanExtract.csv", "PropertyExtract.csv", "Funder.csv"]}
+        m = self._ev("raw/ERE/funded/monthly/direct_001/2026-01-31/_READY.json", inv,
+                     schema=self.fp, meta=meta, pack_files=["LoanExtract.csv"])  # 2 missing
+        self.assertEqual(m["status"], "pending_review")
+        self.assertEqual(m["event_decision"], "incomplete_pack_pending_review")
+        self.assertEqual(len(inv.calls), 0)            # never started
+        self.assertIn("PropertyExtract.csv", m["error"])
+
+    def test_complete_pack_passes_completeness(self):
+        self._seed_active(pid="direct_001")
+        inv = RecordingInvoker()
+        meta = {"expected_files": ["LoanExtract.csv", "Funder.csv"]}
+        m = self._ev("raw/ERE/funded/monthly/direct_001/2026-01-31/_READY.json", inv,
+                     schema=self.fp, meta=meta, pack_files=["LoanExtract.csv", "Funder.csv"])
+        self.assertEqual(m["status"], "processed")
+
+    # ---- duplicate _READY.json ignored unless force_reprocess --------------
+    def test_duplicate_ready_ignored_then_force(self):
+        self._seed_active(pid="direct_001")
+        inv = RecordingInvoker()
+        blob = "raw/ERE/funded/monthly/direct_001/2026-01-31/_READY.json"
+        self._ev(blob, inv, schema=self.fp)            # first → runs
+        m2 = self._ev(blob, inv, schema=self.fp)       # duplicate → ignored
+        self.assertEqual(m2["status"], "already_processed")
+        self.assertEqual(m2["event_decision"], "duplicate_ready_ignored")
+        self.assertEqual(len(inv.calls), 1)
+        # force_reprocess overrides idempotency
+        m3 = self._ev(blob, inv, schema=self.fp, meta={"force_reprocess": True})
+        self.assertNotEqual(m3["status"], "already_processed")
+        self.assertEqual(len(inv.calls), 2)
+
+    # ---- regime_required from marker → routes to all -----------------------
+    def test_regime_required_marker_routes_all(self):
+        self._seed_active(pid="direct_001", regime_required=False)  # registry says no
+        inv = RecordingInvoker()
+        m = self._ev("raw/ERE/funded/monthly/direct_001/2026-01-31/_READY.json", inv,
+                     schema=self.fp, meta={"regime_required": True})  # marker overrides
+        self.assertEqual(m["selected_target"]["target"], "all")
+        self.assertTrue(m["selected_target"]["run_regime"])
+        self.assertEqual(inv.calls[0]["target"], "all")
+
+    # ---- weekly pipeline never routes to regime even if marker asks --------
+    def test_pipeline_never_regime(self):
+        self._seed_active(pid="direct_001", dataset="pipeline", frequency="weekly")
+        inv = RecordingInvoker()
+        m = self._ev("raw/ERE/pipeline/weekly/direct_001/2026-W05/_READY.json", inv,
+                     schema=self.fp, meta={"regime_required": True, "target": "all"})
+        self.assertEqual(m["selected_target"]["target"], "mi")
+        self.assertFalse(m["selected_target"]["run_regime"])
+        self.assertFalse(inv.calls[0]["run_regime"])
+
+    # ---- acquired new source → onboarding / pending review + metadata ------
+    def test_acquired_new_source_onboarding_with_metadata(self):
+        inv = RecordingInvoker(status="halted")
+        meta = {"acquisition_date": "2025-11-30", "seller_name": "BigBank plc"}
+        m = self._ev("raw/ERE/funded/ad_hoc/acquired_001/2026-01-31/_READY.json", inv,
+                     schema=self.fp, meta=meta)
+        self.assertEqual(m["decision"], "source_onboarding")
+        self.assertEqual(m["status"], "pending_review")
+        self.assertEqual(m["event_decision"], "new_source_pending_review")
+        # acquisition metadata + acquired type passed through to the orchestrator
+        self.assertEqual(inv.calls[0]["acquisition_date"], "2025-11-30")
+        self.assertEqual(inv.calls[0]["seller_name"], "BigBank plc")
+        self.assertEqual(inv.calls[0]["source_portfolio_type"], "acquired")
+        rec = self.registry.lookup("ERE", "acquired_001", "funded", "ad_hoc")
+        self.assertEqual(rec.status, "pending_review")
+
+    # ---- acquired approved known source → deterministic + assembler refresh -
+    def test_acquired_known_source_deterministic_triggers_refresh(self):
+        self._seed_active(pid="acquired_001", frequency="ad_hoc", ptype="acquired")
+        inv = RecordingInvoker()
+        ref = RecordingRefresher()
+        m = self._ev("raw/ERE/funded/ad_hoc/acquired_001/2026-01-31/_READY.json", inv,
+                     schema=self.fp, refresher=ref)
+        self.assertEqual(m["decision"], "deterministic")
+        self.assertEqual(m["status"], "processed")
+        self.assertEqual(inv.calls[0]["source_portfolio_type"], "acquired")
+        # Assembler refresh ran for the funded pack
+        self.assertEqual(len(ref.calls), 1)
+        self.assertEqual(ref.calls[0]["source_portfolio_id"], "acquired_001")
+        self.assertEqual(m["central_canonical_path"], "/platform/central_canonical.csv")
+
+    # ---- pipeline success does NOT trigger the platform assembler refresh ---
+    def test_pipeline_success_no_refresh(self):
+        self._seed_active(pid="direct_001", dataset="pipeline", frequency="weekly")
+        inv = RecordingInvoker()
+        ref = RecordingRefresher()
+        m = self._ev("raw/ERE/pipeline/weekly/direct_001/2026-W05/_READY.json", inv,
+                     schema=self.fp, refresher=ref)
+        self.assertEqual(m["status"], "processed")
+        self.assertEqual(len(ref.calls), 0)            # funded-only refresh
+
+
 if __name__ == "__main__":
     unittest.main()
