@@ -49,6 +49,52 @@ describe("RiskLimitsPanel", () => {
     expect(screen.getByText("schedule_8_concentration.txt")).toBeInTheDocument();
   });
 
+  // B — source provenance banner: Schedule 8 vs fallback vs placeholder.
+  it("shows the Schedule 8 document source without a warning badge", async () => {
+    render(<RiskLimitsPanel client={client(async () => mockRiskLimits("client_001"))}
+      portfolioId="client_001/mi_2025_11" />);
+    const banner = await screen.findByTestId("risk-source-banner");
+    expect(banner.textContent).toMatch(/Schedule 8 document/);
+    // schedule_8_doc → not a fallback/placeholder, so no warning badge.
+    expect(banner.textContent).not.toMatch(/Fallback|Placeholder/);
+  });
+
+  it("warns clearly when the limits come from a fallback config", async () => {
+    const fb = {
+      ...mockRiskLimits("client_001"),
+      limitsSource: "fallback config",
+      sourceType: "fallback_config" as const,
+      extractionStatus: "success" as const,
+      isPlaceholder: false,
+    };
+    render(<RiskLimitsPanel client={client(async () => fb)} portfolioId="client_001" />);
+    const banner = await screen.findByTestId("risk-source-banner");
+    expect(banner.textContent).toMatch(/fallback config/);
+    expect(banner.textContent).toMatch(/Fallback/);
+    expect(banner.textContent).toMatch(/not from the client's Schedule 8/i);
+  });
+
+  it("says 'Schedule 8 not found in docs folder' for a placeholder source", async () => {
+    const ph = {
+      ...mockRiskLimits("client_001"),
+      available: false,
+      limitsStatus: "unavailable",
+      limitsSource: "placeholder / missing source",
+      sourceType: "placeholder" as const,
+      sourceFile: null,
+      extractionStatus: "not_found" as const,
+      isPlaceholder: true,
+      limitsReason: "Schedule 8 not found in docs folder.",
+      tests: [],
+      testsByCategory: {},
+      observations: [],
+    };
+    render(<RiskLimitsPanel client={client(async () => ph)} portfolioId="client_001" />);
+    expect(await screen.findByText("Schedule 8 not found in docs folder")).toBeInTheDocument();
+    const banner = screen.getByTestId("risk-source-banner");
+    expect(banner.textContent).toMatch(/Placeholder/);
+  });
+
   it("shows a controlled 'limits unavailable' state when no limits", async () => {
     const empty = {
       ...mockRiskLimits("client_001"),

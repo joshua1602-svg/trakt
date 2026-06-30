@@ -40,6 +40,12 @@ export interface RiskLimitsSummary {
   largestConcentration: { label: string; actualValue: number; limitId: string } | null;
 }
 
+// Production config-contract source metadata (mirrors risk_limits_config.yaml).
+export type RiskSourceType =
+  | "schedule_8_doc" | "onboarding_config" | "fallback_config" | "placeholder";
+export type RiskExtractionStatus =
+  | "success" | "partial" | "failed" | "not_found";
+
 export interface RiskLimitsSnapshot {
   portfolioId: string;
   toRunId: string | null;
@@ -48,6 +54,12 @@ export interface RiskLimitsSnapshot {
   limitsStatus: string;
   limitsSource: string;
   limitsReason?: string | null;
+  // Self-describing source so the UI never shows fallback/placeholder silently.
+  sourceType?: RiskSourceType | string;
+  sourceFile?: string | null;
+  extractionStatus?: RiskExtractionStatus | string;
+  isPlaceholder?: boolean;
+  diagnostics?: Record<string, unknown> | null;
   fundedDataAvailable: boolean;
   summary: RiskLimitsSummary;
   testsByCategory: Record<string, RiskLimitTest[]>;
