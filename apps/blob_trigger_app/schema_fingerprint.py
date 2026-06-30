@@ -82,6 +82,31 @@ def _fingerprint_csv(p: Path, ext: str, include_order: bool) -> SchemaInfo:
     return info
 
 
+def fingerprint_pack(paths, *, include_order: bool = True) -> SchemaInfo:
+    """Combine several data files in a reporting pack into ONE fingerprint.
+
+    The key is the per-file ``{filename: columns}`` map (+ file types) — so the
+    fingerprint covers the whole pack (loan + cashflow + collateral …) and flips
+    if any file's schema changes. Marker files (no recognised tabular type) are
+    skipped.
+    """
+    sheet_columns: Dict[str, List[str]] = {}
+    file_types: List[str] = []
+    for path in sorted(str(p) for p in paths):
+        p = Path(path)
+        ext = p.suffix.lower().lstrip(".")
+        if ext not in ("csv", "xlsx", "xls", "xlsm"):
+            continue
+        info = compute_schema_fingerprint(p, include_order=include_order)
+        sheet_columns[p.name] = info.columns
+        file_types.append(ext)
+    primary = sheet_columns.get(sorted(sheet_columns)[0], []) if sheet_columns else []
+    return fingerprint_from_schema(
+        file_type="+".join(sorted(set(file_types))) or "pack",
+        columns=primary, sheets=sorted(sheet_columns.keys()),
+        sheet_columns=sheet_columns, include_order=include_order)
+
+
 def _fingerprint_excel(p: Path, ext: str, include_order: bool) -> SchemaInfo:
     import pandas as pd
     xl = pd.ExcelFile(p)

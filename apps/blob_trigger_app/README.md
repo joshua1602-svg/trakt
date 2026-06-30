@@ -15,8 +15,27 @@ setting (default `raw`; e.g. `raw-v2`). It is referenced as
 the path parser — so set it once. (`%…%` is resolved by the Functions host, so
 the setting must be present; the example settings ship it defaulted to `raw`.)
 
+## Pack completion (READY sentinel)
+
+A reporting pack is usually several files (loan + cashflow + collateral …). The
+trigger fires **per blob**, so to avoid starting on the first file (against an
+incomplete pack) or running once per file, processing is gated on a **completion
+marker**: the uploader writes the data files, then writes a marker file
+**last** — `…/{reporting_period}/_READY` (name configurable via
+`TRAKT_PACK_MARKER`, default `_READY`).
+
+- **Data-file events** are acknowledged and logged (`status: awaiting_pack`) — the
+  Orchestrator is **not** started.
+- **The marker event** lists + fingerprints the now-complete folder and starts the
+  Orchestrator **exactly once** against the whole pack.
+- **Idempotency:** a folder-level processed marker (`out/.../_packs/{pack_key}.json`)
+  records the run; a duplicate/re-fired marker with the same schema is skipped
+  (`status: already_processed`). New data (different fingerprint) is *not* skipped.
+
 On each upload it:
 1. parses the path (fail closed if it doesn't match the convention);
+1a. **completion gate** — only the `_READY` marker starts processing; data files
+   are logged as pack members;
 2. computes a **schema fingerprint** (column names/order, Excel sheet names, file
    type — never cell values);
 3. looks the source up in the **source registry**;

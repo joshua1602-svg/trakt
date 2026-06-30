@@ -25,6 +25,10 @@ STATUS_PROCESSED = "processed"
 STATUS_HALTED = "halted"
 STATUS_PENDING_REVIEW = "pending_review"
 STATUS_FAILED = "failed"
+STATUS_AWAITING_PACK = "awaiting_pack"        # a data file arrived; waiting for the READY marker
+STATUS_ALREADY_PROCESSED = "already_processed"  # idempotency: this pack already ran
+
+DEFAULT_PACK_MARKER = "_READY"
 
 # Routing decisions.
 DECISION_DETERMINISTIC = "deterministic"
@@ -42,7 +46,9 @@ def handle_blob_event(
     registry: SourceRegistry,
     out_dir: str | Path,
     container: str = "raw",
+    pack_marker: str = DEFAULT_PACK_MARKER,
     local_input_path: Optional[str] = None,
+    input_dir_override: Optional[str] = None,
     schema_info: Optional[SchemaInfo] = None,
     orchestrator_invoker: OrchestratorInvoker = default_orchestrator_invoker,
     now: Optional[str] = None,
@@ -79,6 +85,20 @@ def handle_blob_event(
         client_id=parsed.client_id, dataset=parsed.dataset,
         frequency=parsed.frequency, source_portfolio_id=parsed.source_portfolio_id,
         reporting_period=parsed.reporting_period)
+    manifest["pack_key"] = _pack_key(parsed)
+    manifest["is_pack_marker"] = parsed.filename == pack_marker
+
+    # 1b) Completion gate (READY sentinel) --------------------------------
+    # Only the marker file starts processing. A data-file upload is acknowledged
+    # and logged as a pack member, but never starts the Orchestrator — the pack
+    # runs once, when the uploader writes the marker last.
+    if parsed.filename != pack_marker:
+        manifest["status"] = STATUS_AWAITING_PACK
+        manifest["decision"] = "pack_member"
+        manifest["orchestrator_invocation"] = {
+            "invoked": False, "reason": f"awaiting completion marker {pack_marker!r}"}
+        write_event_manifest(manifest, out_dir)
+        return manifest
 
     # 2) Schema fingerprint (fail closed) ---------------------------------
     try:
@@ -92,6 +112,18 @@ def handle_blob_event(
         write_event_manifest(manifest, out_dir)
         return manifest
     manifest["schema_fingerprint"] = schema_info.fingerprint
+
+    # 2b) Idempotency — a pack that already ran this exact schema is skipped,
+    # so a duplicate/re-fired marker event never double-runs the Orchestrator.
+    prior = _read_processed(out_dir, manifest["pack_key"])
+    if prior and prior.get("schema_fingerprint") == schema_info.fingerprint:
+        manifest["status"] = STATUS_ALREADY_PROCESSED
+        manifest["decision"] = "idempotent_skip"
+        manifest["orchestrator_invocation"] = {
+            "invoked": False, "reason": "pack already processed",
+            "prior_run_id": prior.get("run_id"), "prior_status": prior.get("status")}
+        write_event_manifest(manifest, out_dir)
+        return manifest
 
     # 3) Registry inference ------------------------------------------------
     rec = registry.lookup(parsed.client_id, parsed.source_portfolio_id,
@@ -111,8 +143,9 @@ def handle_blob_event(
     manifest["requires_source_onboarding"] = decision != DECISION_DETERMINISTIC
     manifest["decision"] = decision
 
-    input_for_orch = (str(Path(local_input_path).parent)
-                      if local_input_path else parsed.blob_path)
+    input_for_orch = (input_dir_override
+                      or (str(Path(local_input_path).parent) if local_input_path
+                          else parsed.blob_path))
 
     # 4) Route -------------------------------------------------------------
     if decision == DECISION_SCHEMA_DRIFT:
@@ -144,6 +177,7 @@ def handle_blob_event(
         manifest["status"] = STATUS_PENDING_REVIEW
         _upsert_source(registry, parsed, schema_info, status=STATUS_PENDING_REVIEW,
                        regime_required=regime_required)
+        _write_processed(out_dir, manifest, schema_info, result)
         write_event_manifest(manifest, out_dir)
         return manifest
 
@@ -170,8 +204,51 @@ def handle_blob_event(
     else:
         manifest["status"] = STATUS_FAILED
         manifest["error"] = "; ".join((result or {}).get("blockers") or []) or "orchestrator_failed"
+    # Mark the pack processed (idempotency) on any orchestrator-invoking outcome.
+    _write_processed(out_dir, manifest, schema_info, result)
     write_event_manifest(manifest, out_dir)
     return manifest
+
+
+# --------------------------------------------------------------------------- #
+# Pack idempotency helpers (folder-level, keyed on the reporting pack)
+# --------------------------------------------------------------------------- #
+
+def _pack_key(parsed: ParsedPath) -> str:
+    import re
+    raw = "/".join([parsed.client_id, parsed.source_portfolio_id,
+                    parsed.dataset, parsed.frequency, parsed.reporting_period])
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", raw)
+
+
+def _processed_path(out_dir: str | Path, pack_key: str) -> Path:
+    return Path(out_dir) / "_packs" / f"{pack_key}.json"
+
+
+def _read_processed(out_dir: str | Path, pack_key: str) -> Optional[Dict[str, Any]]:
+    import json
+    p = _processed_path(out_dir, pack_key)
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _write_processed(out_dir: str | Path, manifest: Dict[str, Any],
+                     schema: SchemaInfo, result: Optional[Dict[str, Any]]) -> None:
+    import json
+    p = _processed_path(out_dir, manifest["pack_key"])
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({
+        "pack_key": manifest["pack_key"],
+        "schema_fingerprint": schema.fingerprint,
+        "status": manifest["status"],
+        "event_id": manifest["event_id"],
+        "run_id": (result or {}).get("run_id"),
+        "created_at": manifest["created_at"],
+    }, indent=2), encoding="utf-8")
 
 
 def _inv(result: Optional[Dict[str, Any]]) -> Dict[str, Any]:

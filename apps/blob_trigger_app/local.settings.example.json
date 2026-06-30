@@ -5,6 +5,7 @@
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
     "TRAKT_BLOB_CONNECTION": "<storage-connection-string>",
     "TRAKT_BLOB_CONTAINER": "raw",
+    "TRAKT_PACK_MARKER": "_READY",
     "TRAKT_SOURCE_REGISTRY": "config/source_registry.yaml",
     "TRAKT_TRIGGER_OUT": "out/blob_trigger"
   }

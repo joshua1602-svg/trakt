@@ -28,6 +28,7 @@ from pathlib import Path
 import azure.functions as func  # type: ignore
 
 from .router import handle_blob_event
+from .schema_fingerprint import fingerprint_pack
 from .source_registry import SourceRegistry
 
 app = func.FunctionApp()
@@ -37,24 +38,60 @@ _OUT_DIR = os.environ.get("TRAKT_TRIGGER_OUT", "out/blob_trigger")
 # Read in code to anchor the path parser; the host resolves %TRAKT_BLOB_CONTAINER%
 # in the binding path below from the SAME app setting.
 _CONTAINER = os.environ.get("TRAKT_BLOB_CONTAINER", "raw")
+# Completion sentinel (Option A): the uploader writes this file LAST; only it
+# starts processing, against the now-complete reporting folder.
+_PACK_MARKER = os.environ.get("TRAKT_PACK_MARKER", "_READY")
+
+
+def _name_in_container(blob_name: str) -> str:
+    """Strip a leading ``{container}/`` from blob.name if present."""
+    prefix = _CONTAINER + "/"
+    return blob_name[len(prefix):] if blob_name.startswith(prefix) else blob_name
+
+
+def _download_pack(folder_prefix: str, dest: Path) -> None:
+    """Download every non-marker blob under ``folder_prefix`` into ``dest``."""
+    from azure.storage.blob import BlobServiceClient  # type: ignore
+    conn = os.environ["TRAKT_BLOB_CONNECTION"]
+    svc = BlobServiceClient.from_connection_string(conn)
+    container = svc.get_container_client(_CONTAINER)
+    for b in container.list_blobs(name_starts_with=folder_prefix):
+        fname = b.name.rsplit("/", 1)[-1]
+        if fname == _PACK_MARKER:
+            continue
+        (dest / fname).write_bytes(container.download_blob(b.name).readall())
 
 
 @app.blob_trigger(arg_name="blob", path="%TRAKT_BLOB_CONTAINER%/{name}",
                   connection="TRAKT_BLOB_CONNECTION")
 def on_raw_blob_upload(blob: func.InputStream) -> None:
-    blob_path = blob.name  # e.g. "raw/ERE/funded/monthly/direct_001/2026-09-30/loan_tape.xlsx"
-    logging.info("blob trigger: %s (%s bytes)", blob_path, blob.length)
-
-    # Download the blob to a temp dir whose layout the Orchestrator can consume.
-    tmp = Path(tempfile.mkdtemp(prefix="trakt_blob_"))
+    blob_path = blob.name  # e.g. ".../direct_001/2026-09-30/loan_tape.xlsx" or .../_READY
     filename = Path(blob_path).name
-    local_path = tmp / filename
-    local_path.write_bytes(blob.read())
-
+    logging.info("blob trigger: %s (%s bytes)", blob_path, blob.length)
     registry = SourceRegistry(_REGISTRY_PATH)
+
+    # Data-file event → acknowledge as a pack member; do NOT start the pipeline.
+    if filename != _PACK_MARKER:
+        manifest = handle_blob_event(
+            blob_path, registry=registry, out_dir=_OUT_DIR,
+            container=_CONTAINER, pack_marker=_PACK_MARKER)
+        logging.info("pack member received: %s (status=%s)", blob_path, manifest.get("status"))
+        return
+
+    # Marker event → the folder is complete. Download the pack, fingerprint it,
+    # and route once against the assembled pack directory.
+    name_in_container = _name_in_container(blob_path)
+    folder_prefix = name_in_container.rsplit("/", 1)[0] + "/"
+    pack_dir = Path(tempfile.mkdtemp(prefix="trakt_pack_"))
+    _download_pack(folder_prefix, pack_dir)
+    data_files = [p for p in pack_dir.iterdir() if p.is_file()]
+    schema = fingerprint_pack(data_files) if data_files else None
+    primary = str(sorted(data_files)[0]) if data_files else None
+
     manifest = handle_blob_event(
         blob_path, registry=registry, out_dir=_OUT_DIR, container=_CONTAINER,
-        local_input_path=str(local_path))
-    logging.info("trigger decision: status=%s decision=%s target=%s",
+        pack_marker=_PACK_MARKER, input_dir_override=str(pack_dir),
+        local_input_path=primary, schema_info=schema)
+    logging.info("pack complete → trigger decision: status=%s decision=%s target=%s",
                  manifest.get("status"), manifest.get("decision"),
                  (manifest.get("selected_target") or {}).get("target"))

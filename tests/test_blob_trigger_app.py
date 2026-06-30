@@ -95,8 +95,8 @@ class TestPathParsing(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             reg = SourceRegistry(Path(td) / "r.json")
             m = R.handle_blob_event(
-                "raw-v2/ERE/funded/monthly/acquired_001/2026-09-30/loan_tape.xlsx",
-                registry=reg, out_dir=td, container="raw-v2",
+                "raw-v2/ERE/funded/monthly/acquired_001/2026-09-30/_READY",
+                registry=reg, out_dir=td, container="raw-v2", pack_marker="_READY",
                 schema_info=_fp(), orchestrator_invoker=RecordingInvoker(status="halted"),
                 now=_NOW)
             self.assertEqual(m["client_id"], "ERE")
@@ -107,7 +107,7 @@ class TestPathParsing(unittest.TestCase):
                     "raw/ERE/BADSET/monthly/direct_001/2026-09-30/x.xlsx",     # bad dataset
                     "raw/ERE/funded/yearly/direct_001/2026-09-30/x.xlsx",      # bad frequency
                     "raw/ERE/funded/monthly/direct_001/not-a-period/x.xlsx",   # bad period
-                    "raw/ERE/funded/monthly/direct_001/2026-09-30/noext",      # no extension
+                    "raw/ERE/funded/monthly/direct_001/2026-09-30/",           # empty filename
                     "raw/ERE/extra/funded/monthly/direct_001/2026-09-30/x.xlsx"):  # too many
             with self.assertRaises(PathParseError, msg=bad):
                 parse_blob_path(bad)
@@ -188,8 +188,13 @@ class TestRouting(unittest.TestCase):
             regime_required=regime_required, status=STATUS_ACTIVE))
 
     def _run(self, blob, *, invoker, schema=None):
+        # Processing fires on the completion marker (Option A); rewrite the
+        # uploaded data file to the folder's _READY marker so these decision
+        # tests exercise the real routing rather than the pack-member gate.
+        if "/" in blob and not blob.endswith("/_READY"):
+            blob = blob.rsplit("/", 1)[0] + "/_READY"
         return R.handle_blob_event(
-            blob, registry=self.registry, out_dir=self.out,
+            blob, registry=self.registry, out_dir=self.out, pack_marker="_READY",
             schema_info=schema or self.fp, orchestrator_invoker=invoker, now=_NOW)
 
     # ---- known source: deterministic ---------------------------------------
@@ -273,6 +278,65 @@ class TestRouting(unittest.TestCase):
         m = self._run("raw/ERE/forecast/monthly/direct_001/2026-09-30/forecast.xlsx", invoker=inv)
         self.assertFalse(m["selected_target"]["run_regime"])
         self.assertFalse(inv.calls[0]["run_regime"])
+
+
+class TestPackCompletion(unittest.TestCase):
+    """Option A: only the READY marker starts processing; idempotent re-fires."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.out = self._tmp.name
+        self.registry = SourceRegistry(Path(self.out) / "r.json")
+        self.fp = _fp()
+        self.folder = "raw/ERE/funded/monthly/direct_001/2026-09-30"
+        # Known source so the marker routes deterministically.
+        self.registry.upsert(SourceRecord(
+            client_id="ERE", source_portfolio_id="direct_001", dataset="funded",
+            frequency="monthly", source_portfolio_type="direct", approved_mapping_id="m1",
+            expected_schema_fingerprint=self.fp.fingerprint, status=STATUS_ACTIVE))
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _ev(self, filename, inv, schema=None):
+        return R.handle_blob_event(
+            f"{self.folder}/{filename}", registry=self.registry, out_dir=self.out,
+            pack_marker="_READY", schema_info=schema, orchestrator_invoker=inv, now=_NOW)
+
+    def test_data_files_do_not_start_orchestrator(self):
+        inv = RecordingInvoker()
+        for f in ("loan_tape.xlsx", "cashflow.xlsx", "collateral.xlsx"):
+            m = self._ev(f, inv)
+            self.assertEqual(m["status"], "awaiting_pack")
+            self.assertFalse(m["orchestrator_invocation"]["invoked"])
+        self.assertEqual(len(inv.calls), 0)          # three files, zero runs
+
+    def test_marker_starts_once_after_pack(self):
+        inv = RecordingInvoker()
+        for f in ("loan_tape.xlsx", "cashflow.xlsx", "collateral.xlsx"):
+            self._ev(f, inv)
+        m = self._ev("_READY", inv, schema=self.fp)   # uploader writes marker LAST
+        self.assertEqual(m["decision"], "deterministic")
+        self.assertEqual(m["status"], "processed")
+        self.assertEqual(len(inv.calls), 1)           # exactly one orchestrator run
+        self.assertEqual(inv.calls[0]["processing_mode"], "deterministic")
+
+    def test_idempotent_marker_refire_skipped(self):
+        inv = RecordingInvoker()
+        self._ev("_READY", inv, schema=self.fp)        # first marker → runs
+        m2 = self._ev("_READY", inv, schema=self.fp)   # duplicate marker → skipped
+        self.assertEqual(m2["status"], "already_processed")
+        self.assertFalse(m2["orchestrator_invocation"]["invoked"])
+        self.assertEqual(len(inv.calls), 1)           # still only one run
+
+    def test_changed_pack_reruns(self):
+        inv = RecordingInvoker()
+        self._ev("_READY", inv, schema=self.fp)        # runs
+        # new data (different fingerprint) → not idempotent-skipped. With a known
+        # source this is schema_drift (fail closed), but it is NOT skipped.
+        m = self._ev("_READY", inv, schema=_fp(_COLUMNS + ["extra"]))
+        self.assertNotEqual(m["status"], "already_processed")
+        self.assertEqual(m["decision"], "schema_drift")
 
 
 if __name__ == "__main__":
