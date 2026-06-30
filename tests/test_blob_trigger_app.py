@@ -1015,5 +1015,70 @@ class TestBackfill(unittest.TestCase):
         self.assertNotIn("regime_uris", (m.get("persisted") or {}))
 
 
+# --------------------------------------------------------------------------- #
+# 21. Exception logging — first failing persistence op is diagnosable
+# --------------------------------------------------------------------------- #
+
+class _BoomStorage(Storage):
+    """Storage whose writes always fail (simulates a Blob 403 / missing container)."""
+    def exists(self, uri):
+        return False
+    def write_text(self, uri, text):
+        raise RuntimeError("blob write denied (simulated)")
+
+
+class TestExceptionLogging(unittest.TestCase):
+
+    def test_storage_write_guard_logs_uri_and_traceback(self):
+        with tempfile.TemporaryDirectory() as td:
+            s = Storage(local_root=td)
+            uri = "blob://processed-v2/accepted/ERE/x_canonical_typed.csv"
+            with self.assertLogs("trakt.blob_trigger.storage", level="ERROR") as cm, \
+                    self.assertRaises(Exception):
+                s.upload_file(str(Path(td) / "missing.csv"), uri)   # source absent → fails
+            blob = "\n".join(cm.output)
+            self.assertIn("STORAGE WRITE FAILED", blob)
+            self.assertIn(uri, blob)
+            self.assertIn("Traceback", blob)
+
+    def test_registry_save_failure_logs_uri_and_traceback(self):
+        reg = SourceRegistry("blob://trakt-state/registry/source_registry.yaml",
+                             storage=_BoomStorage(local_root="/tmp"))
+        with self.assertLogs("trakt.blob_trigger.source_registry", level="ERROR") as cm, \
+                self.assertRaises(RuntimeError):
+            reg.upsert(SourceRecord(client_id="ERE", source_portfolio_id="acquired_001",
+                                    dataset="funded", frequency="ad_hoc"))
+        blob = "\n".join(cm.output)
+        self.assertIn("REGISTRY SAVE FAILED", blob)
+        self.assertIn("trakt-state/registry/source_registry.yaml", blob)
+        self.assertIn("Traceback", blob)
+
+    def test_router_wraps_uncaught_and_logs_blob_path_and_traceback(self):
+        with tempfile.TemporaryDirectory() as td:
+            reg = SourceRegistry("blob://trakt-state/registry/source_registry.yaml",
+                                 storage=_BoomStorage(local_root=td))
+            blob_path = "raw-v2/ERE/acquired/funded/ad_hoc/acquired_001/2025-11-30/_READY.json"
+            with self.assertLogs("trakt.blob_trigger", level="ERROR") as cm, \
+                    self.assertRaises(RuntimeError):
+                R.handle_blob_event(
+                    blob_path, registry=reg, out_dir=td, container="raw-v2",
+                    pack_marker="_READY.json", schema_info=_fp(),
+                    orchestrator_invoker=RecordingInvoker(status="halted"), now=_NOW)
+            blob = "\n".join(cm.output)
+            self.assertIn("BLOB-TRIGGER ROUTER FAILED", blob)
+            self.assertIn(blob_path, blob)
+            self.assertIn("Traceback", blob)
+
+    def test_persistence_op_logs_uri_on_failure(self):
+        persistence = ProductionPersistence(_BoomStorage(local_root="/tmp"), Layout())
+        with self.assertLogs("trakt.blob_trigger.persistence", level="ERROR") as cm, \
+                self.assertRaises(RuntimeError):
+            persistence.persist_event_manifest({"event_id": "evt_x", "k": "v"})
+        blob = "\n".join(cm.output)
+        self.assertIn("PERSISTENCE FAILED", blob)
+        self.assertIn("op=persist_event_manifest", blob)
+        self.assertIn("trakt-state/events/evt_x.json", blob)
+
+
 if __name__ == "__main__":
     unittest.main()

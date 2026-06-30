@@ -14,12 +14,32 @@ existing local behaviour is unchanged.
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
+import traceback
+from contextlib import contextmanager
 from pathlib import Path
 from typing import List, Optional
 
 BLOB_SCHEME = "blob://"
+
+logger = logging.getLogger("trakt.blob_trigger.storage")
+
+
+@contextmanager
+def _write_guard(op: str, uri: str, backend: str):
+    """Log the full traceback + the URI of any failing storage write, re-raise.
+
+    This is the seam that turns a silent Azure 'Executed (Failed)' into an
+    identifiable first-failing persistence operation in the logs.
+    """
+    try:
+        yield
+    except Exception:  # noqa: BLE001 — log then re-raise (never swallow)
+        logger.error("STORAGE WRITE FAILED backend=%s op=%s uri=%s\n%s",
+                     backend, op, uri, traceback.format_exc())
+        raise
 
 
 def is_blob_uri(uri: str) -> bool:
@@ -71,28 +91,34 @@ class Storage:
     def read_bytes(self, uri: str) -> bytes:
         return self._local_path(uri).read_bytes()
 
+    _backend_name = "filesystem"
+
     def write_text(self, uri: str, text: str) -> str:
-        p = self._local_path(uri)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(text, encoding="utf-8")
+        with _write_guard("write_text", uri, self._backend_name):
+            p = self._local_path(uri)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(text, encoding="utf-8")
         return uri
 
     def write_bytes(self, uri: str, data: bytes) -> str:
-        p = self._local_path(uri)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_bytes(data)
+        with _write_guard("write_bytes", uri, self._backend_name):
+            p = self._local_path(uri)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(data)
         return uri
 
     def upload_file(self, local_path: str | os.PathLike, uri: str) -> str:
-        p = self._local_path(uri)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(str(local_path), str(p))
+        with _write_guard(f"upload_file<-{local_path}", uri, self._backend_name):
+            p = self._local_path(uri)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(str(local_path), str(p))
         return uri
 
     def download_file(self, uri: str, local_path: str | os.PathLike) -> Path:
-        dest = Path(local_path)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(str(self._local_path(uri)), str(dest))
+        with _write_guard(f"download_file->{local_path}", uri, self._backend_name):
+            dest = Path(local_path)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(str(self._local_path(uri)), str(dest))
         return dest
 
     def list(self, prefix_uri: str) -> List[str]:
@@ -139,22 +165,27 @@ class BlobStorage(Storage):
     def read_text(self, uri: str) -> str:
         return self.read_bytes(uri).decode("utf-8")
 
+    _backend_name = "azure_blob"
+
     def write_bytes(self, uri: str, data: bytes) -> str:
-        self._client(uri).upload_blob(data, overwrite=True)
+        with _write_guard("write_bytes", uri, self._backend_name):
+            self._client(uri).upload_blob(data, overwrite=True)
         return uri
 
     def write_text(self, uri: str, text: str) -> str:
         return self.write_bytes(uri, text.encode("utf-8"))
 
     def upload_file(self, local_path: str | os.PathLike, uri: str) -> str:
-        with open(local_path, "rb") as fh:
-            self._client(uri).upload_blob(fh, overwrite=True)
+        with _write_guard(f"upload_file<-{local_path}", uri, self._backend_name):
+            with open(local_path, "rb") as fh:
+                self._client(uri).upload_blob(fh, overwrite=True)
         return uri
 
     def download_file(self, uri: str, local_path: str | os.PathLike) -> Path:
-        dest = Path(local_path)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(self.read_bytes(uri))
+        with _write_guard(f"download_file->{local_path}", uri, self._backend_name):
+            dest = Path(local_path)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(self.read_bytes(uri))
         return dest
 
     def list(self, prefix_uri: str) -> List[str]:

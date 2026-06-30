@@ -180,6 +180,12 @@ App settings: `TRAKT_RAW_CONTAINER=raw-v2`, `TRAKT_STATE_CONTAINER=trakt-state`,
 `TRAKT_PROCESSED_CONTAINER=processed-v2`, `TRAKT_SOURCE_REGISTRY_URI=blob://…`,
 `TRAKT_STORAGE_BACKEND=blob|file`, `TRAKT_BLOB_CONNECTION`, `TRAKT_LOCAL_BLOB_ROOT`.
 
+> **The `trakt-state` and `processed-v2` containers must exist** (the SDK does not
+> create them). Every storage write logs its full traceback **and the blob URI**
+> on failure — loggers `trakt.blob_trigger.{storage,persistence,source_registry,router}`
+> — so a silent Azure "Executed (Failed)" surfaces the first failing persistence
+> operation (e.g. `REGISTRY SAVE FAILED uri=blob://trakt-state/registry/…`).
+
 ## Approval workflow
 
 New sources and schema changes are **human-gated**. When a pack is detected as a

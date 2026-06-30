@@ -15,6 +15,8 @@ tests are unaffected.
 from __future__ import annotations
 
 import json
+import logging
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -24,6 +26,13 @@ from .layout import Layout
 from .source_registry import SourceRegistry
 from .storage import Storage
 
+logger = logging.getLogger("trakt.blob_trigger.persistence")
+
+
+def _persist_step(op: str, uri: Optional[str] = None):
+    """Log the full traceback + target URI of a failing persistence op, re-raise."""
+    logger.error("PERSISTENCE FAILED op=%s uri=%s\n%s", op, uri, traceback.format_exc())
+
 
 @dataclass
 class ProductionPersistence:
@@ -32,35 +41,57 @@ class ProductionPersistence:
 
     # -- registry ---------------------------------------------------------- #
     def load_registry(self) -> SourceRegistry:
-        return SourceRegistry(self.layout.registry_uri, storage=self.storage)
+        uri = self.layout.registry_uri
+        try:
+            return SourceRegistry(uri, storage=self.storage)
+        except Exception:
+            _persist_step("load_registry", uri)
+            raise
 
     # -- event manifests --------------------------------------------------- #
     def persist_event_manifest(self, manifest: Dict[str, Any]) -> str:
         uri = self.layout.event_uri(manifest["event_id"])
-        self.storage.write_text(uri, json.dumps(manifest, indent=2, default=str))
+        try:
+            self.storage.write_text(uri, json.dumps(manifest, indent=2, default=str))
+        except Exception:
+            _persist_step("persist_event_manifest", uri)
+            raise
         return uri
 
     # -- approvals --------------------------------------------------------- #
     def write_pending_approval(self, **kw) -> Dict[str, Any]:
-        return _approvals.write_pending(self.storage, self.layout, **kw)
+        uri = self.layout.approvals_prefix()
+        try:
+            return _approvals.write_pending(self.storage, self.layout, **kw)
+        except Exception:
+            _persist_step("write_pending_approval", uri)
+            raise
 
     # -- accepted per-portfolio canonical ---------------------------------- #
     def persist_accepted(self, client_id: str, source_portfolio_id: str,
                          local_path: str) -> Optional[str]:
         if not local_path or not Path(local_path).exists():
             return None
-        return self.storage.upload_file(
-            local_path, self.layout.accepted_uri(client_id, source_portfolio_id))
+        uri = self.layout.accepted_uri(client_id, source_portfolio_id)
+        try:
+            return self.storage.upload_file(local_path, uri)
+        except Exception:
+            _persist_step("persist_accepted", uri)
+            raise
 
     # -- central platform canonical (latest + period) ---------------------- #
     def persist_platform(self, client_id: str, period: str,
                          local_path: str) -> Dict[str, Optional[str]]:
         if not local_path or not Path(local_path).exists():
             return {"latest": None, "period": None}
-        latest = self.storage.upload_file(
-            local_path, self.layout.platform_latest_uri(client_id))
-        period_uri = self.storage.upload_file(
-            local_path, self.layout.platform_period_uri(client_id, period))
+        uri = self.layout.platform_latest_uri(client_id)
+        try:
+            latest = self.storage.upload_file(local_path, uri)
+            uri = self.layout.platform_period_uri(client_id, period)
+            period_uri = self.storage.upload_file(local_path, uri)
+        except Exception:
+            _persist_step("persist_platform", uri)
+            raise
         return {"latest": latest, "period": period_uri}
 
     # -- regime outputs ---------------------------------------------------- #
@@ -73,10 +104,16 @@ class ProductionPersistence:
             return []
         prefix = self.layout.regime_prefix(client_id, period)
         out: List[str] = []
-        for f in sorted(base.rglob("*")):
-            if f.is_file():
-                rel = f.relative_to(base).as_posix()
-                out.append(self.storage.upload_file(str(f), f"{prefix}/{rel}"))
+        uri = prefix
+        try:
+            for f in sorted(base.rglob("*")):
+                if f.is_file():
+                    rel = f.relative_to(base).as_posix()
+                    uri = f"{prefix}/{rel}"
+                    out.append(self.storage.upload_file(str(f), uri))
+        except Exception:
+            _persist_step("persist_regime_dir", uri)
+            raise
         return out
 
     # -- MI locator -------------------------------------------------------- #
