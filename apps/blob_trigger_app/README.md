@@ -138,6 +138,12 @@ carries the approved mapping id/path, expected schema fingerprint + columns, las
 successful run/period, `regime_required`, and `status`
 (`active` / `pending_review` / `retired`).
 
+> **Azure note:** the registry is **read + written** (`upsert` persists
+> last-successful run/period and `pending_review` transitions). The default
+> `config/source_registry.yaml` lives under the read-only package mount, so in
+> Azure point **`TRAKT_SOURCE_REGISTRY`** at a writable, persistent location
+> (e.g. an Azure Files mount) — `/tmp` would not survive across instances.
+
 ## Deployment entrypoint
 
 - **Azure event source: Event Grid.** An Event Grid subscription on the storage
@@ -152,6 +158,15 @@ successful run/period, `regime_required`, and `status`
   skipped `raw-v2`; the accepted container is now configuration, not a constant.
 - **Upload data files first; upload `_READY.json` last** to trigger processing.
   Use **one `_READY.json` per reporting pack**.
+- **Writable output root (Azure-safe).** Azure runs from a read-only package
+  mount (`/home/site/wwwroot`), so all runtime output (event manifests,
+  orchestrator state/run dirs, accepted + central platform canonicals) derives
+  from a single writable root resolved by `runtime_paths.resolve_output_root()`:
+  `TRAKT_TRIGGER_OUT` if set, else `/tmp/trakt/blob_trigger` in Azure, else
+  `out/blob_trigger` locally. Downloaded pack files use the system temp dir
+  (`/tmp`). Nothing writes under repo-root `out/` in Azure. Set
+  `TRAKT_TRIGGER_OUT` to an Azure Files mount if you need outputs to persist
+  beyond the instance.
 
 > The native `@app.blob_trigger` variant in
 > `apps/blob_trigger_app/function_app.py` is **not deployed** (kept for local

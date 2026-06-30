@@ -24,7 +24,8 @@ App settings (see local.settings.example.json):
                             path AND read in code to anchor the path parser.
     TRAKT_BLOB_CONNECTION   storage connection (app-setting name, not the string)
     TRAKT_SOURCE_REGISTRY   path to the source registry (default config/source_registry.yaml)
-    TRAKT_TRIGGER_OUT       event-log + run output dir (default out/blob_trigger)
+    TRAKT_TRIGGER_OUT       writable runtime output root (Azure-safe default:
+                            /tmp/trakt/blob_trigger in Azure, out/blob_trigger locally)
 """
 
 from __future__ import annotations
@@ -37,13 +38,15 @@ from pathlib import Path
 import azure.functions as func  # type: ignore
 
 from .router import handle_blob_event
+from .runtime_paths import resolve_output_root
 from .schema_fingerprint import fingerprint_pack
 from .source_registry import SourceRegistry
 
 app = func.FunctionApp()
 
 _REGISTRY_PATH = os.environ.get("TRAKT_SOURCE_REGISTRY", "config/source_registry.yaml")
-_OUT_DIR = os.environ.get("TRAKT_TRIGGER_OUT", "out/blob_trigger")
+# Azure-safe writable output root (see runtime_paths); TRAKT_TRIGGER_OUT overrides.
+_OUT_DIR = resolve_output_root()
 # Read in code to anchor the path parser; the host resolves %TRAKT_BLOB_CONTAINER%
 # in the binding path below from the SAME app setting.
 _CONTAINER = os.environ.get("TRAKT_BLOB_CONTAINER", "raw")

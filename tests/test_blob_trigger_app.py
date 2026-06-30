@@ -531,5 +531,109 @@ class TestReadyJsonAndAcquired(unittest.TestCase):
         self.assertEqual(len(ref.calls), 0)            # funded-only refresh
 
 
+# --------------------------------------------------------------------------- #
+# 15. Azure-safe runtime output paths (TRAKT_TRIGGER_OUT propagation)
+# --------------------------------------------------------------------------- #
+
+import os
+from unittest import mock
+
+from apps.blob_trigger_app import runtime_paths as RP
+from apps.blob_trigger_app.orchestrator_invoke import default_orchestrator_invoker
+
+
+class TestRuntimePaths(unittest.TestCase):
+
+    def test_explicit_wins(self):
+        self.assertEqual(RP.resolve_output_root("/tmp/x/y"), "/tmp/x/y")
+
+    def test_env_respected(self):
+        with mock.patch.dict(os.environ, {"TRAKT_TRIGGER_OUT": "/tmp/trakt/blob_trigger"},
+                             clear=False):
+            self.assertEqual(RP.resolve_output_root(), "/tmp/trakt/blob_trigger")
+
+    def test_azure_default_when_no_env(self):
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("TRAKT_TRIGGER_OUT",)}
+        env["WEBSITE_INSTANCE_ID"] = "abc123"     # simulate Azure
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertTrue(RP.running_in_azure())
+            self.assertEqual(RP.resolve_output_root(), "/tmp/trakt/blob_trigger")
+
+    def test_local_default(self):
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("TRAKT_TRIGGER_OUT", "WEBSITE_INSTANCE_ID", "WEBSITE_SITE_NAME")}
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertFalse(RP.running_in_azure())
+            self.assertEqual(RP.resolve_output_root(), "out/blob_trigger")
+
+
+class _FakeState:
+    """Stand-in RunState capturing the out_root it was handed."""
+    def __init__(self, out_root):
+        self.run_id = "orun_test"
+        self.status = "done"
+        self.out_root = out_root
+        self.central_canonical_path = str(Path(out_root) / "orun_test" / "out_platform" / "central.csv")
+        self.blockers = []
+
+    def state_path(self):
+        return Path(self.out_root) / self.run_id / "run_state.json"
+
+
+class TestTriggerOutPropagation(unittest.TestCase):
+    """TRAKT_TRIGGER_OUT must reach orchestrator state/output paths and the
+    assembler refresh roots — nothing lands under repo-root out/."""
+
+    TRIGGER_OUT = "/tmp/trakt/blob_trigger"
+
+    def test_invoker_forwards_out_dir_as_orchestrator_out_root(self):
+        captured = {}
+
+        def fake_run_orchestration(client_id, portfolios, *, out_root, **kw):
+            captured["out_root"] = out_root
+            captured["state_path"] = str(_FakeState(out_root).state_path())
+            return _FakeState(out_root)
+
+        with mock.patch("engine.orchestrator_agent.run_orchestration",
+                        fake_run_orchestration):
+            result = default_orchestrator_invoker(
+                processing_mode="deterministic", client_id="ERE",
+                source_portfolio_id="direct_001", source_portfolio_type="direct",
+                dataset="funded", frequency="monthly", reporting_period="2026-01-31",
+                input_path="/tmp/pack", target="mi", run_regime=False,
+                mapping_config_path=None, out_dir=self.TRIGGER_OUT)
+        # orchestrator state + run dir derive from the configured writable root
+        self.assertEqual(captured["out_root"], self.TRIGGER_OUT)
+        self.assertTrue(captured["state_path"].startswith(self.TRIGGER_OUT + "/"))
+        self.assertTrue(result["central_canonical_path"].startswith(self.TRIGGER_OUT + "/"))
+        self.assertFalse(captured["out_root"].startswith("out/"))
+
+    def test_router_propagates_out_dir_to_invoker_assembler_and_manifest(self):
+        with tempfile.TemporaryDirectory() as td:
+            out_dir = str(Path(td) / "blob_trigger")   # stands in for TRAKT_TRIGGER_OUT
+            reg = SourceRegistry(Path(out_dir) / "r.json")
+            reg.upsert(SourceRecord(
+                client_id="ERE", source_portfolio_id="direct_001", dataset="funded",
+                frequency="monthly", source_portfolio_type="direct",
+                approved_mapping_id="m1", mapping_config_path="config/m1.yaml",
+                expected_schema_fingerprint=_fp().fingerprint, status=STATUS_ACTIVE))
+            inv = RecordingInvoker()
+            ref = RecordingRefresher()
+            m = R.handle_blob_event(
+                "raw/ERE/funded/monthly/direct_001/2026-01-31/_READY.json",
+                registry=reg, out_dir=out_dir, pack_marker="_READY.json",
+                schema_info=_fp(), orchestrator_invoker=inv,
+                assembler_refresher=ref, now=_NOW)
+            self.assertEqual(m["status"], "processed")
+            # orchestrator told to write under the configured root
+            self.assertEqual(inv.calls[0]["out_dir"], out_dir)
+            # assembler accepted/platform roots derive from the same root
+            self.assertTrue(ref.calls[0]["accepted_root"].startswith(out_dir))
+            self.assertTrue(ref.calls[0]["platform_out_dir"].startswith(out_dir))
+            # event manifest written under the configured root, not repo-root out/
+            self.assertTrue((Path(out_dir) / f"{m['event_id']}.json").exists())
+
+
 if __name__ == "__main__":
     unittest.main()
