@@ -69,6 +69,33 @@ carries the approved mapping id/path, expected schema fingerprint + columns, las
 successful run/period, `regime_required`, and `status`
 (`active` / `pending_review` / `retired`).
 
+## Deployment entrypoint
+
+Azure Functions loads the Function App from the **root** `function_app.py`. That
+file is a **thin shim** — it contains no logic and simply re-exports this app:
+
+```python
+# /function_app.py  (repo root)
+from apps.blob_trigger_app.function_app import app
+```
+
+So the host discovers the trigger here (`apps/blob_trigger_app/function_app.py`)
+via delegation; all routing/inference lives in this package and its Azure-free
+decision core (`router.py`).
+
+> **Why:** the previous root `function_app.py` was a legacy Event Grid trigger
+> bound to the `inbound` container. While it was the deployed entrypoint, uploads
+> to the current `raw-v2` container were silently skipped. The shim makes the
+> blob-trigger app the live entrypoint, with the watched container configurable
+> via `%TRAKT_BLOB_CONTAINER%`.
+
+`.funcignore` (repo root) excludes legacy/unneeded files (the legacy Streamlit
+app, `frontend/`, docs, tests, generated outputs, root-level sample data) but
+**keeps the runtime packages** the shim imports: `engine/`, `mi_agent/`,
+`mi_agent_api/`, `config/`, and `apps/blob_trigger_app/`. Root-level sample-data
+globs are anchored with a leading `/` so nested runtime data (e.g.
+`config/system/*.xsd`) is preserved.
+
 ## Local run
 
 ```bash
