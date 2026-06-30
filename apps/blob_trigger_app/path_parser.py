@@ -78,8 +78,10 @@ def parse_blob_path(blob_path: str, container: str = DEFAULT_CONTAINER) -> Parse
         raise PathParseError(
             f"reporting_period {reporting_period!r} not a recognised period "
             "(YYYY-MM-DD / YYYY-Www / YYYY-MM / YYYY-Qn)")
-    if "." not in filename:
-        raise PathParseError(f"filename {filename!r} has no extension")
+    if not filename:
+        raise PathParseError("empty filename")
+    # Note: no extension requirement — the completion marker (e.g. _READY) is a
+    # legitimate, extensionless filename at this position.
 
     return ParsedPath(
         client_id=client_id, dataset=dataset, frequency=frequency,
