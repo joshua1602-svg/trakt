@@ -210,7 +210,7 @@ class RealAgentAdapters(AgentAdapters):
             registry=self.registry or "config/system/fields_registry.yaml",
             aliases_dir=self.aliases_dir,
             enable_mapping_review=not deterministic,
-            target_first_decisions=(self.mapping_config_path if deterministic else ""))
+            target_first_decisions=((self.mapping_config_path or "") if deterministic else ""))
 
         if self.onboarding_mode == "mi_only":
             # MI path: build + return the central lender tape (the MI canonical).
