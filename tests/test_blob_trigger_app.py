@@ -1080,5 +1080,95 @@ class TestExceptionLogging(unittest.TestCase):
         self.assertIn("trakt-state/events/evt_x.json", blob)
 
 
+# --------------------------------------------------------------------------- #
+# 22. Storage backend selection (Azure → BlobStorage, never read-only fs)
+# --------------------------------------------------------------------------- #
+
+from apps.blob_trigger_app.storage import (
+    BlobStorage, decide_backend, open_storage as _open_storage, running_in_azure)
+
+_FAKE_CONN = "DefaultEndpointsProtocol=https;AccountName=x;AccountKey=y==;EndpointSuffix=core.windows.net"
+
+
+def _clean_env(**overrides):
+    base = {k: v for k, v in os.environ.items()
+            if k not in ("WEBSITE_INSTANCE_ID", "WEBSITE_SITE_NAME",
+                         "TRAKT_STORAGE_BACKEND", "TRAKT_BLOB_CONNECTION",
+                         "AzureWebJobsStorage", "TRAKT_LOCAL_BLOB_ROOT")}
+    base.update(overrides)
+    return base
+
+
+class TestBackendSelection(unittest.TestCase):
+
+    def test_azure_site_name_only_selects_blob(self):
+        # WEBSITE_SITE_NAME present, WEBSITE_INSTANCE_ID absent (Linux/Flex plans):
+        # the old code stayed on filesystem; now it must select Azure Blob.
+        env = _clean_env(WEBSITE_SITE_NAME="trakt-func", TRAKT_BLOB_CONNECTION=_FAKE_CONN)
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertTrue(running_in_azure())
+            d = decide_backend()
+            self.assertEqual(d["backend"], "azure_blob")
+            self.assertTrue(d["connection_detected"])
+            self.assertIsInstance(_open_storage(), BlobStorage)
+
+    def test_azure_instance_id_selects_blob(self):
+        env = _clean_env(WEBSITE_INSTANCE_ID="abc", TRAKT_BLOB_CONNECTION=_FAKE_CONN)
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertIsInstance(_open_storage(), BlobStorage)
+
+    def test_azure_without_connection_raises_not_filesystem(self):
+        # In Azure with no connection string, refuse to silently use the
+        # read-only wwwroot filesystem — fail loud.
+        env = _clean_env(WEBSITE_SITE_NAME="trakt-func")
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertEqual(decide_backend()["backend"], "azure_blob")
+            with self.assertRaises(ValueError):
+                _open_storage()
+
+    def test_azure_falls_back_to_azurewebjobsstorage(self):
+        env = _clean_env(WEBSITE_SITE_NAME="trakt-func", AzureWebJobsStorage=_FAKE_CONN)
+        with mock.patch.dict(os.environ, env, clear=True):
+            d = decide_backend()
+            self.assertTrue(d["connection_detected"])
+            self.assertEqual(d["connection_source"], "AzureWebJobsStorage")
+            self.assertIsInstance(_open_storage(), BlobStorage)
+
+    def test_explicit_file_backend_wins_even_in_azure(self):
+        env = _clean_env(WEBSITE_SITE_NAME="trakt-func", TRAKT_BLOB_CONNECTION=_FAKE_CONN,
+                         TRAKT_STORAGE_BACKEND="file", TRAKT_LOCAL_BLOB_ROOT="/tmp/x")
+        with mock.patch.dict(os.environ, env, clear=True):
+            d = decide_backend()
+            self.assertEqual(d["backend"], "filesystem")
+            s = _open_storage()
+            self.assertIsInstance(s, Storage)
+            self.assertNotIsInstance(s, BlobStorage)
+
+    def test_connection_present_selects_blob_outside_azure(self):
+        env = _clean_env(TRAKT_BLOB_CONNECTION=_FAKE_CONN)
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertFalse(running_in_azure())
+            self.assertEqual(decide_backend()["backend"], "azure_blob")
+
+    def test_local_default_is_filesystem(self):
+        env = _clean_env(TRAKT_LOCAL_BLOB_ROOT="/tmp/lbr")
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertFalse(running_in_azure())
+            d = decide_backend()
+            self.assertEqual(d["backend"], "filesystem")
+            self.assertFalse(d["connection_detected"])
+            self.assertNotIsInstance(_open_storage(), BlobStorage)
+
+    def test_open_storage_logs_selection(self):
+        env = _clean_env(WEBSITE_SITE_NAME="trakt-func", TRAKT_BLOB_CONNECTION=_FAKE_CONN)
+        with mock.patch.dict(os.environ, env, clear=True):
+            with self.assertLogs("trakt.blob_trigger.storage", level="INFO") as cm:
+                _open_storage()
+            blob = "\n".join(cm.output)
+            self.assertIn("STORAGE BACKEND SELECTED", blob)
+            self.assertIn("backend=azure_blob", blob)
+            self.assertIn("connection_detected=True", blob)
+
+
 if __name__ == "__main__":
     unittest.main()

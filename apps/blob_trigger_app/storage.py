@@ -20,7 +20,7 @@ import shutil
 import traceback
 from contextlib import contextmanager
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 BLOB_SCHEME = "blob://"
 
@@ -195,20 +195,95 @@ class BlobStorage(Storage):
                 for b in cc.list_blobs(name_starts_with=key)]
 
 
+#: Env vars set by Azure App Service / Functions in the cloud (NOT locally).
+#: WEBSITE_SITE_NAME is the reliable marker across plans (incl. Linux / Flex /
+#: Elastic Premium) where WEBSITE_INSTANCE_ID may be absent.
+_AZURE_MARKERS = ("WEBSITE_INSTANCE_ID", "WEBSITE_SITE_NAME")
+#: Connection-string app settings, in priority order. AzureWebJobsStorage is the
+#: Functions built-in and is used only as an in-Azure fallback.
+_PRIMARY_CONN_VAR = "TRAKT_BLOB_CONNECTION"
+_FALLBACK_CONN_VAR = "AzureWebJobsStorage"
+
+
+def running_in_azure() -> bool:
+    return any(os.environ.get(m) for m in _AZURE_MARKERS)
+
+
+def _azure_marker_seen() -> Optional[str]:
+    return next((m for m in _AZURE_MARKERS if os.environ.get(m)), None)
+
+
+def _resolve_connection(explicit: Optional[str], *, in_azure: bool) -> "tuple[Optional[str], Optional[str]]":
+    """Return (connection_string, source_name). Primary is TRAKT_BLOB_CONNECTION;
+    AzureWebJobsStorage is used only as an in-Azure fallback."""
+    if explicit:
+        return explicit, "argument"
+    primary = os.environ.get(_PRIMARY_CONN_VAR)
+    if primary:
+        return primary, _PRIMARY_CONN_VAR
+    if in_azure:
+        fb = os.environ.get(_FALLBACK_CONN_VAR)
+        if fb:
+            return fb, _FALLBACK_CONN_VAR
+    return None, None
+
+
+def decide_backend(connection_string: Optional[str] = None,
+                   backend: Optional[str] = None) -> Dict[str, Any]:
+    """Pure decision (no construction, never raises) — also used for startup logs."""
+    requested = (backend or os.environ.get("TRAKT_STORAGE_BACKEND") or "").strip().lower()
+    in_azure = running_in_azure()
+    conn, conn_source = _resolve_connection(connection_string, in_azure=in_azure)
+    primary_conn_present = bool(connection_string or os.environ.get(_PRIMARY_CONN_VAR))
+
+    if requested == "file":
+        chosen, reason = "filesystem", "TRAKT_STORAGE_BACKEND=file (explicit override)"
+    elif requested == "blob":
+        chosen, reason = "azure_blob", "TRAKT_STORAGE_BACKEND=blob (explicit)"
+    elif in_azure:
+        chosen, reason = "azure_blob", f"running in Azure ({_azure_marker_seen()} set)"
+    elif primary_conn_present:
+        chosen, reason = "azure_blob", f"{_PRIMARY_CONN_VAR} present (blob connection configured)"
+    else:
+        chosen, reason = "filesystem", "no Azure markers and no blob connection string"
+    return {
+        "backend": chosen, "reason": reason, "in_azure": in_azure,
+        "azure_marker": _azure_marker_seen(),
+        "connection_detected": bool(conn), "connection_source": conn_source,
+        "connection_string": conn, "requested_backend": requested or None,
+    }
+
+
 def open_storage(*, connection_string: Optional[str] = None,
                  local_root: str | os.PathLike | None = None,
                  backend: Optional[str] = None) -> Storage:
-    """Factory. ``backend='blob'`` (or a connection string + ``backend!='file'``)
-    selects Azure Blob; otherwise a filesystem-backed :class:`Storage`.
+    """Factory. Selects Azure Blob vs filesystem and logs the decision.
 
-    Reads ``TRAKT_STORAGE_BACKEND`` / ``TRAKT_BLOB_CONNECTION`` /
-    ``TRAKT_LOCAL_BLOB_ROOT`` from the environment when args are omitted.
+    Selection (``TRAKT_STORAGE_BACKEND`` overrides; else auto):
+      * ``file``  → filesystem (local/dev override);
+      * ``blob``  → Azure Blob;
+      * **running in Azure** (``WEBSITE_INSTANCE_ID``/``WEBSITE_SITE_NAME``) →
+        Azure Blob, ALWAYS — never the read-only wwwroot filesystem;
+      * a ``TRAKT_BLOB_CONNECTION`` present → Azure Blob;
+      * otherwise → filesystem.
+
+    In Azure a missing connection string is a hard error (we refuse to silently
+    write ``blob://`` URIs onto the read-only ``/home/site/wwwroot`` filesystem).
     """
-    backend = (backend or os.environ.get("TRAKT_STORAGE_BACKEND") or "").strip().lower()
-    conn = connection_string or os.environ.get("TRAKT_BLOB_CONNECTION")
-    if backend == "blob" or (backend != "file" and conn and os.environ.get("WEBSITE_INSTANCE_ID")):
-        if not conn:
-            raise ValueError("blob storage backend requires TRAKT_BLOB_CONNECTION")
-        return BlobStorage(conn)
+    d = decide_backend(connection_string, backend)
+    logger.info(
+        "STORAGE BACKEND SELECTED backend=%s reason=%s in_azure=%s azure_marker=%s "
+        "connection_detected=%s connection_source=%s requested=%s",
+        d["backend"], d["reason"], d["in_azure"], d["azure_marker"],
+        d["connection_detected"], d["connection_source"], d["requested_backend"])
+
+    if d["backend"] == "azure_blob":
+        if not d["connection_string"]:
+            raise ValueError(
+                "Azure Blob storage selected but no connection string found. Set "
+                f"{_PRIMARY_CONN_VAR} (or {_FALLBACK_CONN_VAR}). Refusing to fall "
+                "back to the read-only filesystem in Azure.")
+        return BlobStorage(d["connection_string"])
+
     root = local_root or os.environ.get("TRAKT_LOCAL_BLOB_ROOT") or Path.cwd()
     return Storage(root)
