@@ -25,6 +25,7 @@ export function buildCacheKey(req: AgentRequest): string {
     req.portfolio?.id ?? "",
     req.reporting?.asOf ?? "",
     req.datasetContext ?? "",
+    req.sourceLens ?? "",
     req.question.trim().toLowerCase().replace(/\s+/g, " "),
     stableFilters(req.filters),
     req.options?.topN ?? "",
@@ -59,6 +60,7 @@ export function withCache(client: AgentClient): AgentClient {
     },
 
     getSnapshots: (signal) => client.getSnapshots(signal),
+    getSourcePortfolios: (signal) => client.getSourcePortfolios(signal),
     getSnapshot: (portfolioId, signal) => client.getSnapshot(portfolioId, signal),
     getForecastSnapshot: (portfolioId, signal) => client.getForecastSnapshot(portfolioId, signal),
     getFundedEvolution: (portfolioId, signal) => client.getFundedEvolution(portfolioId, signal),

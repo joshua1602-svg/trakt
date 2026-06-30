@@ -62,6 +62,29 @@ export interface AgentRequest {
    * aggregation against the full dataset; the client-side panel is the fallback
    * when these are not dispatched. */
   filters?: Record<string, unknown>;
+  /** Selected source-portfolio lens: "total" | "direct" | "acquired" | a cohort
+   * id ("direct_001" / "acquired_001"). Default scope; a portfolio named in the
+   * question overrides it backend-side. */
+  sourceLens?: string;
+}
+
+/** A selectable source-portfolio lens (Total / Direct / Acquired / cohort). */
+export interface SourcePortfolioLens {
+  id: string;
+  kind: "total" | "type" | "cohort";
+  label: string;
+  filters: Record<string, unknown>;
+  /** True when only the Funded view applies (acquired back books have no
+   * origination pipeline) — drives Pipeline / Forecast gating in the UI. */
+  funded_only: boolean;
+  source_portfolio_type?: string | null;
+}
+
+/** Discovery payload for the source-portfolio dropdown. */
+export interface SourcePortfolioIndex {
+  available: boolean;
+  lenses: SourcePortfolioLens[];
+  source?: string;
 }
 
 export interface AgentResponse {

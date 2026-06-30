@@ -31,6 +31,7 @@ from .mi_query_executor import (
 )
 from .mi_query_spec import MIQuerySpec
 from .mi_query_validator import load_mi_semantics, recover_chart_spec, validate_mi_query
+from . import portfolio_lens as _portfolio_lens
 
 # Chart types the chart factory can render (others are table/summary only).
 _RENDERABLE = {"bar", "line", "scatter", "bubble", "heatmap", "treemap"}
@@ -170,6 +171,7 @@ def run_mi_agent_query(
     provider: str = "anthropic",
     llm_callable=None,
     extra_filters: Optional[Dict[str, Any]] = None,
+    source_portfolio_lens: Optional[Any] = None,
     dataset: Optional[str] = None,
     run_id: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -262,6 +264,21 @@ def run_mi_agent_query(
     # granular detail (deterministic_zero_cost / llm / llm_repaired / validation_failed)
     result["parser_mode_detail"] = parse_meta.get("parser_mode_detail",
                                                   result["parser_mode"])
+    # ---- source-portfolio lens (Total / Direct / Acquired / cohort) -------
+    # Deterministic: a portfolio scope named in the question ("acquired book",
+    # "direct_001", "back book") overrides the selected lens (the UI dropdown
+    # default). The lens is realised as a filter on the provenance fields, so it
+    # only narrows rows — it never changes any MI calculation. No-op when the
+    # dataset carries no provenance (the filter simply matches nothing to drop).
+    if "source_portfolio_id" in available_columns or "source_portfolio_type" in available_columns:
+        _default_lens = (_portfolio_lens.lens_from_selection(source_portfolio_lens)
+                         if source_portfolio_lens is not None else None)
+        _lens = _portfolio_lens.resolve_lens_with_default(question, _default_lens)
+        _portfolio_lens.apply_lens(spec, _lens)
+        result["portfolio_lens"] = spec.portfolio_lens
+        if _lens.name != _portfolio_lens.LENS_TOTAL:
+            warnings.append(f"portfolio lens applied: {_lens.label}")
+
     # ---- merge drill-through filters into the parsed spec -----------------
     # Additive: caller-supplied filters (e.g. a UI drill into one region/broker/
     # year/SPV/stage) combine with any the parser inferred. They are validated +

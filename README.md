@@ -382,6 +382,62 @@ python -m engine.assembler_agent \
 an MI or Regime run), invoke the Assembler Agent over the client's canonical
 output root, then point the MI / Regime step at the central canonical it returns.
 
+## Agentic Orchestration
+
+`engine/orchestrator_agent/` is the **governed conductor** that runs the whole
+agent pipeline end-to-end — the new orchestration spine replacing the legacy
+`function_app.py` Azure-blob trigger. It drives the existing agents in a fixed,
+auditable DAG via their manifest handoffs and `ready_for_*` gates; it never
+re-implements an agent.
+
+```
+per portfolio:  Onboarding ─▶ Transformation ─▶ Validation ─▶ (stamp provenance)
+                                                                    │
+across portfolios:                                    Assembler ─▶ central canonical ─▶ MI
+```
+
+- **Fan-out:** each portfolio runs Onboarding → Transformation → Validation,
+  threading each agent's manifest into the next.
+- **Provenance:** the orchestrator owns per-portfolio provenance — it stamps the
+  validated canonical (`engine.provenance`) so the Assembler receives a fully
+  provenanced `*_canonical_typed.csv`, without modifying any agent.
+- **Governed auto-halt:** non-blocking steps proceed automatically; a False
+  readiness flag / blocking exception / mapping-review **halts** the run with a
+  resumable `run_state.json` + blocker report. Resolve out-of-band (the existing
+  `approve-non-blocking` / `accept-target-advice` CLIs), then resume.
+- **Consolidate + route:** the Assembler builds the central canonical; MI
+  resolution already prefers it.
+- **Run-state:** one `run_state.json` per run captures every step's status,
+  readiness flags, artifact paths and blockers — resumability + diligence lineage.
+
+```bash
+python -m engine.orchestrator_agent \
+  --client ERE --target mi --out-dir orchestration_out \
+  --portfolio direct_001=inputs/direct_book \
+  --portfolio acquired_001=inputs/acquired_book_1 \
+  --acquisition-date acquired_001=2026-08-15 --seller acquired_001="Seller A"
+
+# resume after resolving a halted gate:
+python -m engine.orchestrator_agent --resume orchestration_out/<run_id>/run_state.json
+```
+
+**Two target-aware pipelines** — the MI and regime canonicals genuinely differ
+(regime carries the fuller ESMA Annex 2 field set with mandatory fields):
+
+| `--target` | Per-portfolio pipeline | Canonical | Terminal |
+|---|---|---|---|
+| `mi` | Onboarding **(mi_only)** → central tape → stamp | lean central tape | MI route |
+| `regime` | Onboarding **(regulatory_mi)** → Transformation → Validation → stamp | full Annex 2 contract (mandatory fields) | Projection → ESMA Annex 2 + provenance companion |
+| `all` | regulatory pipeline (its canonical is a superset that also serves MI) | full | MI route **and** Projection |
+
+The onboarding **mode** is the field-requirement lever: `mi_only` keeps the lean
+active schema; `regulatory_mi` activates the full ESMA Annex 2 target contract,
+so a portfolio that is missing mandatory regulatory fields **halts at the
+Transformation/Validation gate** (governed auto-halt) rather than silently
+producing a non-compliant regulatory tape. Agent internals, canonical/MI
+calculations and Regime/Annex 2 logic are unchanged — regime projection runs the
+existing projector on the assembled central canonical.
+
 ## Configuration
 
 | File | Role |

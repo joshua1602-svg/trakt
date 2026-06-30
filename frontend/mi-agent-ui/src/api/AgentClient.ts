@@ -18,6 +18,7 @@ import type {
   PipelineFunnelEvolution,
   RiskLimitsSnapshot,
   SnapshotIndex,
+  SourcePortfolioIndex,
 } from "@/domain";
 
 export interface AgentClient {
@@ -31,6 +32,10 @@ export interface AgentClient {
 
   /** Discover available funded portfolios and reporting runs (data-driven dropdowns). */
   getSnapshots(signal?: AbortSignal): Promise<SnapshotIndex>;
+
+  /** Discover the source-portfolio lenses (Total / Direct / Acquired / cohorts)
+   * present in the active dataset, for the portfolio-scope dropdown. */
+  getSourcePortfolios(signal?: AbortSignal): Promise<SourcePortfolioIndex>;
 
   /** Deterministic funded-book snapshot for a `"<client_id>/<run_id>"` portfolio. */
   getSnapshot(portfolioId: string, signal?: AbortSignal): Promise<FundedSnapshot>;

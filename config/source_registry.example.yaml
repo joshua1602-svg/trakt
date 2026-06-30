@@ -1,0 +1,34 @@
+# Trakt source registry (example / seed).
+#
+# One record per client_id/source_portfolio_id/dataset/frequency. Copy to
+# config/source_registry.yaml and fill expected_schema_fingerprint + approved
+# mapping after a source has been onboarded and the mapping approved. Until then
+# leave status: pending_review so routine files stop before production.
+sources:
+  - client_id: ERE
+    source_portfolio_id: direct_001
+    source_portfolio_type: direct
+    dataset: funded
+    frequency: monthly
+    source_system: ERE core lending platform
+    approved_mapping_id: ere_direct_funded_monthly_v1
+    mapping_config_path: config/client/mappings/ere_direct_funded_monthly.yaml
+    expected_schema_fingerprint: "sha256:<fill-after-onboarding>"
+    expected_columns: []
+    last_successful_run_id: null
+    last_successful_reporting_period: null
+    regime_required: true        # funded book needing ESMA Annex 2 → target=all
+    status: active
+
+  - client_id: ERE
+    source_portfolio_id: direct_001
+    source_portfolio_type: direct
+    dataset: pipeline
+    frequency: weekly
+    source_system: ERE origination pipeline
+    approved_mapping_id: ere_direct_pipeline_weekly_v1
+    mapping_config_path: config/client/mappings/ere_direct_pipeline_weekly.yaml
+    expected_schema_fingerprint: "sha256:<fill-after-onboarding>"
+    expected_columns: []
+    regime_required: false       # pipeline → MI-only, never Regime/ESMA
+    status: active

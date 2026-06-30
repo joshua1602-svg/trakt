@@ -54,6 +54,7 @@ function makeClient(ask: (req: AgentRequest) => Promise<AgentResponse>): AgentCl
     mock: true,
     ask: (req) => ask(req),
     getSnapshots: async () => INDEX,
+    getSourcePortfolios: async () => ({ available: false, lenses: [], source: "test" }),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     getSnapshot: async () => ({}) as any,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

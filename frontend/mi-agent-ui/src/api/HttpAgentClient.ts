@@ -75,6 +75,11 @@ export class HttpAgentClient implements AgentClient {
     }
   }
 
+  getSourcePortfolios(signal?: AbortSignal) {
+    return this.getJson<import("@/domain").SourcePortfolioIndex>(
+      "/mi/source-portfolios", signal);
+  }
+
   getSnapshots(signal?: AbortSignal): Promise<SnapshotIndex> {
     return this.getJson<SnapshotIndex>("/mi/snapshots", signal);
   }
@@ -135,6 +140,7 @@ export class HttpAgentClient implements AgentClient {
           portfolioId: request.portfolio.id,
           asOfDate: request.reporting.asOf,
           datasetContext: request.datasetContext,
+          sourcePortfolioLens: request.sourceLens,
           // Merge the top_n hint with any drill-through filters; send undefined
           // when neither is present so the contract stays additive.
           filters: ((): Record<string, unknown> | undefined => {

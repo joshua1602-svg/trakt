@@ -11,6 +11,7 @@ import { ForecastExtrapolationPanel } from "@/components/ForecastExtrapolationPa
 import { EvolutionPanel } from "@/components/EvolutionPanel";
 import { RiskLimitsPanel } from "@/components/RiskLimitsPanel";
 import { ViewToggle } from "@/components/ViewToggle";
+import { SourcePortfolioSelector } from "@/components/SourcePortfolioSelector";
 import { LineagePanel } from "@/components/LineagePanel";
 import type { ViewLineage } from "@/domain";
 import { createAgentClient } from "@/api";
@@ -145,21 +146,28 @@ export function AppShell() {
           // client-side drill fallback inside the embedded card.
           onDrill={client.mock ? undefined : ws.drill}
         />
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[var(--color-navy-950)]">
-          {/* Top bar: view toggle + portfolio context + declutter controls. */}
-          <div className="flex flex-wrap items-center justify-between gap-3 px-6 pt-5">
-            <ViewToggle active={ws.activeView} onChange={ws.setActiveView} />
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          {/* One coherent workspace: a view toggle selects which schema-aligned
+              view is foregrounded (no stacking of all sections at once). */}
+          <div className="flex items-center justify-between gap-3 px-6 pt-5">
             <div className="flex items-center gap-3">
-              <DeclutterControls
-                onClearChat={ws.clearChat}
-                onClearArtifacts={ws.clearArtifacts}
-                onClearBoth={ws.clearAll}
+              <ViewToggle
+                active={ws.activeView}
+                onChange={ws.setActiveView}
+                disabledViews={ws.disabledViews}
               />
-              <span className="text-[11px] text-ink-500">
-                {ws.portfolio.name}
-                {ws.reporting.asOf ? ` · ${ws.reporting.asOf}` : ""}
-              </span>
+              {ws.sourceLenses.length > 1 && (
+                <SourcePortfolioSelector
+                  lenses={ws.sourceLenses}
+                  value={ws.selectedLens}
+                  onChange={ws.setSelectedLens}
+                />
+              )}
             </div>
+            <span className="text-[11px] text-ink-500">
+              {ws.portfolio.name}
+              {ws.reporting.asOf ? ` · ${ws.reporting.asOf}` : ""}
+            </span>
           </div>
           <p className="px-6 pt-1 text-[11px] text-ink-500" data-testid="view-subtitle">
             {VIEW_SUBTITLES[ws.activeView]}
