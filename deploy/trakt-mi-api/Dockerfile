@@ -27,8 +27,14 @@ COPY requirements.txt ./requirements.txt
 RUN python -m pip install --upgrade pip \
     && pip install -r requirements.txt
 
-# Application code (whole repo; see .dockerignore for exclusions).
+# Application code (whole repo; see .dockerignore for exclusions). This includes
+# the repo-level runtime packages the MI API needs: mi_agent_api, mi_agent,
+# snapshot, analytics_lib, engine, apps, config.
 COPY . .
+
+# Packaging smoke test — FAILS THE BUILD if a required repo-level package is
+# missing from the image (this is what caught `No module named 'snapshot'`).
+RUN python -c "import mi_agent_api.app; import snapshot.model; print('packaging OK')"
 
 EXPOSE 8000
 
