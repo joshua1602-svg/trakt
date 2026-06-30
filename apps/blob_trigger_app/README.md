@@ -180,6 +180,16 @@ App settings: `TRAKT_RAW_CONTAINER=raw-v2`, `TRAKT_STATE_CONTAINER=trakt-state`,
 `TRAKT_PROCESSED_CONTAINER=processed-v2`, `TRAKT_SOURCE_REGISTRY_URI=blob://…`,
 `TRAKT_STORAGE_BACKEND=blob|file`, `TRAKT_BLOB_CONNECTION`, `TRAKT_LOCAL_BLOB_ROOT`.
 
+**Backend selection** (`open_storage`): `TRAKT_STORAGE_BACKEND` overrides
+(`file`|`blob`); otherwise **auto** — running in Azure (detected via
+`WEBSITE_INSTANCE_ID` **or** `WEBSITE_SITE_NAME`) always selects Azure Blob, as
+does a present `TRAKT_BLOB_CONNECTION`; only a non-Azure host with no connection
+falls back to the filesystem. In Azure a missing connection string is a **hard
+error** — the layer refuses to write `blob://` URIs onto the read-only
+`/home/site/wwwroot` filesystem. The connection is `TRAKT_BLOB_CONNECTION`, with
+`AzureWebJobsStorage` as an in-Azure fallback. Startup logs the decision:
+`TRAKT STARTUP: selected_backend=… reason=… azure_connection_detected=… registry_uri=… processed_container=…`.
+
 > **The `trakt-state` and `processed-v2` containers must exist** (the SDK does not
 > create them). Every storage write logs its full traceback **and the blob URI**
 > on failure — loggers `trakt.blob_trigger.{storage,persistence,source_registry,router}`

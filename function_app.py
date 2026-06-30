@@ -46,7 +46,7 @@ from apps.blob_trigger_app.regime_runner import default_regime_runner
 from apps.blob_trigger_app.router import handle_blob_event
 from apps.blob_trigger_app.runtime_paths import resolve_output_root
 from apps.blob_trigger_app.schema_fingerprint import fingerprint_pack
-from apps.blob_trigger_app.storage import open_storage
+from apps.blob_trigger_app.storage import decide_backend, open_storage
 
 app = func.FunctionApp()
 
@@ -56,6 +56,26 @@ _PACK_MARKER = os.environ.get("TRAKT_PACK_MARKER", "_READY.json")
 # in Azure, out/blob_trigger locally; TRAKT_TRIGGER_OUT overrides). Final
 # artifacts are uploaded to durable Blob Storage via ProductionPersistence.
 _OUT_DIR = resolve_output_root()
+
+
+def _log_startup() -> None:
+    """One-time startup diagnostics: storage backend decision + resolved URIs."""
+    try:
+        layout = Layout.from_env()
+        d = decide_backend()                      # pure decision, never raises
+        logging.info(
+            "TRAKT STARTUP: selected_backend=%s reason=%s azure_connection_detected=%s "
+            "(source=%s) registry_uri=%s processed_container=%s platform_latest(ERE)=%s "
+            "regime_prefix(ERE)=%s scratch_out=%s",
+            d["backend"], d["reason"], d["connection_detected"], d["connection_source"],
+            layout.registry_uri, f"blob://{layout.processed_container}/",
+            layout.platform_latest_uri("ERE"), layout.regime_prefix("ERE", "{period}"),
+            _OUT_DIR)
+    except Exception:  # noqa: BLE001 — never let diagnostics break startup
+        logging.exception("TRAKT STARTUP diagnostics failed")
+
+
+_log_startup()
 
 
 def _persistence() -> ProductionPersistence:
