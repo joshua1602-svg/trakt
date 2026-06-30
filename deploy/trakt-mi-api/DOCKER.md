@@ -16,7 +16,7 @@ No blob-trigger / orchestrator / onboarding logic is changed.
 ```bash
 ACR=traktregistry1602
 IMAGE=trakt-mi-api
-TAG=v1                       # or a git sha; avoid relying on :latest in prod
+TAG=v2                       # bumped after the snapshot/ packaging fix
 APP=trakt-dashboard
 RG=<resource-group-of-trakt-dashboard>     # az webapp list -o table
 IMAGE_REF=$ACR.azurecr.io/$IMAGE:$TAG
@@ -24,7 +24,10 @@ IMAGE_REF=$ACR.azurecr.io/$IMAGE:$TAG
 
 ## 1. Build + push to ACR
 
-Build **in ACR** (no local Docker needed), from the repo root:
+Build **in ACR** (no local Docker needed), from the repo root. The Dockerfile
+includes a packaging smoke step (`import mi_agent_api.app; import snapshot.model`)
+that **fails the build** if a repo-level runtime package (e.g. `snapshot/`) is
+missing — so a broken image never reaches App Service:
 
 ```bash
 az acr build \
@@ -32,6 +35,13 @@ az acr build \
   --image $IMAGE:$TAG \
   --file deploy/trakt-mi-api/Dockerfile \
   .
+```
+
+Verify the built image locally (optional):
+
+```bash
+az acr login --name $ACR
+docker run --rm $IMAGE_REF python -c "import mi_agent_api.app; import snapshot.model; print('packaging OK')"
 ```
 
 <details><summary>Alternative: local Docker build + push</summary>
@@ -110,9 +120,9 @@ exist — run/approve a funded pack first).
 ## Redeploy a new build
 
 ```bash
-az acr build --registry $ACR --image $IMAGE:v2 --file deploy/trakt-mi-api/Dockerfile .
+az acr build --registry $ACR --image $IMAGE:v3 --file deploy/trakt-mi-api/Dockerfile .
 az webapp config container set -g $RG -n $APP \
-  --container-image-name "$ACR.azurecr.io/$IMAGE:v2" \
+  --container-image-name "$ACR.azurecr.io/$IMAGE:v3" \
   --container-registry-url "https://$ACR.azurecr.io"
 az webapp restart -g $RG -n $APP
 ```

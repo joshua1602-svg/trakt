@@ -1,5 +1,7 @@
-# Keep the container build context lean. Runtime packages (mi_agent_api, mi_agent,
-# apps, engine, config) are intentionally NOT excluded.
+# Keep the container build context lean. Runtime PACKAGES used by the MI API are
+# intentionally NOT excluded: mi_agent_api, mi_agent, snapshot, analytics_lib,
+# engine, apps, config. (snapshot/ is a Python package — snapshot.model /
+# snapshot.store — NOT a scratch dir; do not exclude it.)
 .git
 .github
 .gitignore
@@ -13,13 +15,12 @@ venv
 frontend
 node_modules
 
-# Generated / scratch outputs (regenerated at runtime)
+# Generated / scratch OUTPUT dirs (regenerated at runtime; none are packages)
 out
 out_validation
 output
 onboarding_output
 artifacts
-snapshot
 
 # Tests + docs + diligence (not needed at runtime)
 **/tests
