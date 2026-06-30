@@ -25,7 +25,9 @@ from mi_agent.mi_query_validator import load_mi_semantics
 from .adapters import adapt_workflow_result
 from .catalogue import build_catalogue
 from .data_source import (
+    KIND_PLATFORM_CANONICAL,
     data_source_info,
+    data_source_kind,
     data_source_label,
     get_dataframe,
     semantics_path,
@@ -141,6 +143,21 @@ def catalogue() -> Dict[str, Any]:
     return build_catalogue()
 
 
+def _clean_provenance_value(v: Any) -> Optional[str]:
+    """Normalise a provenance cell: pandas NaN / blank / 'nan' → None, so blank
+    labels fall back to the source_portfolio_id rather than the string 'nan'."""
+    if v is None:
+        return None
+    try:
+        import math
+        if isinstance(v, float) and math.isnan(v):
+            return None
+    except Exception:  # noqa: BLE001
+        pass
+    s = str(v).strip()
+    return None if s.lower() in ("", "nan", "none", "nat", "<na>") else s
+
+
 @app.get("/mi/source-portfolios")
 def source_portfolios() -> Dict[str, Any]:
     """Discover the source-portfolio lenses present in the active dataset.
@@ -166,10 +183,69 @@ def source_portfolios() -> Dict[str, Any]:
     keep = [c for c in ("source_portfolio_id", "source_portfolio_type",
                         "source_portfolio_label") if c in cols]
     records = (df[keep].drop_duplicates().to_dict("records")) if keep else []
+    records = [{k: _clean_provenance_value(v) for k, v in r.items()} for r in records]
     lenses = plens.available_lenses(records)
     return {
         "available": len(lenses) > 1,
         "lenses": lenses,
+        "source": data_source_label(),
+    }
+
+
+def _client_from_platform_uri() -> Optional[str]:
+    """Best-effort client id from MI_AGENT_PLATFORM_URI
+    (``blob://{processed}/platform/{client}/latest/…``)."""
+    uri = os.environ.get("MI_AGENT_PLATFORM_URI") or ""
+    parts = [p for p in uri.replace("blob://", "").split("/") if p]
+    if "platform" in parts:
+        i = parts.index("platform")
+        if i + 1 < len(parts):
+            return parts[i + 1]
+    return None
+
+
+def _platform_client_id(df) -> str:
+    explicit = os.environ.get("MI_AGENT_CLIENT_ID")
+    if explicit:
+        return explicit
+    from_uri = _client_from_platform_uri()
+    if from_uri:
+        return from_uri
+    if "client_id" in getattr(df, "columns", []):
+        vals = df["client_id"].dropna()
+        if not vals.empty:
+            return str(vals.iloc[0])
+    return "platform"
+
+
+def _platform_snapshot_index() -> Optional[Dict[str, Any]]:
+    """Portfolio/run index derived from the loaded **platform canonical**.
+
+    When ``MI_AGENT_PLATFORM_URI`` is configured the active dataset is the combined
+    platform canonical (no on-disk onboarding runs), so the portfolio /
+    reporting-date dropdowns are built from the loaded dataframe instead of
+    snapshot discovery: one portfolio (the client) with one run at the canonical's
+    latest reporting date. Returns ``None`` when the platform canonical is not the
+    active source.
+    """
+    if data_source_kind() != KIND_PLATFORM_CANONICAL:
+        return None
+    try:
+        df = get_dataframe()
+    except Exception as exc:  # noqa: BLE001 - discovery must never 500
+        logger.warning("platform snapshot index: dataframe load failed: %s", exc)
+        return None
+    client_id = _platform_client_id(df)
+    run_id = os.environ.get("MI_AGENT_RUN_ID") or "latest"
+    run = {
+        "run_id": run_id,
+        "reporting_date": snapshots_mod.infer_reporting_date(run_id, df),
+        "loan_count": int(len(df)),
+        "current_outstanding_balance": round(snapshots_mod._balance_sum(df), 2),
+    }
+    return {
+        "portfolios": [{"client_id": client_id, "label": str(client_id).upper(),
+                        "runs": [run]}],
         "source": data_source_label(),
     }
 
@@ -179,18 +255,24 @@ def snapshots() -> Dict[str, Any]:
     """Data-driven discovery of available funded portfolios and reporting runs.
 
     The portfolio / reporting-date dropdowns are built from THIS — only real
-    onboarding output appears (no hardcoded prototype options).
+    output appears (no hardcoded prototype options). Prefers on-disk onboarding
+    discovery; when no onboarding root is configured but a platform canonical is
+    loaded (MI_AGENT_PLATFORM_URI), it derives the index from that canonical.
     """
     root = _onboarding_output_root()
-    if not root:
-        return {"portfolios": [], "source": "unavailable"}
-    try:
-        result = snapshots_mod.discover_snapshots(root)
-    except Exception as exc:  # noqa: BLE001 - discovery must never 500
-        logger.warning("snapshot discovery failed: %s", exc)
-        return {"portfolios": [], "source": "error", "error": str(exc)}
-    result["source"] = root
-    return result
+    if root:
+        try:
+            result = snapshots_mod.discover_snapshots(root)
+        except Exception as exc:  # noqa: BLE001 - discovery must never 500
+            logger.warning("snapshot discovery failed: %s", exc)
+            return {"portfolios": [], "source": "error", "error": str(exc)}
+        result["source"] = root
+        return result
+    # No on-disk root: derive portfolios from the loaded platform canonical.
+    platform = _platform_snapshot_index()
+    if platform is not None:
+        return platform
+    return {"portfolios": [], "source": "unavailable"}
 
 
 def _resolve_run_dataframe(client_id: str, run_id: str, root: Optional[str]):
@@ -203,6 +285,10 @@ def _resolve_run_dataframe(client_id: str, run_id: str, root: Optional[str]):
     # Fall back to the active data source if it matches the requested run.
     info = data_source_info()
     if info.get("client_id") == client_id and info.get("run_id") == run_id:
+        return get_dataframe(), info
+    # Platform canonical: the single combined dataset IS the (only) run, so serve
+    # it for the synthesized portfolio/run from _platform_snapshot_index().
+    if data_source_kind() == KIND_PLATFORM_CANONICAL:
         return get_dataframe(), info
     return None, None
 

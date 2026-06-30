@@ -172,12 +172,19 @@ export function useWorkspace(client: AgentClient): Workspace {
         setPortfolios(pfs);
         if (pfs.length === 0) return;
         const persistedPf = pfs.find((p) => p.client_id === persisted?.clientId);
-        const pf = persistedPf ?? pfs[pfs.length - 1];
-        setSelectedClientId((cur) => cur ?? pf.client_id);
-        const run =
-          (persistedPf && pf.runs.find((r) => r.run_id === persisted?.runId)) ??
-          pf.runs[pf.runs.length - 1];
-        setSelectedRunId((cur) => cur ?? run?.run_id ?? null);
+        const pf = pfs.length === 1 ? pfs[0] : (persistedPf ?? pfs[pfs.length - 1]);
+        const persistedRun =
+          persistedPf && pf.runs.find((r) => r.run_id === persisted?.runId);
+        const run = persistedRun ?? pf.runs[pf.runs.length - 1]; // latest reporting date
+        if (pfs.length === 1) {
+          // Exactly one funded portfolio → auto-select it and its latest reporting
+          // date (override any stale persisted selection from another deployment).
+          setSelectedClientId(pf.client_id);
+          setSelectedRunId(run?.run_id ?? null);
+        } else {
+          setSelectedClientId((cur) => cur ?? pf.client_id);
+          setSelectedRunId((cur) => cur ?? run?.run_id ?? null);
+        }
       })
       .catch(() => {
         if (!cancelled) setPortfolios([]);

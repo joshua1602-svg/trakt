@@ -30,17 +30,16 @@ describe("AppShell — UI division, collapse and declutter (A)", () => {
     expect(screen.getByText("73")).toBeInTheDocument();
   });
 
-  it("exposes clear chat / artifacts / both, and clearing keeps the MI data", async () => {
+  it("scopes clearing to the chat / artifact panels (no standalone declutter cluster)", async () => {
     render(<AppShell />);
     await waitFor(() => expect(screen.getByText("Funded Book Snapshot")).toBeInTheDocument());
-    const group = screen.getByTestId("declutter-controls");
-    expect(group).toBeInTheDocument();
-    // "Clear both" wipes chat + artifacts but the funded snapshot stays loaded.
-    fireEvent.click(screen.getByRole("button", { name: "Clear both" }));
+    // The standalone declutter cluster was removed; clearing now lives in the
+    // chat surface (Clear chat) and the artifact workspace (Clear artifacts).
+    expect(screen.queryByTestId("declutter-controls")).toBeNull();
+    expect(document.querySelector('[data-surface="ai-chat"]')).toBeTruthy();
+    expect(screen.getByTestId("artifact-region")).toBeInTheDocument();
+    // The loaded MI data is independent of any view declutter and stays put.
     expect(screen.getByText("Funded Book Snapshot")).toBeInTheDocument();
     expect(screen.getByText("73")).toBeInTheDocument();
-    // Individual clears are present too.
-    expect(screen.getByRole("button", { name: /Clear chat/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Clear artifacts/ })).toBeInTheDocument();
   });
 });
