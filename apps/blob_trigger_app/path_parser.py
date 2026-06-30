@@ -11,7 +11,9 @@ from dataclasses import dataclass
 from typing import List
 
 VALID_DATASETS = ("funded", "pipeline", "forecast")
-VALID_FREQUENCIES = ("monthly", "weekly", "daily", "adhoc")
+# "ad_hoc" (and the legacy "adhoc") support one-off acquired-portfolio onboarding
+# packs, e.g. {client}/funded/ad_hoc/acquired_001/{reporting_date}/.
+VALID_FREQUENCIES = ("monthly", "weekly", "daily", "adhoc", "ad_hoc")
 
 # reporting_period: 2026-09-30 (date) or 2026-W39 (ISO week) or 2026-09 (month).
 _PERIOD_RE = re.compile(r"^\d{4}(-\d{2}(-\d{2})?|-W\d{2}|-Q[1-4])$")

@@ -32,3 +32,22 @@ sources:
     expected_columns: []
     regime_required: false       # pipeline → MI-only, never Regime/ESMA
     status: active
+
+  # Acquired portfolio, one-off onboarding pack. Until the mapping is approved,
+  # leave status: pending_review (no approved_mapping_id) so the first pack routes
+  # to source onboarding and stops before production. After approval, set
+  # status: active + approved_mapping_id + expected_schema_fingerprint and routine
+  # ad_hoc packs route deterministically. acquisition_date / seller_name are
+  # supplied per pack via _READY.json (or added here once known).
+  - client_id: ERE
+    source_portfolio_id: acquired_001
+    source_portfolio_type: acquired
+    dataset: funded
+    frequency: ad_hoc
+    source_system: BigBank plc (seller)
+    approved_mapping_id: null
+    mapping_config_path: null
+    expected_schema_fingerprint: null
+    expected_columns: []
+    regime_required: true        # acquired funded book in scope for ESMA → target=all
+    status: pending_review

@@ -1,4 +1,13 @@
-"""apps.blob_trigger_app.function_app — thin Azure Functions blob trigger.
+"""apps.blob_trigger_app.function_app — native blob-trigger variant (NOT deployed).
+
+.. note::
+   The **deployed** Azure entrypoint is the repo-root ``function_app.py``, an
+   **Event Grid** handler (the Azure event source is an Event Grid subscription).
+   This module is the alternative native ``@app.blob_trigger`` variant, kept for
+   local ``func start`` experiments. It is **not imported by the root
+   entrypoint**, so the Functions host never registers it — only one trigger is
+   active in production. Both paths delegate to the same Azure-free core
+   (:func:`router.handle_blob_event`).
 
 Routing/inference only — NO business logic. On a blob upload it downloads the
 file, then delegates to :func:`router.handle_blob_event`, which parses the path,
@@ -40,7 +49,7 @@ _OUT_DIR = os.environ.get("TRAKT_TRIGGER_OUT", "out/blob_trigger")
 _CONTAINER = os.environ.get("TRAKT_BLOB_CONTAINER", "raw")
 # Completion sentinel (Option A): the uploader writes this file LAST; only it
 # starts processing, against the now-complete reporting folder.
-_PACK_MARKER = os.environ.get("TRAKT_PACK_MARKER", "_READY")
+_PACK_MARKER = os.environ.get("TRAKT_PACK_MARKER", "_READY.json")
 
 
 def _name_in_container(blob_name: str) -> str:
