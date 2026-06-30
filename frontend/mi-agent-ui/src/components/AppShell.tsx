@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, Eraser, LayoutDashboard, Trash2 } from "lucide-react";
+import { ChevronDown, LayoutDashboard } from "lucide-react";
 import { HeaderBar } from "@/components/HeaderBar";
 import { AgentChatPanel } from "@/components/AgentChatPanel";
 import { ArtifactCanvas } from "@/components/ArtifactCanvas";
@@ -56,41 +56,6 @@ const VIEW_SUBTITLES: Record<string, string> = {
   evolution: "Evolution — time-series movement across multiple reporting extracts (funded / pipeline / origination funnel / forecast).",
   risk_limits: "Risk Limits — Schedule 8 concentration limits vs funded actual exposure, headroom and status.",
 };
-
-/** Declutter cluster (A): clear chat / artifacts / both in one place. Each is a
- * VIEW reset only — the loaded portfolio / run / dataset is never touched. */
-function DeclutterControls({
-  onClearChat, onClearArtifacts, onClearBoth,
-}: {
-  onClearChat: () => void;
-  onClearArtifacts: () => void;
-  onClearBoth: () => void;
-}) {
-  return (
-    <div
-      role="group"
-      aria-label="Clear workspace"
-      data-testid="declutter-controls"
-      className="inline-flex items-center gap-0.5 rounded-lg border border-[var(--color-line)] bg-navy-900/60 p-0.5"
-    >
-      <button type="button" onClick={onClearChat}
-        title="Clear the conversation (loaded MI data is untouched)"
-        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-ink-400 hover:text-rose-300">
-        <Eraser size={12} /> Clear chat
-      </button>
-      <button type="button" onClick={onClearArtifacts}
-        title="Clear the artifact workspace (loaded MI data is untouched)"
-        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-ink-400 hover:text-rose-300">
-        <Trash2 size={12} /> Clear artifacts
-      </button>
-      <button type="button" onClick={onClearBoth}
-        title="Clear chat and artifacts (loaded MI data is untouched)"
-        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-ink-400 hover:text-rose-300">
-        Clear both
-      </button>
-    </div>
-  );
-}
 
 export function AppShell() {
   // One client for the app lifetime; swap createAgentClient() for the real
