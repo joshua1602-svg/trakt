@@ -1,18 +1,24 @@
 """apps.blob_trigger_app.path_parser — parse the raw blob path (fail closed).
 
-Convention:
-    /raw/{client_id}/{dataset}/{frequency}/{source_portfolio_id}/{reporting_period}/{filename}
+Preferred (production) convention — 7 segments after the container:
+    {container}/{client_id}/{source_book_type}/{dataset}/{frequency}/{source_portfolio_id}/{period}/{filename}
+    e.g. raw-v2/ERE/direct/funded/monthly/direct_001/2025-11-30/LoanExtract.csv
+         raw-v2/ERE/acquired/funded/ad_hoc/acquired_001/2025-11-30/LoanExtract.csv
+
+Deprecated compatibility convention — 6 segments (no source_book_type):
+    {container}/{client_id}/{dataset}/{frequency}/{source_portfolio_id}/{period}/{filename}
+    (book type is derived from the source_portfolio_id prefix).
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
+VALID_BOOK_TYPES = ("direct", "acquired")
+# forecast retained for back-compat; the production structure uses funded/pipeline.
 VALID_DATASETS = ("funded", "pipeline", "forecast")
-# "ad_hoc" (and the legacy "adhoc") support one-off acquired-portfolio onboarding
-# packs, e.g. {client}/funded/ad_hoc/acquired_001/{reporting_date}/.
 VALID_FREQUENCIES = ("monthly", "weekly", "daily", "adhoc", "ad_hoc")
 
 # reporting_period: 2026-09-30 (date) or 2026-W39 (ISO week) or 2026-09 (month).
@@ -32,6 +38,8 @@ class ParsedPath:
     reporting_period: str
     filename: str
     blob_path: str
+    source_book_type: Optional[str] = None
+    is_legacy_path: bool = False
 
     @property
     def source_key(self) -> str:
@@ -43,13 +51,21 @@ class ParsedPath:
 DEFAULT_CONTAINER = "raw"
 
 
-def _segments(blob_path: str, container: str) -> List[str]:
-    """Return the 6 path segments after the container.
+def _derive_book_type(source_portfolio_id: str) -> Optional[str]:
+    pid = (source_portfolio_id or "").lower()
+    if pid.startswith("direct"):
+        return "direct"
+    if pid.startswith("acquired"):
+        return "acquired"
+    return None
 
-    Works whether or not the path is prefixed with the container name (the Azure
-    blob trigger may surface ``blob.name`` with or without it): if the configured
-    container appears as a segment, everything after it is returned; otherwise the
-    path is assumed to already be the inner segments.
+
+def _segments(blob_path: str, container: str) -> List[str]:
+    """Return the path segments after the container.
+
+    Works whether or not the path is prefixed with the container name: if the
+    configured container appears as a segment, everything after it is returned;
+    otherwise the path is assumed to already be the inner segments.
     """
     parts = [p for p in re.split(r"[\\/]+", blob_path.strip()) if p]
     if container in parts:
@@ -57,21 +73,7 @@ def _segments(blob_path: str, container: str) -> List[str]:
     return parts
 
 
-def parse_blob_path(blob_path: str, container: str = DEFAULT_CONTAINER) -> ParsedPath:
-    """Parse the raw blob path or raise :class:`PathParseError` (fail closed).
-
-    ``container`` is the configured blob container (default ``raw``; set via the
-    ``TRAKT_BLOB_CONTAINER`` app setting, e.g. ``raw-v2``)."""
-    if not blob_path or not str(blob_path).strip():
-        raise PathParseError("empty blob path")
-    seg = _segments(blob_path, container)
-    if len(seg) != 6:
-        raise PathParseError(
-            f"expected {container}/{{client_id}}/{{dataset}}/{{frequency}}/"
-            "{source_portfolio_id}/{reporting_period}/{filename} "
-            f"(6 segments after the container {container!r}), got {len(seg)}: {seg}")
-    client_id, dataset, frequency, source_portfolio_id, reporting_period, filename = seg
-
+def _validate_common(dataset: str, frequency: str, reporting_period: str, filename: str) -> None:
     if dataset not in VALID_DATASETS:
         raise PathParseError(f"dataset must be one of {VALID_DATASETS}, got {dataset!r}")
     if frequency not in VALID_FREQUENCIES:
@@ -82,10 +84,48 @@ def parse_blob_path(blob_path: str, container: str = DEFAULT_CONTAINER) -> Parse
             "(YYYY-MM-DD / YYYY-Www / YYYY-MM / YYYY-Qn)")
     if not filename:
         raise PathParseError("empty filename")
-    # Note: no extension requirement — the completion marker (e.g. _READY) is a
-    # legitimate, extensionless filename at this position.
 
-    return ParsedPath(
-        client_id=client_id, dataset=dataset, frequency=frequency,
-        source_portfolio_id=source_portfolio_id, reporting_period=reporting_period,
-        filename=filename, blob_path=blob_path)
+
+def parse_blob_path(blob_path: str, container: str = DEFAULT_CONTAINER) -> ParsedPath:
+    """Parse the raw blob path or raise :class:`PathParseError` (fail closed).
+
+    Accepts the preferred 7-segment structure (with ``source_book_type``) and the
+    deprecated 6-segment compatibility structure. ``container`` is the configured
+    blob container (default ``raw``; set via ``TRAKT_BLOB_CONTAINER``)."""
+    if not blob_path or not str(blob_path).strip():
+        raise PathParseError("empty blob path")
+    seg = _segments(blob_path, container)
+
+    if len(seg) == 7:
+        (client_id, source_book_type, dataset, frequency,
+         source_portfolio_id, reporting_period, filename) = seg
+        if source_book_type not in VALID_BOOK_TYPES:
+            raise PathParseError(
+                f"source_book_type must be one of {VALID_BOOK_TYPES}, got "
+                f"{source_book_type!r} (path: {client_id}/{source_book_type}/{dataset}/…)")
+        _validate_common(dataset, frequency, reporting_period, filename)
+        derived = _derive_book_type(source_portfolio_id)
+        if derived and derived != source_book_type:
+            raise PathParseError(
+                f"source_book_type {source_book_type!r} is inconsistent with "
+                f"source_portfolio_id {source_portfolio_id!r} (looks {derived!r})")
+        return ParsedPath(
+            client_id=client_id, dataset=dataset, frequency=frequency,
+            source_portfolio_id=source_portfolio_id, reporting_period=reporting_period,
+            filename=filename, blob_path=blob_path, source_book_type=source_book_type,
+            is_legacy_path=False)
+
+    if len(seg) == 6:
+        (client_id, dataset, frequency,
+         source_portfolio_id, reporting_period, filename) = seg
+        _validate_common(dataset, frequency, reporting_period, filename)
+        return ParsedPath(
+            client_id=client_id, dataset=dataset, frequency=frequency,
+            source_portfolio_id=source_portfolio_id, reporting_period=reporting_period,
+            filename=filename, blob_path=blob_path,
+            source_book_type=_derive_book_type(source_portfolio_id), is_legacy_path=True)
+
+    raise PathParseError(
+        f"expected 7 segments {container}/{{client_id}}/{{source_book_type}}/{{dataset}}/"
+        "{frequency}/{source_portfolio_id}/{period}/{filename} (preferred) or 6 "
+        f"(deprecated, no source_book_type) after container {container!r}; got {len(seg)}: {seg}")

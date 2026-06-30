@@ -53,20 +53,39 @@ class SourceRecord:
 
 
 class SourceRegistry:
-    def __init__(self, path: str | Path):
-        self.path = Path(path)
+    """File- or Blob-backed source registry.
+
+    With no ``storage``, reads/writes a local filesystem path (unchanged
+    behaviour). With a ``storage`` backend, ``path`` may be a ``blob://`` URI (or
+    any storage URI) and load/save go through the storage abstraction — so the
+    registry persists durably in Azure Blob in production.
+    """
+
+    def __init__(self, path: str | Path, *, storage: Any = None):
+        self.storage = storage
+        # Keep the original URI/string when storage-backed (blob:// is not a Path).
+        self.uri = str(path)
+        self.path = Path(path) if storage is None else None
         self._records: Dict[str, SourceRecord] = {}
         self.load()
+
+    def _is_yaml(self) -> bool:
+        return self.uri.lower().rsplit(".", 1)[-1] in ("yaml", "yml")
 
     # -- persistence -------------------------------------------------------- #
     def load(self) -> None:
         self._records = {}
-        if not self.path.exists():
-            return
-        raw = self.path.read_text(encoding="utf-8")
+        if self.storage is not None:
+            if not self.storage.exists(self.uri):
+                return
+            raw = self.storage.read_text(self.uri)
+        else:
+            if not self.path.exists():
+                return
+            raw = self.path.read_text(encoding="utf-8")
         if not raw.strip():
             return
-        if self.path.suffix.lower() in (".yaml", ".yml"):
+        if self._is_yaml():
             import yaml
             data = yaml.safe_load(raw) or {}
         else:
@@ -76,13 +95,17 @@ class SourceRegistry:
             self._records[r.key] = r
 
     def save(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
         data = {"sources": [r.to_dict() for r in self._records.values()]}
-        if self.path.suffix.lower() in (".yaml", ".yml"):
+        if self._is_yaml():
             import yaml
-            self.path.write_text(yaml.safe_dump(data, sort_keys=True), encoding="utf-8")
+            text = yaml.safe_dump(data, sort_keys=True)
         else:
-            self.path.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
+            text = json.dumps(data, indent=2, sort_keys=True)
+        if self.storage is not None:
+            self.storage.write_text(self.uri, text)
+        else:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.write_text(text, encoding="utf-8")
 
     # -- lookup / mutation -------------------------------------------------- #
     def lookup(self, client_id: str, source_portfolio_id: str,

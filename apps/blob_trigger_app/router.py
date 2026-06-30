@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 
 from .assembler_refresh import AssemblerRefresher, default_assembler_refresher
 from .event_log import make_event_id, write_event_manifest
@@ -23,6 +23,9 @@ from .source_registry import (
     STATUS_ACTIVE, STATUS_PENDING_REVIEW, SourceRecord, SourceRegistry,
 )
 from .target_selection import select_target
+
+if TYPE_CHECKING:  # avoid import cost at module load; persistence is optional
+    from .persistence import ProductionPersistence
 
 # Final event statuses.
 STATUS_PROCESSED = "processed"
@@ -55,6 +58,7 @@ EVT_KNOWN_SOURCE_HALTED = "known_source_halted"
 EVT_SCHEMA_DRIFT_PENDING = "schema_drift_pending_review"
 EVT_DUPLICATE_READY_IGNORED = "duplicate_ready_ignored"
 EVT_INCOMPLETE_PACK_PENDING = "incomplete_pack_pending_review"
+EVT_BOOK_TYPE_MISMATCH = "book_type_mismatch"
 EVT_FAILED = "failed"
 
 
@@ -78,6 +82,8 @@ def handle_blob_event(
     assembler_refresher: AssemblerRefresher = default_assembler_refresher,
     accepted_root: Optional[str] = None,
     platform_out_dir: Optional[str] = None,
+    persistence: Optional["ProductionPersistence"] = None,
+    regime_runner: Optional[Callable[..., Dict[str, Any]]] = None,
     now: Optional[str] = None,
     run_id_for_registry: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -111,8 +117,20 @@ def handle_blob_event(
         "assembler_refresh": None,
         "status": None,
         "error": None,
+        "approval_id": None,
+        "persisted": None,
         "created_at": created_at,
     }
+
+    def _emit() -> Dict[str, Any]:
+        """Write the event manifest locally and (if configured) durably."""
+        write_event_manifest(manifest, out_dir)
+        if persistence is not None:
+            try:
+                manifest["persisted_event_uri"] = persistence.persist_event_manifest(manifest)
+            except Exception as exc:  # noqa: BLE001 — never fail the event on audit write
+                manifest.setdefault("persist_errors", []).append(f"event_manifest: {exc}")
+        return manifest
 
     # 1) Parse path (fail closed) -----------------------------------------
     try:
@@ -121,8 +139,7 @@ def handle_blob_event(
         manifest["status"] = STATUS_FAILED
         manifest["event_decision"] = EVT_INVALID_PATH
         manifest["error"] = f"path_parse_error: {exc}"
-        write_event_manifest(manifest, out_dir)
-        return manifest
+        return _emit()
     manifest.update(
         client_id=parsed.client_id, dataset=parsed.dataset, dataset_type=parsed.dataset,
         frequency=parsed.frequency, source_portfolio_id=parsed.source_portfolio_id,
@@ -141,8 +158,7 @@ def handle_blob_event(
         manifest["event_decision"] = EVT_IGNORED_DATA_FILE
         manifest["orchestrator_invocation"] = {
             "invoked": False, "reason": f"awaiting completion marker {pack_marker!r}"}
-        write_event_manifest(manifest, out_dir)
-        return manifest
+        return _emit()
 
     # 2) Schema fingerprint (fail closed) — over the PACK's data files -----
     try:
@@ -154,8 +170,7 @@ def handle_blob_event(
         manifest["status"] = STATUS_FAILED
         manifest["event_decision"] = EVT_FAILED
         manifest["error"] = f"fingerprint_error: {exc}"
-        write_event_manifest(manifest, out_dir)
-        return manifest
+        return _emit()
     manifest["schema_fingerprint"] = schema_info.fingerprint
 
     # 2b) Pack completeness — expected files declared in the marker -------
@@ -169,8 +184,7 @@ def handle_blob_event(
             manifest["error"] = f"incomplete_pack: missing {missing}"
             manifest["orchestrator_invocation"] = {
                 "invoked": False, "reason": "incomplete_pack_fail_closed"}
-            write_event_manifest(manifest, out_dir)
-            return manifest
+            return _emit()
 
     # 2c) Idempotency — a pack that already ran this exact schema is skipped,
     # unless the marker explicitly carries force_reprocess=true.
@@ -183,8 +197,7 @@ def handle_blob_event(
         manifest["orchestrator_invocation"] = {
             "invoked": False, "reason": "pack already processed",
             "prior_run_id": prior.get("run_id"), "prior_status": prior.get("status")}
-        write_event_manifest(manifest, out_dir)
-        return manifest
+        return _emit()
 
     # 3) Registry inference + target selection -----------------------------
     rec = registry.lookup(parsed.client_id, parsed.source_portfolio_id,
@@ -229,9 +242,21 @@ def handle_blob_event(
     # acquired-portfolio metadata (marker wins; registry record may also carry it).
     acquisition_date = meta.get("acquisition_date") or getattr(rec, "acquisition_date", None)
     seller_name = meta.get("seller_name") or getattr(rec, "seller_name", None)
-    portfolio_type = (meta.get("source_portfolio_type")
+    # source_portfolio_type: marker → path book type → registry → pid-derived.
+    marker_type = (meta.get("source_portfolio_type") or "").strip().lower() or None
+    portfolio_type = (marker_type or parsed.source_book_type
                       or (rec.source_portfolio_type if rec else None)
                       or _derive_type(parsed.source_portfolio_id))
+    # Reject a marker that contradicts the path's source_book_type (fail closed).
+    if marker_type and parsed.source_book_type and marker_type != parsed.source_book_type:
+        manifest["status"] = STATUS_FAILED
+        manifest["event_decision"] = EVT_BOOK_TYPE_MISMATCH
+        manifest["error"] = (
+            f"book_type_mismatch: _READY.json source_portfolio_type={marker_type!r} "
+            f"contradicts path source_book_type={parsed.source_book_type!r}")
+        manifest["orchestrator_invocation"] = {"invoked": False,
+                                               "reason": "book_type_mismatch"}
+        return _emit()
 
     # 4) Route -------------------------------------------------------------
     if decision == DECISION_SCHEMA_DRIFT:
@@ -245,8 +270,15 @@ def handle_blob_event(
             "invoked": False, "reason": "schema_drift_fail_closed"}
         rec.status = STATUS_PENDING_REVIEW
         registry.upsert(rec)
-        write_event_manifest(manifest, out_dir)
-        return manifest
+        _write_pending_approval(
+            persistence, manifest, parsed, schema_info, created_at,
+            kind="schema_drift", pack_files=pack_files,
+            prior_fingerprint=rec.expected_schema_fingerprint,
+            suggested_mapping_id=rec.approved_mapping_id,
+            suggested_mapping_config_path=rec.mapping_config_path,
+            portfolio_type=portfolio_type, regime_required=regime_required,
+            acquisition_date=acquisition_date, seller_name=seller_name)
+        return _emit()
 
     if decision == DECISION_SOURCE_ONBOARDING:
         result = orchestrator_invoker(
@@ -267,9 +299,14 @@ def handle_blob_event(
         manifest["event_decision"] = EVT_NEW_SOURCE_PENDING
         _upsert_source(registry, parsed, schema_info, status=STATUS_PENDING_REVIEW,
                        regime_required=regime_required, portfolio_type=portfolio_type)
+        _write_pending_approval(
+            persistence, manifest, parsed, schema_info, created_at,
+            kind="new_source", pack_files=pack_files,
+            suggested_mapping_id=None, suggested_mapping_config_path=None,
+            portfolio_type=portfolio_type, regime_required=regime_required,
+            acquisition_date=acquisition_date, seller_name=seller_name)
         _write_processed(out_dir, manifest, schema_info, result)
-        write_event_manifest(manifest, out_dir)
-        return manifest
+        return _emit()
 
     # decision == deterministic ------------------------------------------
     result = orchestrator_invoker(
@@ -299,6 +336,12 @@ def handle_blob_event(
             _refresh_platform_canonical(
                 manifest, parsed, result, sel_target, sel_run_regime,
                 assembler_refresher, out_dir, accepted_root, platform_out_dir)
+            # 6) Durable persistence — upload accepted + platform canonicals (and
+            # regime outputs) to the persistent store (Azure Blob / filesystem).
+            if persistence is not None:
+                _persist_funded_outputs(
+                    persistence, manifest, parsed, out_dir, accepted_root,
+                    sel_run_regime, regime_runner)
     elif orch_status == "halted":
         manifest["status"] = STATUS_HALTED
         manifest["event_decision"] = EVT_KNOWN_SOURCE_HALTED
@@ -308,8 +351,7 @@ def handle_blob_event(
         manifest["error"] = "; ".join((result or {}).get("blockers") or []) or "orchestrator_failed"
     # Mark the pack processed (idempotency) on any orchestrator-invoking outcome.
     _write_processed(out_dir, manifest, schema_info, result)
-    write_event_manifest(manifest, out_dir)
-    return manifest
+    return _emit()
 
 
 # --------------------------------------------------------------------------- #
@@ -334,6 +376,78 @@ def _refresh_platform_canonical(manifest, parsed, result, target, run_regime,
             manifest["central_canonical_path"] = refresh["central_canonical_path"]
     except Exception as exc:  # noqa: BLE001 — pack DID process; record refresh failure
         manifest["assembler_refresh"] = {"error": f"{type(exc).__name__}: {exc}"}
+
+
+# --------------------------------------------------------------------------- #
+# Production persistence + approvals (only when a persistence facade is given)
+# --------------------------------------------------------------------------- #
+
+def _write_pending_approval(persistence, manifest, parsed, schema_info, created_at, *,
+                            kind, pack_files, portfolio_type, regime_required,
+                            acquisition_date=None, seller_name=None,
+                            prior_fingerprint=None, suggested_mapping_id=None,
+                            suggested_mapping_config_path=None) -> None:
+    if persistence is None:
+        return
+    try:
+        art = persistence.write_pending_approval(
+            kind=kind, client_id=parsed.client_id,
+            source_book_type=parsed.source_book_type or portfolio_type,
+            dataset=parsed.dataset, frequency=parsed.frequency,
+            source_portfolio_id=parsed.source_portfolio_id,
+            period=parsed.reporting_period, schema_fingerprint=schema_info.fingerprint,
+            detected_files=pack_files, prior_schema_fingerprint=prior_fingerprint,
+            suggested_mapping_id=suggested_mapping_id,
+            suggested_mapping_config_path=suggested_mapping_config_path,
+            source_metadata={
+                "source_portfolio_type": portfolio_type,
+                "regime_required": regime_required,
+                "acquisition_date": acquisition_date, "seller_name": seller_name},
+            created_at=created_at)
+        manifest["approval_id"] = art.get("approval_id")
+    except Exception as exc:  # noqa: BLE001 — never fail the event on approval write
+        manifest.setdefault("persist_errors", []).append(f"approval: {exc}")
+
+
+def _persist_funded_outputs(persistence, manifest, parsed, out_dir, accepted_root,
+                            run_regime, regime_runner) -> None:
+    accepted_root = accepted_root or str(Path(out_dir) / "_accepted")
+    accepted_local = (Path(accepted_root) / parsed.client_id
+                      / f"{parsed.source_portfolio_id}_canonical_typed.csv")
+    central_local = manifest.get("central_canonical_path")
+    persisted: Dict[str, Any] = {}
+    try:
+        persisted["accepted_uri"] = persistence.persist_accepted(
+            parsed.client_id, parsed.source_portfolio_id, str(accepted_local))
+        if central_local:
+            plat = persistence.persist_platform(
+                parsed.client_id, parsed.reporting_period, str(central_local))
+            persisted["platform_latest_uri"] = plat.get("latest")
+            persisted["platform_period_uri"] = plat.get("period")
+            # Make the durably-persisted latest the manifest's central pointer.
+            if plat.get("latest"):
+                manifest["central_canonical_uri"] = plat["latest"]
+        ref = manifest.get("assembler_refresh") or {}
+        persisted["portfolios"] = ref.get("portfolios")
+    except Exception as exc:  # noqa: BLE001
+        manifest.setdefault("persist_errors", []).append(f"funded_outputs: {exc}")
+
+    # Regime projection from the persisted central canonical (run-clean ESMA +
+    # provenance companion), uploaded under the regime prefix for this period.
+    if run_regime and regime_runner is not None and central_local:
+        try:
+            rr = regime_runner(
+                central_canonical_path=str(central_local),
+                client_id=parsed.client_id, period=parsed.reporting_period,
+                regime="ESMA_Annex2", out_dir=str(Path(out_dir) / "_regime"))
+            local_dir = (rr or {}).get("output_dir")
+            if local_dir:
+                persisted["regime_uris"] = persistence.persist_regime_dir(
+                    parsed.client_id, parsed.reporting_period, local_dir)
+            persisted["regime_ok"] = (rr or {}).get("ok")
+        except Exception as exc:  # noqa: BLE001
+            manifest.setdefault("persist_errors", []).append(f"regime: {exc}")
+    manifest["persisted"] = persisted
 
 
 # --------------------------------------------------------------------------- #

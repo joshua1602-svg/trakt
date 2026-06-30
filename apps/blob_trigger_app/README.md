@@ -15,12 +15,24 @@ Blob uploaded to raw-v2
    → Assembler Agent → MI / Regime / All
 ```
 
+**Input folder structure** (preferred, 7 segments incl. `source_book_type`):
+
 ```
-{container}/{client_id}/{dataset}/{frequency}/{source_portfolio_id}/{reporting_period}/{filename}
-  monthly funded:  raw-v2/ERE/funded/monthly/direct_001/2026-01-31/LoanExtract.csv
-  weekly pipeline: raw-v2/ERE/pipeline/weekly/direct_001/2026-W05/PipelineExtract.csv
-  acquired ad-hoc: raw-v2/ERE/funded/ad_hoc/acquired_001/2026-01-31/LoanExtract.csv
+{client_id}/{source_book_type}/{dataset_type}/{frequency}/{source_portfolio_id}/{period}/{filename}
+  direct funded monthly:   ERE/direct/funded/monthly/direct_001/2025-11-30/LoanExtract.csv
+  direct pipeline weekly:  ERE/direct/pipeline/weekly/direct_001/2025-W48/PipelineExtract.csv
+  acquired funded monthly: ERE/acquired/funded/monthly/acquired_001/2025-11-30/LoanExtract.csv
+  acquired one-off pack:   ERE/acquired/funded/ad_hoc/acquired_001/2025-11-30/LoanExtract.csv
 ```
+
+`source_book_type` ∈ `direct|acquired`, `dataset_type` ∈ `funded|pipeline`,
+`frequency` ∈ `weekly|monthly|ad_hoc`, `period` is `YYYY-Www` (weekly) or a
+month-end date `YYYY-MM-DD` (monthly/ad_hoc). Invalid structures are **rejected**
+with a clear manifest reason (`event_decision: invalid_path`), and a
+`source_book_type` that contradicts the `source_portfolio_id` (e.g. `acquired_001`
+under `direct/`) is rejected too. The older 6-segment convention
+`{client_id}/{dataset}/{frequency}/{pid}/{period}/` is still parsed as a
+**deprecated compatibility** path (book type derived from the portfolio id).
 
 The accepted **container is configurable** via the `TRAKT_BLOB_CONTAINER` app
 setting (default `raw`; **production `raw-v2`**). The Event Grid handler reads it
@@ -143,6 +155,70 @@ successful run/period, `regime_required`, and `status`
 > `config/source_registry.yaml` lives under the read-only package mount, so in
 > Azure point **`TRAKT_SOURCE_REGISTRY`** at a writable, persistent location
 > (e.g. an Azure Files mount) — `/tmp` would not survive across instances.
+
+## Persistent storage (production)
+
+Production must not keep state on `/tmp`. A small **storage abstraction**
+(`storage.py`) addresses both backends by `blob://{container}/{key}` URIs:
+filesystem locally/tests (`blob://c/k` → `{TRAKT_LOCAL_BLOB_ROOT}/c/k`), real
+Azure Blob in the cloud (`TRAKT_STORAGE_BACKEND=blob` + `TRAKT_BLOB_CONNECTION`).
+The `/tmp/trakt/blob_trigger` root is **scratch only**; final artifacts are
+uploaded durably. Layout (`layout.py`, all container names configurable):
+
+| Artifact | Location (default) |
+|---|---|
+| source registry | `trakt-state/registry/source_registry.yaml` (`TRAKT_SOURCE_REGISTRY_URI`) |
+| pending approvals | `trakt-state/approvals/{approval_id}.json` |
+| event manifests | `trakt-state/events/{event_id}.json` |
+| accepted per-portfolio canonical | `processed-v2/accepted/{client}/{pid}_canonical_typed.csv` |
+| central platform canonical (latest) | `processed-v2/platform/{client}/latest/platform_canonical_typed.csv` |
+| central platform canonical (period) | `processed-v2/platform/{client}/{period}/platform_canonical_typed.csv` |
+| regime outputs | `processed-v2/regime/{client}/{period}/` |
+| MI outputs | `processed-v2/mi/{client}/` |
+
+App settings: `TRAKT_RAW_CONTAINER=raw-v2`, `TRAKT_STATE_CONTAINER=trakt-state`,
+`TRAKT_PROCESSED_CONTAINER=processed-v2`, `TRAKT_SOURCE_REGISTRY_URI=blob://…`,
+`TRAKT_STORAGE_BACKEND=blob|file`, `TRAKT_BLOB_CONNECTION`, `TRAKT_LOCAL_BLOB_ROOT`.
+
+## Approval workflow
+
+New sources and schema changes are **human-gated**. When a pack is detected as a
+new source (`new_source_pending_review`) or schema drift
+(`schema_drift_pending_review`), the trigger writes a **pending approval
+artifact** to `trakt-state/approvals/` carrying the schema fingerprint (old + new
+on drift), detected files, suggested mapping, and source metadata
+(`source_portfolio_type`, `acquisition_date`, `seller_name`, `regime_required`).
+Production processing does **not** proceed until approved. CLI:
+
+```bash
+python -m apps.blob_trigger_app.approvals list
+python -m apps.blob_trigger_app.approvals show <approval_id>
+python -m apps.blob_trigger_app.approvals approve <approval_id> --mapping-id ere_acq1_v1 --mapping-config-path config/acq1.yaml
+python -m apps.blob_trigger_app.approvals reject  <approval_id> --reason "seller unverified"
+python -m apps.blob_trigger_app.approvals promote <approval_id>   # → active registry entry
+```
+
+`promote` writes an `active` registry entry (approved mapping + expected
+fingerprint); subsequent packs for that source route deterministically. (Local
+runs add `--local-root .localblob` to use the filesystem-emulated store.)
+
+## MI API access to the latest central canonical
+
+After a funded pack, the Assembler-refreshed central canonical is uploaded to
+`processed-v2/platform/{client}/latest/platform_canonical_typed.csv`. The MI API
+reads it either by **mount** — point `MI_AGENT_PLATFORM_DIR` at the mounted
+`…/latest/` directory (no code change) — or by **URI**: set
+`MI_AGENT_PLATFORM_URI=blob://processed-v2/platform/{client}/latest/…` and the MI
+data source resolves/downloads it via the storage abstraction. The React
+dashboard's Total / Direct / Acquired / cohort lenses are unchanged.
+
+## Regime / Projection access
+
+When a funded source is in ESMA scope (`regime_required`, target `all`), regime
+projection runs over the **persisted central canonical** and outputs are uploaded
+to `processed-v2/regime/{client}/{period}/`. The projector logic is unchanged —
+ESMA output stays template-clean and the **provenance companion** is written and
+uploaded alongside it.
 
 ## Deployment entrypoint
 
