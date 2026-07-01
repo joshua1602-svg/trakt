@@ -213,7 +213,11 @@ def handle_blob_event(
     try:
         if schema_info is None:
             if not local_input_path:
-                raise ValueError("no local_input_path to fingerprint")
+                raise ValueError(
+                    "no data files found in the pack folder to fingerprint — the "
+                    "reporting folder appears to contain only the completion marker. "
+                    "Upload the data file(s) listed in _READY.json alongside it, then "
+                    "re-fire the marker.")
             schema_info = compute_schema_fingerprint(local_input_path)
     except Exception as exc:  # noqa: BLE001
         manifest["status"] = STATUS_FAILED
