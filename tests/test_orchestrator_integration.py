@@ -45,11 +45,13 @@ class TestOrchestratorRealAgents(unittest.TestCase):
         except Exception as exc:  # pragma: no cover
             raise unittest.SkipTest(f"orchestrator/agent deps unavailable: {exc}")
 
-    def _run(self, *, target, mode, regime=None, full_pipeline=False):
+    def _run(self, *, target, mode, regime=None, full_pipeline=False,
+             processing_mode="source_onboarding"):
         from engine.orchestrator_agent import run_orchestration
         from engine.orchestrator_agent.adapters import RealAgentAdapters, PortfolioSpec
         ad = RealAgentAdapters(registry=_REGISTRY, client_name="ERE_IT",
-                               onboarding_mode=mode)
+                               onboarding_mode=mode, processing_mode=processing_mode,
+                               full_pipeline=full_pipeline)
         # Keep the output dir alive for the test body (assertions read artifacts).
         td = tempfile.mkdtemp(prefix="orch_it_")
         self.addCleanup(lambda: __import__("shutil").rmtree(td, ignore_errors=True))
@@ -75,6 +77,32 @@ class TestOrchestratorRealAgents(unittest.TestCase):
         # Incomplete pack → fail-closed: nothing published.
         if state.status != STEP_DONE:
             self.assertIsNone(state.central_canonical_path)
+
+    def test_deterministic_mi_full_pipeline_emits_handoff(self):
+        # THE reported bug, end-to-end: a KNOWN source processed DETERMINISTICALLY
+        # (no LLM review), target=mi, full_pipeline=True. Onboarding must still emit
+        # the MI-contract handoff so Gate 2 has a contract to transform — previously
+        # it produced NO handoff manifest and transform halted with "produced no
+        # handoff manifest".
+        import json
+        from engine.orchestrator_agent.state import STEP_DONE
+        state = self._run(target="mi", mode="mi_only", full_pipeline=True,
+                          processing_mode="deterministic")
+        onboard = state.portfolios[0].step("onboard")
+        self.assertEqual(onboard.status, STEP_DONE)
+        # Handoff manifest IS emitted now (was None on the deterministic path).
+        self.assertTrue(onboard.manifest_path)
+        self.assertEqual(onboard.readiness.get("target_contract"), "mi_semantics")
+        # Gate 2 receives the MI contract, NOT Annex 2, and there are no registry gaps.
+        m = json.loads(Path(onboard.manifest_path).read_text(encoding="utf-8"))
+        self.assertEqual(m.get("target_contract_id"), "mi_semantics_field_registry")
+        self.assertEqual(m.get("registry_gap_count"), 0)
+        # The "produced no handoff manifest" halt no longer occurs; transform reached
+        # its readiness gate (any residual halt is a governed decision, not a missing
+        # contract).
+        self.assertFalse(any("produced no handoff manifest" in b.lower()
+                             for b in state.blockers))
+        self.assertNotEqual(state.portfolios[0].step("transform").status, "pending")
 
     def test_mi_path_real_agents_green(self):
         import pandas as pd

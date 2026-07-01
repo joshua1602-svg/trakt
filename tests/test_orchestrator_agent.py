@@ -349,6 +349,66 @@ class TestFullPipelineMI(unittest.TestCase):
             self.assertFalse(p.step("transform").done)         # lean path: no Gate 2/3
             self.assertFalse(p.step("validate").done)
 
+    def test_missing_handoff_halts_but_ready_handoff_proceeds(self):
+        # THE fix (orchestrator side): a full-pipeline MI run must NOT halt for a
+        # MISSING handoff when onboarding produced a READY one (registry_gap_count=0,
+        # no blocking decisions). It only halts-for-missing when onboard emits none.
+        class _NoHandoff(StubAdapters):
+            def onboard(self, spec, work_dir):
+                r = super().onboard(spec, work_dir)
+                r.manifest_path = None        # the pre-fix deterministic MI onboard
+                return r
+
+        halted = run_orchestration(
+            "ERE", _specs()[:1], target="mi", out_root=self.out,
+            adapters=_NoHandoff(), created_at=_NOW, run_id="orun_nohandoff",
+            full_pipeline=True)
+        self.assertEqual(halted.status, STEP_HALTED)
+        self.assertTrue(any("produced no handoff manifest" in b.lower()
+                            for b in halted.blockers))
+
+        # Ready handoff → transform proceeds (no missing-handoff halt).
+        ok = run_orchestration(
+            "ERE", _specs()[:1], target="mi", out_root=self.out,
+            adapters=StubAdapters(), created_at=_NOW, run_id="orun_ready",
+            full_pipeline=True)
+        self.assertEqual(ok.status, STEP_DONE)
+        self.assertEqual(ok.portfolios[0].step("transform").status, STEP_DONE)
+        self.assertFalse(any("handoff" in b.lower() for b in ok.blockers))
+
+    def test_deterministic_full_pipeline_builds_coverage_llm_off(self):
+        # The adapter fix: a deterministic (known-source) FULL-pipeline mi_only
+        # onboard must build the target coverage (enable_mapping_review=True) so the
+        # MI handoff exists — while the LLM stays OFF (deterministic-first). The LEAN
+        # deterministic path is unchanged (no coverage built).
+        from unittest import mock
+        from engine.orchestrator_agent.adapters import RealAgentAdapters
+        fake_tape = {"central_lender_tape_path": "/tmp/t.csv",
+                     "central_lender_tape_created": True, "loan_count": 3}
+
+        def _capture(full_pipeline):
+            captured = {}
+            with mock.patch("engine.onboarding_agent.workflow.run_operator_workflow",
+                            side_effect=lambda **kw: captured.update(kw)), \
+                 mock.patch("engine.onboarding_agent.storage_paths.resolve_run_paths",
+                            return_value={}), \
+                 mock.patch("engine.onboarding_agent.central_tape_builder.build_central_tapes",
+                            return_value=fake_tape), \
+                 mock.patch.object(RealAgentAdapters, "_build_mi_handoff",
+                                   return_value="/tmp/24.json"):
+                ad = RealAgentAdapters(registry="r", onboarding_mode="mi_only",
+                                       processing_mode="deterministic",
+                                       full_pipeline=full_pipeline)
+                ad.onboard(PortfolioSpec("direct_001", "in"), Path(self.out) / f"p{full_pipeline}")
+            return captured
+
+        full = _capture(full_pipeline=True)
+        self.assertTrue(full["enable_mapping_review"])            # coverage built (handoff)
+        self.assertFalse(full.get("enable_llm_target_advisor", False))  # LLM stays off
+        self.assertEqual(full["target_first_decisions"], "")     # deterministic (no supplied map)
+        lean = _capture(full_pipeline=False)
+        self.assertFalse(lean["enable_mapping_review"])          # lean path unchanged
+
 
 if __name__ == "__main__":
     unittest.main()
