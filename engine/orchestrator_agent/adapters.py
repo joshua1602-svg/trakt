@@ -172,7 +172,8 @@ class RealAgentAdapters(AgentAdapters):
                  onboarding_mode: str = "mi_only",
                  aliases_dir: str = "config/system",
                  processing_mode: str = "source_onboarding",
-                 mapping_config_path: Optional[str] = None):
+                 mapping_config_path: Optional[str] = None,
+                 full_pipeline: bool = False):
         self.registry = registry
         self.client_name = client_name
         self.onboarding_mode = onboarding_mode
@@ -182,6 +183,10 @@ class RealAgentAdapters(AgentAdapters):
         #   "deterministic"     — skip discovery, apply the saved approved mapping.
         self.processing_mode = processing_mode
         self.mapping_config_path = mapping_config_path
+        # full_pipeline: the run will execute Gate 2 (transform), so onboarding must
+        # emit the target-coverage matrix (28a) + handoff even for a deterministic
+        # known source — otherwise Gate 2 has no contract to transform.
+        self.full_pipeline = full_pipeline
 
     def onboard(self, spec: PortfolioSpec, work_dir: Path) -> StepResult:
         """Run onboarding for one portfolio. The ``mode`` is the MI-vs-regime
@@ -202,6 +207,11 @@ class RealAgentAdapters(AgentAdapters):
         # review and applies the saved approved decisions; source onboarding (new /
         # changed source) runs discovery. Both stay deterministic-first (LLM off).
         deterministic = self.processing_mode == "deterministic"
+        # The target-coverage matrix (28a) + handoff are DETERMINISTIC artefacts
+        # (the LLM is separately gated and stays off here). Build them when the run
+        # will execute Gate 2 (full_pipeline) even for a deterministic known source,
+        # so the MI-contract handoff exists; otherwise the lean MI path is unchanged.
+        build_coverage = (not deterministic) or self.full_pipeline
         _wf.run_operator_workflow(
             input_dir=spec.input,
             client_name=self.client_name or spec.source_portfolio_id,
@@ -209,7 +219,7 @@ class RealAgentAdapters(AgentAdapters):
             project_dir=str(project_dir), mode=self.onboarding_mode,
             registry=self.registry or "config/system/fields_registry.yaml",
             aliases_dir=self.aliases_dir,
-            enable_mapping_review=not deterministic,
+            enable_mapping_review=build_coverage,
             target_first_decisions=((self.mapping_config_path or "") if deterministic else ""))
 
         if self.onboarding_mode == "mi_only":

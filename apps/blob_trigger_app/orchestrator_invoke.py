@@ -180,6 +180,7 @@ def default_orchestrator_invoker(
         onboarding_mode=onboarding_mode_for_target(target),   # contract by target
         processing_mode=processing_mode,
         mapping_config_path=mapping_config_path,
+        full_pipeline=full_pipeline,   # Gate 2 will run → onboarding must emit the handoff
     )
     spec = PortfolioSpec(
         source_portfolio_id=source_portfolio_id, input=input_path,
