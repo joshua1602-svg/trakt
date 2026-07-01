@@ -309,6 +309,7 @@ def default_orchestrator_invoker(
         processing_mode=processing_mode,
         mapping_config_path=mapping_config_path,
         full_pipeline=full_pipeline,   # Gate 2 will run → onboarding must emit the handoff
+        reporting_period=reporting_period,   # derive reporting_date from the folder period
     )
     spec = PortfolioSpec(
         source_portfolio_id=source_portfolio_id, input=input_path,

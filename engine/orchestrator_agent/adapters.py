@@ -173,7 +173,8 @@ class RealAgentAdapters(AgentAdapters):
                  aliases_dir: str = "config/system",
                  processing_mode: str = "source_onboarding",
                  mapping_config_path: Optional[str] = None,
-                 full_pipeline: bool = False):
+                 full_pipeline: bool = False,
+                 reporting_period: Optional[str] = None):
         self.registry = registry
         self.client_name = client_name
         self.onboarding_mode = onboarding_mode
@@ -187,6 +188,10 @@ class RealAgentAdapters(AgentAdapters):
         # emit the target-coverage matrix (28a) + handoff even for a deterministic
         # known source — otherwise Gate 2 has no contract to transform.
         self.full_pipeline = full_pipeline
+        # reporting_period: the pack's folder period (e.g. "2025-11-30"). Fed to
+        # onboarding as the reporting_date so the MI contract's portfolio-level
+        # reporting_date is derived from it when the raw files carry no such column.
+        self.reporting_period = reporting_period
 
     def onboard(self, spec: PortfolioSpec, work_dir: Path) -> StepResult:
         """Run onboarding for one portfolio. The ``mode`` is the MI-vs-regime
@@ -220,6 +225,7 @@ class RealAgentAdapters(AgentAdapters):
             registry=self.registry or "config/system/fields_registry.yaml",
             aliases_dir=self.aliases_dir,
             enable_mapping_review=build_coverage,
+            reporting_date=(self.reporting_period or ""),
             target_first_decisions=((self.mapping_config_path or "") if deterministic else ""))
 
         if self.onboarding_mode == "mi_only":
@@ -275,7 +281,8 @@ class RealAgentAdapters(AgentAdapters):
                 client_name=self.client_name or spec.source_portfolio_id,
                 run_id="run", mode="mi_only",
                 registry=self.registry or "config/system/fields_registry.yaml",
-                aliases_dir=self.aliases_dir)
+                aliases_dir=self.aliases_dir,
+                reporting_date=(self.reporting_period or ""))
             if not h:
                 return None
             return h.get("manifest_json_path") or str(

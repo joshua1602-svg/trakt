@@ -243,6 +243,16 @@ python -m apps.blob_trigger_app.ops rerun    <pack_key>         # re-fire the SA
 python -m apps.blob_trigger_app.ops rerun    <pack_key> --force-publish   # break-glass: publish despite validation
 ```
 
+**Portfolio-level `reporting_date`.** When the raw pack files carry no
+`reporting_date` column, the MI contract's portfolio-level `reporting_date` is
+derived from the folder **reporting period** (e.g. `…/2025-11-30/`) and stamped
+onto the coverage matrix as a non-blocking `run_context_period_inference` — so a
+recurring monthly pack satisfies the MI contract deterministically, with no
+per-pack manual approval. A real `reporting_date` source column always wins (the
+derivation only fills the field when it is otherwise missing). The period is fed
+through the onboarding *context*, not the run id, so per-period source
+eligibility (and the loan universe) is unaffected.
+
 When the onboarding handoff is **not ready**, the run diagnostics carry the full
 readiness payload — which readiness gate failed (`failed_readiness_gates`), the
 readiness booleans, `blocking_decision_count` + the actual `blocking_decisions`
