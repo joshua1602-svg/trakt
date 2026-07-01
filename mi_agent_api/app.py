@@ -219,24 +219,56 @@ def _platform_client_id(df) -> str:
 
 
 def _period_from_platform_uri() -> Optional[str]:
-    """A date-form reporting period embedded in MI_AGENT_PLATFORM_URI, if any
-    (``…/platform/{client}/2026-01-31/…``). ``/latest/` has none → None."""
+    """A reporting period embedded in MI_AGENT_PLATFORM_URI, if any
+    (``…/platform/{client}/2026-01-31/…`` or ``…/2026-01/…``). ``/latest/`` has
+    none → None. Month periods are normalised to the month-end date."""
+    import calendar
     import re
     uri = os.environ.get("MI_AGENT_PLATFORM_URI") or ""
     for seg in uri.replace("blob://", "").split("/"):
         if re.match(r"^\d{4}-\d{2}-\d{2}$", seg):
             return seg
+        m = re.match(r"^(\d{4})-(\d{2})$", seg)      # YYYY-MM → month-end
+        if m:
+            y, mo = int(m.group(1)), int(m.group(2))
+            if 1 <= mo <= 12:
+                return f"{y:04d}-{mo:02d}-{calendar.monthrange(y, mo)[1]:02d}"
+    return None
+
+
+def _scan_any_date_column(sub) -> Optional[str]:
+    """Last-resort: the max parseable date in ANY date-like column, so a real
+    date in the frame is never reported as null."""
+    import pandas as pd
+    for col in getattr(sub, "columns", []):
+        name = str(col).lower()
+        if not ("date" in name or "cut_off" in name or "cutoff" in name
+                or name.endswith("_dt")):
+            continue
+        try:
+            rd = pd.to_datetime(sub[col], errors="coerce").dropna()
+        except Exception:  # noqa: BLE001
+            continue
+        if not rd.empty:
+            return rd.max().date().isoformat()
     return None
 
 
 def _platform_reporting_date(sub, run_id: str) -> Optional[str]:
-    """Reporting date for a platform (sub)frame: prefer the data's own columns
-    (reporting_date / data_cut_off_date / cut_off_date), then a date parsed from
-    the platform period path, then the MI_AGENT_REPORTING_DATE override."""
+    """Reporting date for a platform (sub)frame, in priority order:
+    reporting_date → data_cut_off_date → cut_off_date (via infer_reporting_date),
+    then the platform period path, then MI_AGENT_REPORTING_DATE, then any other
+    date-like column. Never null when a real date exists in the frame."""
     from_data = snapshots_mod.infer_reporting_date(run_id, sub)
     if from_data:
         return from_data
-    return _period_from_platform_uri() or os.environ.get("MI_AGENT_REPORTING_DATE") or None
+    from_path = _period_from_platform_uri()
+    if from_path:
+        return from_path
+    env = os.environ.get("MI_AGENT_REPORTING_DATE")
+    if env:
+        return env
+    return _scan_any_date_column(sub)
 
 
 def _pid_label(sub, pid: str) -> str:

@@ -134,5 +134,57 @@ class TestPlatformDiscovery(unittest.TestCase):
             self.assertEqual(cohort["label"], "Direct Book 001")
 
 
+class TestPlatformReportingDate(unittest.TestCase):
+    """Reporting-date derivation priority (never null when a date exists)."""
+
+    def _rd(self, df, env):
+        base = {k: v for k, v in os.environ.items() if not k.startswith("MI_AGENT_")}
+        base.update(env)
+        with mock.patch.dict(os.environ, base, clear=True):
+            from mi_agent_api import app as A
+            return A._platform_reporting_date(df, "latest")
+
+    _URI_LATEST = "blob://processed-v2/platform/ERE/latest/platform_canonical_typed.csv"
+
+    def test_prefers_reporting_date_column(self):
+        df = pd.DataFrame({"reporting_date": ["2026-01-31"],
+                           "data_cut_off_date": ["2025-12-31"]})
+        self.assertEqual(self._rd(df, {"MI_AGENT_PLATFORM_URI": self._URI_LATEST}),
+                         "2026-01-31")
+
+    def test_falls_back_to_data_cut_off_date(self):
+        df = pd.DataFrame({"data_cut_off_date": ["2026-01-31"]})   # no reporting_date
+        self.assertEqual(self._rd(df, {"MI_AGENT_PLATFORM_URI": self._URI_LATEST}),
+                         "2026-01-31")
+
+    def test_parses_date_period_from_platform_uri(self):
+        df = pd.DataFrame({"loan_id": [1, 2]})                     # no date columns
+        env = {"MI_AGENT_PLATFORM_URI":
+               "blob://processed-v2/platform/ERE/2026-01-31/platform_canonical_typed.csv"}
+        self.assertEqual(self._rd(df, env), "2026-01-31")
+
+    def test_parses_month_period_from_platform_uri_to_month_end(self):
+        df = pd.DataFrame({"loan_id": [1]})
+        env = {"MI_AGENT_PLATFORM_URI":
+               "blob://processed-v2/platform/ERE/2026-02/platform_canonical_typed.csv"}
+        self.assertEqual(self._rd(df, env), "2026-02-28")
+
+    def test_env_override(self):
+        df = pd.DataFrame({"loan_id": [1]})
+        self.assertEqual(
+            self._rd(df, {"MI_AGENT_PLATFORM_URI": self._URI_LATEST,
+                          "MI_AGENT_REPORTING_DATE": "2026-03-31"}),
+            "2026-03-31")
+
+    def test_scans_any_date_like_column_last(self):
+        df = pd.DataFrame({"loan_id": [1], "servicer_cutoff_date": ["2026-01-31"]})
+        self.assertEqual(self._rd(df, {"MI_AGENT_PLATFORM_URI": self._URI_LATEST}),
+                         "2026-01-31")
+
+    def test_null_only_when_no_date_anywhere(self):
+        df = pd.DataFrame({"loan_id": [1], "balance": [100.0]})
+        self.assertIsNone(self._rd(df, {"MI_AGENT_PLATFORM_URI": self._URI_LATEST}))
+
+
 if __name__ == "__main__":
     unittest.main()
