@@ -117,6 +117,11 @@ class RunState:
     project: StepState = field(default_factory=lambda: StepState("project"))
     central_canonical_path: Optional[str] = None
     blockers: List[str] = field(default_factory=list)
+    # full_pipeline: run the production onboard→transform→validate→stamp path even
+    # for MI output (funded MI), rather than the lean mi_only shortcut.
+    full_pipeline: bool = False
+    # force_publish: proceed past validation exceptions (still typed) and publish.
+    force_publish: bool = False
 
     # -- persistence -------------------------------------------------------- #
     def state_path(self) -> Path:
@@ -129,6 +134,8 @@ class RunState:
             "created_at": self.created_at, "status": self.status,
             "central_canonical_path": self.central_canonical_path,
             "blockers": self.blockers,
+            "full_pipeline": self.full_pipeline,
+            "force_publish": self.force_publish,
             "portfolios": [p.to_dict() for p in self.portfolios],
             "assemble": self.assemble.to_dict(),
             "route": self.route.to_dict(),
@@ -143,6 +150,8 @@ class RunState:
             status=d.get("status", STEP_RUNNING),
             central_canonical_path=d.get("central_canonical_path"),
             blockers=d.get("blockers") or [],
+            full_pipeline=bool(d.get("full_pipeline", False)),
+            force_publish=bool(d.get("force_publish", False)),
         )
         rs.portfolios = [PortfolioState.from_dict(p) for p in (d.get("portfolios") or [])]
         if d.get("assemble"):

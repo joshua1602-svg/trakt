@@ -60,7 +60,9 @@ class StubAdapters(AgentAdapters):
     def onboard(self, spec: PortfolioSpec, work_dir: Path) -> StepResult:
         work_dir.mkdir(parents=True, exist_ok=True)
         manifest = work_dir / "24_onboarding_handoff_manifest.json"
-        manifest.write_text("{}", encoding="utf-8")
+        # A ready handoff so the full pipeline's Gate 2 guard proceeds (a real
+        # onboarding sets this when mapping gaps / blocking decisions are cleared).
+        manifest.write_text('{"ready_for_transformation_validation": true}', encoding="utf-8")
         if spec.source_portfolio_id in self.blocking_onboard:
             return StepResult(ok=False, blocking=True,
                               blockers=["mapping review pending"],
@@ -259,6 +261,93 @@ class TestRunStateSerialization(unittest.TestCase):
             self.assertEqual(len(reloaded.portfolios), 2)
             self.assertEqual(reloaded.status, STEP_DONE)
             self.assertEqual(reloaded.central_canonical_path, state.central_canonical_path)
+
+
+class TestFullPipelineMI(unittest.TestCase):
+    """Funded MI runs the FULL production path (onboard→transform→validate→stamp)
+    — the same steps as the regulatory/CLI flow — routing to MI, not the lean
+    mi_only shortcut."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.out = self._tmp.name
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_depth_and_contract_are_independent(self):
+        from engine.orchestrator_agent.orchestrator import (
+            steps_for_target, onboarding_mode_for_target)
+        # DEPTH (full_pipeline) — independent of contract.
+        self.assertEqual(tuple(steps_for_target("mi")), ("onboard", "stamp"))
+        self.assertEqual(tuple(steps_for_target("mi", full_pipeline=True)),
+                         ("onboard", "transform", "validate", "stamp"))
+        # Same full steps regardless of target — depth is the same axis.
+        self.assertEqual(tuple(steps_for_target("mi", full_pipeline=True)),
+                         tuple(steps_for_target("regime")))
+        # CONTRACT (onboarding mode) — by TARGET only, NOT changed by depth.
+        self.assertEqual(onboarding_mode_for_target("mi"), "mi_only")      # MI contract
+        self.assertEqual(onboarding_mode_for_target("regime"), "regulatory_mi")  # Annex 2
+        self.assertEqual(onboarding_mode_for_target("all"), "regulatory_mi")     # combined
+        # Full-pipeline MI keeps the MI contract (no Annex 2 coupling).
+        self.assertEqual(onboarding_mode_for_target("mi"), "mi_only")
+
+    def test_mi_contract_has_no_annex2_only_mandatory_fields(self):
+        # target=mi (mi_only) must NOT require the Annex 2-only mandatory fields.
+        from engine.onboarding_agent.required_target_contract import build_required_contract
+        mi = build_required_contract({"reporting_regime": "mi_only"})
+        annex2 = build_required_contract({"reporting_regime": "esma_annex_12"})
+        annex2_only = {"geographic_region_classification",
+                       "originator_legal_entity_identifier", "interest_rate_type"}
+        mi_mandatory = {r["target_field"] for r in mi if r["required_level"] == "mandatory"}
+        annex2_mandatory = {r["target_field"] for r in annex2 if r["required_level"] == "mandatory"}
+        self.assertEqual(mi_mandatory & annex2_only, set())        # none required for MI
+        self.assertTrue(annex2_only <= annex2_mandatory)           # required for Annex 2
+        # current_valuation_amount stays MI-mandatory (collateral MI needs it).
+        self.assertIn("current_valuation_amount", mi_mandatory)
+
+    def test_full_pipeline_runs_gate2_gate3_and_routes_to_mi(self):
+        state = run_orchestration(
+            "ERE", _specs(), target="mi", out_root=self.out, adapters=StubAdapters(),
+            created_at=_NOW, run_id="orun_full", full_pipeline=True)
+        self.assertEqual(state.status, STEP_DONE)
+        self.assertTrue(state.full_pipeline)
+        for p in state.portfolios:
+            # Gate 2 (transform) + Gate 3 (validate) DID run, then stamp.
+            for s in ("onboard", "transform", "validate", "stamp"):
+                self.assertEqual(p.step(s).status, STEP_DONE, s)
+        self.assertEqual(state.assemble.status, STEP_DONE)
+        self.assertEqual(state.route.status, STEP_DONE)        # routed to MI
+        self.assertFalse(state.project.done)                   # no regime projection
+        self.assertIsNotNone(state.central_canonical_path)
+
+    def test_validation_failure_blocks_publish(self):
+        state = run_orchestration(
+            "ERE", _specs(), target="mi", out_root=self.out,
+            adapters=StubAdapters(blocking_validate={"direct_001"}),
+            created_at=_NOW, run_id="orun_block", full_pipeline=True)
+        self.assertEqual(state.status, STEP_HALTED)            # halts at validate
+        self.assertIsNone(state.central_canonical_path)        # NOT published
+        self.assertFalse(state.assemble.done)
+
+    def test_force_publish_overrides_validation_failure(self):
+        state = run_orchestration(
+            "ERE", _specs(), target="mi", out_root=self.out,
+            adapters=StubAdapters(blocking_validate={"direct_001"}),
+            created_at=_NOW, run_id="orun_force", full_pipeline=True,
+            force_publish=True)
+        self.assertEqual(state.status, STEP_DONE)              # proceeds past validation
+        self.assertIsNotNone(state.central_canonical_path)     # published anyway
+        self.assertTrue(any("FORCE-PUBLISHED" in b for b in state.blockers))
+
+    def test_lean_mi_unchanged_without_full_pipeline(self):
+        state = run_orchestration(
+            "ERE", _specs(), target="mi", out_root=self.out, adapters=StubAdapters(),
+            created_at=_NOW, run_id="orun_lean")
+        self.assertEqual(state.status, STEP_DONE)
+        for p in state.portfolios:
+            self.assertFalse(p.step("transform").done)         # lean path: no Gate 2/3
+            self.assertFalse(p.step("validate").done)
 
 
 if __name__ == "__main__":

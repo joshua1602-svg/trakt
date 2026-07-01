@@ -213,7 +213,7 @@ class RealAgentAdapters(AgentAdapters):
             target_first_decisions=((self.mapping_config_path or "") if deterministic else ""))
 
         if self.onboarding_mode == "mi_only":
-            # MI path: build + return the central lender tape (the MI canonical).
+            # MI path: build the central lender tape (the MI canonical, output_path).
             run_paths = storage_paths.resolve_run_paths(
                 project_dir=str(project_dir), input_dir=spec.input, output_root=None,
                 client_id=spec.source_portfolio_id, run_id="run",
@@ -223,9 +223,16 @@ class RealAgentAdapters(AgentAdapters):
                 self.registry or "config/system/fields_registry.yaml", mode="mi_only")
             tape = res.get("central_lender_tape_path")
             ok = bool(res.get("central_lender_tape_created")) and bool(tape)
+            # ALSO emit the MI-contract onboarding handoff (mi_semantics contract)
+            # so the FULL pipeline (Transformation/Validation) can run against the
+            # MI contract — NOT Annex 2. The lean path ignores manifest_path; when
+            # the full pipeline runs, transform consumes it. Best-effort: if the
+            # 28a coverage matrix is absent the handoff is skipped (lean only).
+            handoff_manifest = self._build_mi_handoff(project_dir, spec)
             return StepResult(
-                ok=ok, blocking=not ok, output_path=tape,
-                readiness={"central_lender_tape": tape, "loan_count": res.get("loan_count")},
+                ok=ok, blocking=not ok, output_path=tape, manifest_path=handoff_manifest,
+                readiness={"central_lender_tape": tape, "loan_count": res.get("loan_count"),
+                           "mi_handoff": handoff_manifest, "target_contract": "mi_semantics"},
                 blockers=[] if ok else ["onboarding did not produce a central lender tape"],
                 message=f"central tape: {tape}")
 
@@ -246,6 +253,26 @@ class RealAgentAdapters(AgentAdapters):
             blockers=[] if ready else ["onboarding not ready_for_transformation_validation "
                                        "(mapping review / blocking decision pending)"],
             message=f"handoff: {handoff}")
+
+    def _build_mi_handoff(self, project_dir: Path, spec: PortfolioSpec) -> Optional[str]:
+        """Build the MI-contract onboarding handoff (mi_semantics), returning the
+        24_ manifest path, or ``None`` when it can't be built (lean path only)."""
+        try:
+            from engine.onboarding_agent import onboarding_handoff
+            h = onboarding_handoff.build_handoff_package(
+                str(project_dir), Path(project_dir) / "output",
+                client_id=spec.source_portfolio_id,
+                client_name=self.client_name or spec.source_portfolio_id,
+                run_id="run", mode="mi_only",
+                registry=self.registry or "config/system/fields_registry.yaml",
+                aliases_dir=self.aliases_dir)
+            if not h:
+                return None
+            return h.get("manifest_json_path") or str(
+                Path(project_dir) / "output" / "handoff"
+                / "24_onboarding_handoff_manifest.json")
+        except Exception:  # noqa: BLE001 — handoff is additive; lean path still works
+            return None
 
     def transform(self, spec: PortfolioSpec, handoff_manifest: str, work_dir: Path) -> StepResult:
         from engine.transformation_agent.transformation_agent import build_transformation_package

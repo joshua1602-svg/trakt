@@ -41,13 +41,27 @@ _STEPS_MI = ("onboard", "stamp")
 _STEPS_REG = ("onboard", "transform", "validate", "stamp")
 
 
-def steps_for_target(target: str) -> Sequence[str]:
-    return _STEPS_MI if target == "mi" else _STEPS_REG
+def steps_for_target(target: str, full_pipeline: bool = False) -> Sequence[str]:
+    """Per-portfolio EXECUTION DEPTH — independent of the target contract.
+
+    ``full_pipeline`` runs the full agentic path (onboard → transform → validate
+    → stamp) for ANY target; without it an MI-target run may take the lean
+    central-tape shortcut (onboard → stamp). Regime/all always run the full path.
+    Depth does NOT change the contract (see ``onboarding_mode_for_target``).
+    """
+    if target == "mi" and not full_pipeline:
+        return _STEPS_MI
+    return _STEPS_REG
 
 
 def onboarding_mode_for_target(target: str) -> str:
-    """MI keeps the lean active schema; regime/all activate the full Annex 2
-    target contract (mandatory regulatory fields)."""
+    """Onboarding CONTRACT — determined by the TARGET alone, independent of
+    pipeline depth:
+
+      * mi        → ``mi_only``       (MI contract; no Annex 2-only mandatory fields)
+      * regime    → ``regulatory_mi`` (ESMA Annex 2 contract)
+      * all       → ``regulatory_mi`` (combined superset that also serves MI)
+    """
     return "mi_only" if target == "mi" else "regulatory_mi"
 
 
@@ -114,7 +128,29 @@ def _run_portfolio_step(adapters, p, step_name, work_dir) -> StepResult:
     if step_name == "onboard":
         return adapters.onboard(spec, work_dir)
     if step_name == "transform":
-        return adapters.transform(spec, p.step("onboard").manifest_path, work_dir)
+        handoff = p.step("onboard").manifest_path
+        if not handoff:
+            return StepResult(
+                ok=False, blocking=True,
+                blockers=["full pipeline requested but onboarding produced no "
+                          "handoff manifest (Gate 2 has no contract to transform)"],
+                message="missing onboarding handoff")
+        # Governed HALT (pending review, not a hard error) when the handoff is not
+        # ready for transformation/validation — unresolved mapping gaps / blocking
+        # decisions. A clean approved mapping clears this and Gate 2/3 proceed.
+        import json as _json
+        try:
+            ready = bool(_json.loads(Path(handoff).read_text(encoding="utf-8"))
+                         .get("ready_for_transformation_validation"))
+        except Exception:  # noqa: BLE001
+            ready = False
+        if not ready:
+            return StepResult(
+                ok=False, blocking=True,
+                blockers=["onboarding handoff not ready_for_transformation_validation "
+                          "(unresolved mapping gaps / blocking decisions) — pending review"],
+                message="handoff not ready for Gate 2")
+        return adapters.transform(spec, handoff, work_dir)
     if step_name == "validate":
         return adapters.validate(spec, p.step("transform").manifest_path, work_dir)
     if step_name == "stamp":
@@ -133,8 +169,17 @@ def run_orchestration(
     run_id: Optional[str] = None,
     regime: Optional[str] = None,
     resume_state: Optional[RunState] = None,
+    full_pipeline: bool = False,
+    force_publish: bool = False,
 ) -> RunState:
-    """Run (or resume) the governed orchestration. Returns the final RunState."""
+    """Run (or resume) the governed orchestration. Returns the final RunState.
+
+    ``full_pipeline`` runs the production onboard→transform→validate→stamp path
+    for an MI-target run (funded MI), so Gate 2 typing and Gate 3 validation are
+    applied before the canonical is stamped/assembled. ``force_publish`` proceeds
+    past validation exceptions (the tape is still typed) so the platform canonical
+    is published anyway; without it a validation halt stops before publishing.
+    """
     if target not in VALID_TARGETS:
         raise ValueError(f"target must be one of {VALID_TARGETS}")
     if target in ("regime", "all") and not regime:
@@ -144,12 +189,15 @@ def run_orchestration(
         client_id, portfolios, target, out_root,
         run_id or new_run_id(client_id, created_at.replace(":", "").replace("-", "")[:15]),
         created_at)
+    if resume_state is None:
+        state.full_pipeline = full_pipeline
+        state.force_publish = force_publish
     state.status = STEP_RUNNING
     state.blockers = []
     state.save()
 
     run_dir = Path(state.out_root) / state.run_id
-    steps = steps_for_target(state.target)
+    steps = steps_for_target(state.target, full_pipeline=state.full_pipeline)
 
     # ---- per-portfolio fan-out -------------------------------------------
     for p in state.portfolios:
@@ -176,13 +224,25 @@ def run_orchestration(
             _apply(step, r)
             state.save()
             if step.status != STEP_DONE:
-                p.status = step.status
-                state.status = STEP_HALTED if step.status == STEP_HALTED else STEP_FAILED
-                state.blockers.append(
-                    f"{p.source_portfolio_id}/{step_name}: "
-                    + ("; ".join(step.blockers) or step.message))
-                state.save()
-                return state
+                # force_publish: proceed past a VALIDATION halt (the transformed
+                # tape is still typed) so the platform canonical is published;
+                # every other halt/failure still stops the run.
+                if (state.force_publish and step_name == "validate"
+                        and step.status == STEP_HALTED):
+                    step.status = STEP_DONE
+                    state.blockers.append(
+                        f"{p.source_portfolio_id}/validate: FORCE-PUBLISHED past "
+                        "validation exceptions: "
+                        + ("; ".join(step.blockers) or step.message or ""))
+                    state.save()
+                else:
+                    p.status = step.status
+                    state.status = STEP_HALTED if step.status == STEP_HALTED else STEP_FAILED
+                    state.blockers.append(
+                        f"{p.source_portfolio_id}/{step_name}: "
+                        + ("; ".join(step.blockers) or step.message))
+                    state.save()
+                    return state
         p.status = STEP_DONE
         state.save()
 

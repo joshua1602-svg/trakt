@@ -1170,5 +1170,106 @@ class TestBackendSelection(unittest.TestCase):
             self.assertIn("connection_detected=True", blob)
 
 
+# --------------------------------------------------------------------------- #
+# 23. Funded MI route → full production Orchestrator path (CLI parity)
+# --------------------------------------------------------------------------- #
+
+class TestFullPipelineRouting(unittest.TestCase):
+    """The Azure funded-MI route invokes the full onboard→transform→validate→
+    stamp path (full_pipeline), same as the CLI; pipeline stays lean."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.out = self._tmp.name
+        self.registry = SourceRegistry(Path(self.out) / "r.json")
+        self.fp = _fp()
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _seed(self, pid, dataset, frequency, ptype="direct"):
+        self.registry.upsert(SourceRecord(
+            client_id="ERE", source_portfolio_id=pid, dataset=dataset, frequency=frequency,
+            source_portfolio_type=ptype, approved_mapping_id="m1",
+            mapping_config_path="config/m1.yaml",
+            expected_schema_fingerprint=self.fp.fingerprint, status=STATUS_ACTIVE))
+
+    def _run(self, blob, inv, meta=None):
+        return R.handle_blob_event(
+            blob, registry=self.registry, out_dir=self.out, container="raw-v2",
+            pack_marker="_READY.json", schema_info=self.fp, marker_metadata=meta,
+            orchestrator_invoker=inv, assembler_refresher=RecordingRefresher(), now=_NOW)
+
+    def test_funded_monthly_uses_full_pipeline(self):
+        self._seed("direct_001", "funded", "monthly")
+        inv = RecordingInvoker()
+        m = self._run("raw-v2/ERE/direct/funded/monthly/direct_001/2025-11-30/_READY.json", inv)
+        self.assertEqual(m["decision"], "deterministic")
+        self.assertTrue(inv.calls[0]["full_pipeline"])         # Gate 2/3 pipeline
+        self.assertFalse(inv.calls[0]["force_publish"])
+        self.assertTrue(m["full_pipeline"])
+
+    def test_weekly_pipeline_stays_lean(self):
+        self._seed("direct_001", "pipeline", "weekly")
+        inv = RecordingInvoker()
+        self._run("raw-v2/ERE/direct/pipeline/weekly/direct_001/2025-W48/_READY.json", inv)
+        self.assertFalse(inv.calls[0]["full_pipeline"])        # lean MI
+
+    def test_force_publish_threaded_from_ready_json(self):
+        self._seed("direct_001", "funded", "monthly")
+        inv = RecordingInvoker()
+        self._run("raw-v2/ERE/direct/funded/monthly/direct_001/2025-11-30/_READY.json",
+                  inv, meta={"force_publish": True})
+        self.assertTrue(inv.calls[0]["force_publish"])
+
+    def test_new_funded_source_onboarding_also_full_pipeline(self):
+        # New source → discovery (LLM onboarding), but STILL the full pipeline.
+        inv = RecordingInvoker(status="halted")
+        m = self._run("raw-v2/ERE/acquired/funded/ad_hoc/acquired_001/2025-11-30/_READY.json", inv)
+        self.assertEqual(inv.calls[0]["processing_mode"], "source_onboarding")
+        self.assertTrue(inv.calls[0]["full_pipeline"])
+        self.assertEqual(m["status"], "pending_review")        # halt at approval
+
+    def _capture_invoke(self, *, target, full_pipeline):
+        # Capture the adapters/flags the default invoker hands to run_orchestration.
+        from apps.blob_trigger_app.orchestrator_invoke import default_orchestrator_invoker
+        captured = {}
+
+        class _FakeState:
+            run_id = "r"; status = "done"; central_canonical_path = None; blockers = []
+            def state_path(self):
+                return Path("/tmp/x")
+
+        def fake_run(client_id, portfolios, *, adapters, full_pipeline, force_publish, **kw):
+            captured.update(full_pipeline=full_pipeline, force_publish=force_publish,
+                            onboarding_mode=adapters.onboarding_mode,
+                            processing_mode=adapters.processing_mode)
+            return _FakeState()
+
+        with mock.patch("engine.orchestrator_agent.run_orchestration", fake_run):
+            default_orchestrator_invoker(
+                processing_mode="deterministic", client_id="ERE",
+                source_portfolio_id="direct_001", source_portfolio_type="direct",
+                dataset="funded", frequency="monthly", reporting_period="2025-11-30",
+                input_path="/tmp/pack", target=target, run_regime=(target != "mi"),
+                mapping_config_path="config/m1.yaml", out_dir="/tmp/out",
+                full_pipeline=full_pipeline, force_publish=True)
+        return captured
+
+    def test_funded_mi_full_pipeline_uses_MI_contract_not_annex2(self):
+        # THE fix: full pipeline (depth) does NOT change the contract. target=mi
+        # → mi_only onboarding (MI contract), even with full_pipeline=True.
+        cap = self._capture_invoke(target="mi", full_pipeline=True)
+        self.assertTrue(cap["full_pipeline"])                 # Gate 2/3 run (depth)
+        self.assertEqual(cap["onboarding_mode"], "mi_only")   # MI contract, NOT regulatory_mi
+        self.assertTrue(cap["force_publish"])
+        self.assertEqual(cap["processing_mode"], "deterministic")  # no LLM on approved
+
+    def test_regime_target_uses_annex2_contract(self):
+        cap = self._capture_invoke(target="all", full_pipeline=True)
+        self.assertEqual(cap["onboarding_mode"], "regulatory_mi")   # Annex 2 / combined
+        self.assertTrue(cap["full_pipeline"])
+
+
 if __name__ == "__main__":
     unittest.main()
