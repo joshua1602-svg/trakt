@@ -745,6 +745,7 @@ def run_operator_workflow(
             product_profile=product_profile,
             enable_context_resolver=use_context_resolver,
             context_llm_callable=context_callable,
+            reporting_date=reporting_date,
         )
         input_files = len(project.file_inventory)
     except Exception as exc:  # produce a FAILED summary instead of crashing

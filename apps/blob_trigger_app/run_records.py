@@ -54,6 +54,8 @@ def build_run_record(manifest: Dict[str, Any]) -> Dict[str, Any]:
         "diagnostics": diag,
         "validation_issues": diag.get("validation_errors") or [],
         "mapping_recommendations": diag.get("mapping_recommendations") or [],
+        "handoff_readiness": diag.get("handoff_readiness") or {},
+        "issue_count": diag.get("issue_count", 0),
         "next_action": next_action,
         "error": manifest.get("error"),
         "created_at": manifest.get("created_at"),

@@ -398,7 +398,8 @@ class TestFullPipelineMI(unittest.TestCase):
                                    return_value="/tmp/24.json"):
                 ad = RealAgentAdapters(registry="r", onboarding_mode="mi_only",
                                        processing_mode="deterministic",
-                                       full_pipeline=full_pipeline)
+                                       full_pipeline=full_pipeline,
+                                       reporting_period="2025-11-30")
                 ad.onboard(PortfolioSpec("direct_001", "in"), Path(self.out) / f"p{full_pipeline}")
             return captured
 
@@ -406,8 +407,10 @@ class TestFullPipelineMI(unittest.TestCase):
         self.assertTrue(full["enable_mapping_review"])            # coverage built (handoff)
         self.assertFalse(full.get("enable_llm_target_advisor", False))  # LLM stays off
         self.assertEqual(full["target_first_decisions"], "")     # deterministic (no supplied map)
+        self.assertEqual(full["reporting_date"], "2025-11-30")   # folder period → reporting_date
         lean = _capture(full_pipeline=False)
         self.assertFalse(lean["enable_mapping_review"])          # lean path unchanged
+        self.assertEqual(lean["reporting_date"], "2025-11-30")   # still threaded for the tape/handoff
 
 
 if __name__ == "__main__":

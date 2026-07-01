@@ -46,12 +46,13 @@ class TestOrchestratorRealAgents(unittest.TestCase):
             raise unittest.SkipTest(f"orchestrator/agent deps unavailable: {exc}")
 
     def _run(self, *, target, mode, regime=None, full_pipeline=False,
-             processing_mode="source_onboarding"):
+             processing_mode="source_onboarding", reporting_period=None):
         from engine.orchestrator_agent import run_orchestration
         from engine.orchestrator_agent.adapters import RealAgentAdapters, PortfolioSpec
         ad = RealAgentAdapters(registry=_REGISTRY, client_name="ERE_IT",
                                onboarding_mode=mode, processing_mode=processing_mode,
-                               full_pipeline=full_pipeline)
+                               full_pipeline=full_pipeline,
+                               reporting_period=reporting_period)
         # Keep the output dir alive for the test body (assertions read artifacts).
         td = tempfile.mkdtemp(prefix="orch_it_")
         self.addCleanup(lambda: __import__("shutil").rmtree(td, ignore_errors=True))
@@ -103,6 +104,61 @@ class TestOrchestratorRealAgents(unittest.TestCase):
         self.assertFalse(any("produced no handoff manifest" in b.lower()
                              for b in state.blockers))
         self.assertNotEqual(state.portfolios[0].step("transform").status, "pending")
+
+    def test_reporting_date_derived_from_folder_period(self):
+        # THE fix: with the folder reporting_period supplied, the MI-contract
+        # portfolio-level reporting_date is DERIVED from it (the raw pack has no
+        # reporting_date column), so the onboarding handoff is READY with no
+        # blocking decisions — no manual approval per monthly pack — and every loan
+        # is retained (period fed via context, NOT run_id → no eligibility filter).
+        import json
+        from engine.orchestrator_agent.state import STEP_DONE
+        state = self._run(target="mi", mode="mi_only", full_pipeline=True,
+                          processing_mode="deterministic", reporting_period="2025-11-30")
+        onboard = state.portfolios[0].step("onboard")
+        self.assertEqual(onboard.status, STEP_DONE)
+        self.assertEqual(onboard.readiness.get("loan_count"), 36)      # loans preserved
+        m = json.loads(Path(onboard.manifest_path).read_text(encoding="utf-8"))
+        self.assertEqual(m.get("target_contract_id"), "mi_semantics_field_registry")
+        self.assertEqual(m.get("registry_gap_count"), 0)
+        self.assertEqual(m.get("blocking_decision_count"), 0)          # reporting_date no longer blocks
+        self.assertTrue(m.get("ready_for_transformation_validation")) # handoff READY
+        # reporting_date resolved from the run period, non-blocking.
+        cov = json.loads(Path(str(m["target_coverage_matrix_path"])
+                              .replace(".csv", ".json")).read_text(encoding="utf-8"))
+        rd = next(r for r in cov["rows"] if r.get("target_field") == "reporting_date")
+        self.assertEqual(rd.get("selected_value"), "2025-11-30")
+        self.assertFalse(rd.get("blocking"))
+        self.assertEqual(rd.get("coverage_basis"), "run_context_period_inference")
+
+    def test_deterministic_mi_halt_diagnostics_are_actionable(self):
+        # The exact operator-facing contradiction, end-to-end with real agents:
+        # a not-ready handoff with registry_gap_count=0 and NO mapping recommendations
+        # must still surface WHICH readiness gate failed + the actual blocking
+        # decision, and advise resolve_decisions (NOT the misleading fix_mapping).
+        from apps.blob_trigger_app.orchestrator_invoke import _run_diagnostics
+        from apps.blob_trigger_app.ops_advice import (
+            next_operator_action, ACT_RESOLVE_DECISIONS, ACT_FIX_MAPPING)
+        state = self._run(target="mi", mode="mi_only", full_pipeline=True,
+                          processing_mode="deterministic")
+        d = _run_diagnostics(state)
+        self.assertEqual(d["registry_gap_count"], 0)
+        self.assertEqual(d["mapping_recommendations"], [])
+        hr = d["handoff_readiness"]
+        self.assertFalse(hr["ready_for_transformation_validation"])
+        self.assertTrue(hr["failed_readiness_gates"])              # explains the failed gate
+        self.assertGreaterEqual(hr["blocking_decision_count"], 1)
+        self.assertIn("reporting_date", hr["missing_target_fields"])
+        self.assertTrue(any(b["target_field"] == "reporting_date"
+                            for b in hr["blocking_decisions"]))
+        self.assertTrue(hr.get("handoff_manifest"))               # embedded for durability
+        na = next_operator_action({
+            "event_decision": "known_source_halted", "status": "halted",
+            "pack_key": "pk", "source_portfolio_id": "direct_001",
+            "orchestrator_run_id": "orun_it", "orchestrator_diagnostics": d})
+        self.assertEqual(na["action"], ACT_RESOLVE_DECISIONS)
+        self.assertNotEqual(na["action"], ACT_FIX_MAPPING)
+        self.assertIn("reporting_date", na["summary"])
 
     def test_mi_path_real_agents_green(self):
         import pandas as pd

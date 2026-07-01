@@ -61,14 +61,53 @@ class ProductionPersistence:
 
     # -- operator run ledger ----------------------------------------------- #
     def persist_run_record(self, manifest: Dict[str, Any]) -> Optional[str]:
-        """Durably record a terminal run outcome for the operator CLI."""
+        """Durably record a terminal run outcome for the operator CLI, including a
+        durable copy of the onboarding handoff manifest + target coverage matrix so
+        ops can inspect them after the Azure run scratch is reclaimed."""
+        if not manifest.get("is_pack_marker"):
+            return None
+        if manifest.get("status") not in _run_records.OPERATOR_STATUSES:
+            return None
         uri = None
         try:
             uri = self.layout.run_uri(manifest.get("pack_key") or "unknown")
-            return _run_records.persist_from_manifest(self.storage, self.layout, manifest)
+            record = _run_records.build_run_record(manifest)
+            record["handoff_artifacts"] = self._persist_handoff_artifacts(manifest)
+            return _run_records.write_run_record(self.storage, self.layout, record)
         except Exception:
             _persist_step("persist_run_record", uri)
             raise
+
+    def _persist_handoff_artifacts(self, manifest: Dict[str, Any]) -> Dict[str, Any]:
+        """Copy the onboarding handoff manifest + target coverage matrix into
+        trakt-state (durable) so ``ops show-handoff`` works after scratch is gone."""
+        pack_key = manifest.get("pack_key")
+        hr = ((manifest.get("orchestrator_diagnostics") or {})
+              .get("handoff_readiness") or {})
+        if not pack_key or not hr:
+            return {}
+        artifacts: Dict[str, Any] = {}
+        hm = hr.get("handoff_manifest")
+        if hm:
+            try:
+                out = self.layout.run_artifact_uri(pack_key, "handoff_manifest.json")
+                self.storage.write_text(out, json.dumps(hm, indent=2, default=str))
+                artifacts["handoff_manifest_uri"] = out
+            except Exception as exc:  # noqa: BLE001 — never fail the event on this
+                manifest.setdefault("persist_errors", []).append(f"handoff_manifest: {exc}")
+        cov = hr.get("target_coverage_matrix_path")
+        if cov:
+            base = Path(cov)
+            for src, name in ((base, "target_coverage_matrix.csv"),
+                              (base.with_suffix(".json"), "target_coverage_matrix.json")):
+                try:
+                    if src.exists():
+                        out = self.layout.run_artifact_uri(pack_key, name)
+                        self.storage.upload_file(str(src), out)
+                        artifacts.setdefault("target_coverage_matrix_uris", []).append(out)
+                except Exception as exc:  # noqa: BLE001
+                    manifest.setdefault("persist_errors", []).append(f"coverage_matrix: {exc}")
+        return artifacts
 
     def load_run_record(self, pack_key: str) -> Optional[Dict[str, Any]]:
         return _run_records.load_run_record(self.storage, self.layout, pack_key)

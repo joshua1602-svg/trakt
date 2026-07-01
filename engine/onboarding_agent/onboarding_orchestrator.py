@@ -150,6 +150,7 @@ def run_onboarding(
     regime_config_path: str = "",
     asset_config_path: str = "",
     product_profile: str = "",
+    reporting_date: str = "",
 ) -> OnboardingProject:
     in_dir = Path(input_dir)
     out_dir = Path(output_dir)
@@ -347,6 +348,14 @@ def run_onboarding(
     # reads context['product_profile']) honour it; detection is used otherwise.
     if product_profile:
         _ctx_out["final"]["product_profile"] = str(product_profile)
+    # Derive the portfolio-level reporting_date from the run's reporting period
+    # (e.g. the blob-trigger folder period) when the raw sources carry no
+    # reporting_date column. The coverage step only fills reporting_date from this
+    # context when it is otherwise MISSING_REQUIRED, so a real source column always
+    # wins; this just satisfies the MI contract deterministically (no manual
+    # approval per monthly pack).
+    if reporting_date and not _ctx_out["final"].get("reporting_date"):
+        _ctx_out["final"]["reporting_date"] = str(reporting_date)
     project.resolved_context = _ctx_out
     resolved_product_profile = _pp.resolve_product_profile(
         _ctx_out["final"], explicit_profile_id=str(product_profile or ""))

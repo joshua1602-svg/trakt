@@ -68,6 +68,11 @@ class Layout:
         durable pack_key so reruns update the same record)."""
         return self._state("runs", f"{pack_key}.json")
 
+    def run_artifact_uri(self, pack_key: str, name: str) -> str:
+        """A durable copy of a run's onboarding handoff artefact (handoff manifest,
+        target coverage matrix) so ops can inspect it after Azure scratch is gone."""
+        return self._state("runs", pack_key, name)
+
     # -- processed container ----------------------------------------------- #
     def _processed(self, *parts: str) -> str:
         return join_uri(f"{BLOB_SCHEME}{self.processed_container}", *parts)
