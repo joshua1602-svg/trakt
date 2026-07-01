@@ -60,6 +60,14 @@ class Layout:
     def event_uri(self, event_id: str) -> str:
         return self._state("events", f"{event_id}.json")
 
+    def runs_prefix(self) -> str:
+        return self._state("runs")
+
+    def run_uri(self, pack_key: str) -> str:
+        """Operator-facing run record — one per reporting pack (keyed on the
+        durable pack_key so reruns update the same record)."""
+        return self._state("runs", f"{pack_key}.json")
+
     # -- processed container ----------------------------------------------- #
     def _processed(self, *parts: str) -> str:
         return join_uri(f"{BLOB_SCHEME}{self.processed_container}", *parts)

@@ -7,13 +7,139 @@ is the single seam the trigger calls. The default implementation wraps
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 # An orchestrator invoker takes the routing decision and returns a small dict:
 #   {"run_id", "status", "central_canonical_path", ...}
 OrchestratorInvoker = Callable[..., Dict[str, Any]]
+
+# Terminal step statuses that halt / fail a run (kept local to avoid importing
+# engine state constants at module import time).
+_HALTED = "halted"
+_FAILED = "failed"
+
+
+def _run_diagnostics(state: Any) -> Dict[str, Any]:
+    """Explain WHY a run did not publish a central canonical.
+
+    Walks the run's steps in execution order — each portfolio's
+    onboard → transform → validate → stamp, then assemble → route → project —
+    and pins the FIRST step that halted or failed. That step is the reason the
+    central canonical is null. Returns a JSON-safe dict; every field is best
+    effort (``None``/``0``/``[]`` when the underlying agent did not surface it).
+    """
+    halt_stage: Optional[str] = None
+    halt_reason: Optional[str] = None
+    blocking_decisions: List[str] = []
+    registry_gap_count = 0
+    validation_errors: List[str] = []
+
+    def _reason(step: Any) -> str:
+        return "; ".join(getattr(step, "blockers", None) or []) or getattr(step, "message", "") or ""
+
+    mapping_recommendations = _mapping_recommendations(state)
+
+    # Pull registry-gap / validation signal from wherever it surfaced, even when
+    # the halt was at a later stage (diligence wants the full picture).
+    for p in getattr(state, "portfolios", []) or []:
+        try:
+            onboard = p.step("onboard")
+            gap = (onboard.readiness or {}).get("registry_gap_count")
+            if gap is None:
+                gap = (onboard.readiness or {}).get("issue_count")
+            if isinstance(gap, (int, float)):
+                registry_gap_count = max(registry_gap_count, int(gap))
+        except Exception:  # noqa: BLE001 — diagnostics must never raise
+            pass
+        try:
+            vstep = p.step("validate")
+            if getattr(vstep, "status", None) in (_HALTED, _FAILED):
+                validation_errors.extend(getattr(vstep, "blockers", None) or [])
+        except Exception:  # noqa: BLE001
+            pass
+
+    # First halted/failed step in execution order → the blocking stage.
+    def _scan(label: str, step: Any) -> bool:
+        nonlocal halt_stage, halt_reason, blocking_decisions
+        if getattr(step, "status", None) in (_HALTED, _FAILED):
+            halt_stage = label
+            halt_reason = _reason(step)
+            blocking_decisions = list(getattr(step, "blockers", None) or [])
+            return True
+        return False
+
+    found = False
+    for p in getattr(state, "portfolios", []) or []:
+        for name in ("onboard", "transform", "validate", "stamp"):
+            try:
+                if _scan(f"{p.source_portfolio_id}/{name}", p.step(name)):
+                    found = True
+                    break
+            except Exception:  # noqa: BLE001
+                continue
+        if found:
+            break
+    if not found:
+        for label in ("assemble", "route", "project"):
+            step = getattr(state, label, None)
+            if step is not None and _scan(label, step):
+                break
+
+    # Fall back to the run-level blockers when no single step pinned a reason.
+    if not halt_reason:
+        halt_reason = "; ".join(getattr(state, "blockers", None) or []) or None
+
+    return {
+        "halt_stage": halt_stage,
+        "halt_reason": halt_reason,
+        "blocking_decisions": blocking_decisions,
+        "registry_gap_count": registry_gap_count,
+        "validation_errors": validation_errors,
+        "mapping_recommendations": mapping_recommendations,
+        "run_state_path": str(state.state_path()),
+    }
+
+
+def _mapping_recommendations(state: Any) -> List[Dict[str, Any]]:
+    """Best-effort: surface the onboarding agent's mapping recommendations /
+    unresolved decisions from each portfolio's handoff manifest, so an operator
+    can review + approve them from the CLI. Never raises."""
+    recs: List[Dict[str, Any]] = []
+    for p in getattr(state, "portfolios", []) or []:
+        try:
+            manifest_path = p.step("onboard").manifest_path
+        except Exception:  # noqa: BLE001
+            continue
+        if not manifest_path:
+            continue
+        try:
+            data = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            continue
+        # The handoff exposes recommendations under a few possible keys across
+        # onboarding modes — normalise whatever is present into a flat list.
+        found = None
+        for key in ("mapping_recommendations", "pending_decisions", "decisions",
+                    "unmapped_fields", "mapping_review", "recommendations"):
+            val = data.get(key)
+            if val:
+                found = val
+                break
+        if found is None:
+            continue
+        items = found if isinstance(found, list) else [found]
+        for item in items:
+            rec: Dict[str, Any] = {"source_portfolio_id": p.source_portfolio_id,
+                                   "handoff_manifest": manifest_path}
+            if isinstance(item, dict):
+                rec.update(item)
+            else:
+                rec["field"] = item
+            recs.append(rec)
+    return recs
 
 
 def default_orchestrator_invoker(
@@ -69,10 +195,16 @@ def default_orchestrator_invoker(
         out_root=out_dir, adapters=adapters,
         full_pipeline=full_pipeline, force_publish=force_publish,
         created_at=datetime.now(timezone.utc).isoformat())
-    return {
+    result: Dict[str, Any] = {
         "run_id": state.run_id,
         "status": state.status,                       # done | halted | failed
         "central_canonical_path": state.central_canonical_path,
         "blockers": state.blockers,
         "state_path": str(state.state_path()),
     }
+    # Non-done runs get a diagnostics block explaining why the central canonical
+    # is null (halt stage/reason, blocking decisions, registry gaps, validation
+    # errors, and the path to the resumable run_state.json).
+    if state.status != "done":
+        result["diagnostics"] = _run_diagnostics(state)
+    return result
