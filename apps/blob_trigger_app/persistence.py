@@ -35,6 +35,17 @@ def _persist_step(op: str, uri: Optional[str] = None):
     logger.error("PERSISTENCE FAILED op=%s uri=%s\n%s", op, uri, traceback.format_exc())
 
 
+def _head_lines(path: str, n: int) -> List[str]:
+    """First ``n`` lines of a text file (bounded canonical preview)."""
+    out: List[str] = []
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        for i, line in enumerate(fh):
+            if i >= n:
+                break
+            out.append(line)
+    return out
+
+
 @dataclass
 class ProductionPersistence:
     storage: Storage
@@ -73,10 +84,127 @@ class ProductionPersistence:
             uri = self.layout.run_uri(manifest.get("pack_key") or "unknown")
             record = _run_records.build_run_record(manifest)
             record["handoff_artifacts"] = self._persist_handoff_artifacts(manifest)
+            record["transform_artifacts"] = self._persist_transform_artifacts(manifest)
+            # Generic per-gate diagnostics + artefacts (all gates).
+            record["gate_artifacts"] = self._persist_gate_diagnostics(manifest)
             return _run_records.write_run_record(self.storage, self.layout, record)
         except Exception:
             _persist_step("persist_run_record", uri)
             raise
+
+    # -- generic per-gate diagnostics + artefacts -------------------------- #
+    def _persist_gate_diagnostics(self, manifest: Dict[str, Any]) -> Dict[str, Any]:
+        """Write each gate's standard diagnostics + its source artefacts under
+        ``trakt-state/runs/{pack_key}/gates/{gate}/`` (diagnostics.json + a preview
+        of any produced canonical). Enriches each gate's persisted_artifact_uris."""
+        pack_key = manifest.get("pack_key")
+        gates = (manifest.get("orchestrator_diagnostics") or {}).get("gates") or []
+        if not pack_key or not gates:
+            return {}
+        out: Dict[str, Any] = {}
+        for g in gates:
+            name = g.get("gate_name") or "gate"
+            uris: Dict[str, Any] = {}
+            # Copy the gate's source artefacts FIRST so their URIs are recorded in
+            # the diagnostics.json we write below.
+            for label, path in (g.get("source_artifact_paths") or {}).items():
+                if not path or label == "transformed_canonical_path":
+                    continue
+                try:
+                    if Path(path).exists():
+                        auri = self.layout.gate_artifact_uri(pack_key, name, Path(path).name)
+                        self.storage.upload_file(str(path), auri)
+                        uris[label] = auri
+                except Exception as exc:  # noqa: BLE001
+                    manifest.setdefault("persist_errors", []).append(f"gate_art:{name}: {exc}")
+            # typed/canonical output preview (first 20 rows) if the gate produced one.
+            canon = (g.get("source_artifact_paths") or {}).get("transformed_canonical_path")
+            if canon and Path(str(canon)).exists():
+                try:
+                    preview = "".join(_head_lines(str(canon), 21))
+                    puri = self.layout.gate_artifact_uri(pack_key, name, "canonical_preview.csv")
+                    self.storage.write_text(puri, preview)
+                    uris["canonical_preview"] = puri
+                except Exception as exc:  # noqa: BLE001
+                    manifest.setdefault("persist_errors", []).append(f"gate_preview:{name}: {exc}")
+            g.setdefault("persisted_artifact_uris", {}).update(uris)
+            # Write the standard diagnostics.json LAST (now carrying artefact URIs).
+            try:
+                duri = self.layout.gate_diagnostics_uri(pack_key, name)
+                self.storage.write_text(duri, json.dumps(g, indent=2, default=str))
+                uris["diagnostics"] = duri
+            except Exception as exc:  # noqa: BLE001
+                manifest.setdefault("persist_errors", []).append(f"gate_diag:{name}: {exc}")
+            out[name] = uris
+        return out
+
+    def load_gate_diagnostics(self, pack_key: str, gate_name: str) -> Optional[Dict[str, Any]]:
+        uri = self.layout.gate_diagnostics_uri(pack_key, gate_name)
+        if not self.storage.exists(uri):
+            return None
+        try:
+            return json.loads(self.storage.read_text(uri))
+        except Exception:  # noqa: BLE001
+            return None
+
+    def list_gate_names(self, pack_key: str) -> List[str]:
+        names: List[str] = []
+        for u in self.storage.list(self.layout.gates_prefix(pack_key)):
+            if u.endswith("/diagnostics.json"):
+                names.append(u.rsplit("/", 2)[-2])
+        return sorted(set(names))
+
+    def gates_folder_exists(self, pack_key: str) -> bool:
+        return bool(self.storage.list(self.layout.gates_prefix(pack_key)))
+
+    # -- LLM advisory recommendations -------------------------------------- #
+    def persist_llm_recommendations(self, pack_key: str,
+                                    recommendations: List[Dict[str, Any]],
+                                    meta: Dict[str, Any], now: str) -> str:
+        from . import llm_recommendations as _llm
+        doc = _llm.build_recommendations_doc(recommendations, meta, pack_key=pack_key, now=now)
+        uri = self.layout.llm_recommendations_uri(pack_key)
+        self.storage.write_text(uri, json.dumps(doc, indent=2, default=str))
+        return uri
+
+    def load_llm_recommendations(self, pack_key: str) -> Optional[Dict[str, Any]]:
+        uri = self.layout.llm_recommendations_uri(pack_key)
+        if not self.storage.exists(uri):
+            return None
+        try:
+            return json.loads(self.storage.read_text(uri))
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _persist_transform_artifacts(self, manifest: Dict[str, Any]) -> Dict[str, Any]:
+        """Copy the Gate 2 (transform) output artefacts — the transformation
+        manifest + issues — into trakt-state/runs/{pack_key}/ so ``ops
+        show-transform`` works after the Azure run scratch is reclaimed."""
+        pack_key = manifest.get("pack_key")
+        tr = ((manifest.get("orchestrator_diagnostics") or {})
+              .get("transform_readiness") or {})
+        if not pack_key or not tr:
+            return {}
+        artifacts: Dict[str, Any] = {}
+        tm = tr.get("transformation_manifest")
+        if tm:
+            try:
+                out = self.layout.run_artifact_uri(pack_key, "transformation_manifest.json")
+                self.storage.write_text(out, json.dumps(tm, indent=2, default=str))
+                artifacts["transformation_manifest_uri"] = out
+            except Exception as exc:  # noqa: BLE001 — never fail the event on this
+                manifest.setdefault("persist_errors", []).append(f"transform_manifest: {exc}")
+        for key, name in (("transformation_issues_json", "transformation_issues.json"),
+                          ("transformation_issues_csv", "transformation_issues.csv")):
+            src = tr.get(key)
+            try:
+                if src and Path(src).exists():
+                    out = self.layout.run_artifact_uri(pack_key, name)
+                    self.storage.upload_file(str(src), out)
+                    artifacts.setdefault("transformation_issues_uris", []).append(out)
+            except Exception as exc:  # noqa: BLE001
+                manifest.setdefault("persist_errors", []).append(f"transform_issues: {exc}")
+        return artifacts
 
     def _persist_handoff_artifacts(self, manifest: Dict[str, Any]) -> Dict[str, Any]:
         """Copy the onboarding handoff manifest + target coverage matrix into

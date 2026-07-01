@@ -132,13 +132,14 @@ class TestOrchestratorRealAgents(unittest.TestCase):
         self.assertEqual(rd.get("coverage_basis"), "run_context_period_inference")
 
     def test_deterministic_mi_halt_diagnostics_are_actionable(self):
-        # The exact operator-facing contradiction, end-to-end with real agents:
-        # a not-ready handoff with registry_gap_count=0 and NO mapping recommendations
-        # must still surface WHICH readiness gate failed + the actual blocking
-        # decision, and advise resolve_decisions (NOT the misleading fix_mapping).
+        # End-to-end with real agents: a not-ready handoff (no reporting_period, so
+        # reporting_date blocks) must surface WHICH readiness gate failed + the actual
+        # blocking decision, and — because the transform halted at its GUARD — the
+        # run summary re-points the failed gate to ONBOARDING with a specific,
+        # non-mapping inspect_onboarding action.
         from apps.blob_trigger_app.orchestrator_invoke import _run_diagnostics
         from apps.blob_trigger_app.ops_advice import (
-            next_operator_action, ACT_RESOLVE_DECISIONS, ACT_FIX_MAPPING)
+            next_operator_action, ACT_INSPECT_ONBOARDING)
         state = self._run(target="mi", mode="mi_only", full_pipeline=True,
                           processing_mode="deterministic")
         d = _run_diagnostics(state)
@@ -152,12 +153,14 @@ class TestOrchestratorRealAgents(unittest.TestCase):
         self.assertTrue(any(b["target_field"] == "reporting_date"
                             for b in hr["blocking_decisions"]))
         self.assertTrue(hr.get("handoff_manifest"))               # embedded for durability
+        # run summary + gate observability
+        self.assertEqual(d["run_summary"]["failed_gate"], "onboarding")   # re-pointed
+        self.assertEqual(d["run_summary"]["gate_status"]["transform"], "halted")
         na = next_operator_action({
             "event_decision": "known_source_halted", "status": "halted",
             "pack_key": "pk", "source_portfolio_id": "direct_001",
             "orchestrator_run_id": "orun_it", "orchestrator_diagnostics": d})
-        self.assertEqual(na["action"], ACT_RESOLVE_DECISIONS)
-        self.assertNotEqual(na["action"], ACT_FIX_MAPPING)
+        self.assertEqual(na["action"], ACT_INSPECT_ONBOARDING)
         self.assertIn("reporting_date", na["summary"])
 
     def test_mi_path_real_agents_green(self):

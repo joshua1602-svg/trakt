@@ -10,6 +10,12 @@ React UI can wrap the same operations later.
     python -m apps.blob_trigger_app.ops show <run_id|pack_key>
     python -m apps.blob_trigger_app.ops show-recommendations <run_id|pack_key>
     python -m apps.blob_trigger_app.ops show-handoff <run_id|pack_key>
+    python -m apps.blob_trigger_app.ops show-transform <run_id|pack_key>
+    python -m apps.blob_trigger_app.ops show-validation <run_id|pack_key>
+    python -m apps.blob_trigger_app.ops show-gates <pack_key>
+    python -m apps.blob_trigger_app.ops show-gate <pack_key> <gate_name>
+    python -m apps.blob_trigger_app.ops show-llm <run_id|pack_key>
+    python -m apps.blob_trigger_app.ops debug-storage [pack_key]
     python -m apps.blob_trigger_app.ops approve <approval_id> --mapping-id <id> \
         --mapping-config-path <path>
     python -m apps.blob_trigger_app.ops reject <approval_id> --reason <why>
@@ -26,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from typing import Any, Callable, Dict, List, Optional
 
 from . import approvals as APP
@@ -85,6 +92,112 @@ def handoff(storage: Storage, layout: Layout, ref: str) -> Dict[str, Any]:
         "handoff_artifacts": rec.get("handoff_artifacts") or {},
         "next_action": rec.get("next_action") or {},
     }
+
+
+def transform(storage: Storage, layout: Layout, ref: str) -> Dict[str, Any]:
+    """The Gate 2 transform readiness for a run: readiness flags, the issue tally,
+    the first 20 issues (field/type/severity), the affected fields, and the durable
+    URIs of the persisted transformation manifest + issues."""
+    rec = RR.resolve(storage, layout, ref)
+    if rec is None:
+        return {}
+    diag = rec.get("diagnostics") or {}
+    tr = rec.get("transform_readiness") or diag.get("transform_readiness") or {}
+    return {
+        "pack_key": rec.get("pack_key"),
+        "run_id": rec.get("run_id"),
+        "source_portfolio_id": rec.get("source_portfolio_id"),
+        "transform_readiness": tr,
+        "transform_artifacts": rec.get("transform_artifacts") or {},
+        "next_action": rec.get("next_action") or {},
+    }
+
+
+def validation(storage: Storage, layout: Layout, ref: str) -> Dict[str, Any]:
+    """The Gate 3 validation readiness for a run: mandatory/type/numeric/date
+    failures, first 20 issues, ready_for_publish flag, and artefact URIs."""
+    rec = RR.resolve(storage, layout, ref)
+    if rec is None:
+        return {}
+    diag = rec.get("diagnostics") or {}
+    vr = rec.get("validation_readiness") or diag.get("validation_readiness") or {}
+    return {
+        "pack_key": rec.get("pack_key"),
+        "run_id": rec.get("run_id"),
+        "source_portfolio_id": rec.get("source_portfolio_id"),
+        "validation_readiness": vr,
+        "next_action": rec.get("next_action") or {},
+    }
+
+
+def _pack_key_of(storage: Storage, layout: Layout, ref: str) -> str:
+    rec = RR.resolve(storage, layout, ref)
+    return (rec or {}).get("pack_key") or ref
+
+
+def gates(persistence: ProductionPersistence, ref: str) -> Dict[str, Any]:
+    """All persisted per-gate diagnostics for a run (falls back to the run
+    record's embedded gates)."""
+    pk = _pack_key_of(persistence.storage, persistence.layout, ref)
+    names = persistence.list_gate_names(pk)
+    gates_map = {n: persistence.load_gate_diagnostics(pk, n) for n in names}
+    rec = persistence.load_run_record(pk) or {}
+    if not gates_map:
+        gates_map = {g.get("gate_name"): g for g in (rec.get("gates") or [])}
+    if not gates_map and rec == {}:
+        return {}
+    return {"pack_key": pk, "failed_gate": rec.get("failed_gate"),
+            "gate_status": rec.get("gate_status") or {}, "gates": gates_map}
+
+
+def gate(persistence: ProductionPersistence, pack_key: str,
+         gate_name: str) -> Optional[Dict[str, Any]]:
+    pk = _pack_key_of(persistence.storage, persistence.layout, pack_key)
+    g = persistence.load_gate_diagnostics(pk, gate_name)
+    if g is not None:
+        return g
+    rec = persistence.load_run_record(pk) or {}
+    for gg in (rec.get("gates") or []):
+        if gg.get("gate_name") == gate_name:
+            return gg
+    return None
+
+
+def show_llm(persistence: ProductionPersistence, ref: str) -> Dict[str, Any]:
+    """LLM advisory status + persisted recommendations for a run."""
+    pk = _pack_key_of(persistence.storage, persistence.layout, ref)
+    rec = persistence.load_run_record(pk) or {}
+    doc = persistence.load_llm_recommendations(pk)
+    if rec == {} and doc is None:
+        return {}
+    return {"pack_key": pk, "llm": rec.get("llm") or {},
+            "recommendations_doc": doc,
+            "recommendations": (doc or {}).get("recommendations", [])}
+
+
+def debug_storage(persistence: ProductionPersistence,
+                  pack_key: Optional[str] = None) -> Dict[str, Any]:
+    """Report the storage backend selection + (optionally) a pack's run-record and
+    gates-folder existence — the first thing to check when nothing persists."""
+    from .storage import decide_backend
+    storage, layout = persistence.storage, persistence.layout
+    d = decide_backend()
+    info: Dict[str, Any] = {
+        "selected_backend": d["backend"],
+        "backend_reason": d["reason"],
+        "in_azure": d["in_azure"],
+        "TRAKT_BLOB_CONNECTION_present": bool(os.environ.get("TRAKT_BLOB_CONNECTION")),
+        "state_container": layout.state_container,
+        "processed_container": layout.processed_container,
+        "registry_uri": layout.registry_uri,
+    }
+    if pack_key:
+        run_uri = layout.run_uri(pack_key)
+        info["pack_key"] = pack_key
+        info["run_record_uri"] = run_uri
+        info["run_record_exists"] = storage.exists(run_uri)
+        info["gates_folder_exists"] = persistence.gates_folder_exists(pack_key)
+    return info
 
 
 # --------------------------------------------------------------------------- #
@@ -200,6 +313,25 @@ def main(argv: Optional[List[str]] = None) -> int:
                         help="Show the onboarding handoff readiness (which gate "
                              "failed, blocking decisions, missing/unresolved fields).")
     sp.add_argument("ref", help="run_id or pack_key")
+    sp = sub.add_parser("show-transform",
+                        help="Show the Gate 2 transform readiness (issue count, "
+                             "blocking issues, affected fields, first 20 issues).")
+    sp.add_argument("ref", help="run_id or pack_key")
+    sp = sub.add_parser("show-validation",
+                        help="Show the Gate 3 validation readiness (mandatory/type/"
+                             "numeric/date failures, first 20 issues).")
+    sp.add_argument("ref", help="run_id or pack_key")
+    sp = sub.add_parser("show-gates", help="Show all persisted per-gate diagnostics.")
+    sp.add_argument("pack_key", help="pack_key (or run_id)")
+    sp = sub.add_parser("show-gate", help="Show one gate's persisted diagnostics.")
+    sp.add_argument("pack_key", help="pack_key (or run_id)")
+    sp.add_argument("gate_name",
+                    help="onboarding|transform|validation|stamp|assembler|projection")
+    sp = sub.add_parser("show-llm", help="Show LLM advisory status + recommendations.")
+    sp.add_argument("ref", help="run_id or pack_key")
+    sp = sub.add_parser("debug-storage",
+                        help="Report storage backend + (optional) run-record existence.")
+    sp.add_argument("pack_key", nargs="?", default=None, help="optional pack_key")
     sp = sub.add_parser("approve", help="Approve a source with a mapping.")
     sp.add_argument("approval_id"); sp.add_argument("--mapping-id", required=True)
     sp.add_argument("--mapping-config-path", default=None); sp.add_argument("--by", default=None)
@@ -238,6 +370,36 @@ def main(argv: Optional[List[str]] = None) -> int:
         h = handoff(storage, layout, args.ref)
         print(json.dumps(h, indent=2) if h else f"No run record for: {args.ref}")
         return 0 if h else 1
+
+    if args.cmd == "show-transform":
+        t = transform(storage, layout, args.ref)
+        print(json.dumps(t, indent=2) if t else f"No run record for: {args.ref}")
+        return 0 if t else 1
+
+    if args.cmd == "show-validation":
+        v = validation(storage, layout, args.ref)
+        print(json.dumps(v, indent=2) if v else f"No run record for: {args.ref}")
+        return 0 if v else 1
+
+    if args.cmd == "show-gates":
+        g = gates(persistence, args.pack_key)
+        print(json.dumps(g, indent=2) if g else f"No run record for: {args.pack_key}")
+        return 0 if g else 1
+
+    if args.cmd == "show-gate":
+        g = gate(persistence, args.pack_key, args.gate_name)
+        print(json.dumps(g, indent=2) if g
+              else f"No {args.gate_name!r} gate diagnostics for: {args.pack_key}")
+        return 0 if g else 1
+
+    if args.cmd == "show-llm":
+        l = show_llm(persistence, args.ref)
+        print(json.dumps(l, indent=2) if l else f"No run record for: {args.ref}")
+        return 0 if l else 1
+
+    if args.cmd == "debug-storage":
+        print(json.dumps(debug_storage(persistence, args.pack_key), indent=2))
+        return 0
 
     if args.cmd == "approve":
         art = APP.approve(storage, layout, args.approval_id, mapping_id=args.mapping_id,

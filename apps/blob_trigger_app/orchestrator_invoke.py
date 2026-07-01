@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from . import gate_diagnostics as _gd
+
 # An orchestrator invoker takes the routing decision and returns a small dict:
 #   {"run_id", "status", "central_canonical_path", ...}
 OrchestratorInvoker = Callable[..., Dict[str, Any]]
@@ -92,7 +94,21 @@ def _run_diagnostics(state: Any) -> Dict[str, Any]:
     if not halt_reason:
         halt_reason = "; ".join(getattr(state, "blockers", None) or []) or None
 
-    handoff_readiness = _handoff_readiness(state)
+    # Generic per-gate observability (onboarding/transform/validation/stamp/
+    # assembler/projection) + the run-level summary.
+    gates = _gd.collect_gates(state)
+    central = getattr(state, "central_canonical_path", None)
+    run_summary = _gd.build_run_summary(state, gates, central)
+
+    def _payload(name: str) -> Dict[str, Any]:
+        for g in gates:
+            if g["gate_name"] == name:
+                return g.get("payload") or {}
+        return {}
+
+    handoff_readiness = _payload("onboarding")
+    transform_readiness = _payload("transform")
+    validation_readiness = _payload("validation")
     # issue_count: prefer the handoff's own tally, else derive from gaps + blockers.
     issue_count = handoff_readiness.get("issue_count")
     if issue_count is None:
@@ -107,128 +123,12 @@ def _run_diagnostics(state: Any) -> Dict[str, Any]:
         "validation_errors": validation_errors,
         "mapping_recommendations": mapping_recommendations,
         "handoff_readiness": handoff_readiness,
+        "transform_readiness": transform_readiness,
+        "validation_readiness": validation_readiness,
+        "gates": gates,
+        "run_summary": run_summary,
         "run_state_path": str(state.state_path()),
     }
-
-
-def _read_json_maybe(path: Optional[str]) -> Optional[Dict[str, Any]]:
-    """Read a JSON artefact; if given a ``.csv`` path, try the ``.json`` sibling."""
-    if not path:
-        return None
-    p = Path(path)
-    for cand in (p, p.with_suffix(".json")):
-        try:
-            if cand.exists():
-                return json.loads(cand.read_text(encoding="utf-8"))
-        except Exception:  # noqa: BLE001 — diagnostics must never raise
-            continue
-    return None
-
-
-def _decision_queue(dq_path: Optional[str]) -> "tuple[List[Dict[str, Any]], List[Dict[str, Any]]]":
-    """Return (blocking_decisions, unresolved_decisions) from the 28c queue."""
-    doc = _read_json_maybe(dq_path) or {}
-    blocking: List[Dict[str, Any]] = []
-    unresolved: List[Dict[str, Any]] = []
-    for r in (doc.get("rows", []) or []):
-        entry = {
-            "target_field": r.get("target_field", ""),
-            "esma_code": r.get("esma_code", ""),
-            "reason": (r.get("operator_question") or r.get("question")
-                       or r.get("decision_reason") or r.get("coverage_status") or ""),
-            "decision_status": r.get("decision_status"),
-        }
-        if r.get("blocking"):
-            blocking.append(entry)
-        elif r.get("requires_user_decision") or not r.get("decision_status"):
-            unresolved.append(entry)
-    return blocking, unresolved
-
-
-def _coverage_gaps(cov_path: Optional[str]) -> "tuple[List[str], List[str]]":
-    """Return (missing_target_fields, unresolved_fields) from the 28a matrix."""
-    doc = _read_json_maybe(cov_path) or {}
-    missing: List[str] = []
-    unresolved: List[str] = []
-    for r in (doc.get("rows", []) or []):
-        tf = r.get("target_field", "")
-        if not tf:
-            continue
-        if r.get("coverage_status") == "missing_required":
-            missing.append(tf)
-        if r.get("requires_user_decision") or r.get("blocking"):
-            unresolved.append(tf)
-    return missing, unresolved
-
-
-def _handoff_readiness(state: Any) -> Dict[str, Any]:
-    """Full onboarding-handoff readiness payload — explains EXACTLY which readiness
-    gate failed and surfaces the actual blocking decisions / unresolved fields.
-
-    Reads the first portfolio's handoff manifest (24_) + readiness (25_) + decision
-    queue (28c) + coverage matrix (28a) at run time (Azure scratch still present)
-    and EMBEDS the manifest so ops can inspect it after scratch is reclaimed. Never
-    raises."""
-    for p in getattr(state, "portfolios", []) or []:
-        try:
-            mpath = p.step("onboard").manifest_path
-        except Exception:  # noqa: BLE001
-            continue
-        m = _read_json_maybe(mpath)
-        if not m:
-            continue
-        rj = _read_json_maybe(m.get("readiness_path")) or {}
-        blocking_count = int(m.get("blocking_decision_count", rj.get("blocking_decision_count", 0)) or 0)
-        gap = int(m.get("registry_gap_count", rj.get("registry_gap_count", 0)) or 0)
-        central_present = bool(rj.get("central_tape_present",
-                                      int(m.get("central_tape_row_count", 0) or 0) > 0))
-        coverage_present = bool(rj.get("coverage_matrix_present", True))
-        universe_loaded = bool(rj.get("target_universe_loaded", True))
-
-        # WHICH readiness gate failed (mirrors onboarding compute_readiness).
-        failed_gates: List[str] = []
-        if not central_present:
-            failed_gates.append("central_tape_present=false")
-        if not coverage_present:
-            failed_gates.append("coverage_matrix_present=false")
-        if not universe_loaded:
-            failed_gates.append("target_universe_loaded=false")
-        if gap > 0:
-            failed_gates.append(f"registry_gap_count={gap}")
-        if blocking_count > 0:
-            failed_gates.append(f"blocking_decision_count={blocking_count}")
-
-        blocking_decisions, unresolved_decisions = _decision_queue(m.get("decision_queue_path"))
-        missing_fields, unresolved_fields = _coverage_gaps(m.get("target_coverage_matrix_path"))
-        issue_count = blocking_count + gap + len(missing_fields)
-
-        return {
-            "source_portfolio_id": p.source_portfolio_id,
-            "ready_for_transformation_validation": bool(m.get("ready_for_transformation_validation")),
-            "ready_for_projection": bool(m.get("ready_for_projection")),
-            "ready_for_xml_delivery": bool(m.get("ready_for_xml_delivery")),
-            "failed_readiness_gates": failed_gates,
-            "blocking_decision_count": blocking_count,
-            "non_blocking_decision_count": int(m.get("non_blocking_decision_count", 0) or 0),
-            "operator_decision_pending_count": int(m.get("operator_decision_pending_count", 0) or 0),
-            "registry_gap_count": gap,
-            "issue_count": issue_count,
-            "blocking_decisions": blocking_decisions,
-            "unresolved_decisions": unresolved_decisions,
-            "unresolved_fields": sorted(set(unresolved_fields)),
-            "missing_target_fields": sorted(set(missing_fields)),
-            "source_absent_count": int(m.get("source_absent_count", 0) or 0),
-            "target_field_count": int(m.get("target_field_count", 0) or 0),
-            "source_mapped_count": int(m.get("source_mapped_count", 0) or 0),
-            # scratch paths (ephemeral) + embedded manifest (durable once persisted).
-            "handoff_manifest_path": str(mpath),
-            "readiness_path": m.get("readiness_path"),
-            "target_coverage_matrix_path": m.get("target_coverage_matrix_path"),
-            "decision_queue_path": m.get("decision_queue_path"),
-            "field_contract_path": m.get("field_contract_path"),
-            "handoff_manifest": m,
-        }
-    return {}
 
 
 def _mapping_recommendations(state: Any) -> List[Dict[str, Any]]:
