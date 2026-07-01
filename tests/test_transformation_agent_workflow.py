@@ -421,6 +421,36 @@ class TestRunContextTypedBeforeParse(unittest.TestCase):
         self.assertTrue(res["data_cut_off_date"]["absent"])
         self.assertTrue(any(i["issue_type"] == "source_absent" for i in issues.rows))
 
+    def test_manifest_declared_run_context_field_without_contract_row(self):
+        # The production defect: data_cut_off_date is a run-context field DECLARED in
+        # the handoff manifest (run_context_fields + resolved value) and present as a
+        # tape column, but is NOT a target-contract row — so the contract pass alone
+        # never materialises it and Gate 2 types the stale raw column.
+        rf, df = self._rf(), self._df()
+        contract = []                                   # NO contract row for it
+        handoff = {"run_context_fields": ["data_cut_off_date"],
+                   "data_cut_off_date": "2025-11-30"}   # resolved (e.g. cli_fallback)
+        issues = ta._IssueLog()
+        res = ta._materialise_run_context_fields(df, contract, issues, handoff)
+        self.assertEqual(list(df["data_cut_off_date"].unique()), ["2025-11-30"])
+        type_report = ta.g2.normalize_types(df, rf, dayfirst=False)
+        ta._record_parse_issues(type_report, rf, contract, issues)
+        self.assertEqual(type_report["fields"]["data_cut_off_date"]["parse_failures"], 0)
+        self.assertFalse(any(i["issue_type"] == "date_parse_failed" for i in issues.rows))
+        self.assertTrue(res["data_cut_off_date"]["materialised"])
+
+    def test_manifest_blank_run_context_value_left_to_normal_typing(self):
+        # A blank resolved value must NOT fabricate anything or overwrite a column —
+        # the field is left to normal typing (no spurious source_absent here).
+        df = self._df()
+        df["data_cut_off_date"] = "2025-11-30"          # a valid column value
+        handoff = {"run_context_fields": ["data_cut_off_date"], "data_cut_off_date": ""}
+        issues = ta._IssueLog()
+        res = ta._materialise_run_context_fields(df, [], issues, handoff)
+        self.assertNotIn("data_cut_off_date", res)      # untouched
+        self.assertEqual(list(df["data_cut_off_date"].unique()), ["2025-11-30"])
+        self.assertEqual(issues.rows, [])
+
 
 if __name__ == "__main__":
     unittest.main()

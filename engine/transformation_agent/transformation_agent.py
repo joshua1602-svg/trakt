@@ -401,7 +401,7 @@ def build_transformation_package(
     # 6a-pre. Materialise portfolio-level run/source context (e.g. data_cut_off_date)
     #     FIRST, so type-normalisation reads the handoff's resolved value rather than
     #     a stale/unparseable raw source column that the resolved value supersedes.
-    run_context_results = _materialise_run_context_fields(df, contract_rows, issues)
+    run_context_results = _materialise_run_context_fields(df, contract_rows, issues, handoff)
 
     # 6a. Type-normalise the source columns already present in the tape. Gate 2
     #     treats ND codes as missing here; ND defaults are (re)materialised below.
@@ -515,6 +515,7 @@ def _materialise_run_context(
 
 def _materialise_run_context_fields(
     df: pd.DataFrame, contract_rows: List[Dict[str, Any]], issues: _IssueLog,
+    handoff: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Dict[str, Any]]:
     """Materialise portfolio-level run/source context values (e.g.
     ``data_cut_off_date``) BEFORE type-normalisation.
@@ -524,8 +525,18 @@ def _materialise_run_context_fields(
     types the resolved value — not a stale/unparseable raw column that the resolved
     value replaces — so a valid resolved date never yields a spurious
     ``date_parse_failed``.
+
+    Two sources of run-context fields, both honoured:
+
+      1. field-contract rows classified ``HC_*_CONTEXT_MAPPED`` (run-context fields
+         that are ALSO target-contract fields);
+      2. run-context fields DECLARED in the handoff manifest (``run_context_fields``)
+         whose resolved value is carried at ``handoff[field]`` — these are tape
+         columns that are NOT target-contract rows (e.g. ``data_cut_off_date``
+         resolved via a cli/config fallback), so (1) alone never covers them.
     """
     results: Dict[str, Dict[str, Any]] = {}
+    handled: set = set()
     for row in contract_rows:
         cls = row.get("handoff_classification", "")
         canonical = (row.get("canonical_field") or "").strip()
@@ -533,6 +544,20 @@ def _materialise_run_context_fields(
             results[row.get("target_field", "")] = _materialise_run_context(
                 df, row.get("target_field", ""), canonical, row.get("esma_code", ""),
                 row.get("selected_value_sample", ""), cls, issues)
+            handled.add(canonical)
+
+    for canonical in (handoff or {}).get("run_context_fields", []) or []:
+        canonical = str(canonical or "").strip()
+        if not canonical or canonical in handled:
+            continue
+        value = (handoff or {}).get(canonical, "")
+        # Only when the handoff actually RESOLVED a value — a blank leaves the
+        # column to normal typing (never fabricates a source_absent for it here).
+        if _is_blank(value):
+            continue
+        results[canonical] = _materialise_run_context(
+            df, canonical, canonical, "", value, oh.HC_RUN_CONTEXT_MAPPED, issues)
+        handled.add(canonical)
     return results
 
 
