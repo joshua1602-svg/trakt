@@ -284,6 +284,16 @@ def handle_blob_event(
     manifest["requires_source_onboarding"] = decision != DECISION_DETERMINISTIC
     manifest["decision"] = decision
 
+    # Operator "apply my accepted decisions" rerun (after ops approve-recommendations,
+    # before promote): force a DETERMINISTIC-apply run against the accepted 34_
+    # decisions file — exactly the CLI's `rerun onboarding --target-first-decisions`.
+    applied_decisions_path = meta.get("applied_decisions_path")
+    if applied_decisions_path:
+        decision = DECISION_DETERMINISTIC
+        manifest["decision"] = decision
+        manifest["requires_source_onboarding"] = False
+        manifest["applied_decisions_path"] = applied_decisions_path
+
     input_for_orch = (input_dir_override
                       or (str(Path(local_input_path).parent) if local_input_path
                           else parsed.blob_path))
@@ -374,6 +384,18 @@ def handle_blob_event(
         return _emit()
 
     # decision == deterministic ------------------------------------------
+    # The accepted-decisions override wins over any saved mapping (apply-my-decisions
+    # rerun); otherwise use the promoted registry mapping. rec may be None when
+    # applying accepted decisions on a not-yet-promoted source.
+    mapping_cfg = applied_decisions_path or (rec.mapping_config_path if rec else None)
+    # A promoted accepted-decisions mapping is stored as a blob:// URI — localise it
+    # so the onboarding agent can load it as a target-first decisions file.
+    if (mapping_cfg and str(mapping_cfg).startswith("blob://") and persistence is not None):
+        try:
+            dest = Path(out_dir) / "_mapping" / Path(mapping_cfg).name
+            mapping_cfg = str(persistence.storage.download_file(mapping_cfg, dest))
+        except Exception as exc:  # noqa: BLE001 — record, fall through with the URI
+            manifest.setdefault("persist_errors", []).append(f"mapping_localise: {exc}")
     result = orchestrator_invoker(
         processing_mode=DECISION_DETERMINISTIC,
         client_id=parsed.client_id, source_portfolio_id=parsed.source_portfolio_id,
@@ -383,7 +405,7 @@ def handle_blob_event(
         target=sel_target, run_regime=sel_run_regime,
         acquisition_date=acquisition_date, seller_name=seller_name,
         full_pipeline=full_pipeline, force_publish=force_publish,
-        mapping_config_path=rec.mapping_config_path, out_dir=str(out_dir))
+        mapping_config_path=mapping_cfg, out_dir=str(out_dir))
     manifest["orchestrator_invocation"] = {
         "invoked": True, "mode": DECISION_DETERMINISTIC,
         "target": sel_target, "run_regime": sel_run_regime, **_inv(result)}
@@ -393,9 +415,10 @@ def handle_blob_event(
     if orch_status == "done":
         manifest["status"] = STATUS_PROCESSED
         manifest["event_decision"] = EVT_KNOWN_SOURCE_PROCESSED
-        rec.last_successful_run_id = (result.get("run_id") or run_id_for_registry)
-        rec.last_successful_reporting_period = parsed.reporting_period
-        registry.upsert(rec)
+        if rec is not None:
+            rec.last_successful_run_id = (result.get("run_id") or run_id_for_registry)
+            rec.last_successful_reporting_period = parsed.reporting_period
+            registry.upsert(rec)
         # 5) Assembler refresh — rebuild the central platform canonical across
         # portfolios from accepted canonical outputs (funded packs only).
         if parsed.dataset == "funded":

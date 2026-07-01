@@ -203,6 +203,12 @@ def default_orchestrator_invoker(
     from engine.orchestrator_agent.orchestrator import onboarding_mode_for_target
     from engine.orchestrator_agent.adapters import RealAgentAdapters, PortfolioSpec
 
+    # LLM target advisor: only for a NEW/changed source (source_onboarding) and only
+    # when the LLM policy is enabled. Recurring approved packs (deterministic) never
+    # invoke it — they apply the promoted mapping.
+    from . import llm_recommendations as _llm
+    enable_llm_advisor = (processing_mode == "source_onboarding"
+                          and _llm.resolve_llm_policy().get("enabled", False))
     adapters = RealAgentAdapters(
         client_name=client_id,
         onboarding_mode=onboarding_mode_for_target(target),   # contract by target
@@ -210,6 +216,7 @@ def default_orchestrator_invoker(
         mapping_config_path=mapping_config_path,
         full_pipeline=full_pipeline,   # Gate 2 will run → onboarding must emit the handoff
         reporting_period=reporting_period,   # derive reporting_date from the folder period
+        enable_llm_advisor=enable_llm_advisor,
     )
     spec = PortfolioSpec(
         source_portfolio_id=source_portfolio_id, input=input_path,

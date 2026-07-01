@@ -105,6 +105,47 @@ class TestOrchestratorRealAgents(unittest.TestCase):
                              for b in state.blockers))
         self.assertNotEqual(state.portfolios[0].step("transform").status, "pending")
 
+    def test_cli_vs_azure_onboarding_parity(self):
+        # STEP-1 PROOF: the headless Azure onboarding produces the SAME output as the
+        # Codespaces CLI (run_operator_workflow) for identical inputs — same 28a
+        # coverage per field and the same handoff readiness/contract. The runtime is
+        # the same code; only the approve→rerun bridge differed.
+        import json, tempfile
+        from engine.onboarding_agent import workflow as _wf, onboarding_handoff
+        from engine.orchestrator_agent.adapters import RealAgentAdapters, PortfolioSpec
+
+        def _cov(pdir):
+            d = json.loads((Path(pdir) / "28a_target_coverage_matrix.json").read_text())
+            return {r["target_field"]: r.get("coverage_status") for r in d["rows"]}
+
+        # CLI onboarding, then build the handoff with the SAME function the adapter uses.
+        cli = Path(tempfile.mkdtemp(prefix="cli_it_")) / "p"
+        self.addCleanup(lambda: __import__("shutil").rmtree(cli.parent, ignore_errors=True))
+        _wf.run_operator_workflow(
+            input_dir=str(_PACK), client_name="ERE_IT", client_id="direct_001", run_id="run",
+            project_dir=str(cli), mode="mi_only", registry=_REGISTRY, aliases_dir="config/system",
+            enable_mapping_review=True, reporting_date="2025-11-30", target_first_decisions="")
+        h_cli = onboarding_handoff.build_handoff_package(
+            str(cli), Path(cli) / "output", client_id="direct_001", client_name="ERE_IT",
+            run_id="run", mode="mi_only", registry=_REGISTRY, aliases_dir="config/system",
+            reporting_date="2025-11-30")["manifest"]
+
+        # Azure headless onboarding via the orchestrator adapter.
+        az = Path(tempfile.mkdtemp(prefix="az_it_")) / "p"
+        self.addCleanup(lambda: __import__("shutil").rmtree(az.parent, ignore_errors=True))
+        ad = RealAgentAdapters(registry=_REGISTRY, client_name="ERE_IT", onboarding_mode="mi_only",
+                               processing_mode="deterministic", full_pipeline=True,
+                               reporting_period="2025-11-30")
+        res = ad.onboard(PortfolioSpec("direct_001", str(_PACK), source_portfolio_type="direct",
+                                       allow_unknown_acquisition_date=True), az)
+        h_az = json.loads(Path(res.manifest_path).read_text(encoding="utf-8"))
+
+        self.assertEqual(_cov(cli), _cov(az))            # identical coverage, every field
+        for k in ("target_contract_id", "ready_for_transformation_validation",
+                  "blocking_decision_count", "registry_gap_count",
+                  "source_mapped_count", "source_absent_count", "target_field_count"):
+            self.assertEqual(h_cli.get(k), h_az.get(k), k)
+
     def test_reporting_date_derived_from_folder_period(self):
         # THE fix: with the folder reporting_period supplied, the MI-contract
         # portfolio-level reporting_date is DERIVED from it (the raw pack has no

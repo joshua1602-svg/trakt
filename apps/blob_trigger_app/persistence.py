@@ -87,6 +87,13 @@ class ProductionPersistence:
             record["transform_artifacts"] = self._persist_transform_artifacts(manifest)
             # Generic per-gate diagnostics + artefacts (all gates).
             record["gate_artifacts"] = self._persist_gate_diagnostics(manifest)
+            # Onboarding decision artefacts (34/36/28a) for the approve→rerun bridge.
+            try:
+                from . import decisions_bridge as _db
+                record["onboarding_decision_inputs"] = _db.persist_decision_inputs(
+                    self.storage, self.layout, manifest)
+            except Exception as exc:  # noqa: BLE001 — never fail the event on this
+                manifest.setdefault("persist_errors", []).append(f"decision_inputs: {exc}")
             return _run_records.write_run_record(self.storage, self.layout, record)
         except Exception:
             _persist_step("persist_run_record", uri)
@@ -175,6 +182,23 @@ class ProductionPersistence:
             return json.loads(self.storage.read_text(uri))
         except Exception:  # noqa: BLE001
             return None
+
+    # -- accepted-decisions bridge (CLI approve→rerun→promote) ------------- #
+    def approve_recommendations(self, pack_key: str, **kw) -> Dict[str, Any]:
+        from . import decisions_bridge as _db
+        return _db.approve_recommendations(self.storage, self.layout, pack_key, **kw)
+
+    def has_approved_decisions(self, pack_key: str) -> bool:
+        from . import decisions_bridge as _db
+        return _db.has_approved_decisions(self.storage, self.layout, pack_key)
+
+    def approved_decisions_uri(self, pack_key: str) -> str:
+        from . import decisions_bridge as _db
+        return _db.approved_decisions_uri(self.layout, pack_key)
+
+    def localise_approved_decisions(self, pack_key: str, dest_dir: str) -> Optional[str]:
+        from . import decisions_bridge as _db
+        return _db.localise_approved_decisions(self.storage, self.layout, pack_key, dest_dir)
 
     def _persist_transform_artifacts(self, manifest: Dict[str, Any]) -> Dict[str, Any]:
         """Copy the Gate 2 (transform) output artefacts — the transformation

@@ -693,5 +693,161 @@ class TestGateFrameworkAndLLM(unittest.TestCase):
         self.assertEqual(onboarding_mode_for_target("all"), "regulatory_mi")     # combined
 
 
+# --------------------------------------------------------------------------- #
+# 4. CLI-parity bridge: approve-recommendations → rerun (apply) → promote
+# --------------------------------------------------------------------------- #
+
+class TestApproveRecommendationsBridge(unittest.TestCase):
+
+    def setUp(self):
+        import yaml
+        self._yaml = yaml
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = self._tmp.name
+        self.out = str(Path(self.root) / "scratch")
+        self.storage = Storage(local_root=str(Path(self.root) / "blobstore"))
+        self.layout = Layout()
+        self.persistence = ProductionPersistence(self.storage, self.layout)
+        self.registry = self.persistence.load_registry()
+        self.fp = _fp()
+        self.pk = "ERE_direct_001_funded_monthly_2025-11-30"
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _seed_onboarding_inputs(self):
+        # onboarding decision artefacts as produced with the LLM advisor on
+        decisions = {"decisions": [
+            {"decision_id": "d1", "target_field": "erm_product_type",
+             "status": "pending", "selected_action": None}]}
+        recs = {"rows": [
+            {"decision_id": "d1", "target_field": "erm_product_type",
+             "llm_advice_status": "advised", "llm_recommended_action": "configure_static_value",
+             "llm_recommended_configured_value": "lifetime_mortgage",
+             "llm_confidence": 0.9, "llm_rationale": "ERM product"}]}
+        cov = {"rows": [{"target_field": "erm_product_type", "selected_source_column": "",
+                         "alternative_source_candidates": ""}]}
+        self.storage.write_text(self.layout.run_onboarding_uri(self.pk, "34_target_first_decisions.yaml"),
+                                self._yaml.safe_dump(decisions))
+        self.storage.write_text(self.layout.run_onboarding_uri(self.pk, "36_target_first_llm_recommendations.json"),
+                                json.dumps(recs))
+        self.storage.write_text(self.layout.run_onboarding_uri(self.pk, "28a_target_coverage_matrix.json"),
+                                json.dumps(cov))
+
+    def _run_record(self, *, status="halted"):
+        # minimal run record so rerun/promote can resolve the pack
+        rec = {"pack_key": self.pk, "run_id": "orun_x",
+               "blob_path": "raw-v2/ERE/direct/funded/monthly/direct_001/2025-11-30/_READY.json",
+               "container": "raw-v2", "input_dir": "/tmp/pack",
+               "client_id": "ERE", "source_portfolio_id": "direct_001", "dataset": "funded",
+               "frequency": "monthly", "reporting_period": "2025-11-30", "status": status,
+               "schema_fingerprint": self.fp.fingerprint}
+        RR.write_run_record(self.storage, self.layout, rec)
+
+    # accept the advised recs → approved decisions file, never auto-applied
+    def test_approve_recommendations_produces_approved_decisions(self):
+        self._seed_onboarding_inputs()
+        self._run_record()
+        summary = OPS.approve_recommendations(self.persistence, self.pk, min_confidence=0.0)
+        self.assertEqual(summary["approved"], 1)
+        uri = summary["approved_decisions_uri"]
+        self.assertTrue(self.storage.exists(uri))           # persisted in Blob
+        doc = self._yaml.safe_load(self.storage.read_text(uri))
+        d1 = doc["decisions"][0]
+        self.assertEqual(d1["status"], "approved")
+        self.assertEqual(d1["selected_action"], "configure_static_value")
+        self.assertEqual(d1["configured_value"], "lifetime_mortgage")
+        # recorded on the run record for rerun/promote
+        rec = self.persistence.load_run_record(self.pk)
+        self.assertEqual(rec["approved_decisions_uri"], uri)
+
+    # rerun must APPLY the accepted decisions (deterministic-apply, like the CLI)
+    def test_rerun_applies_accepted_decisions(self):
+        self._seed_onboarding_inputs()
+        self._run_record()
+        OPS.approve_recommendations(self.persistence, self.pk)
+        captured = {}
+
+        def fake_reprocessor(blob_path, *, container, input_dir, marker_metadata):
+            captured.update(marker_metadata=marker_metadata)
+            return {"status": "processed"}
+
+        OPS.rerun(self.persistence, self.registry, self.pk, reprocessor=fake_reprocessor)
+        self.assertIn("applied_decisions_path", captured["marker_metadata"])
+        self.assertTrue(captured["marker_metadata"]["applied_decisions_path"].endswith(
+            "34_target_first_decisions_approved.yaml"))
+        self.assertTrue(captured["marker_metadata"]["force_reprocess"])
+
+    # router: applied_decisions_path forces a deterministic-apply run (rec may be None)
+    def test_router_applied_decisions_forces_deterministic(self):
+        # no registry entry (new source) — applying accepted decisions still runs
+        # deterministically with the accepted file as the mapping config.
+        inv = RecordingInvoker(status="halted")
+        m = R.handle_blob_event(
+            "raw-v2/ERE/direct/funded/monthly/direct_001/2025-11-30/_READY.json",
+            registry=self.registry, out_dir=self.out, container="raw-v2",
+            pack_marker="_READY.json", schema_info=self.fp,
+            marker_metadata={"applied_decisions_path": "/tmp/34_approved.yaml"},
+            orchestrator_invoker=inv, persistence=self.persistence, now=_NOW)
+        self.assertEqual(m["decision"], "deterministic")
+        self.assertEqual(inv.calls[0]["processing_mode"], "deterministic")
+        self.assertEqual(inv.calls[0]["mapping_config_path"], "/tmp/34_approved.yaml")
+
+    # promote persists the accepted mapping active for future deterministic packs
+    def test_promote_pack_activates_mapping(self):
+        self._seed_onboarding_inputs()
+        self._run_record()
+        OPS.approve_recommendations(self.persistence, self.pk)
+        rec = OPS.promote_pack(self.persistence, self.registry, self.pk)
+        self.assertEqual(rec.status, "active")
+        self.assertTrue(rec.has_approved_mapping)
+        self.assertTrue(str(rec.mapping_config_path).endswith(
+            "34_target_first_decisions_approved.yaml"))
+        self.assertEqual(rec.expected_schema_fingerprint, self.fp.fingerprint)
+        # registry now routes this source deterministically
+        looked = self.registry.lookup("ERE", "direct_001", "funded", "monthly")
+        self.assertTrue(looked.has_approved_mapping)
+
+    # THE proof: post-promote recurring monthly pack runs deterministically, no LLM
+    def test_post_promote_recurring_pack_no_llm(self):
+        from unittest import mock
+        from apps.blob_trigger_app.orchestrator_invoke import default_orchestrator_invoker
+
+        def _advisor_for(processing_mode, llm_enabled):
+            captured = {}
+
+            class _S:
+                run_id = "r"; status = "done"; central_canonical_path = "/tmp/c.csv"; blockers = []
+                def state_path(self): return Path("/tmp/x")
+
+            def fake_run(client_id, portfolios, *, adapters, **kw):
+                captured["enable_llm_advisor"] = adapters.enable_llm_advisor
+                captured["processing_mode"] = adapters.processing_mode
+                return _S()
+
+            env = {"TRAKT_LLM_ENABLED": "true", "ANTHROPIC_API_KEY": "k"} if llm_enabled else {}
+            with mock.patch.dict(os.environ, env, clear=False), \
+                 mock.patch("engine.orchestrator_agent.run_orchestration", fake_run):
+                default_orchestrator_invoker(
+                    processing_mode=processing_mode, client_id="ERE",
+                    source_portfolio_id="direct_001", source_portfolio_type="direct",
+                    dataset="funded", frequency="monthly", reporting_period="2025-12-31",
+                    input_path="/tmp/pack", target="mi", run_regime=False,
+                    mapping_config_path="config/m1.yaml", out_dir="/tmp/out",
+                    full_pipeline=True)
+            return captured
+
+        # recurring approved pack → deterministic → advisor OFF even with LLM enabled
+        det = _advisor_for("deterministic", llm_enabled=True)
+        self.assertEqual(det["processing_mode"], "deterministic")
+        self.assertFalse(det["enable_llm_advisor"])
+        # new source + LLM enabled → advisor ON (produces 36_ recs to accept)
+        new = _advisor_for("source_onboarding", llm_enabled=True)
+        self.assertTrue(new["enable_llm_advisor"])
+        # new source but LLM disabled → advisor OFF (deterministic fallback)
+        off = _advisor_for("source_onboarding", llm_enabled=False)
+        self.assertFalse(off["enable_llm_advisor"])
+
+
 if __name__ == "__main__":
     unittest.main()

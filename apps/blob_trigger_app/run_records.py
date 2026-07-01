@@ -50,6 +50,9 @@ def build_run_record(manifest: Dict[str, Any]) -> Dict[str, Any]:
         "event_decision": manifest.get("event_decision"),
         "target": manifest.get("target"),
         "approval_id": manifest.get("approval_id"),
+        "schema_fingerprint": manifest.get("schema_fingerprint"),
+        "regime_required": manifest.get("selected_target", {}).get("run_regime")
+        if isinstance(manifest.get("selected_target"), dict) else None,
         "central_canonical_path": manifest.get("central_canonical_path"),
         "diagnostics": diag,
         "validation_issues": diag.get("validation_errors") or [],

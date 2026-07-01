@@ -20,12 +20,20 @@ React UI can wrap the same operations later.
         --mapping-config-path <path>
     python -m apps.blob_trigger_app.ops reject <approval_id> --reason <why>
     python -m apps.blob_trigger_app.ops edit <approval_id> --set key=value ...
-    python -m apps.blob_trigger_app.ops promote <approval_id>
+    python -m apps.blob_trigger_app.ops approve-recommendations <pack_key>
+    python -m apps.blob_trigger_app.ops promote <approval_id|pack_key>
     python -m apps.blob_trigger_app.ops rerun <pack_key> [--force-publish]
 
 ``rerun`` re-fires the SAME pack (force_reprocess). ``--force-publish`` is the
 explicit break-glass override that publishes despite validation exceptions — it
 is never implied.
+
+The CLI-parity loop for a NEW source (replicates the Codespaces flow of
+approving LLM recs and rerunning onboarding before promoting):
+
+    ops approve-recommendations <pack_key>   # accept advised LLM recs → 34_ decisions (persisted, NOT applied)
+    ops rerun <pack_key>                     # rerun onboarding APPLYING the accepted decisions
+    ops promote <pack_key>                   # persist the mapping active → future packs deterministic (no LLM)
 """
 
 from __future__ import annotations
@@ -233,6 +241,13 @@ def rerun(persistence: ProductionPersistence, registry: SourceRegistry,
     meta = {"force_reprocess": True}
     if force_publish:
         meta["force_publish"] = True
+    # Apply accepted decisions if the operator ran approve-recommendations — a
+    # deterministic-apply rerun, exactly like the CLI's `--target-first-decisions`.
+    if persistence.has_approved_decisions(pack_key):
+        local = persistence.localise_approved_decisions(
+            pack_key, str(persistence.storage._local_path(persistence.layout.runs_prefix())))
+        if local:
+            meta["applied_decisions_path"] = local
     reproc = reprocessor or _default_reprocessor(persistence, registry)
     manifest = reproc(
         record.get("blob_path"),
@@ -240,6 +255,52 @@ def rerun(persistence: ProductionPersistence, registry: SourceRegistry,
         input_dir=record.get("input_dir"),
         marker_metadata=meta)
     return manifest or {}
+
+
+def approve_recommendations(persistence: ProductionPersistence, pack_key: str, *,
+                            approved_by: str = "", min_confidence: float = 0.0) -> Dict[str, Any]:
+    """Accept the advised LLM recommendations into an APPROVED decisions file
+    (never auto-applied). Records the approved-decisions URI on the run record."""
+    summary = persistence.approve_recommendations(
+        pack_key, approved_by=approved_by, min_confidence=min_confidence)
+    if not summary.get("error"):
+        rec = persistence.load_run_record(pack_key)
+        if rec is not None:
+            rec["approved_decisions_uri"] = summary.get("approved_decisions_uri")
+            rec["decisions_accepted"] = {"approved": summary.get("approved"),
+                                         "pending": summary.get("pending"),
+                                         "skipped": len(summary.get("skipped") or [])}
+            RR.write_run_record(persistence.storage, persistence.layout, rec)
+    return summary
+
+
+def promote_pack(persistence: ProductionPersistence, registry: SourceRegistry,
+                 pack_key: str) -> "SourceRecord":
+    """Promote a pack's accepted decisions into an ACTIVE registry mapping, so
+    future monthly packs run deterministically with no LLM. (For approval-artifact
+    promotion use ``ops promote <approval_id>``.)"""
+    from .source_registry import SourceRecord, STATUS_ACTIVE
+    rec = persistence.load_run_record(pack_key)
+    if rec is None:
+        raise KeyError(f"no run record for pack_key {pack_key!r}")
+    approved_uri = rec.get("approved_decisions_uri") or (
+        persistence.approved_decisions_uri(pack_key)
+        if persistence.has_approved_decisions(pack_key) else None)
+    if not approved_uri:
+        raise ValueError(f"no accepted decisions to promote for {pack_key} — run "
+                         f"approve-recommendations first")
+    src = registry.lookup(rec["client_id"], rec["source_portfolio_id"],
+                          rec["dataset"], rec["frequency"]) or SourceRecord(
+        client_id=rec["client_id"], source_portfolio_id=rec["source_portfolio_id"],
+        dataset=rec["dataset"], frequency=rec["frequency"])
+    src.source_portfolio_type = rec.get("source_portfolio_id", "").split("_")[0] or src.source_portfolio_type
+    src.approved_mapping_id = f"{rec['source_portfolio_id']}_accepted_v{int(getattr(src, 'mapping_version', 0) or 0) + 1}"
+    src.mapping_config_path = approved_uri
+    src.expected_schema_fingerprint = rec.get("schema_fingerprint") or src.expected_schema_fingerprint
+    src.mapping_version = int(getattr(src, "mapping_version", 0) or 0) + 1
+    src.status = STATUS_ACTIVE
+    registry.upsert(src)
+    return src
 
 
 def _default_reprocessor(persistence: ProductionPersistence,
@@ -342,9 +403,17 @@ def main(argv: Optional[List[str]] = None) -> int:
     sp.add_argument("approval_id")
     sp.add_argument("--set", dest="sets", action="append", default=[],
                     metavar="KEY=VALUE", help="Field to update (repeatable).")
-    sp = sub.add_parser("promote", help="Promote an approved mapping to active.")
-    sp.add_argument("approval_id")
-    sp = sub.add_parser("rerun", help="Re-fire the same pack (force_reprocess).")
+    sp = sub.add_parser("approve-recommendations",
+                        help="Accept the advised LLM recommendations into an approved "
+                             "34_ decisions file (never auto-applied).")
+    sp.add_argument("pack_key")
+    sp.add_argument("--min-confidence", type=float, default=0.0)
+    sp.add_argument("--by", default=None)
+    sp = sub.add_parser("promote", help="Promote an approved mapping to active "
+                                        "(<approval_id>, or <pack_key> for accepted decisions).")
+    sp.add_argument("ref")
+    sp = sub.add_parser("rerun", help="Re-fire the same pack (force_reprocess); applies "
+                                      "accepted decisions if approve-recommendations was run.")
     sp.add_argument("pack_key")
     sp.add_argument("--force-publish", action="store_true",
                     help="Break-glass: publish despite validation exceptions.")
@@ -424,9 +493,31 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"edited: {art['approval_id']} ({', '.join(updates)})")
         return 0
 
+    if args.cmd == "approve-recommendations":
+        summary = approve_recommendations(persistence, args.pack_key,
+                                          approved_by=args.by or "",
+                                          min_confidence=args.min_confidence)
+        if summary.get("error"):
+            print(f"approve-recommendations: {summary['error']}")
+            return 1
+        print(f"accepted {summary['approved']} decision(s) "
+              f"({summary['pending']} pending, {len(summary.get('skipped') or [])} skipped) → "
+              f"{summary.get('approved_decisions_uri')}")
+        print(f"next: python -m apps.blob_trigger_app.ops rerun {args.pack_key}")
+        print(f"then: python -m apps.blob_trigger_app.ops promote {args.pack_key}")
+        return 0
+
     if args.cmd == "promote":
         registry = _registry(storage, layout, args)
-        rec = APP.promote(storage, layout, registry, args.approval_id)
+        # <pack_key> → promote accepted decisions; <approval_id> → promote approval.
+        if persistence.load_run_record(args.ref) is not None or \
+                persistence.has_approved_decisions(args.ref):
+            rec = promote_pack(persistence, registry, args.ref)
+            print(f"promoted: {rec.key} → active (accepted decisions, "
+                  f"mapping_id={rec.approved_mapping_id}, version={rec.mapping_version})")
+            print("future monthly packs for this source now run DETERMINISTICALLY (no LLM).")
+            return 0
+        rec = APP.promote(storage, layout, registry, args.ref)
         print(f"promoted: {rec.key} → active "
               f"(mapping_id={rec.approved_mapping_id}, version={rec.mapping_version})")
         print(f"next: python -m apps.blob_trigger_app.ops rerun "
