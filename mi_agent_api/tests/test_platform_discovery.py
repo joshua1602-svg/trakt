@@ -38,7 +38,9 @@ def _platform_env(blobroot: Path, scratch: Path) -> dict:
     return env
 
 
-def _write_canonical(blobroot: Path, *, blank_label: bool) -> None:
+def _write_canonical(blobroot: Path, *, blank_label: bool = False,
+                     date_col: str = "reporting_date",
+                     date_value: str = "2026-01-31") -> None:
     dest = (blobroot / "processed-v2" / "platform" / "ERE" / "latest"
             / "platform_canonical_typed.csv")
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -46,16 +48,19 @@ def _write_canonical(blobroot: Path, *, blank_label: bool) -> None:
     df["source_portfolio_id"] = "direct_001"
     df["source_portfolio_type"] = "direct"
     df["source_portfolio_label"] = (float("nan") if blank_label else "Direct Book 001")
-    df["reporting_date"] = "2026-01-31"
+    for c in ("reporting_date", "data_cut_off_date", "cut_off_date"):
+        if c in df.columns:
+            df = df.drop(columns=[c])
+    df[date_col] = date_value                       # only this date column present
     df.to_csv(dest, index=False)
 
 
 @unittest.skipUnless(_SYNTH.exists(), "synthetic canonical fixture not present")
 class TestPlatformDiscovery(unittest.TestCase):
 
-    def _client(self, td: Path, *, blank_label: bool) -> TestClient:
+    def _client(self, td: Path, *, blank_label: bool = False, **canon) -> TestClient:
         blobroot = td / "blobstore"
-        _write_canonical(blobroot, blank_label=blank_label)
+        _write_canonical(blobroot, blank_label=blank_label, **canon)
         env = _platform_env(blobroot, td / "scratch")
         self._ctx = mock.patch.dict(os.environ, env, clear=True)
         self._ctx.start()
@@ -70,17 +75,38 @@ class TestPlatformDiscovery(unittest.TestCase):
         if getattr(self, "_ctx", None):
             self._ctx.stop()
 
-    def test_snapshots_derived_from_platform_canonical(self):
+    def test_snapshots_derived_from_source_portfolio_id(self):
+        # Portfolio entries come from source_portfolio_id → direct_001 selectable.
         with tempfile.TemporaryDirectory() as td:
-            c = self._client(Path(td), blank_label=False)
+            c = self._client(Path(td))
             idx = c.get("/mi/snapshots").json()
             self.assertEqual(len(idx["portfolios"]), 1)
             pf = idx["portfolios"][0]
-            self.assertEqual(pf["client_id"], "ERE")          # from MI_AGENT_PLATFORM_URI
+            self.assertEqual(pf["client_id"], "direct_001")   # not "ERE"
+            self.assertEqual(pf.get("source_portfolio_id"), "direct_001")
+            self.assertEqual(pf["label"], "Direct Book 001")
             self.assertEqual(len(pf["runs"]), 1)
+            self.assertEqual(pf["runs"][0]["run_id"], "latest")
             self.assertEqual(pf["runs"][0]["reporting_date"], "2026-01-31")
             self.assertGreater(pf["runs"][0]["loan_count"], 0)
             self.assertNotEqual(idx["source"], "unavailable")
+
+    def test_reporting_date_from_data_cut_off_date(self):
+        # Live-shaped: no reporting_date column, only data_cut_off_date populated.
+        with tempfile.TemporaryDirectory() as td:
+            c = self._client(Path(td), date_col="data_cut_off_date", date_value="2026-01-31")
+            idx = c.get("/mi/snapshots").json()
+            run = idx["portfolios"][0]["runs"][0]
+            self.assertEqual(run["reporting_date"], "2026-01-31")   # NOT null
+            self.assertIsNotNone(run["reporting_date"])
+
+    def test_snapshot_loads_direct_001_latest(self):
+        with tempfile.TemporaryDirectory() as td:
+            c = self._client(Path(td), date_col="data_cut_off_date")
+            snap = c.get("/mi/snapshot?portfolioId=direct_001/latest").json()
+            self.assertTrue(snap.get("ok"))
+            self.assertTrue(snap.get("kpis"))
+            self.assertEqual((snap.get("portfolio") or {}).get("reporting_date"), "2026-01-31")
 
     def test_source_portfolios_lenses_from_platform_canonical(self):
         with tempfile.TemporaryDirectory() as td:
