@@ -370,5 +370,57 @@ class TestTransformationRun(unittest.TestCase):
         ])
 
 
+class TestRunContextTypedBeforeParse(unittest.TestCase):
+    """Regression: Gate 2 must type the handoff's RESOLVED run/source-context value
+    (e.g. data_cut_off_date), not the stale/unparseable raw source column it
+    supersedes — so a valid resolved date never yields a spurious date_parse_failed.
+    """
+
+    def _rf(self):
+        return ta.g2.load_registry_fields("config/system/fields_registry.yaml")
+
+    def _contract(self):
+        from engine.onboarding_agent import onboarding_handoff as oh
+        return [{"target_field": "data_cut_off_date", "canonical_field": "data_cut_off_date",
+                 "esma_code": "", "handoff_classification": oh.HC_RUN_CONTEXT_MAPPED,
+                 "selected_value_sample": "2025-11-30"}]
+
+    def _df(self):
+        import pandas as pd
+        # raw central-tape column holds an unparseable placeholder
+        return pd.DataFrame({"loan_identifier": ["L1", "L2"],
+                             "data_cut_off_date": ["reporting cut-off pending"] * 2})
+
+    def test_raw_column_alone_would_fail_to_parse(self):
+        # Control: the raw value the parser used to read IS a genuine parse failure.
+        rep = ta.g2.normalize_types(self._df(), self._rf(), dayfirst=False)
+        self.assertGreater(rep["fields"]["data_cut_off_date"]["parse_failures"], 0)
+
+    def test_run_context_materialised_before_typing_no_parse_failure(self):
+        rf, contract, df = self._rf(), self._contract(), self._df()
+        issues = ta._IssueLog()
+        # THE FIX: materialise run/source context BEFORE type-normalisation.
+        ta._materialise_run_context_fields(df, contract, issues)
+        self.assertEqual(list(df["data_cut_off_date"].unique()), ["2025-11-30"])  # resolved value
+        type_report = ta.g2.normalize_types(df, rf, dayfirst=False)
+        ta._record_parse_issues(type_report, rf, contract, issues)
+        # no spurious date_parse_failed — the resolved value typed cleanly
+        self.assertEqual(type_report["fields"]["data_cut_off_date"]["parse_failures"], 0)
+        self.assertFalse(any(i["issue_type"] == "date_parse_failed"
+                             and "data_cut_off_date" in (i.get("field", "") + i.get("canonical_field", ""))
+                             for i in issues.rows))
+
+    def test_missing_run_context_still_surfaces_absent_not_fabricated(self):
+        # If the handoff resolved NO value, the field is a controlled source-absent
+        # item (never fabricated) — unrelated behaviour preserved.
+        rf, df = self._rf(), self._df()
+        contract = self._contract()
+        contract[0]["selected_value_sample"] = ""      # nothing resolved
+        issues = ta._IssueLog()
+        res = ta._materialise_run_context_fields(df, contract, issues)
+        self.assertTrue(res["data_cut_off_date"]["absent"])
+        self.assertTrue(any(i["issue_type"] == "source_absent" for i in issues.rows))
+
+
 if __name__ == "__main__":
     unittest.main()
