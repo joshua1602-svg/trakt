@@ -398,6 +398,11 @@ def build_transformation_package(
     registry_fields = g2.load_registry_fields(registry_path)
     issues = _IssueLog()
 
+    # 6a-pre. Materialise portfolio-level run/source context (e.g. data_cut_off_date)
+    #     FIRST, so type-normalisation reads the handoff's resolved value rather than
+    #     a stale/unparseable raw source column that the resolved value supersedes.
+    run_context_results = _materialise_run_context_fields(df, contract_rows, issues)
+
     # 6a. Type-normalise the source columns already present in the tape. Gate 2
     #     treats ND codes as missing here; ND defaults are (re)materialised below.
     type_report = g2.normalize_types(df, registry_fields, dayfirst=dayfirst)
@@ -407,6 +412,8 @@ def build_transformation_package(
     field_results = _materialise_fields(
         df, contract_rows, asset_defaults, asset_nd_defaults, regime_defaults,
         registry_fields, issues)
+    # Run-context fields were materialised pre-typing; keep their results.
+    field_results.update(run_context_results)
 
     # 7. Apply Gate 2 config-driven asset defaults (reuse) as a backstop fill.
     g2.apply_defaults(df, asset_defaults)
@@ -506,6 +513,29 @@ def _materialise_run_context(
             "value": iso, "run_context": True, "source": source}
 
 
+def _materialise_run_context_fields(
+    df: pd.DataFrame, contract_rows: List[Dict[str, Any]], issues: _IssueLog,
+) -> Dict[str, Dict[str, Any]]:
+    """Materialise portfolio-level run/source context values (e.g.
+    ``data_cut_off_date``) BEFORE type-normalisation.
+
+    The handoff resolves ONE authoritative cut-off value for the whole tape; it
+    supersedes any per-loan raw source column. Materialising it first means Gate 2
+    types the resolved value — not a stale/unparseable raw column that the resolved
+    value replaces — so a valid resolved date never yields a spurious
+    ``date_parse_failed``.
+    """
+    results: Dict[str, Dict[str, Any]] = {}
+    for row in contract_rows:
+        cls = row.get("handoff_classification", "")
+        canonical = (row.get("canonical_field") or "").strip()
+        if cls in (oh.HC_SOURCE_CONTEXT_MAPPED, oh.HC_RUN_CONTEXT_MAPPED) and canonical:
+            results[row.get("target_field", "")] = _materialise_run_context(
+                df, row.get("target_field", ""), canonical, row.get("esma_code", ""),
+                row.get("selected_value_sample", ""), cls, issues)
+    return results
+
+
 def _materialise_asset_override(
     df: pd.DataFrame,
     tf: str,
@@ -561,11 +591,11 @@ def _materialise_fields(
         cls = row.get("handoff_classification", "")
         contract_value = row.get("selected_value_sample", "")
 
-        # Portfolio-level run/source context fields (e.g. data_cut_off_date) are a
-        # single value for the WHOLE tape — materialise into every row.
+        # Portfolio-level run/source context fields (e.g. data_cut_off_date) are
+        # materialised BEFORE type-normalisation by _materialise_run_context_fields
+        # (so Gate 2 types the handoff's resolved value, not a stale raw column) —
+        # skip them here.
         if cls in (oh.HC_SOURCE_CONTEXT_MAPPED, oh.HC_RUN_CONTEXT_MAPPED) and canonical:
-            results[tf] = _materialise_run_context(
-                df, tf, canonical, esma_code, contract_value, cls, issues)
             continue
 
         materialise = cls in (
