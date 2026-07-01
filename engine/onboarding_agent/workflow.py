@@ -675,6 +675,8 @@ def run_operator_workflow(
     asset_config: str = "",
     reporting_date: str = "",
     override_reporting_date: bool = False,
+    reporting_period: str = "",
+    managed_service: bool = False,
     product_profile: str = "",
     enable_context_resolver: Optional[bool] = None,
 ) -> Dict[str, Any]:
@@ -777,7 +779,9 @@ def run_operator_workflow(
                 asset_config_path=(asset_config if is_annex2 else ""),
                 decisions_supplied_file=(target_first_decisions or ""),
                 reporting_date=reporting_date,
-                override_reporting_date=override_reporting_date)
+                override_reporting_date=override_reporting_date,
+                reporting_period=reporting_period,
+                managed_service=managed_service)
             if handoff:
                 m = handoff["manifest"]
                 summary["onboarding_handoff_manifest_json"] = handoff["manifest_json_path"]

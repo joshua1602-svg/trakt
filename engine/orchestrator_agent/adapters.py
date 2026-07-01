@@ -175,7 +175,8 @@ class RealAgentAdapters(AgentAdapters):
                  mapping_config_path: Optional[str] = None,
                  full_pipeline: bool = False,
                  reporting_period: Optional[str] = None,
-                 enable_llm_advisor: bool = False):
+                 enable_llm_advisor: bool = False,
+                 managed_service: bool = False):
         self.registry = registry
         self.client_name = client_name
         self.onboarding_mode = onboarding_mode
@@ -198,6 +199,10 @@ class RealAgentAdapters(AgentAdapters):
         # operator can accept them via ops approve-recommendations. Advisory only —
         # deterministic mapping stays the source of truth; off for recurring packs.
         self.enable_llm_advisor = enable_llm_advisor
+        # managed_service: this is headless blob-triggered execution. Run context
+        # (data_cut_off_date, …) MUST originate from the blob event / folder period,
+        # never a CLI-supplied value — so cli_fallback provenance is impossible here.
+        self.managed_service = managed_service
 
     def onboard(self, spec: PortfolioSpec, work_dir: Path) -> StepResult:
         """Run onboarding for one portfolio. The ``mode`` is the MI-vs-regime
@@ -233,6 +238,8 @@ class RealAgentAdapters(AgentAdapters):
             enable_mapping_review=build_coverage,
             enable_llm_target_advisor=self.enable_llm_advisor,
             reporting_date=(self.reporting_period or ""),
+            reporting_period=(self.reporting_period or ""),
+            managed_service=self.managed_service,
             target_first_decisions=((self.mapping_config_path or "") if deterministic else ""))
 
         if self.onboarding_mode == "mi_only":
@@ -289,7 +296,9 @@ class RealAgentAdapters(AgentAdapters):
                 run_id="run", mode="mi_only",
                 registry=self.registry or "config/system/fields_registry.yaml",
                 aliases_dir=self.aliases_dir,
-                reporting_date=(self.reporting_period or ""))
+                reporting_date=(self.reporting_period or ""),
+                reporting_period=(self.reporting_period or ""),
+                managed_service=self.managed_service)
             if not h:
                 return None
             return h.get("manifest_json_path") or str(

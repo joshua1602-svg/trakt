@@ -198,6 +198,101 @@ class TestExtraction(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------- #
+# Managed-service run context: blob folder period only, never cli_fallback
+# --------------------------------------------------------------------------- #
+class TestManagedServiceRunContext(unittest.TestCase):
+    """In managed-service (blob-triggered) execution, run context must originate
+    from the blob event / folder hierarchy — a ``.../2025-11-30/`` pack resolves
+    data_cut_off_date=2025-11-30 with folder_period provenance, and there is NO
+    code path that produces a cli_fallback source (no operator/LLM involvement)."""
+
+    def _project(self):
+        root = Path(tempfile.mkdtemp(prefix="rc_ms_"))
+        central = _mk_project(
+            root, inventory_rows=[{"file_name": "LoanExtract.csv"}],
+            central_cols=["loan_identifier"], central_rows=[["LN1"]])
+        return root, central
+
+    def test_folder_period_resolves_exact_date(self):
+        # Blob path ending in /2025-11-30/ -> data_cut_off_date=2025-11-30.
+        root, central = self._project()
+        r = rc.extract_data_cut_off_date(
+            root, central, folder_period="2025-11-30", managed_service=True)
+        self.assertEqual(r["value"], "2025-11-30")
+        self.assertEqual(r["source"], rc.SRC_FOLDER_PERIOD)
+        self.assertFalse(r["missing"])
+        self.assertFalse(r["conflict"])
+
+    def test_folder_period_month_resolves_month_end(self):
+        # A month period (2025-11) resolves to month-end, still folder_period.
+        root, central = self._project()
+        r = rc.extract_data_cut_off_date(
+            root, central, folder_period="2025-11", managed_service=True)
+        self.assertEqual(r["value"], "2025-11-30")
+        self.assertEqual(r["source"], rc.SRC_FOLDER_PERIOD)
+
+    def test_managed_service_never_uses_cli_fallback(self):
+        # Even if a CLI value is passed, managed-service mode ignores it entirely:
+        # with no folder/source signal the value is surfaced as missing, never
+        # smuggled in as cli_fallback.
+        root, central = self._project()
+        r = rc.extract_data_cut_off_date(
+            root, central, cli_reporting_date="2025-06-30", managed_service=True)
+        self.assertNotEqual(r["source"], rc.SRC_CLI_FALLBACK)
+        self.assertTrue(r["missing"])
+        self.assertEqual(r["value"], "")
+
+    def test_managed_service_folder_beats_cli(self):
+        # The blob folder period wins outright; the CLI value is never consulted.
+        root, central = self._project()
+        r = rc.extract_data_cut_off_date(
+            root, central, folder_period="2025-11-30",
+            cli_reporting_date="2025-06-30", managed_service=True)
+        self.assertEqual(r["value"], "2025-11-30")
+        self.assertEqual(r["source"], rc.SRC_FOLDER_PERIOD)
+
+    def test_source_column_still_beats_folder(self):
+        # A genuine data_cut_off_date column in the pack is more authoritative than
+        # the folder period — still deterministic, still no cli_fallback.
+        root = Path(tempfile.mkdtemp(prefix="rc_ms_col_"))
+        central = _mk_project(
+            root, inventory_rows=[{"file_name": "LoanExtract.csv"}],
+            central_cols=["data_cut_off_date"], central_rows=[["2025-11-30"], ["2025-11-30"]])
+        r = rc.extract_data_cut_off_date(
+            root, central, folder_period="2025-10-31", managed_service=True)
+        self.assertEqual(r["value"], "2025-11-30")
+        self.assertEqual(r["source"], rc.SRC_SOURCE_COLUMN)
+
+    # -- handoff wrapper plumbs the managed-service flag + folder period --- #
+    def test_handoff_resolver_forwards_managed_service(self):
+        root, central = self._project()
+        r = oh._resolve_run_context(
+            root, root, str(central),
+            reporting_period="2025-11-30", managed_service=True)
+        self.assertEqual(r["value"], "2025-11-30")
+        self.assertEqual(r["source"], rc.SRC_FOLDER_PERIOD)
+
+    def test_handoff_resolver_managed_ignores_cli_reporting_date(self):
+        # A stray reporting_date supplied to a managed-service build is inert: it
+        # can never surface as cli_fallback provenance.
+        root, central = self._project()
+        r = oh._resolve_run_context(
+            root, root, str(central),
+            reporting_date="2025-06-30", managed_service=True)
+        self.assertNotEqual(r["source"], rc.SRC_CLI_FALLBACK)
+        self.assertTrue(r["missing"])
+
+    def test_interactive_cli_still_allows_fallback(self):
+        # Interactive CLI (managed_service=False) keeps the reporting_date fallback.
+        root, central = self._project()
+        r = oh._resolve_run_context(
+            root, root, str(central),
+            reporting_date="2025-06-30", managed_service=False)
+        self.assertEqual(r["value"], "2025-06-30")
+        self.assertEqual(r["source"], rc.SRC_CLI_FALLBACK)
+
+
+# --------------------------------------------------------------------------- #
 # Integration: handoff context -> transformation -> validation
 # --------------------------------------------------------------------------- #
 

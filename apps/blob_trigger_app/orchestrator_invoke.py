@@ -217,6 +217,7 @@ def default_orchestrator_invoker(
         full_pipeline=full_pipeline,   # Gate 2 will run → onboarding must emit the handoff
         reporting_period=reporting_period,   # derive reporting_date from the folder period
         enable_llm_advisor=enable_llm_advisor,
+        managed_service=True,   # headless: run context from blob/folder only, no cli_fallback
     )
     spec = PortfolioSpec(
         source_portfolio_id=source_portfolio_id, input=input_path,

@@ -583,8 +583,16 @@ def _resolve_run_context(
     project_dir: Path, output_root: Path, central_path: str, *,
     asset_config_path: str = "", regime_config_path: str = "",
     reporting_date: str = "", override_reporting_date: bool = False,
+    reporting_period: str = "", run_id: str = "", managed_service: bool = False,
 ) -> Dict[str, Any]:
-    """Resolve portfolio-level context fields (currently data_cut_off_date)."""
+    """Resolve portfolio-level context fields (currently data_cut_off_date).
+
+    In managed-service mode the blob-event ``reporting_period`` (the folder
+    period) is consumed as the first-class ``folder_period`` source and all CLI
+    fallback semantics are disabled — there is no path to a ``cli_fallback``
+    provenance. In interactive CLI mode ``reporting_date`` remains an accepted
+    fallback/override.
+    """
     try:
         from engine.onboarding_agent import run_context as rc
         return rc.extract_data_cut_off_date(
@@ -592,7 +600,10 @@ def _resolve_run_context(
             asset_config_path=asset_config_path,
             regime_config_path=regime_config_path,
             cli_reporting_date=reporting_date,
-            override_reporting_date=override_reporting_date)
+            override_reporting_date=override_reporting_date,
+            folder_period=reporting_period,
+            run_id=run_id,
+            managed_service=managed_service)
     except Exception as exc:  # never break the handoff on context extraction
         return {"value": "", "source": "", "source_file": "", "source_location": "",
                 "confidence": 0.0, "candidates": [], "conflict": False,
@@ -671,6 +682,8 @@ def build_handoff_package(
     decisions_supplied_file: str = "",
     reporting_date: str = "",
     override_reporting_date: bool = False,
+    reporting_period: str = "",
+    managed_service: bool = False,
 ) -> Optional[Dict[str, Any]]:
     """Build the governed canonical onboarding handoff package (24–27).
 
@@ -732,7 +745,8 @@ def build_handoff_package(
     run_context = _resolve_run_context(
         project_dir, output_root, central["path"],
         asset_config_path=asset_config_path, regime_config_path=regime_config_path,
-        reporting_date=reporting_date, override_reporting_date=override_reporting_date)
+        reporting_date=reporting_date, override_reporting_date=override_reporting_date,
+        reporting_period=reporting_period, run_id=run_id, managed_service=managed_service)
     context_conflict = _apply_run_context_to_contract(contract, lineage, run_context)
 
     counts = _counts(contract)
