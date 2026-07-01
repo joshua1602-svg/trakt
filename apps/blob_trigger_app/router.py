@@ -379,9 +379,13 @@ def handle_blob_event(
     elif orch_status == "halted":
         manifest["status"] = STATUS_HALTED
         manifest["event_decision"] = EVT_KNOWN_SOURCE_HALTED
+        # Explain the halt (stage/reason/blocking decisions/run_state.json path)
+        # so the manifest says WHY central_canonical_path is null.
+        manifest["orchestrator_diagnostics"] = _halt_diagnostics(result)
     else:
         manifest["status"] = STATUS_FAILED
         manifest["event_decision"] = EVT_FAILED
+        manifest["orchestrator_diagnostics"] = _halt_diagnostics(result)
         manifest["error"] = "; ".join((result or {}).get("blockers") or []) or "orchestrator_failed"
     # Mark the pack processed (idempotency) on any orchestrator-invoking outcome.
     _write_processed(out_dir, manifest, schema_info, result)
@@ -529,6 +533,42 @@ def _inv(result: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     r = result or {}
     return {"run_id": r.get("run_id"), "orchestrator_status": r.get("status"),
             "central_canonical_path": r.get("central_canonical_path")}
+
+
+def _halt_diagnostics(result: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Manifest diagnostics for a non-done orchestrator outcome.
+
+    Surfaces the halt stage/reason, blocking decisions, registry-gap count,
+    validation errors and the path to the resumable ``run_state.json`` so the
+    event manifest EXPLAINS why ``central_canonical_path`` is null instead of
+    silently reporting ``orchestrator_status=halted``. Best effort: falls back
+    to run-level blockers / state_path when the invoker predates the
+    ``diagnostics`` block (e.g. a recording stub).
+    """
+    r = result or {}
+    diag = r.get("diagnostics") or {}
+    halt_stage = diag.get("halt_stage")
+    halt_reason = (diag.get("halt_reason")
+                   or "; ".join(r.get("blockers") or []) or None)
+    out: Dict[str, Any] = {
+        "halt_stage": halt_stage,
+        "halt_reason": halt_reason,
+        "blocking_decisions": diag.get("blocking_decisions") or (r.get("blockers") or []),
+        "registry_gap_count": diag.get("registry_gap_count", 0),
+        "validation_errors": diag.get("validation_errors") or [],
+        "run_state_path": diag.get("run_state_path") or r.get("state_path"),
+    }
+    # Say plainly why there is no central canonical.
+    if r.get("central_canonical_path"):
+        out["central_canonical_unavailable_reason"] = None
+    else:
+        where = f" at stage {halt_stage}" if halt_stage else ""
+        because = f": {halt_reason}" if halt_reason else ""
+        out["central_canonical_unavailable_reason"] = (
+            f"orchestrator {r.get('status') or 'did not complete'}{where} before "
+            f"the central canonical was assembled — no platform canonical was "
+            f"published{because}")
+    return out
 
 
 def _derive_type(source_portfolio_id: str) -> Optional[str]:

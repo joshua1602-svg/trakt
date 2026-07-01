@@ -902,6 +902,48 @@ class TestApprovalAndPersistence(unittest.TestCase):
         for u in regime_uris:
             self.assertIn("processed-v2/regime/ERE/2025-11-30", u)
 
+    def test_halted_run_manifest_carries_diagnostic_reason(self):
+        # A recurring approved pack whose orchestrator run HALTS must not silently
+        # report orchestrator_status=halted with a null central canonical — the
+        # event manifest has to EXPLAIN the halt (stage/reason/run_state.json path).
+        self.registry.upsert(SourceRecord(
+            client_id="ERE", source_portfolio_id="direct_001", dataset="funded",
+            frequency="monthly", source_portfolio_type="direct", approved_mapping_id="m1",
+            mapping_config_path="config/m1.yaml",
+            expected_schema_fingerprint=self.fp.fingerprint, status=STATUS_ACTIVE))
+
+        class DiagnosticInvoker:
+            def __call__(self, **kw):
+                return {
+                    "run_id": "orun_halt", "status": "halted",
+                    "central_canonical_path": None,
+                    "blockers": ["direct_001/transform: onboarding handoff not ready"],
+                    "state_path": "/tmp/trakt/blob_trigger/orun_halt/run_state.json",
+                    "diagnostics": {
+                        "halt_stage": "direct_001/transform",
+                        "halt_reason": "onboarding handoff not ready_for_transformation_validation",
+                        "blocking_decisions": ["unresolved mapping gaps / blocking decisions"],
+                        "registry_gap_count": 3,
+                        "validation_errors": [],
+                        "run_state_path": "/tmp/trakt/blob_trigger/orun_halt/run_state.json",
+                    },
+                }
+
+        m = self._marker(
+            "raw-v2", "raw-v2/ERE/direct/funded/monthly/direct_001/2025-11-30/_READY.json",
+            DiagnosticInvoker())
+        self.assertEqual(m["status"], "halted")
+        self.assertIsNone(m["central_canonical_path"])
+        diag = m["orchestrator_diagnostics"]
+        self.assertEqual(diag["halt_stage"], "direct_001/transform")
+        self.assertIn("ready_for_transformation_validation", diag["halt_reason"])
+        self.assertEqual(diag["registry_gap_count"], 3)
+        self.assertEqual(diag["run_state_path"],
+                         "/tmp/trakt/blob_trigger/orun_halt/run_state.json")
+        # The manifest explains WHY the central canonical is null.
+        self.assertIsNotNone(diag["central_canonical_unavailable_reason"])
+        self.assertIn("direct_001/transform", diag["central_canonical_unavailable_reason"])
+
     def test_mi_locator_reads_latest_platform_canonical(self):
         # persist a platform canonical, then resolve it through the MI locator
         self.registry.upsert(SourceRecord(
@@ -1269,6 +1311,33 @@ class TestFullPipelineRouting(unittest.TestCase):
         cap = self._capture_invoke(target="all", full_pipeline=True)
         self.assertEqual(cap["onboarding_mode"], "regulatory_mi")   # Annex 2 / combined
         self.assertTrue(cap["full_pipeline"])
+
+    def test_run_diagnostics_pins_first_halted_step_from_run_state(self):
+        # _run_diagnostics walks a REAL RunState and pins the first halted stage,
+        # its reason, registry-gap count and the run_state.json path — the data the
+        # manifest surfaces to explain a null central canonical.
+        from apps.blob_trigger_app.orchestrator_invoke import _run_diagnostics
+        from engine.orchestrator_agent.state import (
+            RunState, PortfolioState, STEP_DONE, STEP_HALTED)
+        st = RunState(run_id="orun_it", client_id="ERE", target="mi",
+                      out_root="/tmp/trakt/blob_trigger", created_at=_NOW)
+        p = PortfolioState(source_portfolio_id="direct_001", source_portfolio_type="direct")
+        onb = p.step("onboard")
+        onb.status = STEP_DONE
+        onb.readiness = {"registry_gap_count": 2}
+        tr = p.step("transform")
+        tr.status = STEP_HALTED
+        tr.blockers = ["onboarding handoff not ready_for_transformation_validation — pending review"]
+        st.portfolios.append(p)
+        st.status = STEP_HALTED
+        st.blockers = ["direct_001/transform: onboarding handoff not ready"]
+
+        diag = _run_diagnostics(st)
+        self.assertEqual(diag["halt_stage"], "direct_001/transform")
+        self.assertIn("ready_for_transformation_validation", diag["halt_reason"])
+        self.assertEqual(diag["blocking_decisions"], tr.blockers)
+        self.assertEqual(diag["registry_gap_count"], 2)
+        self.assertTrue(diag["run_state_path"].endswith("orun_it/run_state.json"))
 
 
 if __name__ == "__main__":
