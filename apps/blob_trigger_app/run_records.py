@@ -107,15 +107,27 @@ def load_run_record(storage: Storage, layout: Layout,
         return None
 
 
+def _is_run_record_uri(uri: str, runs_prefix: str) -> bool:
+    """True only for a TOP-LEVEL run record ``runs/{pack_key}.json`` — never a
+    nested artefact (``runs/{pack_key}/gates/…``, ``…/onboarding/…``, ``…/llm/…``),
+    which also ends in .json and would otherwise pollute the ledger."""
+    rel = uri[len(runs_prefix):].lstrip("/")
+    return rel.endswith(".json") and "/" not in rel
+
+
 def list_run_records(storage: Storage, layout: Layout,
                      *, statuses: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    prefix = layout.runs_prefix()
     out: List[Dict[str, Any]] = []
-    for uri in storage.list(layout.runs_prefix()):
-        if not uri.endswith(".json"):
+    for uri in storage.list(prefix):
+        if not _is_run_record_uri(uri, prefix):
             continue
         try:
             rec = json.loads(storage.read_text(uri))
         except Exception:  # noqa: BLE001
+            continue
+        # A genuine run record always carries a pack_key.
+        if not isinstance(rec, dict) or not rec.get("pack_key"):
             continue
         if statuses is None or rec.get("status") in statuses:
             out.append(rec)
@@ -137,5 +149,13 @@ def find_by_run_id(storage: Storage, layout: Layout,
 
 def resolve(storage: Storage, layout: Layout,
             ref: str) -> Optional[Dict[str, Any]]:
-    """Resolve a record by run_id first, then by pack_key (``show`` takes either)."""
-    return find_by_run_id(storage, layout, ref) or load_run_record(storage, layout, ref)
+    """Resolve a record by run_id or pack_key. Uses the SAME listing as
+    ``list-halted`` as a fallback, so anything ``list-halted`` shows is always
+    retrievable by ``show`` (no direct-load vs. list inconsistency)."""
+    direct = load_run_record(storage, layout, ref)
+    if direct is not None:
+        return direct
+    for rec in list_run_records(storage, layout):
+        if rec.get("run_id") == ref or rec.get("pack_key") == ref:
+            return rec
+    return None

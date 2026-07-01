@@ -106,6 +106,23 @@ def normalize_to_iso(raw: Any, *, dayfirst: bool = True) -> Optional[str]:
     return None
 
 
+def folder_period_to_iso(token: str) -> Optional[str]:
+    """Resolve a blob folder / period token to an ISO observation date.
+
+    A full ISO date (``2025-11-30``) is preserved exactly; a month period
+    (``2025-11`` / ``202511``) resolves to month-end. Returns ``None`` for a
+    token that is not a recognisable period (e.g. a bare year or an ISO week /
+    quarter we do not month-map) — never invents a date.
+    """
+    if not token:
+        return None
+    iso = normalize_to_iso(token)
+    if iso:
+        return iso
+    cands = dates_from_period_token(token)
+    return cands[0] if cands else None
+
+
 def _valid_ymd(y: int, mo: int, d: int) -> bool:
     if not (1900 <= y <= 2100 and 1 <= mo <= 12):
         return False
@@ -244,6 +261,8 @@ def extract_data_cut_off_date(
     override_reporting_date: bool = False,
     run_id: str = "",
     input_dir: str | Path = "",
+    folder_period: str = "",
+    managed_service: bool = False,
 ) -> Dict[str, Any]:
     """Resolve a single portfolio-level ``data_cut_off_date`` with full evidence.
 
@@ -251,10 +270,21 @@ def extract_data_cut_off_date(
         1. explicit operator override;
         2. source column values (tape date);
         3. a date embedded in a source file name;
-        4. a folder period (e.g. ``input/2025-10`` -> ``2025-10-31``);
+        4. a folder period — the blob-event ``folder_period`` (e.g. ``2025-11-30``)
+           and any ``input/2025-10`` period folder -> month/observation date;
         5. the run id period (e.g. ``mi_2025_10`` -> ``2025-10-31``);
         6. a configured static reporting date;
-        7. a plain CLI fallback.
+        7. a plain CLI fallback (interactive CLI only).
+
+    ``folder_period`` is the authoritative period carried by the blob event/folder
+    hierarchy in managed-service execution and is consumed as a first-class
+    ``folder_period`` run-context source.
+
+    ``managed_service`` removes ALL CLI-derived semantics: a CLI-supplied value is
+    never accepted (neither as an override nor a fallback), so there is no path in
+    managed-service mode that yields ``source == cli_fallback``. When nothing
+    resolves from the blob event / folder / source data, the value is surfaced as
+    ``missing`` (never fabricated, never CLI-derived).
 
     Returns a dict with the resolved ``value`` (ISO or ""), ``source`` label,
     ``source_file``, ``source_location``, ``confidence``, the full ``candidates``
@@ -293,8 +323,16 @@ def extract_data_cut_off_date(
                                   "source_file": fname,
                                   "source_location": "filename", "confidence": 0.6})
 
-    # Tier 4a: folder period (e.g. an `input/2025-10` period folder -> month end).
+    # Tier 4a: folder period. The blob-event `folder_period` is the authoritative
+    # managed-service signal (consumed as a first-class run-context source); any
+    # `input/2025-10` period folder is also considered.
     folder_vals: List[Dict[str, Any]] = []
+    fp_iso = folder_period_to_iso(folder_period)
+    if fp_iso:
+        folder_vals.append({"value": fp_iso, "source": SRC_FOLDER_PERIOD,
+                            "source_file": "",
+                            "source_location": f"blob_folder_period:{folder_period}",
+                            "confidence": 0.75})
     period_dirs: List[str] = []
     if input_dir:
         ip = Path(input_dir)
@@ -327,8 +365,11 @@ def extract_data_cut_off_date(
                             "source_location": f"config:{cfg_hit['key']}",
                             "confidence": 0.9})
 
-    # CLI value (override or fallback)
-    cli_iso = normalize_to_iso(cli_reporting_date) if cli_reporting_date else None
+    # CLI value (override or fallback) — interactive CLI only. In managed-service
+    # mode all CLI-derived semantics are removed: no override, no fallback, so a
+    # cli_fallback source is impossible (run context comes from blob/folder/data).
+    cli_iso = (normalize_to_iso(cli_reporting_date)
+               if (cli_reporting_date and not managed_service) else None)
 
     candidates = source_vals + filename_vals + folder_vals + runid_vals + config_vals
     if cli_iso:

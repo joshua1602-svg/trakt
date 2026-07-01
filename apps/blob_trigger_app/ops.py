@@ -349,6 +349,13 @@ def _print_halted(rows: List[Dict[str, Any]]) -> None:
         print(f"    run_id={r.get('run_id')}  approval_id={r.get('approval_id')}  "
               f"source={r.get('source_portfolio_id')}")
         print(f"    why: {r.get('event_decision')}  →  next: {na.get('action')}")
+        # Surface the failure reason inline so a failed/errored run explains itself
+        # here — no second command needed.
+        reason = (r.get("error")
+                  or (r.get("run_summary") or {}).get("central_canonical_unavailable_reason")
+                  or na.get("summary"))
+        if reason:
+            print(f"    reason: {reason}")
         if na.get("command"):
             print(f"    $ {na['command']}")
         print()

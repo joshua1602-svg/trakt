@@ -467,6 +467,43 @@ class TestRunLedgerAndCli(unittest.TestCase):
         finally:
             os.environ.pop("TRAKT_LOCAL_BLOB_ROOT", None)
 
+    # -- list/show consistency with nested gate artefacts present -------- #
+    def test_list_halted_and_show_agree_with_nested_gate_artifacts(self):
+        """Regression: a FAILED run (run_id=None) must be listable by list-halted
+        AND retrievable by ``show``/``show-transform`` via its pack_key — even
+        when nested gate ``diagnostics.json`` artefacts (which also carry a
+        ``status`` field) exist under ``runs/{pack_key}/…``. Previously the nested
+        artefacts polluted the ledger and ``show`` could not resolve the record."""
+        pack_key = "ERE_direct_001_funded_monthly_2025-11-30"
+        # A terminal FAILED record with no orchestrator run_id (router error path).
+        record = RR.build_run_record({
+            "is_pack_marker": True, "pack_key": pack_key,
+            "orchestrator_run_id": None, "status": "failed",
+            "event_decision": "failed", "source_portfolio_id": "direct_001",
+            "error": "no data files found in the pack folder to fingerprint",
+            "created_at": "2026-07-01T00:00:00Z",
+        })
+        RR.write_run_record(self.storage, self.layout, record)
+        # Nested gate artefacts that ALSO end in .json and carry a "status".
+        self.storage.write_text(
+            self.layout.runs_prefix() + pack_key + "/gates/transform/diagnostics.json",
+            json.dumps({"status": "halted", "gate": "transform"}))
+        self.storage.write_text(
+            self.layout.runs_prefix() + pack_key + "/onboarding/24_handoff.json",
+            json.dumps({"status": "failed"}))
+
+        # list-halted returns exactly the one real run record (no artefact noise).
+        halted = RR.list_halted(self.storage, self.layout)
+        self.assertEqual(len(halted), 1)
+        self.assertEqual(halted[0]["pack_key"], pack_key)
+        self.assertIsNone(halted[0]["run_id"])
+        # Anything list-halted shows, show must resolve — by pack_key here since
+        # run_id is None.
+        resolved = RR.resolve(self.storage, self.layout, pack_key)
+        self.assertIsNotNone(resolved)
+        self.assertEqual(resolved["pack_key"], pack_key)
+        self.assertEqual(resolved["error"], record["error"])
+
 
 # --------------------------------------------------------------------------- #
 # 3. Generic gate framework + LLM advisory + debug-storage
