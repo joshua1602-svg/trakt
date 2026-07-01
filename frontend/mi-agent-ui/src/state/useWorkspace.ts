@@ -170,6 +170,13 @@ export function useWorkspace(client: AgentClient): Workspace {
         if (cancelled) return;
         const pfs = index.portfolios ?? [];
         setPortfolios(pfs);
+        // Diagnostic: what the store received + how it auto-selected (visible in
+        // the browser console on the live app).
+        console.debug("[useWorkspace] /mi/snapshots", {
+          count: pfs.length,
+          portfolioIds: pfs.map((p) => p.client_id),
+          runsPerPortfolio: pfs.map((p) => p.runs?.length ?? 0),
+        });
         if (pfs.length === 0) return;
         const persistedPf = pfs.find((p) => p.client_id === persisted?.clientId);
         const pf = pfs.length === 1 ? pfs[0] : (persistedPf ?? pfs[pfs.length - 1]);
@@ -185,8 +192,13 @@ export function useWorkspace(client: AgentClient): Workspace {
           setSelectedClientId((cur) => cur ?? pf.client_id);
           setSelectedRunId((cur) => cur ?? run?.run_id ?? null);
         }
+        console.debug("[useWorkspace] auto-selected", {
+          clientId: pf.client_id, runId: run?.run_id ?? null,
+          reportingDate: run?.reporting_date ?? null,
+        });
       })
-      .catch(() => {
+      .catch((err) => {
+        console.warn("[useWorkspace] /mi/snapshots failed", err);
         if (!cancelled) setPortfolios([]);
       });
     return () => {
