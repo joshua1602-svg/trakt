@@ -261,5 +261,76 @@ class TestRunStateSerialization(unittest.TestCase):
             self.assertEqual(reloaded.central_canonical_path, state.central_canonical_path)
 
 
+class TestFullPipelineMI(unittest.TestCase):
+    """Funded MI runs the FULL production path (onboard→transform→validate→stamp)
+    — the same steps as the regulatory/CLI flow — routing to MI, not the lean
+    mi_only shortcut."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.out = self._tmp.name
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_steps_parity_with_cli_regulatory_path(self):
+        from engine.orchestrator_agent.orchestrator import (
+            steps_for_target, onboarding_mode_for_target)
+        # Lean MI shortcut (unchanged default).
+        self.assertEqual(tuple(steps_for_target("mi")), ("onboard", "stamp"))
+        # Full-pipeline MI == the regulatory/CLI steps.
+        self.assertEqual(tuple(steps_for_target("mi", full_pipeline=True)),
+                         ("onboard", "transform", "validate", "stamp"))
+        self.assertEqual(tuple(steps_for_target("mi", full_pipeline=True)),
+                         tuple(steps_for_target("regime")))
+        # Onboarding mode: full MI uses the regulatory onboarding (emits handoff).
+        self.assertEqual(onboarding_mode_for_target("mi"), "mi_only")
+        self.assertEqual(onboarding_mode_for_target("mi", full_pipeline=True),
+                         "regulatory_mi")
+
+    def test_full_pipeline_runs_gate2_gate3_and_routes_to_mi(self):
+        state = run_orchestration(
+            "ERE", _specs(), target="mi", out_root=self.out, adapters=StubAdapters(),
+            created_at=_NOW, run_id="orun_full", full_pipeline=True)
+        self.assertEqual(state.status, STEP_DONE)
+        self.assertTrue(state.full_pipeline)
+        for p in state.portfolios:
+            # Gate 2 (transform) + Gate 3 (validate) DID run, then stamp.
+            for s in ("onboard", "transform", "validate", "stamp"):
+                self.assertEqual(p.step(s).status, STEP_DONE, s)
+        self.assertEqual(state.assemble.status, STEP_DONE)
+        self.assertEqual(state.route.status, STEP_DONE)        # routed to MI
+        self.assertFalse(state.project.done)                   # no regime projection
+        self.assertIsNotNone(state.central_canonical_path)
+
+    def test_validation_failure_blocks_publish(self):
+        state = run_orchestration(
+            "ERE", _specs(), target="mi", out_root=self.out,
+            adapters=StubAdapters(blocking_validate={"direct_001"}),
+            created_at=_NOW, run_id="orun_block", full_pipeline=True)
+        self.assertEqual(state.status, STEP_HALTED)            # halts at validate
+        self.assertIsNone(state.central_canonical_path)        # NOT published
+        self.assertFalse(state.assemble.done)
+
+    def test_force_publish_overrides_validation_failure(self):
+        state = run_orchestration(
+            "ERE", _specs(), target="mi", out_root=self.out,
+            adapters=StubAdapters(blocking_validate={"direct_001"}),
+            created_at=_NOW, run_id="orun_force", full_pipeline=True,
+            force_publish=True)
+        self.assertEqual(state.status, STEP_DONE)              # proceeds past validation
+        self.assertIsNotNone(state.central_canonical_path)     # published anyway
+        self.assertTrue(any("FORCE-PUBLISHED" in b for b in state.blockers))
+
+    def test_lean_mi_unchanged_without_full_pipeline(self):
+        state = run_orchestration(
+            "ERE", _specs(), target="mi", out_root=self.out, adapters=StubAdapters(),
+            created_at=_NOW, run_id="orun_lean")
+        self.assertEqual(state.status, STEP_DONE)
+        for p in state.portfolios:
+            self.assertFalse(p.step("transform").done)         # lean path: no Gate 2/3
+            self.assertFalse(p.step("validate").done)
+
+
 if __name__ == "__main__":
     unittest.main()

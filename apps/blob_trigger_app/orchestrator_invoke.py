@@ -32,17 +32,24 @@ def default_orchestrator_invoker(
     out_dir: str,
     acquisition_date: Optional[str] = None,   # acquired portfolios (from _READY.json/registry)
     seller_name: Optional[str] = None,        # acquired portfolios (from _READY.json/registry)
+    full_pipeline: bool = False,   # funded MI: run the full onboard→transform→validate→stamp
+    force_publish: bool = False,   # publish the platform canonical despite validation exceptions
     regime: str = "ESMA_Annex2",
 ) -> Dict[str, Any]:
-    """Invoke the real Orchestrator Agent. Onboarding mode (mi_only vs
-    regulatory_mi) follows whether regime output is in scope; processing_mode
-    selects discovery vs saved-mapping deterministic processing."""
+    """Invoke the real Orchestrator Agent.
+
+    ``full_pipeline`` (funded MI) runs the production onboard→transform→validate→
+    stamp path — the same the Codespaces CLI uses — so Gate 2 typing and Gate 3
+    validation are applied before the platform canonical is published. It forces
+    the ``regulatory_mi`` onboarding that emits the transform handoff.
+    ``processing_mode`` still selects discovery (new/changed source) vs saved-
+    mapping deterministic processing (recurring approved packs — no LLM)."""
     from engine.orchestrator_agent import run_orchestration
     from engine.orchestrator_agent.adapters import RealAgentAdapters, PortfolioSpec
 
     adapters = RealAgentAdapters(
         client_name=client_id,
-        onboarding_mode=("regulatory_mi" if run_regime else "mi_only"),
+        onboarding_mode=("regulatory_mi" if (run_regime or full_pipeline) else "mi_only"),
         processing_mode=processing_mode,
         mapping_config_path=mapping_config_path,
     )
@@ -58,6 +65,7 @@ def default_orchestrator_invoker(
     state = run_orchestration(
         client_id, [spec], target=target, regime=(regime if run_regime else None),
         out_root=out_dir, adapters=adapters,
+        full_pipeline=full_pipeline, force_publish=force_publish,
         created_at=datetime.now(timezone.utc).isoformat())
     return {
         "run_id": state.run_id,

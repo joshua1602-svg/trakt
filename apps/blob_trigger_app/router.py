@@ -280,6 +280,16 @@ def handle_blob_event(
                                                "reason": "book_type_mismatch"}
         return _emit()
 
+    # Funded MI runs the FULL production pipeline (onboard→transform→validate→
+    # stamp) — the same path the Codespaces CLI uses — so Gate 2 typing and Gate 3
+    # validation are applied before the platform canonical is published.
+    # Pipeline/forecast keep the lean MI path. force_publish (from _READY.json)
+    # publishes despite validation exceptions.
+    full_pipeline = parsed.dataset == "funded"
+    force_publish = bool(meta.get("force_publish"))
+    manifest["full_pipeline"] = full_pipeline
+    manifest["force_publish"] = force_publish
+
     # 4) Route -------------------------------------------------------------
     if decision == DECISION_SCHEMA_DRIFT:
         # Fail closed — never process with a stale mapping.
@@ -311,6 +321,7 @@ def handle_blob_event(
             reporting_period=parsed.reporting_period, input_path=input_for_orch,
             target=sel_target, run_regime=sel_run_regime,
             acquisition_date=acquisition_date, seller_name=seller_name,
+            full_pipeline=full_pipeline, force_publish=force_publish,
             mapping_config_path=None, out_dir=str(out_dir))
         # Approval is human-gated: a new/changed source stops at pending_review.
         manifest["orchestrator_invocation"] = {
@@ -339,6 +350,7 @@ def handle_blob_event(
         reporting_period=parsed.reporting_period, input_path=input_for_orch,
         target=sel_target, run_regime=sel_run_regime,
         acquisition_date=acquisition_date, seller_name=seller_name,
+        full_pipeline=full_pipeline, force_publish=force_publish,
         mapping_config_path=rec.mapping_config_path, out_dir=str(out_dir))
     manifest["orchestrator_invocation"] = {
         "invoked": True, "mode": DECISION_DETERMINISTIC,
