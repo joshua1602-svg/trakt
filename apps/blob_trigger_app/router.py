@@ -19,6 +19,7 @@ from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 
 from .assembler_refresh import AssemblerRefresher, default_assembler_refresher
 from .event_log import make_event_id, write_event_manifest
+from .ops_advice import next_operator_action
 from .orchestrator_invoke import OrchestratorInvoker, default_orchestrator_invoker
 from .path_parser import ParsedPath, PathParseError, parse_blob_path
 from .schema_fingerprint import SchemaInfo, compute_schema_fingerprint
@@ -37,6 +38,9 @@ STATUS_PENDING_REVIEW = "pending_review"
 STATUS_FAILED = "failed"
 STATUS_AWAITING_PACK = "awaiting_pack"          # a data file arrived; waiting for the marker
 STATUS_ALREADY_PROCESSED = "already_processed"  # idempotency: this pack already ran
+
+# Terminal pack outcomes that warrant an operator advisory + durable run record.
+_OPERATOR_STATUSES = (STATUS_PROCESSED, STATUS_HALTED, STATUS_PENDING_REVIEW, STATUS_FAILED)
 
 # Completion marker (Option A). Production uploads ``_READY.json`` last; its
 # JSON body may carry expected_files / target / regime_required / seller_name /
@@ -145,13 +149,30 @@ def handle_blob_event(
     }
 
     def _emit() -> Dict[str, Any]:
-        """Write the event manifest locally and (if configured) durably."""
+        """Write the event manifest locally and (if configured) durably.
+
+        For terminal pack outcomes, attach the actionable ``next_action``
+        advisory (approve / promote / rerun / fix_data_supply + exact command)
+        and persist an operator run record so ``ops list-halted`` / ``ops show``
+        can drive the feedback loop.
+        """
+        if manifest.get("is_pack_marker") and manifest.get("status") in _OPERATOR_STATUSES:
+            try:
+                manifest["next_action"] = next_operator_action(manifest)
+            except Exception as exc:  # noqa: BLE001 — advisory is best effort
+                manifest.setdefault("persist_errors", []).append(f"next_action: {exc}")
         write_event_manifest(manifest, out_dir)
         if persistence is not None:
             try:
                 manifest["persisted_event_uri"] = persistence.persist_event_manifest(manifest)
             except Exception as exc:  # noqa: BLE001 — never fail the event on audit write
                 manifest.setdefault("persist_errors", []).append(f"event_manifest: {exc}")
+            try:
+                uri = persistence.persist_run_record(manifest)
+                if uri:
+                    manifest["persisted_run_uri"] = uri
+            except Exception as exc:  # noqa: BLE001 — never fail the event on ledger write
+                manifest.setdefault("persist_errors", []).append(f"run_record: {exc}")
         return manifest
 
     # 1) Parse path (fail closed) -----------------------------------------
@@ -260,6 +281,7 @@ def handle_blob_event(
     input_for_orch = (input_dir_override
                       or (str(Path(local_input_path).parent) if local_input_path
                           else parsed.blob_path))
+    manifest["input_dir"] = input_for_orch
 
     # acquired-portfolio metadata (marker wins; registry record may also carry it).
     acquisition_date = meta.get("acquisition_date") or getattr(rec, "acquisition_date", None)
@@ -328,6 +350,10 @@ def handle_blob_event(
             "invoked": True, "mode": DECISION_SOURCE_ONBOARDING,
             "target": sel_target, "run_regime": sel_run_regime, **_inv(result)}
         manifest["orchestrator_run_id"] = (result or {}).get("run_id")
+        # Surface any onboarding recommendations/diagnostics so the operator can
+        # review them before approving the mapping.
+        if (result or {}).get("status") != "done":
+            manifest["orchestrator_diagnostics"] = _halt_diagnostics(result)
         manifest["status"] = STATUS_PENDING_REVIEW
         manifest["event_decision"] = EVT_NEW_SOURCE_PENDING
         _upsert_source(registry, parsed, schema_info, status=STATUS_PENDING_REVIEW,
@@ -556,6 +582,7 @@ def _halt_diagnostics(result: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         "blocking_decisions": diag.get("blocking_decisions") or (r.get("blockers") or []),
         "registry_gap_count": diag.get("registry_gap_count", 0),
         "validation_errors": diag.get("validation_errors") or [],
+        "mapping_recommendations": diag.get("mapping_recommendations") or [],
         "run_state_path": diag.get("run_state_path") or r.get("state_path"),
     }
     # Say plainly why there is no central canonical.

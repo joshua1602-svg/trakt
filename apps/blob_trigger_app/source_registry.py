@@ -32,6 +32,7 @@ class SourceRecord:
     source_system: Optional[str] = None          # lender / servicer where known
     approved_mapping_id: Optional[str] = None
     mapping_config_path: Optional[str] = None
+    mapping_version: int = 0                      # bumped on each promote
     expected_schema_fingerprint: Optional[str] = None
     expected_columns: List[str] = field(default_factory=list)
     last_successful_run_id: Optional[str] = None

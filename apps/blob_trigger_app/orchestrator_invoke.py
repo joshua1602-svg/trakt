@@ -7,6 +7,7 @@ is the single seam the trigger calls. The default implementation wraps
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -38,6 +39,8 @@ def _run_diagnostics(state: Any) -> Dict[str, Any]:
 
     def _reason(step: Any) -> str:
         return "; ".join(getattr(step, "blockers", None) or []) or getattr(step, "message", "") or ""
+
+    mapping_recommendations = _mapping_recommendations(state)
 
     # Pull registry-gap / validation signal from wherever it surfaced, even when
     # the halt was at a later stage (diligence wants the full picture).
@@ -95,8 +98,48 @@ def _run_diagnostics(state: Any) -> Dict[str, Any]:
         "blocking_decisions": blocking_decisions,
         "registry_gap_count": registry_gap_count,
         "validation_errors": validation_errors,
+        "mapping_recommendations": mapping_recommendations,
         "run_state_path": str(state.state_path()),
     }
+
+
+def _mapping_recommendations(state: Any) -> List[Dict[str, Any]]:
+    """Best-effort: surface the onboarding agent's mapping recommendations /
+    unresolved decisions from each portfolio's handoff manifest, so an operator
+    can review + approve them from the CLI. Never raises."""
+    recs: List[Dict[str, Any]] = []
+    for p in getattr(state, "portfolios", []) or []:
+        try:
+            manifest_path = p.step("onboard").manifest_path
+        except Exception:  # noqa: BLE001
+            continue
+        if not manifest_path:
+            continue
+        try:
+            data = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            continue
+        # The handoff exposes recommendations under a few possible keys across
+        # onboarding modes — normalise whatever is present into a flat list.
+        found = None
+        for key in ("mapping_recommendations", "pending_decisions", "decisions",
+                    "unmapped_fields", "mapping_review", "recommendations"):
+            val = data.get(key)
+            if val:
+                found = val
+                break
+        if found is None:
+            continue
+        items = found if isinstance(found, list) else [found]
+        for item in items:
+            rec: Dict[str, Any] = {"source_portfolio_id": p.source_portfolio_id,
+                                   "handoff_manifest": manifest_path}
+            if isinstance(item, dict):
+                rec.update(item)
+            else:
+                rec["field"] = item
+            recs.append(rec)
+    return recs
 
 
 def default_orchestrator_invoker(

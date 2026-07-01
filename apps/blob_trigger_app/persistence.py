@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from . import approvals as _approvals
+from . import run_records as _run_records
 from .layout import Layout
 from .source_registry import SourceRegistry
 from .storage import Storage
@@ -57,6 +58,26 @@ class ProductionPersistence:
             _persist_step("persist_event_manifest", uri)
             raise
         return uri
+
+    # -- operator run ledger ----------------------------------------------- #
+    def persist_run_record(self, manifest: Dict[str, Any]) -> Optional[str]:
+        """Durably record a terminal run outcome for the operator CLI."""
+        uri = None
+        try:
+            uri = self.layout.run_uri(manifest.get("pack_key") or "unknown")
+            return _run_records.persist_from_manifest(self.storage, self.layout, manifest)
+        except Exception:
+            _persist_step("persist_run_record", uri)
+            raise
+
+    def load_run_record(self, pack_key: str) -> Optional[Dict[str, Any]]:
+        return _run_records.load_run_record(self.storage, self.layout, pack_key)
+
+    def list_halted_runs(self) -> List[Dict[str, Any]]:
+        return _run_records.list_halted(self.storage, self.layout)
+
+    def resolve_run_record(self, ref: str) -> Optional[Dict[str, Any]]:
+        return _run_records.resolve(self.storage, self.layout, ref)
 
     # -- approvals --------------------------------------------------------- #
     def write_pending_approval(self, **kw) -> Dict[str, Any]:

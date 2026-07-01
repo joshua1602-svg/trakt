@@ -215,8 +215,40 @@ python -m apps.blob_trigger_app.approvals promote <approval_id>   # → active r
 ```
 
 `promote` writes an `active` registry entry (approved mapping + expected
-fingerprint); subsequent packs for that source route deterministically. (Local
-runs add `--local-root .localblob` to use the filesystem-emulated store.)
+fingerprint, and bumps `mapping_version`); subsequent packs for that source route
+deterministically. (Local runs add `--local-root .localblob` to use the
+filesystem-emulated store.)
+
+## Operator feedback loop (`ops` CLI)
+
+Every terminal pack outcome is written to a durable **run ledger**
+(`trakt-state/runs/{pack_key}.json`) carrying the halt diagnostics (stage,
+reason, blocking decisions, registry gaps), validation issues, the agent's
+mapping recommendations, the approval id, and an actionable **`next_action`**
+advisory (which of approve / promote / rerun / fix_data_supply comes next, plus
+the exact command). The same advisory is embedded in each event manifest, so a
+halted run explains itself. The `ops` CLI closes the loop — CLI-first; a React UI
+can wrap the same operations later:
+
+```bash
+python -m apps.blob_trigger_app.ops list-halted                 # runs awaiting an operator
+python -m apps.blob_trigger_app.ops show <run_id|pack_key>      # diagnostics + next action
+python -m apps.blob_trigger_app.ops show-recommendations <ref>  # mapping recs + validation issues
+python -m apps.blob_trigger_app.ops approve  <approval_id> --mapping-id m1 --mapping-config-path config/m1.yaml
+python -m apps.blob_trigger_app.ops reject   <approval_id> --reason "seller unverified"
+python -m apps.blob_trigger_app.ops edit     <approval_id> --set suggested_mapping_id=m1_v2
+python -m apps.blob_trigger_app.ops promote  <approval_id>      # → active registry, bumps mapping_version
+python -m apps.blob_trigger_app.ops rerun    <pack_key>         # re-fire the SAME pack (force_reprocess)
+python -m apps.blob_trigger_app.ops rerun    <pack_key> --force-publish   # break-glass: publish despite validation
+```
+
+Scenario → next action: **new source** / **schema drift** → `approve` → `promote`
+→ `rerun`; **incomplete pack** → `fix_data_supply` (upload missing files) →
+`rerun`; **known source, incomplete MI-contract handoff** → `fix_mapping` (review
+recommendations, resolve, then `rerun`); **validation halt** → fix the flagged
+data and `rerun`, or `rerun --force-publish` as an explicit break-glass. Recurring
+approved packs still process deterministically (no LLM) — only new source, schema
+drift, or an incomplete handoff enters review.
 
 ## MI API access to the latest central canonical
 

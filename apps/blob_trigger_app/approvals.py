@@ -158,9 +158,14 @@ def promote(storage: Storage, layout: Layout, registry: SourceRegistry,
                                or art.get("suggested_mapping_config_path"))
     rec.expected_schema_fingerprint = art["schema_fingerprint"]
     rec.regime_required = bool(meta.get("regime_required", rec.regime_required))
+    rec.mapping_version = int(getattr(rec, "mapping_version", 0) or 0) + 1
     rec.status = STATUS_ACTIVE
     registry.upsert(rec)
     art["status"] = STATUS_PROMOTED
+    art["promoted_mapping"] = {"mapping_id": rec.approved_mapping_id,
+                               "mapping_config_path": rec.mapping_config_path,
+                               "mapping_version": rec.mapping_version,
+                               "expected_schema_fingerprint": rec.expected_schema_fingerprint}
     _save(storage, layout, art)
     return rec
 
