@@ -581,8 +581,10 @@ def _halt_diagnostics(result: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         "halt_reason": halt_reason,
         "blocking_decisions": diag.get("blocking_decisions") or (r.get("blockers") or []),
         "registry_gap_count": diag.get("registry_gap_count", 0),
+        "issue_count": diag.get("issue_count", 0),
         "validation_errors": diag.get("validation_errors") or [],
         "mapping_recommendations": diag.get("mapping_recommendations") or [],
+        "handoff_readiness": diag.get("handoff_readiness") or {},
         "run_state_path": diag.get("run_state_path") or r.get("state_path"),
     }
     # Say plainly why there is no central canonical.

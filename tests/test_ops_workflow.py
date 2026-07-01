@@ -28,7 +28,7 @@ from apps.blob_trigger_app import approvals as APP
 from apps.blob_trigger_app import run_records as RR
 from apps.blob_trigger_app.ops_advice import (
     next_operator_action, ACT_APPROVE, ACT_FIX_DATA, ACT_FIX_MAPPING,
-    ACT_RERUN, ACT_INVESTIGATE, ACT_NONE)
+    ACT_RESOLVE_DECISIONS, ACT_RERUN, ACT_INVESTIGATE, ACT_NONE)
 from apps.blob_trigger_app.layout import Layout
 from apps.blob_trigger_app.persistence import ProductionPersistence
 from apps.blob_trigger_app.schema_fingerprint import fingerprint_from_schema
@@ -123,6 +123,43 @@ class TestNextActionAdvisory(unittest.TestCase):
         self.assertEqual(na["action"], ACT_FIX_MAPPING)
         self.assertIn("show-recommendations", na["command"])
 
+    def test_known_halt_blocking_decisions_not_mapping_says_resolve_decisions(self):
+        # THE reported contradiction: not ready, but registry_gap_count=0 AND
+        # mapping_recommendations=[] — the blocker is a run-context OPERATOR decision
+        # (reporting_date), not a mapping fix. Must NOT be labelled fix_mapping.
+        na = next_operator_action(self._m(
+            event_decision="known_source_halted", status="halted",
+            orchestrator_diagnostics={
+                "registry_gap_count": 0, "mapping_recommendations": [], "validation_errors": [],
+                "handoff_readiness": {
+                    "ready_for_transformation_validation": False,
+                    "failed_readiness_gates": ["blocking_decision_count=1"],
+                    "blocking_decision_count": 1,
+                    "blocking_decisions": [{"target_field": "reporting_date",
+                                            "reason": "required but unmapped"}],
+                    "missing_target_fields": ["reporting_date"]}}))
+        self.assertEqual(na["action"], ACT_RESOLVE_DECISIONS)
+        self.assertNotEqual(na["action"], ACT_FIX_MAPPING)
+        self.assertIn("reporting_date", na["summary"])
+        self.assertIn("not mapping", na["summary"].lower())
+        self.assertIn("show-handoff", na["command"])
+
+    def test_known_halt_not_ready_but_nothing_actionable_says_investigate(self):
+        # not ready, yet NO gaps, NO recommendations, NO blocking decisions →
+        # explicit readiness-metadata-mismatch, never fix_mapping.
+        na = next_operator_action(self._m(
+            event_decision="known_source_halted", status="halted",
+            orchestrator_diagnostics={
+                "registry_gap_count": 0, "mapping_recommendations": [], "validation_errors": [],
+                "handoff_readiness": {
+                    "ready_for_transformation_validation": False,
+                    "failed_readiness_gates": [], "blocking_decision_count": 0,
+                    "blocking_decisions": []}}))
+        self.assertEqual(na["action"], ACT_INVESTIGATE)
+        self.assertNotEqual(na["action"], ACT_FIX_MAPPING)
+        self.assertIn("metadata mismatch", na["summary"].lower())
+        self.assertIn("not persisted", na["summary"].lower())
+
     def test_known_halt_clean_says_rerun(self):
         na = next_operator_action(self._m(
             event_decision="known_source_halted", status="halted",
@@ -201,6 +238,55 @@ class TestRunLedgerAndCli(unittest.TestCase):
         # recommendations surfaced for the operator
         recs = OPS.recommendations(self.storage, self.layout, "orun_halt")
         self.assertEqual(recs["mapping_recommendations"][0]["field"], "current_valuation_amount")
+
+    def test_handoff_readiness_persisted_and_show_handoff(self):
+        # A not-ready handoff (blocking reporting_date decision, zero gaps, no recs)
+        # must surface the FULL readiness payload durably + advise resolve_decisions.
+        self._seed_active()
+        cov = Path(self.root) / "scratch" / "28a_target_coverage_matrix.csv"
+        cov.parent.mkdir(parents=True, exist_ok=True)
+        cov.write_text("target_field,coverage_status\nreporting_date,missing_required\n")
+        hr = {
+            "source_portfolio_id": "direct_001",
+            "ready_for_transformation_validation": False,
+            "failed_readiness_gates": ["blocking_decision_count=1"],
+            "blocking_decision_count": 1,
+            "blocking_decisions": [{"target_field": "reporting_date",
+                                    "reason": "required but unmapped"}],
+            "missing_target_fields": ["reporting_date"],
+            "unresolved_fields": ["reporting_date"],
+            "registry_gap_count": 0, "issue_count": 2,
+            "target_coverage_matrix_path": str(cov),
+            "handoff_manifest": {"target_contract_id": "mi_semantics_field_registry",
+                                 "ready_for_transformation_validation": False,
+                                 "blocking_decision_count": 1},
+        }
+        inv = DiagnosticInvoker(diagnostics={
+            "registry_gap_count": 0, "issue_count": 2, "mapping_recommendations": [],
+            "validation_errors": [], "handoff_readiness": hr})
+        m = self._marker(
+            "raw-v2/ERE/direct/funded/monthly/direct_001/2025-11-30/_READY.json", inv)
+        self.assertEqual(m["status"], "halted")
+        # advisory: resolve_decisions naming reporting_date — NOT fix_mapping.
+        self.assertEqual(m["next_action"]["action"], ACT_RESOLVE_DECISIONS)
+
+        rec = self.persistence.load_run_record(m["pack_key"])
+        self.assertEqual(rec["issue_count"], 2)
+        self.assertFalse(rec["handoff_readiness"]["ready_for_transformation_validation"])
+        self.assertEqual(rec["handoff_readiness"]["blocking_decisions"][0]["target_field"],
+                         "reporting_date")
+        self.assertEqual(rec["handoff_readiness"]["failed_readiness_gates"],
+                         ["blocking_decision_count=1"])
+        # durable handoff artifacts persisted to trakt-state (survive scratch cleanup)
+        arts = rec["handoff_artifacts"]
+        self.assertTrue(self.storage.exists(arts["handoff_manifest_uri"]))
+        self.assertTrue(any(self.storage.exists(u)
+                            for u in arts["target_coverage_matrix_uris"]))
+        # ops show-handoff surfaces the readiness + artifact URIs
+        h = OPS.handoff(self.storage, self.layout, "orun_halt")
+        self.assertEqual(h["issue_count"], 2)
+        self.assertEqual(h["handoff_readiness"]["missing_target_fields"], ["reporting_date"])
+        self.assertIn("handoff_manifest_uri", h["handoff_artifacts"])
 
     def test_validation_halt_advises_fix_data_supply(self):
         self._seed_active()
@@ -337,6 +423,8 @@ class TestRunLedgerAndCli(unittest.TestCase):
             self.assertEqual(OPS.main(["list-halted"]), 0)
             self.assertEqual(OPS.main(["show", "orun_halt"]), 0)
             self.assertEqual(OPS.main(["show-recommendations", "orun_halt"]), 0)
+            self.assertEqual(OPS.main(["show-handoff", "orun_halt"]), 0)
+            self.assertEqual(OPS.main(["show-handoff", "does_not_exist"]), 1)
             self.assertEqual(OPS.main(["show", "does_not_exist"]), 1)
         finally:
             os.environ.pop("TRAKT_LOCAL_BLOB_ROOT", None)

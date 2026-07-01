@@ -104,6 +104,35 @@ class TestOrchestratorRealAgents(unittest.TestCase):
                              for b in state.blockers))
         self.assertNotEqual(state.portfolios[0].step("transform").status, "pending")
 
+    def test_deterministic_mi_halt_diagnostics_are_actionable(self):
+        # The exact operator-facing contradiction, end-to-end with real agents:
+        # a not-ready handoff with registry_gap_count=0 and NO mapping recommendations
+        # must still surface WHICH readiness gate failed + the actual blocking
+        # decision, and advise resolve_decisions (NOT the misleading fix_mapping).
+        from apps.blob_trigger_app.orchestrator_invoke import _run_diagnostics
+        from apps.blob_trigger_app.ops_advice import (
+            next_operator_action, ACT_RESOLVE_DECISIONS, ACT_FIX_MAPPING)
+        state = self._run(target="mi", mode="mi_only", full_pipeline=True,
+                          processing_mode="deterministic")
+        d = _run_diagnostics(state)
+        self.assertEqual(d["registry_gap_count"], 0)
+        self.assertEqual(d["mapping_recommendations"], [])
+        hr = d["handoff_readiness"]
+        self.assertFalse(hr["ready_for_transformation_validation"])
+        self.assertTrue(hr["failed_readiness_gates"])              # explains the failed gate
+        self.assertGreaterEqual(hr["blocking_decision_count"], 1)
+        self.assertIn("reporting_date", hr["missing_target_fields"])
+        self.assertTrue(any(b["target_field"] == "reporting_date"
+                            for b in hr["blocking_decisions"]))
+        self.assertTrue(hr.get("handoff_manifest"))               # embedded for durability
+        na = next_operator_action({
+            "event_decision": "known_source_halted", "status": "halted",
+            "pack_key": "pk", "source_portfolio_id": "direct_001",
+            "orchestrator_run_id": "orun_it", "orchestrator_diagnostics": d})
+        self.assertEqual(na["action"], ACT_RESOLVE_DECISIONS)
+        self.assertNotEqual(na["action"], ACT_FIX_MAPPING)
+        self.assertIn("reporting_date", na["summary"])
+
     def test_mi_path_real_agents_green(self):
         import pandas as pd
         from engine.orchestrator_agent.state import STEP_DONE

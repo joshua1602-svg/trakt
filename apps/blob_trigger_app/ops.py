@@ -9,6 +9,7 @@ React UI can wrap the same operations later.
     python -m apps.blob_trigger_app.ops list-halted
     python -m apps.blob_trigger_app.ops show <run_id|pack_key>
     python -m apps.blob_trigger_app.ops show-recommendations <run_id|pack_key>
+    python -m apps.blob_trigger_app.ops show-handoff <run_id|pack_key>
     python -m apps.blob_trigger_app.ops approve <approval_id> --mapping-id <id> \
         --mapping-config-path <path>
     python -m apps.blob_trigger_app.ops reject <approval_id> --reason <why>
@@ -62,6 +63,26 @@ def recommendations(storage: Storage, layout: Layout, ref: str) -> Dict[str, Any
         "mapping_recommendations": rec.get("mapping_recommendations") or [],
         "validation_issues": rec.get("validation_issues") or [],
         "diagnostics": rec.get("diagnostics") or {},
+        "next_action": rec.get("next_action") or {},
+    }
+
+
+def handoff(storage: Storage, layout: Layout, ref: str) -> Dict[str, Any]:
+    """The full onboarding handoff readiness for a run: which readiness gate
+    failed, the blocking decisions / unresolved+missing fields, and the durable
+    URIs of the persisted handoff manifest + target coverage matrix."""
+    rec = RR.resolve(storage, layout, ref)
+    if rec is None:
+        return {}
+    diag = rec.get("diagnostics") or {}
+    hr = rec.get("handoff_readiness") or diag.get("handoff_readiness") or {}
+    return {
+        "pack_key": rec.get("pack_key"),
+        "run_id": rec.get("run_id"),
+        "source_portfolio_id": rec.get("source_portfolio_id"),
+        "issue_count": rec.get("issue_count", diag.get("issue_count", 0)),
+        "handoff_readiness": hr,
+        "handoff_artifacts": rec.get("handoff_artifacts") or {},
         "next_action": rec.get("next_action") or {},
     }
 
@@ -175,6 +196,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     sp = sub.add_parser("show-recommendations",
                         help="Show mapping recommendations + validation issues.")
     sp.add_argument("ref", help="run_id or pack_key")
+    sp = sub.add_parser("show-handoff",
+                        help="Show the onboarding handoff readiness (which gate "
+                             "failed, blocking decisions, missing/unresolved fields).")
+    sp.add_argument("ref", help="run_id or pack_key")
     sp = sub.add_parser("approve", help="Approve a source with a mapping.")
     sp.add_argument("approval_id"); sp.add_argument("--mapping-id", required=True)
     sp.add_argument("--mapping-config-path", default=None); sp.add_argument("--by", default=None)
@@ -208,6 +233,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         recs = recommendations(storage, layout, args.ref)
         print(json.dumps(recs, indent=2) if recs else f"No run record for: {args.ref}")
         return 0 if recs else 1
+
+    if args.cmd == "show-handoff":
+        h = handoff(storage, layout, args.ref)
+        print(json.dumps(h, indent=2) if h else f"No run record for: {args.ref}")
+        return 0 if h else 1
 
     if args.cmd == "approve":
         art = APP.approve(storage, layout, args.approval_id, mapping_id=args.mapping_id,

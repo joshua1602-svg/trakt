@@ -234,6 +234,7 @@ can wrap the same operations later:
 python -m apps.blob_trigger_app.ops list-halted                 # runs awaiting an operator
 python -m apps.blob_trigger_app.ops show <run_id|pack_key>      # diagnostics + next action
 python -m apps.blob_trigger_app.ops show-recommendations <ref>  # mapping recs + validation issues
+python -m apps.blob_trigger_app.ops show-handoff <ref>          # handoff readiness: which gate failed
 python -m apps.blob_trigger_app.ops approve  <approval_id> --mapping-id m1 --mapping-config-path config/m1.yaml
 python -m apps.blob_trigger_app.ops reject   <approval_id> --reason "seller unverified"
 python -m apps.blob_trigger_app.ops edit     <approval_id> --set suggested_mapping_id=m1_v2
@@ -242,13 +243,26 @@ python -m apps.blob_trigger_app.ops rerun    <pack_key>         # re-fire the SA
 python -m apps.blob_trigger_app.ops rerun    <pack_key> --force-publish   # break-glass: publish despite validation
 ```
 
+When the onboarding handoff is **not ready**, the run diagnostics carry the full
+readiness payload — which readiness gate failed (`failed_readiness_gates`), the
+readiness booleans, `blocking_decision_count` + the actual `blocking_decisions`
+(field + reason), `unresolved_fields`, `missing_target_fields`,
+`registry_gap_count`, `issue_count` — and the durable URIs of the persisted
+handoff manifest + target coverage matrix (`trakt-state/runs/{pack_key}/…`), so
+`show-handoff` works after Azure scratch is reclaimed.
+
 Scenario → next action: **new source** / **schema drift** → `approve` → `promote`
 → `rerun`; **incomplete pack** → `fix_data_supply` (upload missing files) →
-`rerun`; **known source, incomplete MI-contract handoff** → `fix_mapping` (review
-recommendations, resolve, then `rerun`); **validation halt** → fix the flagged
-data and `rerun`, or `rerun --force-publish` as an explicit break-glass. Recurring
-approved packs still process deterministically (no LLM) — only new source, schema
-drift, or an incomplete handoff enters review.
+`rerun`; **known source with mapping recommendations / registry gaps** →
+`fix_mapping`; **known source, handoff not ready because of blocking operator
+decisions** (e.g. a missing run-context field) → `resolve_decisions` (the
+decisions are named, not treated as mapping); **handoff not ready with no gaps,
+no recommendations, no blocking decisions** → `investigate` (a readiness metadata
+mismatch / a flag that was not persisted — stated explicitly, never mislabelled
+`fix_mapping`); **validation halt** → fix the flagged data and `rerun`, or
+`rerun --force-publish` as an explicit break-glass. Recurring approved packs still
+process deterministically (no LLM) — only new source, schema drift, or an
+incomplete handoff enters review.
 
 ## MI API access to the latest central canonical
 
