@@ -218,15 +218,79 @@ def _platform_client_id(df) -> str:
     return "platform"
 
 
+def _period_from_platform_uri() -> Optional[str]:
+    """A reporting period embedded in MI_AGENT_PLATFORM_URI, if any
+    (``…/platform/{client}/2026-01-31/…`` or ``…/2026-01/…``). ``/latest/`` has
+    none → None. Month periods are normalised to the month-end date."""
+    import calendar
+    import re
+    uri = os.environ.get("MI_AGENT_PLATFORM_URI") or ""
+    for seg in uri.replace("blob://", "").split("/"):
+        if re.match(r"^\d{4}-\d{2}-\d{2}$", seg):
+            return seg
+        m = re.match(r"^(\d{4})-(\d{2})$", seg)      # YYYY-MM → month-end
+        if m:
+            y, mo = int(m.group(1)), int(m.group(2))
+            if 1 <= mo <= 12:
+                return f"{y:04d}-{mo:02d}-{calendar.monthrange(y, mo)[1]:02d}"
+    return None
+
+
+def _scan_any_date_column(sub) -> Optional[str]:
+    """Last-resort: the max parseable date in ANY date-like column, so a real
+    date in the frame is never reported as null."""
+    import pandas as pd
+    for col in getattr(sub, "columns", []):
+        name = str(col).lower()
+        if not ("date" in name or "cut_off" in name or "cutoff" in name
+                or name.endswith("_dt")):
+            continue
+        try:
+            rd = pd.to_datetime(sub[col], errors="coerce").dropna()
+        except Exception:  # noqa: BLE001
+            continue
+        if not rd.empty:
+            return rd.max().date().isoformat()
+    return None
+
+
+def _platform_reporting_date(sub, run_id: str) -> Optional[str]:
+    """Reporting date for a platform (sub)frame, in priority order:
+    reporting_date → data_cut_off_date → cut_off_date (via infer_reporting_date),
+    then the platform period path, then MI_AGENT_REPORTING_DATE, then any other
+    date-like column. Never null when a real date exists in the frame."""
+    from_data = snapshots_mod.infer_reporting_date(run_id, sub)
+    if from_data:
+        return from_data
+    from_path = _period_from_platform_uri()
+    if from_path:
+        return from_path
+    env = os.environ.get("MI_AGENT_REPORTING_DATE")
+    if env:
+        return env
+    return _scan_any_date_column(sub)
+
+
+def _pid_label(sub, pid: str) -> str:
+    if "source_portfolio_label" in getattr(sub, "columns", []):
+        for v in sub["source_portfolio_label"].dropna():
+            cleaned = _clean_provenance_value(v)
+            if cleaned:
+                return cleaned
+    return pid
+
+
 def _platform_snapshot_index() -> Optional[Dict[str, Any]]:
     """Portfolio/run index derived from the loaded **platform canonical**.
 
     When ``MI_AGENT_PLATFORM_URI`` is configured the active dataset is the combined
     platform canonical (no on-disk onboarding runs), so the portfolio /
-    reporting-date dropdowns are built from the loaded dataframe instead of
-    snapshot discovery: one portfolio (the client) with one run at the canonical's
-    latest reporting date. Returns ``None`` when the platform canonical is not the
-    active source.
+    reporting-date dropdowns are built from the loaded dataframe. Portfolios are
+    derived from ``source_portfolio_id`` (so ``direct_001`` is the selectable
+    funded portfolio), each with one run at that portfolio's latest reporting
+    date. Falls back to a single client entry when the canonical has no
+    provenance. Returns ``None`` when the platform canonical is not the active
+    source.
     """
     if data_source_kind() != KIND_PLATFORM_CANONICAL:
         return None
@@ -235,19 +299,39 @@ def _platform_snapshot_index() -> Optional[Dict[str, Any]]:
     except Exception as exc:  # noqa: BLE001 - discovery must never 500
         logger.warning("platform snapshot index: dataframe load failed: %s", exc)
         return None
-    client_id = _platform_client_id(df)
     run_id = os.environ.get("MI_AGENT_RUN_ID") or "latest"
-    run = {
-        "run_id": run_id,
-        "reporting_date": snapshots_mod.infer_reporting_date(run_id, df),
-        "loan_count": int(len(df)),
-        "current_outstanding_balance": round(snapshots_mod._balance_sum(df), 2),
-    }
-    return {
-        "portfolios": [{"client_id": client_id, "label": str(client_id).upper(),
-                        "runs": [run]}],
-        "source": data_source_label(),
-    }
+
+    portfolios: List[Dict[str, Any]] = []
+    if "source_portfolio_id" in df.columns:
+        ids = df["source_portfolio_id"].dropna().astype(str).str.strip()
+        distinct = sorted({p for p in ids.unique() if p and p.lower() != "nan"})
+        for pid in distinct:
+            sub = df[ids == pid]
+            portfolios.append({
+                "client_id": pid,                    # React selects on client_id
+                "label": _pid_label(sub, pid),
+                "source_portfolio_id": pid,
+                "runs": [{
+                    "run_id": run_id,
+                    "reporting_date": _platform_reporting_date(sub, run_id),
+                    "loan_count": int(len(sub)),
+                    "current_outstanding_balance": round(snapshots_mod._balance_sum(sub), 2),
+                }],
+            })
+
+    if not portfolios:  # no provenance → single client entry (prior behaviour)
+        client_id = _platform_client_id(df)
+        portfolios = [{
+            "client_id": client_id, "label": str(client_id).upper(),
+            "runs": [{
+                "run_id": run_id,
+                "reporting_date": _platform_reporting_date(df, run_id),
+                "loan_count": int(len(df)),
+                "current_outstanding_balance": round(snapshots_mod._balance_sum(df), 2),
+            }],
+        }]
+
+    return {"portfolios": portfolios, "source": data_source_label()}
 
 
 @app.get("/mi/snapshots")
@@ -286,10 +370,16 @@ def _resolve_run_dataframe(client_id: str, run_id: str, root: Optional[str]):
     info = data_source_info()
     if info.get("client_id") == client_id and info.get("run_id") == run_id:
         return get_dataframe(), info
-    # Platform canonical: the single combined dataset IS the (only) run, so serve
-    # it for the synthesized portfolio/run from _platform_snapshot_index().
+    # Platform canonical: the combined dataset IS the run. Serve it for the
+    # synthesized portfolio/run from _platform_snapshot_index(); when the requested
+    # id is a source_portfolio_id present in the canonical, scope to that book.
     if data_source_kind() == KIND_PLATFORM_CANONICAL:
-        return get_dataframe(), info
+        df = get_dataframe()
+        if client_id and "source_portfolio_id" in df.columns:
+            ids = df["source_portfolio_id"].astype(str).str.strip()
+            if (ids == client_id).any():
+                df = df[ids == client_id]
+        return df, info
     return None, None
 
 
