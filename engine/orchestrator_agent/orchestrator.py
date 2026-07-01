@@ -42,22 +42,27 @@ _STEPS_REG = ("onboard", "transform", "validate", "stamp")
 
 
 def steps_for_target(target: str, full_pipeline: bool = False) -> Sequence[str]:
-    """Per-portfolio steps for a target.
+    """Per-portfolio EXECUTION DEPTH — independent of the target contract.
 
-    ``full_pipeline`` upgrades an MI-target run to the FULL production path
-    (onboard → transform → validate → stamp) — the same steps the regulatory /
-    Codespaces-CLI flow uses — so typing + validation are applied even when the
-    output is MI (funded MI). Default MI stays the lean central-tape shortcut.
+    ``full_pipeline`` runs the full agentic path (onboard → transform → validate
+    → stamp) for ANY target; without it an MI-target run may take the lean
+    central-tape shortcut (onboard → stamp). Regime/all always run the full path.
+    Depth does NOT change the contract (see ``onboarding_mode_for_target``).
     """
     if target == "mi" and not full_pipeline:
         return _STEPS_MI
     return _STEPS_REG
 
 
-def onboarding_mode_for_target(target: str, full_pipeline: bool = False) -> str:
-    """MI (lean) keeps the active schema; regime/all — and full-pipeline MI —
-    activate the regulatory onboarding that emits the transform handoff."""
-    return "mi_only" if (target == "mi" and not full_pipeline) else "regulatory_mi"
+def onboarding_mode_for_target(target: str) -> str:
+    """Onboarding CONTRACT — determined by the TARGET alone, independent of
+    pipeline depth:
+
+      * mi        → ``mi_only``       (MI contract; no Annex 2-only mandatory fields)
+      * regime    → ``regulatory_mi`` (ESMA Annex 2 contract)
+      * all       → ``regulatory_mi`` (combined superset that also serves MI)
+    """
+    return "mi_only" if target == "mi" else "regulatory_mi"
 
 
 def new_run_id(client_id: str, stamp: str) -> str:
@@ -123,7 +128,29 @@ def _run_portfolio_step(adapters, p, step_name, work_dir) -> StepResult:
     if step_name == "onboard":
         return adapters.onboard(spec, work_dir)
     if step_name == "transform":
-        return adapters.transform(spec, p.step("onboard").manifest_path, work_dir)
+        handoff = p.step("onboard").manifest_path
+        if not handoff:
+            return StepResult(
+                ok=False, blocking=True,
+                blockers=["full pipeline requested but onboarding produced no "
+                          "handoff manifest (Gate 2 has no contract to transform)"],
+                message="missing onboarding handoff")
+        # Governed HALT (pending review, not a hard error) when the handoff is not
+        # ready for transformation/validation — unresolved mapping gaps / blocking
+        # decisions. A clean approved mapping clears this and Gate 2/3 proceed.
+        import json as _json
+        try:
+            ready = bool(_json.loads(Path(handoff).read_text(encoding="utf-8"))
+                         .get("ready_for_transformation_validation"))
+        except Exception:  # noqa: BLE001
+            ready = False
+        if not ready:
+            return StepResult(
+                ok=False, blocking=True,
+                blockers=["onboarding handoff not ready_for_transformation_validation "
+                          "(unresolved mapping gaps / blocking decisions) — pending review"],
+                message="handoff not ready for Gate 2")
+        return adapters.transform(spec, handoff, work_dir)
     if step_name == "validate":
         return adapters.validate(spec, p.step("transform").manifest_path, work_dir)
     if step_name == "stamp":

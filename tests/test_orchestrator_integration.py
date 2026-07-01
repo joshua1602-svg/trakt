@@ -45,7 +45,7 @@ class TestOrchestratorRealAgents(unittest.TestCase):
         except Exception as exc:  # pragma: no cover
             raise unittest.SkipTest(f"orchestrator/agent deps unavailable: {exc}")
 
-    def _run(self, *, target, mode, regime=None):
+    def _run(self, *, target, mode, regime=None, full_pipeline=False):
         from engine.orchestrator_agent import run_orchestration
         from engine.orchestrator_agent.adapters import RealAgentAdapters, PortfolioSpec
         ad = RealAgentAdapters(registry=_REGISTRY, client_name="ERE_IT",
@@ -57,7 +57,24 @@ class TestOrchestratorRealAgents(unittest.TestCase):
             "ERE", [PortfolioSpec("direct_001", str(_PACK),
                                   source_portfolio_label="Direct Book")],
             target=target, regime=regime, out_root=td, adapters=ad,
-            created_at=_NOW, run_id="orun_it")
+            full_pipeline=full_pipeline, created_at=_NOW, run_id="orun_it")
+
+    def test_mi_full_pipeline_uses_mi_contract_not_annex2(self):
+        # Funded MI full pipeline: MI contract (mi_semantics), Gate 2/3 attempted,
+        # governed halt on this intentionally-incomplete pack — NOT Annex 2.
+        from engine.orchestrator_agent.state import STEP_DONE, STEP_HALTED, STEP_FAILED
+        state = self._run(target="mi", mode="mi_only", full_pipeline=True)
+        onboard = state.portfolios[0].step("onboard")
+        self.assertEqual(onboard.status, STEP_DONE)
+        # MI contract used — not the ESMA Annex 2 contract.
+        self.assertEqual(onboard.readiness.get("target_contract"), "mi_semantics")
+        self.assertTrue(onboard.manifest_path)                 # MI handoff produced
+        # The FULL pipeline was attempted (transform reached), not lean onboard→stamp.
+        self.assertIn(state.portfolios[0].step("transform").status, (STEP_HALTED, STEP_FAILED, STEP_DONE))
+        self.assertNotEqual(state.portfolios[0].step("transform").status, "pending")
+        # Incomplete pack → fail-closed: nothing published.
+        if state.status != STEP_DONE:
+            self.assertIsNone(state.central_canonical_path)
 
     def test_mi_path_real_agents_green(self):
         import pandas as pd

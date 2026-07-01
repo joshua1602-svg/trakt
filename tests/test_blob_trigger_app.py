@@ -1230,9 +1230,8 @@ class TestFullPipelineRouting(unittest.TestCase):
         self.assertTrue(inv.calls[0]["full_pipeline"])
         self.assertEqual(m["status"], "pending_review")        # halt at approval
 
-    def test_default_invoker_uses_regulatory_mi_and_threads_flags(self):
-        # CLI parity at the invoke seam: full_pipeline forces regulatory_mi
-        # onboarding (emits the transform handoff) and threads the flags through.
+    def _capture_invoke(self, *, target, full_pipeline):
+        # Capture the adapters/flags the default invoker hands to run_orchestration.
         from apps.blob_trigger_app.orchestrator_invoke import default_orchestrator_invoker
         captured = {}
 
@@ -1252,13 +1251,24 @@ class TestFullPipelineRouting(unittest.TestCase):
                 processing_mode="deterministic", client_id="ERE",
                 source_portfolio_id="direct_001", source_portfolio_type="direct",
                 dataset="funded", frequency="monthly", reporting_period="2025-11-30",
-                input_path="/tmp/pack", target="mi", run_regime=False,
+                input_path="/tmp/pack", target=target, run_regime=(target != "mi"),
                 mapping_config_path="config/m1.yaml", out_dir="/tmp/out",
-                full_pipeline=True, force_publish=True)
-        self.assertTrue(captured["full_pipeline"])
-        self.assertTrue(captured["force_publish"])
-        self.assertEqual(captured["onboarding_mode"], "regulatory_mi")
-        self.assertEqual(captured["processing_mode"], "deterministic")  # no LLM on approved
+                full_pipeline=full_pipeline, force_publish=True)
+        return captured
+
+    def test_funded_mi_full_pipeline_uses_MI_contract_not_annex2(self):
+        # THE fix: full pipeline (depth) does NOT change the contract. target=mi
+        # → mi_only onboarding (MI contract), even with full_pipeline=True.
+        cap = self._capture_invoke(target="mi", full_pipeline=True)
+        self.assertTrue(cap["full_pipeline"])                 # Gate 2/3 run (depth)
+        self.assertEqual(cap["onboarding_mode"], "mi_only")   # MI contract, NOT regulatory_mi
+        self.assertTrue(cap["force_publish"])
+        self.assertEqual(cap["processing_mode"], "deterministic")  # no LLM on approved
+
+    def test_regime_target_uses_annex2_contract(self):
+        cap = self._capture_invoke(target="all", full_pipeline=True)
+        self.assertEqual(cap["onboarding_mode"], "regulatory_mi")   # Annex 2 / combined
+        self.assertTrue(cap["full_pipeline"])
 
 
 if __name__ == "__main__":

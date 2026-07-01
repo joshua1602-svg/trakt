@@ -38,18 +38,20 @@ def default_orchestrator_invoker(
 ) -> Dict[str, Any]:
     """Invoke the real Orchestrator Agent.
 
-    ``full_pipeline`` (funded MI) runs the production onboard→transform→validate→
-    stamp path — the same the Codespaces CLI uses — so Gate 2 typing and Gate 3
-    validation are applied before the platform canonical is published. It forces
-    the ``regulatory_mi`` onboarding that emits the transform handoff.
-    ``processing_mode`` still selects discovery (new/changed source) vs saved-
-    mapping deterministic processing (recurring approved packs — no LLM)."""
+    ``full_pipeline`` controls EXECUTION DEPTH only (whether Gate 2/Gate 3 run) —
+    it does NOT change the contract. The onboarding CONTRACT follows the TARGET:
+    ``mi`` → ``mi_only`` (MI contract; no Annex 2-only mandatory fields), ``all`` →
+    ``regulatory_mi`` (combined). So funded MI runs the full pipeline against the
+    MI contract, exactly like the Codespaces CLI. ``processing_mode`` still selects
+    discovery (new/changed source) vs saved-mapping deterministic processing
+    (recurring approved packs — no LLM)."""
     from engine.orchestrator_agent import run_orchestration
+    from engine.orchestrator_agent.orchestrator import onboarding_mode_for_target
     from engine.orchestrator_agent.adapters import RealAgentAdapters, PortfolioSpec
 
     adapters = RealAgentAdapters(
         client_name=client_id,
-        onboarding_mode=("regulatory_mi" if (run_regime or full_pipeline) else "mi_only"),
+        onboarding_mode=onboarding_mode_for_target(target),   # contract by target
         processing_mode=processing_mode,
         mapping_config_path=mapping_config_path,
     )

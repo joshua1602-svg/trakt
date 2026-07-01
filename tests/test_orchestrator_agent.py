@@ -60,7 +60,9 @@ class StubAdapters(AgentAdapters):
     def onboard(self, spec: PortfolioSpec, work_dir: Path) -> StepResult:
         work_dir.mkdir(parents=True, exist_ok=True)
         manifest = work_dir / "24_onboarding_handoff_manifest.json"
-        manifest.write_text("{}", encoding="utf-8")
+        # A ready handoff so the full pipeline's Gate 2 guard proceeds (a real
+        # onboarding sets this when mapping gaps / blocking decisions are cleared).
+        manifest.write_text('{"ready_for_transformation_validation": true}', encoding="utf-8")
         if spec.source_portfolio_id in self.blocking_onboard:
             return StepResult(ok=False, blocking=True,
                               blockers=["mapping review pending"],
@@ -273,20 +275,36 @@ class TestFullPipelineMI(unittest.TestCase):
     def tearDown(self):
         self._tmp.cleanup()
 
-    def test_steps_parity_with_cli_regulatory_path(self):
+    def test_depth_and_contract_are_independent(self):
         from engine.orchestrator_agent.orchestrator import (
             steps_for_target, onboarding_mode_for_target)
-        # Lean MI shortcut (unchanged default).
+        # DEPTH (full_pipeline) — independent of contract.
         self.assertEqual(tuple(steps_for_target("mi")), ("onboard", "stamp"))
-        # Full-pipeline MI == the regulatory/CLI steps.
         self.assertEqual(tuple(steps_for_target("mi", full_pipeline=True)),
                          ("onboard", "transform", "validate", "stamp"))
+        # Same full steps regardless of target — depth is the same axis.
         self.assertEqual(tuple(steps_for_target("mi", full_pipeline=True)),
                          tuple(steps_for_target("regime")))
-        # Onboarding mode: full MI uses the regulatory onboarding (emits handoff).
+        # CONTRACT (onboarding mode) — by TARGET only, NOT changed by depth.
+        self.assertEqual(onboarding_mode_for_target("mi"), "mi_only")      # MI contract
+        self.assertEqual(onboarding_mode_for_target("regime"), "regulatory_mi")  # Annex 2
+        self.assertEqual(onboarding_mode_for_target("all"), "regulatory_mi")     # combined
+        # Full-pipeline MI keeps the MI contract (no Annex 2 coupling).
         self.assertEqual(onboarding_mode_for_target("mi"), "mi_only")
-        self.assertEqual(onboarding_mode_for_target("mi", full_pipeline=True),
-                         "regulatory_mi")
+
+    def test_mi_contract_has_no_annex2_only_mandatory_fields(self):
+        # target=mi (mi_only) must NOT require the Annex 2-only mandatory fields.
+        from engine.onboarding_agent.required_target_contract import build_required_contract
+        mi = build_required_contract({"reporting_regime": "mi_only"})
+        annex2 = build_required_contract({"reporting_regime": "esma_annex_12"})
+        annex2_only = {"geographic_region_classification",
+                       "originator_legal_entity_identifier", "interest_rate_type"}
+        mi_mandatory = {r["target_field"] for r in mi if r["required_level"] == "mandatory"}
+        annex2_mandatory = {r["target_field"] for r in annex2 if r["required_level"] == "mandatory"}
+        self.assertEqual(mi_mandatory & annex2_only, set())        # none required for MI
+        self.assertTrue(annex2_only <= annex2_mandatory)           # required for Annex 2
+        # current_valuation_amount stays MI-mandatory (collateral MI needs it).
+        self.assertIn("current_valuation_amount", mi_mandatory)
 
     def test_full_pipeline_runs_gate2_gate3_and_routes_to_mi(self):
         state = run_orchestration(
