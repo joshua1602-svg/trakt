@@ -73,6 +73,26 @@ class Layout:
         target coverage matrix) so ops can inspect it after Azure scratch is gone."""
         return self._state("runs", pack_key, name)
 
+    # -- per-gate diagnostics + artefacts ---------------------------------- #
+    def gates_prefix(self, pack_key: str) -> str:
+        return self._state("runs", pack_key, "gates")
+
+    def gate_diagnostics_uri(self, pack_key: str, gate_name: str) -> str:
+        return self._state("runs", pack_key, "gates", gate_name, "diagnostics.json")
+
+    def gate_artifact_uri(self, pack_key: str, gate_name: str, name: str) -> str:
+        return self._state("runs", pack_key, "gates", gate_name, "artifacts", name)
+
+    # -- LLM advisory recommendations -------------------------------------- #
+    def llm_recommendations_uri(self, pack_key: str) -> str:
+        return self._state("runs", pack_key, "llm", "recommendations.json")
+
+    # -- onboarding decision inputs + accepted decisions (CLI-parity bridge) #
+    def run_onboarding_uri(self, pack_key: str, name: str) -> str:
+        """Durable copy of an onboarding decision artefact (34 pending decisions,
+        36 LLM recommendations, 28a coverage) or the accepted 34_ decisions file."""
+        return self._state("runs", pack_key, "onboarding", name)
+
     # -- processed container ----------------------------------------------- #
     def _processed(self, *parts: str) -> str:
         return join_uri(f"{BLOB_SCHEME}{self.processed_container}", *parts)

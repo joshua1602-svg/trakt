@@ -174,7 +174,8 @@ class RealAgentAdapters(AgentAdapters):
                  processing_mode: str = "source_onboarding",
                  mapping_config_path: Optional[str] = None,
                  full_pipeline: bool = False,
-                 reporting_period: Optional[str] = None):
+                 reporting_period: Optional[str] = None,
+                 enable_llm_advisor: bool = False):
         self.registry = registry
         self.client_name = client_name
         self.onboarding_mode = onboarding_mode
@@ -192,6 +193,11 @@ class RealAgentAdapters(AgentAdapters):
         # onboarding as the reporting_date so the MI contract's portfolio-level
         # reporting_date is derived from it when the raw files carry no such column.
         self.reporting_period = reporting_period
+        # enable_llm_advisor: run the onboarding target-first LLM advisor (produces
+        # 36_target_first_llm_recommendations) for a new/changed source, so an
+        # operator can accept them via ops approve-recommendations. Advisory only —
+        # deterministic mapping stays the source of truth; off for recurring packs.
+        self.enable_llm_advisor = enable_llm_advisor
 
     def onboard(self, spec: PortfolioSpec, work_dir: Path) -> StepResult:
         """Run onboarding for one portfolio. The ``mode`` is the MI-vs-regime
@@ -225,6 +231,7 @@ class RealAgentAdapters(AgentAdapters):
             registry=self.registry or "config/system/fields_registry.yaml",
             aliases_dir=self.aliases_dir,
             enable_mapping_review=build_coverage,
+            enable_llm_target_advisor=self.enable_llm_advisor,
             reporting_date=(self.reporting_period or ""),
             target_first_decisions=((self.mapping_config_path or "") if deterministic else ""))
 

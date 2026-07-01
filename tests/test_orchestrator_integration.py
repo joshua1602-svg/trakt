@@ -105,6 +105,47 @@ class TestOrchestratorRealAgents(unittest.TestCase):
                              for b in state.blockers))
         self.assertNotEqual(state.portfolios[0].step("transform").status, "pending")
 
+    def test_cli_vs_azure_onboarding_parity(self):
+        # STEP-1 PROOF: the headless Azure onboarding produces the SAME output as the
+        # Codespaces CLI (run_operator_workflow) for identical inputs — same 28a
+        # coverage per field and the same handoff readiness/contract. The runtime is
+        # the same code; only the approve→rerun bridge differed.
+        import json, tempfile
+        from engine.onboarding_agent import workflow as _wf, onboarding_handoff
+        from engine.orchestrator_agent.adapters import RealAgentAdapters, PortfolioSpec
+
+        def _cov(pdir):
+            d = json.loads((Path(pdir) / "28a_target_coverage_matrix.json").read_text())
+            return {r["target_field"]: r.get("coverage_status") for r in d["rows"]}
+
+        # CLI onboarding, then build the handoff with the SAME function the adapter uses.
+        cli = Path(tempfile.mkdtemp(prefix="cli_it_")) / "p"
+        self.addCleanup(lambda: __import__("shutil").rmtree(cli.parent, ignore_errors=True))
+        _wf.run_operator_workflow(
+            input_dir=str(_PACK), client_name="ERE_IT", client_id="direct_001", run_id="run",
+            project_dir=str(cli), mode="mi_only", registry=_REGISTRY, aliases_dir="config/system",
+            enable_mapping_review=True, reporting_date="2025-11-30", target_first_decisions="")
+        h_cli = onboarding_handoff.build_handoff_package(
+            str(cli), Path(cli) / "output", client_id="direct_001", client_name="ERE_IT",
+            run_id="run", mode="mi_only", registry=_REGISTRY, aliases_dir="config/system",
+            reporting_date="2025-11-30")["manifest"]
+
+        # Azure headless onboarding via the orchestrator adapter.
+        az = Path(tempfile.mkdtemp(prefix="az_it_")) / "p"
+        self.addCleanup(lambda: __import__("shutil").rmtree(az.parent, ignore_errors=True))
+        ad = RealAgentAdapters(registry=_REGISTRY, client_name="ERE_IT", onboarding_mode="mi_only",
+                               processing_mode="deterministic", full_pipeline=True,
+                               reporting_period="2025-11-30")
+        res = ad.onboard(PortfolioSpec("direct_001", str(_PACK), source_portfolio_type="direct",
+                                       allow_unknown_acquisition_date=True), az)
+        h_az = json.loads(Path(res.manifest_path).read_text(encoding="utf-8"))
+
+        self.assertEqual(_cov(cli), _cov(az))            # identical coverage, every field
+        for k in ("target_contract_id", "ready_for_transformation_validation",
+                  "blocking_decision_count", "registry_gap_count",
+                  "source_mapped_count", "source_absent_count", "target_field_count"):
+            self.assertEqual(h_cli.get(k), h_az.get(k), k)
+
     def test_reporting_date_derived_from_folder_period(self):
         # THE fix: with the folder reporting_period supplied, the MI-contract
         # portfolio-level reporting_date is DERIVED from it (the raw pack has no
@@ -132,13 +173,14 @@ class TestOrchestratorRealAgents(unittest.TestCase):
         self.assertEqual(rd.get("coverage_basis"), "run_context_period_inference")
 
     def test_deterministic_mi_halt_diagnostics_are_actionable(self):
-        # The exact operator-facing contradiction, end-to-end with real agents:
-        # a not-ready handoff with registry_gap_count=0 and NO mapping recommendations
-        # must still surface WHICH readiness gate failed + the actual blocking
-        # decision, and advise resolve_decisions (NOT the misleading fix_mapping).
+        # End-to-end with real agents: a not-ready handoff (no reporting_period, so
+        # reporting_date blocks) must surface WHICH readiness gate failed + the actual
+        # blocking decision, and — because the transform halted at its GUARD — the
+        # run summary re-points the failed gate to ONBOARDING with a specific,
+        # non-mapping inspect_onboarding action.
         from apps.blob_trigger_app.orchestrator_invoke import _run_diagnostics
         from apps.blob_trigger_app.ops_advice import (
-            next_operator_action, ACT_RESOLVE_DECISIONS, ACT_FIX_MAPPING)
+            next_operator_action, ACT_INSPECT_ONBOARDING)
         state = self._run(target="mi", mode="mi_only", full_pipeline=True,
                           processing_mode="deterministic")
         d = _run_diagnostics(state)
@@ -152,12 +194,14 @@ class TestOrchestratorRealAgents(unittest.TestCase):
         self.assertTrue(any(b["target_field"] == "reporting_date"
                             for b in hr["blocking_decisions"]))
         self.assertTrue(hr.get("handoff_manifest"))               # embedded for durability
+        # run summary + gate observability
+        self.assertEqual(d["run_summary"]["failed_gate"], "onboarding")   # re-pointed
+        self.assertEqual(d["run_summary"]["gate_status"]["transform"], "halted")
         na = next_operator_action({
             "event_decision": "known_source_halted", "status": "halted",
             "pack_key": "pk", "source_portfolio_id": "direct_001",
             "orchestrator_run_id": "orun_it", "orchestrator_diagnostics": d})
-        self.assertEqual(na["action"], ACT_RESOLVE_DECISIONS)
-        self.assertNotEqual(na["action"], ACT_FIX_MAPPING)
+        self.assertEqual(na["action"], ACT_INSPECT_ONBOARDING)
         self.assertIn("reporting_date", na["summary"])
 
     def test_mi_path_real_agents_green(self):

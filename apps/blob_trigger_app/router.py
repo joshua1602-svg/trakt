@@ -110,6 +110,7 @@ def handle_blob_event(
     platform_out_dir: Optional[str] = None,
     persistence: Optional["ProductionPersistence"] = None,
     regime_runner: Optional[Callable[..., Dict[str, Any]]] = None,
+    llm_generator: Optional[Callable[..., Any]] = None,
     now: Optional[str] = None,
     run_id_for_registry: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -157,6 +158,11 @@ def handle_blob_event(
         can drive the feedback loop.
         """
         if manifest.get("is_pack_marker") and manifest.get("status") in _OPERATOR_STATUSES:
+            # Advisory LLM recommendations (deterministic stays the source of truth).
+            try:
+                _attach_llm(manifest, persistence, created_at, llm_generator)
+            except Exception as exc:  # noqa: BLE001 — advisory must never fail the event
+                manifest.setdefault("persist_errors", []).append(f"llm: {exc}")
             try:
                 manifest["next_action"] = next_operator_action(manifest)
             except Exception as exc:  # noqa: BLE001 — advisory is best effort
@@ -278,6 +284,16 @@ def handle_blob_event(
     manifest["requires_source_onboarding"] = decision != DECISION_DETERMINISTIC
     manifest["decision"] = decision
 
+    # Operator "apply my accepted decisions" rerun (after ops approve-recommendations,
+    # before promote): force a DETERMINISTIC-apply run against the accepted 34_
+    # decisions file — exactly the CLI's `rerun onboarding --target-first-decisions`.
+    applied_decisions_path = meta.get("applied_decisions_path")
+    if applied_decisions_path:
+        decision = DECISION_DETERMINISTIC
+        manifest["decision"] = decision
+        manifest["requires_source_onboarding"] = False
+        manifest["applied_decisions_path"] = applied_decisions_path
+
     input_for_orch = (input_dir_override
                       or (str(Path(local_input_path).parent) if local_input_path
                           else parsed.blob_path))
@@ -368,6 +384,18 @@ def handle_blob_event(
         return _emit()
 
     # decision == deterministic ------------------------------------------
+    # The accepted-decisions override wins over any saved mapping (apply-my-decisions
+    # rerun); otherwise use the promoted registry mapping. rec may be None when
+    # applying accepted decisions on a not-yet-promoted source.
+    mapping_cfg = applied_decisions_path or (rec.mapping_config_path if rec else None)
+    # A promoted accepted-decisions mapping is stored as a blob:// URI — localise it
+    # so the onboarding agent can load it as a target-first decisions file.
+    if (mapping_cfg and str(mapping_cfg).startswith("blob://") and persistence is not None):
+        try:
+            dest = Path(out_dir) / "_mapping" / Path(mapping_cfg).name
+            mapping_cfg = str(persistence.storage.download_file(mapping_cfg, dest))
+        except Exception as exc:  # noqa: BLE001 — record, fall through with the URI
+            manifest.setdefault("persist_errors", []).append(f"mapping_localise: {exc}")
     result = orchestrator_invoker(
         processing_mode=DECISION_DETERMINISTIC,
         client_id=parsed.client_id, source_portfolio_id=parsed.source_portfolio_id,
@@ -377,7 +405,7 @@ def handle_blob_event(
         target=sel_target, run_regime=sel_run_regime,
         acquisition_date=acquisition_date, seller_name=seller_name,
         full_pipeline=full_pipeline, force_publish=force_publish,
-        mapping_config_path=rec.mapping_config_path, out_dir=str(out_dir))
+        mapping_config_path=mapping_cfg, out_dir=str(out_dir))
     manifest["orchestrator_invocation"] = {
         "invoked": True, "mode": DECISION_DETERMINISTIC,
         "target": sel_target, "run_regime": sel_run_regime, **_inv(result)}
@@ -387,9 +415,10 @@ def handle_blob_event(
     if orch_status == "done":
         manifest["status"] = STATUS_PROCESSED
         manifest["event_decision"] = EVT_KNOWN_SOURCE_PROCESSED
-        rec.last_successful_run_id = (result.get("run_id") or run_id_for_registry)
-        rec.last_successful_reporting_period = parsed.reporting_period
-        registry.upsert(rec)
+        if rec is not None:
+            rec.last_successful_run_id = (result.get("run_id") or run_id_for_registry)
+            rec.last_successful_reporting_period = parsed.reporting_period
+            registry.upsert(rec)
         # 5) Assembler refresh — rebuild the central platform canonical across
         # portfolios from accepted canonical outputs (funded packs only).
         if parsed.dataset == "funded":
@@ -561,6 +590,39 @@ def _inv(result: Optional[Dict[str, Any]]) -> Dict[str, Any]:
             "central_canonical_path": r.get("central_canonical_path")}
 
 
+def _attach_llm(manifest: Dict[str, Any], persistence, now: str, generator) -> None:
+    """Attach ADVISORY LLM recommendation status to the manifest (and persist the
+    recommendations artefact). Deterministic mapping/registry stays the production
+    source of truth — the LLM never auto-applies and never fails the run. A CLEAN
+    recurring known source triggers no LLM call."""
+    from . import llm_recommendations as _llm
+
+    policy = _llm.resolve_llm_policy()
+    diag = manifest.get("orchestrator_diagnostics") or {}
+    gates = diag.get("gates") or []
+    gate_failed = bool((diag.get("run_summary") or {}).get("failed_gate")) or (
+        manifest.get("status") in (STATUS_HALTED, STATUS_FAILED, STATUS_PENDING_REVIEW))
+    pack_key = manifest.get("pack_key") or "unknown"
+    recs, meta = _llm.generate_recommendations(
+        pack_key=pack_key, decision=manifest.get("decision"), gates=gates,
+        gate_failed=gate_failed, generator=generator, policy=policy, now=now)
+    llm_status = {
+        "llm_enabled": meta["llm_enabled"], "llm_invoked": meta["llm_invoked"],
+        "llm_available": meta["llm_available"], "llm_reason": meta["llm_reason"],
+        "llm_error": meta["llm_error"],
+        "recommendations_present": meta["recommendations_present"],
+        "deterministic_fallback_used": meta["deterministic_fallback_used"],
+        "recommendations_artifact_uri": None,
+    }
+    if recs and persistence is not None:
+        try:
+            llm_status["recommendations_artifact_uri"] = (
+                persistence.persist_llm_recommendations(pack_key, recs, meta, now))
+        except Exception as exc:  # noqa: BLE001
+            manifest.setdefault("persist_errors", []).append(f"llm_persist: {exc}")
+    manifest["llm"] = llm_status
+
+
 def _halt_diagnostics(result: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     """Manifest diagnostics for a non-done orchestrator outcome.
 
@@ -585,6 +647,10 @@ def _halt_diagnostics(result: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         "validation_errors": diag.get("validation_errors") or [],
         "mapping_recommendations": diag.get("mapping_recommendations") or [],
         "handoff_readiness": diag.get("handoff_readiness") or {},
+        "transform_readiness": diag.get("transform_readiness") or {},
+        "validation_readiness": diag.get("validation_readiness") or {},
+        "gates": diag.get("gates") or [],
+        "run_summary": diag.get("run_summary") or {},
         "run_state_path": diag.get("run_state_path") or r.get("state_path"),
     }
     # Say plainly why there is no central canonical.

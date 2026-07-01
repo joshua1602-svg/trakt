@@ -50,12 +50,26 @@ def build_run_record(manifest: Dict[str, Any]) -> Dict[str, Any]:
         "event_decision": manifest.get("event_decision"),
         "target": manifest.get("target"),
         "approval_id": manifest.get("approval_id"),
+        "schema_fingerprint": manifest.get("schema_fingerprint"),
+        "regime_required": manifest.get("selected_target", {}).get("run_regime")
+        if isinstance(manifest.get("selected_target"), dict) else None,
         "central_canonical_path": manifest.get("central_canonical_path"),
         "diagnostics": diag,
         "validation_issues": diag.get("validation_errors") or [],
         "mapping_recommendations": diag.get("mapping_recommendations") or [],
         "handoff_readiness": diag.get("handoff_readiness") or {},
+        "transform_readiness": diag.get("transform_readiness") or {},
+        "validation_readiness": diag.get("validation_readiness") or {},
+        # Generic gate observability + run-level summary.
+        "gates": diag.get("gates") or [],
+        "run_summary": diag.get("run_summary") or {},
+        "failed_gate": (diag.get("run_summary") or {}).get("failed_gate"),
+        "gate_status": (diag.get("run_summary") or {}).get("gate_status") or {},
+        "central_canonical_unavailable_reason": (
+            (diag.get("run_summary") or {}).get("central_canonical_unavailable_reason")),
         "issue_count": diag.get("issue_count", 0),
+        # LLM advisory status (deterministic remains the source of truth).
+        "llm": manifest.get("llm") or {},
         "next_action": next_action,
         "error": manifest.get("error"),
         "created_at": manifest.get("created_at"),
