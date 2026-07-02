@@ -15,9 +15,12 @@ import logging
 import os
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+
+from .auth import auth_guard, principal_from_request
 
 from mi_agent.mi_agent_workflow import run_mi_agent_query
 from mi_agent.mi_query_validator import load_mi_semantics
@@ -42,20 +45,40 @@ from . import chat_routing as chat_routing_mod
 
 logger = logging.getLogger("mi_agent_api")
 
-app = FastAPI(title="Trakt MI Agent API", version="1.0.0")
+# Global authentication guard: every /mi/* route requires an authenticated
+# principal carrying an MI role (client|operator). Probe/index/docs routes stay
+# open. Enforcement is toggled by MI_AGENT_AUTH_ENABLED (default on); see auth.py.
+app = FastAPI(title="Trakt MI Agent API", version="1.0.0",
+              dependencies=[Depends(auth_guard)])
 
-# CORS for the React dev server (and configurable origins in deployment).
+# CORS. With the SWA linked-backend deployment the UI calls the API same-origin,
+# so CORS is not relied on for security. We still restrict it: allowed origins
+# come from MI_AGENT_CORS_ORIGINS (comma-separated) and default to the local dev
+# servers only. There is deliberately NO "*" fallback — an unset/empty value
+# denies cross-origin browser calls rather than opening to any origin.
 _origins = os.environ.get(
     "MI_AGENT_CORS_ORIGINS",
     "http://localhost:5173,http://localhost:4173",
 ).split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in _origins if o.strip()] or ["*"],
+    allow_origins=[o.strip() for o in _origins if o.strip()],
     allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Fail safe: never leak a stack trace / internal path to a client. Unhandled
+    errors (e.g. from the /mi/query workflow) become a generic 500 payload; the
+    detail is logged server-side only."""
+    logger.exception("unhandled error on %s %s: %s", request.method, request.url.path, exc)
+    return JSONResponse(
+        status_code=500,
+        content={"ok": False, "error": "An internal error occurred processing the request."},
+    )
 
 
 class PortfolioContext(BaseModel):
@@ -132,10 +155,24 @@ def health() -> Dict[str, Any]:
         # The single MI dataset contract: per-field metadata + display hints
         # (format + storage scale) so React never guesses field meaning or scale.
         "datasetContract": info.get("dataset_contract", {}),
-        "dataSourceInfo": info,
+        # NOTE: the full ``info`` dict is intentionally NOT echoed here — it
+        # carries the server-side dataset file path. Expose only non-sensitive
+        # summary fields above.
         "dataAvailable": csv != "unavailable",
         "semantics": semantics_path().name,
     }
+
+
+@app.get("/me")
+def me(request: Request) -> Dict[str, Any]:
+    """The authenticated caller as the API resolved them (identity + MI roles).
+
+    Useful for the UI to show who is signed in and whether they hold the
+    operator role. Requires authentication (via the global guard)."""
+    principal = getattr(request.state, "principal", None) or principal_from_request(request)
+    if principal is None:
+        return {"authenticated": False}
+    return {"authenticated": True, **principal.to_public()}
 
 
 @app.get("/mi/catalogue")
