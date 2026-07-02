@@ -31,6 +31,20 @@ from .target_selection import select_target
 if TYPE_CHECKING:  # avoid import cost at module load; persistence is optional
     from .persistence import ProductionPersistence
 
+def aliases_for_pack(registry: SourceRegistry, blob_path: str,
+                     container: str = "raw") -> Optional[Dict[str, List[str]]]:
+    """Resolve the approved logical-role file-name aliases for a pack's source, so
+    the caller can fingerprint on logical roles (``fingerprint_pack(..., aliases=)``)
+    before routing. Returns ``None`` when the source/aliases are unknown."""
+    try:
+        parsed = parse_blob_path(blob_path, container)
+        rec = registry.lookup(parsed.client_id, parsed.source_portfolio_id,
+                              parsed.dataset, parsed.frequency)
+        return (getattr(rec, "file_role_aliases", None) or None) if rec else None
+    except Exception:  # noqa: BLE001 — alias resolution is best-effort; defaults apply
+        return None
+
+
 # Final event statuses.
 STATUS_PROCESSED = "processed"
 STATUS_HALTED = "halted"

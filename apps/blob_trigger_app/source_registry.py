@@ -35,6 +35,11 @@ class SourceRecord:
     mapping_version: int = 0                      # bumped on each promote
     expected_schema_fingerprint: Optional[str] = None
     expected_columns: List[str] = field(default_factory=list)
+    # Approved logical-role file-name aliases (``role -> [name patterns]``), e.g.
+    # {"loan_extract": ["LoanExtract One OMNI", "LoanExtract One - OMNI"]}. Promoted
+    # with the mapping; used to fingerprint on logical roles so equivalent monthly
+    # packs with cosmetically different file names route deterministically.
+    file_role_aliases: Dict[str, List[str]] = field(default_factory=dict)
     last_successful_run_id: Optional[str] = None
     last_successful_reporting_period: Optional[str] = None
     regime_required: bool = False                # funded books needing ESMA output

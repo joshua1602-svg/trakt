@@ -1340,5 +1340,151 @@ class TestFullPipelineRouting(unittest.TestCase):
         self.assertTrue(diag["run_state_path"].endswith("orun_it/run_state.json"))
 
 
+# --------------------------------------------------------------------------- #
+# 19. Recurring-pack scalability — logical-role fingerprint / filename aliasing
+# --------------------------------------------------------------------------- #
+
+from apps.blob_trigger_app.schema_fingerprint import fingerprint_pack
+from apps.blob_trigger_app import file_roles as FR
+
+# Same logical schema, cosmetically different file names period to period.
+_LOAN_COLS = "loan_id,current_balance,interest_rate\n"
+_PROP_COLS = "property_id,valuation_amount,ltv\n"
+_FUND_COLS = "loan_id,principal_paid,interest_paid\n"
+_NOV_FILES = {
+    "LoanExtract One - OMNI_test.csv": _LOAN_COLS,
+    "PropertyExtract - Omni_test.csv": _PROP_COLS,
+    "Funder Principal And Interest_test.csv": _FUND_COLS,
+}
+_OCT_FILES = {  # equivalent roles, different names + separators + prefixes
+    "LoanExtract One OMNI_test.csv": _LOAN_COLS,
+    "PG_PropertyExtract Internal OMNI_test.csv": _PROP_COLS,
+    "Funder Principal And Interest_test.csv": _FUND_COLS,
+}
+
+
+def _write_pack(root: Path, files: dict) -> list:
+    root.mkdir(parents=True, exist_ok=True)
+    for name, cols in files.items():
+        (root / name).write_text(cols + "1,2,3\n")
+    return [str(p) for p in root.iterdir()]
+
+
+class TestFileRoleClassification(unittest.TestCase):
+    """Logical-role classification is stable across filename variants and honours
+    operator-approved registry aliases (requirements 1-3)."""
+
+    def test_default_roles_stable_across_variants(self):
+        self.assertEqual(FR.classify_file("LoanExtract One - OMNI_test.csv"), "loan_extract")
+        self.assertEqual(FR.classify_file("LoanExtract One OMNI_test.csv"), "loan_extract")
+        self.assertEqual(FR.classify_file("PropertyExtract - Omni_test.csv"), "property_extract")
+        self.assertEqual(FR.classify_file("PG_PropertyExtract Internal OMNI_test.csv"),
+                         "property_extract")
+        self.assertEqual(FR.classify_file("Funder Principal And Interest_test.csv"),
+                         "funder_pi_extract")
+
+    def test_registry_alias_override(self):
+        # A filename the default rules would not recognise, mapped via an approved
+        # alias to a logical role.
+        aliases = {"loan_extract": ["ACME Monthly Extract"]}
+        # Default rules do not recognise it as a known role; the fallback is the
+        # digit-stripped normalised name (stable across periods), NOT loan_extract.
+        self.assertEqual(FR.classify_file("ACME_Monthly_Extract_2025_10_test.csv"),
+                         "acmemonthlyextract")
+        # With the approved alias it resolves to the logical role.
+        self.assertEqual(FR.classify_file("ACME_Monthly_Extract_2025_10_test.csv", aliases),
+                         "loan_extract")
+
+    def test_pack_fingerprint_equal_across_equivalent_names(self):
+        with tempfile.TemporaryDirectory() as td:
+            nov = _write_pack(Path(td) / "2025-11-30", _NOV_FILES)
+            oct = _write_pack(Path(td) / "2025-10-31", _OCT_FILES)
+            fp_nov = fingerprint_pack(nov)
+            fp_oct = fingerprint_pack(oct)
+            self.assertEqual(fp_nov.sheets,
+                             ["funder_pi_extract", "loan_extract", "property_extract"])
+            self.assertEqual(fp_nov.fingerprint, fp_oct.fingerprint)   # equivalent → same key
+
+    def test_real_schema_change_still_flips_fingerprint(self):
+        with tempfile.TemporaryDirectory() as td:
+            nov = _write_pack(Path(td) / "2025-11-30", _NOV_FILES)
+            drift = dict(_OCT_FILES)
+            drift["LoanExtract One OMNI_test.csv"] = "loan_id,current_balance,interest_rate,NEW\n"
+            oct = _write_pack(Path(td) / "2025-10-31", drift)
+            self.assertNotEqual(fingerprint_pack(nov).fingerprint,
+                                fingerprint_pack(oct).fingerprint)
+
+
+class TestRecurringPackDeterministic(unittest.TestCase):
+    """End-to-end: a pack approved with one filename set processes deterministically
+    when an equivalent pack arrives with different file names — no re-approval, no
+    LLM (requirements 4-6)."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = self._tmp.name
+        self.out = str(Path(self.root) / "scratch")
+        self.storage = Storage(local_root=str(Path(self.root) / "blobstore"))
+        self.layout = Layout()
+        self.persistence = ProductionPersistence(self.storage, self.layout)
+        self.registry = self.persistence.load_registry()
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_equivalent_named_pack_runs_known_source_processed(self):
+        # 1) 2025-11-30 approved with the November filename set — its role-based
+        # fingerprint is what the registry stores.
+        nov = _write_pack(Path(self.root) / "nov", _NOV_FILES)
+        fp_nov = fingerprint_pack(nov)
+        self.registry.upsert(SourceRecord(
+            client_id="ERE", source_portfolio_id="direct_001", dataset="funded",
+            frequency="monthly", source_portfolio_type="direct", approved_mapping_id="m1",
+            mapping_config_path="config/m1.yaml",
+            expected_schema_fingerprint=fp_nov.fingerprint, status=STATUS_ACTIVE))
+
+        # 2) 2025-10-31 arrives with the EQUIVALENT (differently-named) file set.
+        oct = _write_pack(Path(self.root) / "oct", _OCT_FILES)
+        fp_oct = fingerprint_pack(oct)
+        self.assertEqual(fp_oct.fingerprint, fp_nov.fingerprint)   # same logical schema
+
+        inv = RecordingInvoker(status="done")
+        ref = WritingRefresher(self.out)
+        m = R.handle_blob_event(
+            "raw-v2/ERE/direct/funded/monthly/direct_001/2025-10-31/_READY.json",
+            registry=self.registry, out_dir=self.out, container="raw-v2",
+            pack_marker="_READY.json", schema_info=fp_oct,
+            orchestrator_invoker=inv, assembler_refresher=ref,
+            persistence=self.persistence, now=_NOW)
+
+        # 3) required assertions.
+        self.assertTrue(m["registry_match"])
+        self.assertEqual(m["decision"], "deterministic")
+        self.assertEqual(m["event_decision"], "known_source_processed")
+        self.assertEqual(m["status"], "processed")
+        # deterministic apply of the promoted mapping — no LLM, no approval.
+        self.assertEqual(inv.calls[0]["processing_mode"], "deterministic")
+        self.assertEqual(inv.calls[0]["mapping_config_path"], "config/m1.yaml")
+        # platform canonical for 2025-10-31 written to the durable store.
+        self.assertTrue(self.storage.exists(
+            self.layout.platform_period_uri("ERE", "2025-10-31")))
+
+    def test_aliases_for_pack_reads_registry(self):
+        self.registry.upsert(SourceRecord(
+            client_id="ERE", source_portfolio_id="direct_001", dataset="funded",
+            frequency="monthly", approved_mapping_id="m1", status=STATUS_ACTIVE,
+            expected_schema_fingerprint="sha256:x",
+            file_role_aliases={"loan_extract": ["ACME Monthly Extract"]}))
+        aliases = R.aliases_for_pack(
+            self.registry,
+            "raw-v2/ERE/direct/funded/monthly/direct_001/2025-10-31/_READY.json",
+            "raw-v2")
+        self.assertEqual(aliases, {"loan_extract": ["ACME Monthly Extract"]})
+        # aliases survive a registry round-trip (promoted with the mapping).
+        reg2 = self.persistence.load_registry()
+        rec = reg2.lookup("ERE", "direct_001", "funded", "monthly")
+        self.assertEqual(rec.file_role_aliases, {"loan_extract": ["ACME Monthly Extract"]})
+
+
 if __name__ == "__main__":
     unittest.main()
