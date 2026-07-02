@@ -12,11 +12,11 @@ The app code is already done. Everything below is clicking through your Microsof
 
 | Thing | Value |
 |---|---|
-| Your login (operator) | your `@becquerelventures.com` Microsoft account |
-| Client (added later, not now) | `@equityreleaseeurope.com` |
+| Your login (operator) | your `@digifinsolutions.co.uk` Microsoft account |
+| Client users (added later, not now) | `@equityreleaseeurope.com` and their NED at `@becquerelventures.com` |
 | Reports service (API) | the `trakt-mi-api` app |
 | Website plan | Paid (Standard) — confirmed |
-| Who gets access now | **only you** |
+| Who gets access now | **only you** (`@digifinsolutions.co.uk`) |
 | Emails sent to client now | **none** |
 
 Time needed: ~20–30 minutes, one time.
@@ -26,7 +26,7 @@ Time needed: ~20–30 minutes, one time.
 ## Part 1 — the one-time setup (just you)
 
 Do these in order in the Azure portal (portal.azure.com), signed in with your
-`@becquerelventures.com` account.
+`@digifinsolutions.co.uk` account.
 
 ### 1. Upgrade the website to the paid plan
 - Open your **Static Web App** (the website that serves the MI Agent).
@@ -57,7 +57,7 @@ This tells Microsoft "these people are allowed to sign in to this app."
 - Save.
 
 *(You don't need to touch the tenant ID — I've already set your organisation's
-domain, `becquerelventures.com`, in the app's config file.)*
+domain, `digifinsolutions.co.uk`, in the app's config file.)*
 
 ### 4. Connect the reports service to the website
 - In your **Static Web App** → **APIs** → **Link** → choose **`trakt-mi-api`**.
@@ -79,8 +79,9 @@ domain, `becquerelventures.com`, in the app's config file.)*
 
 ### 7. Put only yourself on the list
 - Go to **Enterprise applications** → open **`trakt-mi-agent`** → **Users and
-  groups** → **Add user** → add **your own** `@becquerelventures.com` account and
-  give it the **operator** role.
+  groups** → **Add user** → add **your own** `@digifinsolutions.co.uk` account and
+  give it the **operator** role. (It's your own tenant, so no invitation is
+  needed — you're already in the directory.)
 - That's it. No one else is added. Nothing is sent to the client.
 
 ---
@@ -88,7 +89,7 @@ domain, `becquerelventures.com`, in the app's config file.)*
 ## Part 2 — done. Test it
 - Open your website address in a private/incognito browser window.
 - It should now ask you to **sign in with Microsoft** before showing anything.
-- Sign in with your `@becquerelventures.com` account → you see the MI Agent.
+- Sign in with your `@digifinsolutions.co.uk` account → you see the MI Agent.
 - Try it signed out (or a different account) → you're kept out. 
 
 If sign-in gives an "issuer"/"tenant" error, tell me — it's a one-line fix (I'll
@@ -99,8 +100,8 @@ swap your domain for your tenant's ID in the config).
 ## Later — when the client signs (NOT now)
 A 2-minute step, done by you when you're ready:
 1. **Enterprise applications** → `trakt-mi-agent` → **Users and groups** → invite
-   each of their 5 people (their `@equityreleaseeurope.com` addresses) and give
-   them the **client** role.
+   each of their people — the `@equityreleaseeurope.com` staff **and** their NED at
+   `@becquerelventures.com` — and give each the **client** role.
 2. They receive a Microsoft invitation and can sign in. Client users see the
    reports; only you (operator) have full access.
 
