@@ -653,8 +653,13 @@ def _write_processed(out_dir: str | Path, manifest: Dict[str, Any],
 
 def _inv(result: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     r = result or {}
-    return {"run_id": r.get("run_id"), "orchestrator_status": r.get("status"),
-            "central_canonical_path": r.get("central_canonical_path")}
+    out = {"run_id": r.get("run_id"), "orchestrator_status": r.get("status"),
+           "central_canonical_path": r.get("central_canonical_path")}
+    # Surface the final investor-pack artifact (when the run produced one) so the
+    # event manifest advertises the downloadable deck alongside the run outputs.
+    if r.get("investor_pack_pptx") is not None:
+        out["investor_pack_pptx"] = r.get("investor_pack_pptx")
+    return out
 
 
 def _attach_llm(manifest: Dict[str, Any], persistence, now: str, generator) -> None:

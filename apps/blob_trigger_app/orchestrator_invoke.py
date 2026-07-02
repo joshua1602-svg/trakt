@@ -8,6 +8,7 @@ is the single seam the trigger calls. The default implementation wraps
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -22,6 +23,9 @@ OrchestratorInvoker = Callable[..., Dict[str, Any]]
 # engine state constants at module import time).
 _HALTED = "halted"
 _FAILED = "failed"
+
+# Manifest / result key for the final investor-PPTX artifact.
+ARTIFACT_KEY = "investor_pack_pptx"
 
 
 def _run_diagnostics(state: Any) -> Dict[str, Any]:
@@ -245,4 +249,60 @@ def default_orchestrator_invoker(
     # errors, and the path to the resumable run_state.json).
     if state.status != "done":
         result["diagnostics"] = _run_diagnostics(state)
+        return result
+
+    # ---- final orchestration stage: Investor PPTX ------------------------
+    # A successful pipeline run automatically produces the MI Agent-native
+    # investor PowerPoint as its final artifact, consuming the completed
+    # canonical / analytics / risk / manifest outputs. The deck failure is
+    # recorded in the manifest but does NOT fail an otherwise-successful run
+    # unless PPTX has been explicitly configured mandatory.
+    _generate_investor_pptx(state, client_id=client_id,
+                            reporting_period=reporting_period, result=result)
     return result
+
+
+def _generate_investor_pptx(state: Any, *, client_id: str,
+                            reporting_period: str, result: Dict[str, Any]) -> None:
+    """Run the investor-PPTX stage for a completed run (guarded).
+
+    Client name / as-of date are resolved from run metadata already produced by
+    the orchestration (never by reopening the raw uploaded files). The stage is
+    idempotent — a replay overwrites the existing deck and refreshes the
+    manifest timestamp.
+    """
+    from .pptx_stage import (generate_investor_pptx, pptx_enabled,
+                             pptx_mandatory)
+
+    if not pptx_enabled():
+        return
+
+    # Derive the run directory from the run manifest the orchestration already
+    # saved (out_root/run_id/run_state.json → run_dir). Gate on the manifest
+    # existing on disk: a real completed run always persisted it, so the deck
+    # consumes completed artifacts (and never runs against a bare stub state).
+    try:
+        manifest_path = Path(state.state_path())
+    except Exception:  # noqa: BLE001 — malformed state, skip silently
+        return
+    if not manifest_path.exists():
+        return
+    run_dir = manifest_path.parent
+
+    mandatory = pptx_mandatory()
+    # Client name priority: run metadata (client_id) → resolved client id → "Client".
+    client_name = getattr(state, "client_id", None) or client_id or "Client"
+    # As-of date priority: run metadata reporting period (already resolved);
+    # otherwise the generator infers the tape's data cut-off date.
+    as_of_date = reporting_period or ""
+    try:
+        result[ARTIFACT_KEY] = generate_investor_pptx(
+            run_dir, client_name=client_name, as_of_date=as_of_date,
+            mandatory=mandatory)
+    except Exception as exc:  # mandatory failure → fail the run
+        logging.exception("Investor PPTX stage failed (mandatory=%s)", mandatory)
+        if mandatory:
+            raise
+        result[ARTIFACT_KEY] = {
+            "type": "pptx", "status": "failed", "error": str(exc),
+            "generator": "mi_agent_pptx"}
