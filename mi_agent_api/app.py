@@ -460,13 +460,57 @@ def pipeline_snapshots(portfolioId: Optional[str] = None) -> Dict[str, Any]:
     return {"sources": sources, "source": root}
 
 
-def _resolve_pipeline_source(client_id: str, run_id: Optional[str]) -> Optional[Dict[str, Any]]:
-    """The governed pipeline scope for a client/run (explicit env or discovery).
+#: etag-cached local copy of the blob pipeline snapshot (avoid re-download when
+#: unchanged; re-download when a new weekly run republishes it).
+_PIPELINE_URI_CACHE: Dict[str, Any] = {"etag": None, "path": None}
 
-    Returns a scope dict with the separated date concepts (folder / extract /
-    as-of), never a single ambiguous reporting date.
+
+def _resolve_pipeline_uri_local() -> Optional[str]:
+    """Resolve MI_AGENT_PIPELINE_URI (the durable weekly pipeline snapshot pointer,
+    CSV, or ``latest/`` dir) to a LOCAL CSV path, etag-cached so a re-published
+    weekly extract renders on the next request without a restart. ``None`` when
+    unset/absent — filesystem resolution below is then unchanged."""
+    uri = os.environ.get("MI_AGENT_PIPELINE_URI")
+    if not uri:
+        return None
+    try:
+        import json as _json
+        from pathlib import Path as _Path
+        from apps.blob_trigger_app.storage import open_storage
+        storage = open_storage()
+        csv_uri = uri
+        if uri.endswith(".json"):
+            ptr = _json.loads(storage.read_text(uri))
+            csv_uri = ptr.get("blob_name") or ptr.get("source_file")
+        elif not uri.endswith(".csv"):
+            csv_uri = f"{uri.rstrip('/')}/pipeline_snapshot.csv"
+        if not csv_uri or not storage.exists(csv_uri):
+            return None
+        et = storage.etag(csv_uri)
+        cached = _PIPELINE_URI_CACHE
+        if (et and et == cached.get("etag") and cached.get("path")
+                and _Path(cached["path"]).exists()):
+            return cached["path"]
+        local = storage._local_path(csv_uri)
+        if _Path(str(local)).exists():
+            dest = str(local)
+        else:
+            scratch = os.environ.get("MI_AGENT_SCRATCH", "/tmp/trakt/mi_platform")
+            dest = str(storage.download_file(csv_uri, _Path(scratch) / "pipeline_snapshot.csv"))
+        _PIPELINE_URI_CACHE.update(etag=et, path=dest)
+        return dest
+    except Exception as exc:  # noqa: BLE001 — never 500 pipeline resolution
+        logger.warning("pipeline blob resolution failed for %s: %s", uri, exc)
+        return None
+
+
+def _resolve_pipeline_source(client_id: str, run_id: Optional[str]) -> Optional[Dict[str, Any]]:
+    """The governed pipeline scope for a client/run (blob URI, explicit env, or
+    discovery). Returns a scope dict with the separated date concepts (folder /
+    extract / as-of), never a single ambiguous reporting date.
     """
-    explicit = os.environ.get("MI_AGENT_PIPELINE_SOURCE")
+    # Durable blob pipeline snapshot (production) wins, then an explicit local file.
+    explicit = _resolve_pipeline_uri_local() or os.environ.get("MI_AGENT_PIPELINE_SOURCE")
     if explicit:
         from pathlib import Path as _Path
         p = _Path(explicit)
@@ -488,8 +532,8 @@ def _resolve_pipeline_source(client_id: str, run_id: Optional[str]) -> Optional[
 def _pipeline_history(client_id: str) -> Optional[Dict[str, Any]]:
     """The historical completion-rate model from a client's weekly pipeline files
     (None when only a single explicit source / no discovery root is configured)."""
-    if os.environ.get("MI_AGENT_PIPELINE_SOURCE"):
-        return None
+    if os.environ.get("MI_AGENT_PIPELINE_SOURCE") or os.environ.get("MI_AGENT_PIPELINE_URI"):
+        return None  # single explicit / blob snapshot → no multi-week history model
     root = os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root()
     if not root:
         return None

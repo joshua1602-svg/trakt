@@ -270,16 +270,25 @@ def handle_blob_event(
             return _emit()
 
     # 2c) Idempotency — a pack that already ran this exact schema is skipped,
-    # unless the marker explicitly carries force_reprocess=true.
+    # unless the marker explicitly carries force_reprocess=true. The local marker
+    # lives on EPHEMERAL scratch (/tmp in Azure), so it vanishes on instance churn;
+    # also consult the DURABLE run ledger in trakt-state so a redelivered Event Grid
+    # event OR a backfill re-run does not double-process a pack that already
+    # PROCESSED with this exact schema. Only a successful `processed` record blocks —
+    # a pending_review/halted/failed pack must remain reprocessable (e.g. after the
+    # operator approves it).
     force = bool(meta.get("force_reprocess"))
     prior = _read_processed(out_dir, manifest["pack_key"])
+    if prior is None and persistence is not None:
+        prior = _durable_prior(persistence, manifest["pack_key"])
     if (not force) and prior and prior.get("schema_fingerprint") == schema_info.fingerprint:
         manifest["status"] = STATUS_ALREADY_PROCESSED
         manifest["decision"] = DECISION_IDEMPOTENT_SKIP
         manifest["event_decision"] = EVT_DUPLICATE_READY_IGNORED
         manifest["orchestrator_invocation"] = {
             "invoked": False, "reason": "pack already processed",
-            "prior_run_id": prior.get("run_id"), "prior_status": prior.get("status")}
+            "prior_run_id": prior.get("run_id"), "prior_status": prior.get("status"),
+            "prior_source": prior.get("source", "scratch")}
         return _emit()
 
     # 3) Registry inference + target selection -----------------------------
@@ -547,6 +556,11 @@ def handle_blob_event(
                 _persist_funded_outputs(
                     persistence, manifest, parsed, out_dir, accepted_root,
                     sel_run_regime, regime_runner)
+        # 5b) Weekly pipeline (dataset=pipeline) runs publish the pipeline snapshot
+        # the React MI pipeline view reads (stable latest pointer + period copy), so
+        # a weekly extract renders as the latest without a filesystem mount.
+        elif parsed.dataset == "pipeline" and persistence is not None:
+            _persist_pipeline_outputs(persistence, manifest, parsed, result)
     elif orch_status == "halted":
         manifest["status"] = STATUS_HALTED
         manifest["event_decision"] = EVT_KNOWN_SOURCE_HALTED
@@ -715,6 +729,28 @@ def _persist_funded_outputs(persistence, manifest, parsed, out_dir, accepted_roo
     manifest["persisted"] = persisted
 
 
+def _persist_pipeline_outputs(persistence, manifest, parsed, result) -> None:
+    """Publish a weekly pipeline run's snapshot (the MI canonical the deterministic
+    run produced) to the durable store so the React MI pipeline view reads the
+    latest weekly extract from Blob. Best effort — never fails the event."""
+    central_local = (result or {}).get("central_canonical_path")
+    persisted: Dict[str, Any] = dict(manifest.get("persisted") or {})
+    try:
+        if central_local and Path(str(central_local)).exists():
+            pl = persistence.persist_pipeline(
+                parsed.client_id, parsed.reporting_period, str(central_local))
+            persisted["pipeline_latest_uri"] = pl.get("latest")
+            persisted["pipeline_period_uri"] = pl.get("period")
+            persisted["pipeline_pointer_uri"] = pl.get("pointer")
+            if pl.get("latest"):
+                manifest["pipeline_snapshot_uri"] = pl["latest"]
+        else:
+            persisted["pipeline_snapshot"] = "unavailable (no central canonical produced)"
+    except Exception as exc:  # noqa: BLE001
+        manifest.setdefault("persist_errors", []).append(f"pipeline_outputs: {exc}")
+    manifest["persisted"] = persisted
+
+
 # --------------------------------------------------------------------------- #
 # Pack idempotency helpers (folder-level, keyed on the reporting pack)
 # --------------------------------------------------------------------------- #
@@ -728,6 +764,23 @@ def _pack_key(parsed: ParsedPath) -> str:
 
 def _processed_path(out_dir: str | Path, pack_key: str) -> Path:
     return Path(out_dir) / "_packs" / f"{pack_key}.json"
+
+
+def _durable_prior(persistence: "ProductionPersistence",
+                   pack_key: str) -> Optional[Dict[str, Any]]:
+    """Durable idempotency: return a prior-run fingerprint/status from the durable
+    trakt-state ledger, but ONLY for a successfully ``processed`` run — so a
+    pending_review / halted / failed pack stays reprocessable. ``None`` on any miss
+    or error (idempotency is best-effort; never fail the event on a ledger read)."""
+    try:
+        rec = persistence.load_run_record(pack_key)
+    except Exception:  # noqa: BLE001
+        return None
+    if not rec or rec.get("status") != STATUS_PROCESSED:
+        return None
+    return {"schema_fingerprint": rec.get("schema_fingerprint"),
+            "status": rec.get("status"), "run_id": rec.get("run_id"),
+            "source": "durable_ledger"}
 
 
 def _read_processed(out_dir: str | Path, pack_key: str) -> Optional[Dict[str, Any]]:

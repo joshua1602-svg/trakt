@@ -133,6 +133,17 @@ class Storage:
                 out.append(join_uri(prefix_uri, rel))
         return out
 
+    def etag(self, uri: str) -> Optional[str]:
+        """A cheap change-token for ``uri`` (no full read): filesystem uses
+        ``mtime_ns:size``. ``None`` when the target does not exist. Callers use it
+        to detect that a re-published artifact changed and re-read only then."""
+        p = self._local_path(uri)
+        try:
+            st = p.stat()
+        except OSError:
+            return None
+        return f"{st.st_mtime_ns}:{st.st_size}"
+
 
 class BlobStorage(Storage):
     """Azure Blob-backed storage. ``blob://{container}/{key}`` → real blob.
@@ -193,6 +204,16 @@ class BlobStorage(Storage):
         cc = self._svc().get_container_client(container)
         return [f"{BLOB_SCHEME}{container}/{b.name}"
                 for b in cc.list_blobs(name_starts_with=key)]
+
+    def etag(self, uri: str) -> Optional[str]:
+        """The blob's ETag via a cheap properties HEAD (no download). ``None`` when
+        absent — so the MI API re-reads a re-published canonical only when it
+        actually changed."""
+        try:
+            props = self._client(uri).get_blob_properties()
+        except Exception:  # noqa: BLE001 — missing blob / transient → treat as no etag
+            return None
+        return getattr(props, "etag", None) or str(getattr(props, "last_modified", ""))
 
 
 #: Env vars set by Azure App Service / Functions in the cloud (NOT locally).

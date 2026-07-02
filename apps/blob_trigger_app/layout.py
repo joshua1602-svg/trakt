@@ -124,3 +124,18 @@ class Layout:
 
     def mi_prefix(self, client_id: str) -> str:
         return self._processed("mi", client_id)
+
+    # -- weekly pipeline snapshot (React MI pipeline view) ------------------ #
+    PIPELINE_SNAPSHOT_NAME = "pipeline_snapshot.csv"
+    PIPELINE_POINTER_NAME = "latest_pipeline_snapshot.json"
+
+    def pipeline_latest_csv_uri(self, client_id: str) -> str:
+        """Stable pointer to the latest weekly pipeline extract, overwritten each
+        weekly run — the URI the MI API reads for GET /mi/pipeline/snapshot."""
+        return self._processed("pipeline", client_id, "latest", self.PIPELINE_SNAPSHOT_NAME)
+
+    def pipeline_latest_pointer_uri(self, client_id: str) -> str:
+        return self._processed("pipeline", client_id, "latest", self.PIPELINE_POINTER_NAME)
+
+    def pipeline_period_csv_uri(self, client_id: str, period: str) -> str:
+        return self._processed("pipeline", client_id, period, self.PIPELINE_SNAPSHOT_NAME)

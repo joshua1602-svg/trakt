@@ -27,7 +27,6 @@ pipeline rows.
 from __future__ import annotations
 
 import os
-from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -215,9 +214,82 @@ def _present_dimensions(
     return available, missing
 
 
-@lru_cache(maxsize=1)
+def _platform_uri_etag(uri: str) -> Optional[str]:
+    """Cheap change-token for a ``blob://`` (or local) platform URI — the blob
+    ETag via a properties HEAD, NOT a download. Lets the cache detect a
+    re-published canonical without re-reading it every request."""
+    try:
+        from apps.blob_trigger_app.storage import open_storage
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        storage = open_storage()
+        candidate = uri if uri.endswith(".csv") else f"{uri.rstrip('/')}/{_PLATFORM_CANONICAL_NAME}"
+        return storage.etag(candidate)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _source_signature() -> str:
+    """A cheap identity of the ACTIVE data source so the cache reloads when a new
+    run republishes it. For a ``blob://`` platform URI this is the blob ETag (no
+    download); for local sources it is ``path:mtime:size``."""
+    uri = os.environ.get("MI_AGENT_PLATFORM_URI")
+    if uri:
+        et = _platform_uri_etag(uri)
+        if et:
+            return f"platform_uri:{uri}:{et}"
+    try:
+        path, base = resolve_data_source()
+    except Exception:  # noqa: BLE001
+        return "unresolved"
+    if path is None:
+        return "none"
+    try:
+        st = Path(path).stat()
+        return f"{base}:{path}:{st.st_mtime_ns}:{st.st_size}"
+    except OSError:
+        return f"{base}:{path}"
+
+
+def _cache_ttl() -> float:
+    """Seconds a loaded dataset is served before the source signature is re-checked
+    (``MI_AGENT_DATA_CACHE_TTL``; default 30s). 0 ⇒ check every request."""
+    try:
+        return max(0.0, float(os.environ.get("MI_AGENT_DATA_CACHE_TTL", "30")))
+    except (TypeError, ValueError):
+        return 30.0
+
+
+#: Signature-keyed cache: (signature -> (df, info)) with a TTL re-check so a new
+#: run is picked up on the next request without an API restart.
+_ACTIVE_CACHE: Dict[str, Any] = {"sig": None, "value": None, "checked_at": 0.0}
+
+
 def _active() -> Tuple[pd.DataFrame, Dict[str, Any]]:
-    """Load + prepare the active dataset once; return ``(df, info)``."""
+    """Return the active ``(df, info)``, reloading when the source changed.
+
+    Within the TTL the cached frame is served directly; after the TTL the source
+    signature (blob ETag / file mtime) is re-checked and the dataset is reloaded
+    ONLY when it actually changed — so a re-published platform canonical renders
+    on the next request, but an unchanged source is not re-read.
+    """
+    import time
+    now = time.monotonic()
+    cached = _ACTIVE_CACHE.get("value")
+    if cached is not None and (now - _ACTIVE_CACHE["checked_at"]) < _cache_ttl():
+        return cached
+    sig = _source_signature()
+    if cached is not None and sig == _ACTIVE_CACHE.get("sig"):
+        _ACTIVE_CACHE["checked_at"] = now
+        return cached
+    value = _load_active()
+    _ACTIVE_CACHE.update(sig=sig, value=value, checked_at=now)
+    return value
+
+
+def _load_active() -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """Load + prepare the active dataset; return ``(df, info)``."""
     path, base = resolve_data_source()
     if path is None:
         raise FileNotFoundError(
@@ -291,8 +363,9 @@ def _active() -> Tuple[pd.DataFrame, Dict[str, Any]]:
 
 
 def reset_cache() -> None:
-    """Clear the cached active dataset (used by tests when env changes)."""
-    _active.cache_clear()
+    """Clear the cached active dataset (used by tests, and by an explicit refresh
+    after a new run publishes). The next request reloads from the current source."""
+    _ACTIVE_CACHE.update(sig=None, value=None, checked_at=0.0)
 
 
 def get_dataframe() -> pd.DataFrame:
