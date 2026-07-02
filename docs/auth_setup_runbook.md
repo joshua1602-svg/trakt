@@ -1,160 +1,127 @@
-# MI Agent authentication — setup runbook
+# Turning on the login for the MI Agent — step-by-step guide
 
-Adds authentication + role-based access to the **client-facing MI Agent** so only
-invited users can reach the UI or the API. Scope: one client, ~5 client users +
-operators. Model chosen: **Entra ID B2B guest invites · platform Easy Auth + Static
-Web Apps config · client role + operator role**.
+This switches on "sign in to see the reports" for the MI Agent. After this, only
+people you allow can open it. **This is setup only — nobody is emailed.** You put
+just yourself on the list now; the client's people are added later (a 2-minute
+step) once they've signed.
 
-The application code and config are already in this repo (`mi_agent_api/auth.py`,
-the guard/CORS/exception changes in `mi_agent_api/app.py`, and
-`frontend/mi-agent-ui/staticwebapp.config.json`). This runbook is the **Azure-side
-work you apply**; no further code changes are required to turn auth on.
+The app code is already done. Everything below is clicking through your Microsoft
+(Azure) account.
 
----
+**Your details, already filled in for you:**
 
-## Architecture
-
-```
-client user ──login (Entra ID)──▶ Azure Static Web App (Standard)
-                                    │  serves the React MI Agent UI
-                                    │  enforces staticwebapp.config.json (auth + roles)
-                                    ▼
-                            linked backend  ── injects X-MS-CLIENT-PRINCIPAL ─▶ trakt-mi-api (App Service, FastAPI)
-                                                                                  auth.py reads the principal,
-                                                                                  requires client|operator role
-```
-
-- The SWA does the login and **forwards the verified identity** to the API as the
-  `X-MS-CLIENT-PRINCIPAL` header. The API trusts that header (no token validation
-  in-app) — the supported linked-backend / Easy Auth pattern.
-- Same-origin: the UI calls `/api/*`, which the SWA proxies to the App Service, so
-  there is no cross-origin/token handling in the browser.
-
----
-
-## Values you need to supply (fill these in before starting)
-
-| Placeholder | Where used | Value |
-|---|---|---|
-| `AAD_TENANT_ID` | staticwebapp.config.json issuer | _your Entra tenant ID_ |
-| `AAD_CLIENT_ID` | SWA app setting | _app registration (client) ID_ |
-| `AAD_CLIENT_SECRET` | SWA app setting | _app registration client secret_ |
-| SWA name | Azure portal | _e.g. the existing `nice-smoke-…` SWA_ |
-| App Service name | Azure portal | `trakt-mi-api` |
-| Client email domain | B2B invites | _e.g. `@client-domain.com`_ |
-| Operator emails | role assignment | _your team's accounts_ |
-| Client tenant label | `MI_AGENT_CLIENT_ID` | _the single client id this deployment serves_ |
-
-> If the SWA is currently on the **Free** tier, it must be upgraded to **Standard**
-> — custom Entra providers and linked backends require Standard.
-
----
-
-## Step 1 — Entra app registration
-
-1. Entra ID → App registrations → New registration. Name e.g. `trakt-mi-agent`.
-2. Redirect URI (Web): `https://<swa-hostname>/.auth/login/aad/callback`.
-3. Certificates & secrets → new client secret → record the value → this is
-   `AAD_CLIENT_SECRET`. The Application (client) ID is `AAD_CLIENT_ID`; the
-   Directory (tenant) ID is `AAD_TENANT_ID`.
-4. (Recommended) App roles → create two app roles, values **`client`** and
-   **`operator`** (Allowed member types: Users/Groups). These are surfaced to the
-   API. *Alternatively* you can assign the same role names via SWA role invitations
-   in Step 5 without app roles — either works; app roles scale better.
-5. Token configuration (only if using app roles): ensure the `roles` claim is
-   emitted (it is by default for assigned app roles).
-
-## Step 2 — Static Web App (Standard) + config
-
-1. Upgrade the SWA to **Standard** if needed.
-2. Configuration → Application settings → add:
-   - `AAD_CLIENT_ID` = _app (client) ID_
-   - `AAD_CLIENT_SECRET` = _client secret_
-3. Deploy `frontend/mi-agent-ui/staticwebapp.config.json` (it ships with the app;
-   replace `AAD_TENANT_ID` in the `openIdIssuer` with your tenant ID — or template
-   it in the build).
-
-## Step 3 — Link the backend
-
-1. SWA → APIs → Link an existing backend → select the `trakt-mi-api` App Service.
-2. This makes the SWA proxy `/api/*` to the App Service and forward the principal.
-
-## Step 4 — App Service (`trakt-mi-api`) settings
-
-Add these application settings and restart:
-
-| Setting | Value |
+| Thing | Value |
 |---|---|
-| `MI_AGENT_AUTH_ENABLED` | `true` |
-| `MI_AGENT_CLIENT_ROLE` | `client` |
-| `MI_AGENT_OPERATOR_ROLE` | `operator` |
-| `MI_AGENT_CLIENT_ID` | _the single client id_ |
-| `MI_AGENT_CORS_ORIGINS` | _the SWA origin, e.g. `https://<swa-hostname>`_ |
+| Your login (operator) | your `@becquerelventures.com` Microsoft account |
+| Client (added later, not now) | `@equityreleaseeurope.com` |
+| Reports service (API) | the `trakt-mi-api` app |
+| Website plan | Paid (Standard) — confirmed |
+| Who gets access now | **only you** |
+| Emails sent to client now | **none** |
 
-> With the linked backend the UI is same-origin, so CORS is defensive only. Never
-> set `MI_AGENT_CORS_ORIGINS` to `*` — the app no longer has a wildcard fallback,
-> and an unset value denies cross-origin browser calls.
-
-## Step 5 — Frontend build target + invite users
-
-1. Build the SWA with `VITE_AGENT_API_URL=/api` so the UI calls the linked backend
-   same-origin. **Update `.github/workflows/azure-static-web-apps-*.yml`** — the
-   current `VITE_AGENT_API_URL` points at the Streamlit host and must change to
-   `/api` **after** the linked backend exists (Step 3).
-2. Invite the ~5 client users as **B2B guests** (Entra → Users → Invite external
-   user) using their `@client-domain.com` addresses.
-3. Assign roles:
-   - *App-role path:* Enterprise applications → `trakt-mi-agent` → Users and groups
-     → assign each client guest the **client** role and each operator the
-     **operator** role.
-   - *SWA-invitation path (alternative):* SWA → Role management → invite each user
-     and grant role `client` or `operator`.
-
-## Step 6 — Verify
-
-```bash
-# health is open (probe) even with auth on:
-curl -i https://<swa-hostname>/api/health           # 200
-
-# protected without login → redirected to Entra login:
-curl -i https://<swa-hostname>/api/me               # 302 to /.auth/login/aad
-
-# after logging in through the browser, /api/me returns identity + roles:
-#   {"authenticated": true, "user": "...", "roles": ["client"], "isOperator": false}
-```
-
-Also confirm: an authenticated user with **no** client/operator role gets 403; the
-UI is unreachable when logged out; `/api/health` contains no server file path.
-
-## Rollback / disable
-
-Set `MI_AGENT_AUTH_ENABLED=false` on the App Service to bypass API enforcement
-(the SWA route rules still gate the UI). To fully revert, remove the
-`staticwebapp.config.json` auth block and unlink the backend. **Do not expose the
-UI to the client with auth disabled.**
+Time needed: ~20–30 minutes, one time.
 
 ---
 
-## What the code already does (no action needed)
+## Part 1 — the one-time setup (just you)
 
-- `mi_agent_api/auth.py` — parses `X-MS-CLIENT-PRINCIPAL` (SWA and Easy Auth
-  shapes), global `auth_guard` requiring an MI role, `client`/`operator`
-  distinction. Fails closed: no principal → 401, no MI role → 403.
-- `mi_agent_api/app.py` — guard wired as a global dependency; CORS wildcard
-  fallback removed; `/health` no longer leaks the dataset path; unhandled errors
-  return a generic 500 (no stack/paths); `GET /me` reports the resolved identity.
-- `frontend/mi-agent-ui/staticwebapp.config.json` — Entra login, `/api/*` and the
-  SPA restricted to `client`/`operator`, health left open, login/logout redirects,
-  hardening headers.
-- Tests: `mi_agent_api/tests/test_auth.py` (guard + parsing); the existing suite is
-  unaffected (`mi_agent_api/tests/conftest.py` disables enforcement for it).
+Do these in order in the Azure portal (portal.azure.com), signed in with your
+`@becquerelventures.com` account.
 
-## Known follow-ups (not blockers for one client)
+### 1. Upgrade the website to the paid plan
+- Open your **Static Web App** (the website that serves the MI Agent).
+- Find **Hosting plan** (under Settings) and switch it from **Free** to
+  **Standard**. This is the ~$9/month upgrade. It shows the exact price before you
+  confirm.
 
-- **Per-request tenant entitlement.** With one client, data isolation is achieved
-  by deploying exactly one client's dataset; the caller-supplied `client_id` only
-  selects cohorts *within* that dataset. True multi-client entitlement (mapping a
-  principal → allowed client_ids) is a later change when a second client is hosted.
-- **UI identity chip / logout link.** The platform enforces access already; adding
-  a signed-in-user chip + logout in the React header is UX polish (use `/.auth/me`
-  and `/logout`).
+### 2. Create the "sign-in registration"
+This tells Microsoft "these people are allowed to sign in to this app."
+- Go to **Microsoft Entra ID** → **App registrations** → **New registration**.
+- Name it `trakt-mi-agent`.
+- Under "Supported account types", choose the option that includes your
+  organisation **and guests** (accounts in this directory + invited guests).
+- Under **Redirect URI**, pick **Web** and paste:
+  `https://<your-website-address>/.auth/login/aad/callback`
+  (replace `<your-website-address>` with your Static Web App's URL).
+- Click **Register**.
+- On the next screen, **copy the "Application (client) ID"** — you'll paste it in
+  step 3.
+- Go to **Certificates & secrets** → **New client secret** → create one →
+  **copy its "Value" immediately** (you can't see it again).
+
+### 3. Give the website those two values
+- Back in your **Static Web App** → **Configuration** (Application settings) →
+  add two settings:
+  - `AAD_CLIENT_ID` = the Application (client) ID from step 2
+  - `AAD_CLIENT_SECRET` = the secret Value from step 2
+- Save.
+
+*(You don't need to touch the tenant ID — I've already set your organisation's
+domain, `becquerelventures.com`, in the app's config file.)*
+
+### 4. Connect the reports service to the website
+- In your **Static Web App** → **APIs** → **Link** → choose **`trakt-mi-api`**.
+- This lets the website hand the logged-in person's identity to the reports
+  service automatically.
+
+### 5. Turn the lock on, on the reports side
+- Open the **`trakt-mi-api`** app → **Configuration** (Application settings) → add:
+  - `MI_AGENT_AUTH_ENABLED` = `true`
+  - `MI_AGENT_CORS_ORIGINS` = your website's address (e.g. `https://<your-website-address>`)
+  - `MI_AGENT_CLIENT_ID` = a short label for this client, e.g. `ERE`
+- Save and restart the app.
+
+### 6. Point the website at the connected service
+- The website needs to send report questions to `/api`. This is one line in the
+  deployment settings (`VITE_AGENT_API_URL` = `/api`). **Tell me when you reach
+  this step and I'll make that change in the code for you** (it only takes effect
+  after step 4, so timing matters — that's why I've held it).
+
+### 7. Put only yourself on the list
+- Go to **Enterprise applications** → open **`trakt-mi-agent`** → **Users and
+  groups** → **Add user** → add **your own** `@becquerelventures.com` account and
+  give it the **operator** role.
+- That's it. No one else is added. Nothing is sent to the client.
+
+---
+
+## Part 2 — done. Test it
+- Open your website address in a private/incognito browser window.
+- It should now ask you to **sign in with Microsoft** before showing anything.
+- Sign in with your `@becquerelventures.com` account → you see the MI Agent.
+- Try it signed out (or a different account) → you're kept out. 
+
+If sign-in gives an "issuer"/"tenant" error, tell me — it's a one-line fix (I'll
+swap your domain for your tenant's ID in the config).
+
+---
+
+## Later — when the client signs (NOT now)
+A 2-minute step, done by you when you're ready:
+1. **Enterprise applications** → `trakt-mi-agent` → **Users and groups** → invite
+   each of their 5 people (their `@equityreleaseeurope.com` addresses) and give
+   them the **client** role.
+2. They receive a Microsoft invitation and can sign in. Client users see the
+   reports; only you (operator) have full access.
+
+Until you do this, the client is not contacted and cannot get in.
+
+---
+
+## If you ever need to turn it off
+Set `MI_AGENT_AUTH_ENABLED` = `false` on the `trakt-mi-api` app. (Don't leave the
+website reachable by the client with the lock off.)
+
+---
+
+## For reference — what the code already handles (no action needed)
+- `mi_agent_api/auth.py` — reads the signed-in person's identity that the website
+  passes to the reports service; requires an allowed role (client or operator);
+  refuses everyone else. Switched by `MI_AGENT_AUTH_ENABLED`.
+- `mi_agent_api/app.py` — applies that check to every report request; tightened
+  the cross-site rules; stopped the health check from revealing a server file
+  path; hides internal error details from users; adds a `/me` "who am I" check.
+- `frontend/mi-agent-ui/staticwebapp.config.json` — the website's own rules:
+  sign-in with Microsoft, only client/operator roles allowed, login/logout,
+  security headers. Your domain is already set here.
+- Tested in `mi_agent_api/tests/test_auth.py`; the rest of the app is unaffected.
