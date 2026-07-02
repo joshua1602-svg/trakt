@@ -177,6 +177,39 @@ python -m unittest \
   tests.test_blob_trigger_app tests.test_ops_workflow
 ```
 
+## 8b. Operator approval console (standalone UI)
+
+Approvals are done in a **separate** web console (`mi_agent_operator`), NOT the
+client dashboard — see `mi_agent_operator/README.md`. It shows the review queue
+(new sources + material changes, AI-mapping pre-filled) with **Approve & promote**
+/ **Reject** / **Choose alternative** buttons, plus an auto-approval audit log.
+
+Run it as its **own** App Service (never inside the client app), locked down:
+
+```bash
+TRAKT_OPERATOR_TOKEN=<secret from Key Vault> \
+TRAKT_BLOB_CONNECTION=<same connection string> \
+uvicorn mi_agent_operator.operator_app:app --port 8099
+```
+
+- Auth is **server-side, fail-closed**: no `TRAKT_OPERATOR_TOKEN` ⇒ the API
+  refuses everything (503). Front it with Entra ID / an IP allowlist in production.
+- Approving pins the source `active` (fingerprint + header signatures) exactly like
+  the `ops` CLI — the CLI remains available as a fallback.
+
+## 8c. ESMA Annex 2 XML delivery (deliberate, manual — Codespaces)
+
+The automated pipeline produces the Annex 2 **projection** (template-clean data +
+provenance) into `processed-v2/regime/{client}/{period}/` for any funded source
+flagged `--regime-required`. Producing the **submittable `auth.099.001.04` XML** is
+kept a deliberate, human-run managed-service step (the delivery agent refuses XML
+unless all readiness gates pass) — it is intentionally NOT blob-triggered:
+
+```bash
+# In Codespaces, against the projection the pipeline published:
+python -m engine.delivery_xml_agent deliver <projection package from processed-v2/regime/…>
+```
+
 ## 9. What the operator must apply (Claude Code cannot)
 
 - All Function App / MI API **Application settings** in §1.

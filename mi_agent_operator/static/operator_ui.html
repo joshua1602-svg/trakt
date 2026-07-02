@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trakt Operator Console</title>
+<style>
+  :root{
+    --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
+    --text:#e2e8f0; --muted:#94a3b8; --accent:#38bdf8;
+    --green:#22c55e; --red:#ef4444; --amber:#f59e0b; --violet:#a78bfa;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       background:var(--bg);color:var(--text)}
+  header{display:flex;align-items:center;gap:16px;padding:12px 20px;background:var(--panel);
+         border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+  header h1{font-size:16px;margin:0;font-weight:650;letter-spacing:.2px}
+  header .spacer{flex:1}
+  input,button,textarea{font:inherit}
+  input[type=password],input[type=text]{background:var(--panel2);border:1px solid var(--line);
+       color:var(--text);border-radius:8px;padding:7px 10px;min-width:220px}
+  button{background:var(--panel2);border:1px solid var(--line);color:var(--text);
+       border-radius:8px;padding:7px 12px;cursor:pointer}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--green);border-color:var(--green);color:#052e16;font-weight:650}
+  button.danger{background:transparent;border-color:var(--red);color:#fca5a5}
+  button.danger:hover{background:var(--red);color:#450a0a}
+  button.ghost{background:transparent}
+  .tabs{display:flex;gap:6px}
+  .tab{padding:6px 12px;border-radius:8px;cursor:pointer;color:var(--muted)}
+  .tab.active{background:var(--panel2);color:var(--text)}
+  main{display:grid;grid-template-columns:minmax(300px,380px) 1fr;gap:0;height:calc(100vh - 57px)}
+  #list{overflow:auto;border-right:1px solid var(--line)}
+  #detail{overflow:auto;padding:22px 26px}
+  .card{padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer}
+  .card:hover{background:var(--panel)}
+  .card.sel{background:var(--panel2);box-shadow:inset 3px 0 0 var(--accent)}
+  .card .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .card .pid{font-weight:600}
+  .card .sub{color:var(--muted);font-size:12px;margin-top:2px}
+  .badge{font-size:11px;font-weight:650;padding:2px 8px;border-radius:999px;white-space:nowrap}
+  .b-new{background:rgba(167,139,250,.15);color:var(--violet);border:1px solid var(--violet)}
+  .b-mat{background:rgba(245,158,11,.15);color:var(--amber);border:1px solid var(--amber)}
+  .b-drift{background:rgba(56,189,248,.12);color:var(--accent);border:1px solid var(--accent)}
+  h2{font-size:18px;margin:0 0 4px}
+  .why{color:var(--muted);margin-bottom:18px}
+  .grid{display:grid;grid-template-columns:150px 1fr;gap:6px 16px;margin:10px 0 20px}
+  .grid .k{color:var(--muted)}
+  .fp{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;word-break:break-all}
+  .sec{margin:22px 0}
+  .sec h3{font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:0 0 10px}
+  .chips span{display:inline-block;background:var(--panel2);border:1px solid var(--line);
+       border-radius:6px;padding:3px 8px;margin:0 6px 6px 0;font-size:12px}
+  .chips .add{border-color:var(--green);color:#86efac}
+  .chips .rem{border-color:var(--red);color:#fca5a5}
+  table{width:100%;border-collapse:collapse}
+  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:12px}
+  .conf{font-family:ui-monospace,monospace}
+  .actions{position:sticky;bottom:0;background:linear-gradient(180deg,transparent,var(--bg) 30%);
+       padding:18px 0 6px;display:flex;gap:10px;flex-wrap:wrap}
+  .toast{position:fixed;right:20px;bottom:20px;background:var(--panel);border:1px solid var(--line);
+       border-left:4px solid var(--green);border-radius:8px;padding:12px 16px;max-width:420px;
+       box-shadow:0 8px 30px rgba(0,0,0,.4);opacity:0;transform:translateY(8px);transition:.2s}
+  .toast.show{opacity:1;transform:none}
+  .toast.err{border-left-color:var(--red)}
+  .empty{color:var(--muted);padding:40px;text-align:center}
+  dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:12px;
+       padding:20px;min-width:420px;max-width:90vw}
+  dialog::backdrop{background:rgba(0,0,0,.55)}
+  dialog h3{margin-top:0}
+  dialog textarea,dialog input{width:100%;margin:6px 0 14px}
+  .row{display:flex;gap:10px;justify-content:flex-end}
+  label{display:block;color:var(--muted);font-size:12px;margin-top:8px}
+  .mut{color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <h1>🛡️ Trakt Operator Console</h1>
+  <div class="tabs">
+    <div class="tab active" id="tab-queue" onclick="showTab('queue')">Review queue</div>
+    <div class="tab" id="tab-audit" onclick="showTab('audit')">Auto-approval audit</div>
+  </div>
+  <div class="spacer"></div>
+  <input id="token" type="password" placeholder="Operator token" autocomplete="off">
+  <button onclick="connect()">Connect</button>
+</header>
+
+<main>
+  <div id="list"><div class="empty">Enter your operator token and press <b>Connect</b>.</div></div>
+  <div id="detail"><div class="empty">Select an item to review.</div></div>
+</main>
+
+<dialog id="dlg">
+  <h3 id="dlg-title"></h3>
+  <div id="dlg-body"></div>
+  <div class="row">
+    <button class="ghost" onclick="document.getElementById('dlg').close()">Cancel</button>
+    <button class="primary" id="dlg-ok"></button>
+  </div>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let TOKEN = sessionStorage.getItem("trakt_op_token") || "";
+let TAB = "queue";
+let SEL = null;
+
+function tok(){ return document.getElementById("token").value || TOKEN; }
+function connect(){
+  TOKEN = document.getElementById("token").value.trim();
+  sessionStorage.setItem("trakt_op_token", TOKEN);
+  refresh();
+}
+async function api(path, opts){
+  opts = opts || {};
+  opts.headers = Object.assign({"X-Operator-Token": tok(), "Content-Type":"application/json"}, opts.headers||{});
+  const r = await fetch(path, opts);
+  if(!r.ok){
+    let msg = r.status===401 ? "Invalid operator token." :
+              r.status===503 ? "Console disabled — TRAKT_OPERATOR_TOKEN not set on the server." :
+              ("Error "+r.status);
+    try{ const j = await r.json(); if(j.detail) msg = j.detail; }catch(e){}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+function toast(msg, err){
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.className = "toast show" + (err?" err":"");
+  setTimeout(()=>t.className="toast"+(err?" err":""), 3800);
+}
+function showTab(t){ TAB=t;
+  document.getElementById("tab-queue").classList.toggle("active", t==="queue");
+  document.getElementById("tab-audit").classList.toggle("active", t==="audit");
+  refresh();
+}
+function badge(kind, material){
+  if(kind==="new_source") return '<span class="badge b-new">New client / portfolio</span>';
+  if(material) return '<span class="badge b-mat">Material change</span>';
+  return '<span class="badge b-drift">Schema change</span>';
+}
+function esc(s){ return (s==null?"":String(s)).replace(/[&<>]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+
+async function refresh(){
+  const list = document.getElementById("list");
+  try{
+    if(TAB==="audit"){ return renderAudit(); }
+    const {items} = await api("/api/queue");
+    if(!items.length){ list.innerHTML = '<div class="empty">🎉 Nothing awaiting approval.</div>';
+       document.getElementById("detail").innerHTML='<div class="empty">Queue is clear.</div>'; return; }
+    list.innerHTML = items.map(it=>`
+      <div class="card ${SEL===it.approval_id?'sel':''}" onclick="openItem('${it.approval_id}')">
+        <div class="top"><span class="pid">${esc(it.source_portfolio_id)}</span>${badge(it.kind,it.material)}</div>
+        <div class="sub">${esc(it.client_id)} · ${esc(it.dataset)}/${esc(it.frequency)} · ${esc(it.period)}</div>
+      </div>`).join("");
+  }catch(e){ list.innerHTML = `<div class="empty">${esc(e.message)}</div>`; toast(e.message,true); }
+}
+
+async function renderAudit(){
+  const list = document.getElementById("list");
+  const detail = document.getElementById("detail");
+  list.innerHTML = '<div class="empty mut">Auto-approvals appear on the right →</div>';
+  try{
+    const {items} = await api("/api/audit");
+    if(!items.length){ detail.innerHTML='<div class="empty">No auto-approvals yet.</div>'; return; }
+    detail.innerHTML = `<h2>Auto-approval audit</h2>
+      <div class="why">Recurring, "significantly the same" changes that were auto-approved and re-pinned — no human needed. Every row has a governance artifact.</div>
+      <table><tr><th>Source</th><th>Period</th><th>Old → new fingerprint</th><th>Why non-material</th></tr>
+      ${items.map(r=>`<tr>
+        <td>${esc(r.source_portfolio_id)}<div class="mut">${esc(r.client_id)} · ${esc(r.dataset)}/${esc(r.frequency)}</div></td>
+        <td>${esc(r.period)}</td>
+        <td class="fp">${esc((r.old_fingerprint||'').slice(0,20))}…<br>→ ${esc((r.new_fingerprint||'').slice(0,20))}…</td>
+        <td class="mut">${esc((r.reasons||[]).join("; "))}</td></tr>`).join("")}
+      </table>`;
+  }catch(e){ detail.innerHTML = `<div class="empty">${esc(e.message)}</div>`; toast(e.message,true); }
+}
+
+async function openItem(id){
+  SEL = id; refresh();
+  const d = document.getElementById("detail");
+  try{
+    const it = await api("/api/item/"+encodeURIComponent(id));
+    const files = (it.detected_files||[]).map(f=>`<span>${esc(f)}</span>`).join("") || '<span class="mut">none listed</span>';
+    const added = (it.added_columns||[]).map(c=>`<span class="add">+ ${esc(c)}</span>`).join("");
+    const removed = (it.removed_columns||[]).map(c=>`<span class="rem">− ${esc(c)}</span>`).join("");
+    const diff = (added||removed) ? `<div class="sec"><h3>Column changes</h3><div class="chips">${removed}${added}</div></div>` : "";
+    const rows = (it.proposed_mapping||[]).map(m=>`<tr>
+        <td>${esc(m.target_field||m.field||"")}</td>
+        <td>${esc(m.source_field||m.source_column||"")}</td>
+        <td class="mut">${esc(m.recommended_mapping||m.rationale||m.reason||"")}</td>
+        <td class="conf">${m.confidence!=null?esc(m.confidence):""}</td></tr>`).join("");
+    const mapping = rows ? `<div class="sec"><h3>Proposed mapping (AI pre-filled · review before approving)</h3>
+        <table><tr><th>Canonical field</th><th>Source column</th><th>Basis / rationale</th><th>Conf.</th></tr>${rows}</table></div>`
+      : `<div class="sec mut">No per-field mapping proposed — approving pins this pack's header signature as the source's schema.</div>`;
+    d.innerHTML = `
+      <h2>${esc(it.source_portfolio_id)} ${badge(it.kind,it.material)}</h2>
+      <div class="why">${esc(it.client_id)} · ${esc(it.dataset)}/${esc(it.frequency)} · period ${esc(it.period)} — <b>${esc(it.reason)}</b></div>
+      <div class="grid">
+        <div class="k">Book type</div><div>${esc(it.source_book_type||"—")}</div>
+        <div class="k">New fingerprint</div><div class="fp">${esc(it.new_fingerprint)}</div>
+        <div class="k">Prior fingerprint</div><div class="fp">${esc(it.prior_fingerprint||"— (new source)")}</div>
+        <div class="k">Suggested mapping</div><div>${esc(it.suggested_mapping_config_path||it.suggested_mapping_id||"— (pin this pack's schema)")}</div>
+      </div>
+      <div class="sec"><h3>Detected files</h3><div class="chips">${files}</div></div>
+      ${diff}
+      ${mapping}
+      <div class="actions">
+        <button class="primary" onclick="doApprove('${id}')">✓ Approve &amp; promote</button>
+        <button class="danger" onclick="doReject('${id}')">✕ Reject…</button>
+        <button class="ghost" onclick="doEdit('${id}','${esc(it.suggested_mapping_config_path||"")}')">✎ Choose alternative mapping…</button>
+      </div>`;
+  }catch(e){ d.innerHTML = `<div class="empty">${esc(e.message)}</div>`; toast(e.message,true); }
+}
+
+function dialog(title, bodyHtml, okLabel, onOk){
+  const dlg = document.getElementById("dlg");
+  document.getElementById("dlg-title").textContent = title;
+  document.getElementById("dlg-body").innerHTML = bodyHtml;
+  const ok = document.getElementById("dlg-ok");
+  ok.textContent = okLabel;
+  ok.onclick = async ()=>{ try{ await onOk(); dlg.close(); }catch(e){ toast(e.message,true); } };
+  dlg.showModal();
+}
+
+async function doApprove(id){
+  dialog("Approve & promote",
+    `<p>This accepts the proposed mapping and promotes the source to <b>active</b>. Future identical uploads then run automatically.</p>`,
+    "Approve & promote", async ()=>{
+      const r = await api("/api/item/"+encodeURIComponent(id)+"/approve",{method:"POST",body:JSON.stringify({})});
+      toast("Promoted "+r.registry_key+" (mapping v"+r.mapping_version+")");
+      SEL=null; document.getElementById("detail").innerHTML='<div class="empty">Approved. Select another item.</div>'; refresh();
+    });
+}
+async function doReject(id){
+  dialog("Reject",
+    `<label>Reason (required)</label><textarea id="rj" rows="3" placeholder="e.g. wrong portfolio id in the folder path"></textarea>`,
+    "Reject", async ()=>{
+      const reason = document.getElementById("rj").value.trim();
+      if(!reason) throw new Error("A reason is required.");
+      await api("/api/item/"+encodeURIComponent(id)+"/reject",{method:"POST",body:JSON.stringify({reason})});
+      toast("Rejected."); SEL=null; document.getElementById("detail").innerHTML='<div class="empty">Rejected. Select another item.</div>'; refresh();
+    });
+}
+async function doEdit(id, current){
+  dialog("Choose an alternative mapping",
+    `<p class="mut">Override the mapping before approving. Point at a different approved mapping config, or set a mapping id.</p>
+     <label>Mapping config path / URI</label><input id="mcp" type="text" value="${esc(current)}" placeholder="config/client/mappings/....yaml">
+     <label>Mapping id (optional)</label><input id="mid" type="text" placeholder="ere_direct_funded_monthly_v2">`,
+    "Save override", async ()=>{
+      const updates = {};
+      const mcp = document.getElementById("mcp").value.trim();
+      const mid = document.getElementById("mid").value.trim();
+      if(mcp) updates.suggested_mapping_config_path = mcp;
+      if(mid) updates.suggested_mapping_id = mid;
+      if(!Object.keys(updates).length) throw new Error("Nothing to change.");
+      await api("/api/item/"+encodeURIComponent(id)+"/edit",{method:"POST",body:JSON.stringify({updates})});
+      toast("Alternative mapping saved — review, then Approve."); openItem(id);
+    });
+}
+
+if(TOKEN){ document.getElementById("token").value = TOKEN; refresh(); }
+</script>
+</body>
+</html>
