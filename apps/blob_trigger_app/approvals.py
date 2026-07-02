@@ -51,6 +51,8 @@ def write_pending(
     suggested_mapping_config_path: Optional[str] = None,
     prior_schema_fingerprint: Optional[str] = None,
     source_metadata: Optional[Dict[str, Any]] = None,
+    role_schemas: Optional[Dict[str, List[str]]] = None,
+    role_aliases: Optional[Dict[str, List[str]]] = None,
     created_at: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Write (idempotently, keyed on the fingerprint) a pending approval artifact."""
@@ -68,6 +70,11 @@ def write_pending(
         "period": period,
         "schema_fingerprint": schema_fingerprint,
         "prior_schema_fingerprint": prior_schema_fingerprint,
+        # Approved header-first role signatures (role -> columns) + filename alias
+        # fallbacks, captured from THIS pack's classification and promoted so future
+        # months are recognised by header regardless of filename.
+        "role_schemas": dict(role_schemas or {}),
+        "role_aliases": dict(role_aliases or {}),
         "detected_files": list(detected_files or []),
         "suggested_mapping_id": suggested_mapping_id,
         "suggested_mapping_config_path": suggested_mapping_config_path,
@@ -157,6 +164,12 @@ def promote(storage: Storage, layout: Layout, registry: SourceRegistry,
     rec.mapping_config_path = (art.get("mapping_config_path")
                                or art.get("suggested_mapping_config_path"))
     rec.expected_schema_fingerprint = art["schema_fingerprint"]
+    # Persist the approved role -> header signature (and alias) mapping so future
+    # months are classified header-first, regardless of filename.
+    if art.get("role_schemas"):
+        rec.file_role_schemas = dict(art["role_schemas"])
+    if art.get("role_aliases"):
+        rec.file_role_aliases = dict(art["role_aliases"])
     rec.regime_required = bool(meta.get("regime_required", rec.regime_required))
     rec.mapping_version = int(getattr(rec, "mapping_version", 0) or 0) + 1
     rec.status = STATUS_ACTIVE

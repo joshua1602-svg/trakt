@@ -1486,5 +1486,208 @@ class TestRecurringPackDeterministic(unittest.TestCase):
         self.assertEqual(rec.file_role_aliases, {"loan_extract": ["ACME Monthly Extract"]})
 
 
+# --------------------------------------------------------------------------- #
+# 20. Header-first role detection (production rule)
+# --------------------------------------------------------------------------- #
+
+from apps.blob_trigger_app import approvals as _APP
+
+# Approved per-role header signatures (role -> columns).
+_LOAN_SIG = ["loan_id", "current_balance", "interest_rate"]
+_PROP_SIG = ["property_id", "valuation_amount", "ltv"]
+_FUND_SIG = ["loan_id", "principal_paid", "interest_paid"]
+_ROLE_SCHEMAS = {"loan_extract": _LOAN_SIG, "property_extract": _PROP_SIG,
+                 "funder_pi_extract": _FUND_SIG}
+
+
+def _pack_with_headers(root: Path, name_to_cols: dict) -> list:
+    root.mkdir(parents=True, exist_ok=True)
+    for name, cols in name_to_cols.items():
+        (root / name).write_text(",".join(cols) + "\n" + ",".join("1" for _ in cols) + "\n")
+    return [str(p) for p in root.iterdir()]
+
+
+class TestHeaderFirstClassification(unittest.TestCase):
+    """classify_pack: header signature → registry alias → filename keyword →
+    fallback, with confidence + drift/ambiguity signals (requirements 2, 4, 5)."""
+
+    def test_arbitrary_filename_known_headers_is_loan(self):
+        # 2) An arbitrary filename with known loan headers → loan_extract by header.
+        c = FR.classify_pack([("random_export_2025_10.csv", _LOAN_SIG)],
+                             role_schemas=_ROLE_SCHEMAS)
+        a = c.assignments[0]
+        self.assertEqual(a.assigned_role, "loan_extract")
+        self.assertEqual(a.role_basis, FR.BASIS_HEADER)
+        self.assertEqual(a.confidence, 1.0)
+        self.assertEqual(a.matched_columns_count, 3)
+        self.assertEqual(a.unmatched_columns_count, 0)
+        self.assertFalse(c.drift_suspected)
+
+    def test_two_files_same_role_is_ambiguous_conflict(self):
+        # 4) Two files both match loan headers → ambiguous_role_conflict.
+        c = FR.classify_pack([("loan_a.csv", _LOAN_SIG), ("loan_b.csv", _LOAN_SIG)],
+                             role_schemas=_ROLE_SCHEMAS)
+        self.assertTrue(c.ambiguous_role_conflict)
+        self.assertEqual(c.conflicting_roles, ["loan_extract"])
+
+    def test_no_approved_schema_uses_filename_fallback(self):
+        # 5) No approved header schema yet → filename keyword fallback (first onboarding).
+        c = FR.classify_pack(
+            [("LoanExtract One - OMNI_test.csv", _LOAN_SIG),
+             ("PropertyExtract - Omni_test.csv", _PROP_SIG),
+             ("Funder Principal And Interest_test.csv", _FUND_SIG)],
+            role_schemas=None)
+        roles = {a.assigned_role for a in c.assignments}
+        self.assertEqual(roles, {"loan_extract", "property_extract", "funder_pi_extract"})
+        self.assertTrue(all(a.role_basis == FR.BASIS_KEYWORD for a in c.assignments))
+        self.assertFalse(c.drift_suspected)          # first onboarding, not drift
+
+    def test_materially_different_headers_flag_drift(self):
+        # A known-ish loan filename but materially different headers → no header
+        # match → drift_suspected (weak filename evidence only).
+        c = FR.classify_pack(
+            [("LoanExtract One OMNI_test.csv", ["loan_id", "foo", "bar", "baz"]),
+             ("PropertyExtract - Omni_test.csv", _PROP_SIG),
+             ("Funder Principal And Interest_test.csv", _FUND_SIG)],
+            role_schemas=_ROLE_SCHEMAS)
+        self.assertTrue(c.drift_suspected)
+        self.assertIn("LoanExtract One OMNI_test.csv", c.drift_files)
+
+    def test_header_match_beats_filename(self):
+        # 1-support: same headers under different filenames → same role/columns →
+        # identical pack fingerprint (header-first, filename ignored).
+        with tempfile.TemporaryDirectory() as td:
+            nov = _pack_with_headers(Path(td) / "nov", {
+                "LoanExtract One - OMNI_test.csv": _LOAN_SIG,
+                "PropertyExtract - Omni_test.csv": _PROP_SIG,
+                "Funder Principal And Interest_test.csv": _FUND_SIG})
+            oct = _pack_with_headers(Path(td) / "oct", {
+                "ZZZ_totally_different.csv": _LOAN_SIG,
+                "AAA_other.csv": _PROP_SIG,
+                "BBB_misc.csv": _FUND_SIG})
+            fp_nov = fingerprint_pack(nov, role_schemas=_ROLE_SCHEMAS)
+            fp_oct = fingerprint_pack(oct, role_schemas=_ROLE_SCHEMAS)
+            self.assertEqual(fp_nov.sheets,
+                             ["funder_pi_extract", "loan_extract", "property_extract"])
+            self.assertEqual(fp_nov.fingerprint, fp_oct.fingerprint)
+
+
+class TestHeaderFirstRouting(unittest.TestCase):
+    """End-to-end routing on the header-first fingerprint (requirements 1, 3, 4, 6)."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = self._tmp.name
+        self.out = str(Path(self.root) / "scratch")
+        self.storage = Storage(local_root=str(Path(self.root) / "blobstore"))
+        self.layout = Layout()
+        self.persistence = ProductionPersistence(self.storage, self.layout)
+        self.registry = self.persistence.load_registry()
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _seed(self, fingerprint):
+        self.registry.upsert(SourceRecord(
+            client_id="ERE", source_portfolio_id="direct_001", dataset="funded",
+            frequency="monthly", source_portfolio_type="direct", approved_mapping_id="m1",
+            mapping_config_path="config/m1.yaml", expected_schema_fingerprint=fingerprint,
+            file_role_schemas=_ROLE_SCHEMAS, status=STATUS_ACTIVE))
+
+    def _route(self, period, schema, refresher=None):
+        return R.handle_blob_event(
+            f"raw-v2/ERE/direct/funded/monthly/direct_001/{period}/_READY.json",
+            registry=self.registry, out_dir=self.out, container="raw-v2",
+            pack_marker="_READY.json", schema_info=schema,
+            orchestrator_invoker=RecordingInvoker(status="done"),
+            assembler_refresher=(refresher or WritingRefresher(self.out)),
+            persistence=self.persistence, now=_NOW)
+
+    def test_same_headers_diff_filenames_processes_deterministically(self):
+        # 1) approved with the Nov filenames; Oct arrives with different names but the
+        # same headers → same fingerprint → known_source_processed, no re-approval.
+        nov = _pack_with_headers(Path(self.root) / "nov", {
+            "LoanExtract One - OMNI_test.csv": _LOAN_SIG,
+            "PropertyExtract - Omni_test.csv": _PROP_SIG,
+            "Funder Principal And Interest_test.csv": _FUND_SIG})
+        fp_nov = fingerprint_pack(nov, role_schemas=_ROLE_SCHEMAS)
+        self._seed(fp_nov.fingerprint)
+
+        oct = _pack_with_headers(Path(self.root) / "oct", {
+            "PG_LoanExtract Internal_test.csv": _LOAN_SIG,
+            "Property Data OMNI_test.csv": _PROP_SIG,
+            "PandI_test.csv": _FUND_SIG})
+        fp_oct = fingerprint_pack(oct, role_schemas=_ROLE_SCHEMAS)
+        self.assertEqual(fp_oct.fingerprint, fp_nov.fingerprint)
+
+        m = self._route("2025-10-31", fp_oct)
+        self.assertTrue(m["registry_match"])
+        self.assertEqual(m["decision"], "deterministic")
+        self.assertEqual(m["event_decision"], "known_source_processed")
+        self.assertTrue(self.storage.exists(
+            self.layout.platform_period_uri("ERE", "2025-10-31")))
+        # diagnostics: every file assigned by header signature.
+        bases = {d["role_basis"] for d in m["file_role_diagnostics"]}
+        self.assertEqual(bases, {"header_signature"})
+
+    def test_known_filename_different_headers_is_schema_drift(self):
+        # 3) Known filename, materially different headers → drift, NOT known source.
+        nov = _pack_with_headers(Path(self.root) / "nov", {
+            "LoanExtract One - OMNI_test.csv": _LOAN_SIG,
+            "PropertyExtract - Omni_test.csv": _PROP_SIG,
+            "Funder Principal And Interest_test.csv": _FUND_SIG})
+        self._seed(fingerprint_pack(nov, role_schemas=_ROLE_SCHEMAS).fingerprint)
+
+        bad = _pack_with_headers(Path(self.root) / "bad", {
+            "LoanExtract One - OMNI_test.csv": ["loan_id", "xx", "yy", "zz"],  # changed
+            "PropertyExtract - Omni_test.csv": _PROP_SIG,
+            "Funder Principal And Interest_test.csv": _FUND_SIG})
+        fp_bad = fingerprint_pack(bad, role_schemas=_ROLE_SCHEMAS)
+        self.assertTrue(fp_bad.drift_suspected)
+
+        m = self._route("2025-10-31", fp_bad)
+        self.assertEqual(m["decision"], "schema_drift")
+        self.assertEqual(m["event_decision"], "schema_drift_pending_review")
+        self.assertNotEqual(m["status"], "processed")
+
+    def test_two_same_role_files_fail_closed(self):
+        # 4) Two files matching loan_extract → ambiguous, fail closed (not processed).
+        nov = _pack_with_headers(Path(self.root) / "nov", {
+            "LoanExtract One - OMNI_test.csv": _LOAN_SIG,
+            "PropertyExtract - Omni_test.csv": _PROP_SIG,
+            "Funder Principal And Interest_test.csv": _FUND_SIG})
+        self._seed(fingerprint_pack(nov, role_schemas=_ROLE_SCHEMAS).fingerprint)
+
+        dup = _pack_with_headers(Path(self.root) / "dup", {
+            "LoanExtract A_test.csv": _LOAN_SIG,
+            "LoanExtract B_test.csv": _LOAN_SIG,   # second loan file
+            "Funder Principal And Interest_test.csv": _FUND_SIG})
+        fp_dup = fingerprint_pack(dup, role_schemas=_ROLE_SCHEMAS)
+        self.assertTrue(fp_dup.ambiguous_role_conflict)
+
+        m = self._route("2025-10-31", fp_dup)
+        self.assertTrue(m.get("ambiguous_role_conflict"))
+        self.assertEqual(m["decision"], "schema_drift")
+        self.assertNotEqual(m["status"], "processed")
+        self.assertIn("ambiguous_role_conflict", m["error"])
+
+    def test_promotion_stores_role_header_signatures(self):
+        # 6) Promotion pins role -> header signature for future months.
+        art = _APP.write_pending(
+            self.storage, self.layout, kind="new_source", client_id="ERE",
+            source_book_type="direct", dataset="funded", frequency="monthly",
+            source_portfolio_id="direct_001", period="2025-11-30",
+            schema_fingerprint="sha256:abc", role_schemas=_ROLE_SCHEMAS,
+            source_metadata={"source_portfolio_type": "direct"})
+        _APP.approve(self.storage, self.layout, art["approval_id"],
+                     mapping_id="m1", mapping_config_path="config/m1.yaml")
+        rec = _APP.promote(self.storage, self.layout, self.registry, art["approval_id"])
+        self.assertEqual(rec.file_role_schemas, _ROLE_SCHEMAS)
+        # survives a registry round-trip (available to next month's classification).
+        rec2 = self.persistence.load_registry().lookup(
+            "ERE", "direct_001", "funded", "monthly")
+        self.assertEqual(rec2.file_role_schemas, _ROLE_SCHEMAS)
+
+
 if __name__ == "__main__":
     unittest.main()

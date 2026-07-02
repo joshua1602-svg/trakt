@@ -43,7 +43,8 @@ from apps.blob_trigger_app.eventgrid import classify_blob_event
 from apps.blob_trigger_app.layout import Layout
 from apps.blob_trigger_app.persistence import ProductionPersistence
 from apps.blob_trigger_app.regime_runner import default_regime_runner
-from apps.blob_trigger_app.router import aliases_for_pack, handle_blob_event
+from apps.blob_trigger_app.router import (
+    aliases_for_pack, handle_blob_event, role_schemas_for_pack)
 from apps.blob_trigger_app.runtime_paths import resolve_output_root
 from apps.blob_trigger_app.schema_fingerprint import fingerprint_pack
 from apps.blob_trigger_app.storage import decide_backend, open_storage
@@ -125,10 +126,13 @@ def _dispatch(event: func.EventGridEvent) -> None:
     pack_names = azure_io.list_pack_files(ref.container, prefix, marker=_PACK_MARKER)
     pack_dir = Path(tempfile.mkdtemp(prefix="trakt_pack_"))
     data_files = azure_io.download_pack(ref.container, prefix, pack_dir, marker=_PACK_MARKER)
-    # Fingerprint on logical source roles (not exact file names), applying any
-    # operator-approved aliases so equivalent monthly packs route deterministically.
+    # Fingerprint HEADER-FIRST on logical source roles (not exact file names):
+    # approved role header signatures classify files regardless of filename, with
+    # filename aliases as fallback — so equivalent monthly packs route deterministically.
+    role_schemas = role_schemas_for_pack(registry, blob_path, ref.container)
     aliases = aliases_for_pack(registry, blob_path, ref.container)
-    schema = fingerprint_pack(data_files, aliases=aliases) if data_files else None
+    schema = (fingerprint_pack(data_files, role_schemas=role_schemas, aliases=aliases)
+              if data_files else None)
     primary = str(sorted(data_files)[0]) if data_files else None
 
     manifest = handle_blob_event(
