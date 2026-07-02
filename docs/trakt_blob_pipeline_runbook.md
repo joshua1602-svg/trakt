@@ -135,9 +135,52 @@ pre-fills the mapping so approval is genuinely one click.
 
 ---
 
-## 6. Verifying render
+## 6. Pinning each source (one-off, before first automated run)
+
+Pin `expected_schema_fingerprint` + `file_role_schemas` from ONE representative
+real pack per source so recurring uploads route `deterministic`. Run once per
+source (or let §4 backfill auto-pin recurring sources):
+
+```bash
+# Monthly funded (ESMA in scope → regime):
+python -m apps.blob_trigger_app.repin \
+  --blob-prefix raw-v2/ERE/direct/funded/monthly/direct_001/2025-11-30 \
+  --client ERE --book-type direct --dataset funded --frequency monthly \
+  --pid direct_001 --regime-required \
+  --mapping-config-path config/client/mappings/ere_direct_funded_monthly.yaml
+
+# Weekly pipeline (MI-only):
+python -m apps.blob_trigger_app.repin \
+  --blob-prefix raw-v2/ERE/direct/pipeline/weekly/direct_001/2026-W02 \
+  --client ERE --book-type direct --dataset pipeline --frequency weekly \
+  --pid direct_001 --no-regime \
+  --mapping-config-path config/client/mappings/ere_direct_pipeline_weekly.yaml
+```
+
+## 7. Verifying render
 
 - After a monthly run: `GET /mi/snapshot` on the MI API returns the new period
-  without a restart (blob ETag re-check).
-- After a weekly run: `GET /mi/pipeline/snapshot` returns the new weekly extract.
+  without a restart (blob ETag re-check; TTL `MI_AGENT_DATA_CACHE_TTL`).
+- After a weekly run: `GET /mi/pipeline/snapshot` returns the new weekly extract
+  (resolved from `MI_AGENT_PIPELINE_URI`).
 - The React dashboard shows both as the latest data.
+
+## 8. Regression tests (run before deploy)
+
+```bash
+python -m unittest \
+  tests.test_repin_deterministic \    # Phase 1: pin → deterministic; churn stable; change → drift
+  tests.test_approval_policy \        # Phase 2: classifier + (a)-(d) router acceptance + LLM wiring
+  tests.test_backfill \               # Phase 3: chronological + durable idempotency + dry-run
+  tests.test_mi_render \              # Phase 4: cache invalidation + weekly pipeline blob read
+  tests.test_e2e_and_deploy_guard \   # Phase 5: funded render E2E + `import function_app` guard
+  tests.test_blob_trigger_app tests.test_ops_workflow
+```
+
+## 9. What the operator must apply (Claude Code cannot)
+
+- All Function App / MI API **Application settings** in §1.
+- The **Event Grid** BlobCreated subscription in §3.
+- Run the **repin** commands in §6 once per source (or the §4 backfill).
+- Run the **backfill** in §4 for historical packs.
+- Provide `ANTHROPIC_API_KEY` for the LLM resolver (§1).
