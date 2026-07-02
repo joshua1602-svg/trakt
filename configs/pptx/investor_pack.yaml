@@ -1,0 +1,324 @@
+# =========================================================================
+# MI Agent — Investor / Funder PPTX pack (config-driven deck definition).
+# =========================================================================
+#
+# This file is the single source of truth for the deck: slides, titles,
+# strapline sources, chart specs, metric specs, lens applicability and broker
+# suppression. The generator (`python -m mi_agent_pptx.cli`) renders whatever is
+# declared here against the MI Agent registries and post-pipeline artifacts.
+#
+# Field bindings reference the MI Agent semantic registry keys
+# (mi_agent/mi_semantics_field_registry.yaml); bucket keys reference
+# config/mi/buckets.yaml; dimensions reference config/mi/stratification_catalogue.yaml.
+# No economic derivation is defined here — only field bindings + registry-declared
+# aggregations. Missing fields degrade to branded placeholders + appendix notes.
+
+deck:
+  name: "Investor & Funder MI Pack"
+  theme: trakt_mi_agent_dark
+  default_lens: total
+  footer: "trakt MI Agent · Confidential — for institutional funders/investors"
+  max_strapline_words: 24
+  # Broker channel is allowed for pipeline and SPV-level funded views, but
+  # suppressed for consolidated funded views (acquired portfolios carry no
+  # broker data). Toggle per-run with the CLI --consolidated flag.
+  suppress_broker_consolidated: true
+  logo_path: null
+
+# --------------------------------------------------------------------------- #
+# Metric registry — each KPI binds a semantic field + a registry-authorised
+# aggregation. `weighted_avg` uses the field's registry weight_field.
+# --------------------------------------------------------------------------- #
+metrics:
+  total_pipeline:
+    label: "Total Pipeline"
+    field: current_outstanding_balance
+    aggregation: sum
+    lens: pipeline
+    format: currency
+  funded_balance:
+    label: "Funded Balance"
+    field: current_outstanding_balance
+    aggregation: sum
+    format: currency
+  loan_count:
+    label: "Loan Count"
+    kind: count
+    format: integer
+  wa_ticket_size:
+    label: "WA Ticket Size"
+    field: current_outstanding_balance
+    aggregation: avg
+    format: currency
+  wa_current_ltv:
+    label: "WA Current LTV"
+    field: current_loan_to_value
+    aggregation: weighted_avg
+    format: percent
+  wa_original_ltv:
+    label: "WA Original LTV"
+    field: original_loan_to_value
+    aggregation: weighted_avg
+    format: percent
+  wa_borrower_age:
+    label: "WA Borrower Age"
+    field: youngest_borrower_age
+    aggregation: weighted_avg
+    weight_field: current_outstanding_balance
+    format: years
+  wa_current_rate:
+    label: "WA Current Rate"
+    field: current_interest_rate
+    aggregation: weighted_avg
+    weight_field: current_outstanding_balance
+    format: rate
+  largest_region:
+    label: "Largest Region"
+    kind: largest
+    dimension: geographic_region_obligor
+    format: percent
+  largest_broker:
+    label: "Largest Channel"
+    kind: largest
+    dimension: broker_channel
+    format: percent
+  forecast_funded_balance:
+    label: "Forecast Funded"
+    field: forecast_funded_balance
+    aggregation: sum
+    format: currency
+  limits_breached:
+    label: "Limits Breached"
+    field: null
+    format: integer
+  data_quality:
+    label: "Data Quality"
+    kind: data_quality
+    format: string
+
+# --------------------------------------------------------------------------- #
+# Slides (12–15). Each has a title + strapline; charts degrade to placeholders.
+# --------------------------------------------------------------------------- #
+slides:
+  # 1 -------------------------------------------------------------- Cover
+  - id: cover
+    type: cover
+    title: "Investor & Funder MI Pack"
+    strapline_source: deterministic
+
+  # 2 ---------------------------------------------------- Executive Summary
+  - id: executive_summary
+    type: kpi
+    title: "Executive Summary"
+    strapline_source: llm
+    kpis:
+      - total_pipeline
+      - funded_balance
+      - loan_count
+      - wa_ticket_size
+      - wa_current_ltv
+      - wa_borrower_age
+      - wa_current_rate
+      - largest_region
+      - largest_broker
+      - data_quality
+
+  # 3 ----------------------------------------------------- Pipeline Overview
+  - id: pipeline_overview
+    type: charts
+    title: "Pipeline Overview"
+    lens: pipeline
+    strapline_source: deterministic
+    charts:
+      - id: pipeline_by_stage
+        title: "Pipeline by Stage"
+        type: bar
+        dimension: pipeline_stage
+        measure: balance
+      - id: pipeline_channel_mix
+        title: "Channel Mix"
+        type: bar
+        dimension: broker_channel
+        measure: balance
+        broker: true
+
+  # 4 --------------------------------------------------- Pipeline Conversion
+  - id: pipeline_conversion
+    type: charts
+    title: "Pipeline Conversion"
+    lens: pipeline
+    strapline_source: deterministic
+    charts:
+      - id: conversion_by_stage
+        title: "Conversion by Stage"
+        type: bar
+        dimension: pipeline_stage
+        measure: count
+
+  # 5 ------------------------------------------- Pipeline Run-Rate / Forecast
+  - id: pipeline_forecast
+    type: charts
+    title: "Pipeline Run-Rate & Forecast"
+    lens: forecast
+    strapline_source: deterministic
+    charts:
+      - id: monthly_run_rate
+        title: "Monthly Origination Run-Rate"
+        type: line
+        date_field: origination_date
+        period: M
+        measure: balance
+
+  # 6 ------------------------------------------------- Funded Balance Evolution
+  - id: funded_evolution
+    type: charts
+    title: "Funded Balance Evolution"
+    lens: funded
+    strapline_source: deterministic
+    charts:
+      - id: funded_balance_over_time
+        title: "Funded Balance by Vintage"
+        type: cohort
+        date_field: origination_date
+        period: M
+        measure: balance
+        mandatory: true
+      - id: funded_count_over_time
+        title: "Funded Loan Count by Vintage"
+        type: cohort
+        date_field: origination_date
+        period: M
+        measure: count
+
+  # 7 ----------------------------------------------- Funded Stratifications I
+  - id: stratification_1
+    type: charts
+    title: "Funded Stratifications — LTV & Ticket Size"
+    lens: funded
+    strapline_source: deterministic
+    charts:
+      - id: balance_by_ltv
+        title: "Balance by LTV Bucket"
+        type: bar
+        dimension: current_loan_to_value
+        bucket: ltv_bucket
+        measure: balance
+        mandatory: true
+      - id: balance_by_ticket
+        title: "Balance by Ticket Size"
+        type: bar
+        dimension: current_outstanding_balance
+        bucket: balance_band
+        measure: balance
+
+  # 8 ---------------------------------------------- Funded Stratifications II
+  - id: stratification_2
+    type: charts
+    title: "Funded Stratifications — Borrower Age & Structure"
+    lens: funded
+    strapline_source: deterministic
+    charts:
+      - id: balance_by_age
+        title: "Balance by Borrower Age"
+        type: bar
+        dimension: youngest_borrower_age
+        bucket: borrower_age_bucket
+        measure: balance
+      - id: balance_by_borrower_structure
+        title: "Balance by Borrower Structure"
+        type: bar
+        dimension: borrower_structure
+        measure: balance
+
+  # 9 --------------------------------------------- Funded Stratifications III
+  - id: stratification_3
+    type: charts
+    title: "Funded Stratifications — Region & Channel"
+    lens: funded
+    strapline_source: deterministic
+    suppress_broker_consolidated: true
+    charts:
+      - id: balance_by_region
+        title: "Balance by Region (Top 10)"
+        type: hbar
+        dimension: geographic_region_obligor
+        measure: balance
+        top_n: 10
+        mandatory: true
+      - id: balance_by_broker
+        title: "Balance by Broker Channel"
+        type: bar
+        dimension: broker_channel
+        measure: balance
+        broker: true
+
+  # 10 --------------------------------------- Multi-Dimensional Risk Analytics
+  - id: risk_analytics
+    type: charts
+    title: "Multi-Dimensional Risk Analytics"
+    lens: funded
+    strapline_source: deterministic
+    charts:
+      - id: heatmap_ltv_age
+        title: "Balance Heatmap — LTV × Borrower Age"
+        type: heatmap
+        dimension: current_loan_to_value
+        bucket: ltv_bucket
+        dimension2: youngest_borrower_age
+        bucket2: borrower_age_bucket
+      - id: bubble_ltv_age
+        title: "LTV × Age (size = balance)"
+        type: bubble
+        x: current_loan_to_value
+        y: youngest_borrower_age
+
+  # 11 -------------------------------------- Vintage / Origination Analytics
+  - id: vintage
+    type: charts
+    title: "Vintage & Origination Analytics"
+    lens: funded
+    strapline_source: deterministic
+    charts:
+      - id: vintage_balance
+        title: "Origination Balance by Vintage"
+        type: cohort
+        date_field: origination_date
+        period: Y
+        measure: balance
+      - id: vintage_count
+        title: "Loan Count by Vintage"
+        type: cohort
+        date_field: origination_date
+        period: Y
+        measure: count
+
+  # 12 ---------------------------------------- Scenario / Forecast Snapshot
+  - id: forecast_snapshot
+    type: charts
+    title: "Scenario & Forecast Snapshot"
+    lens: forecast
+    strapline_source: deterministic
+    charts:
+      - id: scenario_base_curve
+        title: "Base Projected Balance Curve"
+        type: line
+        date_field: forecast_scenario_date  # absent -> branded placeholder
+        measure: balance
+
+  # 13 --------------------------------------------------------- Risk Monitor
+  - id: risk_monitor
+    type: risk_monitor
+    title: "Risk Monitor"
+    strapline_source: deterministic
+
+  # 14 ------------------------------------------------ Methodology / Notes
+  - id: methodology
+    type: methodology
+    title: "Methodology & Notes"
+    strapline_source: deterministic
+
+  # 15 ------------------------------------------------ Appendix / Coverage
+  - id: appendix
+    type: appendix
+    title: "Appendix — Data Coverage"
+    strapline_source: deterministic

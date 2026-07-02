@@ -95,3 +95,7 @@ portfolio_test/
 
 # Stray root-level node_modules (e.g. vitest .vite cache)
 node_modules/
+
+# mi_agent_pptx generated investor decks + intermediate chart PNGs
+reports/*.pptx
+reports/*_charts/
