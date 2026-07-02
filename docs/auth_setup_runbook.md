@@ -59,10 +59,56 @@ This tells Microsoft "these people are allowed to sign in to this app."
 *(You don't need to touch the tenant ID — I've already set your organisation's
 domain, `digifinsolutions.co.uk`, in the app's config file.)*
 
-### 4. Connect the reports service to the website
-- In your **Static Web App** → **APIs** → **Link** → choose **`trakt-mi-api`**.
-- This lets the website hand the logged-in person's identity to the reports
-  service automatically.
+### 4. Connect the reports service to the website ("link the backend")
+
+**Exact location in the portal:**
+- Open your **Static Web App** resource (this is the *website*, not the
+  `trakt-mi-api` app — make sure you're on the right one).
+- In the **left-hand menu**, under the **Settings** group, click **APIs**.
+- You'll see an environment row (usually **Production**). Select it, then click
+  **Link** at the top.
+- **Backend resource type:** choose **App Service**. Pick your subscription, then
+  select **`trakt-mi-api`**. Click **Link** / OK.
+
+**If you can't see "APIs", or the Link button is greyed out, or `trakt-mi-api`
+isn't in the list** — it's almost always one of these:
+1. **The website is still on the Free plan.** Linking needs **Standard** (Step 1).
+   Double-check the upgrade actually applied to *this* Static Web App. This is the
+   #1 reason the option is missing.
+2. **Region.** Linked backends are only supported when the App Service is in a
+   supported region. If `trakt-mi-api` is in an unsupported region it won't appear
+   in the list — use the command-line method below (it gives a clearer error), or
+   tell me the region and I'll confirm.
+3. **You're looking at the App Service, not the Static Web App.** The APIs/Link
+   blade only exists on the Static Web App resource.
+
+**Command-line alternative (more reliable than hunting in the portal).** Open
+**Azure Cloud Shell** (the `>_` icon at the top of the portal, choose **Bash**) and
+run — replacing the two `<...>` values:
+```
+az staticwebapp backends link \
+  --name <your-static-web-app-name> \
+  --resource-group <your-resource-group> \
+  --backend-resource-id $(az webapp show -n trakt-mi-api -g <your-resource-group> --query id -o tsv) \
+  --backend-region <region-of-trakt-mi-api>
+```
+If it errors, copy the message to me — it usually says exactly what's wrong (tier
+or region).
+
+Linking is what lets the website hand the logged-in person's identity to the
+reports service automatically.
+
+### 4b. Lock the reports app so it can't be bypassed  ⚠️ important
+The reports service trusts the identity the website passes it. That means the
+service must **not** be openly reachable on its own web address — otherwise
+someone could skip the login by calling it directly. This needs one extra
+lock-down (either restricting the app's network access to the website, or turning
+on the platform's own sign-in check on the app as a second layer).
+
+There are two ways to do this and the exact clicks differ by your setup, so
+rather than guess: **once you've completed the linking in step 4, tell me and I'll
+give you the precise steps for your case (and verify it's actually closed).** Do
+**not** give the client the link until this is done.
 
 ### 5. Turn the lock on, on the reports side
 - Open the **`trakt-mi-api`** app → **Configuration** (Application settings) → add:
