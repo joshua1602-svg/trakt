@@ -37,7 +37,7 @@ from pathlib import Path
 
 import azure.functions as func  # type: ignore
 
-from .router import handle_blob_event
+from .router import aliases_for_pack, handle_blob_event, role_schemas_for_pack
 from .runtime_paths import resolve_output_root
 from .schema_fingerprint import fingerprint_pack
 from .source_registry import SourceRegistry
@@ -97,7 +97,13 @@ def on_raw_blob_upload(blob: func.InputStream) -> None:
     pack_dir = Path(tempfile.mkdtemp(prefix="trakt_pack_"))
     _download_pack(folder_prefix, pack_dir)
     data_files = [p for p in pack_dir.iterdir() if p.is_file()]
-    schema = fingerprint_pack(data_files) if data_files else None
+    # Fingerprint HEADER-FIRST on logical source roles (not exact file names):
+    # approved role header signatures classify files regardless of filename, with
+    # filename aliases as fallback — so equivalent monthly packs route deterministically.
+    role_schemas = role_schemas_for_pack(registry, blob_path, _CONTAINER)
+    aliases = aliases_for_pack(registry, blob_path, _CONTAINER)
+    schema = (fingerprint_pack(data_files, role_schemas=role_schemas, aliases=aliases)
+              if data_files else None)
     primary = str(sorted(data_files)[0]) if data_files else None
 
     manifest = handle_blob_event(

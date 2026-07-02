@@ -11,7 +11,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 
 @dataclass
@@ -22,12 +22,23 @@ class SchemaInfo:
     sheet_columns: Dict[str, List[str]] = field(default_factory=dict)
     row_count: Optional[int] = None
     fingerprint: str = ""
+    # Header-first role classification (populated by ``fingerprint_pack``).
+    role_diagnostics: List[Dict[str, Any]] = field(default_factory=list)
+    ambiguous_role_conflict: bool = False
+    conflicting_roles: List[str] = field(default_factory=list)
+    drift_suspected: bool = False
+    drift_files: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "file_type": self.file_type, "columns": self.columns,
             "sheets": self.sheets, "sheet_columns": self.sheet_columns,
             "row_count": self.row_count, "fingerprint": self.fingerprint,
+            "role_diagnostics": self.role_diagnostics,
+            "ambiguous_role_conflict": self.ambiguous_role_conflict,
+            "conflicting_roles": self.conflicting_roles,
+            "drift_suspected": self.drift_suspected,
+            "drift_files": self.drift_files,
         }
 
 
@@ -82,15 +93,31 @@ def _fingerprint_csv(p: Path, ext: str, include_order: bool) -> SchemaInfo:
     return info
 
 
-def fingerprint_pack(paths, *, include_order: bool = True) -> SchemaInfo:
-    """Combine several data files in a reporting pack into ONE fingerprint.
+def fingerprint_pack(paths, *, include_order: bool = True,
+                     role_schemas: Optional[Dict[str, List[str]]] = None,
+                     aliases: Optional[Dict[str, List[str]]] = None) -> SchemaInfo:
+    """Combine several data files in a reporting pack into ONE fingerprint, keyed
+    on **logical role → columns** (NOT exact file names).
 
-    The key is the per-file ``{filename: columns}`` map (+ file types) — so the
-    fingerprint covers the whole pack (loan + cashflow + collateral …) and flips
-    if any file's schema changes. Marker files (no recognised tabular type) are
-    skipped.
+    Roles are resolved HEADER-FIRST by :func:`file_roles.classify_pack`:
+
+      1. header/column signature match against approved ``role_schemas``
+         (``SourceRecord.file_role_schemas``) — a header set that matches an
+         approved role is assigned that role *regardless of filename*;
+      2. approved registry filename ``aliases``;
+      3. built-in filename keyword rules;
+      4. a stable normalised-name fallback.
+
+    So a pack whose files are cosmetically renamed period-to-period (same headers)
+    fingerprints IDENTICALLY and routes deterministically; a real schema change
+    (column added/removed/reordered, or a new role) still flips it. The returned
+    :class:`SchemaInfo` carries per-file ``role_diagnostics`` and the
+    ``ambiguous_role_conflict`` / ``drift_suspected`` fail-closed signals for the
+    router. Marker/non-tabular files are skipped.
     """
-    sheet_columns: Dict[str, List[str]] = {}
+    from .file_roles import classify_pack
+
+    files: List[Tuple[str, List[str]]] = []
     file_types: List[str] = []
     for path in sorted(str(p) for p in paths):
         p = Path(path)
@@ -98,13 +125,23 @@ def fingerprint_pack(paths, *, include_order: bool = True) -> SchemaInfo:
         if ext not in ("csv", "xlsx", "xls", "xlsm"):
             continue
         info = compute_schema_fingerprint(p, include_order=include_order)
-        sheet_columns[p.name] = info.columns
+        files.append((p.name, info.columns))
         file_types.append(ext)
+
+    classification = classify_pack(files, role_schemas=role_schemas, aliases=aliases)
+    sheet_columns = classification.role_columns()
+
     primary = sheet_columns.get(sorted(sheet_columns)[0], []) if sheet_columns else []
-    return fingerprint_from_schema(
+    out = fingerprint_from_schema(
         file_type="+".join(sorted(set(file_types))) or "pack",
         columns=primary, sheets=sorted(sheet_columns.keys()),
         sheet_columns=sheet_columns, include_order=include_order)
+    out.role_diagnostics = classification.diagnostics()
+    out.ambiguous_role_conflict = classification.ambiguous_role_conflict
+    out.conflicting_roles = classification.conflicting_roles
+    out.drift_suspected = classification.drift_suspected
+    out.drift_files = classification.drift_files
+    return out
 
 
 def _fingerprint_excel(p: Path, ext: str, include_order: bool) -> SchemaInfo:

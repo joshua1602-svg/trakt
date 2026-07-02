@@ -31,6 +31,34 @@ from .target_selection import select_target
 if TYPE_CHECKING:  # avoid import cost at module load; persistence is optional
     from .persistence import ProductionPersistence
 
+def _pack_match_record(registry: SourceRegistry, blob_path: str, container: str):
+    try:
+        parsed = parse_blob_path(blob_path, container)
+        return registry.lookup(parsed.client_id, parsed.source_portfolio_id,
+                               parsed.dataset, parsed.frequency)
+    except Exception:  # noqa: BLE001 — resolution is best-effort; defaults apply
+        return None
+
+
+def aliases_for_pack(registry: SourceRegistry, blob_path: str,
+                     container: str = "raw") -> Optional[Dict[str, List[str]]]:
+    """Resolve the approved filename-alias fallback hints for a pack's source, so
+    the caller can pass them to ``fingerprint_pack(..., aliases=)``. Returns
+    ``None`` when the source/aliases are unknown."""
+    rec = _pack_match_record(registry, blob_path, container)
+    return (getattr(rec, "file_role_aliases", None) or None) if rec else None
+
+
+def role_schemas_for_pack(registry: SourceRegistry, blob_path: str,
+                          container: str = "raw") -> Optional[Dict[str, List[str]]]:
+    """Resolve the approved per-role header signatures (``role -> [columns]``) for
+    a pack's source, so ``fingerprint_pack(..., role_schemas=)`` can classify
+    HEADER-FIRST (assign a role by matching headers, regardless of filename).
+    Returns ``None`` before the source has been promoted."""
+    rec = _pack_match_record(registry, blob_path, container)
+    return (getattr(rec, "file_role_schemas", None) or None) if rec else None
+
+
 # Final event statuses.
 STATUS_PROCESSED = "processed"
 STATUS_HALTED = "halted"
@@ -279,11 +307,31 @@ def handle_blob_event(
                                    "reason": sel_reason}
     manifest["target"] = sel_target
 
+    # Header-first role classification signals (from fingerprint_pack). Surface the
+    # per-file diagnostics regardless of outcome so the operator can see WHY each
+    # file got its role (header_signature / registry_alias / filename_keyword /
+    # fallback_unknown), with confidence + matched/unmatched column counts.
+    role_conflict = bool(getattr(schema_info, "ambiguous_role_conflict", False))
+    drift_suspected = bool(getattr(schema_info, "drift_suspected", False))
+    if getattr(schema_info, "role_diagnostics", None):
+        manifest["file_role_diagnostics"] = schema_info.role_diagnostics
+    if role_conflict:
+        manifest["ambiguous_role_conflict"] = True
+        manifest["conflicting_roles"] = list(getattr(schema_info, "conflicting_roles", []))
+    if drift_suspected:
+        manifest["drift_files"] = list(getattr(schema_info, "drift_files", []))
+
     if rec is None or not rec.has_approved_mapping:
         decision = DECISION_SOURCE_ONBOARDING
-    elif rec.expected_schema_fingerprint == schema_info.fingerprint:
+    elif role_conflict:
+        # Two files resolved to the same logical role — fail closed, never process
+        # with an ambiguous pack.
+        decision = DECISION_SCHEMA_DRIFT
+    elif rec.expected_schema_fingerprint == schema_info.fingerprint and not drift_suspected:
         decision = DECISION_DETERMINISTIC
     else:
+        # Fingerprint mismatch OR a file that no approved role schema recognises
+        # (only weak filename evidence) → treat as drift, not silent known source.
         decision = DECISION_SCHEMA_DRIFT
     manifest["requires_source_onboarding"] = decision != DECISION_DETERMINISTIC
     manifest["decision"] = decision
@@ -334,14 +382,25 @@ def handle_blob_event(
 
     # 4) Route -------------------------------------------------------------
     if decision == DECISION_SCHEMA_DRIFT:
-        # Fail closed — never process with a stale mapping.
+        # Fail closed — never process with a stale mapping or an ambiguous pack.
         manifest["status"] = STATUS_PENDING_REVIEW
         manifest["event_decision"] = EVT_SCHEMA_DRIFT_PENDING
-        manifest["error"] = (
-            f"schema_drift: incoming fingerprint {schema_info.fingerprint} != "
-            f"saved {rec.expected_schema_fingerprint}")
-        manifest["orchestrator_invocation"] = {
-            "invoked": False, "reason": "schema_drift_fail_closed"}
+        if role_conflict:
+            manifest["error"] = (
+                "ambiguous_role_conflict: two files resolved to the same logical "
+                f"role(s) {manifest.get('conflicting_roles')} — see file_role_diagnostics")
+            reason = "ambiguous_role_conflict_fail_closed"
+        elif drift_suspected:
+            manifest["error"] = (
+                "schema_drift: file(s) do not match any approved role header "
+                f"signature (only weak filename evidence): {manifest.get('drift_files')}")
+            reason = "header_signature_mismatch_fail_closed"
+        else:
+            manifest["error"] = (
+                f"schema_drift: incoming fingerprint {schema_info.fingerprint} != "
+                f"saved {rec.expected_schema_fingerprint}")
+            reason = "schema_drift_fail_closed"
+        manifest["orchestrator_invocation"] = {"invoked": False, "reason": reason}
         rec.status = STATUS_PENDING_REVIEW
         registry.upsert(rec)
         _write_pending_approval(
@@ -496,6 +555,10 @@ def _write_pending_approval(persistence, manifest, parsed, schema_info, created_
             detected_files=pack_files, prior_schema_fingerprint=prior_fingerprint,
             suggested_mapping_id=suggested_mapping_id,
             suggested_mapping_config_path=suggested_mapping_config_path,
+            # Capture THIS pack's role -> header signature (role -> columns) so
+            # promotion pins the approved schemas for header-first matching next
+            # month. sheet_columns is the {role: columns} map from classification.
+            role_schemas=dict(getattr(schema_info, "sheet_columns", {}) or {}),
             source_metadata={
                 "source_portfolio_type": portfolio_type,
                 "regime_required": regime_required,

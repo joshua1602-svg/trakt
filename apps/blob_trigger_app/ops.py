@@ -115,6 +115,11 @@ def transform(storage: Storage, layout: Layout, ref: str) -> Dict[str, Any]:
         "pack_key": rec.get("pack_key"),
         "run_id": rec.get("run_id"),
         "source_portfolio_id": rec.get("source_portfolio_id"),
+        # Surface the run outcome so a successful (processed) run reads as a
+        # success here — an empty transform_readiness on a processed run means
+        # "transform completed", not "failed".
+        "status": rec.get("status"),
+        "event_decision": rec.get("event_decision"),
         "transform_readiness": tr,
         "transform_artifacts": rec.get("transform_artifacts") or {},
         "next_action": rec.get("next_action") or {},
@@ -133,6 +138,8 @@ def validation(storage: Storage, layout: Layout, ref: str) -> Dict[str, Any]:
         "pack_key": rec.get("pack_key"),
         "run_id": rec.get("run_id"),
         "source_portfolio_id": rec.get("source_portfolio_id"),
+        "status": rec.get("status"),
+        "event_decision": rec.get("event_decision"),
         "validation_readiness": vr,
         "next_action": rec.get("next_action") or {},
     }

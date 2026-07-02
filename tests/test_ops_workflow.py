@@ -722,6 +722,26 @@ class TestGateFrameworkAndLLM(unittest.TestCase):
         self.assertFalse(m["llm"]["llm_invoked"])
         self.assertEqual(called, [])
 
+    # -- a processed (successful) run reads as success in the gate views --- #
+    def test_processed_run_shows_as_success_not_failed(self):
+        # A clean known-source pack processes deterministically. show-transform /
+        # show-validation must present it as a SUCCESS: status=processed and
+        # next_action=none — never "Run failed". (Regression for a processed run
+        # being misreported by the transform gate view.)
+        self._seed_active()
+        m = self._fire(RecordingInvoker(status="done"))
+        self.assertEqual(m["status"], "processed")
+        pk = m["pack_key"]
+
+        t = OPS.transform(self.storage, self.layout, pk)
+        self.assertEqual(t["status"], "processed")
+        self.assertEqual(t["next_action"].get("action"), "none")
+        self.assertNotIn("fail", (t["next_action"].get("summary") or "").lower())
+
+        v = OPS.validation(self.storage, self.layout, pk)
+        self.assertEqual(v["status"], "processed")
+        self.assertEqual(v["next_action"].get("action"), "none")
+
     # -- no routing/contract regression ----------------------------------- #
     def test_no_contract_routing_regression(self):
         from engine.orchestrator_agent.orchestrator import onboarding_mode_for_target

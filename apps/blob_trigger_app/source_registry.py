@@ -35,6 +35,16 @@ class SourceRecord:
     mapping_version: int = 0                      # bumped on each promote
     expected_schema_fingerprint: Optional[str] = None
     expected_columns: List[str] = field(default_factory=list)
+    # Approved per-role header/column signatures (``role -> [columns]``), captured
+    # at promotion. The PRODUCTION role-detection rule is header-first: an incoming
+    # file whose normalised headers match one of these signatures is assigned that
+    # logical role regardless of filename.
+    file_role_schemas: Dict[str, List[str]] = field(default_factory=dict)
+    # Approved logical-role file-name aliases (``role -> [name patterns]``), e.g.
+    # {"loan_extract": ["LoanExtract One OMNI", "LoanExtract One - OMNI"]}. FALLBACK
+    # hint only — used when header matching is ambiguous or no approved role schema
+    # exists — so equivalent monthly packs still route deterministically.
+    file_role_aliases: Dict[str, List[str]] = field(default_factory=dict)
     last_successful_run_id: Optional[str] = None
     last_successful_reporting_period: Optional[str] = None
     regime_required: bool = False                # funded books needing ESMA output
