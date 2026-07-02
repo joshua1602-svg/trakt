@@ -304,6 +304,21 @@ def promote_pack(persistence: ProductionPersistence, registry: SourceRegistry,
     src.approved_mapping_id = f"{rec['source_portfolio_id']}_accepted_v{int(getattr(src, 'mapping_version', 0) or 0) + 1}"
     src.mapping_config_path = approved_uri
     src.expected_schema_fingerprint = rec.get("schema_fingerprint") or src.expected_schema_fingerprint
+    # Re-pin the header-first role signatures (role -> columns) from the approval
+    # artifact this run raised, so future months are matched HEADER-FIRST regardless
+    # of filename — not just by the exact fingerprint. Without this the promoted
+    # source has no file_role_schemas and a filename change would drift.
+    approval_id = rec.get("approval_id")
+    if approval_id:
+        try:
+            from . import approvals as _approvals
+            art = _approvals.show(persistence.storage, persistence.layout, approval_id)
+            if art and art.get("role_schemas"):
+                src.file_role_schemas = dict(art["role_schemas"])
+            if art and art.get("role_aliases"):
+                src.file_role_aliases = dict(art["role_aliases"])
+        except Exception:  # noqa: BLE001 — fingerprint pin still applies without roles
+            pass
     src.mapping_version = int(getattr(src, "mapping_version", 0) or 0) + 1
     src.status = STATUS_ACTIVE
     registry.upsert(src)

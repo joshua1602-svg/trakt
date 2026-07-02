@@ -666,6 +666,8 @@ def run_operator_workflow(
     aliases_dir: str = "config/system",
     enable_mapping_review: bool = True,
     enable_llm_target_advisor: bool = False,
+    enable_llm_mapping_review: bool = False,
+    llm_mapping_profile: str = "low",
     target_first_decisions: str = "",
     llm_max_cost_gbp: float = 1.0,
     llm_max_calls: Optional[int] = None,
@@ -709,13 +711,17 @@ def run_operator_workflow(
     # ANTHROPIC_API_KEY — the advisor then records a deterministic no_advice).
     advisor_callable = None
     advisor_model = ""
-    if enable_llm_target_advisor:
+    if enable_llm_target_advisor or enable_llm_mapping_review:
         from engine.onboarding_agent.cli import _build_mapping_llm_callable
-        advisor_callable = _build_mapping_llm_callable("low")
+        advisor_callable = _build_mapping_llm_callable(llm_mapping_profile or "low")
         advisor_model = "claude-haiku-4-5-20251001"
         if advisor_callable is None:
-            print("[workflow] No ANTHROPIC_API_KEY — LLM target advisor will record a "
-                  "deterministic no_advice fallback.")
+            print("[workflow] No ANTHROPIC_API_KEY — LLM advisor/mapping resolver will "
+                  "record a deterministic no_advice fallback.")
+    # The mapping RESOLVER (source→canonical mapping review) shares the same
+    # callable; it is enabled only when explicitly requested AND a key produced a
+    # callable — otherwise the run stays deterministic-only (no silent network).
+    mapping_callable = advisor_callable if enable_llm_mapping_review else None
 
     run_error = ""
     input_files = 0
@@ -738,6 +744,12 @@ def run_operator_workflow(
             enable_llm_target_advisor=enable_llm_target_advisor,
             llm_target_advisor_callable=advisor_callable,
             llm_target_advisor_model=advisor_model,
+            # Agentic mapping RESOLVER (source→canonical). Forwarded so the
+            # blob-triggered automated path can produce a pre-filled mapping for a
+            # new/changed source instead of halting with an empty review queue.
+            enable_llm_mapping_review=bool(enable_llm_mapping_review and mapping_callable),
+            llm_mapping_callable=mapping_callable,
+            llm_mapping_profile=(llm_mapping_profile or "low"),
             llm_max_cost_gbp=llm_max_cost_gbp,
             llm_max_calls=llm_max_calls,
             llm_max_items_per_call=llm_max_items_per_call,

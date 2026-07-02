@@ -94,6 +94,8 @@ EVT_SCHEMA_DRIFT_PENDING = "schema_drift_pending_review"
 EVT_DUPLICATE_READY_IGNORED = "duplicate_ready_ignored"
 EVT_INCOMPLETE_PACK_PENDING = "incomplete_pack_pending_review"
 EVT_BOOK_TYPE_MISMATCH = "book_type_mismatch"
+EVT_AUTO_APPROVED = "recurring_auto_approved_non_material"
+EVT_MATERIAL_CHANGE_PENDING = "material_change_pending_review"
 EVT_FAILED = "failed"
 
 
@@ -268,16 +270,25 @@ def handle_blob_event(
             return _emit()
 
     # 2c) Idempotency — a pack that already ran this exact schema is skipped,
-    # unless the marker explicitly carries force_reprocess=true.
+    # unless the marker explicitly carries force_reprocess=true. The local marker
+    # lives on EPHEMERAL scratch (/tmp in Azure), so it vanishes on instance churn;
+    # also consult the DURABLE run ledger in trakt-state so a redelivered Event Grid
+    # event OR a backfill re-run does not double-process a pack that already
+    # PROCESSED with this exact schema. Only a successful `processed` record blocks —
+    # a pending_review/halted/failed pack must remain reprocessable (e.g. after the
+    # operator approves it).
     force = bool(meta.get("force_reprocess"))
     prior = _read_processed(out_dir, manifest["pack_key"])
+    if prior is None and persistence is not None:
+        prior = _durable_prior(persistence, manifest["pack_key"])
     if (not force) and prior and prior.get("schema_fingerprint") == schema_info.fingerprint:
         manifest["status"] = STATUS_ALREADY_PROCESSED
         manifest["decision"] = DECISION_IDEMPOTENT_SKIP
         manifest["event_decision"] = EVT_DUPLICATE_READY_IGNORED
         manifest["orchestrator_invocation"] = {
             "invoked": False, "reason": "pack already processed",
-            "prior_run_id": prior.get("run_id"), "prior_status": prior.get("status")}
+            "prior_run_id": prior.get("run_id"), "prior_status": prior.get("status"),
+            "prior_source": prior.get("source", "scratch")}
         return _emit()
 
     # 3) Registry inference + target selection -----------------------------
@@ -321,18 +332,55 @@ def handle_blob_event(
     if drift_suspected:
         manifest["drift_files"] = list(getattr(schema_info, "drift_files", []))
 
+    # APPROVAL POLICY state (threaded into the deterministic success branch).
+    auto_approved = False
+    materiality = None
     if rec is None or not rec.has_approved_mapping:
+        # New client / new source_portfolio (no ACTIVE record) → always one-click.
         decision = DECISION_SOURCE_ONBOARDING
     elif role_conflict:
         # Two files resolved to the same logical role — fail closed, never process
         # with an ambiguous pack.
         decision = DECISION_SCHEMA_DRIFT
     elif rec.expected_schema_fingerprint == schema_info.fingerprint and not drift_suspected:
+        # Exact schema match → deterministic as today (no LLM, no approval).
         decision = DECISION_DETERMINISTIC
-    else:
-        # Fingerprint mismatch OR a file that no approved role schema recognises
-        # (only weak filename evidence) → treat as drift, not silent known source.
+    elif drift_suspected:
+        # A file matched NO approved role header signature (only weak filename
+        # evidence) — header evidence absent, cannot trust classification → drift.
         decision = DECISION_SCHEMA_DRIFT
+    elif not (rec.file_role_schemas and getattr(schema_info, "sheet_columns", None)):
+        # Recurring approved source with a fingerprint change but NO pinned header
+        # signatures to compare against (legacy/placeholder pin, or a pack with no
+        # role columns) → cannot prove "significantly the same"; fail closed to the
+        # one-click review path, exactly as before the approval policy existed.
+        decision = DECISION_SCHEMA_DRIFT
+    else:
+        # Recurring APPROVED source, fingerprint CHANGED, but every file still
+        # header-matched an approved role → run the APPROVAL POLICY materiality
+        # classifier over the deterministic (+ any LLM) evidence.
+        from . import approval_policy as _ap
+        materiality = _ap.classify(
+            old_role_schemas=rec.file_role_schemas or {},
+            new_role_schemas=dict(getattr(schema_info, "sheet_columns", {}) or {}),
+            old_fingerprint=rec.expected_schema_fingerprint,
+            new_fingerprint=schema_info.fingerprint,
+            # No mandatory-column set is threaded here → the classifier treats ANY
+            # removed previously-mapped column as material (conservative default).
+            mandatory_columns=None)
+        manifest["materiality"] = materiality.to_dict()
+        if materiality.auto_approvable:
+            # NON-MATERIAL "significantly the same" recurring change → AUTO-APPROVE:
+            # process deterministically with the saved mapping, then re-pin + write
+            # the governance evidence (handled in the deterministic success branch).
+            decision = DECISION_DETERMINISTIC
+            auto_approved = True
+            manifest["auto_approved"] = True
+        else:
+            # MATERIAL change to a known source → re-run discovery + the LLM mapping
+            # resolver to PRE-FILL the mapping, then halt at pending_review (one-click).
+            decision = DECISION_SOURCE_ONBOARDING
+            manifest["material_change"] = True
     manifest["requires_source_onboarding"] = decision != DECISION_DETERMINISTIC
     manifest["decision"] = decision
 
@@ -434,12 +482,17 @@ def handle_blob_event(
         if (result or {}).get("status") != "done":
             manifest["orchestrator_diagnostics"] = _halt_diagnostics(result)
         manifest["status"] = STATUS_PENDING_REVIEW
-        manifest["event_decision"] = EVT_NEW_SOURCE_PENDING
+        # A MATERIAL change to a KNOWN source is audited distinctly from a brand-new
+        # source, though both take the same one-click path (mapping pre-filled).
+        is_material_change = bool(manifest.get("material_change"))
+        manifest["event_decision"] = (EVT_MATERIAL_CHANGE_PENDING if is_material_change
+                                      else EVT_NEW_SOURCE_PENDING)
         _upsert_source(registry, parsed, schema_info, status=STATUS_PENDING_REVIEW,
                        regime_required=regime_required, portfolio_type=portfolio_type)
         _write_pending_approval(
             persistence, manifest, parsed, schema_info, created_at,
-            kind="new_source", pack_files=pack_files,
+            kind=("schema_drift" if is_material_change else "new_source"),
+            pack_files=pack_files,
             suggested_mapping_id=None, suggested_mapping_config_path=None,
             portfolio_type=portfolio_type, regime_required=regime_required,
             acquisition_date=acquisition_date, seller_name=seller_name)
@@ -481,6 +534,15 @@ def handle_blob_event(
         if rec is not None:
             rec.last_successful_run_id = (result.get("run_id") or run_id_for_registry)
             rec.last_successful_reporting_period = parsed.reporting_period
+            # AUTO-APPROVE (non-material recurring change): re-pin the registry
+            # expected_schema_fingerprint + file_role_schemas to THIS pack so the
+            # next identical upload is a clean `deterministic` (exact-match) run,
+            # and write the governance audit trail. Deterministic mapping stays the
+            # source of truth; canonical-only nulling is enforced downstream.
+            if auto_approved:
+                _auto_approve_repin(registry, rec, parsed, schema_info, materiality,
+                                    persistence, manifest, created_at)
+                manifest["event_decision"] = EVT_AUTO_APPROVED
             registry.upsert(rec)
         # 5) Assembler refresh — rebuild the central platform canonical across
         # portfolios from accepted canonical outputs (funded packs only).
@@ -494,6 +556,11 @@ def handle_blob_event(
                 _persist_funded_outputs(
                     persistence, manifest, parsed, out_dir, accepted_root,
                     sel_run_regime, regime_runner)
+        # 5b) Weekly pipeline (dataset=pipeline) runs publish the pipeline snapshot
+        # the React MI pipeline view reads (stable latest pointer + period copy), so
+        # a weekly extract renders as the latest without a filesystem mount.
+        elif parsed.dataset == "pipeline" and persistence is not None:
+            _persist_pipeline_outputs(persistence, manifest, parsed, result)
     elif orch_status == "halted":
         manifest["status"] = STATUS_HALTED
         manifest["event_decision"] = EVT_KNOWN_SOURCE_HALTED
@@ -508,6 +575,58 @@ def handle_blob_event(
     # Mark the pack processed (idempotency) on any orchestrator-invoking outcome.
     _write_processed(out_dir, manifest, schema_info, result)
     return _emit()
+
+
+# --------------------------------------------------------------------------- #
+# Approval policy — auto-approve re-pin + governance
+# --------------------------------------------------------------------------- #
+
+def _auto_approve_repin(registry, rec, parsed, schema_info, materiality,
+                        persistence, manifest, created_at) -> None:
+    """Re-pin the registry to a NON-MATERIAL recurring change and write the
+    governance audit trail. ``rec`` is upserted by the caller.
+
+    The evidence (deterministic conf, value-match rate, LLM conf, role-set diff,
+    old→new fingerprint) lands in BOTH the run record (via ``manifest``) and a
+    durable governance artifact, per the approval policy.
+    """
+    old_fingerprint = rec.expected_schema_fingerprint
+    new_role_schemas = dict(getattr(schema_info, "sheet_columns", {}) or {})
+    rec.expected_schema_fingerprint = schema_info.fingerprint
+    rec.expected_columns = list(schema_info.columns)
+    if new_role_schemas:
+        rec.file_role_schemas = {r: list(c) for r, c in new_role_schemas.items()}
+    rec.mapping_version = int(getattr(rec, "mapping_version", 0) or 0) + 1
+    evidence = materiality.to_dict() if materiality is not None else {}
+    manifest["auto_approval"] = {
+        "old_fingerprint": old_fingerprint,
+        "new_fingerprint": schema_info.fingerprint,
+        "repinned_roles": sorted(new_role_schemas.keys()),
+        "mapping_version": rec.mapping_version,
+        "materiality": evidence,
+    }
+    if persistence is not None:
+        try:
+            doc = {
+                "pack_key": manifest.get("pack_key"),
+                "event_id": manifest.get("event_id"),
+                "client_id": parsed.client_id,
+                "source_portfolio_id": parsed.source_portfolio_id,
+                "dataset": parsed.dataset, "frequency": parsed.frequency,
+                "reporting_period": parsed.reporting_period,
+                "decision": "auto_approved_non_material",
+                "old_fingerprint": old_fingerprint,
+                "new_fingerprint": schema_info.fingerprint,
+                "repinned_role_schemas": rec.file_role_schemas,
+                "mapping_version": rec.mapping_version,
+                "materiality_evidence": evidence,
+                "approved_by": "approval_policy:auto",
+                "created_at": created_at,
+            }
+            manifest["governance_artifact_uri"] = (
+                persistence.persist_governance_artifact(manifest.get("pack_key") or "unknown", doc))
+        except Exception as exc:  # noqa: BLE001 — never fail the event on audit write
+            manifest.setdefault("persist_errors", []).append(f"governance: {exc}")
 
 
 # --------------------------------------------------------------------------- #
@@ -610,6 +729,28 @@ def _persist_funded_outputs(persistence, manifest, parsed, out_dir, accepted_roo
     manifest["persisted"] = persisted
 
 
+def _persist_pipeline_outputs(persistence, manifest, parsed, result) -> None:
+    """Publish a weekly pipeline run's snapshot (the MI canonical the deterministic
+    run produced) to the durable store so the React MI pipeline view reads the
+    latest weekly extract from Blob. Best effort — never fails the event."""
+    central_local = (result or {}).get("central_canonical_path")
+    persisted: Dict[str, Any] = dict(manifest.get("persisted") or {})
+    try:
+        if central_local and Path(str(central_local)).exists():
+            pl = persistence.persist_pipeline(
+                parsed.client_id, parsed.reporting_period, str(central_local))
+            persisted["pipeline_latest_uri"] = pl.get("latest")
+            persisted["pipeline_period_uri"] = pl.get("period")
+            persisted["pipeline_pointer_uri"] = pl.get("pointer")
+            if pl.get("latest"):
+                manifest["pipeline_snapshot_uri"] = pl["latest"]
+        else:
+            persisted["pipeline_snapshot"] = "unavailable (no central canonical produced)"
+    except Exception as exc:  # noqa: BLE001
+        manifest.setdefault("persist_errors", []).append(f"pipeline_outputs: {exc}")
+    manifest["persisted"] = persisted
+
+
 # --------------------------------------------------------------------------- #
 # Pack idempotency helpers (folder-level, keyed on the reporting pack)
 # --------------------------------------------------------------------------- #
@@ -623,6 +764,23 @@ def _pack_key(parsed: ParsedPath) -> str:
 
 def _processed_path(out_dir: str | Path, pack_key: str) -> Path:
     return Path(out_dir) / "_packs" / f"{pack_key}.json"
+
+
+def _durable_prior(persistence: "ProductionPersistence",
+                   pack_key: str) -> Optional[Dict[str, Any]]:
+    """Durable idempotency: return a prior-run fingerprint/status from the durable
+    trakt-state ledger, but ONLY for a successfully ``processed`` run — so a
+    pending_review / halted / failed pack stays reprocessable. ``None`` on any miss
+    or error (idempotency is best-effort; never fail the event on a ledger read)."""
+    try:
+        rec = persistence.load_run_record(pack_key)
+    except Exception:  # noqa: BLE001
+        return None
+    if not rec or rec.get("status") != STATUS_PROCESSED:
+        return None
+    return {"schema_fingerprint": rec.get("schema_fingerprint"),
+            "status": rec.get("status"), "run_id": rec.get("run_id"),
+            "source": "durable_ledger"}
 
 
 def _read_processed(out_dir: str | Path, pack_key: str) -> Optional[Dict[str, Any]]:
