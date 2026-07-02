@@ -176,6 +176,8 @@ class RealAgentAdapters(AgentAdapters):
                  full_pipeline: bool = False,
                  reporting_period: Optional[str] = None,
                  enable_llm_advisor: bool = False,
+                 enable_llm_mapping_review: bool = False,
+                 llm_mapping_profile: str = "low",
                  managed_service: bool = False):
         self.registry = registry
         self.client_name = client_name
@@ -199,6 +201,12 @@ class RealAgentAdapters(AgentAdapters):
         # operator can accept them via ops approve-recommendations. Advisory only —
         # deterministic mapping stays the source of truth; off for recurring packs.
         self.enable_llm_advisor = enable_llm_advisor
+        # enable_llm_mapping_review: run the agentic mapping RESOLVER (source→canonical
+        # mapping review) for a new/changed source, so the automated blob path emits a
+        # pre-filled mapping instead of halting with an empty review queue. Advisory to
+        # the human one-click approval; canonical-only nulling stays enforced downstream.
+        self.enable_llm_mapping_review = enable_llm_mapping_review
+        self.llm_mapping_profile = llm_mapping_profile
         # managed_service: this is headless blob-triggered execution. Run context
         # (data_cut_off_date, …) MUST originate from the blob event / folder period,
         # never a CLI-supplied value — so cli_fallback provenance is impossible here.
@@ -237,6 +245,10 @@ class RealAgentAdapters(AgentAdapters):
             aliases_dir=self.aliases_dir,
             enable_mapping_review=build_coverage,
             enable_llm_target_advisor=self.enable_llm_advisor,
+            # Agentic mapping resolver — only for a new/changed source (discovery);
+            # a deterministic recurring pack applies the saved mapping (no LLM).
+            enable_llm_mapping_review=(self.enable_llm_mapping_review and not deterministic),
+            llm_mapping_profile=self.llm_mapping_profile,
             reporting_date=(self.reporting_period or ""),
             reporting_period=(self.reporting_period or ""),
             managed_service=self.managed_service,

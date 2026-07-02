@@ -211,8 +211,14 @@ def default_orchestrator_invoker(
     # when the LLM policy is enabled. Recurring approved packs (deterministic) never
     # invoke it — they apply the promoted mapping.
     from . import llm_recommendations as _llm
+    _policy = _llm.resolve_llm_policy()
     enable_llm_advisor = (processing_mode == "source_onboarding"
-                          and _llm.resolve_llm_policy().get("enabled", False))
+                          and _policy.get("enabled", False))
+    # Agentic mapping RESOLVER: wired into the automated path only for a new/changed
+    # source (source_onboarding) when TRAKT_LLM_MODE=resolving. A recurring approved
+    # pack (deterministic) applies the saved mapping — never the resolver.
+    enable_llm_mapping_review = (processing_mode == "source_onboarding"
+                                 and _policy.get("resolve_mapping", False))
     adapters = RealAgentAdapters(
         client_name=client_id,
         onboarding_mode=onboarding_mode_for_target(target),   # contract by target
@@ -221,6 +227,8 @@ def default_orchestrator_invoker(
         full_pipeline=full_pipeline,   # Gate 2 will run → onboarding must emit the handoff
         reporting_period=reporting_period,   # derive reporting_date from the folder period
         enable_llm_advisor=enable_llm_advisor,
+        enable_llm_mapping_review=enable_llm_mapping_review,
+        llm_mapping_profile="low",
         managed_service=True,   # headless: run context from blob/folder only, no cli_fallback
     )
     spec = PortfolioSpec(

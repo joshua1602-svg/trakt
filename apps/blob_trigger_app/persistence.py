@@ -183,6 +183,24 @@ class ProductionPersistence:
         except Exception:  # noqa: BLE001
             return None
 
+    # -- governance artifact (auto-approve audit trail) -------------------- #
+    def persist_governance_artifact(self, pack_key: str,
+                                    doc: Dict[str, Any]) -> str:
+        """Write the auto-approval governance artifact (materiality evidence +
+        old→new fingerprint + re-pin outcome) durably. Returns the URI."""
+        uri = self.layout.governance_uri(pack_key)
+        self.storage.write_text(uri, json.dumps(doc, indent=2, default=str))
+        return uri
+
+    def load_governance_artifact(self, pack_key: str) -> Optional[Dict[str, Any]]:
+        uri = self.layout.governance_uri(pack_key)
+        if not self.storage.exists(uri):
+            return None
+        try:
+            return json.loads(self.storage.read_text(uri))
+        except Exception:  # noqa: BLE001
+            return None
+
     # -- accepted-decisions bridge (CLI approve→rerun→promote) ------------- #
     def approve_recommendations(self, pack_key: str, **kw) -> Dict[str, Any]:
         from . import decisions_bridge as _db

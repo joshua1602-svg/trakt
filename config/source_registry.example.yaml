@@ -1,9 +1,24 @@
 # Trakt source registry (example / seed).
 #
-# One record per client_id/source_portfolio_id/dataset/frequency. Copy to
-# config/source_registry.yaml and fill expected_schema_fingerprint + approved
-# mapping after a source has been onboarded and the mapping approved. Until then
-# leave status: pending_review so routine files stop before production.
+# One record per client_id/source_portfolio_id/dataset/frequency. The DURABLE
+# registry lives at TRAKT_SOURCE_REGISTRY_URI (default
+# blob://trakt-state/registry/source_registry.yaml) — NOT this example file, which
+# is a template only.
+#
+# expected_schema_fingerprint + file_role_schemas are NEVER hand-written (a
+# placeholder like "sha256:<fill…>" can never match a real pack and forces every
+# upload to schema_drift). PIN them from ONE representative real pack per source:
+#
+#   python -m apps.blob_trigger_app.repin \
+#     --blob-prefix raw-v2/ERE/direct/funded/monthly/direct_001/2025-11-30 \
+#     --client ERE --book-type direct --dataset funded --frequency monthly \
+#     --pid direct_001 --regime-required \
+#     --mapping-config-path config/client/mappings/ere_direct_funded_monthly.yaml
+#
+# That writes an ACTIVE record with the header-first fingerprint + role schemas so
+# the next identical upload routes `deterministic`. Until a source is pinned, leave
+# status: pending_review so routine files stop before production. The historical
+# backfill (python -m apps.blob_trigger_app.backfill) auto-pins recurring sources.
 sources:
   - client_id: ERE
     source_portfolio_id: direct_001
@@ -13,7 +28,7 @@ sources:
     source_system: ERE core lending platform
     approved_mapping_id: ere_direct_funded_monthly_v1
     mapping_config_path: config/client/mappings/ere_direct_funded_monthly.yaml
-    expected_schema_fingerprint: "sha256:<fill-after-onboarding>"
+    expected_schema_fingerprint: null   # PIN via `python -m apps.blob_trigger_app.repin`
     expected_columns: []
     last_successful_run_id: null
     last_successful_reporting_period: null
@@ -28,7 +43,7 @@ sources:
     source_system: ERE origination pipeline
     approved_mapping_id: ere_direct_pipeline_weekly_v1
     mapping_config_path: config/client/mappings/ere_direct_pipeline_weekly.yaml
-    expected_schema_fingerprint: "sha256:<fill-after-onboarding>"
+    expected_schema_fingerprint: null   # PIN via `python -m apps.blob_trigger_app.repin`
     expected_columns: []
     regime_required: false       # pipeline → MI-only, never Regime/ESMA
     status: active

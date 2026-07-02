@@ -70,6 +70,12 @@ def build_run_record(manifest: Dict[str, Any]) -> Dict[str, Any]:
         "issue_count": diag.get("issue_count", 0),
         # LLM advisory status (deterministic remains the source of truth).
         "llm": manifest.get("llm") or {},
+        # APPROVAL POLICY audit — materiality classification + auto-approve re-pin
+        # evidence (present only on a recurring fingerprint-change outcome).
+        "materiality": manifest.get("materiality") or {},
+        "auto_approved": bool(manifest.get("auto_approved")),
+        "auto_approval": manifest.get("auto_approval") or {},
+        "governance_artifact_uri": manifest.get("governance_artifact_uri"),
         "next_action": next_action,
         "error": manifest.get("error"),
         "created_at": manifest.get("created_at"),

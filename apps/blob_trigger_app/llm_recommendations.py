@@ -47,6 +47,11 @@ def resolve_llm_policy(env: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     mode = (env.get("TRAKT_LLM_MODE") or ("advisory" if enabled_flag else "off")).strip().lower()
     fallback = (env.get("TRAKT_LLM_FALLBACK") or "deterministic").strip().lower()
     enabled = enabled_flag and mode != "off"
+    # ``resolving`` additionally wires the agentic mapping RESOLVER into the
+    # automated path (a new/changed source gets a pre-filled mapping instead of an
+    # empty review queue). ``advisory`` keeps the LLM advisory-only. Both still
+    # require an operator one-click for a new source / material change.
+    resolve_mapping = bool(enabled and mode == "resolving")
     key = env.get("ANTHROPIC_API_KEY") or env.get("TRAKT_LLM_API_KEY")
     available = bool(enabled and key)
     if not enabled_flag:
@@ -55,11 +60,14 @@ def resolve_llm_policy(env: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         reason = "TRAKT_LLM_MODE=off — deterministic only"
     elif not key:
         reason = "LLM enabled but no ANTHROPIC_API_KEY — deterministic fallback"
+    elif resolve_mapping:
+        reason = "LLM enabled (resolving) with provider key present"
     else:
         reason = "LLM enabled (advisory) with provider key present"
     return {
         "enabled": enabled,
         "mode": mode,
+        "resolve_mapping": resolve_mapping,
         "available": available,
         "fallback": fallback,
         "reason": reason,

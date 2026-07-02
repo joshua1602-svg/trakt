@@ -17,24 +17,57 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - name: Create deployment package
+        # The deployed entrypoint (root function_app.py) imports the whole
+        # apps.blob_trigger_app package at module top, which in turn reaches into
+        # engine/, mi_agent/, mi_agent_api/, mi_agent_pptx/ and analytics_lib/.
+        # Every runtime package the trigger can import MUST ship, or the Function
+        # host cannot register the trigger. Keep this list in sync with .funcignore
+        # (which serves the same intent for `func azure functionapp publish`).
         run: |
           zip -r deploy.zip \
             function_app.py \
             host.json \
             requirements.txt \
+            apps/ \
             engine/ \
+            mi_agent/ \
+            mi_agent_api/ \
+            mi_agent_pptx/ \
+            analytics_lib/ \
             config/ \
-            -x "*.pyc" "__pycache__/*"
+            -x "*.pyc" "*/__pycache__/*" "*/tests/*" "*/test_*"
 
       - name: Show package size
         run: ls -lh deploy.zip
 
-      - name: Sanity check package contents
+      - name: Sanity check package contents (fail loudly on an incomplete deploy)
+        # py_compile only parses one file; it NEVER catches a missing runtime
+        # package because it does not execute imports. The trigger's real failure
+        # mode is `ModuleNotFoundError: No module named 'apps'` at host start,
+        # which passes CI silently under py_compile. Instead: unpack the ACTUAL
+        # artifact into a clean dir, install azure-functions, and import
+        # function_app the way the Functions host does — so an incomplete package
+        # fails the build here, not silently in production.
         run: |
-          unzip -l deploy.zip | sed -n '1,120p'
+          set -euo pipefail
           unzip -l deploy.zip | grep -E 'function_app.py|host.json|requirements.txt'
-          python -m py_compile function_app.py
+          # Every runtime package the entrypoint imports must be present.
+          for pkg in apps/blob_trigger_app/__init__.py engine/__init__.py \
+                     mi_agent_api/__init__.py; do
+            unzip -l deploy.zip | grep -q "$pkg" || {
+              echo "DEPLOY PACKAGE INCOMPLETE: missing $pkg"; exit 1; }
+          done
+          rm -rf _pkgcheck && mkdir _pkgcheck
+          unzip -q deploy.zip -d _pkgcheck
+          python -m pip install --quiet "azure-functions>=1.17" pyyaml \
+            "pandas>=1.5,<3.0" openpyxl
+          ( cd _pkgcheck && python -c "import function_app; print('import function_app OK')" )
 
       - name: Login to Azure
         uses: azure/login@v2

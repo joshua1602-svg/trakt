@@ -94,6 +94,8 @@ EVT_SCHEMA_DRIFT_PENDING = "schema_drift_pending_review"
 EVT_DUPLICATE_READY_IGNORED = "duplicate_ready_ignored"
 EVT_INCOMPLETE_PACK_PENDING = "incomplete_pack_pending_review"
 EVT_BOOK_TYPE_MISMATCH = "book_type_mismatch"
+EVT_AUTO_APPROVED = "recurring_auto_approved_non_material"
+EVT_MATERIAL_CHANGE_PENDING = "material_change_pending_review"
 EVT_FAILED = "failed"
 
 
@@ -321,18 +323,55 @@ def handle_blob_event(
     if drift_suspected:
         manifest["drift_files"] = list(getattr(schema_info, "drift_files", []))
 
+    # APPROVAL POLICY state (threaded into the deterministic success branch).
+    auto_approved = False
+    materiality = None
     if rec is None or not rec.has_approved_mapping:
+        # New client / new source_portfolio (no ACTIVE record) → always one-click.
         decision = DECISION_SOURCE_ONBOARDING
     elif role_conflict:
         # Two files resolved to the same logical role — fail closed, never process
         # with an ambiguous pack.
         decision = DECISION_SCHEMA_DRIFT
     elif rec.expected_schema_fingerprint == schema_info.fingerprint and not drift_suspected:
+        # Exact schema match → deterministic as today (no LLM, no approval).
         decision = DECISION_DETERMINISTIC
-    else:
-        # Fingerprint mismatch OR a file that no approved role schema recognises
-        # (only weak filename evidence) → treat as drift, not silent known source.
+    elif drift_suspected:
+        # A file matched NO approved role header signature (only weak filename
+        # evidence) — header evidence absent, cannot trust classification → drift.
         decision = DECISION_SCHEMA_DRIFT
+    elif not (rec.file_role_schemas and getattr(schema_info, "sheet_columns", None)):
+        # Recurring approved source with a fingerprint change but NO pinned header
+        # signatures to compare against (legacy/placeholder pin, or a pack with no
+        # role columns) → cannot prove "significantly the same"; fail closed to the
+        # one-click review path, exactly as before the approval policy existed.
+        decision = DECISION_SCHEMA_DRIFT
+    else:
+        # Recurring APPROVED source, fingerprint CHANGED, but every file still
+        # header-matched an approved role → run the APPROVAL POLICY materiality
+        # classifier over the deterministic (+ any LLM) evidence.
+        from . import approval_policy as _ap
+        materiality = _ap.classify(
+            old_role_schemas=rec.file_role_schemas or {},
+            new_role_schemas=dict(getattr(schema_info, "sheet_columns", {}) or {}),
+            old_fingerprint=rec.expected_schema_fingerprint,
+            new_fingerprint=schema_info.fingerprint,
+            # No mandatory-column set is threaded here → the classifier treats ANY
+            # removed previously-mapped column as material (conservative default).
+            mandatory_columns=None)
+        manifest["materiality"] = materiality.to_dict()
+        if materiality.auto_approvable:
+            # NON-MATERIAL "significantly the same" recurring change → AUTO-APPROVE:
+            # process deterministically with the saved mapping, then re-pin + write
+            # the governance evidence (handled in the deterministic success branch).
+            decision = DECISION_DETERMINISTIC
+            auto_approved = True
+            manifest["auto_approved"] = True
+        else:
+            # MATERIAL change to a known source → re-run discovery + the LLM mapping
+            # resolver to PRE-FILL the mapping, then halt at pending_review (one-click).
+            decision = DECISION_SOURCE_ONBOARDING
+            manifest["material_change"] = True
     manifest["requires_source_onboarding"] = decision != DECISION_DETERMINISTIC
     manifest["decision"] = decision
 
@@ -434,12 +473,17 @@ def handle_blob_event(
         if (result or {}).get("status") != "done":
             manifest["orchestrator_diagnostics"] = _halt_diagnostics(result)
         manifest["status"] = STATUS_PENDING_REVIEW
-        manifest["event_decision"] = EVT_NEW_SOURCE_PENDING
+        # A MATERIAL change to a KNOWN source is audited distinctly from a brand-new
+        # source, though both take the same one-click path (mapping pre-filled).
+        is_material_change = bool(manifest.get("material_change"))
+        manifest["event_decision"] = (EVT_MATERIAL_CHANGE_PENDING if is_material_change
+                                      else EVT_NEW_SOURCE_PENDING)
         _upsert_source(registry, parsed, schema_info, status=STATUS_PENDING_REVIEW,
                        regime_required=regime_required, portfolio_type=portfolio_type)
         _write_pending_approval(
             persistence, manifest, parsed, schema_info, created_at,
-            kind="new_source", pack_files=pack_files,
+            kind=("schema_drift" if is_material_change else "new_source"),
+            pack_files=pack_files,
             suggested_mapping_id=None, suggested_mapping_config_path=None,
             portfolio_type=portfolio_type, regime_required=regime_required,
             acquisition_date=acquisition_date, seller_name=seller_name)
@@ -481,6 +525,15 @@ def handle_blob_event(
         if rec is not None:
             rec.last_successful_run_id = (result.get("run_id") or run_id_for_registry)
             rec.last_successful_reporting_period = parsed.reporting_period
+            # AUTO-APPROVE (non-material recurring change): re-pin the registry
+            # expected_schema_fingerprint + file_role_schemas to THIS pack so the
+            # next identical upload is a clean `deterministic` (exact-match) run,
+            # and write the governance audit trail. Deterministic mapping stays the
+            # source of truth; canonical-only nulling is enforced downstream.
+            if auto_approved:
+                _auto_approve_repin(registry, rec, parsed, schema_info, materiality,
+                                    persistence, manifest, created_at)
+                manifest["event_decision"] = EVT_AUTO_APPROVED
             registry.upsert(rec)
         # 5) Assembler refresh — rebuild the central platform canonical across
         # portfolios from accepted canonical outputs (funded packs only).
@@ -508,6 +561,58 @@ def handle_blob_event(
     # Mark the pack processed (idempotency) on any orchestrator-invoking outcome.
     _write_processed(out_dir, manifest, schema_info, result)
     return _emit()
+
+
+# --------------------------------------------------------------------------- #
+# Approval policy — auto-approve re-pin + governance
+# --------------------------------------------------------------------------- #
+
+def _auto_approve_repin(registry, rec, parsed, schema_info, materiality,
+                        persistence, manifest, created_at) -> None:
+    """Re-pin the registry to a NON-MATERIAL recurring change and write the
+    governance audit trail. ``rec`` is upserted by the caller.
+
+    The evidence (deterministic conf, value-match rate, LLM conf, role-set diff,
+    old→new fingerprint) lands in BOTH the run record (via ``manifest``) and a
+    durable governance artifact, per the approval policy.
+    """
+    old_fingerprint = rec.expected_schema_fingerprint
+    new_role_schemas = dict(getattr(schema_info, "sheet_columns", {}) or {})
+    rec.expected_schema_fingerprint = schema_info.fingerprint
+    rec.expected_columns = list(schema_info.columns)
+    if new_role_schemas:
+        rec.file_role_schemas = {r: list(c) for r, c in new_role_schemas.items()}
+    rec.mapping_version = int(getattr(rec, "mapping_version", 0) or 0) + 1
+    evidence = materiality.to_dict() if materiality is not None else {}
+    manifest["auto_approval"] = {
+        "old_fingerprint": old_fingerprint,
+        "new_fingerprint": schema_info.fingerprint,
+        "repinned_roles": sorted(new_role_schemas.keys()),
+        "mapping_version": rec.mapping_version,
+        "materiality": evidence,
+    }
+    if persistence is not None:
+        try:
+            doc = {
+                "pack_key": manifest.get("pack_key"),
+                "event_id": manifest.get("event_id"),
+                "client_id": parsed.client_id,
+                "source_portfolio_id": parsed.source_portfolio_id,
+                "dataset": parsed.dataset, "frequency": parsed.frequency,
+                "reporting_period": parsed.reporting_period,
+                "decision": "auto_approved_non_material",
+                "old_fingerprint": old_fingerprint,
+                "new_fingerprint": schema_info.fingerprint,
+                "repinned_role_schemas": rec.file_role_schemas,
+                "mapping_version": rec.mapping_version,
+                "materiality_evidence": evidence,
+                "approved_by": "approval_policy:auto",
+                "created_at": created_at,
+            }
+            manifest["governance_artifact_uri"] = (
+                persistence.persist_governance_artifact(manifest.get("pack_key") or "unknown", doc))
+        except Exception as exc:  # noqa: BLE001 — never fail the event on audit write
+            manifest.setdefault("persist_errors", []).append(f"governance: {exc}")
 
 
 # --------------------------------------------------------------------------- #

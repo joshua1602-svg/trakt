@@ -87,6 +87,12 @@ class Layout:
     def llm_recommendations_uri(self, pack_key: str) -> str:
         return self._state("runs", pack_key, "llm", "recommendations.json")
 
+    # -- governance artifacts (auto-approve audit trail) ------------------- #
+    def governance_uri(self, pack_key: str, name: str = "auto_approval.json") -> str:
+        """Durable governance artifact for an auto-approved recurring change:
+        the materiality evidence + old→new fingerprint + re-pin outcome."""
+        return self._state("runs", pack_key, "governance", name)
+
     # -- onboarding decision inputs + accepted decisions (CLI-parity bridge) #
     def run_onboarding_uri(self, pack_key: str, name: str) -> str:
         """Durable copy of an onboarding decision artefact (34 pending decisions,
