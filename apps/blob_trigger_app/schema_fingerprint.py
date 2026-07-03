@@ -85,10 +85,40 @@ def compute_schema_fingerprint(path: str | Path, *, include_order: bool = True) 
     return _fingerprint_csv(p, ext or "csv", include_order)
 
 
+def _unnamed_fraction(cols: List[str]) -> float:
+    if not cols:
+        return 0.0
+    unnamed = sum(1 for c in cols if str(c).startswith("Unnamed:") or str(c).strip() == "")
+    return unnamed / len(cols)
+
+
+def _redetect_columns(read_rows, cols: List[str]) -> List[str]:
+    """When >40% of ``cols`` are ``Unnamed:*`` (the real header sits below row 1),
+    rescan for the true header using the SAME detector the onboarding engine applies
+    internally (``source_table_loader.redetect_header``), so the pinned header
+    signature carries business column names — not ``Unnamed:*`` noise. Header-first
+    fingerprinting only; no values are read into the key. Falls back to the raw
+    header row if redetection is unavailable or fails."""
+    if _unnamed_fraction(cols) <= 0.4:
+        return cols
+    try:
+        from engine.onboarding_agent.source_table_loader import redetect_header
+        df = read_rows()
+        if df is None or len(df) == 0:
+            return cols
+        redet, _idx, failed = redetect_header(df)
+        if not failed:
+            return [str(c) for c in redet.columns]
+    except Exception:  # noqa: BLE001 — fingerprint must never fail on a messy header
+        pass
+    return cols
+
+
 def _fingerprint_csv(p: Path, ext: str, include_order: bool) -> SchemaInfo:
     import pandas as pd
     head = pd.read_csv(p, nrows=0)
     cols = [str(c) for c in head.columns]
+    cols = _redetect_columns(lambda: pd.read_csv(p, nrows=25, header=0, dtype=str), cols)
     info = fingerprint_from_schema(file_type=ext, columns=cols, include_order=include_order)
     return info
 
@@ -151,7 +181,10 @@ def _fingerprint_excel(p: Path, ext: str, include_order: bool) -> SchemaInfo:
     sheet_columns: Dict[str, List[str]] = {}
     for s in sheets:
         head = xl.parse(s, nrows=0)
-        sheet_columns[s] = [str(c) for c in head.columns]
+        cols = [str(c) for c in head.columns]
+        # Same misaligned-header re-detection as the CSV path (real header below row 1).
+        sheet_columns[s] = _redetect_columns(
+            lambda s=s: xl.parse(s, nrows=25, header=0, dtype=str), cols)
     primary = sheet_columns.get(sheets[0], []) if sheets else []
     return fingerprint_from_schema(
         file_type=ext, columns=primary, sheets=sheets,
