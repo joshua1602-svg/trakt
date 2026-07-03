@@ -477,6 +477,9 @@ def handle_blob_event(
             "invoked": True, "mode": DECISION_SOURCE_ONBOARDING,
             "target": sel_target, "run_regime": sel_run_regime, **_inv(result)}
         manifest["orchestrator_run_id"] = (result or {}).get("run_id")
+        # Onboarding project dir(s) — so persistence captures the target-first
+        # decisions + resolved mapping for approve→promote→rerun, on success too.
+        manifest["onboarding_project_dirs"] = (result or {}).get("onboarding_project_dirs")
         # Surface any onboarding recommendations/diagnostics so the operator can
         # review them before approving the mapping.
         if (result or {}).get("status") != "done":

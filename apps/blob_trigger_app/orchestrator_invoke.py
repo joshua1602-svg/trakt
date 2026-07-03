@@ -135,6 +135,23 @@ def _run_diagnostics(state: Any) -> Dict[str, Any]:
     }
 
 
+def _onboarding_project_dirs(state: Any, out_dir: str) -> Dict[str, str]:
+    """Map each portfolio id → its onboarding project dir. Mirrors the orchestrator's
+    layout (``out_root/run_id/portfolios/{source_portfolio_id}``) so persistence can
+    locate the target-first decisions + resolved mapping artefacts on ANY outcome.
+    Best effort — never raises."""
+    out: Dict[str, str] = {}
+    try:
+        run_dir = Path(out_dir) / getattr(state, "run_id", "")
+        for p in getattr(state, "portfolios", []) or []:
+            pid = getattr(p, "source_portfolio_id", None)
+            if pid:
+                out[pid] = str(run_dir / "portfolios" / pid)
+    except Exception:  # noqa: BLE001 — diagnostics/locators must never raise
+        pass
+    return out
+
+
 def _mapping_recommendations(state: Any) -> List[Dict[str, Any]]:
     """Best-effort: surface the onboarding agent's mapping recommendations /
     unresolved decisions from each portfolio's handoff manifest, so an operator
@@ -251,6 +268,13 @@ def default_orchestrator_invoker(
         "central_canonical_path": state.central_canonical_path,
         "blockers": state.blockers,
         "state_path": str(state.state_path()),
+        # Per-portfolio onboarding project dir (out_root/run_id/portfolios/{pid}) —
+        # where the 34/36/28a target-first decisions + the resolver's mapping
+        # artefacts (22/31) are written. Surfaced for BOTH done and halted runs so
+        # persistence can capture the resolved mapping for the approve→promote→rerun
+        # loop even when the onboarding run SUCCEEDED (previously only halted runs,
+        # via diagnostics, exposed a project dir).
+        "onboarding_project_dirs": _onboarding_project_dirs(state, out_dir),
     }
     # Non-done runs get a diagnostics block explaining why the central canonical
     # is null (halt stage/reason, blocking decisions, registry gaps, validation

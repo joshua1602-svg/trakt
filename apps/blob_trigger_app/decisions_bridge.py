@@ -31,29 +31,54 @@ _RECS_NAME = "36_target_first_llm_recommendations.json"
 _COVERAGE_JSON = "28a_target_coverage_matrix.json"
 _APPROVED_NAME = "34_target_first_decisions_approved.yaml"
 _INPUT_NAMES = (_DECISIONS_NAME, _RECS_NAME, _COVERAGE_JSON)
+# Additionally captured so the RESOLVED source→canonical mapping (from the LLM
+# mapping resolver) is durably preserved alongside the target-first decisions —
+# the operator can inspect it, and nothing the resolver produced is lost when the
+# ephemeral run scratch is reclaimed. Persisted; not required by accept_target_advice.
+_RESOLVER_NAMES = (
+    "22_llm_mapping_suggestions.json",
+    "31_llm_mapping_review.json",
+    "31_llm_mapping_review.csv",
+    "28a_target_coverage_matrix.csv",
+)
+_PERSIST_NAMES = tuple(dict.fromkeys(_INPUT_NAMES + _RESOLVER_NAMES))
 
 
 def _project_dir_from_manifest(manifest: Dict[str, Any]) -> Optional[Path]:
-    """The onboarding project dir = the parent of the 28a coverage matrix path."""
+    """Locate the onboarding project dir for this pack's source.
+
+    Prefers the invoker-supplied ``onboarding_project_dirs`` (populated on ANY
+    outcome, incl. a SUCCESSFUL new-source run), keyed by source_portfolio_id;
+    falls back to the parent of the 28a coverage matrix path from the halt
+    diagnostics (which only exist on a non-done run).
+    """
+    dirs = manifest.get("onboarding_project_dirs") or {}
+    if isinstance(dirs, dict) and dirs:
+        pid = manifest.get("source_portfolio_id")
+        candidate = dirs.get(pid) if pid else None
+        for d in ([candidate] if candidate else []) + list(dirs.values()):
+            if d and Path(d).exists():
+                return Path(d)
     hr = ((manifest.get("orchestrator_diagnostics") or {}).get("handoff_readiness") or {})
     cov = hr.get("target_coverage_matrix_path")
-    if not cov:
-        return None
-    p = Path(cov).parent
-    return p if p.exists() else None
+    if cov and Path(cov).parent.exists():
+        return Path(cov).parent
+    return None
 
 
 def persist_decision_inputs(storage: Storage, layout: Layout,
                             manifest: Dict[str, Any]) -> Dict[str, str]:
-    """Copy the onboarding decision artefacts (34 pending / 36 recs / 28a) into
-    ``trakt-state/runs/{pack_key}/onboarding/`` so ``approve-recommendations`` can
-    run accept_target_advice after the Azure run scratch is reclaimed."""
+    """Copy the onboarding decision artefacts (34 pending / 36 recs / 28a) AND the
+    resolved-mapping artefacts (22/31) into ``trakt-state/runs/{pack_key}/
+    onboarding/`` so ``approve-recommendations`` can run accept_target_advice —
+    and the resolved mapping is reusable — after the Azure run scratch is
+    reclaimed. Runs on a SUCCESSFUL new-source onboarding run too, not only a halt."""
     pack_key = manifest.get("pack_key")
     pdir = _project_dir_from_manifest(manifest)
     if not pack_key or pdir is None:
         return {}
     out: Dict[str, str] = {}
-    for name in _INPUT_NAMES:
+    for name in _PERSIST_NAMES:
         src = pdir / name
         if src.exists():
             uri = layout.run_onboarding_uri(pack_key, name)
