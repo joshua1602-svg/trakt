@@ -196,5 +196,164 @@ class TestPipelineRegistrySeparation(unittest.TestCase):
             self.assertEqual(m2["decision"], R.DECISION_DETERMINISTIC)
 
 
+class TestPipelineAssemblerSkip(unittest.TestCase):
+    """Criteria 1, 2, 6 — for dataset=pipeline the funded platform assembler (which
+    requires loan_identifier/unique_identifier) is skipped; the run reaches done
+    with the stamped pipeline tape as the canonical. Funded still assembles."""
+
+    def _adapters(self, tape):
+        from engine.orchestrator_agent.adapters import AgentAdapters, StepResult
+
+        class _A(AgentAdapters):
+            def __init__(self):
+                self.assemble_called = False
+
+            def onboard(self, spec, work_dir):
+                return StepResult(ok=True, output_path=tape, readiness={}, message="onb")
+
+            def transform(self, spec, handoff, work_dir):
+                raise AssertionError("transform must not run for lean MI")
+
+            def validate(self, spec, manifest, work_dir):
+                raise AssertionError("validate must not run for lean MI")
+
+            def stamp_provenance(self, spec, canonical, out_dir):
+                return StepResult(ok=True, output_path=canonical, readiness={}, message="stamp")
+
+            def assemble(self, stamped, out_dir, client_id, target, regime=None):
+                self.assemble_called = True
+                return StepResult(ok=False, blocking=True,
+                                  blockers=["no loan identifier column"], message="halt")
+
+            def route_mi(self, central):
+                return StepResult(ok=True, output_path=central, readiness={}, message="route")
+
+            def project(self, central, out_dir, regime):
+                raise AssertionError("project must not run for mi target")
+
+        return _A()
+
+    def test_pipeline_run_reaches_done_without_funded_assembler(self):
+        from engine.orchestrator_agent.orchestrator import run_orchestration
+        from engine.orchestrator_agent.adapters import PortfolioSpec
+        from engine.orchestrator_agent.state import STEP_DONE
+        with tempfile.TemporaryDirectory() as td:
+            tape = Path(td) / "18a_central_pipeline_tape.csv"
+            tape.write_text("application_id,pipeline_stage,interest_rate\nA1,offer,0.05\n")
+            ad = self._adapters(str(tape))
+            spec = PortfolioSpec(source_portfolio_id="direct_001", input=str(td))
+            state = run_orchestration(
+                "ERE", [spec], target="mi", out_root=str(Path(td) / "out"),
+                adapters=ad, created_at="2026-01-01T00:00:00+00:00", dataset="pipeline")
+            self.assertEqual(state.status, STEP_DONE)          # (6) no halt
+            self.assertFalse(ad.assemble_called)               # (2) funded assembler skipped
+            self.assertEqual(state.central_canonical_path, str(tape))  # (3) pipeline tape = canonical
+            self.assertEqual(state.dataset, "pipeline")
+
+
+class TestPipelineIdentity(unittest.TestCase):
+    """Criterion 4 — an existing application/KFI id is used; otherwise a stable
+    pipeline_row_id is generated."""
+
+    def _parsed(self):
+        from apps.blob_trigger_app.path_parser import parse_blob_path
+        return parse_blob_path(
+            "raw-v2/ERE/direct/pipeline/weekly/direct_001/2025-09-08/x.csv", "raw-v2")
+
+    def test_existing_application_id_preserved(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "snap.csv"
+            p.write_text("application_id,pipeline_stage\nA1,offer\n")
+            out = R._ensure_pipeline_identity(str(p), self._parsed())
+            self.assertEqual(out, str(p))                      # unchanged — id present
+
+    def test_missing_id_generates_stable_row_id(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "snap.csv"
+            p.write_text("pipeline_stage,interest_rate\noffer,0.05\ncompleted,0.04\n")
+            out = R._ensure_pipeline_identity(str(p), self._parsed())
+            import csv
+            with open(out) as fh:
+                rows = list(csv.DictReader(fh))
+            self.assertIn("pipeline_row_id", rows[0])
+            self.assertTrue(rows[0]["pipeline_row_id"].endswith("|2025-09-08|0"))
+            self.assertTrue(rows[1]["pipeline_row_id"].endswith("|2025-09-08|1"))
+
+
+class TestPipelineFullExtractPublished(unittest.TestCase):
+    """The published snapshot is the FULL raw extract (rate/value/DOB), not the thin
+    18a tape — so the React pipeline view maps the rich fields and derives the
+    youngest-borrower age bucket (NNEG) from the DOBs."""
+
+    _RAW_HEADERS = ("Company,Pool,Account Number,KFI Number,Broker,DOB App 1,DOB App 2,"
+                    "Loan Amount,Estimated Value,Product Rate,Property Value,Status,"
+                    "Application Submitted Date,Date Funds Released")
+
+    def _parsed(self):
+        from apps.blob_trigger_app.path_parser import parse_blob_path
+        return parse_blob_path(
+            "raw-v2/ERE/direct/pipeline/weekly/direct_001/2025-09-08/x.csv", "raw-v2")
+
+    def test_snapshot_from_raw_preserves_rich_headers(self):
+        with tempfile.TemporaryDirectory() as td:
+            raw = Path(td) / "M2L KFI and Pipeline.csv"
+            raw.write_text(self._RAW_HEADERS + "\n"
+                           "ACME,P1,A100,K200,BrokerX,1950-03-01,1948-07-09,"
+                           "250000,600000,0.062,590000,Offer,2025-08-01,2025-09-05\n")
+            out = R._pipeline_snapshot_from_raw(str(raw), self._parsed())
+            self.assertIsNotNone(out)
+            import pandas as pd
+            cols = list(pd.read_csv(out, nrows=0).columns)
+            for c in ("Product Rate", "Property Value", "DOB App 1", "DOB App 2"):
+                self.assertIn(c, cols)
+
+    def test_persist_publishes_raw_extract_not_thin_tape(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            storage = Storage(root)
+            persistence = ProductionPersistence(storage, Layout())
+            parsed = self._parsed()
+            # A raw KFI extract in the pack + a THIN 18a tape from the run.
+            pack = root / "pack"
+            pack.mkdir()
+            (pack / "M2L KFI and Pipeline.csv").write_text(
+                self._RAW_HEADERS + "\nACME,P1,A100,K200,BrokerX,1950-03-01,1948-07-09,"
+                "250000,600000,0.062,590000,Offer,2025-08-01,2025-09-05\n")
+            thin = root / "18a_central_pipeline_tape.csv"
+            thin.write_text("application_id,pipeline_stage,expected_funded_amount\nA100,offer,250000\n")
+
+            manifest: dict = {}
+            R._persist_pipeline_outputs(
+                persistence, manifest, parsed,
+                {"central_canonical_path": str(thin)},
+                input_dir=str(pack), local_input_path=str(pack / "M2L KFI and Pipeline.csv"))
+            self.assertEqual(manifest.get("pipeline_snapshot_source"), "raw_extract")
+
+            published = persistence.pipeline_latest_path("ERE")
+            self.assertIsNotNone(published)
+            import pandas as pd
+            cols = list(pd.read_csv(published, nrows=0).columns)
+            self.assertIn("Product Rate", cols)          # rich field published
+            self.assertIn("DOB App 1", cols)             # DOB present → NNEG age bucket
+            self.assertNotIn("expected_funded_amount", cols)  # NOT the thin tape
+
+    def test_mi_contract_derives_youngest_age_from_dob(self):
+        # The existing MI pipeline contract already turns the applicant DOBs into the
+        # youngest-borrower age bucket — the DOB columns just have to reach it.
+        import yaml
+        cfg = yaml.safe_load((_REPO / "config/mi/pipeline_field_contract.yaml").read_text())
+        yba = cfg.get("fields", cfg).get("youngest_borrower_age") if isinstance(cfg, dict) else None
+        # tolerate either a top-level or fields-nested layout
+        if yba is None:
+            for v in (cfg.values() if isinstance(cfg, dict) else []):
+                if isinstance(v, dict) and "youngest_borrower_age" in v:
+                    yba = v["youngest_borrower_age"]
+                    break
+        self.assertIsNotNone(yba, "youngest_borrower_age must exist in the pipeline contract")
+        aliases = [str(a).lower() for a in (yba.get("dob_source_aliases") or [])]
+        self.assertIn("dob app 1", aliases)
+        self.assertIn("dob app 2", aliases)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -171,6 +171,7 @@ def run_orchestration(
     resume_state: Optional[RunState] = None,
     full_pipeline: bool = False,
     force_publish: bool = False,
+    dataset: str = "",
 ) -> RunState:
     """Run (or resume) the governed orchestration. Returns the final RunState.
 
@@ -192,6 +193,7 @@ def run_orchestration(
     if resume_state is None:
         state.full_pipeline = full_pipeline
         state.force_publish = force_publish
+        state.dataset = dataset
     state.status = STEP_RUNNING
     state.blockers = []
     state.save()
@@ -248,21 +250,38 @@ def run_orchestration(
 
     # ---- consolidate (Assembler) -----------------------------------------
     if not state.assemble.done:
-        stamped = [p.step("stamp").output_path for p in state.portfolios]
-        state.assemble.status = STEP_RUNNING
-        state.save()
-        r = adapters.assemble(stamped, run_dir / "out_platform",
-                              state.client_id, state.target, regime=regime)
-        _apply(state.assemble, r)
-        state.save()
-        if state.assemble.status != STEP_DONE:
-            state.status = STEP_HALTED if state.assemble.status == STEP_HALTED else STEP_FAILED
-            state.blockers.append("assemble: " + ("; ".join(state.assemble.blockers)
-                                                  or state.assemble.message))
+        if state.dataset == "pipeline":
+            # A pipeline dataset is NOT a funded loan canonical: its deliverable is
+            # the central PIPELINE tape (18a, stamped), and the funded platform
+            # assembler's loan-identity requirement (loan_identifier/unique_identifier)
+            # does not apply. Use the stamped pipeline tape as the central canonical
+            # and skip the funded assemble — funded runs are unaffected.
+            stamped = next((p.step("stamp").output_path or p.step("onboard").output_path
+                            for p in state.portfolios), None)
+            state.assemble.status = STEP_DONE
+            state.assemble.output_path = stamped
+            state.assemble.readiness = {"pipeline_dataset": True,
+                                        "central_pipeline_tape": stamped}
+            state.assemble.message = ("pipeline dataset — central pipeline tape used "
+                                      "as the canonical (funded platform assembler skipped)")
+            state.central_canonical_path = stamped
             state.save()
-            return state
-        state.central_canonical_path = state.assemble.output_path
-        state.save()
+        else:
+            stamped = [p.step("stamp").output_path for p in state.portfolios]
+            state.assemble.status = STEP_RUNNING
+            state.save()
+            r = adapters.assemble(stamped, run_dir / "out_platform",
+                                  state.client_id, state.target, regime=regime)
+            _apply(state.assemble, r)
+            state.save()
+            if state.assemble.status != STEP_DONE:
+                state.status = STEP_HALTED if state.assemble.status == STEP_HALTED else STEP_FAILED
+                state.blockers.append("assemble: " + ("; ".join(state.assemble.blockers)
+                                                      or state.assemble.message))
+                state.save()
+                return state
+            state.central_canonical_path = state.assemble.output_path
+            state.save()
 
     # ---- route to MI ------------------------------------------------------
     if state.target in ("mi", "all") and not state.route.done:
