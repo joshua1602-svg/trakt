@@ -240,6 +240,7 @@ def default_orchestrator_invoker(
         client_name=client_id,
         onboarding_mode=onboarding_mode_for_target(target),   # contract by target
         processing_mode=processing_mode,
+        dataset=dataset,   # pipeline vs funded — selects the pipeline tape deliverable
         mapping_config_path=mapping_config_path,
         full_pipeline=full_pipeline,   # Gate 2 will run → onboarding must emit the handoff
         reporting_period=reporting_period,   # derive reporting_date from the folder period

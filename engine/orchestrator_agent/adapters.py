@@ -172,6 +172,7 @@ class RealAgentAdapters(AgentAdapters):
                  onboarding_mode: str = "mi_only",
                  aliases_dir: str = "config/system",
                  processing_mode: str = "source_onboarding",
+                 dataset: str = "",
                  mapping_config_path: Optional[str] = None,
                  full_pipeline: bool = False,
                  reporting_period: Optional[str] = None,
@@ -187,6 +188,11 @@ class RealAgentAdapters(AgentAdapters):
         #   "source_onboarding" — run source discovery/mapping (new/changed source);
         #   "deterministic"     — skip discovery, apply the saved approved mapping.
         self.processing_mode = processing_mode
+        # dataset: "funded" | "pipeline" | "forecast". A pipeline pack feeds the
+        # central PIPELINE tape (18a) + materialised pipeline sources — NOT the
+        # funded mi_semantics lender-tape contract — so onboard selects the pipeline
+        # tape as the deliverable and does not grade against funded mandatory fields.
+        self.dataset = dataset
         self.mapping_config_path = mapping_config_path
         # full_pipeline: the run will execute Gate 2 (transform), so onboarding must
         # emit the target-coverage matrix (28a) + handoff even for a deterministic
@@ -231,11 +237,20 @@ class RealAgentAdapters(AgentAdapters):
         # review and applies the saved approved decisions; source onboarding (new /
         # changed source) runs discovery. Both stay deterministic-first (LLM off).
         deterministic = self.processing_mode == "deterministic"
+        # Pipeline packs feed the central PIPELINE tape (18a — built by
+        # central_tape_builder from pipeline_report-classified sources by header
+        # pattern) + materialised pipeline sources the MI pipeline layer reads. They
+        # are NOT graded against the funded mi_semantics contract, so skip the funded
+        # target coverage / advisor / mapping resolver — otherwise a pipeline pack
+        # halts on absent funded fields (current_interest_rate, …) that it should
+        # never be held to. Shared MI fields (balance/rate/dates/stage/status) map
+        # deterministically via the pipeline tape's header patterns.
+        is_pipeline = (self.dataset == "pipeline")
         # The target-coverage matrix (28a) + handoff are DETERMINISTIC artefacts
         # (the LLM is separately gated and stays off here). Build them when the run
         # will execute Gate 2 (full_pipeline) even for a deterministic known source,
         # so the MI-contract handoff exists; otherwise the lean MI path is unchanged.
-        build_coverage = (not deterministic) or self.full_pipeline
+        build_coverage = (not is_pipeline) and ((not deterministic) or self.full_pipeline)
         _wf.run_operator_workflow(
             input_dir=spec.input,
             client_name=self.client_name or spec.source_portfolio_id,
@@ -244,10 +259,13 @@ class RealAgentAdapters(AgentAdapters):
             registry=self.registry or "config/system/fields_registry.yaml",
             aliases_dir=self.aliases_dir,
             enable_mapping_review=build_coverage,
-            enable_llm_target_advisor=self.enable_llm_advisor,
-            # Agentic mapping resolver — only for a new/changed source (discovery);
-            # a deterministic recurring pack applies the saved mapping (no LLM).
-            enable_llm_mapping_review=(self.enable_llm_mapping_review and not deterministic),
+            enable_llm_target_advisor=(self.enable_llm_advisor and not is_pipeline),
+            # Agentic mapping resolver — only for a new/changed FUNDED source
+            # (discovery); a deterministic recurring pack applies the saved mapping,
+            # and a pipeline pack needs no funded-contract resolution (header-pattern
+            # pipeline tape) — so the LLM is not invoked for pipeline.
+            enable_llm_mapping_review=(self.enable_llm_mapping_review
+                                       and not deterministic and not is_pipeline),
             llm_mapping_profile=self.llm_mapping_profile,
             reporting_date=(self.reporting_period or ""),
             reporting_period=(self.reporting_period or ""),
@@ -263,6 +281,25 @@ class RealAgentAdapters(AgentAdapters):
             res = central_tape_builder.build_central_tapes(
                 str(project_dir), run_paths,
                 self.registry or "config/system/fields_registry.yaml", mode="mi_only")
+            if is_pipeline:
+                # Pipeline deliverable: the central PIPELINE tape (18a) + materialised
+                # sources. NEVER gate on the funded lender tape (empty for a
+                # pipeline-only pack) — that is exactly what halted the blob route
+                # before the central pipeline tape could be used.
+                ptape = res.get("central_pipeline_tape_path")
+                pok = bool(res.get("central_pipeline_tape_created")) and bool(ptape)
+                return StepResult(
+                    ok=pok, blocking=not pok, output_path=ptape, manifest_path=None,
+                    readiness={"central_pipeline_tape": ptape,
+                               "pipeline_count": res.get("pipeline_count"),
+                               "pipeline_source_dir": res.get("pipeline_source_dir"),
+                               "pipeline_sources_materialised": res.get("pipeline_sources_materialised"),
+                               "target_contract": "pipeline_field_contract"},
+                    blockers=[] if pok else [
+                        "onboarding did not produce a central pipeline tape — no "
+                        "pipeline_report file was classified or no application/KFI key "
+                        "column was found (check the workbook's pipeline/KFI sheet)"],
+                    message=f"central pipeline tape: {ptape}")
             tape = res.get("central_lender_tape_path")
             ok = bool(res.get("central_lender_tape_created")) and bool(tape)
             # ALSO emit the MI-contract onboarding handoff (mi_semantics contract)
