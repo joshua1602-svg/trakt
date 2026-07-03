@@ -563,7 +563,9 @@ def handle_blob_event(
         # the React MI pipeline view reads (stable latest pointer + period copy), so
         # a weekly extract renders as the latest without a filesystem mount.
         elif parsed.dataset == "pipeline" and persistence is not None:
-            _persist_pipeline_outputs(persistence, manifest, parsed, result)
+            _persist_pipeline_outputs(persistence, manifest, parsed, result,
+                                      input_dir=input_for_orch,
+                                      local_input_path=local_input_path)
     elif orch_status == "halted":
         manifest["status"] = STATUS_HALTED
         manifest["event_decision"] = EVT_KNOWN_SOURCE_HALTED
@@ -766,24 +768,90 @@ def _ensure_pipeline_identity(csv_path: str, parsed: ParsedPath) -> str:
         return str(csv_path)
 
 
-def _persist_pipeline_outputs(persistence, manifest, parsed, result) -> None:
-    """Publish a weekly pipeline run's snapshot (the central PIPELINE tape) to the
-    durable store so the React MI pipeline view reads the latest weekly extract from
-    Blob. Ensures a stable pipeline identity column. Best effort — never fails the event."""
-    central_local = (result or {}).get("central_canonical_path")
-    persisted: Dict[str, Any] = dict(manifest.get("persisted") or {})
+#: Filename hints for the raw pipeline extract inside a pack (KFI / pipeline).
+_PIPELINE_SOURCE_HINTS = ("kfi", "pipeline")
+_TABULAR_EXT = (".csv", ".xlsx", ".xls", ".xlsm")
+
+
+def _pick_pipeline_source(input_dir: Optional[str],
+                          local_input_path: Optional[str]) -> Optional[str]:
+    """The RAW pipeline extract to publish: prefer a KFI/pipeline-named tabular file
+    in the pack, else the primary uploaded file."""
     try:
+        if input_dir and Path(input_dir).is_dir():
+            files = [p for p in sorted(Path(input_dir).iterdir())
+                     if p.is_file() and p.suffix.lower() in _TABULAR_EXT]
+            for p in files:
+                if any(h in p.name.lower() for h in _PIPELINE_SOURCE_HINTS):
+                    return str(p)
+            if files:
+                return str(files[0])
+    except Exception:  # noqa: BLE001
+        pass
+    return local_input_path
+
+
+def _pipeline_snapshot_from_raw(raw_path: str, parsed: ParsedPath) -> Optional[str]:
+    """Convert the RAW pipeline extract (ORIGINAL headers — Loan Amount, Product Rate,
+    Property Value, DOB App 1/2, dates, Status, …) to a CSV snapshot the MI pipeline
+    layer maps IN FULL: the rich forecast fields AND youngest_borrower_age derived
+    from the applicant DOBs (config/mi/pipeline_field_contract.yaml → age_bucket /
+    NNEG). The thin 18a tape drops rate/value/DOB, so it is only a fallback. Reuses
+    the same first-sheet + redetect_header load as onboarding. ``None`` on error."""
+    import tempfile as _tempfile
+    try:
+        import pandas as pd
+        p = Path(str(raw_path))
+        if p.suffix.lower() in (".xlsx", ".xls", ".xlsm"):
+            df = pd.read_excel(p)
+        else:
+            df = pd.read_csv(p)
+        try:
+            from engine.onboarding_agent.source_table_loader import redetect_header
+            df, _idx, _fail = redetect_header(df)
+        except Exception:  # noqa: BLE001 — clean headers are untouched
+            pass
+        out = Path(_tempfile.mkdtemp(prefix="pipe_snap_")) / "pipeline_snapshot.csv"
+        df.to_csv(out, index=False)
+        return str(out)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _persist_pipeline_outputs(persistence, manifest, parsed, result, *,
+                              input_dir=None, local_input_path=None) -> None:
+    """Publish a weekly pipeline run's snapshot to the durable store so the React MI
+    pipeline view reads the latest weekly extract from Blob.
+
+    Publishes the FULL raw pipeline extract (original headers) — so the MI pipeline
+    layer produces the rich forecast-ready dataset (interest rate, property value,
+    dates, stage, and the DOB-derived youngest-borrower age bucket for NNEG) — and
+    only falls back to the thin 18a central pipeline tape if the raw extract is
+    unavailable. Ensures a stable identity column. Best effort — never fails the event."""
+    persisted: Dict[str, Any] = dict(manifest.get("persisted") or {})
+    snapshot_local: Optional[str] = None
+    raw = _pick_pipeline_source(input_dir, local_input_path)
+    if raw and Path(str(raw)).exists():
+        snapshot_local = _pipeline_snapshot_from_raw(str(raw), parsed)
+        if snapshot_local:
+            manifest["pipeline_snapshot_source"] = "raw_extract"
+    if not snapshot_local:
+        central_local = (result or {}).get("central_canonical_path")
         if central_local and Path(str(central_local)).exists():
-            central_local = _ensure_pipeline_identity(str(central_local), parsed)
+            snapshot_local = str(central_local)
+            manifest["pipeline_snapshot_source"] = "central_pipeline_tape_fallback"
+    try:
+        if snapshot_local and Path(snapshot_local).exists():
+            snapshot_local = _ensure_pipeline_identity(snapshot_local, parsed)
             pl = persistence.persist_pipeline(
-                parsed.client_id, parsed.reporting_period, str(central_local))
+                parsed.client_id, parsed.reporting_period, snapshot_local)
             persisted["pipeline_latest_uri"] = pl.get("latest")
             persisted["pipeline_period_uri"] = pl.get("period")
             persisted["pipeline_pointer_uri"] = pl.get("pointer")
             if pl.get("latest"):
                 manifest["pipeline_snapshot_uri"] = pl["latest"]
         else:
-            persisted["pipeline_snapshot"] = "unavailable (no central canonical produced)"
+            persisted["pipeline_snapshot"] = "unavailable (no pipeline extract or tape produced)"
     except Exception as exc:  # noqa: BLE001
         manifest.setdefault("persist_errors", []).append(f"pipeline_outputs: {exc}")
     manifest["persisted"] = persisted

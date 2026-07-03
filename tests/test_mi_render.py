@@ -116,24 +116,30 @@ class TestWeeklyPipelineBlobRoundTrip(unittest.TestCase):
             persistence = ProductionPersistence(storage, layout)
             registry = SourceRegistry("blob://trakt-state/registry/source_registry.yaml",
                                       storage=storage)
-            # A pinned weekly pipeline source + a produced central canonical.
+            # A pinned weekly pipeline source. The published snapshot must be the FULL
+            # raw extract (rich fields like interest_rate), NOT the thin 18a tape.
             wk = root / "wk"
             wk.mkdir()
-            (wk / "PipelineExtract.csv").write_text("deal_id,amount,stage\n1,2,new\n")
+            (wk / "PipelineExtract.csv").write_text(
+                "deal_id,amount,stage,interest_rate\nD1,250000,offer,0.062\n")
             repin_source(registry, client_id="ERE", source_portfolio_id="direct_001",
                          dataset="pipeline", frequency="weekly",
                          data_files=[str(wk / "PipelineExtract.csv")],
                          source_book_type="direct", regime_required=False)
+            # The run's central tape is the THIN 18a (no rate) — must NOT be published.
             central = root / "central.csv"
-            central.write_text("deal_id,amount,stage\n1,2,new\n7,8,won\n")
+            central.write_text("application_id,pipeline_stage\nD1,offer\n")
 
             m = self._route_weekly(td, registry, persistence, central)
             self.assertEqual(m["status"], "processed")
-            # The router persisted the pipeline snapshot durably.
+            self.assertEqual(m.get("pipeline_snapshot_source"), "raw_extract")
             self.assertTrue(m.get("pipeline_snapshot_uri"))
             local = persistence.pipeline_latest_path("ERE")
             self.assertIsNotNone(local)
-            self.assertIn("7,8,won", Path(local).read_text())
+            text = Path(local).read_text()
+            self.assertIn("interest_rate", text)          # rich raw field published
+            self.assertIn("0.062", text)
+            self.assertNotIn("application_id", text)       # NOT the thin 18a tape
 
             # The MI API resolves the latest pipeline snapshot from the blob pointer.
             import mi_agent_api.app as app
@@ -142,7 +148,7 @@ class TestWeeklyPipelineBlobRoundTrip(unittest.TestCase):
                            MI_AGENT_PIPELINE_URI="blob://processed-v2/pipeline/ERE/latest/latest_pipeline_snapshot.json"):
                 resolved = app._resolve_pipeline_uri_local()
             self.assertIsNotNone(resolved)
-            self.assertIn("7,8,won", Path(resolved).read_text())
+            self.assertIn("interest_rate", Path(resolved).read_text())
 
 
 if __name__ == "__main__":
