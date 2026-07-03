@@ -16,7 +16,7 @@ jobs:
     name: Build and Deploy Job
 
     env:
-      VITE_AGENT_API_URL: https://trakt-dashboard.azurewebsites.net
+      VITE_AGENT_API_URL: https://trakt-mi-api.azurewebsites.net
     
     steps:
       - uses: actions/checkout@v3
