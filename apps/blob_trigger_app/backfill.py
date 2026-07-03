@@ -68,16 +68,20 @@ class PackFolder:
         return (self.reporting_period, self.source_portfolio_id, self.dataset)
 
 
-def enumerate_packs(storage: Storage, container: str, *,
-                    marker: str = "_READY.json",
-                    scope: Optional[Tuple[Tuple[str, str], ...]] = None
-                    ) -> List[PackFolder]:
-    """Enumerate complete pack folders under ``container`` (each period folder with
-    ≥1 tabular data file), filtered to ``scope`` (dataset, frequency) pairs and
-    sorted chronologically. Marker/non-tabular files are not counted as data."""
+def scan_folders(storage: Storage, container: str, *,
+                 marker: str = "_READY.json",
+                 scope: Optional[Tuple[Tuple[str, str], ...]] = None
+                 ) -> "Tuple[List[PackFolder], List[Dict[str, str]]]":
+    """Return ``(packs, skipped)``. ``packs`` are complete in-scope pack folders
+    (each period folder with ≥1 tabular data file), sorted chronologically.
+    ``skipped`` records every folder that carried tabular data but was NOT
+    enumerated — a path that did not match the convention (e.g. a period folder
+    ``2025_09_08`` under an old separator) or a dataset/frequency outside ``scope`` —
+    with a reason, so backfill never silently drops a pack."""
     scope_set = set(scope or DEFAULT_SCOPE)
     groups: Dict[str, PackFolder] = {}
     markers: Dict[str, str] = {}
+    skipped: Dict[str, str] = {}
     for uri in storage.list(f"blob://{container}/"):
         name = uri.rsplit("/", 1)[-1]
         folder = uri.rsplit("/", 1)[0]
@@ -88,9 +92,11 @@ def enumerate_packs(storage: Storage, container: str, *,
             continue
         try:
             parsed = parse_blob_path(uri, container)
-        except PathParseError:
+        except PathParseError as exc:
+            skipped.setdefault(folder, f"path_parse_error: {exc}")
             continue
         if (parsed.dataset, parsed.frequency) not in scope_set:
+            skipped.setdefault(folder, f"out_of_scope: {parsed.dataset}/{parsed.frequency}")
             continue
         pf = groups.get(folder)
         if pf is None:
@@ -104,7 +110,17 @@ def enumerate_packs(storage: Storage, container: str, *,
     for folder, pf in groups.items():
         pf.data_file_uris.sort()
         pf.marker_uri = markers.get(folder)
-    return sorted(groups.values(), key=lambda p: p.sort_key())
+    # A folder that ended up enumerated is not "skipped".
+    skips = [{"folder": f, "reason": r} for f, r in skipped.items() if f not in groups]
+    return sorted(groups.values(), key=lambda p: p.sort_key()), skips
+
+
+def enumerate_packs(storage: Storage, container: str, *,
+                    marker: str = "_READY.json",
+                    scope: Optional[Tuple[Tuple[str, str], ...]] = None
+                    ) -> List[PackFolder]:
+    """The in-scope pack folders, chronologically (see :func:`scan_folders`)."""
+    return scan_folders(storage, container, marker=marker, scope=scope)[0]
 
 
 def _read_marker_meta(storage: Storage, pf: PackFolder) -> Dict[str, Any]:
@@ -158,7 +174,9 @@ def run_backfill(
         from .regime_runner import default_regime_runner
         regime_runner = default_regime_runner
 
-    packs = enumerate_packs(storage, container, marker=marker, scope=scope)
+    packs, skipped = scan_folders(storage, container, marker=marker, scope=scope)
+    for s in skipped:
+        logger.warning("BACKFILL SKIPPED %s — %s", s["folder"], s["reason"])
     if limit:
         packs = packs[:limit]
     results: List[Dict[str, Any]] = []
@@ -220,6 +238,12 @@ def run_backfill(
                         pf.source_portfolio_id, row["status"], row["decision"],
                         " (auto-approved)" if row["auto_approved"] else "")
             results.append(row)
+    # Surface folders that carried data but could not be enumerated (a path that
+    # did not match the convention) so they are never silently dropped.
+    for s in skipped:
+        if s["reason"].startswith("path_parse_error"):
+            results.append({"prefix": s["folder"], "status": "skipped_unparseable",
+                            "reason": s["reason"]})
     return results
 
 
@@ -264,21 +288,28 @@ def main(argv: Optional[List[str]] = None) -> int:
         scope=_parse_scope(args.scope), dry_run=args.dry_run,
         force=args.force, limit=args.limit)
 
-    processed = [r for r in results if r.get("status") == "processed"]
-    auto = [r for r in results if r.get("auto_approved")]
-    pending = [r for r in results if r.get("status") == "pending_review"]
-    skipped = [r for r in results if r.get("status") == "already_processed"]
-    print(f"\nBACKFILL {'PLAN' if args.dry_run else 'COMPLETE'}: {len(results)} pack(s)")
+    unparseable = [r for r in results if r.get("status") == "skipped_unparseable"]
+    packs = [r for r in results if r.get("status") != "skipped_unparseable"]
+    processed = [r for r in packs if r.get("status") == "processed"]
+    auto = [r for r in packs if r.get("auto_approved")]
+    pending = [r for r in packs if r.get("status") == "pending_review"]
+    already = [r for r in packs if r.get("status") == "already_processed"]
+    print(f"\nBACKFILL {'PLAN' if args.dry_run else 'COMPLETE'}: {len(packs)} pack(s)")
     if not args.dry_run:
         print(f"  processed={len(processed)}  auto_approved={len(auto)}  "
-              f"pending_review(one-click)={len(pending)}  already_processed={len(skipped)}")
-    for r in results:
+              f"pending_review(one-click)={len(pending)}  already_processed={len(already)}")
+    for r in packs:
         if args.dry_run:
             print(f"  [{r.get('n')}] {r['period']} {r['dataset']}/{r['frequency']} "
                   f"{r['source_portfolio_id']} → {r['planned_route']}")
         else:
             print(f"  [{r.get('n')}] {r.get('period')} {r.get('dataset')}/{r.get('frequency')} "
                   f"{r.get('source_portfolio_id')} → {r.get('status')}/{r.get('decision')}")
+    if unparseable:
+        print(f"\n  ⚠ SKIPPED {len(unparseable)} folder(s) that did not match the path "
+              f"convention (fix the folder name, then re-run):")
+        for r in unparseable:
+            print(f"    - {r['prefix']}  [{r['reason']}]")
     return 0
 
 

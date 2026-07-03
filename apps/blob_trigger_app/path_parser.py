@@ -25,6 +25,23 @@ VALID_FREQUENCIES = ("monthly", "weekly", "daily", "adhoc", "ad_hoc")
 _PERIOD_RE = re.compile(r"^\d{4}(-\d{2}(-\d{2})?|-W\d{2}|-Q[1-4])$")
 
 
+def _normalise_period(period: str) -> str:
+    """Canonicalise a period-folder segment to hyphen form.
+
+    Real uploads use both separators — funded folders arrive as ``2025-10-31`` but
+    weekly pipeline folders arrive as ``2025_09_08`` (underscores). Both mean the
+    same reporting period, so an underscore variant that resolves to a valid period
+    is normalised to hyphens (``2025_09_08`` → ``2025-09-08``, ``2025_W36`` →
+    ``2025-W36``). Input blobs are always read from their real path; only the
+    parsed ``reporting_period`` (used for pack_key + output layout) is canonicalised,
+    so nothing downstream depends on the raw separator. Unrecognised values are
+    returned unchanged and fail validation as before (fail closed)."""
+    if _PERIOD_RE.match(period):
+        return period
+    candidate = period.replace("_", "-")
+    return candidate if _PERIOD_RE.match(candidate) else period
+
+
 class PathParseError(ValueError):
     """Raised when a blob path does not match the convention (fail closed)."""
 
@@ -99,6 +116,7 @@ def parse_blob_path(blob_path: str, container: str = DEFAULT_CONTAINER) -> Parse
     if len(seg) == 7:
         (client_id, source_book_type, dataset, frequency,
          source_portfolio_id, reporting_period, filename) = seg
+        reporting_period = _normalise_period(reporting_period)
         if source_book_type not in VALID_BOOK_TYPES:
             raise PathParseError(
                 f"source_book_type must be one of {VALID_BOOK_TYPES}, got "
@@ -118,6 +136,7 @@ def parse_blob_path(blob_path: str, container: str = DEFAULT_CONTAINER) -> Parse
     if len(seg) == 6:
         (client_id, dataset, frequency,
          source_portfolio_id, reporting_period, filename) = seg
+        reporting_period = _normalise_period(reporting_period)
         _validate_common(dataset, frequency, reporting_period, filename)
         return ParsedPath(
             client_id=client_id, dataset=dataset, frequency=frequency,
