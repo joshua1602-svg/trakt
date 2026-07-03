@@ -732,14 +732,49 @@ def _persist_funded_outputs(persistence, manifest, parsed, out_dir, accepted_roo
     manifest["persisted"] = persisted
 
 
+# Pipeline identity columns, in preference order. When none is present the snapshot
+# gets a deterministic generated id so every pipeline row is traceable.
+_PIPELINE_ID_COLUMNS = ("application_id", "case_id", "kfi_number", "pipeline_id",
+                        "account_number", "deal_id", "loan_identifier", "unique_identifier")
+
+
+def _ensure_pipeline_identity(csv_path: str, parsed: ParsedPath) -> str:
+    """Guarantee the published pipeline snapshot carries a stable identity column.
+
+    Pipeline datasets have no funded loan id. Use an existing application / case /
+    KFI / pipeline identifier when present; otherwise add a deterministic
+    ``pipeline_row_id`` = ``{source}|{period}|{row}``. Traceability wiring only — no
+    MI/analytics change. Returns the path to publish (the original when an identity
+    column already exists)."""
+    import re as _re
+    try:
+        import pandas as pd
+        p = Path(str(csv_path))
+        header = [str(c) for c in pd.read_csv(p, nrows=0).columns]
+        norm = {_re.sub(r"[^a-z0-9]+", "", c.lower()) for c in header}
+        wanted = {_re.sub(r"[^a-z0-9]+", "", c) for c in _PIPELINE_ID_COLUMNS}
+        if norm & wanted:
+            return str(p)                       # a usable identity already exists
+        df = pd.read_csv(p)
+        src = _re.sub(r"[^A-Za-z0-9._-]+", "_", p.stem)
+        df.insert(0, "pipeline_row_id",
+                  [f"{src}|{parsed.reporting_period}|{i}" for i in range(len(df))])
+        out = p.with_name(p.stem + "_pipeline_id.csv")
+        df.to_csv(out, index=False)
+        return str(out)
+    except Exception:  # noqa: BLE001 — identity is best effort; never fail the event
+        return str(csv_path)
+
+
 def _persist_pipeline_outputs(persistence, manifest, parsed, result) -> None:
-    """Publish a weekly pipeline run's snapshot (the MI canonical the deterministic
-    run produced) to the durable store so the React MI pipeline view reads the
-    latest weekly extract from Blob. Best effort — never fails the event."""
+    """Publish a weekly pipeline run's snapshot (the central PIPELINE tape) to the
+    durable store so the React MI pipeline view reads the latest weekly extract from
+    Blob. Ensures a stable pipeline identity column. Best effort — never fails the event."""
     central_local = (result or {}).get("central_canonical_path")
     persisted: Dict[str, Any] = dict(manifest.get("persisted") or {})
     try:
         if central_local and Path(str(central_local)).exists():
+            central_local = _ensure_pipeline_identity(str(central_local), parsed)
             pl = persistence.persist_pipeline(
                 parsed.client_id, parsed.reporting_period, str(central_local))
             persisted["pipeline_latest_uri"] = pl.get("latest")

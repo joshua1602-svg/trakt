@@ -262,6 +262,7 @@ def default_orchestrator_invoker(
         client_id, [spec], target=target, regime=(regime if run_regime else None),
         out_root=out_dir, adapters=adapters,
         full_pipeline=full_pipeline, force_publish=force_publish,
+        dataset=dataset,   # pipeline → skip the funded platform assembler
         created_at=datetime.now(timezone.utc).isoformat())
     result: Dict[str, Any] = {
         "run_id": state.run_id,

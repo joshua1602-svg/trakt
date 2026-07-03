@@ -122,6 +122,10 @@ class RunState:
     full_pipeline: bool = False
     # force_publish: proceed past validation exceptions (still typed) and publish.
     force_publish: bool = False
+    # dataset: "funded" | "pipeline" | "forecast". A pipeline dataset's deliverable
+    # is the central PIPELINE tape (18a), not a funded platform lender canonical, so
+    # the funded platform assembler (which requires loan identity) is skipped for it.
+    dataset: str = ""
 
     # -- persistence -------------------------------------------------------- #
     def state_path(self) -> Path:
@@ -136,6 +140,7 @@ class RunState:
             "blockers": self.blockers,
             "full_pipeline": self.full_pipeline,
             "force_publish": self.force_publish,
+            "dataset": self.dataset,
             "portfolios": [p.to_dict() for p in self.portfolios],
             "assemble": self.assemble.to_dict(),
             "route": self.route.to_dict(),
@@ -152,6 +157,7 @@ class RunState:
             blockers=d.get("blockers") or [],
             full_pipeline=bool(d.get("full_pipeline", False)),
             force_publish=bool(d.get("force_publish", False)),
+            dataset=d.get("dataset", "") or "",
         )
         rs.portfolios = [PortfolioState.from_dict(p) for p in (d.get("portfolios") or [])]
         if d.get("assemble"):
