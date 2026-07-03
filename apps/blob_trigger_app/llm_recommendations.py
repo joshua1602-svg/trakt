@@ -164,15 +164,43 @@ def _default_generator(ctx: Dict[str, Any]) -> List[Dict[str, Any]]:
     raises and the caller falls back deterministically. (No network in tests —
     tests inject a generator.)"""
     from engine.onboarding_agent.cli import _build_mapping_llm_callable  # type: ignore
+
     callable_ = _build_mapping_llm_callable("low")
     if callable_ is None:
         raise RuntimeError("no LLM callable available")
-    prompt = ("Propose advisory canonical mappings/defaults for these unresolved "
-              f"target fields: {ctx.get('target_fields')}. Return JSON list of "
-              "{target_field, recommended_mapping, rationale, confidence}.")
+
+    prompt = (
+        "Propose advisory canonical mappings/defaults for these unresolved "
+        f"target fields: {ctx.get('target_fields')}. Return JSON list of "
+        "{target_field, recommended_mapping, rationale, confidence}."
+    )
+
     text = callable_(prompt)
-    data = json.loads(text) if isinstance(text, str) else text
-    return data if isinstance(data, list) else data.get("rows", [])
+
+    if isinstance(text, str):
+        from engine.onboarding_agent.llm_json import extract_json_list
+
+        data, _, _ = extract_json_list(text)
+    else:
+        data = text
+
+    if isinstance(data, dict):
+        data = (
+            data.get("recommendations")
+            or data.get("llm_mapping_suggestions")
+            or data.get("proposals")
+            or data.get("mappings")
+            or data.get("rows")
+            or []
+        )
+
+    if not isinstance(data, list):
+        return []
+
+    return [
+        row for row in data
+        if isinstance(row, dict)
+    ]
 
 
 def _normalise_recommendations(raw: Any, *, model: str, provider: str,
