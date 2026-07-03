@@ -271,19 +271,22 @@ def _parse_suggestions(text: Any) -> List[Dict[str, Any]]:
     if isinstance(text, dict):
         data = text
     else:
-        raw = str(text).strip()
-        if raw.startswith("```"):
-            raw = re.sub(r"^```[a-zA-Z]*\n?", "", raw)
-            raw = re.sub(r"\n?```$", "", raw).strip()
-        if not raw.startswith("{"):
-            m = re.search(r"\{.*\}", raw, re.DOTALL)
-            if m:
-                raw = m.group(0)
-        try:
-            data = json.loads(raw)
-        except Exception:
-            return []
-    return list(data.get("llm_mapping_suggestions", []) or [])
+        from engine.onboarding_agent.llm_json import extract_json
+
+        data, _, _ = extract_json(text)
+
+    if not isinstance(data, dict):
+        return []
+
+    suggestions = data.get("llm_mapping_suggestions", []) or []
+
+    if not isinstance(suggestions, list):
+        return []
+
+    return [
+        s for s in suggestions
+        if isinstance(s, dict)
+    ]
 
 
 # --------------------------------------------------------------------------- #

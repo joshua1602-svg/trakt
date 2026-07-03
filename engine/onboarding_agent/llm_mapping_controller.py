@@ -172,50 +172,94 @@ class LLMMappingController:
         shortlist_by_col: Dict[str, List[Dict[str, Any]]],
         only_unresolved: Optional[set] = None,
     ) -> Dict[str, Any]:
-        usage = {"llm_enabled": bool(self.llm_callable), "calls_completed": 0,
-                 "items_sent": 0, "estimated_cost_gbp": 0.0, "prompt_chars": 0,
-                 "stopped_for_budget": False}
+        usage = {
+            "llm_enabled": bool(self.llm_callable),
+            "calls_completed": 0,
+            "items_sent": 0,
+            "estimated_cost_gbp": 0.0,
+            "prompt_chars": 0,
+            "stopped_for_budget": False,
+        }
+
         if not self.llm_callable:
             return {"proposals": [], "usage": usage}
 
         rows = evidence_rows
         if only_unresolved is not None:
             rows = [e for e in rows if e["source_column"] in only_unresolved]
+
         rows = rows[: self.max_items]
-        packs = [build_evidence_pack(e, shortlist_by_col.get(e["source_column"], []))
-                 for e in rows]
+
+        packs = [
+            build_evidence_pack(e, shortlist_by_col.get(e["source_column"], []))
+            for e in rows
+        ]
+
         if not packs:
             return {"proposals": [], "usage": usage}
+
         if usage["estimated_cost_gbp"] + self.cost_per_call_gbp > self.max_cost_gbp:
             usage["stopped_for_budget"] = True
             return {"proposals": [], "usage": usage}
 
         import uuid
+
         batch_id = "llm_" + uuid.uuid4().hex[:10]
         usage["llm_batch_id"] = batch_id
+
         prompt = build_prompt(packs)
         usage["prompt_chars"] = len(prompt)
+
         raw = self.llm_callable(prompt)
+
         usage["calls_completed"] = 1
         usage["items_sent"] = len(packs)
         usage["estimated_cost_gbp"] = round(self.cost_per_call_gbp, 6)
 
         try:
-            parsed = json.loads(raw) if isinstance(raw, str) else raw
+            if isinstance(raw, str):
+                from engine.onboarding_agent.llm_json import extract_json
+
+                parsed, _, _ = extract_json(raw)
+            else:
+                parsed = raw
+
             if isinstance(parsed, dict):
-                parsed = parsed.get("proposals", parsed.get("mappings", []))
-        except (json.JSONDecodeError, TypeError):
+                parsed = (
+                    parsed.get("proposals")
+                    or parsed.get("mappings")
+                    or parsed.get("llm_mapping_suggestions")
+                    or []
+                )
+
+            if not isinstance(parsed, list):
+                parsed = []
+
+        except Exception:
             parsed = []
 
-        shortlist_targets = {s["candidate_target_field"]
-                             for sl in shortlist_by_col.values() for s in sl}
+        shortlist_targets = {
+            s["candidate_target_field"]
+            for sl in shortlist_by_col.values()
+            for s in sl
+            if isinstance(s, dict) and "candidate_target_field" in s
+        }
+
         proposals = []
+
         for p in parsed:
             if not isinstance(p, dict):
                 continue
-            sp = _sanitize_proposal(p, shortlist_targets, self.registry_fields, self.field_scope)
+
+            sp = _sanitize_proposal(
+                p,
+                shortlist_targets,
+                self.registry_fields,
+                self.field_scope,
+            )
             sp["llm_batch_id"] = batch_id
             proposals.append(sp)
+
         return {"proposals": proposals, "usage": usage}
 
 
