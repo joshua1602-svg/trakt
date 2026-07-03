@@ -300,26 +300,45 @@ def promote_pack(persistence: ProductionPersistence, registry: SourceRegistry,
                           rec["dataset"], rec["frequency"]) or SourceRecord(
         client_id=rec["client_id"], source_portfolio_id=rec["source_portfolio_id"],
         dataset=rec["dataset"], frequency=rec["frequency"])
-    src.source_portfolio_type = rec.get("source_portfolio_id", "").split("_")[0] or src.source_portfolio_type
-    src.approved_mapping_id = f"{rec['source_portfolio_id']}_accepted_v{int(getattr(src, 'mapping_version', 0) or 0) + 1}"
-    src.mapping_config_path = approved_uri
-    src.expected_schema_fingerprint = rec.get("schema_fingerprint") or src.expected_schema_fingerprint
-    # Re-pin the header-first role signatures (role -> columns) from the approval
-    # artifact this run raised, so future months are matched HEADER-FIRST regardless
-    # of filename — not just by the exact fingerprint. Without this the promoted
-    # source has no file_role_schemas and a filename change would drift.
+    # The APPROVAL ARTIFACT this run raised is the authoritative description of the
+    # promoted pack (its fingerprint + role signatures). Prefer it over the run
+    # ledger, which a later re-route of a differently-fingerprinted pack may have
+    # overwritten — pinning the ledger's fingerprint is exactly what left the source
+    # in schema_drift right after promote.
+    art = None
     approval_id = rec.get("approval_id")
     if approval_id:
         try:
             from . import approvals as _approvals
             art = _approvals.show(persistence.storage, persistence.layout, approval_id)
-            if art and art.get("role_schemas"):
-                src.file_role_schemas = dict(art["role_schemas"])
-            if art and art.get("role_aliases"):
-                src.file_role_aliases = dict(art["role_aliases"])
-        except Exception:  # noqa: BLE001 — fingerprint pin still applies without roles
-            pass
+        except Exception:  # noqa: BLE001 — promotion still proceeds without the artifact
+            art = None
+
+    src.source_portfolio_type = rec.get("source_portfolio_id", "").split("_")[0] or src.source_portfolio_type
+    src.approved_mapping_id = f"{rec['source_portfolio_id']}_accepted_v{int(getattr(src, 'mapping_version', 0) or 0) + 1}"
+    src.mapping_config_path = approved_uri
+    # (2) Pin expected_schema_fingerprint from the PROMOTED APPROVAL (fall back to
+    # the run record) — NOT the possibly-stale existing registry value — so
+    # re-running the SAME pack immediately after promote routes deterministic, not
+    # schema_drift.
+    fp = (art or {}).get("schema_fingerprint") or rec.get("schema_fingerprint")
+    if fp:
+        src.expected_schema_fingerprint = fp
+    # Re-pin the header-first role signatures (role -> columns) + filename aliases
+    # from the approval, so future months are matched HEADER-FIRST regardless of
+    # filename — not just by the exact fingerprint.
+    if art and art.get("role_schemas"):
+        src.file_role_schemas = dict(art["role_schemas"])
+    if art and art.get("role_aliases"):
+        src.file_role_aliases = dict(art["role_aliases"])
+    # (4) Do NOT carry stale last_successful_* from a looked-up historical record —
+    # a promotion is not itself a successful publish. They are (re)set by the next
+    # successful deterministic run (router deterministic-done branch). Clearing here
+    # prevents a stale prior period/run masking the newly-promoted mapping.
+    src.last_successful_reporting_period = None
+    src.last_successful_run_id = None
     src.mapping_version = int(getattr(src, "mapping_version", 0) or 0) + 1
+    # (1) The source becomes ACTIVE so recurring packs route deterministically.
     src.status = STATUS_ACTIVE
     registry.upsert(src)
     return src

@@ -121,6 +121,59 @@ class TestGap1DecisionInputsPersisted(unittest.TestCase):
             self.assertTrue(src.has_approved_mapping)  # future months run deterministically
 
 
+class TestPromoteClosesLoop(unittest.TestCase):
+    """approve-recommendations → promote → re-route SAME pack must be deterministic
+    (not immediately schema_drift), status active, fingerprint from the approval,
+    and no stale last_successful_* carried over."""
+
+    def _route_same_pack(self, td, registry, persistence, invoker):
+        from apps.blob_trigger_app.schema_fingerprint import fingerprint_pack
+        pack = Path(td) / "pack"
+        f = pack / "PipelineExtract.csv"
+        marker = "raw-v2/ERE/direct/pipeline/weekly/direct_001/2026-W02/_READY.json"
+        role_schemas = R.role_schemas_for_pack(registry, marker, "raw-v2")
+        schema = fingerprint_pack([str(f)], role_schemas=role_schemas)
+        return R.handle_blob_event(
+            marker, registry=registry, out_dir=td, container="raw-v2",
+            pack_marker="_READY.json", schema_info=schema, input_dir_override=str(pack),
+            pack_files=["PipelineExtract.csv"], orchestrator_invoker=invoker,
+            marker_metadata={"force_reprocess": True}, persistence=persistence, now=_NOW)
+
+    def test_promote_then_same_pack_is_deterministic(self):
+        with tempfile.TemporaryDirectory() as td:
+            _, layout, persistence, registry = _ctx(td)
+            inv = _OnboardInvoker(Path(td) / "proj")
+            m1 = _route_new_source(td, registry, persistence, inv)
+            pack_key = m1["pack_key"]
+            approval_fp = m1["schema_fingerprint"]
+
+            # Simulate approve-recommendations having produced the approved decisions.
+            approved_uri = layout.run_onboarding_uri(pack_key, "34_target_first_decisions_approved.yaml")
+            persistence.storage.write_text(approved_uri, "approved: true\n")
+
+            # Seed a STALE last_successful on the pending record to prove it's cleared.
+            stale = registry.lookup("ERE", "direct_001", "pipeline", "weekly")
+            stale.last_successful_reporting_period = "2000-01-01"
+            stale.last_successful_run_id = "orun_ancient"
+            registry.upsert(stale)
+
+            src = OPS.promote_pack(persistence, registry, pack_key)
+            # (1) active, (2) fingerprint from the approval, (3) mapping kept, (4) no stale.
+            self.assertEqual(src.status, STATUS_ACTIVE)
+            self.assertEqual(src.expected_schema_fingerprint, approval_fp)
+            self.assertEqual(src.mapping_config_path, approved_uri)
+            self.assertIsNotNone(src.approved_mapping_id)
+            self.assertIsNone(src.last_successful_reporting_period)
+            self.assertIsNone(src.last_successful_run_id)
+
+            # (5) Re-route the SAME pack → deterministic, NOT schema_drift.
+            det = _OnboardInvoker(Path(td) / "proj2")  # a done invoker for the rerun
+            m2 = self._route_same_pack(td, registry, persistence, det)
+            self.assertEqual(m2["decision"], R.DECISION_DETERMINISTIC)
+            self.assertNotEqual(m2["decision"], R.DECISION_SCHEMA_DRIFT)
+            self.assertEqual(m2["status"], R.STATUS_PROCESSED)
+
+
 class TestGap2HeaderRedetection(unittest.TestCase):
 
     def _write(self, p: Path, text: str):
