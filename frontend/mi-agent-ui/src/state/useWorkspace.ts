@@ -432,7 +432,14 @@ export function useWorkspace(client: AgentClient): Workspace {
                     warnings: res.warnings,
                     diagnostics: res.diagnostics,
                     intent: res.intent,
-                    datasetContext: res.datasetContext,
+                    // Only surface the book that answered when it DIFFERS from the
+                    // active tab — i.e. the question's wording routed it to another
+                    // book (funded tab -> a pipeline answer). When it matches the
+                    // tab there is nothing surprising to flag, so no badge.
+                    datasetContext:
+                      res.datasetContext && res.datasetContext !== request.datasetContext
+                        ? res.datasetContext
+                        : undefined,
                     spec: res.spec,
                     confidence: res.confidence,
                     usedContext: params.usedContext,
