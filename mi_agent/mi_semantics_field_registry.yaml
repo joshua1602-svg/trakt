@@ -4,7 +4,7 @@
 # Do NOT edit by hand without also updating the build script (CURATION),
 # or your changes will be overwritten on the next regeneration.
 metadata:
-  generated_at: '2026-06-29T15:02:12.804232+00:00'
+  generated_at: '2026-07-04T21:05:58.570926+00:00'
   source_registry: /home/user/trakt/config/system/fields_registry.yaml
   selection_approach: curated MI-first allowlist (see CURATION in build script)
   selection_rules:
@@ -21,10 +21,10 @@ metadata:
   mi_tiers:
   - core
   - extended
-  field_count: 104
-  core_field_count: 71
+  field_count: 105
+  core_field_count: 72
   extended_field_count: 33
-  derived_field_count: 14
+  derived_field_count: 15
   virtual_field_count: 15
   missing_curated_fields: []
   version: 0.3.0
@@ -336,44 +336,6 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
-  borrower_type:
-    canonical_field: borrower_type
-    mi_tier: core
-    business_name: Borrower Type
-    display_name: Borrower Type
-    business_description: Single vs joint borrower, derived from whether any
-      second-applicant field (DOB / gender for the second borrower) is populated.
-      Enables single-vs-joint cohort analysis and stratifications (e.g. LTV or
-      youngest-age by borrower type); NNEG exposure is joint-life.
-    description: ''
-    synonyms:
-    - borrower type
-    - single vs joint
-    - single or joint
-    - joint borrower
-    - single borrower
-    - number of borrowers
-    - applicant type
-    source_criteria:
-    - derived
-    role: dimension
-    format: string
-    chartable: true
-    allowed_aggregations:
-    - count
-    - balance_sum
-    default_aggregation: count
-    allowed_chart_roles:
-    - x
-    - group
-    - filter
-    - color
-    default_chart_role: x
-    weight_field: null
-    bucket_field: null
-    notes: ''
-    derived: true
-    derived_from: borrower_type
   borrower_jurisdiction:
     canonical_field: borrower_jurisdiction
     mi_tier: core
@@ -408,14 +370,12 @@ fields:
     mi_tier: core
     business_name: Borrower Structure
     display_name: Borrower Structure
-    business_description: Single vs joint borrower band (derived from number_of_borrowers).
+    business_description: 'Single vs joint borrower band (derived from number_of_borrowers). Legacy: prefer
+      borrower_type, which funded prep materialises from second-applicant presence.'
     description: ''
     synonyms:
     - borrower structure
-    - single or joint
     - sole or joint
-    - joint borrower
-    - single borrower
     source_criteria:
     - derived_bucket
     role: dimension
@@ -436,6 +396,42 @@ fields:
     notes: ''
     derived: true
     derived_from: number_of_borrowers
+  borrower_type:
+    canonical_field: borrower_type
+    mi_tier: core
+    business_name: Borrower Type
+    display_name: Borrower Type
+    business_description: Single vs joint borrower, derived from whether any second-applicant field (DOB
+      / gender for the second borrower) is populated. Enables single-vs-joint cohort analysis and stratifications
+      (e.g. LTV or youngest-age by borrower type); NNEG exposure is joint-life.
+    description: ''
+    synonyms:
+    - borrower type
+    - single vs joint
+    - single or joint
+    - joint borrower
+    - single borrower
+    - applicant type
+    source_criteria:
+    - derived
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    derived: true
+    derived_from: borrower_2_dob
   broker_channel:
     canonical_field: broker_channel
     mi_tier: core
@@ -2478,7 +2474,6 @@ fields:
     description: ''
     synonyms:
     - origination date
-    - vintage
     - origination
     - completion date
     - drawdown date

@@ -258,7 +258,9 @@ CURATION: Dict[str, dict] = {
     "origination_date": {
         "tier": "core", "business_name": "Origination Date",
         "business_description": "Date the loan was originated.",
-        "synonyms": ["origination date", "vintage", "origination",
+        # "vintage" is owned by vintage_year (the cohort dimension), not the
+        # raw date — duplicated synonyms make resolution order-dependent.
+        "synonyms": ["origination date", "origination",
                      "completion date", "drawdown date"],
     },
     "maturity_date": {
@@ -716,9 +718,26 @@ CURATION: Dict[str, dict] = {
         "tier": "core", "derived": True, "derived_from": "number_of_borrowers",
         "business_name": "Borrower Structure",
         "business_description": "Single vs joint borrower band "
-                               "(derived from number_of_borrowers).",
-        "synonyms": ["borrower structure", "single or joint", "sole or joint",
-                     "joint borrower", "single borrower"],
+                               "(derived from number_of_borrowers). Legacy: "
+                               "prefer borrower_type, which funded prep "
+                               "materialises from second-applicant presence.",
+        # Single-vs-joint synonyms are owned by borrower_type (the materialised
+        # dimension); keeping them here too made resolution order-dependent.
+        "synonyms": ["borrower structure", "sole or joint"],
+        "overrides": dict(_BUCKET_OVERRIDES),
+    },
+    "borrower_type": {
+        "tier": "core", "derived": True, "derived_from": "borrower_2_dob",
+        "business_name": "Borrower Type",
+        "business_description": "Single vs joint borrower, derived from whether "
+                               "any second-applicant field (DOB / gender for the "
+                               "second borrower) is populated. Enables "
+                               "single-vs-joint cohort analysis and "
+                               "stratifications (e.g. LTV or youngest-age by "
+                               "borrower type); NNEG exposure is joint-life.",
+        "synonyms": ["borrower type", "single vs joint", "single or joint",
+                     "joint borrower", "single borrower", "applicant type"],
+        "source_criteria": ["derived"],
         "overrides": dict(_BUCKET_OVERRIDES),
     },
 

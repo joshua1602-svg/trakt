@@ -199,6 +199,9 @@ export class HttpAgentClient implements AgentClient {
     }
 
     const artifacts = (body.artifacts ?? []).filter(isArtifact) as Artifact[];
+    const meta = body.metadata ?? {};
+    const asString = (v: unknown): string | undefined =>
+      typeof v === "string" && v.length > 0 ? v : undefined;
 
     return {
       ok: !!body.ok,
@@ -211,6 +214,7 @@ export class HttpAgentClient implements AgentClient {
       warnings: body.warnings ?? [],
       diagnostics: body.diagnostics ?? [],
       spec: body.spec,
+      datasetContext: asString(meta.datasetContext),
       error: body.error ?? undefined,
     };
   }

@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 
 from .auth import auth_guard, principal_from_request
 
+from mi_agent.mi_agent_config import get_llm_config
 from mi_agent.mi_agent_workflow import run_mi_agent_query
 from mi_agent.mi_query_validator import load_mi_semantics
 
@@ -165,6 +166,9 @@ def health() -> Dict[str, Any]:
         # summary fields above.
         "dataAvailable": csv != "unavailable",
         "semantics": semantics_path().name,
+        # LLM parser availability (ENABLE_LLM_MI_AGENT + key). The chat runs
+        # deterministically when unavailable — surface which mode is live.
+        "llm": get_llm_config().to_dict(),
     }
 
 
@@ -1286,7 +1290,23 @@ def _resolve_query_frame(view: str, portfolio_id: Optional[str]):
         client_id = portfolio_id
 
     if view == "funded":
-        return get_dataframe(), None  # existing behaviour, unchanged
+        # Honour the selected reporting run: when the portfolio id carries a
+        # run_id, load THAT run's funded book (exactly as /mi/snapshot does)
+        # instead of the active/latest dataset. Otherwise an earlier-run
+        # selection would be answered from the latest snapshot yet labelled with
+        # the selected date — a stale, mislabelled answer. Falls back to the
+        # active dataset when no run_id is given or the run cannot be resolved.
+        if run_id:
+            try:
+                run_df, _ = _resolve_run_dataframe(
+                    client_id, run_id, _onboarding_output_root())
+            except Exception as exc:  # noqa: BLE001 - fall back to active source
+                logger.warning("funded run resolution failed for %s/%s: %s",
+                               client_id, run_id, exc)
+                run_df = None
+            if run_df is not None and len(run_df):
+                return run_df, None
+        return get_dataframe(), None  # active/latest funded dataset
 
     pipeline_df = None
     source = _resolve_pipeline_source(client_id, run_id)
@@ -1362,8 +1382,18 @@ def query(req: QueryRequest) -> Dict[str, Any]:
     if frame_error:
         return _error(frame_error)
 
+    # LLM parser wiring: governed by ENABLE_LLM_MI_AGENT / ANTHROPIC_API_KEY
+    # (see mi_agent_config). When unavailable (disabled, no key, no package) the
+    # deterministic parser runs alone — and the response says so.
+    llm_cfg = get_llm_config()
     workflow = run_mi_agent_query(
-        req.question, df, str(semantics_path()), parser_mode="deterministic",
+        req.question, df, str(semantics_path()),
+        parser_mode=("llm" if llm_cfg.available else "deterministic"),
+        llm_enabled=llm_cfg.available,
+        model=llm_cfg.model,
+        max_repair_attempts=llm_cfg.max_repair_attempts,
+        catalog_mode=llm_cfg.catalog_mode,
+        zero_cost_first=llm_cfg.zero_cost_first,
         extra_filters=req.filters or None,
         source_portfolio_lens=req.sourcePortfolioLens or None)
     result = adapt_workflow_result(workflow, portfolio_id=portfolio_id, as_of=req.asOfDate)
@@ -1372,6 +1402,13 @@ def query(req: QueryRequest) -> Dict[str, Any]:
     meta = result.setdefault("metadata", {}) if isinstance(result, dict) else {}
     if isinstance(meta, dict):
         meta["datasetContext"] = view
+        meta["llm"] = {"enabled": llm_cfg.enabled, "available": llm_cfg.available,
+                       "model": llm_cfg.model if llm_cfg.available else None,
+                       "status": llm_cfg.status}
         if workflow.get("portfolio_lens"):
             meta["portfolioLens"] = workflow["portfolio_lens"]
+    # An LLM that was requested but is unusable (missing key / package) is a
+    # configuration fault the operator must see, not a silent downgrade.
+    if llm_cfg.enabled and not llm_cfg.available and isinstance(result, dict):
+        result.setdefault("warnings", []).extend(llm_cfg.warnings)
     return result

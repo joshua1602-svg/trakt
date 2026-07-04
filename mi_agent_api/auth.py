@@ -18,9 +18,10 @@ supported pattern for Easy Auth / SWA linked backends. It:
 
 Environment configuration:
 
-  ``MI_AGENT_AUTH_ENABLED``   "true" (default) enforces auth; "false" bypasses it
-                              for local dev / the existing test suite. **Set it
-                              explicitly to true on the App Service.**
+  ``MI_AGENT_AUTH_ENABLED``   Enforces auth unless EXPLICITLY disabled. Missing
+                              or empty -> auth ON (fail closed). Only an explicit
+                              "false"/"0"/"no"/"off" bypasses it, for local dev /
+                              the existing test suite.
   ``MI_AGENT_CLIENT_ROLE``    Entra app-role name for client users (default "client")
   ``MI_AGENT_OPERATOR_ROLE``  Entra app-role name for operators (default "operator")
   ``MI_AGENT_CLIENT_ID``      The single tenant this deployment serves (already
@@ -72,8 +73,13 @@ _NAME_CLAIM_TYPES = {
 
 
 def _auth_enabled() -> bool:
+    """Auth is ON unless it is EXPLICITLY disabled. Fail closed: a missing OR
+    empty ``MI_AGENT_AUTH_ENABLED`` enforces auth, so a blanked/forgotten env
+    var can never silently run the API open with a synthetic operator. Only an
+    explicit opt-out token ("false"/"0"/"no"/"off") disables enforcement (for
+    local dev / the test suite, which set it explicitly)."""
     return os.environ.get("MI_AGENT_AUTH_ENABLED", "true").strip().lower() not in (
-        "false", "0", "no", "off", "",
+        "false", "0", "no", "off",
     )
 
 

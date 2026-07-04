@@ -124,6 +124,30 @@ describe("useWorkspace — analysis context", () => {
     expect(answer.interpreted).toBeDefined();
   });
 
+  it("flags the answering book ONLY when it differs from the active tab", async () => {
+    // Active tab defaults to "funded". A question routed to the pipeline book
+    // must be flagged; a funded answer on the funded tab must not.
+    const ask = vi.fn(async (req: AgentRequest) => ({
+      ...regionResult(req.question),
+      datasetContext: req.question.includes("pipeline") ? "pipeline" : "funded",
+    }));
+    const { result } = renderHook(() => useWorkspace(makeClient(ask)));
+    await waitFor(() => expect(result.current.selectedRunId).toBe("mi_2025_11"));
+
+    act(() => result.current.ask("show pipeline amount by region"));
+    await waitFor(() =>
+      expect(result.current.messages.some((m) => m.role === "assistant" && !m.pending)).toBe(true),
+    );
+    const surprising = [...result.current.messages].reverse().find((m) => m.role === "assistant" && !m.pending)!;
+    expect(surprising.datasetContext).toBe("pipeline");
+
+    act(() => result.current.ask("show balance by region"));
+    await waitFor(() => expect(ask).toHaveBeenCalledTimes(2));
+    const expected = [...result.current.messages].reverse().find((m) => m.role === "assistant" && !m.pending)!;
+    // Funded answer on the funded tab — nothing surprising, so no badge.
+    expect(expected.datasetContext).toBeUndefined();
+  });
+
   it("resolves a follow-up against context and dispatches the rewritten query", async () => {
     const ask = vi.fn(async (req: AgentRequest) => regionResult(req.question));
     const { result } = renderHook(() => useWorkspace(makeClient(ask)));

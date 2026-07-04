@@ -14,7 +14,7 @@ import { ViewToggle } from "@/components/ViewToggle";
 import { SourcePortfolioSelector } from "@/components/SourcePortfolioSelector";
 import { LineagePanel } from "@/components/LineagePanel";
 import type { ViewLineage } from "@/domain";
-import { createAgentClient } from "@/api";
+import { createAgentClient, resolveAgentClientConfig } from "@/api";
 import { useWorkspace } from "@/state/useWorkspace";
 
 // Display-only lineage (mirrors backend workspace.lineage_for); no calculation.
@@ -61,6 +61,9 @@ export function AppShell() {
   // One client for the app lifetime; swap createAgentClient() for the real
   // backend later with zero component changes.
   const client = useMemo(() => createAgentClient(), []);
+  // A production build that silently fell back to the mock (VITE_AGENT_API_URL
+  // unset) must be unmistakable — never let canned demo data pass for live MI.
+  const agentMisconfigured = useMemo(() => resolveAgentClientConfig().misconfigured, []);
   const ws = useWorkspace(client);
 
   // The `"<client_id>/<run_id>"` id used by the evolution / risk / extrapolation
@@ -86,6 +89,16 @@ export function AppShell() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
+      {agentMisconfigured && (
+        <div
+          role="alert"
+          className="flex items-center justify-center gap-2 bg-red-600 px-4 py-2 text-center text-sm font-semibold text-white"
+        >
+          Configuration error: no backend URL (VITE_AGENT_API_URL) is set, so this
+          build is showing MOCK demo data — not live portfolio MI. Do not rely on
+          these figures.
+        </div>
+      )}
       <HeaderBar
         portfolios={ws.portfolios}
         runs={ws.runs}
