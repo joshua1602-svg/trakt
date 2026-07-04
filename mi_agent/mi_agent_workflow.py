@@ -264,6 +264,41 @@ def run_mi_agent_query(
     # granular detail (deterministic_zero_cost / llm / llm_repaired / validation_failed)
     result["parser_mode_detail"] = parse_meta.get("parser_mode_detail",
                                                   result["parser_mode"])
+
+    # ---- controlled-unmapped guard -----------------------------------------
+    # A question the deterministic parser could not map to ANY governed
+    # analytic (no metric, no dimension, no filter, no summary intent) must be
+    # refused honestly — never silently answered with a whole-book KPI summary,
+    # which answers a different question than the one asked. A question that
+    # names a portfolio scope ("show the back book", "direct only") IS a
+    # meaningful lens-scoped summary, so it stays on the summary path.
+    if (result["parser_mode"] == "deterministic"
+            and parse_meta.get("note") == "unmapped"
+            and not _portfolio_lens.mentions_portfolio(question)):
+        msg = (
+            "I couldn't map this question to a governed analytic, so I haven't "
+            "computed an answer (nothing was guessed). Try a metric by a "
+            "dimension — e.g. 'balance by region', 'weighted average LTV by "
+            "ticket size', 'ticket size by borrower type' — a cross-period "
+            "comparison ('compare October and November'), a scale-up forecast "
+            "('run-rate to £100m'), risk limits ('are we within limits?'), or "
+            "'portfolio summary'."
+        )
+        result["unmapped_question"] = True
+        result["error"] = msg
+        result["answer"] = msg
+        result["parse_metadata"] = parse_meta
+        result["spec_obj"] = spec
+        result["spec"] = spec.to_dict()
+        result["validation"] = {
+            "ok": False,
+            "errors": ["unmapped_question: no governed metric, dimension or "
+                       "intent was recognised in the question"],
+            "warnings": [], "resolved_fields": {},
+        }
+        result["warnings"] = ["question not understood: no governed metric, "
+                              "dimension or intent was recognised."]
+        return result
     # ---- source-portfolio lens (Total / Direct / Acquired / cohort) -------
     # Deterministic: a portfolio scope named in the question ("acquired book",
     # "direct_001", "back book") overrides the selected lens (the UI dropdown

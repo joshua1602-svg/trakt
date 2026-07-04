@@ -1,5 +1,14 @@
 # MI Agent Chatbot — Critical Production-Readiness Review
 
+> **Status update:** the P0 items in §6 are now implemented on this branch —
+> honest refusal path for unmapped questions, removal of the `" vs "` scatter
+> trap, borrower-type vocabulary, forecast bridge/MM/conversion vocabulary, LLM
+> wiring into `/mi/query` (high-confidence-only zero-cost gate), registry
+> `borrower_type` drift fix with generator-equality + synonym-uniqueness
+> guards, and a golden-question regression suite
+> (`mi_agent/tests/test_chat_golden_regressions.py`,
+> `mi_agent/tests/test_registry_governance.py`). The P1/P2 items remain open.
+
 **Scope:** the live MI Agent chat functionality only — `POST /mi/query` end to end:
 deterministic parser (`mi_agent/llm_query_parser.py`), semantic registry
 (`mi_agent/mi_semantics_field_registry.yaml`), governed-intent routing
