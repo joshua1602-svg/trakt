@@ -118,6 +118,36 @@ def test_balance_by_borrower_type_never_substitutes_amortisation(semantics):
     assert spec.metric == "current_outstanding_balance"
 
 
+@pytest.mark.parametrize("q,expected_dim", [
+    ("balance by originator", "originator_name"),
+    ("balance by lender", "originator_name"),
+    ("balance by intermediary", "broker_channel"),
+    ("balance by employment status", "employment_status"),
+    ("balance by portfolio cohort", "portfolio_cohort"),
+])
+def test_registry_synonyms_resolve_dimensions(q, expected_dim, semantics):
+    spec, _ = _deterministic_parse(q, semantics)
+    assert spec.dimension == expected_dim
+
+
+def test_new_registry_synonym_is_understood_without_code_change(semantics):
+    import copy
+    sem = copy.deepcopy(semantics)
+    sem["fields"]["broker_channel"]["synonyms"].append("distribution partner")
+    spec, _ = _deterministic_parse("balance by distribution partner", sem)
+    assert spec.dimension == "broker_channel"
+
+
+@pytest.mark.parametrize("q", [
+    "portfolio summary",                       # 'portfolio' must not become a dim
+    "show me the ranking of brokers by balance",  # 'ranking' must not hijack to lien
+])
+def test_generic_words_are_not_hijacked_by_registry_terms(q, semantics):
+    spec, _ = _deterministic_parse(q, semantics)
+    # portfolio_id / lien must never be selected from these generic words.
+    assert spec.dimension not in ("portfolio_id", "lien")
+
+
 def test_numeric_vs_phrasing_still_produces_a_scatter(semantics):
     spec, _ = _deterministic_parse("ltv vs interest rate", semantics)
     assert spec.chart_type == "scatter"

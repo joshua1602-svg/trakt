@@ -1290,7 +1290,23 @@ def _resolve_query_frame(view: str, portfolio_id: Optional[str]):
         client_id = portfolio_id
 
     if view == "funded":
-        return get_dataframe(), None  # existing behaviour, unchanged
+        # Honour the selected reporting run: when the portfolio id carries a
+        # run_id, load THAT run's funded book (exactly as /mi/snapshot does)
+        # instead of the active/latest dataset. Otherwise an earlier-run
+        # selection would be answered from the latest snapshot yet labelled with
+        # the selected date — a stale, mislabelled answer. Falls back to the
+        # active dataset when no run_id is given or the run cannot be resolved.
+        if run_id:
+            try:
+                run_df, _ = _resolve_run_dataframe(
+                    client_id, run_id, _onboarding_output_root())
+            except Exception as exc:  # noqa: BLE001 - fall back to active source
+                logger.warning("funded run resolution failed for %s/%s: %s",
+                               client_id, run_id, exc)
+                run_df = None
+            if run_df is not None and len(run_df):
+                return run_df, None
+        return get_dataframe(), None  # active/latest funded dataset
 
     pipeline_df = None
     source = _resolve_pipeline_source(client_id, run_id)

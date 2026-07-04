@@ -131,15 +131,30 @@ describe("ChatMessage suggestions", () => {
 });
 
 describe("ChatMessage clean default view", () => {
-  it("shows only the conversational narrative — no query-logic / routing internals", () => {
+  it("shows the narrative plus a concise interpretation — but no query-logic controls or diagnostics", () => {
     render(<ChatMessage message={answeredMessage} />);
     // Narrative is visible.
     expect(screen.getByText(/Average LTV is highest in London/)).toBeInTheDocument();
-    // Technical routing internals are not exposed in the client chat at all —
-    // no Query logic disclosure, interpretation, spec or diagnostics.
+    // The analytical interpretation IS surfaced (an early-warning against a
+    // misread question) ...
+    expect(screen.getByText(/interpreted as/i)).toBeInTheDocument();
+    // ... but the engineer-only controls / raw diagnostics are still hidden.
     expect(screen.queryByRole("button", { name: /query logic/i })).toBeNull();
-    expect(screen.queryByText(/interpreted as/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/total_funded/)).not.toBeInTheDocument();
     expect(screen.queryByText(/resolved region via NUTS 2024/)).not.toBeInTheDocument();
+  });
+
+  it("drops engineer-only Parser/Validation segments from the interpretation", () => {
+    const msg: ChatMessageType = {
+      ...answeredMessage,
+      interpreted:
+        "Chart: Bar · Metric: Current Outstanding Balance · Dimension: Region · Aggregation: Sum · Parser: deterministic · Validation: Passed",
+      datasetContext: "funded",
+    };
+    const { container } = render(<ChatMessage message={msg} />);
+    expect(container.textContent).toMatch(/Interpreted as:\s*Metric: Current Outstanding Balance/);
+    expect(container.textContent).not.toMatch(/Parser:/);
+    expect(container.textContent).not.toMatch(/Validation:/);
+    // The dataset that answered is shown as a badge.
+    expect(screen.getByText(/^funded$/i)).toBeInTheDocument();
   });
 });

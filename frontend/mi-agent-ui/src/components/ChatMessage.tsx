@@ -3,6 +3,19 @@ import type { ChatMessage as ChatMessageType } from "@/domain";
 import { ChatResult } from "@/components/ChatResult";
 import { cn, formatTime } from "@/lib/utils";
 
+/** Trim engineer-only segments (Parser / Validation / Chart type) from the
+ * backend interpretation so the chat shows the analytical reading — "what did
+ * it think I asked" — without the routing internals. */
+function summariseInterpretation(interpreted?: string): string | undefined {
+  if (!interpreted) return undefined;
+  const kept = interpreted
+    .split(" · ")
+    .filter((seg) => !/^\s*(parser|validation|chart)\s*:/i.test(seg))
+    .join(" · ")
+    .trim();
+  return kept.length > 0 ? kept : undefined;
+}
+
 export function ChatMessage({
   message,
   onOpenArtifact,
@@ -19,6 +32,9 @@ export function ChatMessage({
 }) {
   const isUser = message.role === "user";
   const hasInlineResult = !isUser && !!message.artifacts && message.artifacts.length > 0;
+  const interpretation = summariseInterpretation(message.interpreted);
+  const showProvenance =
+    !isUser && !message.pending && !message.error && (!!interpretation || !!message.datasetContext);
 
   return (
     <div className="animate-fade-in flex gap-2.5" data-role={message.role}>
@@ -74,6 +90,32 @@ export function ChatMessage({
             <RefreshCw size={12} />
             Retry
           </button>
+        )}
+
+        {showProvenance && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+            {message.datasetContext && (
+              <span
+                title="The dataset this answer was computed from"
+                className="inline-flex items-center rounded-full border border-slate-500/30 bg-slate-700/30 px-2 py-0.5 font-medium uppercase tracking-wider text-slate-300"
+              >
+                {message.datasetContext}
+              </span>
+            )}
+            {message.parserMode && (
+              <span
+                title="How the question was parsed"
+                className="inline-flex items-center rounded-full border border-slate-500/20 bg-slate-800/40 px-2 py-0.5 text-[10px] uppercase tracking-wider text-ink-500"
+              >
+                {message.parserMode === "llm" ? "AI parse" : "rules parse"}
+              </span>
+            )}
+            {interpretation && (
+              <span className="text-ink-400">
+                <span className="text-ink-500">Interpreted as:</span> {interpretation}
+              </span>
+            )}
+          </div>
         )}
 
         {message.assumptions && message.assumptions.length > 0 && (

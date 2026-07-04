@@ -249,5 +249,35 @@ def test_forecast_funded_balance_not_routed_to_extrapolation():
     assert r.get("metadata", {}).get("route") != "forecast_extrapolation"
 
 
+def _ask_run(question: str, run_id: str) -> dict:
+    return client.post("/mi/query", json={
+        "question": question, "portfolioId": f"client_001/{run_id}",
+        "datasetContext": "funded",
+    }).json()
+
+
+def test_funded_query_honours_selected_run():
+    # The fixture writes two funded runs of DIFFERENT sizes (Oct=60, Nov=70).
+    # A point-in-time funded question must be answered from the SELECTED run,
+    # not the active/latest dataset — otherwise the earlier run is silently
+    # mislabelled with the latest data.
+    oct_rows = _record_count(_ask_run("how many loans", "mi_2025_10"))
+    nov_rows = _record_count(_ask_run("how many loans", "mi_2025_11"))
+    assert oct_rows == 60, oct_rows
+    assert nov_rows == 70, nov_rows
+
+
+def _record_count(resp: dict) -> int:
+    assert resp.get("ok") is True, resp.get("error")
+    recon = resp.get("reconciliation") or {}
+    if recon.get("total_records") is not None:
+        return int(recon["total_records"])
+    for art in resp.get("artifacts", []):
+        art_recon = art.get("reconciliation") or {}
+        if art_recon.get("total_records") is not None:
+            return int(art_recon["total_records"])
+    raise AssertionError(f"no reconciliation record count in {resp.get('artifacts')}")
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

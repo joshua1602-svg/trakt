@@ -292,6 +292,57 @@ EXPLICIT_DIMENSION_TERMS = {
     "joint or sole": "borrower_type",
 }
 
+# Single-word tokens that must NOT be auto-mapped from registry synonyms: they
+# are either too generic (would hijack unrelated questions) or collide with
+# other grammar (ranking / count / summary intents, metric buckets). Curated
+# EXPLICIT_DIMENSION_TERMS still map them where a specific meaning is intended.
+_GENERIC_DIM_TOKENS = frozenset({
+    "type", "types", "status", "band", "bands", "bucket", "buckets", "date",
+    "year", "name", "code", "id", "value", "amount", "rate", "balance", "age",
+    "ltv", "region", "regions", "geography", "geographic", "group", "total",
+    "class", "level", "score", "stage", "grade", "term",
+    # collide with other grammar / are ambiguous on their own:
+    "ranking",     # top-N ranking grammar
+    "portfolio",   # "portfolio summary" / "the portfolio"
+    "borrowers",   # count intent ("how many borrowers")
+    "charge",      # "early repayment charge" etc.
+})
+
+
+def _registry_dimension_terms(semantics: dict) -> Dict[str, str]:
+    """Business synonyms / names for every dimension-role field, so the parser
+    recognises a term the MOMENT it is added to the registry (no code change).
+
+    Curated ``EXPLICIT_DIMENSION_TERMS`` override these; an ambiguous synonym
+    (mapping to more than one dimension) and over-generic single tokens
+    (``_GENERIC_DIM_TOKENS``) are dropped so registry vocabulary can never
+    hijack an unrelated question. Multi-word phrases are always safe to add."""
+    out: Dict[str, str] = {}
+    ambiguous: set = set()
+    for key, entry in _fields(semantics).items():
+        if entry.get("role") != "dimension":
+            continue
+        phrases = list(_synonyms(entry))
+        for name in (entry.get("business_name"), entry.get("display_name")):
+            if name:
+                phrases.append(str(name))
+        phrases.append(key.replace("_", " "))
+        for phrase in phrases:
+            p = str(phrase).strip().lower()
+            if len(p) < 3:
+                continue
+            if " " not in p and p in _GENERIC_DIM_TOKENS:
+                continue
+            existing = out.get(p)
+            if existing is not None and existing != key:
+                ambiguous.add(p)
+            else:
+                out[p] = key
+    for p in ambiguous:
+        out.pop(p, None)
+    return out
+
+
 # Generic region terms resolved by data-aware preference (see _preferred_region).
 _REGION_GENERIC_TERMS = {"region", "regions", "geography", "geographic",
                          "geographic region"}
@@ -384,7 +435,11 @@ def _explicit_dimensions(q: str, semantics: dict, grouping: bool = False,
     bare "age" axis -> age_bucket) used by heatmap/treemap.
     """
     fields = _fields(semantics)
-    terms_map = dict(EXPLICIT_DIMENSION_TERMS)
+    # Registry-derived dimension synonyms first, then the curated map on top so
+    # curated disambiguation always wins. This makes a synonym added to the
+    # semantic registry immediately understood by the chat, without a code edit.
+    terms_map = _registry_dimension_terms(semantics)
+    terms_map.update(EXPLICIT_DIMENSION_TERMS)
     if grouping:
         # In a grouping chart (heatmap/treemap) a bare "age" axis means the
         # age band, not the numeric age metric. Same idea for the other

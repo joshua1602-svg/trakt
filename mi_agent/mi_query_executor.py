@@ -448,11 +448,17 @@ def _apply_filters(work: pd.DataFrame, spec: MIQuerySpec, semantics: dict,
             # the column's own storage scale. If the column stores fractions
             # (0.51) but the threshold reads as points (80), convert once here —
             # the single percent-scale source of truth, never re-guessed downstream.
-            if entry.get("format") == "percent" and isinstance(raw, (int, float)):
-                if percent_storage_scale(col) == PERCENT_FRACTION and abs(raw) > 1.5:
+            # Handles both a scalar threshold and a two-element ``between`` range
+            # (e.g. "ltv between 60 and 80" -> [0.6, 0.8]); the range bounds live
+            # in ``raw`` (the "value" key), so they must be rescaled here too.
+            if entry.get("format") == "percent" \
+                    and percent_storage_scale(col) == PERCENT_FRACTION:
+                if isinstance(raw, (int, float)) and abs(raw) > 1.5:
                     raw = raw / 100.0
-                    if isinstance(value.get("between"), (list, tuple)):
-                        raw = [x / 100.0 for x in value["between"]]
+                elif (isinstance(raw, (list, tuple))
+                      and all(isinstance(x, (int, float)) for x in raw)
+                      and any(abs(float(x)) > 1.5 for x in raw)):
+                    raw = [float(x) / 100.0 for x in raw]
             mask = _apply_numeric_op(col, op, raw)
             work = work[mask.fillna(False)]
             warnings.append(f"filter {field_key} {op} {raw!r} kept {len(work)}/{before} rows")
@@ -620,30 +626,41 @@ def _maybe_concentration(out: pd.DataFrame, metric_col: str, work: pd.DataFrame,
 def _apply_top_n(out: pd.DataFrame, metric_col: str, work: pd.DataFrame,
                  group_cols: List[str], aggregation: str,
                  balance_col: Optional[str], top_n: Optional[int],
-                 rank_priority: Tuple[str, ...], warnings: List[str]) -> pd.DataFrame:
+                 rank_priority: Tuple[str, ...], warnings: List[str],
+                 sort_direction: str = "desc") -> pd.DataFrame:
     if top_n is None:
         return out
     rank = None
     basis_name = None
-    for basis in rank_priority:
-        if basis == "balance" and balance_col and balance_col in work.columns:
-            rank = _align(out, group_cols, _group_sum(work, group_cols, balance_col))
-            basis_name = "balance"
-            break
-        if basis == "count":
-            rank = _align(out, group_cols, work.groupby(group_cols, sort=False).size())
-            basis_name = "count"
-            break
-        if basis == "concentration" and "concentration_pct" in out.columns:
-            rank = out["concentration_pct"]
-            basis_name = "concentration"
-            break
+    # A non-additive aggregation (avg / weighted_avg / median / distribution)
+    # asked for by the user — "top 10 brokers by AVERAGE ltv" — must be ranked by
+    # that metric, not by balance. Balance-first ranking only makes sense for an
+    # additive measure (the metric IS a sum/count), so restrict the balance/count
+    # priority to those; otherwise rank by the requested metric column directly.
+    if aggregation in _ADDITIVE_AGGS:
+        for basis in rank_priority:
+            if basis == "balance" and balance_col and balance_col in work.columns:
+                rank = _align(out, group_cols, _group_sum(work, group_cols, balance_col))
+                basis_name = "balance"
+                break
+            if basis == "count":
+                rank = _align(out, group_cols, work.groupby(group_cols, sort=False).size())
+                basis_name = "count"
+                break
+            if basis == "concentration" and "concentration_pct" in out.columns:
+                rank = out["concentration_pct"]
+                basis_name = "concentration"
+                break
     if rank is None:
         rank = coerce_numeric(out[metric_col])
         basis_name = "metric"
-    order = rank.sort_values(ascending=False, kind="mergesort").index
+    # Honour the requested direction: "bottom/smallest/lowest N" ranks ascending.
+    ascending = str(sort_direction or "desc").strip().lower() == "asc"
+    order = rank.sort_values(ascending=ascending, kind="mergesort").index
     out2 = out.loc[order].head(int(top_n)).reset_index(drop=True)
-    warnings.append(f"top_n={top_n} applied, ranked by {basis_name}")
+    warnings.append(
+        f"top_n={top_n} applied, ranked by {basis_name} "
+        f"({'ascending' if ascending else 'descending'})")
     return out2
 
 
@@ -790,7 +807,8 @@ def _execute_grouped(spec, work, semantics, warnings, balance_col,
 
     if top_n_allowed and spec.top_n is not None:
         out = _apply_top_n(out, metric_col, work, group_cols, agg, balance_col,
-                           spec.top_n, rank_priority, warnings)
+                           spec.top_n, rank_priority, warnings,
+                           sort_direction=(spec.sort_direction or "desc"))
     elif spec.top_n is not None:
         warnings.append("top_n ignored for this output type")
 
