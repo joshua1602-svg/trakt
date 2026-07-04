@@ -35,9 +35,9 @@ layer and the enum layer**, all of which are hard-wired to equity release / RRE:
 |---|---------|----------|----------|
 | 1 | **Asset classification is fail-open.** Auto finance has *no* asset signal at all and is silently classified as **equity release with confidence 1.0**; the ERM product profile is applied to a motor-vehicle book. | **High** | `product_profile_resolution.applied=True`, `decision=detected_high_confidence`, evidence `asset_class=equity_release_mortgage` |
 | 2 | **No product profile for auto or consumer.** Consumer is correctly detected (`consumer_loan`) but has no profile, so the engine falls back to generic (stricter) behaviour. | Medium | `decision=no_profile_generic_behaviour` |
-| 3 | **Vehicle collateral has no canonical home.** Make / model / mileage / VIN / fuel / agreement-type (HP/PCP) / balloon (GFV) all remain **unmapped**. | **High** (auto) | 9 unmapped columns, all runs |
+| 3 | **Auto regime attributes are not wired to the auto annex.** Make/model/condition ARE ESMA Annex 5 regime fields and the defs already exist in the registry — but scoped to `equipment`/Annex 8, so they don't resolve for an auto tape. VIN/mileage are MI-only (not ESMA fields), so their non-mapping is expected. | **High** (auto) | registry scan; XSD `Manufacturer`/`Model`/`CurrentVehicleData1` |
 | 4 | **Consumer-specific attributes have no home.** Secured/unsecured flag, dependants, residential status, affordability result, monthly instalment all **unmapped**. | Medium | 5 unmapped columns, all runs |
-| 5 | **Registry & regime are RRE-centric.** No `auto`/`consumer` `portfolio_type`; no ESMA Annex 5/6 codes; regulatory-mode projection reaches for **RRE codes (RREL/RREC)** on a vehicle book. | **High** | registry scan + `07_gap_questions` |
+| 5 | **Registry & regime are RRE-centric.** No `auto`/`consumer` `portfolio_type`; no ESMA Annex 5/6 codes (though the shipped XSD defines Automobile/Consumer/Vehicle); regulatory-mode projection reaches for **RRE codes (RREL/RREC)** on a vehicle book. | **High** | registry scan + `07_gap_questions` |
 | 6 | **Enum normalisation only covers ESMA Annex 2.** `collateral_type` enum is property-only (HOUSE/FLAT/OFFICE) — no vehicle code. | Medium | `enum_mapping.yaml` has one top key |
 | 7 | **Borrower age leaks onto an ERM field.** A consumer/auto borrower's age maps to `borrower_1_age` (`portfolio_type: equity_release`). | Low | mapping trace |
 
@@ -109,25 +109,48 @@ the ERM profile match drops to 0.25 (below the 0.55 confirm threshold) →
 `no_profile_generic_behaviour`. It is correctly *not* mislabelled, but there is
 still no consumer profile to apply.
 
+**Why the LLM doesn't rescue this.** Asset detection here is deterministic
+token-matching; the optional LLM context resolver is **off by default**
+(`enable_context_resolver=False`, and the LLM tiers need `ANTHROPIC_API_KEY`), so
+in these runs nothing ever semantically read the `Vehicle Make/Model/VIN`
+columns. And even with the LLM enabled, `backstop_context()` only *accepts* an
+LLM asset guess when a corroborating term exists in `_ASSET_SIGNALS`
+(`asset_supported`). Because that set has no auto entry, an LLM "this is auto"
+answer trips `conflict → downgraded_to_deterministic` — it reverts to
+`equity_release_mortgage` and merely flags `needs_user_confirmation`. The LLM's
+correct answer is vetoed by the same auto-less taxonomy.
+
 **Recommended hardening:** add `auto_finance` and `consumer` (and their product
-profiles) to the asset-signal taxonomy; change the no-signal default from
-"assume equity release" to "unknown → require confirmation" (fail-closed).
+profiles) to the asset-signal taxonomy `_ASSET_SIGNALS` — this both fixes pure
+determinism (the `Vehicle`/`Motor` tokens would match) and lets the LLM's answer
+survive the backstop; and change the no-signal default from "assume equity
+release" to "unknown → require confirmation" (fail-closed).
 
 ---
 
 ## Finding 3 & 4 — Collateral and asset-specific attributes have no canonical home
 
-The registry (`config/system/fields_registry.yaml`) is property-collateral
-centric. Searching the whole registry: `make`, `model`, `mileage`, `vehicle`,
-`vin`, `registration`, `fuel` do **not** exist as `common`/auto fields
-(`manufacturer`/`model`/`year_of_manufacture_construction` exist but are
-`portfolio_type: equipment`, i.e. equipment-leasing, and do not resolve for an
-auto tape). Only `new_or_used` exists. Result — these columns are **unmapped in
-every run**:
+Two distinct things are worth separating here — a correction to an easy
+overstatement:
 
-- **Auto:** `Vehicle Make`, `Vehicle Model`, `Vehicle Registration Year`,
-  `Mileage`, `Vehicle Identification Number`, `Fuel Type`, `Agreement Type`
-  (HP/PCP), `Balloon Payment` (PCP GFV).
+1. **Make / model / vehicle condition ARE ESMA Annex 5 regime fields**, and the
+   registry *already carries the definitions*: `manufacturer`, `model`,
+   `year_of_manufacture_construction`, `new_or_used` all exist — but scoped to
+   `portfolio_type: equipment` / `ESMA_Annex8` (equipment leasing). The shipped
+   ESMA XSD confirms these are real regime elements (`Manufacturer`, `Model` =
+   "Name of the car model", `VehicleConditionType1Code` = DEMO/NEWX/USED,
+   `CurrentVehicleData1`). So this is a **wiring gap** (defs present, not mapped
+   to an auto annex / portfolio_type), not a "field doesn't exist" gap.
+2. **VIN and mileage are NOT ESMA regime fields** — ESMA templates avoid asset
+   serial numbers / PII. They are MI / servicing / collateral-management
+   attributes, so their being unmapped is *expected*, not a defect.
+
+Result — the columns that are unmapped in every run:
+
+- **Auto:** `Vehicle Make`, `Vehicle Model`, `Vehicle Registration Year`
+  (regime attributes with defs present under Annex 8 but not wired to auto),
+  and `Mileage`, `Vehicle Identification Number`, `Fuel Type`, `Agreement Type`
+  (HP/PCP), `Balloon Payment` (PCP GFV) (MI / product-structure attributes).
 - **Consumer:** `Secured / Unsecured`, `Number of Dependents`,
   `Residential Status`, `Affordability Assessment Result`, `Monthly Instalment`.
 
@@ -163,10 +186,19 @@ story: `config/system/enum_mapping.yaml` has a single top-level key,
 `ESMA_Annex2`, and its `collateral_type` enum maps HOUSE/FLAT/OFFICE/LAND — there
 is no motor-vehicle collateral code.
 
+**This is additive, not an engine rewrite.** The validation machinery is already
+regime-generic: `regime_fields()` and `validate_regime_schema_and_mandatory()`
+iterate *whatever* `regime_mapping` keys each field declares (that is how Annex
+3/4/8/9 ride the same code path), `enum_synonyms.yaml` is regime-agnostic, and
+`enum_mapping.yaml` is a regime-keyed dict where `ESMA_Annex5:` / `ESMA_Annex6:`
+blocks would slot in with the identical shape. (Note enums lag further than the
+registry: Annex 3/4 have field codes but no `enum_mapping` value-sets yet.)
+
 **Recommended hardening:** extend `fields_registry.yaml` with `auto` / `consumer`
 `portfolio_type` fields carrying ESMA Annex 5 (`AUTL`) / Annex 6 (`CMRL`) regime
-mappings, add the corresponding enum blocks, and register Annex 5/6 projectors —
-mirroring the existing Annex 3/4/8/9 pattern.
+mappings (re-using the existing `manufacturer`/`model`/`new_or_used` defs), add
+the corresponding enum blocks, and register Annex 5/6 projectors — mirroring the
+existing Annex 3/4/8/9 pattern.
 
 ---
 
