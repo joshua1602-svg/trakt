@@ -175,3 +175,43 @@ def test_query_invalid_drill_filter_field_rejected_safely(monkeypatch):
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+# --------------------------------------------------------------------------- #
+# Pipeline discovery root derived from MI_AGENT_PIPELINE_URI (config fallback)
+# --------------------------------------------------------------------------- #
+import pytest as _pytest
+
+
+@_pytest.mark.parametrize("uri,expected", [
+    ("blob://processed-v2/pipeline/ERE/latest/pipeline_snapshot.csv", "blob://processed-v2/pipeline/ERE"),
+    ("blob://processed-v2/pipeline/ERE/2025-11-30/pipeline_snapshot.csv", "blob://processed-v2/pipeline/ERE"),
+    ("blob://processed-v2/pipeline/ERE/latest/", "blob://processed-v2/pipeline/ERE"),
+    ("blob://processed-v2/pipeline/ERE/latest/pipeline_snapshot.json", "blob://processed-v2/pipeline/ERE"),
+    ("blob://processed-v2/pipeline/ERE", "blob://processed-v2/pipeline/ERE"),
+])
+def test_pipeline_root_derived_from_uri(monkeypatch, uri, expected):
+    from mi_agent_api import app as _app
+    monkeypatch.delenv("MI_AGENT_PIPELINE_ROOT", raising=False)
+    monkeypatch.setenv("MI_AGENT_PIPELINE_URI", uri)
+    assert _app._pipeline_root_from_uri() == expected
+
+
+def test_pipeline_root_precedence(monkeypatch):
+    from mi_agent_api import app as _app
+    monkeypatch.setenv("MI_AGENT_PIPELINE_URI",
+                       "blob://processed-v2/pipeline/ERE/latest/pipeline_snapshot.csv")
+    # Explicit root wins over the URI-derived root.
+    monkeypatch.setenv("MI_AGENT_PIPELINE_ROOT", "blob://explicit/pipeline/ROOT")
+    assert _app._pipeline_root() == "blob://explicit/pipeline/ROOT"
+    # Without an explicit root, the URI-derived root is used (NOT the funded
+    # onboarding/platform root, which holds funded cuts not pipeline extracts).
+    monkeypatch.delenv("MI_AGENT_PIPELINE_ROOT", raising=False)
+    monkeypatch.setenv("MI_AGENT_ONBOARDING_OUTPUT_ROOT", "blob://processed-v2/platform/ERE")
+    assert _app._pipeline_root() == "blob://processed-v2/pipeline/ERE"
+
+
+def test_pipeline_root_no_uri_returns_none(monkeypatch):
+    from mi_agent_api import app as _app
+    monkeypatch.delenv("MI_AGENT_PIPELINE_URI", raising=False)
+    assert _app._pipeline_root_from_uri() is None

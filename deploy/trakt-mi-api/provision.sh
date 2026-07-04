@@ -25,6 +25,14 @@ PLAN_SKU="${PLAN_SKU:-B1}"
 CLIENT_ID="${CLIENT_ID:-ERE}"
 CORS_ORIGINS="${CORS_ORIGINS:-*}"
 PLATFORM_URI="blob://processed-v2/platform/${CLIENT_ID}/latest/platform_canonical_typed.csv"
+# Multi-period discovery roots (funded evolution/forecast/compare + weekly
+# pipeline funnel/conversion). These are the FOLDERS that contain the dated
+# cuts — funded evolution needs >=2 dated platform canonicals under the
+# platform root; weekly pipeline needs the dated snapshots under the pipeline
+# root. Without these the forecast/evolution/compare/funnel routes report
+# "no reporting periods" / "£0" even though point-in-time works.
+ONBOARDING_ROOT="blob://processed-v2/platform/${CLIENT_ID}"
+PIPELINE_ROOT="blob://processed-v2/pipeline/${CLIENT_ID}"
 
 echo ">> Resource group"
 az group create -n "$RESOURCE_GROUP" -l "$LOCATION" -o none
@@ -49,6 +57,8 @@ az webapp config appsettings set -g "$RESOURCE_GROUP" -n "$APP_NAME" --settings 
   TRAKT_PROCESSED_CONTAINER=processed-v2 \
   TRAKT_BLOB_CONNECTION="$TRAKT_BLOB_CONNECTION" \
   MI_AGENT_PLATFORM_URI="$PLATFORM_URI" \
+  MI_AGENT_ONBOARDING_OUTPUT_ROOT="$ONBOARDING_ROOT" \
+  MI_AGENT_PIPELINE_ROOT="$PIPELINE_ROOT" \
   MI_AGENT_SCRATCH=/tmp/trakt/mi_platform \
   MI_AGENT_CORS_ORIGINS="$CORS_ORIGINS" \
   MI_API_WORKERS=2 MI_API_TIMEOUT=120 \
