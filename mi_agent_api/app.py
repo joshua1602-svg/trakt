@@ -37,6 +37,7 @@ from .data_source import (
     semantics_path,
 )
 from . import snapshots as snapshots_mod
+from . import platform_snapshots_blob as platform_blob_mod
 from . import pipeline_contract as pipeline_mod
 from . import pipeline_history
 from . import forecast_bridge as forecast_mod
@@ -372,22 +373,54 @@ def _platform_snapshot_index() -> Optional[Dict[str, Any]]:
     return {"portfolios": portfolios, "source": data_source_label()}
 
 
+def _blob_platform_index(root: str) -> Optional[Dict[str, Any]]:
+    """The dated funded platform-canonical index for a ``blob://`` onboarding
+    output root, or None when nothing dated is published under it."""
+    try:
+        from apps.blob_trigger_app.storage import open_storage
+        storage = open_storage()
+        return platform_blob_mod.build_index(
+            root, storage, label_fn=_pid_label,
+            balance_fn=snapshots_mod._balance_sum,
+            default_client_id=os.environ.get("MI_AGENT_CLIENT_ID"))
+    except Exception as exc:  # noqa: BLE001 - discovery must never 500
+        logger.warning("blob platform snapshot index failed for %s: %s", root, exc)
+        return None
+
+
 @app.get("/mi/snapshots")
 def snapshots() -> Dict[str, Any]:
     """Data-driven discovery of available funded portfolios and reporting runs.
 
     The portfolio / reporting-date dropdowns are built from THIS — only real
-    output appears (no hardcoded prototype options). Prefers on-disk onboarding
-    discovery; when no onboarding root is configured but a platform canonical is
-    loaded (MI_AGENT_PLATFORM_URI), it derives the index from that canonical.
+    output appears (no hardcoded prototype options). A ``blob://`` onboarding
+    output root enumerates the dated platform canonicals (one run per funded cut);
+    an on-disk root uses the onboarding-tape walk; and either way, when nothing is
+    discovered, it falls back to the loaded platform canonical (latest).
     """
     root = _onboarding_output_root()
+    if root and platform_blob_mod.is_blob_root(root):
+        idx = _blob_platform_index(root)
+        if idx and idx.get("portfolios"):
+            return idx
+        # Nothing dated under the blob root → the loaded latest canonical.
+        platform = _platform_snapshot_index()
+        if platform is not None:
+            return platform
+        return {"portfolios": [], "source": root}
     if root:
         try:
             result = snapshots_mod.discover_snapshots(root)
         except Exception as exc:  # noqa: BLE001 - discovery must never 500
             logger.warning("snapshot discovery failed: %s", exc)
             return {"portfolios": [], "source": "error", "error": str(exc)}
+        if result.get("portfolios"):
+            result["source"] = root
+            return result
+        # On-disk root discovered nothing → loaded platform canonical, if any.
+        platform = _platform_snapshot_index()
+        if platform is not None:
+            return platform
         result["source"] = root
         return result
     # No on-disk root: derive portfolios from the loaded platform canonical.
@@ -400,7 +433,21 @@ def snapshots() -> Dict[str, Any]:
 def _resolve_run_dataframe(client_id: str, run_id: str, root: Optional[str]):
     """``(df, prep_report)`` for a specific run, preferring on-disk discovery and
     falling back to the active env-configured dataframe for the active run."""
-    if root:
+    # A dated cut under a blob:// platform root: load THAT canonical (scoped to the
+    # source portfolio), not the active/latest one — so selecting an earlier month
+    # shows that month's data.
+    if root and platform_blob_mod.is_blob_root(root):
+        try:
+            from apps.blob_trigger_app.storage import open_storage
+            raw = platform_blob_mod.resolve_run_frame(
+                root, open_storage(), client_id, run_id)
+            if raw is not None and not raw.empty:
+                from .funded_prep import prepare_funded_mi_dataset
+                return prepare_funded_mi_dataset(raw)
+        except Exception as exc:  # noqa: BLE001 - fall back to active source
+            logger.warning("blob platform run resolution failed for %s/%s: %s",
+                           client_id, run_id, exc)
+    if root and not platform_blob_mod.is_blob_root(root):
         tape = snapshots_mod.resolve_tape_path(root, client_id, run_id)
         if tape is not None:
             return snapshots_mod.load_prepared_run(tape)
@@ -450,7 +497,17 @@ def snapshot(portfolioId: Optional[str] = None,
     # Resolve the prior available run for month-on-month change.
     prior_df = prior_run_id = prior_reporting_date = None
     reporting_date = snapshots_mod.infer_reporting_date(run_id, df)
-    if root:
+    if root and platform_blob_mod.is_blob_root(root):
+        try:
+            index = _blob_platform_index(root) or {"portfolios": []}
+            prior = snapshots_mod.find_prior_run(index, client_id, run_id)
+            if prior:
+                prior_run_id = prior["run_id"]
+                prior_reporting_date = prior["reporting_date"]
+                prior_df, _ = _resolve_run_dataframe(client_id, prior_run_id, root)
+        except Exception as exc:  # noqa: BLE001 - prior comparison is additive
+            logger.warning("blob prior-run resolution failed: %s", exc)
+    elif root:
         try:
             index = snapshots_mod.discover_snapshots(root)
             prior = snapshots_mod.find_prior_run(index, client_id, run_id)
