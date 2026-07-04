@@ -1831,10 +1831,14 @@ def _call_llm(prompt: Dict[str, str], model: str, use_cache: bool = True):
     client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
     cache_supported = False
     message = None
+    # NOTE: ``temperature`` is intentionally NOT sent. Newer Claude models
+    # (Sonnet 5 / Opus 4.x …) reject it with a 400 "temperature is deprecated"
+    # error; the model's default sampling is used. The task is a constrained
+    # NL->JSON parse validated downstream, so a fixed temperature isn't needed.
     if use_cache:
         try:
             message = client.messages.create(
-                model=model, max_tokens=1024, temperature=0.0,
+                model=model, max_tokens=1024,
                 system=[{"type": "text", "text": prompt["system"],
                          "cache_control": {"type": "ephemeral"}}],
                 messages=[{"role": "user", "content": prompt["user"]}],
@@ -1844,7 +1848,7 @@ def _call_llm(prompt: Dict[str, str], model: str, use_cache: bool = True):
             message = None
     if message is None:
         message = client.messages.create(
-            model=model, max_tokens=1024, temperature=0.0,
+            model=model, max_tokens=1024,
             system=prompt["system"],
             messages=[{"role": "user", "content": prompt["user"]}],
         )
