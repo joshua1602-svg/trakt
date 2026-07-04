@@ -4,6 +4,8 @@
  * pipeline extracts, each period carrying its own reconciliation + lineage.
  */
 
+import type { TimingDisclosure } from "./pipeline";
+
 export interface EvolutionPeriod {
   period: string;
   run_id?: string;
@@ -56,6 +58,8 @@ export interface PipelineEvolution {
   byStage: StagePoint[];
   lineage?: Record<string, unknown>;
   singlePeriod: boolean;
+  /** Funded-vs-pipeline timing disclosure (pipeline history not capped by funded date). */
+  pipelineTiming?: TimingDisclosure;
   error?: string;
 }
 

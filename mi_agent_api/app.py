@@ -44,6 +44,7 @@ from . import forecast_bridge as forecast_mod
 from . import workspace as workspace_mod
 from . import evolution as evolution_mod
 from . import chat_routing as chat_routing_mod
+from . import pipeline_timing as timing_mod
 
 logger = logging.getLogger("mi_agent_api")
 
@@ -713,10 +714,31 @@ def _resolve_pipeline_uri_local() -> Optional[str]:
         return None
 
 
+def _latest_pipeline_extract_date(client_id: str) -> Optional[str]:
+    """The latest available weekly pipeline extract date for ``client_id`` from
+    governed discovery (the max dated snapshot). Used to recover the real as-of
+    date when the source was resolved via the ``latest/`` pointer (whose path
+    carries no date), so the pipeline is disclosed as of its true extract date."""
+    root = _pipeline_discovery_root()
+    if not root:
+        return None
+    try:
+        srcs = pipeline_mod.discover_pipeline_sources(root, client_id=client_id)
+    except Exception:  # noqa: BLE001 - discovery must never break resolution
+        return None
+    dates = [s.get("pipeline_as_of_date") or s.get("pipeline_extract_date")
+             for s in srcs]
+    dates = [d for d in dates if d]
+    return max(dates) if dates else None
+
+
 def _resolve_pipeline_source(client_id: str, run_id: Optional[str]) -> Optional[Dict[str, Any]]:
     """The governed pipeline scope for a client/run (blob URI, explicit env, or
     discovery). Returns a scope dict with the separated date concepts (folder /
     extract / as-of), never a single ambiguous reporting date.
+
+    The pipeline scope ALWAYS reflects the LATEST available weekly extract — the
+    funded ``run_id`` never truncates it (funded actuals may lag the pipeline).
     """
     # Durable blob pipeline snapshot (production) wins, then an explicit local file.
     explicit = _resolve_pipeline_uri_local() or os.environ.get("MI_AGENT_PIPELINE_SOURCE")
@@ -726,12 +748,17 @@ def _resolve_pipeline_source(client_id: str, run_id: Optional[str]) -> Optional[
         if p.exists():
             folder_date = pipeline_mod._folder_date(p.parent)
             extract_date = pipeline_mod._extract_date(p)
+            # The latest/ pointer carries no date in its path; recover the true
+            # extract date from discovery so the pipeline as-of is not lost/None.
+            as_of = extract_date or folder_date or _latest_pipeline_extract_date(client_id)
             return {"client_id": client_id, "source_file": str(p),
                     "run_id": run_id or pipeline_mod._run_id_for(folder_date, extract_date, p),
                     "pipeline_source_folder": str(p.parent),
                     "pipeline_source_folder_date": folder_date,
-                    "pipeline_extract_date": extract_date,
-                    "pipeline_as_of_date": extract_date or folder_date}
+                    "pipeline_extract_date": extract_date or as_of,
+                    "pipeline_as_of_date": as_of,
+                    "current_pipeline_snapshot_date": as_of,
+                    "current_pipeline_source_file": p.name}
     root = _pipeline_discovery_root()
     if root:
         return pipeline_mod.resolve_pipeline_source(root, client_id, run_id)
@@ -790,9 +817,14 @@ def pipeline_snapshot(portfolioId: Optional[str] = None,
     df, report = pipeline_mod.load_prepared_pipeline(source, historical_model=history)
     semantics = load_mi_semantics(semantics_path())
     prior_week = pipeline_mod.compute_prior_week_aggregates(source, historical_model=history)
-    return pipeline_mod.compute_pipeline_snapshot(
+    result = pipeline_mod.compute_pipeline_snapshot(
         df, report, semantics, client_id=source.get("client_id", client_id),
         run_id=run_id or source.get("run_id", ""), source=source, prior_week=prior_week)
+    # Disclose the funded-vs-pipeline timing (never truncate): funded anchor = the
+    # selected run's reporting date; pipeline anchor = the latest weekly extract.
+    result["pipelineTiming"] = timing_mod.timing_disclosure(
+        _funded_date_from_run(run_id), result.get("pipelineAsOfDate"))
+    return result
 
 
 @app.get("/mi/forecast/snapshot")
@@ -862,7 +894,32 @@ def forecast_snapshot(portfolioId: Optional[str] = None,
         current_pipeline_snapshot_date=(source or {}).get("current_pipeline_snapshot_date"),
         current_pipeline_source_file=(source or {}).get("current_pipeline_source_file"),
         completion_probability_basis=basis, historical_model_evidence=evidence)
+    # Both anchors + non-blocking timing disclosure (funded actuals vs latest
+    # pipeline). The forecast bridge composes funded actuals with the LATEST
+    # pipeline; when the pipeline extract is later than the funded cut we disclose
+    # it rather than hide the pipeline.
+    pipeline_as_of = ((source or {}).get("pipeline_as_of_date")
+                      or _latest_pipeline_extract_date(client_id))
+    envelope["pipelineTiming"] = timing_mod.timing_disclosure(
+        funded_reporting_date or _funded_date_from_run(run_id), pipeline_as_of)
     return envelope
+
+
+def _funded_date_from_run(run_id: Optional[str]) -> Optional[str]:
+    """The funded reporting date implied by a selected run id: a ``YYYY-MM-DD``
+    run IS the date; an ``mi_YYYY_MM`` run maps to that month-end; otherwise None."""
+    import calendar
+    if not run_id:
+        return None
+    s = str(run_id)
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
+        return s
+    m = re.fullmatch(r"mi_(\d{4})_(\d{2})", s) or re.fullmatch(r"(\d{4})-(\d{2})", s)
+    if m:
+        y, mo = int(m.group(1)), int(m.group(2))
+        if 1 <= mo <= 12:
+            return f"{y:04d}-{mo:02d}-{calendar.monthrange(y, mo)[1]:02d}"
+    return None
 
 
 def _evo_ids(portfolioId, client_id, toRunId, to_run_id):
@@ -902,17 +959,31 @@ def pipeline_evolution(portfolioId: Optional[str] = None, client_id: Optional[st
                        ) -> Dict[str, Any]:
     """Pipeline time series across governed weekly extracts (amount / cases / by
     stage over time), with per-period reconciliation + lineage."""
-    cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
+    cid, _funded_trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
+    # The pipeline is a continuous weekly operational view — the selected FUNDED
+    # reporting date (carried in portfolioId) must NOT truncate it. Only an EXPLICIT
+    # pipeline toRunId query param caps it (rare; no UI toggle needed by default).
+    pipeline_cut = toRunId or to_run_id
     root = _pipeline_discovery_root()
     if not root:
-        return {"dataset": "pipeline", "portfolioId": cid, "toRunId": trid,
+        return {"dataset": "pipeline", "portfolioId": cid, "toRunId": pipeline_cut,
                 "periods": [], "byStage": [], "singlePeriod": True,
                 "error": "no pipeline root configured"}
     try:
-        return evolution_mod.pipeline_evolution(root, cid, trid)
+        result = evolution_mod.pipeline_evolution(root, cid, pipeline_cut)
+        # Disclose the funded-vs-pipeline timing on the evolution response too, so
+        # the pipeline evolution view can surface the non-blocking banner.
+        latest = None
+        dates = [p.get("extract_date") for p in result.get("periods", [])]
+        dates = [d for d in dates if d]
+        if dates:
+            latest = max(dates)
+        result["pipelineTiming"] = timing_mod.timing_disclosure(
+            _funded_date_from_run(_funded_trid), latest)
+        return result
     except Exception as exc:  # noqa: BLE001
         logger.warning("pipeline evolution failed: %s", exc)
-        return {"dataset": "pipeline", "portfolioId": cid, "toRunId": trid,
+        return {"dataset": "pipeline", "portfolioId": cid, "toRunId": pipeline_cut,
                 "periods": [], "byStage": [], "singlePeriod": True, "error": str(exc)}
 
 
@@ -922,17 +993,20 @@ def funnel_evolution(portfolioId: Optional[str] = None, client_id: Optional[str]
                      ) -> Dict[str, Any]:
     """Weekly origination funnel trends (KFI / Application / Offer / Completion
     value + count, 5-week average, latest week, delta vs prior week). Never 500s."""
-    cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
+    cid, _funded_trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
+    # Origination funnel is weekly-pipeline data — the funded reporting date must
+    # NOT truncate it; only an explicit pipeline toRunId caps it.
+    pipeline_cut = toRunId or to_run_id
     root = _pipeline_discovery_root()
     if not root:
-        return {"dataset": "pipeline_funnel", "portfolioId": cid, "toRunId": trid,
+        return {"dataset": "pipeline_funnel", "portfolioId": cid, "toRunId": pipeline_cut,
                 "stages": [], "weeks": [], "series": {}, "summary": {},
                 "singlePeriod": True, "error": "no pipeline root configured"}
     try:
-        return evolution_mod.pipeline_funnel_evolution(root, cid, trid)
+        return evolution_mod.pipeline_funnel_evolution(root, cid, pipeline_cut)
     except Exception as exc:  # noqa: BLE001
         logger.warning("funnel evolution failed: %s", exc)
-        return {"dataset": "pipeline_funnel", "portfolioId": cid, "toRunId": trid,
+        return {"dataset": "pipeline_funnel", "portfolioId": cid, "toRunId": pipeline_cut,
                 "stages": [], "weeks": [], "series": {}, "summary": {},
                 "singlePeriod": True, "error": str(exc)}
 
