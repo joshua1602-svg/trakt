@@ -160,6 +160,37 @@ def _dob_columns(df: pd.DataFrame) -> List[str]:
     return [norm_to_col[_norm(a)] for a in aliases if _norm(a) in norm_to_col]
 
 
+#: Second-applicant source columns whose presence means a JOINT borrower.
+_SECOND_BORROWER_ALIASES_DEFAULT = ["dob app 2", "gender app 2", "date of birth 2",
+                                    "borrower 2 dob", "customer 2 dob"]
+
+
+def _second_borrower_columns(df: pd.DataFrame) -> List[str]:
+    contract = load_pipeline_contract()
+    aliases = ((contract.get("funded_correlated_fields", {}) or {})
+               .get("borrower_type", {}) or {}).get(
+        "second_borrower_source_aliases", _SECOND_BORROWER_ALIASES_DEFAULT)
+    norm_to_col = {_norm(c): c for c in df.columns}
+    return [norm_to_col[_norm(a)] for a in aliases if _norm(a) in norm_to_col]
+
+
+def _derive_borrower_type(src: pd.DataFrame, out: pd.DataFrame, derived: List[str]) -> None:
+    """Single vs joint borrower — JOINT iff ANY second-applicant field (DOB App 2 /
+    Gender App 2) is populated, else SINGLE. A first-class categorical dimension so
+    the MI Agent can run single-vs-joint cohort analysis and stratifications
+    (e.g. LTV by borrower_type). No second-applicant column ⇒ not derivable."""
+    cols = _second_borrower_columns(src)
+    if not cols:
+        return
+    present = pd.Series(False, index=src.index)
+    for c in cols:
+        v = src[c].astype(str).str.strip().str.lower()
+        present = present | (src[c].notna() & ~v.isin(["", "nan", "none"]))
+    out["borrower_type"] = np.where(present.to_numpy(), "joint", "single")
+    if "borrower_type" not in derived:
+        derived.append("borrower_type")
+
+
 # --------------------------------------------------------------------------- #
 # Numeric / date / ratio helpers (shared with funded prep semantics)
 # --------------------------------------------------------------------------- #
@@ -171,7 +202,10 @@ def _to_ratio(s: pd.Series) -> pd.Series:
 
 
 def _parse_date(series: pd.Series) -> pd.Series:
-    return pd.to_datetime(series, errors="coerce", dayfirst=False)
+    # UK day-first dates (dd/mm/yyyy) — matches funded_prep. dayfirst=False silently
+    # dropped every DOB / date whose day > 12 to NaT and month/day-swapped the rest,
+    # which broke youngest-borrower age (NNEG) and all pipeline timing.
+    return pd.to_datetime(series, errors="coerce", dayfirst=True)
 
 
 def _as_of_date(df: pd.DataFrame, explicit: Optional[str],
@@ -239,6 +273,9 @@ def prepare_pipeline_mi_dataset(
     # 4. Youngest borrower age from DOBs, as of the operational as-of date.
     rep_ts = _as_of_date(df, as_of_date, source_file)
     _derive_youngest_age(df, out, rep_ts, derived)
+
+    # 4b. Borrower type (single vs joint) from second-applicant field presence.
+    _derive_borrower_type(df, out, derived)
 
     # 5. Normalise funnel stage + status.
     _normalise_stage(out, derived)
@@ -311,7 +348,7 @@ def _derive_youngest_age(src: pd.DataFrame, out: pd.DataFrame,
         return
     ages = pd.DataFrame(index=src.index)
     for c in dob_cols:
-        dob = pd.to_datetime(src[c], errors="coerce", dayfirst=False)
+        dob = pd.to_datetime(src[c], errors="coerce", dayfirst=True)  # UK dd/mm/yyyy DOBs
         ages[c] = (rep_ts - dob).dt.days / 365.25
     youngest = ages.min(axis=1, skipna=True)  # youngest borrower = minimum age
     if youngest.notna().any():
@@ -542,7 +579,7 @@ _DIMENSION_FIELDS = [
     "pipeline_stage", "pipeline_status", "pipeline_stage_bucket",
     "geographic_region_obligor", "collateral_geography", "origination_channel",
     "broker_channel", "product_type", "ltv_bucket", "age_bucket", "ticket_bucket",
-    "interest_rate_bucket", "expected_completion_month",
+    "interest_rate_bucket", "expected_completion_month", "borrower_type",
 ]
 _METRIC_FIELDS = [
     "current_outstanding_balance", "expected_funded_amount",

@@ -52,6 +52,7 @@ _DIM_SPEC: Dict[str, Dict[str, Any]] = {
     "age_bucket": {"kind": "bucket", "source": "youngest_borrower_age"},
     "time_on_book_bucket": {"kind": "bucket_derived", "source": "months_on_book"},
     "vintage_year": {"kind": "derived", "source": "vintage_year"},
+    "borrower_type": {"kind": "derived", "source": "borrower_type"},
     "geographic_region_obligor": {
         "kind": "group", "primary": "geographic_region_obligor",
         "sources": ["geographic_region_obligor", "geographic_region_collateral",
@@ -153,6 +154,10 @@ def _derive_ltv(out: pd.DataFrame, target: str) -> Dict[str, Any]:
 # youngest-borrower age when no explicit age field is supplied.
 _DOB_FIELDS = ("borrower_1_DOB", "borrower_2_DOB", "borrower_1_dob", "borrower_2_dob",
                "customer_1_dob", "customer_2_dob")
+# Second-applicant fields whose presence means a JOINT borrower.
+_SECOND_BORROWER_FIELDS = ("borrower_2_DOB", "borrower_2_dob", "customer_2_dob",
+                           "borrower_2_gender", "customer_2_gender", "borrower_2_name",
+                           "customer_2_name")
 # Postcode fields preserved for region derivation / reason-coding.
 _POSTCODE_FIELDS = ("property_post_code", "postcode", "post_code")
 
@@ -188,6 +193,28 @@ def _derive_youngest_age(out: pd.DataFrame, derived: List[str]) -> None:
         out["youngest_borrower_age"] = np.floor(youngest).astype("Int64")
         if "youngest_borrower_age" not in derived:
             derived.append("youngest_borrower_age")
+
+
+def _derive_borrower_type(out: pd.DataFrame, derived: List[str]) -> None:
+    """Single vs joint borrower — JOINT iff ANY second-applicant field
+    (borrower_2 DOB / gender / name) is populated, else SINGLE. A first-class
+    categorical dimension so the MI Agent can run single-vs-joint cohort analysis
+    and stratifications (e.g. LTV by borrower_type). NNEG exposure is joint-life,
+    so the split matters for lifetime-mortgage risk. No second-applicant column
+    present ⇒ not derivable (skipped)."""
+    if "borrower_type" in out.columns and out["borrower_type"].astype(str).str.strip().ne("").any():
+        return
+    cols = [c for c in _SECOND_BORROWER_FIELDS if c in out.columns]
+    if not cols:
+        return
+    import numpy as np
+    present = pd.Series(False, index=out.index)
+    for c in cols:
+        v = out[c].astype(str).str.strip().str.lower()
+        present = present | (out[c].notna() & ~v.isin(["", "nan", "none"]))
+    out["borrower_type"] = np.where(present.to_numpy(), "joint", "single")
+    if "borrower_type" not in derived:
+        derived.append("borrower_type")
 
 
 def _dedupe_columns(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
@@ -241,6 +268,7 @@ def _derive_source_fields(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str], Li
                     derived.append("months_on_book")
 
     _derive_youngest_age(out, derived)
+    _derive_borrower_type(out, derived)
 
     return out, derived, basis, dedup
 

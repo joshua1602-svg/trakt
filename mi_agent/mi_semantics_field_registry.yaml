@@ -336,6 +336,44 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+  borrower_type:
+    canonical_field: borrower_type
+    mi_tier: core
+    business_name: Borrower Type
+    display_name: Borrower Type
+    business_description: Single vs joint borrower, derived from whether any
+      second-applicant field (DOB / gender for the second borrower) is populated.
+      Enables single-vs-joint cohort analysis and stratifications (e.g. LTV or
+      youngest-age by borrower type); NNEG exposure is joint-life.
+    description: ''
+    synonyms:
+    - borrower type
+    - single vs joint
+    - single or joint
+    - joint borrower
+    - single borrower
+    - number of borrowers
+    - applicant type
+    source_criteria:
+    - derived
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    derived: true
+    derived_from: borrower_type
   borrower_jurisdiction:
     canonical_field: borrower_jurisdiction
     mi_tier: core
