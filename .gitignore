@@ -87,6 +87,8 @@ onboarding_output/
 # Onboarding Agent Phase 1 — domain-based synthetic packs (committed fixtures)
 !synthetic_onboarding_pack_domain_based/scenario_a_combined/*.csv
 !synthetic_onboarding_pack_domain_based/scenario_b_split/*.csv
+# Non-equity-release asset-class test packs (committed synthetic tapes)
+!synthetic_portfolios/**/*.csv
 # Onboarding Agent — committed test fixtures (synthetic, no real data)
 !tests/fixtures/*.csv
 # MI runtime — committed synthetic multi-artefact fixtures (subdirectories)
