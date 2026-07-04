@@ -39,6 +39,12 @@ from . import pipeline_history as _history
 
 _CENTRAL_PIPELINE_TAPE = "18a_central_pipeline_tape.csv"
 _PREPARED_PIPELINE_NAME = "20_prepared_pipeline_mi.csv"
+# The published weekly snapshot (the FULL raw extract) written per dated folder by
+# the blob pipeline, e.g. ``pipeline/ERE/2025-09-08/pipeline_snapshot.csv``. Its
+# date lives in the FOLDER, not the filename, so it is a LAST-RESORT governed
+# source (like the central tape) — only used when no richer M2L/KFI extract exists.
+_PUBLISHED_PIPELINE_SNAPSHOT = "pipeline_snapshot.csv"
+_FALLBACK_PIPELINE_GLOBS = [_CENTRAL_PIPELINE_TAPE, _PUBLISHED_PIPELINE_SNAPSHOT]
 
 # Governed pipeline source filename patterns (xlsx or csv).
 _PIPELINE_SOURCE_GLOBS = [
@@ -87,6 +93,15 @@ def _date_in(text: str) -> Optional[str]:
 def _extract_date(file_path: Path) -> Optional[str]:
     """The weekly extract date parsed from the FILE name only."""
     return _date_in(file_path.name)
+
+
+def _source_extract_date(file_path: Path) -> Optional[str]:
+    """The extract date for a governed source: parsed from the FILE name when it
+    carries one (M2L/KFI weekly files), else falling back to the parent FOLDER
+    date. Dated M2L filenames are unaffected; a dateless published snapshot
+    (``{YYYY-MM-DD}/pipeline_snapshot.csv``) takes its date from its dated folder,
+    so each dated snapshot stays a distinct weekly extract."""
+    return _extract_date(file_path) or _folder_date(file_path.parent)
 
 
 def _folder_date(folder: Path) -> Optional[str]:
@@ -153,7 +168,7 @@ def discover_pipeline_sources(root: str | os.PathLike,
     source_globs = [g for g in _PIPELINE_SOURCE_GLOBS if g != _CENTRAL_PIPELINE_TAPE]
     files = _collect_files(root, source_globs)
     if not files:
-        files = _collect_files(root, [_CENTRAL_PIPELINE_TAPE])
+        files = _collect_files(root, _FALLBACK_PIPELINE_GLOBS)
 
     # Group weekly files by (client, source folder) scope.
     scopes: Dict[Tuple[str, str], Dict[str, Any]] = {}
@@ -163,7 +178,7 @@ def discover_pipeline_sources(root: str | os.PathLike,
             continue
         folder = path.parent
         folder_date = _folder_date(folder)
-        extract_date = _extract_date(path)
+        extract_date = _source_extract_date(path)
         key = (cid, str(folder))
         scope = scopes.setdefault(key, {
             "client_id": cid,
@@ -281,7 +296,7 @@ def _collect_governed_extracts(root: str | os.PathLike,
     source_globs = [g for g in _PIPELINE_SOURCE_GLOBS if g != _CENTRAL_PIPELINE_TAPE]
     files = _collect_files(root, source_globs)
     if not files:
-        files = _collect_files(root, [_CENTRAL_PIPELINE_TAPE])
+        files = _collect_files(root, _FALLBACK_PIPELINE_GLOBS)
     out: List[Dict[str, Any]] = []
     for path in files:
         cid = _infer_client(path, root) or (client_id or "client_001")
@@ -293,7 +308,7 @@ def _collect_governed_extracts(root: str | os.PathLike,
             "source_file": str(path),
             "normalised_name": _normalise_basename(path),
             "ext": path.suffix.lower(),
-            "pipeline_extract_date": _extract_date(path),
+            "pipeline_extract_date": _source_extract_date(path),
             "pipeline_source_folder": str(folder),
             "pipeline_source_folder_date": _folder_date(folder),
         })
