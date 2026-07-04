@@ -388,6 +388,28 @@ def _blob_platform_index(root: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+def _blob_funded_evolution(root: str, cid: str, trid: Optional[str]) -> Dict[str, Any]:
+    """Funded evolution over the dated platform canonicals under a ``blob://`` root.
+
+    Uses the SOURCE PORTFOLIO id (e.g. ``direct_001``) — not the selected run — and
+    aggregates ALL dated cuts for it (truncated to ``trid`` when that is a date).
+    ``total`` / a type lens aggregates across the matching source portfolios. Never
+    collapses to the currently-selected run."""
+    from apps.blob_trigger_app.storage import open_storage
+    from .funded_prep import prepare_funded_mi_dataset
+    frames = platform_blob_mod.build_funded_evolution_frames(
+        root, open_storage(), cid, trid, prepare_funded_mi_dataset)
+    result = evolution_mod.assemble_funded_evolution(
+        frames, cid, trid,
+        lineage={
+            "source": "governed dated platform canonicals (platform_canonical_typed.csv)",
+            "metric": "funded book actuals per reporting cut",
+            "note": "One period per dated platform canonical for the selected "
+                    "source portfolio / lens; no cross-run merge.",
+        })
+    return result
+
+
 @app.get("/mi/snapshots")
 def snapshots() -> Dict[str, Any]:
     """Data-driven discovery of available funded portfolios and reporting runs.
@@ -865,6 +887,8 @@ def funded_evolution(portfolioId: Optional[str] = None, client_id: Optional[str]
                 "periods": [], "breakdowns": {}, "singlePeriod": True,
                 "error": "no onboarding output root configured"}
     try:
+        if platform_blob_mod.is_blob_root(root):
+            return _blob_funded_evolution(root, cid, trid)
         return evolution_mod.funded_evolution(root, cid, trid)
     except Exception as exc:  # noqa: BLE001 - evolution must never 500
         logger.warning("funded evolution failed: %s", exc)

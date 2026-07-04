@@ -110,11 +110,16 @@ def _runs_up_to(output_root: str | os.PathLike, client_id: str,
     return runs
 
 
-def funded_evolution(output_root: str | os.PathLike, client_id: str,
-                     to_run_id: Optional[str] = None,
-                     breakdowns: Optional[List[str]] = None) -> Dict[str, Any]:
-    """Funded time series across monthly runs up to ``to_run_id`` (inclusive)."""
-    runs = _runs_up_to(output_root, client_id, to_run_id)
+def assemble_funded_evolution(frames: List[Dict[str, Any]], client_id: str,
+                              to_run_id: Optional[str] = None,
+                              breakdowns: Optional[List[str]] = None,
+                              *, lineage: Optional[Dict[str, Any]] = None
+                              ) -> Dict[str, Any]:
+    """Build the funded evolution series from an ordered list of prepared run
+    frames — ``[{run_id, reporting_date, df, source}]`` (oldest → newest).
+
+    Shared by the on-disk tape path and the blob platform-canonical path so the
+    metric/reconciliation/breakdown shape is IDENTICAL regardless of source."""
     required = [_BALANCE, "current_loan_to_value", "current_interest_rate",
                 "youngest_borrower_age"]
     want_breakdowns = breakdowns or ["broker", "region", "ltv_bucket"]
@@ -125,19 +130,16 @@ def funded_evolution(output_root: str | os.PathLike, client_id: str,
     sources: List[Optional[str]] = []
     bd_series: Dict[str, List[Dict[str, Any]]] = {b: [] for b in want_breakdowns}
 
-    for run in runs:
-        run_id = run["run_id"]
-        tape = snap.resolve_tape_path(output_root, client_id, run_id)
-        if tape is None:
+    for fr in frames:
+        run_id = fr["run_id"]
+        df = fr["df"]
+        if df is None:
             continue
-        try:
-            df, _rep = snap.load_prepared_run(tape)
-        except Exception:  # noqa: BLE001 - a bad tape never breaks the series
-            continue
-        rdate = run.get("reporting_date") or snap.infer_reporting_date(run_id, df)
+        rdate = fr.get("reporting_date") or snap.infer_reporting_date(run_id, df)
+        source = fr.get("source")
         run_ids.append(run_id)
         dates.append(rdate)
-        sources.append(str(tape))
+        sources.append(source)
         periods.append({
             "run_id": run_id,
             "reporting_date": rdate,
@@ -150,7 +152,7 @@ def funded_evolution(output_root: str | os.PathLike, client_id: str,
                 "avg_borrower_age": _simple_avg(df, "youngest_borrower_age"),
             },
             "reconciliation": _reconciliation(df, "funded", run_id, required),
-            "source_file": str(tape),
+            "source_file": source,
         })
         for b in want_breakdowns:
             dim_col = _FUNDED_BREAKDOWN_DIMS.get(b)
@@ -167,13 +169,36 @@ def funded_evolution(output_root: str | os.PathLike, client_id: str,
         "sourceFiles": sources,
         "periods": periods,
         "breakdowns": bd_series,
-        "lineage": {
+        "lineage": lineage or {
             "source": "governed monthly central lender tapes (18_central_lender_tape.csv)",
             "metric": "funded book actuals per reporting month",
             "note": "Each period is an independent funded run; no cross-run merge.",
         },
         "singlePeriod": len(periods) <= 1,
     }
+
+
+def funded_evolution(output_root: str | os.PathLike, client_id: str,
+                     to_run_id: Optional[str] = None,
+                     breakdowns: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Funded time series across monthly runs up to ``to_run_id`` (inclusive)."""
+    frames: List[Dict[str, Any]] = []
+    for run in _runs_up_to(output_root, client_id, to_run_id):
+        run_id = run["run_id"]
+        tape = snap.resolve_tape_path(output_root, client_id, run_id)
+        if tape is None:
+            continue
+        try:
+            df, _rep = snap.load_prepared_run(tape)
+        except Exception:  # noqa: BLE001 - a bad tape never breaks the series
+            continue
+        frames.append({
+            "run_id": run_id,
+            "reporting_date": run.get("reporting_date") or snap.infer_reporting_date(run_id, df),
+            "df": df,
+            "source": str(tape),
+        })
+    return assemble_funded_evolution(frames, client_id, to_run_id, breakdowns)
 
 
 # --------------------------------------------------------------------------- #

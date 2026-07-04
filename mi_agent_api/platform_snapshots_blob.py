@@ -152,6 +152,63 @@ def build_index(root: str, storage, *, label_fn, balance_fn,
     return {"portfolios": out, "source": root}
 
 
+_TOTAL_SCOPES = {"total", "all", "client_001", "platform", ""}
+
+
+def _scope_frame(df: pd.DataFrame, scope: Optional[str]) -> Optional[pd.DataFrame]:
+    """Scope a full dated canonical to a funded lens:
+
+      * an exact ``source_portfolio_id`` (e.g. ``direct_001``) → that cohort;
+      * a ``source_portfolio_type`` (e.g. ``direct`` / ``acquired``) → that book;
+      * ``total`` / ``all`` (or an unrecognised scope) → the WHOLE frame (all
+        source portfolios aggregated).
+
+    Returns ``None`` only when a recognised cohort/type filter matches no rows."""
+    if not scope:
+        return df
+    low = str(scope).strip().lower()
+    if "source_portfolio_id" in df.columns:
+        ids = df["source_portfolio_id"].astype(str).str.strip()
+        if (ids == scope).any():
+            return df[ids == scope]
+    if "source_portfolio_type" in df.columns:
+        types = df["source_portfolio_type"].astype(str).str.strip().str.lower()
+        if (types == low).any():
+            return df[types == low]
+    if low in _TOTAL_SCOPES:
+        return df
+    # Unrecognised scope: aggregate all books rather than render nothing.
+    return df
+
+
+def build_funded_evolution_frames(root: str, storage, scope: Optional[str],
+                                  to_run_id: Optional[str], prepare_fn
+                                  ) -> List[Dict[str, Any]]:
+    """Ordered ``[{run_id, reporting_date, df, source}]`` for funded evolution over
+    the dated platform canonicals under a ``blob://`` root, scoped to ``scope``
+    (source_portfolio_id, type, or total) and truncated to ``to_run_id`` when that
+    is a date. Each frame's ``df`` is prepared via ``prepare_fn`` (funded prep) so
+    it carries the same derived dimensions as the snapshot path."""
+    cut = str(to_run_id) if re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(to_run_id) or "") else None
+    frames: List[Dict[str, Any]] = []
+    for d in list_dated_platform_canonicals(root, storage):
+        if cut and d["date"] > cut:
+            continue
+        raw = _read(d["uri"], storage)
+        if raw is None or raw.empty:
+            continue
+        scoped = _scope_frame(raw, scope)
+        if scoped is None or scoped.empty:
+            continue
+        try:
+            prepared, _rep = prepare_fn(scoped)
+        except Exception:  # noqa: BLE001 - a bad cut never breaks the series
+            continue
+        frames.append({"run_id": d["date"], "reporting_date": d["date"],
+                       "df": prepared, "source": d["uri"]})
+    return frames
+
+
 def resolve_run_frame(root: str, storage, source_portfolio_id: Optional[str],
                       run_id: str) -> Optional[pd.DataFrame]:
     """The RAW dated platform canonical for ``run_id`` (a ``YYYY-MM-DD`` date),

@@ -146,6 +146,56 @@ class TestSnapshotsEndpoint(unittest.TestCase):
         self.assertIn("2025-10-31", text)
 
 
+class TestFundedEvolution(unittest.TestCase):
+
+    def test_two_periods_for_source_portfolio(self):
+        import mi_agent_api.app as app
+        with tempfile.TemporaryDirectory() as td:
+            fx = _BlobPlatformFixture(td)
+            _reset_read_cache()
+            with fx.env():
+                # portfolioId is the SELECTED run — evolution must NOT collapse to it.
+                evo = app.funded_evolution(portfolioId="direct_001/2025-11-30")
+        self.assertFalse(evo["singlePeriod"])
+        dates = [p["reporting_date"] for p in evo["periods"]]
+        self.assertEqual(dates, ["2025-10-31", "2025-11-30"])
+        # Oct direct = 2 loans, Nov direct = 2 loans; balances are the dated cut's.
+        oct_bal = evo["periods"][0]["metrics"]["funded_balance"]
+        nov_bal = evo["periods"][1]["metrics"]["funded_balance"]
+        self.assertEqual(oct_bal, 10_000_000.0)
+        self.assertEqual(nov_bal, 12_000_000.0)
+
+    def test_uses_source_portfolio_not_selected_run(self):
+        import mi_agent_api.app as app
+        with tempfile.TemporaryDirectory() as td:
+            fx = _BlobPlatformFixture(td)
+            _reset_read_cache()
+            with fx.env():
+                a = app.funded_evolution(portfolioId="direct_001/2025-11-30")
+                b = app.funded_evolution(portfolioId="direct_001/2025-10-31")
+        # Selecting the EARLIER run truncates to it (one period); the later run
+        # yields both — proving the series follows the source portfolio + toRunId,
+        # not a single collapsed run.
+        self.assertEqual([p["reporting_date"] for p in a["periods"]],
+                         ["2025-10-31", "2025-11-30"])
+        self.assertEqual([p["reporting_date"] for p in b["periods"]], ["2025-10-31"])
+
+    def test_total_lens_aggregates_across_source_portfolios(self):
+        import mi_agent_api.app as app
+        with tempfile.TemporaryDirectory() as td:
+            fx = _BlobPlatformFixture(td)
+            _reset_read_cache()
+            with fx.env():
+                evo = app.funded_evolution(portfolioId="total/2025-11-30")
+        self.assertFalse(evo["singlePeriod"])
+        self.assertEqual([p["reporting_date"] for p in evo["periods"]],
+                         ["2025-10-31", "2025-11-30"])
+        # Oct total = direct(2*5M) + acquired(1*2M) = 12,000,000.
+        self.assertEqual(evo["periods"][0]["metrics"]["funded_balance"], 12_000_000.0)
+        # Nov total = direct(2*6M) + acquired(1*2.5M) = 14,500,000.
+        self.assertEqual(evo["periods"][1]["metrics"]["funded_balance"], 14_500_000.0)
+
+
 class TestOnDiskRootUnaffected(unittest.TestCase):
 
     def test_filesystem_root_still_uses_disk_walk(self):
