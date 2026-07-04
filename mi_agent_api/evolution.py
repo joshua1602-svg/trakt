@@ -181,7 +181,27 @@ def assemble_funded_evolution(frames: List[Dict[str, Any]], client_id: str,
 def funded_evolution(output_root: str | os.PathLike, client_id: str,
                      to_run_id: Optional[str] = None,
                      breakdowns: Optional[List[str]] = None) -> Dict[str, Any]:
-    """Funded time series across monthly runs up to ``to_run_id`` (inclusive)."""
+    """Funded time series across monthly runs up to ``to_run_id`` (inclusive).
+
+    Blob-aware: the on-disk tape walk (``snap.discover_snapshots``) is
+    filesystem-only and cannot enumerate a ``blob://`` platform root, so on such
+    a root it would return ZERO periods — which is why funded evolution /
+    forecast / compare reported "no reporting periods" / "£0" even though dated
+    platform canonicals exist. When ``output_root`` is a blob root, build the
+    series from the dated platform canonicals (the same source that already
+    powers ``/mi/evolution/funded``); fall back to the tape walk on any error."""
+    from . import platform_snapshots_blob as _blob
+    if _blob.is_blob_root(output_root):
+        try:
+            from apps.blob_trigger_app.storage import open_storage
+            from .funded_prep import prepare_funded_mi_dataset
+            blob_frames = _blob.build_funded_evolution_frames(
+                str(output_root), open_storage(), client_id, to_run_id,
+                prepare_funded_mi_dataset)
+            return assemble_funded_evolution(
+                blob_frames, client_id, to_run_id, breakdowns)
+        except Exception:  # noqa: BLE001 - never break the series on a blob error
+            pass
     frames: List[Dict[str, Any]] = []
     for run in _runs_up_to(output_root, client_id, to_run_id):
         run_id = run["run_id"]

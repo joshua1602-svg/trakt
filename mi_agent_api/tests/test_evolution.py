@@ -159,3 +159,61 @@ def test_evolution_endpoints(funded_root, monkeypatch):
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+# --------------------------------------------------------------------------- #
+# Blob platform root: funded_evolution must use the dated-platform-canonical
+# loader (the filesystem tape walk cannot enumerate a blob:// root, which is
+# what previously produced "no reporting periods" / "£0" for forecast/compare).
+# --------------------------------------------------------------------------- #
+def _prepared_frame(n: int, bal: float, ltv: float, rate: float, age: int) -> pd.DataFrame:
+    return pd.DataFrame({
+        "current_outstanding_balance": [bal] * n,
+        "current_loan_to_value": [ltv] * n,
+        "current_interest_rate": [rate] * n,
+        "youngest_borrower_age": [age] * n,
+    })
+
+
+def test_funded_evolution_reads_blob_dated_canonicals(monkeypatch):
+    import apps.blob_trigger_app.storage as storage_mod
+    from mi_agent_api import platform_snapshots_blob as blob
+
+    calls = {}
+
+    def fake_frames(root, storage, scope, to_run_id, prepare_fn):
+        calls["root"] = root
+        calls["scope"] = scope
+        return [
+            {"run_id": "2025-10-31", "reporting_date": "2025-10-31",
+             "df": _prepared_frame(60, 200_000, 40.0, 5.0, 70), "source": "blob://…/2025-10-31"},
+            {"run_id": "2025-11-30", "reporting_date": "2025-11-30",
+             "df": _prepared_frame(70, 230_000, 42.0, 5.2, 71), "source": "blob://…/2025-11-30"},
+        ]
+
+    monkeypatch.setattr(storage_mod, "open_storage", lambda: object())
+    monkeypatch.setattr(blob, "build_funded_evolution_frames", fake_frames)
+
+    out = evo.funded_evolution("blob://processed-v2/platform/ERE", "client_001")
+    periods = out.get("periods", [])
+    assert len(periods) == 2, out
+    assert calls["root"] == "blob://processed-v2/platform/ERE"
+    # Newest-last ordering + the funded balance grows across the two cuts.
+    bals = [(p.get("metrics") or {}).get("funded_balance") for p in periods]
+    assert bals[0] and bals[1] and bals[1] > bals[0]
+
+
+def test_funded_evolution_blob_error_falls_back(monkeypatch, tmp_path):
+    # If the blob build raises, funded_evolution must fall back to the tape walk
+    # (here an empty filesystem root) rather than propagate — never a 500.
+    from mi_agent_api import platform_snapshots_blob as blob
+    import apps.blob_trigger_app.storage as storage_mod
+
+    monkeypatch.setattr(storage_mod, "open_storage", lambda: object())
+
+    def boom(*a, **k):
+        raise RuntimeError("storage unavailable")
+
+    monkeypatch.setattr(blob, "build_funded_evolution_frames", boom)
+    out = evo.funded_evolution("blob://processed-v2/platform/ERE", "client_001")
+    assert out.get("periods") == []
