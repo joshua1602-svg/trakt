@@ -8,6 +8,22 @@
  * (funded balance + Σ expected × probability) — never computed in React state.
  */
 
+/**
+ * Non-blocking disclosure of the funded-vs-pipeline date difference — mirrors
+ * `mi_agent_api.pipeline_timing.timing_disclosure`. Pipeline defaults to its
+ * latest weekly extract; when that is later than the selected funded reporting
+ * date we DISCLOSE the gap (info, or a stronger warning above the threshold)
+ * rather than hide/truncate the pipeline.
+ */
+export interface TimingDisclosure {
+  fundedActualsAsOf: string | null;
+  pipelineExtractAsOf: string | null;
+  lagDays: number | null;
+  level: "none" | "info" | "warning";
+  message: string | null;
+  warnThresholdDays: number;
+}
+
 /** One row of the pipeline stage breakdown. */
 export interface PipelineStageBucket {
   stage: string;
@@ -139,6 +155,8 @@ export interface PipelineSnapshot {
   dataQuality: PipelineDiagnostic[];
   fieldCorrelationToFunded: Record<string, FieldCorrelation>;
   forecastReadiness: Record<string, unknown>;
+  /** Funded-vs-pipeline timing disclosure (pipeline shown as of its latest extract). */
+  pipelineTiming?: TimingDisclosure;
 }
 
 /** Forecast readiness summary. */
@@ -190,6 +208,8 @@ export interface ForecastBridge {
   stageBreakdown: PipelineStageBucket[];
   forecastReadiness: ForecastReadiness;
   dataQuality: GroupedDataQuality;
+  /** Funded actuals vs latest-pipeline timing disclosure (both anchors + level). */
+  pipelineTiming?: TimingDisclosure;
 }
 
 /** One early-warning / watchlist item. */
@@ -287,4 +307,6 @@ export interface ForecastSnapshot {
   forecastBreakdowns?: ForecastBreakdowns;
   lineage?: ViewLineage;
   watchlist: WatchlistItem[];
+  /** Funded actuals vs latest-pipeline timing disclosure (both anchors + level). */
+  pipelineTiming?: TimingDisclosure;
 }

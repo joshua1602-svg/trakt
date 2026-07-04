@@ -12,6 +12,7 @@ import type {
   PipelineFunnelEvolution,
   StagePoint,
 } from "@/domain";
+import { TimingDisclosureBanner } from "@/components/TimingDisclosureBanner";
 import { cn, formatGBP } from "@/lib/utils";
 
 type EvoView = "funded" | "pipeline" | "forecast" | "origination";
@@ -468,6 +469,10 @@ export function EvolutionPanel({
           </div>
         ) : null;
       })()}
+
+      {view === "pipeline" && (
+        <TimingDisclosureBanner timing={pipeline?.pipelineTiming} />
+      )}
 
       {view === "pipeline" && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

@@ -1,5 +1,6 @@
 import type { ForecastSnapshot } from "@/domain";
 import { ForecastBridgeCard } from "@/components/ForecastBridgeCard";
+import { TimingDisclosureBanner } from "@/components/TimingDisclosureBanner";
 import { PipelineWatchlist } from "@/components/PipelineWatchlist";
 import { LineagePanel } from "@/components/LineagePanel";
 import { BarList, type BarDatum } from "@/components/pipeline/bits";
@@ -42,6 +43,7 @@ export function ForecastView({
 
   return (
     <div className="space-y-4">
+      <TimingDisclosureBanner timing={forecast?.pipelineTiming} />
       <ForecastBridgeCard bridge={bridge} />
       <LineagePanel lineage={forecast?.lineage} />
       {(byRegion.length > 0 || byLtv.length > 0 || byMonth.length > 0) && (
