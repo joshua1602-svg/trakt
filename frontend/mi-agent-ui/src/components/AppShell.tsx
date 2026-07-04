@@ -113,46 +113,20 @@ export function AppShell() {
           onClearContext={ws.clearContext}
           onClearChat={ws.clearChat}
           onTogglePin={ws.togglePin}
-          // Inline-result drill uses the backend when live; mock keeps the
-          // client-side drill fallback inside the embedded card.
-          onDrill={client.mock ? undefined : ws.drill}
         />
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-          {/* One coherent workspace: a view toggle selects which schema-aligned
-              view is foregrounded (no stacking of all sections at once). */}
-          <div className="flex items-center justify-between gap-3 px-6 pt-5">
-            <div className="flex items-center gap-3">
-              <ViewToggle
-                active={ws.activeView}
-                onChange={ws.setActiveView}
-                disabledViews={ws.disabledViews}
-              />
-              {ws.sourceLenses.length > 1 && (
-                <SourcePortfolioSelector
-                  lenses={ws.sourceLenses}
-                  value={ws.selectedLens}
-                  onChange={ws.setSelectedLens}
-                />
-              )}
-            </div>
-            <span className="text-[11px] text-ink-500">
-              {ws.portfolio.name}
-              {ws.reporting.asOf ? ` · ${ws.reporting.asOf}` : ""}
-            </span>
-          </div>
-          <p className="px-6 pt-1 text-[11px] text-ink-500" data-testid="view-subtitle">
-            {VIEW_SUBTITLES[ws.activeView]}
-          </p>
-
-          {/* Region 3/4 — CORE DASHBOARD: neutral panel, distinct from the faint
-              blue artifact workspace below. Collapsible to focus the chart area. */}
+          {/* Region 3/4 — CORE DASHBOARD: neutral panel, distinct from the grey
+              artifact workspace below. Collapsible to focus the chart area. */}
           <section
             data-testid="core-dashboard"
-            className="mx-6 mt-4 rounded-2xl border border-[var(--surface-dashboard-line)] bg-[var(--surface-dashboard)] shadow-sm"
+            className="mx-6 mt-5 rounded-2xl border border-[var(--surface-dashboard-line)] bg-[var(--surface-dashboard)] shadow-sm"
           >
-            <header className="flex items-center justify-between gap-3 border-b border-[var(--surface-dashboard-line)] px-4 py-2.5">
-              <div className="flex items-center gap-2 text-[12px] font-semibold text-ink-200">
-                <LayoutDashboard size={14} className="text-peri-300" /> Core dashboard
+            <header className="flex items-center justify-between gap-3 border-b border-[var(--surface-dashboard-line)] px-4 py-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-navy-700 text-peri-300">
+                  <LayoutDashboard size={18} />
+                </div>
+                <h2 className="text-base font-semibold text-ink-100">Core Dashboard</h2>
               </div>
               <button
                 type="button"
@@ -165,9 +139,37 @@ export function AppShell() {
                 <ChevronDown size={15} className={dashCollapsed ? "-rotate-90 transition-transform" : "transition-transform"} />
               </button>
             </header>
+            {/* Dashboard navigation: the lens tabs span the full panel width; the
+                portfolio-scope selector sits alongside, visually separated so it
+                reads as a selector rather than another tab. */}
+            {!dashCollapsed && (
+              <div className="flex flex-wrap items-center gap-3 border-b border-[var(--surface-dashboard-line)] px-4 py-3">
+                <ViewToggle
+                  active={ws.activeView}
+                  onChange={ws.setActiveView}
+                  disabledViews={ws.disabledViews}
+                  className="min-w-0 flex-1"
+                />
+                {ws.sourceLenses.length > 1 && (
+                  <>
+                    <div className="h-6 w-px shrink-0 bg-[var(--surface-dashboard-line)]" />
+                    <SourcePortfolioSelector
+                      lenses={ws.sourceLenses}
+                      value={ws.selectedLens}
+                      onChange={ws.setSelectedLens}
+                    />
+                  </>
+                )}
+              </div>
+            )}
+            {!dashCollapsed && (
+              <p className="px-4 pt-3 text-[11px] text-ink-500" data-testid="view-subtitle">
+                {VIEW_SUBTITLES[ws.activeView]}
+              </p>
+            )}
             {dashCollapsed ? (
               <p className="px-4 py-3 text-[11px] text-ink-500">
-                Core dashboard collapsed — expand to show the {ws.activeView} view.
+                Core Dashboard collapsed — expand to show the {ws.activeView} view.
               </p>
             ) : (
               <div className="space-y-4 p-4">

@@ -103,14 +103,11 @@ describe("ChatMessage embedded result", () => {
     expect(screen.queryByText(/CHART →/)).not.toBeInTheDocument();
   });
 
-  it("expands the full chart inline only when explicitly requested", () => {
+  it("never renders the full chart inline — outputs live in the workspace", () => {
     const { container } = render(<ChatMessage message={msg} onTogglePin={vi.fn()} />);
+    // No inline chart, and no 'Show here' affordance that would duplicate it.
     expect(container.querySelector(".recharts-responsive-container")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /Show here/i }));
-    // Now the full chart renders inline with the Chart/Table toggle.
-    expect(container.querySelector(".recharts-responsive-container")).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Chart" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Table" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Show here/i })).toBeNull();
   });
 });
 
@@ -134,17 +131,15 @@ describe("ChatMessage suggestions", () => {
 });
 
 describe("ChatMessage clean default view", () => {
-  it("hides interpretation and technical details until Query logic is expanded", () => {
+  it("shows only the conversational narrative — no query-logic / routing internals", () => {
     render(<ChatMessage message={answeredMessage} />);
     // Narrative is visible.
     expect(screen.getByText(/Average LTV is highest in London/)).toBeInTheDocument();
-    // Interpretation / diagnostics are NOT in the default view.
+    // Technical routing internals are not exposed in the client chat at all —
+    // no Query logic disclosure, interpretation, spec or diagnostics.
+    expect(screen.queryByRole("button", { name: /query logic/i })).toBeNull();
     expect(screen.queryByText(/interpreted as/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/total_funded/)).not.toBeInTheDocument();
     expect(screen.queryByText(/resolved region via NUTS 2024/)).not.toBeInTheDocument();
-    // Expanding the single Query logic panel reveals them.
-    fireEvent.click(screen.getByRole("button", { name: /query logic/i }));
-    expect(screen.getByText(/total_funded/)).toBeInTheDocument();
-    expect(screen.getByText(/resolved region via NUTS 2024/)).toBeInTheDocument();
   });
 });

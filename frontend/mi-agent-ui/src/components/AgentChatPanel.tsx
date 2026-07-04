@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { CornerDownLeft, Eraser, History, Sparkles, X } from "lucide-react";
 import type { AnalysisContext } from "@/lib/analysisContext";
 import { contextSummary } from "@/lib/analysisContext";
-import type { Artifact, ChatMessage as ChatMessageType } from "@/domain";
+import type { ChatMessage as ChatMessageType } from "@/domain";
 import { ChatMessage } from "@/components/ChatMessage";
 import { PromptSuggestions } from "@/components/PromptSuggestions";
 import { cn } from "@/lib/utils";
@@ -18,7 +18,6 @@ export function AgentChatPanel({
   onClearContext,
   onClearChat,
   onTogglePin,
-  onDrill,
 }: {
   messages: ChatMessageType[];
   isWorking: boolean;
@@ -31,7 +30,6 @@ export function AgentChatPanel({
   /** Reset the conversation to the greeting (loaded MI data is untouched). */
   onClearChat?: () => void;
   onTogglePin?: (id: string) => void;
-  onDrill?: (artifact: Artifact, filters: Record<string, unknown>) => void;
 }) {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -56,13 +54,10 @@ export function AgentChatPanel({
       className="flex h-full w-[460px] shrink-0 flex-col border-r border-teal-800/30 bg-gradient-to-b from-teal-950/40 to-navy-950/60"
     >
       <header className="flex items-center gap-2.5 border-b border-teal-800/30 bg-teal-950/30 px-5 py-3.5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-teal-500 to-emerald-600 text-white shadow-sm shadow-teal-900/40">
-          <Sparkles size={16} />
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-teal-500 to-emerald-600 text-white shadow-sm shadow-teal-900/40">
+          <Sparkles size={18} />
         </div>
-        <div>
-          <h1 className="text-sm font-semibold text-teal-50">MI Agent</h1>
-          <p className="text-[11px] text-teal-200/70">Your portfolio analyst</p>
-        </div>
+        <h1 className="text-base font-semibold text-teal-50">MI Agent</h1>
         <span
           className={cn(
             "ml-auto inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-medium",
@@ -96,7 +91,6 @@ export function AgentChatPanel({
             onRetry={onRetry}
             onAsk={onSubmit}
             onTogglePin={onTogglePin}
-            onDrill={onDrill}
           />
         ))}
 
