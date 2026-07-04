@@ -1,42 +1,76 @@
 {
   "$schema": "https://json.schemas.azureedge.net/staticwebapp.config.json",
   "//": "Azure Static Web Apps auth + routing for the MI Agent UI. Requires SWA Standard tier (custom Entra provider + linked backend). Login is Entra ID; only invited users with the 'client' or 'operator' role may reach the app or the API. See docs/auth_setup_runbook.md.",
-
-  "auth": {
-    "identityProviders": {
-      "azureActiveDirectory": {
-        "registration": {
-          "openIdIssuer": "https://login.microsoftonline.com/digifinsolutions.co.uk/v2.0",
-          "clientIdSettingName": "AAD_CLIENT_ID",
-          "clientSecretSettingName": "AAD_CLIENT_SECRET"
-        }
-      }
+  "routes": [
+    {
+      "route": "/.auth/login/aad",
+      "allowedRoles": [
+        "anonymous",
+        "authenticated"
+      ]
+    },
+    {
+      "route": "/.auth/login/github",
+      "statusCode": 404
+    },
+    {
+      "route": "/.auth/logout",
+      "allowedRoles": [
+        "anonymous",
+        "authenticated"
+      ]
+    },
+    {
+      "route": "/login",
+      "redirect": "/.auth/login/aad",
+      "statusCode": 302
+    },
+    {
+      "route": "/logout",
+      "redirect": "/.auth/logout",
+      "statusCode": 302
+    },
+    {
+      "route": "/api/health",
+      "allowedRoles": [
+        "anonymous",
+        "authenticated"
+      ]
+    },
+    {
+      "route": "/api/*",
+      "allowedRoles": [
+        "client",
+        "operator"
+      ]
+    },
+    {
+      "route": "/*",
+      "allowedRoles": [
+        "client",
+        "operator"
+      ]
+    }
+  ],
+  "responseOverrides": {
+    "401": {
+      "redirect": "/.auth/login/aad",
+      "statusCode": 302
+    },
+    "403": {
+      "redirect": "/.auth/login/aad",
+      "statusCode": 302
     }
   },
-
-  "routes": [
-    { "route": "/.auth/login/aad", "allowedRoles": ["anonymous", "authenticated"] },
-    { "route": "/.auth/login/github", "statusCode": 404 },
-    { "route": "/.auth/logout", "allowedRoles": ["anonymous", "authenticated"] },
-    { "route": "/login", "redirect": "/.auth/login/aad", "statusCode": 302 },
-    { "route": "/logout", "redirect": "/.auth/logout", "statusCode": 302 },
-
-    { "route": "/api/health", "allowedRoles": ["anonymous", "authenticated"] },
-    { "route": "/api/*", "allowedRoles": ["client", "operator"] },
-
-    { "route": "/*", "allowedRoles": ["client", "operator"] }
-  ],
-
-  "responseOverrides": {
-    "401": { "redirect": "/.auth/login/aad", "statusCode": 302 },
-    "403": { "redirect": "/.auth/login/aad", "statusCode": 302 }
-  },
-
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/assets/*", "/.auth/*", "/api/*", "/*.{png,jpg,svg,ico,css,js,woff,woff2}"]
+    "exclude": [
+      "/assets/*",
+      "/.auth/*",
+      "/api/*",
+      "/*.{png,jpg,svg,ico,css,js,woff,woff2}"
+    ]
   },
-
   "globalHeaders": {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
