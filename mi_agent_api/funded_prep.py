@@ -241,6 +241,23 @@ def _dedupe_columns(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[Dict[str, Any]
     return pd.DataFrame(new, index=df.index), collapsed
 
 
+def augment_platform_canonical_dimensions(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
+    """Additively derive the MI dimensions the platform assembler does NOT emit —
+    ``borrower_type`` (single vs joint) and ``youngest_borrower_age`` (NNEG) — onto
+    an already-typed platform canonical, WITHOUT the full funded-tape prep (no LTV
+    re-derivation, no dedup, no numeric coercion of existing columns).
+
+    Purely additive and idempotent: each field is added only when its source
+    columns exist and it is not already populated. Used by the MI API's platform
+    canonical path so the MI Agent sees these dimensions without an onboarding
+    re-run — the derivation happens at read time, not at onboarding time."""
+    out = df.copy()
+    derived: List[str] = []
+    _derive_youngest_age(out, derived)   # DOBs → youngest_borrower_age (age_bucket)
+    _derive_borrower_type(out, derived)  # second-applicant presence → single/joint
+    return out, derived
+
+
 def _derive_source_fields(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str], List[Dict[str, Any]], List[Dict[str, Any]]]:
     out = df.copy()
     out, dedup = _dedupe_columns(out)
