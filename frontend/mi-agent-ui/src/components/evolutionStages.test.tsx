@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import type { AgentClient } from "@/api";
 import { EvolutionPanel, STAGE_ORDER, normaliseStage, orderStages, pipelineXValue } from "./EvolutionPanel";
 import { mockFundedEvolution, mockPipelineEvolution, mockForecastEvolution } from "@/data/mockEvolution";
@@ -77,28 +77,62 @@ describe("EvolutionPanel origination conversion footers", () => {
     expect(screen.getAllByText(/Conversion vs KFI/).length).toBeGreaterThan(0);
   });
 
-  it("labels conversion basis explicitly (5-week / since inception, by count / value)", async () => {
+  it("keeps conversion stats collapsed by default and reveals them on expand", async () => {
     render(<EvolutionPanel client={client()} portfolioId="client_001" />);
     await screen.findByText("Funded balance by month");
     fireEvent.click(screen.getByRole("tab", { name: "Origination" }));
-    const footer = await screen.findByTestId("funnel-conversion-APPLICATION");
-    expect(footer.textContent).toMatch(/5-week/);
-    expect(footer.textContent).toMatch(/Since inception/);
-    expect(footer.textContent).toMatch(/by count/);
-    expect(footer.textContent).toMatch(/by value/);
+    const disclosure = await screen.findByTestId("funnel-conversion-APPLICATION");
+    // Collapsed by default: the label shows but the detailed stats do not.
+    expect(disclosure.textContent).toMatch(/Conversion vs KFI/);
+    expect(screen.queryByTestId("funnel-conversion-body-APPLICATION")).toBeNull();
+    // Expanding reveals the existing stats, labelled explicitly.
+    fireEvent.click(within(disclosure).getByRole("button", { name: /Conversion vs KFI/ }));
+    const body = screen.getByTestId("funnel-conversion-body-APPLICATION");
+    expect(body.textContent).toMatch(/5-week/);
+    expect(body.textContent).toMatch(/Since inception/);
+    expect(body.textContent).toMatch(/by count/);
+    expect(body.textContent).toMatch(/by value/);
   });
 
-  it("shows weekly-flow summary + the cumulative-stock toggle (flow semantics)", async () => {
+  it("shows weekly-flow summary, a 'Show stock line' toggle, and no stock-level text row", async () => {
     render(<EvolutionPanel client={client()} portfolioId="client_001" />);
     await screen.findByText("Funded balance by month");
     fireEvent.click(screen.getByRole("tab", { name: "Origination" }));
     const card = await screen.findByTestId("funnel-stage-KFI");
-    // Weekly-flow basis is labelled and the stock level is shown separately.
     expect(card.textContent).toMatch(/weekly flow/i);
     expect(card.textContent).toMatch(/5-wk avg flow/i);
-    expect(screen.getByTestId("funnel-stock-KFI").textContent).toMatch(/stock level/i);
-    // Cumulative-stock overlay is opt-in.
-    expect(screen.getByLabelText("Show cumulative stock line")).toBeInTheDocument();
+    // The explicit "Current stock level:" text row is removed from the card.
+    expect(card.textContent).not.toMatch(/Current stock level/i);
+    expect(screen.queryByTestId("funnel-stock-KFI")).toBeNull();
+    // The stock-line overlay toggle is opt-in and renamed to "Show stock line".
+    expect(screen.getByLabelText("Show stock line")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Show cumulative stock line")).toBeNull();
+  });
+
+  it("enlarges a single chart in a focus modal that closes cleanly", async () => {
+    render(<EvolutionPanel client={client()} portfolioId="client_001" />);
+    await screen.findByText("Funded balance by month");
+    fireEvent.click(screen.getByRole("tab", { name: "Origination" }));
+    await screen.findByTestId("origination-funnel");
+    // No modal until a chart is enlarged.
+    expect(screen.queryByTestId("funnel-focus-modal")).toBeNull();
+    fireEvent.click(screen.getByTestId("funnel-expand-KFI"));
+    const modal = await screen.findByTestId("funnel-focus-modal");
+    expect(modal.textContent).toMatch(/weekly origination flow/i);
+    // Easy to close.
+    fireEvent.click(screen.getByTestId("funnel-focus-close"));
+    expect(screen.queryByTestId("funnel-focus-modal")).toBeNull();
+  });
+
+  it("no longer shows the long explanatory paragraph by default", async () => {
+    render(<EvolutionPanel client={client()} portfolioId="client_001" />);
+    await screen.findByText("Funded balance by month");
+    fireEvent.click(screen.getByRole("tab", { name: "Origination" }));
+    await screen.findByTestId("origination-funnel");
+    expect(screen.queryByText(/the new\s+origination each week/i)).toBeNull();
+    // A short methodology disclosure is available instead (collapsed).
+    expect(screen.getByTestId("origination-methodology-toggle")).toBeInTheDocument();
+    expect(screen.queryByTestId("origination-methodology-body")).toBeNull();
   });
 });
 
