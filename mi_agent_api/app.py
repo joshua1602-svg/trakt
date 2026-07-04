@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI
@@ -445,10 +446,101 @@ def _pipeline_root() -> Optional[str]:
     return _onboarding_output_root()
 
 
+#: A dated published pipeline snapshot under a ``blob://`` root:
+#: ``…/pipeline/{client}/{YYYY-MM-DD}/pipeline_snapshot.csv``. The ``latest/``
+#: pointer folder is excluded because ``latest`` is not a ``YYYY-MM-DD`` date.
+_BLOB_DATED_SNAPSHOT_RE = re.compile(
+    r"/(?P<date>\d{4}-\d{2}-\d{2})/pipeline_snapshot\.csv$")
+
+
+def _blob_dated_snapshots(root: str, storage) -> List[Dict[str, str]]:
+    """List the DATED published pipeline snapshots under a ``blob://`` root, using
+    the storage abstraction (same helper that downloads MI_AGENT_PIPELINE_URI).
+
+    Includes only ``{YYYY-MM-DD}/pipeline_snapshot.csv`` blobs, EXCLUDES the
+    ``latest/`` pointer, and returns ``[{date, uri}]`` sorted chronologically. A
+    non-blob root, or any listing error, yields ``[]`` (the caller then falls back
+    to unchanged filesystem discovery)."""
+    if not str(root).startswith("blob://"):
+        return []
+    try:
+        uris = storage.list(root)
+    except Exception as exc:  # noqa: BLE001 - discovery must never 500
+        logger.warning("blob pipeline listing failed for %s: %s", root, exc)
+        return []
+    dated: List[Dict[str, str]] = []
+    for uri in uris:
+        if "/latest/" in uri:
+            continue  # the latest/ pointer is never a dated historical source
+        m = _BLOB_DATED_SNAPSHOT_RE.search(uri)
+        if m:
+            dated.append({"date": m.group("date"), "uri": uri})
+    dated.sort(key=lambda d: d["date"])
+    return dated
+
+
+#: Local mirror of the blob dated snapshots, keyed by root and content signature
+#: (sorted uri:etag) so we only re-download when a snapshot is added/republished.
+_PIPELINE_MIRROR_CACHE: Dict[str, Any] = {"root": None, "sig": None, "local": None}
+
+
+def _materialise_pipeline_root(root: Optional[str]) -> Optional[str]:
+    """Return a LOCAL discovery root for ``root``.
+
+    Filesystem roots are returned unchanged (fixtures behave exactly as before).
+    A ``blob://`` root is mirrored to a local scratch tree
+    (``{scratch}/pipeline_root/{client}/{date}/pipeline_snapshot.csv``) containing
+    ONLY the dated snapshots (``latest/`` excluded), so every downstream consumer —
+    ``/mi/pipeline/snapshots``, ``/mi/evolution/pipeline`` and the historical model
+    — discovers the SAME set of dated sources through the existing filesystem
+    discovery. etag-cached, so repeated requests do not re-download."""
+    if not root or not str(root).startswith("blob://"):
+        return root
+    try:
+        from pathlib import Path as _Path
+        from apps.blob_trigger_app.storage import open_storage, split_blob_uri
+        storage = open_storage()
+        dated = _blob_dated_snapshots(root, storage)
+        if not dated:
+            return root  # nothing dated to mirror; blob discovery yields []
+        sig = ";".join(f"{d['uri']}:{storage.etag(d['uri']) or ''}" for d in dated)
+        cache = _PIPELINE_MIRROR_CACHE
+        if (cache.get("root") == root and cache.get("sig") == sig
+                and cache.get("local") and _Path(cache["local"]).exists()):
+            return cache["local"]
+        scratch = os.environ.get("MI_AGENT_SCRATCH", "/tmp/trakt/mi_platform")
+        base = _Path(scratch) / "pipeline_root"
+        _container, key = split_blob_uri(root)
+        prefix = key.rstrip("/")
+        for d in dated:
+            # Preserve the {client}/{date}/pipeline_snapshot.csv tail below the root
+            # prefix so folder-date + client inference resolve on the local mirror.
+            _c, ukey = split_blob_uri(d["uri"])
+            rel = ukey[len(prefix):].lstrip("/") if ukey.startswith(prefix) else \
+                f"{d['date']}/pipeline_snapshot.csv"
+            dest = base / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            storage.download_file(d["uri"], dest)
+        cache.update(root=root, sig=sig, local=str(base))
+        return str(base)
+    except Exception as exc:  # noqa: BLE001 - never break discovery on mirror errors
+        logger.warning("pipeline blob mirror failed for %s: %s", root, exc)
+        return root
+
+
+def _pipeline_discovery_root() -> Optional[str]:
+    """The pipeline root to run governed discovery/evolution/history against —
+    filesystem unchanged, ``blob://`` mirrored locally so all consumers share the
+    same dated snapshot set."""
+    return _materialise_pipeline_root(
+        os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root())
+
+
 @app.get("/mi/pipeline/snapshots")
 def pipeline_snapshots(portfolioId: Optional[str] = None) -> Dict[str, Any]:
     """Data-driven discovery of governed pipeline sources and reporting dates."""
-    root = os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root()
+    configured = os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root()
+    root = _materialise_pipeline_root(configured)
     if not root:
         return {"sources": [], "source": "unavailable"}
     client_id = portfolioId.split("/", 1)[0] if portfolioId else None
@@ -457,7 +549,8 @@ def pipeline_snapshots(portfolioId: Optional[str] = None) -> Dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 - discovery must never 500
         logger.warning("pipeline discovery failed: %s", exc)
         return {"sources": [], "source": "error", "error": str(exc)}
-    return {"sources": sources, "source": root}
+    # Report the ORIGINAL configured root (the blob:// URI), not the local mirror.
+    return {"sources": sources, "source": configured}
 
 
 #: etag-cached local copy of the blob pipeline snapshot (avoid re-download when
@@ -523,25 +616,34 @@ def _resolve_pipeline_source(client_id: str, run_id: Optional[str]) -> Optional[
                     "pipeline_source_folder_date": folder_date,
                     "pipeline_extract_date": extract_date,
                     "pipeline_as_of_date": extract_date or folder_date}
-    root = os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root()
+    root = _pipeline_discovery_root()
     if root:
         return pipeline_mod.resolve_pipeline_source(root, client_id, run_id)
     return None
 
 
 def _pipeline_history(client_id: str) -> Optional[Dict[str, Any]]:
-    """The historical completion-rate model from a client's weekly pipeline files
-    (None when only a single explicit source / no discovery root is configured)."""
-    if os.environ.get("MI_AGENT_PIPELINE_SOURCE") or os.environ.get("MI_AGENT_PIPELINE_URI"):
-        return None  # single explicit / blob snapshot → no multi-week history model
-    root = os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root()
+    """The historical completion-rate model from a client's weekly pipeline files.
+
+    Built from the SAME discovered dated sources as ``/mi/pipeline/snapshots`` and
+    ``/mi/evolution/pipeline`` — including a ``blob://`` root's dated snapshots
+    (the ``MI_AGENT_PIPELINE_URI`` latest pointer is only the current snapshot; it
+    does NOT suppress the multi-week history when the root holds several dated
+    snapshots). Returns None for a single explicit local source, no discovery root,
+    or when fewer than two weekly extracts exist (no multi-week history to model)."""
+    if os.environ.get("MI_AGENT_PIPELINE_SOURCE"):
+        return None  # single explicit local source → no multi-week history model
+    root = _pipeline_discovery_root()
     if not root:
         return None
     try:
-        return pipeline_mod.build_pipeline_history(root, client_id)
+        model = pipeline_mod.build_pipeline_history(root, client_id)
     except Exception as exc:  # noqa: BLE001 - history is additive; never 500
         logger.warning("pipeline history build failed for %s: %s", client_id, exc)
         return None
+    if int((model or {}).get("uniqueWeeklyExtractsUsed", 0)) < 2:
+        return None  # a single dated snapshot is not a multi-week history
+    return model
 
 
 @app.get("/mi/pipeline/snapshot")
@@ -683,7 +785,7 @@ def pipeline_evolution(portfolioId: Optional[str] = None, client_id: Optional[st
     """Pipeline time series across governed weekly extracts (amount / cases / by
     stage over time), with per-period reconciliation + lineage."""
     cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
-    root = os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root()
+    root = _pipeline_discovery_root()
     if not root:
         return {"dataset": "pipeline", "portfolioId": cid, "toRunId": trid,
                 "periods": [], "byStage": [], "singlePeriod": True,
@@ -703,7 +805,7 @@ def funnel_evolution(portfolioId: Optional[str] = None, client_id: Optional[str]
     """Weekly origination funnel trends (KFI / Application / Offer / Completion
     value + count, 5-week average, latest week, delta vs prior week). Never 500s."""
     cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
-    root = os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root()
+    root = _pipeline_discovery_root()
     if not root:
         return {"dataset": "pipeline_funnel", "portfolioId": cid, "toRunId": trid,
                 "stages": [], "weeks": [], "series": {}, "summary": {},
@@ -724,7 +826,7 @@ def forecast_evolution(portfolioId: Optional[str] = None, client_id: Optional[st
     """Forecast bridge over time (funded balance + weighted pipeline per run)."""
     cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
     root = _onboarding_output_root()
-    proot = os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root()
+    proot = _pipeline_discovery_root()
     if not root:
         return {"dataset": "forecast", "portfolioId": cid, "toRunId": trid,
                 "periods": [], "singlePeriod": True,
@@ -748,7 +850,7 @@ def forecast_extrapolation(portfolioId: Optional[str] = None, client_id: Optiona
     from . import forecast_extrapolation as fx_mod
     cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
     root = _onboarding_output_root()
-    proot = os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root()
+    proot = _pipeline_discovery_root()
     if not root:
         return {"portfolioId": cid, "toRunId": trid, "currentFundedBalance": 0.0,
                 "completionRunRateForecast": {"available": False,
@@ -804,7 +906,7 @@ def evolution_compare(portfolioId: Optional[str] = None, client_id: Optional[str
     from . import temporal_compare as compare_mod
     cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
     root = _onboarding_output_root()
-    proot = os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root()
+    proot = _pipeline_discovery_root()
     try:
         return compare_mod.run_temporal_compare(
             root, proot or root, cid, trid, dataset=dataset, metric=metric,
@@ -942,7 +1044,7 @@ def query(req: QueryRequest) -> Dict[str, Any]:
         routed = chat_routing_mod.try_route(
             req.question, portfolio_id=portfolio_id, view=view,
             output_root=_onboarding_output_root(),
-            pipeline_root=os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root(),
+            pipeline_root=_pipeline_discovery_root(),
             semantics=load_mi_semantics(semantics_path()),
             history_model=_pipeline_history(cid), as_of=req.asOfDate)
     except Exception as exc:  # noqa: BLE001 - routing must never break the chat
