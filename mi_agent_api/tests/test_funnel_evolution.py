@@ -32,6 +32,33 @@ def test_trend_helper():
     assert evo._trend([1.0]) == "flat"
 
 
+def test_weekly_flow_from_stock_levels():
+    # Stock levels week-on-week -> weekly flow (net change). First week has no
+    # prior extract so its flow is None (never fabricated as the level).
+    assert evo.weekly_flow([100.0, 130.0, 120.0, 160.0]) == [None, 30.0, -10.0, 40.0]
+    assert evo.weekly_flow([]) == []
+    assert evo.weekly_flow([50.0]) == [None]
+    # A missing level (and the week after it) yields None flow, no exception.
+    assert evo.weekly_flow([100.0, None, 140.0]) == [None, None, None]
+
+
+def test_five_week_average_is_flow_not_stock():
+    """Acceptance (Task 4): the 5-week average must be the trailing mean of the
+    WEEKLY FLOW, not the average stock level. A cumulative/stock series of
+    250,255,260,265,280,312.7 (MM) has a large stock average but a small weekly
+    flow — the two must not be conflated."""
+    stock = [250.0, 255.0, 260.0, 265.0, 280.0, 312.7]  # £MM, cumulative-style
+    flow = evo.weekly_flow(stock)                         # [None,5,5,5,15,32.7]
+    # The 5-week trailing average of the WEEKLY FLOW (last 5 non-null flows).
+    flow_avg = evo._trailing_avg([f for f in flow if f is not None], 5)
+    assert flow_avg == round((5 + 5 + 5 + 15 + 32.7) / 5, 2)   # 12.54, NOT ~272
+    # A naive stock average would be ~270 — proving the bug the fix removes.
+    stock_avg = evo._trailing_avg(stock, 5)
+    assert stock_avg > 250 and abs(stock_avg - flow_avg) > 100
+    # Δ vs prior week reconciles with the flow basis: 32.7 − 15 = 17.7.
+    assert round(flow[-1] - flow[-2], 2) == 17.7
+
+
 def test_funnel_evolution_builds_stage_series():
     warnings.simplefilter("ignore")
     out = evo.pipeline_funnel_evolution(_PIPELINE_FIXTURE, "client_001", None)
@@ -50,13 +77,36 @@ def test_funnel_summary_metrics():
     summ = out["summary"]
     for stage in out["stages"]:
         s = summ[stage]
-        assert "latestValue" in s and "latestCount" in s
-        assert "fiveWeekAvgValue" in s and "fiveWeekAvgCount" in s
-        assert "deltaValue" in s and "deltaCount" in s
+        # Weekly-flow basis (the default) and the stock level, clearly separated.
+        assert "latestFlowValue" in s and "latestFlowCount" in s
+        assert "fiveWeekAvgFlowValue" in s and "fiveWeekAvgFlowCount" in s
+        assert "deltaFlowValue" in s and "deltaFlowCount" in s
+        assert "latestStockValue" in s and "latestStockCount" in s
         assert s["trend"] in ("up", "down", "flat")
-    # Completions stage has at least one completed case in the fixture.
-    assert summ["COMPLETED"]["latestCount"] >= 1
+    # Completions stage has at least one completed case in the fixture (stock).
+    assert summ["COMPLETED"]["latestStockCount"] >= 1
     assert summ["KFI"]["label"] == "KFIs"
+    # KFI is the funnel denominator: no conversion; downstream stages carry one.
+    assert summ["KFI"]["conversion"] is None
+    for stage in ("APPLICATION", "OFFER", "COMPLETED"):
+        conv = summ[stage]["conversion"]
+        assert conv is not None
+        for k in ("fiveWeekCount", "fiveWeekValue",
+                  "sinceInceptionCount", "sinceInceptionValue"):
+            assert k in conv
+
+
+def test_funnel_flow_series_reconciles_with_stock():
+    """The flow series is the week-on-week change in the stock series, and the
+    5-week average flow is the trailing mean of that flow (Task 4)."""
+    warnings.simplefilter("ignore")
+    out = evo.pipeline_funnel_evolution(_PIPELINE_FIXTURE, "client_001", None)
+    for stage in out["stages"]:
+        stock = [p["value"] for p in out["series"][stage]]
+        flows = [f["flowValue"] for f in out["flowSeries"][stage]]
+        assert flows == evo.weekly_flow(stock)
+        assert out["summary"][stage]["fiveWeekAvgFlowValue"] == \
+            evo._trailing_avg([f for f in flows if f is not None], 5)
 
 
 def test_funnel_has_source_and_weeks():

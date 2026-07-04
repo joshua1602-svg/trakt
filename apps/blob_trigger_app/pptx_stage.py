@@ -59,6 +59,19 @@ def pptx_mandatory() -> bool:
     return val in ("1", "true", "yes", "on")
 
 
+def pptx_persist_enabled() -> bool:
+    """Whether the generated deck is uploaded to durable storage (so the MI API
+    can serve it). Defaults ON in Azure (a blob connection is configured) and OFF
+    in local dev / tests where the scratch deck is enough. Force with
+    ``TRAKT_INVESTOR_PPTX_PERSIST=true|false``."""
+    override = os.environ.get("TRAKT_INVESTOR_PPTX_PERSIST")
+    if override is not None:
+        return override.strip().lower() in ("1", "true", "yes", "on")
+    # Auto: only when durable Azure blob storage is configured.
+    return bool(os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
+                or os.environ.get("TRAKT_BLOB_CONNECTION"))
+
+
 # --------------------------------------------------------------------------- #
 # Internals.
 # --------------------------------------------------------------------------- #
@@ -127,6 +140,66 @@ def _update_manifest(run_dir: Path, artifact: Dict[str, Any]) -> None:
                        manifest_path, exc)
 
 
+def _period_key(period: str) -> Optional[str]:
+    """Normalise an as-of/reporting value to a ``YYYY-MM`` period key for the
+    durable dated deck path, or None when no month can be parsed."""
+    import re
+    m = re.search(r"(\d{4})[-_/]?(\d{2})", str(period or ""))
+    return f"{m.group(1)}-{m.group(2)}" if m else None
+
+
+def persist_investor_deck(
+    deck_path: str | Path,
+    *,
+    client_id: str,
+    period: str = "",
+    log: Optional[logging.Logger] = None,
+) -> Optional[Dict[str, Any]]:
+    """Upload a generated deck to durable storage so the MI API can serve it.
+
+    Writes the client's ``latest`` deck (stable pointer, overwritten each run)
+    and, when a reporting month can be parsed, a dated period copy for history.
+    Fully guarded: returns ``None`` (never raises) when persistence is disabled
+    or any storage op fails — the scratch deck and the run are unaffected.
+    """
+    log = log or logger
+    if not pptx_persist_enabled():
+        return None
+    deck_path = Path(deck_path)
+    if not deck_path.exists():
+        return None
+    try:
+        from .storage import open_storage
+        from .layout import Layout
+        storage = open_storage()
+        layout = Layout.from_env()
+        client = client_id or "Client"
+        latest_uri = layout.deck_latest_uri(client)
+        storage.upload_file(deck_path, latest_uri)
+        published: Dict[str, Any] = {"latest_uri": latest_uri}
+        pointer = {
+            "deck_name": Layout.DECK_NAME,
+            "blob_name": latest_uri,
+            "client_id": client,
+            "reporting_period": period or None,
+            "generated_at": _now_iso(),
+        }
+        period_key = _period_key(period)
+        if period_key:
+            period_uri = layout.deck_period_uri(client, period_key)
+            storage.upload_file(deck_path, period_uri)
+            published["period_uri"] = period_uri
+            published["period"] = period_key
+            pointer["period_blob_name"] = period_uri
+        storage.write_text(layout.deck_latest_pointer_uri(client),
+                           json.dumps(pointer, indent=2))
+        log.info("Investor PPTX published to durable storage: %s", latest_uri)
+        return published
+    except Exception as exc:  # noqa: BLE001 — publish is best-effort, never fatal
+        log.warning("Investor PPTX durable publish failed: %s", exc)
+        return None
+
+
 # --------------------------------------------------------------------------- #
 # Public stage entry point.
 # --------------------------------------------------------------------------- #
@@ -179,6 +252,12 @@ def generate_investor_pptx(
             "generator": GENERATOR_NAME,
             "deck_config": _rel_config(deck_config),
         }
+        # Durable publish (guarded): upload the deck so the MI API can serve it.
+        # A publish failure never fails the run — it is recorded on the artifact.
+        published = persist_investor_deck(
+            output, client_id=client_name, period=as_of_date, log=log)
+        if published:
+            artifact["published"] = published
         _update_manifest(run_dir, artifact)
         log.info("Investor PPTX successfully generated:\n%s", output)
         return artifact

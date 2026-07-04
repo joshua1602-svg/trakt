@@ -268,22 +268,32 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
                              answer=f"No weekly {funnel_stage.title()} extracts are available yet.",
                              spec=spec_dict, artifacts=[], route="evolution_funnel",
                              warnings=["insufficient-data: no weekly pipeline extracts."])
-        rows = [{"week": p.get("week"), "value": p.get("value"), "count": p.get("count")} for p in pts]
+        flow_pts = funnel.get("flowSeries", {}).get(funnel_stage, [])
+        # Weekly-flow rows (bars); fall back to the stock level only when no flow
+        # series is present. Each row carries the stock level too (cumulative line).
+        rows = [{"week": p.get("week"),
+                 "value": p.get("flowValue"),
+                 "count": p.get("flowCount"),
+                 "stock": s.get("value")}
+                for p, s in zip(flow_pts, pts)] or \
+            [{"week": p.get("week"), "value": p.get("value"), "count": p.get("count")} for p in pts]
         chart = _chart_artifact(
-            f"{summ.get('label', funnel_stage.title())} value by week", chart_type="line",
+            f"{summ.get('label', funnel_stage.title())} weekly flow", chart_type="line",
             x_key="week", rows=rows,
-            series=[{"key": "value", "label": "Weekly value", "color": _PALETTE[0]}],
+            series=[{"key": "value", "label": "Weekly flow (£)", "color": _PALETTE[0]}],
             value_format="gbp", spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of)
         table = _table_artifact(
-            f"{summ.get('label', funnel_stage.title())} weekly trend", columns=[
+            f"{summ.get('label', funnel_stage.title())} weekly flow trend", columns=[
                 {"key": "week", "label": "Week", "align": "left", "format": "date"},
-                {"key": "value", "label": "Value", "align": "right", "format": "gbp"},
-                {"key": "count", "label": "Count", "align": "right", "format": "number"},
+                {"key": "value", "label": "Weekly flow (£)", "align": "right", "format": "gbp"},
+                {"key": "count", "label": "Weekly flow (count)", "align": "right", "format": "number"},
+                {"key": "stock", "label": "Stock level (£)", "align": "right", "format": "gbp"},
             ], rows=rows, spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of)
-        answer = (f"Latest week {summ.get('label', funnel_stage.title())}: "
-                  f"{_gbp(summ.get('latestValue'))} across {summ.get('latestCount', 0)} case(s); "
-                  f"5-week average {_gbp(summ.get('fiveWeekAvgValue'))} "
-                  f"({summ.get('trend', 'flat')} vs prior week).")
+        answer = (f"Latest week {summ.get('label', funnel_stage.title())} weekly flow: "
+                  f"{_gbp(summ.get('latestFlowValue'))}; "
+                  f"5-week average weekly flow {_gbp(summ.get('fiveWeekAvgFlowValue'))} "
+                  f"({summ.get('trend', 'flat')} vs prior week). Current stock level "
+                  f"{_gbp(summ.get('latestStockValue'))}.")
         notes = [{"field": "weekly_extracts",
                   "note": f"{funnel.get('uniqueWeeklyExtractsUsed') or len(rows)} governed weekly extract(s)."}]
         return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,

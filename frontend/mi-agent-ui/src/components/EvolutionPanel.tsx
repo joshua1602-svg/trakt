@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip,
-  XAxis, YAxis, Legend,
+  Bar, CartesianGrid, ComposedChart, Line, LineChart, ReferenceLine,
+  ResponsiveContainer, Tooltip, XAxis, YAxis, Legend,
 } from "recharts";
 import { Activity, ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import type { AgentClient } from "@/api";
@@ -10,12 +10,17 @@ import type {
   PipelineEvolution,
   ForecastEvolution,
   PipelineFunnelEvolution,
+  FunnelConversion,
+  FunnelFlowPoint,
+  FunnelPoint,
+  CohortAnalysis,
   StagePoint,
 } from "@/domain";
 import { TimingDisclosureBanner } from "@/components/TimingDisclosureBanner";
+import { StatTile } from "@/components/pipeline/bits";
 import { cn, formatGBP } from "@/lib/utils";
 
-type EvoView = "funded" | "pipeline" | "forecast" | "origination";
+type EvoView = "funded" | "pipeline" | "forecast" | "origination" | "cohorts";
 
 const PALETTE = ["#7c9cf0", "#5ec6b8", "#e0a458", "#c98bdb", "#6fcf97", "#eb6f6f"];
 
@@ -54,12 +59,13 @@ const EVO_SUBTITLES: Record<EvoView, string> = {
   // D: distinct from the main Forecast tab (which is the forward projection from
   // the latest run). This is the HISTORY of the forecast across reporting runs.
   forecast: "Forecast Evolution — historical movement in forecast metrics across reporting runs (how the forecast changed over time, and actual funded vs the prior run's forecast). For the forward projection from the latest run, use the main Forecast tab.",
+  cohorts: "Cohorts — funded book by origination vintage (static pool): balance, loan count, book share and balance-weighted LTV / rate / months-on-book per origination year, as of the selected reporting date.",
 };
 
 // Sub-tab button labels (the "forecast" view reads as "Forecast Evolution").
 const EVO_TAB_LABEL: Record<EvoView, string> = {
   funded: "Funded", pipeline: "Pipeline", origination: "Origination",
-  forecast: "Forecast Evolution",
+  forecast: "Forecast Evolution", cohorts: "Cohorts",
 };
 
 /** Data-quality annotation for a weekly pipeline series (A2): flags a sharp
@@ -206,111 +212,242 @@ function trendIcon(trend: "up" | "down" | "flat") {
   return <Minus size={13} className="text-ink-500" />;
 }
 
-/** Conversion of a stage relative to KFI (count + value), divide-by-zero safe. */
-export function stageConversion(
-  stage: PipelineFunnelEvolution["summary"][string] | undefined,
-  kfi: PipelineFunnelEvolution["summary"][string] | undefined,
-): { countPct: number | null; valuePct: number | null; numerCount: number; denomCount: number } | null {
-  if (!stage || !kfi) return null;
-  const denomCount = kfi.latestCount ?? 0;
-  const numerCount = stage.latestCount ?? 0;
-  const countPct = denomCount > 0 ? (numerCount / denomCount) * 100 : null;
-  const denomVal = kfi.latestValue ?? 0;
-  const valuePct = denomVal > 0 && stage.latestValue != null
-    ? (stage.latestValue / denomVal) * 100 : null;
-  return { countPct, valuePct, numerCount, denomCount };
+function pct1(v: number | null | undefined): string {
+  return v == null ? "n/a" : `${v.toFixed(1)}%`;
 }
 
-/** One origination-funnel stage: weekly value chart + 5-week avg line + summary. */
+/** One origination-funnel stage: weekly-FLOW bars (default) with an optional
+ * cumulative stock line, a 5-week trailing average of the WEEKLY FLOW, the Δ vs
+ * prior week (flow − prior flow), and conversion vs KFI on two explicit bases. */
 function FunnelStageCard({
-  stage, label, points, summary, conversion,
+  stage, label, points, flowPoints, summary, conversion, showCumulative,
 }: {
   stage: string;
   label: string;
-  points: { week: string | null; value: number | null; count: number }[];
+  points: FunnelPoint[];
+  flowPoints: FunnelFlowPoint[];
   summary: PipelineFunnelEvolution["summary"][string] | undefined;
-  conversion?: ReturnType<typeof stageConversion>;
+  conversion: FunnelConversion | null;
+  showCumulative: boolean;
 }) {
-  const data = points.map((p) => ({ week: p.week ?? "", value: p.value, count: p.count }));
-  const avg = summary?.fiveWeekAvgValue ?? null;
+  // Join the weekly-flow bars with the cumulative stock level per week.
+  const data = flowPoints.map((f, i) => ({
+    week: f.week ?? "",
+    flow: f.flowValue,
+    stock: points[i]?.value ?? null,
+  }));
+  const avgFlow = summary?.fiveWeekAvgFlowValue ?? null;
+  const hasFlow = data.some((d) => d.flow != null);
   return (
     <div className="rounded-xl border border-[var(--color-line)] bg-navy-900/40 p-4"
       data-testid={`funnel-stage-${stage}`}>
       <div className="mb-1 flex items-center justify-between">
-        <div className="text-[12px] font-semibold text-ink-200">{label}</div>
+        <div className="text-[12px] font-semibold text-ink-200">
+          {label} <span className="font-normal text-ink-500">· weekly flow</span>
+        </div>
         <div className="flex items-center gap-1 text-[11px] text-ink-400">
           {summary && trendIcon(summary.trend)}
           <span>{summary?.weeksObserved ?? 0} wks</span>
         </div>
       </div>
-      {data.length === 0 ? (
-        <p className="py-8 text-center text-[12px] text-ink-500">No weekly extracts available.</p>
+      {!hasFlow ? (
+        <p className="py-8 text-center text-[12px] text-ink-500">
+          Need ≥2 weekly extracts to show weekly flow.
+        </p>
       ) : (
-        <div style={{ width: "100%", height: 150 }}>
+        <div style={{ width: "100%", height: 160 }}>
           <ResponsiveContainer>
-            <LineChart data={data} margin={{ top: 6, right: 12, bottom: 4, left: 4 }}>
+            <ComposedChart data={data} margin={{ top: 6, right: 12, bottom: 4, left: 4 }}>
               <CartesianGrid stroke="#23304d" strokeDasharray="3 3" />
               <XAxis dataKey="week" tick={{ fill: "#8a97ad", fontSize: 10 }} />
-              <YAxis tickFormatter={gbpCompact} tick={{ fill: "#8a97ad", fontSize: 10 }} width={56} />
-              <Tooltip
-                formatter={(v: number) => gbpCompact(Number(v))}
-                contentStyle={{ background: "#0f1626", border: "1px solid #23304d", fontSize: 12 }} />
-              {avg != null && (
-                <ReferenceLine y={avg} stroke="#e0a458" strokeDasharray="4 3"
-                  label={{ value: "5-wk avg", fill: "#e0a458", fontSize: 9, position: "insideTopRight" }} />
+              <YAxis yAxisId="flow" tickFormatter={gbpCompact}
+                tick={{ fill: "#8a97ad", fontSize: 10 }} width={56} />
+              {showCumulative && (
+                <YAxis yAxisId="stock" orientation="right" tickFormatter={gbpCompact}
+                  tick={{ fill: "#6f7b91", fontSize: 10 }} width={56} />
               )}
-              <Line type="monotone" dataKey="value" name="Weekly value"
-                stroke="#7c9cf0" strokeWidth={2} dot={false} />
-            </LineChart>
+              <Tooltip
+                formatter={(v: number, name: string) => [gbpCompact(Number(v)), name]}
+                contentStyle={{ background: "#0f1626", border: "1px solid #23304d", fontSize: 12 }} />
+              {avgFlow != null && (
+                <ReferenceLine yAxisId="flow" y={avgFlow} stroke="#e0a458" strokeDasharray="4 3"
+                  label={{ value: "5-wk avg flow", fill: "#e0a458", fontSize: 9, position: "insideTopRight" }} />
+              )}
+              <Bar yAxisId="flow" dataKey="flow" name="Weekly flow (£)"
+                fill="#7c9cf0" radius={[2, 2, 0, 0]} />
+              {showCumulative && (
+                <Line yAxisId="stock" type="monotone" dataKey="stock" name="Cumulative stock (£)"
+                  stroke="#5ec6b8" strokeWidth={2} dot={false} />
+              )}
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
       )}
       {summary && (
         <div className="mt-2 grid grid-cols-3 gap-2 text-[10px]">
           <div>
-            <div className="text-ink-500">Latest week</div>
+            <div className="text-ink-500">Latest weekly flow</div>
             <div className="text-ink-200">
-              {summary.latestValue != null ? gbpCompact(summary.latestValue) : "—"}
-              <span className="text-ink-500"> · {summary.latestCount} cases</span>
-            </div>
-          </div>
-          <div>
-            <div className="text-ink-500">5-week avg</div>
-            <div className="text-ink-200">
-              {summary.fiveWeekAvgValue != null ? gbpCompact(summary.fiveWeekAvgValue) : "—"}
+              {summary.latestFlowValue != null ? gbpCompact(summary.latestFlowValue) : "—"}
               <span className="text-ink-500">
-                {" "}· {summary.fiveWeekAvgCount != null ? Math.round(summary.fiveWeekAvgCount) : "—"}
+                {" "}· {summary.latestFlowCount != null
+                  ? `${summary.latestFlowCount >= 0 ? "+" : ""}${summary.latestFlowCount}`
+                  : "—"} cases
               </span>
             </div>
           </div>
           <div>
-            <div className="text-ink-500">Δ vs prior wk</div>
+            <div className="text-ink-500" title="Trailing mean of the last 5 weeks of weekly flow">
+              5-wk avg flow
+            </div>
             <div className="text-ink-200">
-              {summary.deltaValue != null ? gbpCompact(summary.deltaValue) : "—"}
+              {summary.fiveWeekAvgFlowValue != null ? gbpCompact(summary.fiveWeekAvgFlowValue) : "—"}
               <span className="text-ink-500">
-                {" "}· {summary.deltaCount != null
-                  ? `${summary.deltaCount >= 0 ? "+" : ""}${summary.deltaCount}`
+                {" "}· {summary.fiveWeekAvgFlowCount != null ? Math.round(summary.fiveWeekAvgFlowCount) : "—"}
+              </span>
+            </div>
+          </div>
+          <div>
+            <div className="text-ink-500" title="Latest weekly flow minus prior weekly flow">
+              Δ vs prior wk
+            </div>
+            <div className="text-ink-200">
+              {summary.deltaFlowValue != null ? gbpCompact(summary.deltaFlowValue) : "—"}
+              <span className="text-ink-500">
+                {" "}· {summary.deltaFlowCount != null
+                  ? `${summary.deltaFlowCount >= 0 ? "+" : ""}${summary.deltaFlowCount}`
                   : "—"}
               </span>
             </div>
           </div>
         </div>
       )}
-      {conversion && (
-        <div className="mt-2 rounded-md border border-[var(--color-line-soft)] bg-navy-900/50 px-2 py-1 text-[10px]"
-          data-testid={`funnel-conversion-${stage}`}
-          title={`Conversion vs KFI (latest week): ${conversion.numerCount} ${label} / `
-            + `${conversion.denomCount} KFI`}>
-          <span className="text-ink-500">Conversion vs KFI: </span>
-          <span className="font-semibold text-mint-300">
-            {conversion.countPct != null ? `${conversion.countPct.toFixed(1)}%` : "n/a"}
-          </span>
-          <span className="text-ink-500"> by count</span>
-          {conversion.valuePct != null && (
-            <span className="text-ink-500"> · {conversion.valuePct.toFixed(1)}% by value</span>
-          )}
+      {summary && (
+        <div className="mt-1 text-[10px] text-ink-500" data-testid={`funnel-stock-${stage}`}>
+          Current stock level: {summary.latestStockValue != null ? gbpCompact(summary.latestStockValue) : "—"}
+          {" "}· {summary.latestStockCount} cases
         </div>
       )}
+      {conversion && (
+        <div className="mt-2 rounded-md border border-[var(--color-line-soft)] bg-navy-900/50 px-2 py-1.5 text-[10px]"
+          data-testid={`funnel-conversion-${stage}`}>
+          <div className="mb-1 font-medium uppercase tracking-wide text-ink-500">
+            Conversion vs KFI
+          </div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+            <div>
+              <span className="text-ink-500">5-week</span>{" "}
+              <span className="font-semibold text-mint-300">{pct1(conversion.fiveWeekCount)}</span>
+              <span className="text-ink-500"> by count</span>
+            </div>
+            <div>
+              <span className="font-semibold text-mint-300">{pct1(conversion.fiveWeekValue)}</span>
+              <span className="text-ink-500"> by value</span>
+            </div>
+            <div>
+              <span className="text-ink-500">Since inception</span>{" "}
+              <span className="font-semibold text-peri-200">{pct1(conversion.sinceInceptionCount)}</span>
+              <span className="text-ink-500"> by count</span>
+            </div>
+            <div>
+              <span className="font-semibold text-peri-200">{pct1(conversion.sinceInceptionValue)}</span>
+              <span className="text-ink-500"> by value</span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function pctFmt(v: number | null | undefined): string {
+  return v == null ? "—" : `${(v * 100).toFixed(1)}%`;
+}
+function mobFmt(v: number | null | undefined): string {
+  return v == null ? "—" : `${Math.round(v)} mo`;
+}
+
+/** Funded origination-vintage (static-pool) cohorts. Surfaces ONLY the computed
+ * aggregates the backend returns — balance / count / share and balance-weighted
+ * LTV / rate / months-on-book by origination year — with an honest empty state
+ * when no vintage is available (never fabricated curves). */
+function CohortView({ cohorts }: { cohorts: CohortAnalysis | null }) {
+  if (cohorts && !cohorts.available) {
+    return (
+      <div className="rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-[11px] text-amber-300/90"
+        data-testid="cohorts-unavailable">
+        No computed cohort data for this run{cohorts.reason ? ` — ${cohorts.reason}` : ""}.
+        Cohort analysis needs an origination date / vintage on the funded tape.
+      </div>
+    );
+  }
+  const rows = cohorts?.cohorts ?? [];
+  const metrics = new Set(cohorts?.metricsAvailable ?? []);
+  const chartData = rows.map((r) => ({ vintage: r.vintage, balance: r.balance ?? 0 }));
+  return (
+    <div className="space-y-3" data-testid="cohorts-view">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile label="Vintages" value={String(rows.length)} />
+        <StatTile label="Total loans" value={(cohorts?.totalLoanCount ?? 0).toLocaleString("en-GB")} />
+        {cohorts?.totalBalance != null && (
+          <StatTile label="Total balance" value={gbpCompact(cohorts.totalBalance)} />
+        )}
+        {cohorts?.reportingDate && (
+          <StatTile label="As of" value={cohorts.reportingDate} />
+        )}
+      </div>
+
+      {metrics.has("balance") && chartData.length > 0 && (
+        <div className="rounded-xl border border-[var(--color-line)] bg-navy-900/40 p-4">
+          <div className="mb-2 text-[12px] font-semibold text-ink-200">Funded balance by origination vintage</div>
+          <div style={{ width: "100%", height: 200 }}>
+            <ResponsiveContainer>
+              <ComposedChart data={chartData} margin={{ top: 6, right: 12, bottom: 4, left: 4 }}>
+                <CartesianGrid stroke="#23304d" strokeDasharray="3 3" />
+                <XAxis dataKey="vintage" tick={{ fill: "#8a97ad", fontSize: 11 }} />
+                <YAxis tickFormatter={gbpCompact} tick={{ fill: "#8a97ad", fontSize: 11 }} width={64} />
+                <Tooltip formatter={(v: number) => gbpCompact(Number(v))}
+                  contentStyle={{ background: "#0f1626", border: "1px solid #23304d", fontSize: 12 }} />
+                <Bar dataKey="balance" name="Balance" fill="#7c9cf0" radius={[2, 2, 0, 0]} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      <div className="overflow-x-auto rounded-xl border border-[var(--color-line)] bg-navy-900/40">
+        <table className="w-full text-[11px]" data-testid="cohorts-table">
+          <thead>
+            <tr className="border-b border-[var(--color-line)] text-ink-400">
+              <th className="px-3 py-2 text-left font-medium">Vintage</th>
+              <th className="px-3 py-2 text-right font-medium">Loans</th>
+              {metrics.has("balance") && <th className="px-3 py-2 text-right font-medium">Balance</th>}
+              {metrics.has("balance") && <th className="px-3 py-2 text-right font-medium">Book share</th>}
+              {metrics.has("waLtv") && <th className="px-3 py-2 text-right font-medium">WA LTV</th>}
+              {metrics.has("waRate") && <th className="px-3 py-2 text-right font-medium">WA rate</th>}
+              {metrics.has("waMonthsOnBook") && <th className="px-3 py-2 text-right font-medium">WA MOB</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.vintage} className="border-b border-[var(--color-line-soft)] last:border-0">
+                <td className="px-3 py-1.5 text-left font-medium text-ink-100">{r.vintage}</td>
+                <td className="px-3 py-1.5 text-right text-ink-200">{r.loanCount.toLocaleString("en-GB")}</td>
+                {metrics.has("balance") && <td className="px-3 py-1.5 text-right text-ink-200">{r.balance != null ? gbpCompact(r.balance) : "—"}</td>}
+                {metrics.has("balance") && <td className="px-3 py-1.5 text-right text-ink-400">{r.sharePct != null ? `${r.sharePct.toFixed(1)}%` : "—"}</td>}
+                {metrics.has("waLtv") && <td className="px-3 py-1.5 text-right text-ink-200">{pctFmt(r.waLtv)}</td>}
+                {metrics.has("waRate") && <td className="px-3 py-1.5 text-right text-ink-200">{pctFmt(r.waRate)}</td>}
+                {metrics.has("waMonthsOnBook") && <td className="px-3 py-1.5 text-right text-ink-200">{mobFmt(r.waMonthsOnBook)}</td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-[10px] text-ink-500">
+        Source: governed funded central lender tape (origination vintage). Point-in-time vintage
+        aggregates only — redemption / completion / performance curves are not computed in the MI
+        path and are not shown.
+      </p>
     </div>
   );
 }
@@ -331,9 +468,12 @@ export function EvolutionPanel({
   const [pipeline, setPipeline] = useState<PipelineEvolution | null>(null);
   const [forecast, setForecast] = useState<ForecastEvolution | null>(null);
   const [funnel, setFunnel] = useState<PipelineFunnelEvolution | null>(null);
+  const [cohorts, setCohorts] = useState<CohortAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [stageMode, setStageMode] = useState<StageViewMode>("amount");
   const [includeKfi, setIncludeKfi] = useState(true);
+  // Origination funnel: overlay the cumulative stock line on the weekly-flow bars.
+  const [showCumulative, setShowCumulative] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -343,6 +483,7 @@ export function EvolutionPanel({
         if (view === "funded") setFunded(await client.getFundedEvolution(portfolioId));
         else if (view === "pipeline") setPipeline(await client.getPipelineEvolution(portfolioId));
         else if (view === "origination") setFunnel(await client.getFunnelEvolution(portfolioId));
+        else if (view === "cohorts") setCohorts(await client.getCohorts(portfolioId));
         else setForecast(await client.getForecastEvolution(portfolioId));
       } catch {
         /* keep prior state; charts show empty */
@@ -414,13 +555,15 @@ export function EvolutionPanel({
           <Activity size={16} className="text-peri-300" /> Evolution
         </div>
         <div role="tablist" aria-label="Evolution series"
-          className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] bg-navy-900/60 p-1">
-          {(["funded", "pipeline", "origination", "forecast"] as EvoView[]).map((v) => (
+          className="inline-flex items-center gap-1 rounded-lg border border-navy-600 bg-navy-950/80 p-1 ring-1 ring-inset ring-white/5">
+          {(["funded", "pipeline", "origination", "cohorts", "forecast"] as EvoView[]).map((v) => (
             <button key={v} type="button" role="tab" aria-selected={view === v}
               onClick={() => setView(v)}
               className={cn(
-                "rounded-md px-3 py-1 text-[12px] font-medium transition-colors",
-                view === v ? "bg-navy-700/80 text-ink-100" : "text-ink-400 hover:text-ink-200",
+                "rounded-md px-3 py-1 text-[12px] font-medium transition-all",
+                view === v
+                  ? "bg-peri-400/20 text-ink-100 ring-1 ring-inset ring-peri-400/50"
+                  : "cursor-pointer bg-navy-800/70 text-ink-300 ring-1 ring-inset ring-white/5 hover:bg-navy-700 hover:text-ink-100",
               )}>
               {EVO_TAB_LABEL[v]}
             </button>
@@ -533,30 +676,45 @@ export function EvolutionPanel({
 
       {view === "origination" && (
         <div className="space-y-3" data-testid="origination-funnel">
-          <p className="text-[11px] text-ink-400">
-            Weekly origination funnel — KFI → Application → Offer → Completion value and
-            count per governed weekly extract, with a 5-week trailing average and the
-            week-on-week movement.
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <p className="max-w-2xl text-[11px] text-ink-400">
+              Weekly origination funnel — KFI → Application → Offer → Completion.{" "}
+              <span className="text-ink-300">Bars show weekly flow</span> (the new
+              origination each week, i.e. the week-on-week change in the stage level);
+              the 5-week average and Δ-vs-prior-week are both on this weekly-flow basis.
+              Toggle the cumulative line to overlay the stock level.
+            </p>
+            <label className="flex shrink-0 items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-navy-900/60 px-2 py-1 text-[10px] text-ink-300">
+              <input type="checkbox" checked={showCumulative}
+                onChange={(e) => setShowCumulative(e.target.checked)}
+                aria-label="Show cumulative stock line" />
+              Show cumulative stock line
+            </label>
+          </div>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {orderStages(funnel?.stages ?? []).map((stage) => (
               <FunnelStageCard key={stage} stage={stage}
                 label={funnel?.stageLabels?.[stage] ?? stage}
                 points={funnel?.series?.[stage] ?? []}
+                flowPoints={funnel?.flowSeries?.[stage] ?? []}
                 summary={funnel?.summary?.[stage]}
-                conversion={normaliseStage(stage) === "KFI"
-                  ? null
-                  : stageConversion(funnel?.summary?.[stage], funnel?.summary?.["KFI"])} />
+                conversion={funnel?.summary?.[stage]?.conversion ?? null}
+                showCumulative={showCumulative} />
             ))}
           </div>
           {funnel?.sourceFiles?.length ? (
             <p className="text-[10px] text-ink-500">
               Source: {funnel.uniqueWeeklyExtractsUsed ?? funnel.sourceFiles.length} governed
-              weekly extract(s). 5-week average = trailing mean of up to the last 5 weeks.
+              weekly extract(s). Weekly flow = week-on-week change in the stage level; 5-week
+              average = trailing mean of the last 5 weeks of weekly flow (not the average stock
+              level). Conversion vs KFI is shown on a 5-week trailing and a since-inception basis,
+              by count and by value.
             </p>
           ) : null}
         </div>
       )}
+
+      {view === "cohorts" && <CohortView cohorts={cohorts} />}
 
       {view === "forecast" && (
         <div className="space-y-3" data-testid="forecast-evolution">

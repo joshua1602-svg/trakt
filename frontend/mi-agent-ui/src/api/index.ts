@@ -1,13 +1,13 @@
-import type { AgentClient } from "./AgentClient";
 import { MockAgentClient } from "./MockAgentClient";
 import { HttpAgentClient } from "./HttpAgentClient";
-import { withCache } from "./CachingAgentClient";
+import { withCache, type CachingAgentClient } from "./CachingAgentClient";
 
 export type { AgentClient } from "./AgentClient";
 export { AgentError } from "./AgentClient";
 export { MockAgentClient } from "./MockAgentClient";
 export { HttpAgentClient } from "./HttpAgentClient";
-export { withCache, buildCacheKey } from "./CachingAgentClient";
+export { withCache, buildCacheKey, RESOURCE_STALE_MS } from "./CachingAgentClient";
+export type { CachingAgentClient } from "./CachingAgentClient";
 
 /**
  * Resolve the active agent client from build-time config:
@@ -18,7 +18,7 @@ export { withCache, buildCacheKey } from "./CachingAgentClient";
  * Default behaviour: use the HTTP client when a URL is configured, otherwise
  * fall back to the mock so the app always builds/runs without a backend.
  */
-export function createAgentClient(): AgentClient {
+export function createAgentClient(): CachingAgentClient {
   const url = import.meta.env.VITE_AGENT_API_URL as string | undefined;
   const mode = import.meta.env.VITE_AGENT_MODE as string | undefined;
 

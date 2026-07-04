@@ -308,19 +308,72 @@ def _trend(values: List[Optional[float]]) -> str:
     return "up" if delta > 0 else ("down" if delta < 0 else "flat")
 
 
+def weekly_flow(levels: List[Optional[float]]) -> List[Optional[float]]:
+    """Convert a per-week STOCK level series into a per-week FLOW series.
+
+    ``flow[t] = level[t] − level[t-1]`` — the new origination that arrived in
+    week ``t`` (net of cases that left the stage). The first week has no prior
+    extract, so its flow is ``None`` (never fabricated as the level itself). A
+    week whose level is missing, or that follows a missing level, is ``None``.
+    This is the semantic the origination funnel charts on by default; the raw
+    stock level is retained separately for the optional cumulative line.
+    """
+    out: List[Optional[float]] = []
+    for i, v in enumerate(levels):
+        prev = levels[i - 1] if i > 0 else None
+        if i == 0 or v is None or prev is None:
+            out.append(None)
+        else:
+            out.append(round(float(v) - float(prev), 2))
+    return out
+
+
+def _sum_window(values: List[Optional[float]], window: Optional[int] = None) -> float:
+    """Sum the non-null tail of ``values`` (all of it when ``window`` is None)."""
+    vals = [float(v) for v in values if v is not None]
+    if window is not None:
+        vals = vals[-window:]
+    return float(sum(vals))
+
+
+def _conversion_pct(numerator: float, denominator: float) -> Optional[float]:
+    """Conversion share (%) of a stage relative to KFI, divide-by-zero safe."""
+    if not denominator:
+        return None
+    return round(numerator / denominator * 100.0, 2)
+
+
 def pipeline_funnel_evolution(pipeline_root: str | os.PathLike, client_id: str,
                               to_run_id: Optional[str] = None) -> Dict[str, Any]:
-    """Weekly origination funnel: KFI / Application / Offer / Completion value AND
-    count per governed weekly extract, with a 5-week trailing average, latest
-    week value/count and the delta vs the prior week. Reuses the governed weekly
-    pipeline extracts (same source as ``pipeline_evolution``)."""
+    """Weekly origination funnel: KFI / Application / Offer / Completion per
+    governed weekly extract, FLOW-FIRST.
+
+    For each stage we track two things per week:
+      * the STOCK level — total balance / case count sitting at the stage on the
+        extract date (``series[stage][*].value|count``); and
+      * the weekly FLOW — the week-on-week change in that level
+        (``flowSeries[stage][*].flowValue|flowCount``), i.e. the new origination
+        that arrived that week.
+
+    The summary therefore reports BOTH bases, clearly separated, so the 5-week
+    average and the Δ-vs-prior-week reconcile with one another:
+      * ``fiveWeekAvgFlow*`` is the trailing mean of the weekly FLOW (NOT the
+        average stock level — that historical bug made a ~£280MM stock average
+        sit next to a ~£33MM weekly Δ);
+      * ``deltaFlow*`` is the latest weekly flow minus the prior weekly flow;
+      * ``*Stock*`` fields carry the level for the optional cumulative line.
+
+    Conversion vs KFI is exposed on two bases (Task 6): a 5-week trailing share
+    and a since-inception share, each by count and by value. Reuses the governed
+    weekly pipeline extracts (same source as ``pipeline_evolution``).
+    """
     inv = pipeline_mod.weekly_extract_inventory(pipeline_root, client_id)
     extracts = inv.get("extracts", [])
     cut_ym = pipeline_mod._year_month(str(to_run_id)) if to_run_id else None
 
     weeks: List[Optional[str]] = []
     sources: List[str] = []
-    # series[stage] = [{week, value, count}]
+    # series[stage] = [{week, value, count}] (STOCK level per week)
     series: Dict[str, List[Dict[str, Any]]] = {s: [] for s in _FUNNEL_STAGES}
 
     for ext in extracts:
@@ -343,27 +396,75 @@ def pipeline_funnel_evolution(pipeline_root: str | os.PathLike, client_id: str,
             value = round(float(bal[mask].sum()), 2) if bal is not None else None
             series[stage].append({"week": edate, "value": value, "count": int(mask.sum())})
 
+    # Per-week weekly-flow series derived from the stock levels (bars chart this).
+    flow_series: Dict[str, List[Dict[str, Any]]] = {}
+    for stage in _FUNNEL_STAGES:
+        pts = series[stage]
+        vflow = weekly_flow([p["value"] for p in pts])
+        cflow = weekly_flow([float(p["count"]) for p in pts])
+        flow_series[stage] = [
+            {"week": pts[i]["week"],
+             "flowValue": vflow[i],
+             "flowCount": (int(cflow[i]) if cflow[i] is not None else None)}
+            for i in range(len(pts))
+        ]
+
+    kfi_counts = [float(p["count"]) for p in series["KFI"]]
+    kfi_values = [p["value"] for p in series["KFI"]]
+
     summary: Dict[str, Any] = {}
     for stage in _FUNNEL_STAGES:
         pts = series[stage]
         values = [p["value"] for p in pts]
         counts = [float(p["count"]) for p in pts]
-        latest_value = values[-1] if values else None
-        latest_count = pts[-1]["count"] if pts else 0
-        prior_value = values[-2] if len(values) >= 2 else None
-        prior_count = pts[-2]["count"] if len(pts) >= 2 else None
+        value_flows = [f["flowValue"] for f in flow_series[stage]]
+        count_flows = [(float(f["flowCount"]) if f["flowCount"] is not None else None)
+                       for f in flow_series[stage]]
+
+        latest_flow_value = value_flows[-1] if value_flows else None
+        latest_flow_count = count_flows[-1] if count_flows else None
+        prior_flow_value = value_flows[-2] if len(value_flows) >= 2 else None
+        prior_flow_count = count_flows[-2] if len(count_flows) >= 2 else None
+
+        # Conversion vs KFI on two bases (never for KFI itself, the denominator).
+        conversion: Optional[Dict[str, Any]] = None
+        if stage != "KFI":
+            conversion = {
+                "fiveWeekCount": _conversion_pct(
+                    _sum_window(counts, 5), _sum_window(kfi_counts, 5)),
+                "fiveWeekValue": _conversion_pct(
+                    _sum_window(values, 5), _sum_window(kfi_values, 5)),
+                "sinceInceptionCount": _conversion_pct(
+                    _sum_window(counts), _sum_window(kfi_counts)),
+                "sinceInceptionValue": _conversion_pct(
+                    _sum_window(values), _sum_window(kfi_values)),
+            }
+
         summary[stage] = {
             "label": _FUNNEL_LABELS[stage],
-            "latestValue": latest_value,
-            "latestCount": latest_count,
-            "fiveWeekAvgValue": _trailing_avg(values, 5),
-            "fiveWeekAvgCount": _trailing_avg(counts, 5),
-            "deltaValue": (round(latest_value - prior_value, 2)
-                           if latest_value is not None and prior_value is not None else None),
-            "deltaCount": (latest_count - prior_count
-                           if prior_count is not None else None),
-            "trend": _trend(values),
+            # Weekly FLOW (default basis for the origination funnel).
+            "latestFlowValue": latest_flow_value,
+            "latestFlowCount": (int(latest_flow_count)
+                                if latest_flow_count is not None else None),
+            "priorFlowValue": prior_flow_value,
+            "priorFlowCount": (int(prior_flow_count)
+                               if prior_flow_count is not None else None),
+            "fiveWeekAvgFlowValue": _trailing_avg(value_flows, 5),
+            "fiveWeekAvgFlowCount": _trailing_avg(count_flows, 5),
+            "deltaFlowValue": (round(latest_flow_value - prior_flow_value, 2)
+                               if latest_flow_value is not None
+                               and prior_flow_value is not None else None),
+            "deltaFlowCount": (int(latest_flow_count - prior_flow_count)
+                               if latest_flow_count is not None
+                               and prior_flow_count is not None else None),
+            # STOCK level (drives the optional cumulative line).
+            "latestStockValue": values[-1] if values else None,
+            "latestStockCount": pts[-1]["count"] if pts else 0,
+            "fiveWeekAvgStockValue": _trailing_avg(values, 5),
+            "fiveWeekAvgStockCount": _trailing_avg(counts, 5),
+            "trend": _trend(value_flows),
             "weeksObserved": len([v for v in values if v is not None]),
+            "conversion": conversion,
         }
 
     return {
@@ -376,11 +477,13 @@ def pipeline_funnel_evolution(pipeline_root: str | os.PathLike, client_id: str,
         "sourceFiles": sources,
         "uniqueWeeklyExtractsUsed": inv.get("uniqueWeeklyExtractsUsed"),
         "series": series,
+        "flowSeries": flow_series,
         "summary": summary,
         "lineage": {
             "source": "governed weekly pipeline extracts (deduplicated)",
-            "metric": "weekly KFI / Application / Offer / Completion value and count",
-            "fiveWeekAverage": "trailing mean of up to the last 5 weekly extracts",
+            "metric": "weekly KFI / Application / Offer / Completion — weekly flow (default) and stock level",
+            "fiveWeekAverage": "trailing mean of the last 5 weeks of WEEKLY FLOW (level week-on-week change), not the average stock level",
+            "conversion": "share of the KFI pipeline reaching each stage, on a 5-week trailing and a since-inception basis, by count and by value",
         },
         "singlePeriod": len(weeks) <= 1,
     }

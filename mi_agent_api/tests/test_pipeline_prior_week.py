@@ -194,5 +194,58 @@ class TestSnapshotPriorWeekField(unittest.TestCase):
         self.assertIsNone(snap["priorWeek"])
 
 
+class TestLatestPointerPriorWeekEnrichment(unittest.TestCase):
+    """Regression (Task 5): a source resolved via the ``latest/`` pointer (a
+    single CSV with no embedded history) must be enriched with the governed
+    dated-extract window so prior-week tile deltas still compute. Reproduces the
+    acceptance scenario: latest extract 2026-01-12, prior extract 2026-01-05.
+    """
+
+    def setUp(self):
+        warnings.simplefilter("ignore")
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.folder = self.root / "client_001" / "pipeline" / "2026-01-01"
+        self.prior = self.folder / "M2L KFI and Pipeline 2026_01_05.csv"
+        self.latest = self.folder / "M2L KFI and Pipeline 2026_01_12.csv"
+        _write_pipeline_csv(self.prior, rows=8, amount=100_000.0)
+        _write_pipeline_csv(self.latest, rows=11, amount=100_000.0)
+        self._env = {}
+        for k in ("MI_AGENT_PIPELINE_URI", "MI_AGENT_PIPELINE_SOURCE",
+                  "MI_AGENT_PIPELINE_ROOT"):
+            self._env[k] = __import__("os").environ.pop(k, None)
+        import os
+        # Simulate the blob latest/ pointer resolving to the latest local CSV,
+        # with the discovery root holding both dated extracts.
+        os.environ["MI_AGENT_PIPELINE_SOURCE"] = str(self.latest)
+        os.environ["MI_AGENT_PIPELINE_ROOT"] = str(self.root)
+
+    def tearDown(self):
+        import os
+        for k, v in self._env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        self._tmp.cleanup()
+
+    def test_latest_pointer_source_carries_weekly_window(self):
+        from mi_agent_api import app
+        source = app._resolve_pipeline_source("client_001", "mi_2026_01")
+        self.assertIsNotNone(source)
+        self.assertEqual(source["pipeline_as_of_date"], "2026-01-12")
+        dates = {e.get("pipeline_extract_date") for e in source.get("weekly_files", [])}
+        self.assertIn("2026-01-05", dates)
+        self.assertIn("2026-01-12", dates)
+
+    def test_prior_week_selected_from_enriched_window(self):
+        from mi_agent_api import app
+        source = app._resolve_pipeline_source("client_001", "mi_2026_01")
+        agg = pc.compute_prior_week_aggregates(source)
+        self.assertIsNotNone(agg)
+        self.assertEqual(agg["snapshotDate"], "2026-01-05")
+        self.assertEqual(agg["pipelineRowCount"], 8)
+
+
 if __name__ == "__main__":
     unittest.main()

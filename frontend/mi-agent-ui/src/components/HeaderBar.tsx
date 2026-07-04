@@ -1,6 +1,15 @@
-import { Bell, CalendarDays, Settings, ShieldCheck } from "lucide-react";
+import { Bell, CalendarDays, RefreshCw, Settings, ShieldCheck } from "lucide-react";
 import { PortfolioSelector } from "@/components/PortfolioSelector";
+import { DeckDownloadMenu } from "@/components/DeckDownloadMenu";
+import type { AgentClient } from "@/api";
 import type { SnapshotPortfolio, SnapshotRun } from "@/domain";
+import {
+  type UserIdentity,
+  canSeeAdminControls,
+  displayInitials,
+  formatDisplayName,
+  roleLabel,
+} from "@/lib/identity";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-GB", {
@@ -22,6 +31,12 @@ export function HeaderBar({
   onPortfolioChange,
   onRunChange,
   mock,
+  client,
+  portfolioId,
+  reportingPeriod,
+  identity,
+  onRefresh,
+  refreshing,
 }: {
   portfolios: SnapshotPortfolio[];
   runs: SnapshotRun[];
@@ -30,7 +45,19 @@ export function HeaderBar({
   onPortfolioChange: (clientId: string) => void;
   onRunChange: (runId: string) => void;
   mock: boolean;
+  client: AgentClient;
+  portfolioId: string;
+  reportingPeriod?: string | null;
+  identity: UserIdentity | null;
+  onRefresh?: () => void;
+  refreshing?: boolean;
 }) {
+  // Role-based visibility: operators/admins may see settings + notifications;
+  // client users get a clean, read-only MI surface (fail-closed when unknown).
+  const showAdminControls = canSeeAdminControls(identity);
+  const displayName = formatDisplayName(identity?.user);
+  const role = roleLabel(identity);
+
   return (
     <header className="flex h-14 shrink-0 items-center gap-4 border-b border-[var(--color-line)] bg-navy-900/70 px-5 backdrop-blur">
       {/* Brand */}
@@ -75,43 +102,72 @@ export function HeaderBar({
         </select>
       </label>
 
-      <div className="ml-auto flex items-center gap-3">
-        <span
-          className={
-            mock
-              ? "inline-flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium text-amber-400"
-              : "inline-flex items-center gap-1.5 rounded-full border border-mint-400/30 bg-mint-400/10 px-2.5 py-1 text-[11px] font-medium text-mint-400"
-          }
-        >
-          <ShieldCheck size={13} />
-          {mock ? "Staging · Mock Data" : "Production"}
-        </span>
-        <div className="flex items-center gap-0.5">
-          <button
-            type="button"
-            aria-label="Notifications"
-            className="relative inline-flex h-8 w-8 items-center justify-center rounded-md text-ink-400 hover:bg-navy-800 hover:text-ink-100"
+      <div className="ml-auto flex items-center gap-2.5">
+        {/* Environment badge: the mock/staging warning stays prominent (it means
+            the data is not real); Production is a quiet, low-key marker. */}
+        {mock ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium text-amber-400">
+            <ShieldCheck size={13} /> Staging · Mock Data
+          </span>
+        ) : (
+          <span
+            title="Production environment"
+            className="inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-ink-500"
           >
-            <Bell size={16} />
-            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-rose-400" />
-          </button>
+            <span className="h-1.5 w-1.5 rounded-full bg-mint-400" /> Prod
+          </span>
+        )}
+
+        {/* Investor deck download (top-right actions). */}
+        <DeckDownloadMenu client={client} portfolioId={portfolioId} reportingPeriod={reportingPeriod} />
+
+        {/* Manual refresh — clears the client cache + reloads the active data. */}
+        {onRefresh && (
           <button
             type="button"
-            aria-label="Settings"
+            onClick={onRefresh}
+            aria-label="Refresh data"
+            title="Refresh MI data"
+            data-testid="refresh-button"
             className="inline-flex h-8 w-8 items-center justify-center rounded-md text-ink-400 hover:bg-navy-800 hover:text-ink-100"
           >
-            <Settings size={16} />
+            <RefreshCw size={15} className={refreshing ? "animate-spin" : undefined} />
           </button>
-        </div>
-        <div className="flex items-center gap-2 rounded-lg border border-[var(--color-line)] bg-navy-900/60 py-1 pl-1 pr-3">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-peri-400 to-navy-600 text-[11px] font-bold text-navy-950">
-            JA
+        )}
+
+        {/* Settings / notifications are operator/admin-only (hidden for clients). */}
+        {showAdminControls && (
+          <div className="flex items-center gap-0.5">
+            <button
+              type="button"
+              aria-label="Notifications"
+              className="relative inline-flex h-8 w-8 items-center justify-center rounded-md text-ink-400 hover:bg-navy-800 hover:text-ink-100"
+            >
+              <Bell size={16} />
+            </button>
+            <button
+              type="button"
+              aria-label="Settings"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-ink-400 hover:bg-navy-800 hover:text-ink-100"
+            >
+              <Settings size={16} />
+            </button>
           </div>
-          <div className="leading-tight">
-            <div className="text-[12px] font-medium text-ink-100">J. Analyst</div>
-            <div className="text-[10px] text-ink-500">Risk &amp; MI</div>
+        )}
+
+        {/* Signed-in identity (Entra-derived). Shown only when authenticated —
+            no hardcoded fallback name. */}
+        {displayName && (
+          <div className="flex items-center gap-2 rounded-lg border border-[var(--color-line)] bg-navy-900/60 py-1 pl-1 pr-3" data-testid="user-identity">
+            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-peri-400 to-navy-600 text-[11px] font-bold text-navy-950">
+              {displayInitials(identity?.user)}
+            </div>
+            <div className="leading-tight">
+              <div className="text-[12px] font-medium text-ink-100">{displayName}</div>
+              {role && <div className="text-[10px] text-ink-500">{role}</div>}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </header>
   );
