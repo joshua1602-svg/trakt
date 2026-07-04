@@ -117,5 +117,61 @@ class TestFundedBorrowerType(unittest.TestCase):
         self.assertEqual(int(out["youngest_borrower_age"].isna().sum()), 0)
 
 
+class TestPlatformCanonicalReadTimeDerivation(unittest.TestCase):
+    """The MI Agent queries the platform canonical, which the assembler does NOT
+    prep. borrower_type must still be derived at READ time (no onboarding re-run),
+    so the semantic layer finds it as a real column."""
+
+    import os as _os
+    import tempfile as _tempfile
+
+    def _load(self, canonical_csv: str):
+        import os
+        import tempfile
+        import mi_agent_api.data_source as ds
+        td = tempfile.mkdtemp()
+        csv = Path(td) / "platform_canonical_typed.csv"
+        csv.write_text(canonical_csv)
+        saved = {k: os.environ.get(k) for k in (
+            "MI_AGENT_ANALYTICS_DATASET", "MI_AGENT_CENTRAL_TAPE", "MI_AGENT_DATA_CSV",
+            "MI_AGENT_ONBOARDING_OUTPUT_ROOT", "MI_AGENT_PLATFORM_URI",
+            "MI_AGENT_PLATFORM_CANONICAL")}
+        for k in saved:
+            os.environ.pop(k, None)
+        os.environ["MI_AGENT_PLATFORM_CANONICAL"] = str(csv)
+        ds.reset_cache()
+        try:
+            return ds.get_dataframe(), ds.data_source_info()
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+            ds.reset_cache()
+
+    def test_borrower_type_derived_on_platform_canonical_query_path(self):
+        df, info = self._load(
+            "loan_id,source_portfolio_id,current_outstanding_balance,reporting_date,"
+            "borrower_1_DOB,borrower_2_DOB\n"
+            "L1,direct_001,250000,2025-11-30,12/03/1955,15/06/1957\n"   # joint
+            "L2,direct_001,180000,2025-11-30,22/10/1947,\n"             # single
+            "L3,direct_001,320000,2025-11-30,14/05/1946,20/08/1952\n")  # joint
+        self.assertEqual(info["kind"], "platform_canonical")
+        self.assertIn("borrower_type", df.columns)                    # real column now
+        self.assertEqual(list(df["borrower_type"]), ["joint", "single", "joint"])
+        self.assertIn("youngest_borrower_age", df.columns)
+        self.assertIn("age_bucket", df.columns)                       # bucketed after derive
+        self.assertIn("borrower_type", info.get("dimensions_available", []))
+        self.assertIn("borrower_type", info.get("derived_fields", []))
+
+    def test_not_fabricated_without_second_borrower_column(self):
+        df, _info = self._load(
+            "loan_id,source_portfolio_id,current_outstanding_balance,reporting_date,borrower_1_DOB\n"
+            "L1,direct_001,250000,2025-11-30,12/03/1955\n")
+        self.assertNotIn("borrower_type", df.columns)                 # can't split → absent
+        self.assertIn("youngest_borrower_age", df.columns)            # single-life age still derived
+
+
 if __name__ == "__main__":
     unittest.main()

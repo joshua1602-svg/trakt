@@ -32,7 +32,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
-from .funded_prep import CORE_FUNDED_DIMENSIONS, prepare_funded_mi_dataset
+from .funded_prep import (
+    CORE_FUNDED_DIMENSIONS,
+    augment_platform_canonical_dimensions,
+    prepare_funded_mi_dataset,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -323,12 +327,15 @@ def _load_active() -> Tuple[pd.DataFrame, Dict[str, Any]]:
         info.update(kind=KIND_PREPARED, preparation_applied=True, derived_fields=[],
                     dimensions_available=avail, missing_dimensions=missing)
     elif base == "platform_canonical":
-        # Combined latest-per-portfolio canonical; treated like a typed canonical
-        # (bucket materialisation only, no funded-tape prep).
-        df = _materialise_mi_buckets(raw)
+        # Combined latest-per-portfolio canonical; treated like a typed canonical.
+        # The platform assembler does not emit the read-time MI dimensions, so
+        # additively derive borrower_type (single vs joint) + youngest_borrower_age
+        # (NNEG) BEFORE bucketing (so age_bucket forms), then materialise buckets.
+        augmented, derived = augment_platform_canonical_dimensions(raw)
+        df = _materialise_mi_buckets(augmented)
         avail, missing = _present_dimensions(df)
         info.update(kind=KIND_PLATFORM_CANONICAL, preparation_applied=False,
-                    derived_fields=[], dimensions_available=avail,
+                    derived_fields=derived, dimensions_available=avail,
                     missing_dimensions=missing)
     else:  # explicit_csv | synthetic_demo
         df = _materialise_mi_buckets(raw)
