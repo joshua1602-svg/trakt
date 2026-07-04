@@ -104,11 +104,9 @@ export interface AgentResponse {
   /** Interpreter confidence 0–1 (retained for the Query Logic panel). */
   confidence?: number;
   /** Which dataset actually answered (funded | pipeline | forecast). Surfaced so
-   * the operator can see when a question was answered from a different book than
-   * the active tab. */
+   * a reader can see when a question was answered from a different book than the
+   * active tab. */
   datasetContext?: string;
-  /** How the question was parsed ("deterministic" | "llm"). */
-  parserMode?: string;
   /** True when served from the client-side result cache (display-only flag). */
   cacheHit?: boolean;
   error?: string;
@@ -153,8 +151,6 @@ export interface ChatMessage {
   intent?: Intent;
   /** Which dataset answered (funded | pipeline | forecast), shown as a badge. */
   datasetContext?: string;
-  /** How the question was parsed ("deterministic" | "llm"), shown in the chip. */
-  parserMode?: string;
   /** Parsed query spec, retained for the collapsed Query Logic panel. */
   spec?: Partial<MIQuerySpec>;
   /** Interpreter confidence 0–1, retained for the Query Logic panel. */

@@ -131,30 +131,31 @@ describe("ChatMessage suggestions", () => {
 });
 
 describe("ChatMessage clean default view", () => {
-  it("shows the narrative plus a concise interpretation — but no query-logic controls or diagnostics", () => {
+  it("shows only the conversational narrative — no interpretation, spec or diagnostics", () => {
     render(<ChatMessage message={answeredMessage} />);
     // Narrative is visible.
     expect(screen.getByText(/Average LTV is highest in London/)).toBeInTheDocument();
-    // The analytical interpretation IS surfaced (an early-warning against a
-    // misread question) ...
-    expect(screen.getByText(/interpreted as/i)).toBeInTheDocument();
-    // ... but the engineer-only controls / raw diagnostics are still hidden.
+    // The client chat stays clean: no interpretation line, no query-logic
+    // controls, no raw diagnostics (that provenance stays backend-side).
     expect(screen.queryByRole("button", { name: /query logic/i })).toBeNull();
+    expect(screen.queryByText(/interpreted as/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/total_funded/)).not.toBeInTheDocument();
     expect(screen.queryByText(/resolved region via NUTS 2024/)).not.toBeInTheDocument();
   });
 
-  it("drops engineer-only Parser/Validation segments from the interpretation", () => {
+  it("shows only a minimal dataset badge (which book answered), nothing else", () => {
     const msg: ChatMessageType = {
       ...answeredMessage,
       interpreted:
-        "Chart: Bar · Metric: Current Outstanding Balance · Dimension: Region · Aggregation: Sum · Parser: deterministic · Validation: Passed",
-      datasetContext: "funded",
+        "Chart: Bar · Metric: Current Outstanding Balance · Dimension: Region · Parser: deterministic · Validation: Passed",
+      datasetContext: "pipeline",
     };
-    const { container } = render(<ChatMessage message={msg} />);
-    expect(container.textContent).toMatch(/Interpreted as:\s*Metric: Current Outstanding Balance/);
-    expect(container.textContent).not.toMatch(/Parser:/);
-    expect(container.textContent).not.toMatch(/Validation:/);
-    // The dataset that answered is shown as a badge.
-    expect(screen.getByText(/^funded$/i)).toBeInTheDocument();
+    render(<ChatMessage message={msg} />);
+    // The book that answered IS shown (it materially changes the number's meaning).
+    expect(screen.getByText(/^pipeline$/i)).toBeInTheDocument();
+    // But the interpretation / parse internals are NOT rendered client-side.
+    expect(screen.queryByText(/interpreted as/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Parser:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Validation:/)).not.toBeInTheDocument();
   });
 });

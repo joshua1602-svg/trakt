@@ -215,7 +215,6 @@ export class HttpAgentClient implements AgentClient {
       diagnostics: body.diagnostics ?? [],
       spec: body.spec,
       datasetContext: asString(meta.datasetContext),
-      parserMode: asString(meta.parserMode),
       error: body.error ?? undefined,
     };
   }

@@ -433,7 +433,6 @@ export function useWorkspace(client: AgentClient): Workspace {
                     diagnostics: res.diagnostics,
                     intent: res.intent,
                     datasetContext: res.datasetContext,
-                    parserMode: res.parserMode,
                     spec: res.spec,
                     confidence: res.confidence,
                     usedContext: params.usedContext,
