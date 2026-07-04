@@ -110,6 +110,21 @@ funded_correlated_fields:
       - date of birth
     bucket: age_bucket
 
+  borrower_type:
+    role: dimension
+    availability: derived
+    description: Single vs joint borrower, derived from whether any second-applicant
+      field (DOB App 2 / Gender App 2) is populated. First-class categorical
+      dimension for single-vs-joint cohort analysis and stratifications
+      (e.g. LTV or youngest-age by borrower_type; NNEG exposure is joint-life).
+    funded_correlation: [borrower_type]
+    second_borrower_source_aliases:
+      - dob app 2
+      - gender app 2
+      - date of birth 2
+      - borrower 2 dob
+      - customer 2 dob
+
   collateral_geography:
     role: dimension
     availability: available
