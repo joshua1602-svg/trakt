@@ -8,6 +8,7 @@ import {
   mockForecastEvolution,
 } from "@/data/mockEvolution";
 import { mockFunnelEvolution } from "@/data/mockFunnel";
+import { mockCohorts } from "@/data/mockCohorts";
 import { mockRiskLimits } from "@/data/mockRiskLimits";
 import { mockForecastExtrapolation } from "@/data/mockForecastExtrapolation";
 
@@ -37,6 +38,10 @@ function client(over: Partial<AgentClient> = {}): AgentClient {
     getFunnelEvolution: vi.fn(async () => mockFunnelEvolution("client_001")),
     getRiskLimits: vi.fn(async () => mockRiskLimits("client_001")),
     getForecastExtrapolation: vi.fn(async () => mockForecastExtrapolation("client_001")),
+    getMe: vi.fn(async () => ({ authenticated: true, isOperator: true })),
+    getDecks: vi.fn(async () => ({ available: false, latest: null, decks: [], client_id: "client_001" })),
+    deckDownloadUrl: vi.fn(() => null),
+    getCohorts: vi.fn(async () => mockCohorts("client_001")),
     ...over,
   };
 }
@@ -72,10 +77,37 @@ describe("EvolutionPanel", () => {
     expect(screen.getByText("Applications")).toBeInTheDocument();
     expect(screen.getByText("Offers")).toBeInTheDocument();
     expect(screen.getByText("Completions")).toBeInTheDocument();
-    // 5-week average + latest week + delta summary present per stage.
-    expect(screen.getAllByText("5-week avg").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Latest week").length).toBeGreaterThan(0);
+    // Weekly-flow summary present per stage (5-week average of flow + latest flow).
+    expect(screen.getAllByText("5-wk avg flow").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Latest weekly flow").length).toBeGreaterThan(0);
     expect(c.getFunnelEvolution).toHaveBeenCalled();
+  });
+
+  it("renders the Cohorts sub-tab with computed vintage metrics (Task 2)", async () => {
+    const c = client();
+    render(<EvolutionPanel client={c} portfolioId="client_001/mi_2025_11" />);
+    await screen.findByText("Funded balance by month");
+    fireEvent.click(screen.getByRole("tab", { name: "Cohorts" }));
+    expect(await screen.findByTestId("cohorts-view")).toBeInTheDocument();
+    // The vintage table surfaces computed aggregates.
+    const table = screen.getByTestId("cohorts-table");
+    expect(table.textContent).toContain("2021");
+    expect(table.textContent).toMatch(/WA LTV/);
+    // No fabricated redemption/performance curves are shown.
+    expect(screen.queryByText(/redemption curve/i)).toBeNull();
+    expect(c.getCohorts).toHaveBeenCalled();
+  });
+
+  it("shows an honest empty state when cohort data is unavailable", async () => {
+    const c = client();
+    c.getCohorts = vi.fn(async () => ({
+      dataset: "cohorts", portfolioId: "client_001/mi_2025_11", available: false,
+      reason: "no origination date / vintage on the funded tape", cohorts: [],
+    })) as AgentClient["getCohorts"];
+    render(<EvolutionPanel client={c} portfolioId="client_001/mi_2025_11" />);
+    await screen.findByText("Funded balance by month");
+    fireEvent.click(screen.getByRole("tab", { name: "Cohorts" }));
+    expect(await screen.findByTestId("cohorts-unavailable")).toBeInTheDocument();
   });
 
   // D — Forecast Evolution is distinct from the main Forecast tab: it shows the

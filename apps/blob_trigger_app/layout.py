@@ -139,3 +139,23 @@ class Layout:
 
     def pipeline_period_csv_uri(self, client_id: str, period: str) -> str:
         return self._processed("pipeline", client_id, period, self.PIPELINE_SNAPSHOT_NAME)
+
+    # -- investor PPTX deck (React MI Agent download) ----------------------- #
+    DECK_NAME = "investor_pack.pptx"
+    DECK_POINTER_NAME = "latest_investor_pack.json"
+
+    def deck_prefix(self, client_id: str) -> str:
+        """The durable deck area for a client (enumerated by the MI API)."""
+        return self._processed("decks", client_id)
+
+    def deck_latest_uri(self, client_id: str) -> str:
+        """Stable pointer to the latest investor deck, overwritten each run —
+        the deck the MI API serves for GET /mi/decks/download (no date)."""
+        return self._processed("decks", client_id, "latest", self.DECK_NAME)
+
+    def deck_latest_pointer_uri(self, client_id: str) -> str:
+        return self._processed("decks", client_id, "latest", self.DECK_POINTER_NAME)
+
+    def deck_period_uri(self, client_id: str, period: str) -> str:
+        """The investor deck for a specific reporting period (kept for history)."""
+        return self._processed("decks", client_id, period, self.DECK_NAME)

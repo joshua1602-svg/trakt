@@ -30,7 +30,7 @@ export function ViewToggle({
     <div
       role="tablist"
       aria-label="MI workspace view"
-      className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] bg-navy-900/60 p-1"
+      className="inline-flex items-center gap-1 rounded-lg border border-navy-600 bg-navy-950/80 p-1 shadow-inner ring-1 ring-inset ring-white/5"
     >
       {VIEWS.map(({ id, label, icon: Icon }) => {
         const selected = active === id;
@@ -46,15 +46,17 @@ export function ViewToggle({
             title={isDisabled ? "Not applicable for an acquired back book (Funded only)" : undefined}
             onClick={() => !isDisabled && onChange(id)}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors",
+              "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all",
               isDisabled
                 ? "cursor-not-allowed text-ink-600 opacity-40"
                 : selected
-                  ? "bg-navy-700/80 text-ink-100 shadow-sm"
-                  : "text-ink-400 hover:text-ink-200",
+                  ? "bg-peri-400/20 text-ink-100 shadow-sm ring-1 ring-inset ring-peri-400/50"
+                  // Inactive: visibly a clickable chip (subtle fill + border) that
+                  // lifts on hover, not near-invisible plain text.
+                  : "cursor-pointer bg-navy-800/70 text-ink-300 ring-1 ring-inset ring-white/5 hover:bg-navy-700 hover:text-ink-100 hover:ring-white/10",
             )}
           >
-            <Icon size={14} className={selected && !isDisabled ? "text-peri-300" : "text-ink-500"} />
+            <Icon size={14} className={selected && !isDisabled ? "text-peri-200" : "text-ink-400"} />
             {label}
           </button>
         );

@@ -128,6 +128,32 @@ export class HttpAgentClient implements AgentClient {
       `/mi/forecast/extrapolation?portfolioId=${encodeURIComponent(portfolioId)}`, signal);
   }
 
+  async getMe(signal?: AbortSignal): Promise<import("@/lib/identity").UserIdentity> {
+    try {
+      return await this.getJson<import("@/lib/identity").UserIdentity>("/me", signal);
+    } catch {
+      // The header degrades gracefully when /me is unreachable (auth removed for
+      // the test deployment) — treat as an unauthenticated, role-less caller.
+      return { authenticated: false };
+    }
+  }
+
+  getDecks(portfolioId: string, signal?: AbortSignal): Promise<import("@/domain").DeckIndex> {
+    return this.getJson<import("@/domain").DeckIndex>(
+      `/mi/decks?portfolioId=${encodeURIComponent(portfolioId)}`, signal);
+  }
+
+  deckDownloadUrl(portfolioId: string, period?: string | null): string {
+    const q = new URLSearchParams({ portfolioId });
+    if (period) q.set("period", period);
+    return `${this.baseUrl}/mi/decks/download?${q.toString()}`;
+  }
+
+  getCohorts(portfolioId: string, signal?: AbortSignal): Promise<import("@/domain").CohortAnalysis> {
+    return this.getJson<import("@/domain").CohortAnalysis>(
+      `/mi/cohorts?portfolioId=${encodeURIComponent(portfolioId)}`, signal);
+  }
+
   async ask(request: AgentRequest, signal?: AbortSignal): Promise<AgentResponse> {
     let res: Response;
     try {

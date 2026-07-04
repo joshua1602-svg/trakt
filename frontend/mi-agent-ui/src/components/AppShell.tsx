@@ -94,6 +94,12 @@ export function AppShell() {
         onPortfolioChange={ws.setPortfolio}
         onRunChange={ws.setRun}
         mock={client.mock}
+        client={client}
+        portfolioId={workspacePortfolioId}
+        reportingPeriod={ws.reporting.asOf ? ws.reporting.asOf.slice(0, 7) : null}
+        identity={ws.identity}
+        onRefresh={ws.refresh}
+        refreshing={ws.refreshing}
       />
       <div className="flex min-h-0 flex-1">
         <AgentChatPanel
@@ -184,14 +190,17 @@ export function AppShell() {
                 {ws.activeView === "forecast" && (
                   <>
                     <ForecastView forecast={ws.forecast} loading={ws.forecastLoading} />
-                    <ForecastExtrapolationPanel client={client} portfolioId={workspacePortfolioId} />
+                    <ForecastExtrapolationPanel key={`fx-${ws.dataVersion}`}
+                      client={client} portfolioId={workspacePortfolioId} />
                   </>
                 )}
                 {ws.activeView === "evolution" && (
-                  <EvolutionPanel client={client} portfolioId={workspacePortfolioId} />
+                  <EvolutionPanel key={`evo-${ws.dataVersion}`}
+                    client={client} portfolioId={workspacePortfolioId} />
                 )}
                 {ws.activeView === "risk_limits" && (
-                  <RiskLimitsPanel client={client} portfolioId={workspacePortfolioId} />
+                  <RiskLimitsPanel key={`risk-${ws.dataVersion}`}
+                    client={client} portfolioId={workspacePortfolioId} />
                 )}
               </div>
             )}

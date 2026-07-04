@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from .auth import auth_guard, principal_from_request
@@ -45,6 +45,8 @@ from . import workspace as workspace_mod
 from . import evolution as evolution_mod
 from . import chat_routing as chat_routing_mod
 from . import pipeline_timing as timing_mod
+from . import decks as decks_mod
+from . import cohorts as cohorts_mod
 
 logger = logging.getLogger("mi_agent_api")
 
@@ -732,6 +734,30 @@ def _latest_pipeline_extract_date(client_id: str) -> Optional[str]:
     return max(dates) if dates else None
 
 
+def _weekly_files_window(client_id: str, as_of: Optional[str]) -> list:
+    """The governed weekly-extract window (every unique dated extract up to and
+    including ``as_of``) for ``client_id``, from the SAME discovery the evolution
+    and history endpoints use — including a ``blob://`` root's dated snapshots.
+
+    Used to attach ``weekly_files`` to a source resolved via the ``latest/``
+    blob pointer (whose single CSV carries no prior-week history), so week-on-week
+    tile deltas can select and aggregate the real prior extract. Returns ``[]``
+    when there is no discovery root or fewer than two dated extracts.
+    """
+    root = _pipeline_discovery_root()
+    if not root:
+        return []
+    try:
+        inv = pipeline_mod.weekly_extract_inventory(root, client_id)
+    except Exception:  # noqa: BLE001 - discovery must never break resolution
+        return []
+    extracts = inv.get("extracts", []) or []
+    if as_of:
+        extracts = [e for e in extracts
+                    if (e.get("pipeline_extract_date") or "") <= as_of]
+    return extracts
+
+
 def _resolve_pipeline_source(client_id: str, run_id: Optional[str]) -> Optional[Dict[str, Any]]:
     """The governed pipeline scope for a client/run (blob URI, explicit env, or
     discovery). Returns a scope dict with the separated date concepts (folder /
@@ -758,7 +784,11 @@ def _resolve_pipeline_source(client_id: str, run_id: Optional[str]) -> Optional[
                     "pipeline_extract_date": extract_date or as_of,
                     "pipeline_as_of_date": as_of,
                     "current_pipeline_snapshot_date": as_of,
-                    "current_pipeline_source_file": p.name}
+                    "current_pipeline_source_file": p.name,
+                    # The latest/ pointer is a single CSV with no prior-week
+                    # history; attach the governed dated-extract window so the
+                    # week-on-week tile deltas can select the real prior extract.
+                    "weekly_files": _weekly_files_window(client_id, as_of)}
     root = _pipeline_discovery_root()
     if root:
         return pipeline_mod.resolve_pipeline_source(root, client_id, run_id)
@@ -1009,6 +1039,83 @@ def funnel_evolution(portfolioId: Optional[str] = None, client_id: Optional[str]
         return {"dataset": "pipeline_funnel", "portfolioId": cid, "toRunId": pipeline_cut,
                 "stages": [], "weeks": [], "series": {}, "summary": {},
                 "singlePeriod": True, "error": str(exc)}
+
+
+@app.get("/mi/cohorts")
+def cohorts(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
+            runId: Optional[str] = None, run_id: Optional[str] = None) -> Dict[str, Any]:
+    """Funded origination-vintage (static-pool) cohort analysis for a run.
+
+    Balance / loan count / book share and balance-weighted LTV, rate and
+    months-on-book by origination year — computed from the governed funded tape.
+    Returns ``available=false`` (with a reason) when the tape carries no vintage,
+    so the UI never fabricates cohort metrics. Never 500s.
+    """
+    run_id = runId or run_id
+    if portfolioId and "/" in portfolioId:
+        client_id, run_id = portfolioId.split("/", 1)
+    client_id = client_id or "client_001"
+    pid = f"{client_id}/{run_id or ''}"
+    if not run_id:
+        return {"dataset": "cohorts", "portfolioId": pid, "available": False,
+                "reason": "portfolioId (client_id/run_id) is required",
+                "cohorts": [], "metricsAvailable": []}
+    try:
+        root = _onboarding_output_root()
+        df, _report = _resolve_run_dataframe(client_id, run_id, root)
+        reporting_date = snapshots_mod.infer_reporting_date(run_id, df)
+        return cohorts_mod.cohort_analysis(
+            df, client_id=client_id, portfolio_id=pid, reporting_date=reporting_date)
+    except Exception as exc:  # noqa: BLE001 - cohort analysis must never 500
+        logger.warning("cohort analysis failed for %s: %s", pid, exc)
+        return {"dataset": "cohorts", "portfolioId": pid, "available": False,
+                "reason": str(exc), "cohorts": [], "metricsAvailable": []}
+
+
+_PPTX_MEDIA_TYPE = (
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation")
+
+
+@app.get("/mi/decks")
+def list_decks(portfolioId: Optional[str] = None,
+               client_id: Optional[str] = None) -> Dict[str, Any]:
+    """Discover investor PPTX decks published by the orchestration for a client.
+
+    UI-safe: returns the ``latest`` deck pointer and the dated reporting-period
+    decks available (never raw blob paths). Empty listing when none exist — the
+    UI then shows a disabled 'No deck available' state. Never 500s.
+    """
+    cid, _trid = _evo_ids(portfolioId, client_id, None, None)
+    try:
+        return decks_mod.list_decks(cid)
+    except Exception as exc:  # noqa: BLE001 - discovery must never 500
+        logger.warning("deck discovery failed for %s: %s", cid, exc)
+        return {"available": False, "latest": None, "decks": [], "client_id": cid,
+                "error": str(exc)}
+
+
+@app.get("/mi/decks/download")
+def download_deck(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
+                  period: Optional[str] = None):
+    """Serve an investor PPTX deck (the latest, or a specific reporting period).
+
+    Returns the .pptx bytes as an attachment with a friendly filename. 404 (JSON)
+    when the requested deck does not exist, so the UI can disable the action.
+    """
+    cid, _trid = _evo_ids(portfolioId, client_id, None, None)
+    try:
+        resolved = decks_mod.resolve_deck_local(cid, period)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("deck download failed for %s: %s", cid, exc)
+        resolved = None
+    if resolved is None:
+        which = period or "latest"
+        return JSONResponse(
+            status_code=404,
+            content={"ok": False,
+                     "error": f"No investor deck available for {cid} ({which})."})
+    path, filename = resolved
+    return FileResponse(str(path), media_type=_PPTX_MEDIA_TYPE, filename=filename)
 
 
 @app.get("/mi/evolution/forecast")

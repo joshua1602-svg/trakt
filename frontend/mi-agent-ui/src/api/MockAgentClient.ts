@@ -28,6 +28,7 @@ import {
   mockForecastEvolution,
 } from "@/data/mockEvolution";
 import { mockFunnelEvolution } from "@/data/mockFunnel";
+import { mockCohorts } from "@/data/mockCohorts";
 import { mockRiskLimits } from "@/data/mockRiskLimits";
 import { mockForecastExtrapolation } from "@/data/mockForecastExtrapolation";
 import { AgentError, type AgentClient } from "./AgentClient";
@@ -120,5 +121,34 @@ export class MockAgentClient implements AgentClient {
 
   getForecastExtrapolation(portfolioId: string): Promise<ForecastExtrapolation> {
     return Promise.resolve(mockForecastExtrapolation(portfolioId));
+  }
+
+  getMe(): Promise<import("@/lib/identity").UserIdentity> {
+    // Mock mode has no real auth — present a demo operator so role-gated controls
+    // are exercisable in staging without leaking a hardcoded production name.
+    return Promise.resolve({
+      authenticated: true, user: "Demo Operator",
+      roles: ["operator"], isOperator: true,
+    });
+  }
+
+  getDecks(portfolioId: string): Promise<import("@/domain").DeckIndex> {
+    // Deterministic mock: a latest deck + one dated period, so the download menu
+    // and its enabled/disabled states are exercisable without a backend.
+    const client = portfolioId.split("/")[0] || "client_001";
+    return Promise.resolve({
+      available: true,
+      latest: { period: "2025-11", generatedAt: "2025-11-28T09:00:00Z" },
+      decks: [{ period: "2025-11" }, { period: "2025-10" }],
+      client_id: client,
+    });
+  }
+
+  deckDownloadUrl(): string | null {
+    return null; // mock cannot serve real .pptx bytes
+  }
+
+  getCohorts(portfolioId: string): Promise<import("@/domain").CohortAnalysis> {
+    return Promise.resolve(mockCohorts(portfolioId));
   }
 }

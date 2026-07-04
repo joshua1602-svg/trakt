@@ -9,6 +9,8 @@
 import type {
   AgentRequest,
   AgentResponse,
+  CohortAnalysis,
+  DeckIndex,
   ForecastEvolution,
   ForecastExtrapolation,
   ForecastSnapshot,
@@ -20,6 +22,7 @@ import type {
   SnapshotIndex,
   SourcePortfolioIndex,
 } from "@/domain";
+import type { UserIdentity } from "@/lib/identity";
 
 export interface AgentClient {
   /** Identifier surfaced in the UI (e.g. environment badge). */
@@ -64,6 +67,20 @@ export interface AgentClient {
 
   /** Securitisation scale-up forecast (run-rate / KFI extrapolation + milestones). */
   getForecastExtrapolation(portfolioId: string, signal?: AbortSignal): Promise<ForecastExtrapolation>;
+
+  /** The authenticated caller (Entra principal echoed by the API), for the
+   * header identity + role-based control visibility. */
+  getMe(signal?: AbortSignal): Promise<UserIdentity>;
+
+  /** Discover the investor PPTX decks published for a portfolio (latest + dated). */
+  getDecks(portfolioId: string, signal?: AbortSignal): Promise<DeckIndex>;
+
+  /** A direct download URL for an investor deck (latest, or a specific period),
+   * or `null` when the client cannot serve decks (e.g. the mock). */
+  deckDownloadUrl(portfolioId: string, period?: string | null): string | null;
+
+  /** Funded origination-vintage (static-pool) cohort analysis for a portfolio. */
+  getCohorts(portfolioId: string, signal?: AbortSignal): Promise<CohortAnalysis>;
 }
 
 /** Error thrown by clients for transport/agent failures. */

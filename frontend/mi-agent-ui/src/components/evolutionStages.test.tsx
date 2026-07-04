@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import type { AgentClient } from "@/api";
-import { EvolutionPanel, STAGE_ORDER, normaliseStage, orderStages, stageConversion, pipelineXValue } from "./EvolutionPanel";
+import { EvolutionPanel, STAGE_ORDER, normaliseStage, orderStages, pipelineXValue } from "./EvolutionPanel";
 import { mockFundedEvolution, mockPipelineEvolution, mockForecastEvolution } from "@/data/mockEvolution";
 import { mockFunnelEvolution } from "@/data/mockFunnel";
+import { mockCohorts } from "@/data/mockCohorts";
 import { mockRiskLimits } from "@/data/mockRiskLimits";
 import { mockForecastExtrapolation } from "@/data/mockForecastExtrapolation";
 
@@ -27,6 +28,10 @@ function client(over: Partial<AgentClient> = {}): AgentClient {
     getFunnelEvolution: vi.fn(async () => mockFunnelEvolution("client_001")),
     getRiskLimits: vi.fn(async () => mockRiskLimits("client_001")),
     getForecastExtrapolation: vi.fn(async () => mockForecastExtrapolation("client_001")),
+    getMe: vi.fn(async () => ({ authenticated: true, isOperator: true })),
+    getDecks: vi.fn(async () => ({ available: false, latest: null, decks: [], client_id: "client_001" })),
+    deckDownloadUrl: vi.fn(() => null),
+    getCohorts: vi.fn(async () => mockCohorts("client_001")),
     ...over,
   };
 }
@@ -56,25 +61,8 @@ describe("stage ordering", () => {
 });
 
 // --------------------------------------------------------------------------- //
-// A4 — conversion rates (divide-by-zero safe)
+// Task 4 & 6 — origination funnel: flow-first summary + conversion basis labels
 // --------------------------------------------------------------------------- //
-describe("stage conversion vs KFI", () => {
-  const kfi = { label: "KFIs", latestValue: 1000, latestCount: 20 } as any;
-  it("computes count and value conversion", () => {
-    const c = stageConversion({ latestValue: 500, latestCount: 10 } as any, kfi)!;
-    expect(c.countPct).toBe(50);
-    expect(c.valuePct).toBe(50);
-    expect(c.numerCount).toBe(10);
-    expect(c.denomCount).toBe(20);
-  });
-  it("is divide-by-zero safe when KFI is zero", () => {
-    const c = stageConversion({ latestValue: 100, latestCount: 5 } as any,
-      { latestValue: 0, latestCount: 0 } as any)!;
-    expect(c.countPct).toBeNull();
-    expect(c.valuePct).toBeNull();
-  });
-});
-
 describe("EvolutionPanel origination conversion footers", () => {
   it("shows a conversion-vs-KFI footer on Application/Offer/Completion (not KFI)", async () => {
     render(<EvolutionPanel client={client()} portfolioId="client_001" />);
@@ -87,6 +75,30 @@ describe("EvolutionPanel origination conversion footers", () => {
     // KFI is the denominator — no conversion footer on it.
     expect(screen.queryByTestId("funnel-conversion-KFI")).toBeNull();
     expect(screen.getAllByText(/Conversion vs KFI/).length).toBeGreaterThan(0);
+  });
+
+  it("labels conversion basis explicitly (5-week / since inception, by count / value)", async () => {
+    render(<EvolutionPanel client={client()} portfolioId="client_001" />);
+    await screen.findByText("Funded balance by month");
+    fireEvent.click(screen.getByRole("tab", { name: "Origination" }));
+    const footer = await screen.findByTestId("funnel-conversion-APPLICATION");
+    expect(footer.textContent).toMatch(/5-week/);
+    expect(footer.textContent).toMatch(/Since inception/);
+    expect(footer.textContent).toMatch(/by count/);
+    expect(footer.textContent).toMatch(/by value/);
+  });
+
+  it("shows weekly-flow summary + the cumulative-stock toggle (flow semantics)", async () => {
+    render(<EvolutionPanel client={client()} portfolioId="client_001" />);
+    await screen.findByText("Funded balance by month");
+    fireEvent.click(screen.getByRole("tab", { name: "Origination" }));
+    const card = await screen.findByTestId("funnel-stage-KFI");
+    // Weekly-flow basis is labelled and the stock level is shown separately.
+    expect(card.textContent).toMatch(/weekly flow/i);
+    expect(card.textContent).toMatch(/5-wk avg flow/i);
+    expect(screen.getByTestId("funnel-stock-KFI").textContent).toMatch(/stock level/i);
+    // Cumulative-stock overlay is opt-in.
+    expect(screen.getByLabelText("Show cumulative stock line")).toBeInTheDocument();
   });
 });
 

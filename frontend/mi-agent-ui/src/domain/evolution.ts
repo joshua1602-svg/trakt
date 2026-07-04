@@ -77,22 +77,48 @@ export interface ForecastEvolution {
 // Weekly origination funnel trends — KFI / Application / Offer / Completion
 // value + count per governed weekly extract (mirrors evolution.pipeline_funnel).
 // --------------------------------------------------------------------------- //
+/** Per-week STOCK level of a funnel stage (drives the optional cumulative line). */
 export interface FunnelPoint {
   week: string | null;
   value: number | null;
   count: number;
 }
 
+/** Per-week WEEKLY FLOW of a funnel stage (drives the default bars): the
+ * week-on-week change in the stage level (new origination that week). */
+export interface FunnelFlowPoint {
+  week: string | null;
+  flowValue: number | null;
+  flowCount: number | null;
+}
+
+/** Conversion of a stage vs KFI on two bases, by count and by value (Task 6). */
+export interface FunnelConversion {
+  fiveWeekCount: number | null;
+  fiveWeekValue: number | null;
+  sinceInceptionCount: number | null;
+  sinceInceptionValue: number | null;
+}
+
 export interface FunnelStageSummary {
   label: string;
-  latestValue: number | null;
-  latestCount: number;
-  fiveWeekAvgValue: number | null;
-  fiveWeekAvgCount: number | null;
-  deltaValue: number | null;
-  deltaCount: number | null;
+  // Weekly FLOW (default basis for the origination funnel).
+  latestFlowValue: number | null;
+  latestFlowCount: number | null;
+  priorFlowValue: number | null;
+  priorFlowCount: number | null;
+  fiveWeekAvgFlowValue: number | null;
+  fiveWeekAvgFlowCount: number | null;
+  deltaFlowValue: number | null;
+  deltaFlowCount: number | null;
+  // STOCK level (for the optional cumulative line).
+  latestStockValue: number | null;
+  latestStockCount: number;
+  fiveWeekAvgStockValue: number | null;
+  fiveWeekAvgStockCount: number | null;
   trend: "up" | "down" | "flat";
   weeksObserved: number;
+  conversion: FunnelConversion | null;
 }
 
 export interface PipelineFunnelEvolution {
@@ -105,6 +131,7 @@ export interface PipelineFunnelEvolution {
   sourceFiles: string[];
   uniqueWeeklyExtractsUsed?: number | null;
   series: Record<string, FunnelPoint[]>;
+  flowSeries: Record<string, FunnelFlowPoint[]>;
   summary: Record<string, FunnelStageSummary>;
   lineage?: Record<string, unknown>;
   singlePeriod: boolean;

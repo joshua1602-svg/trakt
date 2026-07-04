@@ -24,6 +24,7 @@ import type {
   WorkspaceView,
 } from "@/domain";
 import type { AgentClient } from "@/api";
+import type { UserIdentity } from "@/lib/identity";
 import { uid } from "@/lib/utils";
 import {
   type AnalysisContext,
@@ -95,6 +96,13 @@ export interface Workspace {
   retryLast: () => void;
   togglePin: (id: string) => void;
   resetWorkspace: () => void;
+  /** The signed-in caller (for the header identity + role gating). */
+  identity: UserIdentity | null;
+  /** Bumps on manual refresh; panels key off it to reload after a cache clear. */
+  dataVersion: number;
+  refreshing: boolean;
+  /** Clear the client cache and reload the active MI data. */
+  refresh: () => void;
 }
 
 export function useWorkspace(client: AgentClient): Workspace {
@@ -107,6 +115,10 @@ export function useWorkspace(client: AgentClient): Workspace {
   const [snapshotLoading, setSnapshotLoading] = useState(false);
   const [forecast, setForecast] = useState<ForecastSnapshot | null>(null);
   const [forecastLoading, setForecastLoading] = useState(false);
+  // Signed-in caller (header identity + role gating) and manual-refresh plumbing.
+  const [identity, setIdentity] = useState<UserIdentity | null>(null);
+  const [dataVersion, setDataVersion] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
   // Active view defaults to Funded. A ref mirrors it so runQuery reads the latest
   // value without being re-created on every view change.
   const [activeView, setActiveViewState] = useState<WorkspaceView>("funded");
@@ -126,6 +138,17 @@ export function useWorkspace(client: AgentClient): Workspace {
     selectedLensRef.current = id;
     setSelectedLensState(id);
   }, []);
+
+  // Resolve the signed-in caller once (drives the header identity + role gating).
+  // Degrades silently to null when /me is unreachable (auth removed for testing).
+  useEffect(() => {
+    let cancelled = false;
+    client
+      .getMe()
+      .then((me) => { if (!cancelled) setIdentity(me); })
+      .catch(() => { if (!cancelled) setIdentity(null); });
+    return () => { cancelled = true; };
+  }, [client]);
 
   useEffect(() => {
     let cancelled = false;
@@ -251,7 +274,7 @@ export function useWorkspace(client: AgentClient): Workspace {
     return () => {
       cancelled = true;
     };
-  }, [client, portfolioId]);
+  }, [client, portfolioId, dataVersion]);
 
   // Fetch the deterministic forecast (funded + pipeline) for the same run, so the
   // pipeline + forecast + watchlist sections move with the funded selection.
@@ -273,7 +296,18 @@ export function useWorkspace(client: AgentClient): Workspace {
     return () => {
       cancelled = true;
     };
-  }, [client, portfolioId]);
+  }, [client, portfolioId, dataVersion]);
+
+  // Manual refresh: clear the client cache (if it exposes one) and bump the
+  // data version so the snapshot/forecast effects and the keyed panels reload.
+  const refresh = useCallback(() => {
+    const c = client as AgentClient & { invalidate?: () => void };
+    if (typeof c.invalidate === "function") c.invalidate();
+    setRefreshing(true);
+    setDataVersion((v) => v + 1);
+    // The spinner is a brief acknowledgement; the effects clear their own loading.
+    setTimeout(() => setRefreshing(false), 600);
+  }, [client]);
 
   const [messages, setMessages] = useState<ChatMessage[]>(
     () => persisted?.messages ?? [greeting("selected", persisted?.runId ? null : null)],
@@ -589,5 +623,9 @@ export function useWorkspace(client: AgentClient): Workspace {
     retryLast,
     togglePin,
     resetWorkspace,
+    identity,
+    dataVersion,
+    refreshing,
+    refresh,
   };
 }
