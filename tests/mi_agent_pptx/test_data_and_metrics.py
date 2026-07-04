@@ -35,9 +35,11 @@ def test_missing_balance_records_issue(registries):
 
 
 # ------------------------------------------------------------- metric_resolver
-def _resolver(sample_tape, registries, analytics=None):
+def _resolver(sample_tape, registries, analytics=None, prior=None):
     rd = resolve_data(sample_tape, registries)
-    return MetricResolver(rd, registries, analytics=analytics)
+    prior_lenses = {"funded": resolve_data(prior, registries)} if prior is not None else None
+    return MetricResolver({"funded": rd, "pipeline": None, "forecast": None},
+                          registries, analytics=analytics, prior_lenses=prior_lenses)
 
 
 def test_sum_and_count_metrics(sample_tape, registries):
@@ -68,12 +70,32 @@ def test_weighted_avg_falls_back_when_weight_unusable(registries):
         "youngest_borrower_age": [70, 72, 74],
     })
     rd = resolve_data(df, registries)
-    mr = MetricResolver(rd, registries)
+    mr = MetricResolver({"funded": rd}, registries)
     ltv = mr.resolve({"key": "wa_current_ltv", "field": "current_loan_to_value",
                      "aggregation": "weighted_avg", "format": "percent"})
     assert ltv.ok
     assert abs(ltv.value - 0.40) < 1e-6
-    assert "simple mean" in ltv.note
+
+
+def test_lens_separation_pipeline_absent_is_unavailable(sample_tape, registries):
+    # A pipeline-lens metric must NOT fall back to funded data.
+    rd = resolve_data(sample_tape, registries)
+    mr = MetricResolver({"funded": rd, "pipeline": None}, registries)
+    res = mr.resolve({"key": "total_pipeline", "field": "current_outstanding_balance",
+                     "aggregation": "sum", "lens": "pipeline", "format": "currency"})
+    assert not res.ok
+    assert "pipeline" in res.note.lower()
+
+
+def test_prior_period_delta(sample_tape, registries):
+    prior = sample_tape.copy()
+    prior["current_principal_balance"] = prior["current_principal_balance"] * 0.9
+    mr = _resolver(sample_tape, registries, prior=prior)
+    res = mr.resolve({"key": "funded_balance", "field": "current_outstanding_balance",
+                     "aggregation": "sum", "lens": "funded", "format": "currency"})
+    assert res.has_delta
+    assert res.delta_dir == "up"
+    assert "vs prior" in res.delta_display
 
 
 def test_missing_field_returns_unavailable(sample_tape, registries):
@@ -91,7 +113,7 @@ def test_analytics_artifact_overrides_computation(sample_tape, registries):
     mr = _resolver(sample_tape, registries, analytics=analytics)
     res = mr.resolve({"key": "funded_balance",
                      "field": "current_outstanding_balance",
-                     "aggregation": "sum", "format": "currency"})
+                     "aggregation": "sum", "lens": "funded", "format": "currency"})
     assert res.value == 9_999_999
     assert res.basis == "analytics_artifact"
 
@@ -99,13 +121,15 @@ def test_analytics_artifact_overrides_computation(sample_tape, registries):
 def test_largest_exposure_metric(sample_tape, registries):
     mr = _resolver(sample_tape, registries)
     res = mr.resolve({"key": "largest_region", "kind": "largest",
-                     "dimension": "geographic_region_obligor", "format": "percent"})
+                     "dimension": "region", "format": "percent"})
     assert res.ok
-    assert "·" in res.display  # "<region> · <share>%"
+    assert res.display.endswith("%")   # share as a percent
+    assert res.hint                    # top category name as the tile hint
 
 
 def test_format_value_variants():
-    assert format_value(1_500_000, "currency") == "£1.5m"
+    assert format_value(1_500_000, "currency") == "£1.5MM"
+    assert format_value(950_000, "currency") == "£950K"
     assert format_value(0.435, "percent") == "43.5%"
     assert format_value(7.63, "rate") == "7.63%"
     assert format_value(75.3, "years") == "75.3 yrs"

@@ -92,13 +92,15 @@ def test_straplines_populated_on_every_slide(run_dir, deck_config_path, tmp_path
     art = load_run_artifacts(run_dir)
     rd = resolve_data(art.tape, reg, as_of_date="2026-01-31")
     cfg = load_deck_config(deck_config_path)
-    mr = MetricResolver(rd, reg)
+    lenses = {"funded": rd, "pipeline": None, "forecast": None}
+    mr = MetricResolver(lenses, reg)
     metrics = {k: mr.resolve(cfg.metric_spec(k)) for k in cfg.metrics}
     sr = StraplineResolver(metrics=metrics)
-    cr = ChartResolver(rd, reg, tmp_path / "c")
+    resolvers = {"funded": ChartResolver(rd, reg, tmp_path / "c", lens="funded"),
+                 "pipeline": None, "forecast": None}
     ctx = BuildContext(client_name="X", as_of_date="2026-01-31",
                        run_dir=str(run_dir))
-    builder = DeckBuilder(cfg, ctx, mr, cr, sr, AppendixNotes())
+    builder = DeckBuilder(cfg, ctx, mr, resolvers, sr, AppendixNotes())
     report = builder.build(tmp_path / "d.pptx")
     for rec in report["slides"]:
         assert rec["strapline"], f"slide {rec['id']} missing strapline"

@@ -1,21 +1,23 @@
-"""mi_agent_pptx.metric_resolver — resolve KPI metrics from the registry layer.
+"""mi_agent_pptx.metric_resolver — lens-aware, registry-authorised KPI metrics.
 
-Resolves the scalar KPIs the deck renders (total pipeline, funded balance, loan
-count, WA ticket size, WA current LTV, WA borrower age, largest exposures, data
-quality …). Resolution order honours the source-of-truth principles:
+Resolves the deck's scalar KPIs from post-pipeline artifacts / registry
+aggregations, with three properties the investor pack requires:
 
-1. If a post-pipeline analytics / metric-registry artifact already carries the
-   value, use it verbatim (the MI Agent computed it — the deck must not
-   recompute).
-2. Otherwise compute a **registry-authorised** aggregation: the aggregation
-   method (``sum`` / ``avg`` / ``count`` / ``weighted_avg``) and the weighting
-   field come from the semantic registry field entry, not from ad-hoc code in
-   the PPTX layer. Weighted averages use the registry ``weight_field``.
-3. If neither is possible (field absent), return an *unavailable* result so the
-   slide renders a branded placeholder and an appendix note — never a crash.
+* **Lens separation** — every metric declares a lens (``funded`` / ``pipeline``
+  / ``forecast``). A metric resolves against *that lens's* frame only, so the
+  pipeline total is never the funded total (and vice-versa). If a lens's frame
+  is absent for the run, the metric is *unavailable* (branded placeholder), not
+  silently backfilled from another lens.
+* **Prior-period deltas** — when a prior-period run is supplied, each metric
+  also reports its change (Δ absolute, Δ%, direction) so KPI tiles can show a
+  "+£0.7MM vs prior" chip, mirroring the React dashboard. No prior data ⇒ no
+  fabricated delta.
+* **No new economics** — aggregation methods and weights come from the semantic
+  registry; the only composite is the registry-declared forecast bridge
+  (funded + Σ weighted pipeline).
 
-No economic derivation lives here beyond the aggregation methods the registry
-already declares for each field.
+Value formatting mirrors the dashboard (`lib/utils.formatGBP`): £X.XXBN / £X.XMM
+/ £XK, percentages to one decimal, tabular figures.
 """
 
 from __future__ import annotations
@@ -24,79 +26,71 @@ import math
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-import numpy as np
 import pandas as pd
 
 from .data_resolver import ResolvedData
 from .registry_loader import RegistryLoader
 
-
-@dataclass
-class MetricResult:
-    """A resolved KPI value plus provenance for the appendix."""
-
-    key: str
-    label: str
-    value: Any = None
-    fmt: str = "string"
-    available: bool = False
-    basis: str = "unavailable"   # analytics_artifact | registry_computed | unavailable
-    note: str = ""
-    display: str = "—"
-
-    @property
-    def ok(self) -> bool:
-        return self.available and self.value is not None
+# Weighted-pipeline column used by the registry forecast bridge.
+_WEIGHTED_PIPELINE_COL = "weighted_expected_funded_amount"
 
 
 # --------------------------------------------------------------------------- #
-# Formatting (mirrors mi_chart_factory compact formatters).
+# Formatting (mirrors the React dashboard's formatGBP / formatPercent).
 # --------------------------------------------------------------------------- #
+
+def _is_nan(v: Any) -> bool:
+    return isinstance(v, float) and math.isnan(v)
+
 
 def compact_currency(value: float, symbol: str = "£") -> str:
-    if value is None or (isinstance(value, float) and math.isnan(value)):
+    if value is None or _is_nan(value):
         return "—"
     v = float(value)
     sign = "-" if v < 0 else ""
     a = abs(v)
     if a >= 1e9:
-        return f"{sign}{symbol}{a / 1e9:.2f}bn"
+        return f"{sign}{symbol}{a / 1e9:.2f}BN"
     if a >= 1e6:
-        return f"{sign}{symbol}{a / 1e6:.1f}m"
+        return f"{sign}{symbol}{a / 1e6:.1f}MM"
     if a >= 1e3:
-        return f"{sign}{symbol}{a / 1e3:.0f}k"
+        return f"{sign}{symbol}{a / 1e3:.0f}K"
     return f"{sign}{symbol}{a:,.0f}"
 
 
+def signed_currency(value: float) -> str:
+    if value is None or _is_nan(value):
+        return "—"
+    body = compact_currency(abs(value))
+    sign = "−" if value < 0 else "+"  # U+2212 minus, per dashboard
+    return f"{sign}{body}"
+
+
 def compact_number(value: float) -> str:
-    if value is None or (isinstance(value, float) and math.isnan(value)):
+    if value is None or _is_nan(value):
         return "—"
     return f"{int(round(float(value))):,}"
 
 
-def format_percent(value: float, *, already_fraction: bool = True) -> str:
-    if value is None or (isinstance(value, float) and math.isnan(value)):
+def format_percent(value: float) -> str:
+    if value is None or _is_nan(value):
         return "—"
-    v = float(value)
-    pct = v * 100.0 if already_fraction else v
-    return f"{pct:.1f}%"
+    return f"{float(value) * 100:.1f}%"
 
 
 def format_value(value: Any, fmt: str) -> str:
-    """Render *value* per a registry format string."""
+    """Render *value* per a registry format string (dashboard parity)."""
     if value is None:
         return "—"
     if isinstance(value, str):
         return value
-    if isinstance(value, float) and math.isnan(value):
+    if _is_nan(value):
         return "—"
     if fmt == "currency":
         return compact_currency(value)
     if fmt == "percent":
         return format_percent(value)
     if fmt == "rate":
-        # Interest rate is stored as whole-number points (e.g. 9.55), not a
-        # fraction — render as-is with a percent sign.
         return f"{float(value):.2f}%"
     if fmt in ("integer", "count"):
         return compact_number(value)
@@ -108,7 +102,38 @@ def format_value(value: Any, fmt: str) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Aggregation (registry-authorised only).
+# Result type.
+# --------------------------------------------------------------------------- #
+
+@dataclass
+class MetricResult:
+    key: str
+    label: str
+    value: Any = None
+    fmt: str = "string"
+    available: bool = False
+    basis: str = "unavailable"
+    note: str = ""
+    display: str = "—"
+    lens: str = "funded"
+    hint: str = ""                       # secondary context line for the tile
+    # prior-period delta
+    delta: Optional[float] = None
+    delta_display: str = ""
+    delta_dir: str = "flat"              # up | down | flat
+    delta_pct: Optional[float] = None
+
+    @property
+    def ok(self) -> bool:
+        return self.available and self.value is not None
+
+    @property
+    def has_delta(self) -> bool:
+        return self.delta is not None and self.delta_display != ""
+
+
+# --------------------------------------------------------------------------- #
+# Aggregation helpers (registry-authorised only).
 # --------------------------------------------------------------------------- #
 
 def _weighted_avg(values: pd.Series, weights: pd.Series) -> float:
@@ -122,176 +147,197 @@ def _weighted_avg(values: pd.Series, weights: pd.Series) -> float:
 
 
 class MetricResolver:
-    """Resolve deck KPIs from analytics artifacts or registry aggregations."""
+    """Resolve deck KPIs across lenses, with optional prior-period deltas."""
 
     def __init__(
         self,
-        data: ResolvedData,
+        lenses: Dict[str, Optional[ResolvedData]],
         registries: RegistryLoader,
         analytics: Optional[Dict[str, Any]] = None,
+        prior_lenses: Optional[Dict[str, Optional[ResolvedData]]] = None,
+        default_lens: str = "funded",
     ):
-        self.data = data
+        self.lenses = lenses or {}
         self.reg = registries
         self.analytics = analytics or {}
+        self.prior_lenses = prior_lenses or {}
+        self.default_lens = default_lens
 
-    # ------------------------------------------------------------------ core
+    # ------------------------------------------------------------------ public
     def resolve(self, spec: Dict[str, Any]) -> MetricResult:
-        """Resolve a single metric spec.
-
-        Spec keys: ``key``, ``label`` (optional), ``field`` (semantic key),
-        ``aggregation`` (overrides the registry default), ``format`` (overrides
-        registry format), ``dimension`` (for ``largest_*`` metrics),
-        ``kind`` (``field`` | ``largest`` | ``data_quality``).
-        """
         key = spec.get("key", spec.get("id", "metric"))
-        kind = spec.get("kind", "field")
+        lens = spec.get("lens", self.default_lens)
         field_key = spec.get("field")
         label = spec.get("label") or (
-            self.reg.label_for(field_key) if field_key else key.replace("_", " ").title()
-        )
+            self.reg.label_for(field_key) if field_key else key.replace("_", " ").title())
         fmt = spec.get("format") or (
-            self.reg.format_for(field_key) if field_key else "string"
-        )
+            self.reg.format_for(field_key) if field_key else "string")
 
-        # 1) analytics artifact override -------------------------------------
+        # 1) analytics-artifact override -----------------------------------
         art_val = self._from_analytics(key)
         if art_val is not None:
-            return self._finish(key, label, art_val, fmt, "analytics_artifact",
-                                 "Sourced from MI Agent analytics artifact.")
+            return self._finish(key, label, art_val, fmt, lens,
+                                "analytics_artifact",
+                                "Sourced from MI Agent analytics artifact.", spec)
 
-        # 2) registry-authorised computation --------------------------------
-        if kind == "data_quality":
-            return self._data_quality(key, label)
-        if kind == "largest":
-            return self._largest_exposure(key, label, spec)
-        return self._field_metric(key, label, field_key, spec, fmt)
+        data = self.lenses.get(lens)
+        if data is None or data.df is None or data.df.empty:
+            return self._unavailable(
+                key, label, fmt, lens,
+                f"{lens.title()} lens data not available for this run.")
+
+        value, basis, note = self._compute(spec, data)
+        if value is None or _is_nan(value):
+            return self._unavailable(key, label, fmt, lens, note or "No value.")
+
+        return self._finish(key, label, value, fmt, lens, basis, note, spec)
 
     def resolve_all(self, specs: List[Dict[str, Any]]) -> List[MetricResult]:
         return [self.resolve(s) for s in specs]
 
-    # ------------------------------------------------------------- computations
-    def _field_metric(self, key, label, field_key, spec, fmt) -> MetricResult:
-        df = self.data.df
-        agg = spec.get("aggregation")
+    # ------------------------------------------------------------- computation
+    def _compute(self, spec, data: ResolvedData):
+        """Return ``(value, basis, note)`` for a metric spec against *data*."""
+        kind = spec.get("kind", "field")
+        if kind == "data_quality":
+            return self._data_quality(data)
+        if kind == "largest":
+            return self._largest(spec, data)
+        if kind == "forecast_funded":
+            return self._forecast_funded(spec)
+        if kind == "count":
+            return float(len(data.df)), "registry_computed", "Loan/case count."
 
-        # count needs no field.
-        if agg == "count" or spec.get("kind") == "count":
-            return self._finish(key, label, int(len(df)), fmt or "integer",
-                                 "registry_computed", "Loan count from tape.")
-
+        field_key = spec.get("field")
         if not field_key:
-            return self._unavailable(key, label, fmt, "No field bound to metric.")
-
+            return None, "unavailable", "No field bound."
         fspec = self.reg.field_spec(field_key)
         canonical = fspec.canonical_field if fspec else field_key
-        if canonical not in df.columns or df[canonical].notna().sum() == 0:
-            return self._unavailable(
-                key, label, fmt,
-                f"Field '{canonical}' not present in tape.")
+        if canonical not in data.df.columns or data.df[canonical].notna().sum() == 0:
+            return None, "unavailable", f"Field '{canonical}' not present."
 
-        agg = agg or (fspec.default_aggregation if fspec else None) or "sum"
-        series = pd.to_numeric(df[canonical], errors="coerce")
-
+        agg = spec.get("aggregation") or (
+            fspec.default_aggregation if fspec else None) or "sum"
+        series = pd.to_numeric(data.df[canonical], errors="coerce")
         if agg == "sum":
-            val = float(series.sum())
-        elif agg in ("avg", "mean"):
-            val = float(series.mean())
-        elif agg == "median":
-            val = float(series.median())
-        elif agg == "weighted_avg":
-            weight_field = spec.get("weight_field") or (
-                fspec.weight_field if fspec else None
-            ) or self.reg.default_weight_field
-            if weight_field not in df.columns:
-                # Fall back to a simple mean rather than fail.
-                val = float(series.mean())
-                note = (f"Weight field '{weight_field}' absent; used simple mean.")
-                return self._finish(key, label, val, fmt, "registry_computed", note)
-            val = _weighted_avg(df[canonical], df[weight_field])
-            if val is None or (isinstance(val, float) and math.isnan(val)):
-                # Weight column present but unusable (e.g. all-NaN balances) —
-                # fall back to a registry-allowed simple mean.
-                mean_val = float(series.mean())
-                if not math.isnan(mean_val):
-                    return self._finish(
-                        key, label, mean_val, fmt, "registry_computed",
-                        f"weighted_avg weight '{weight_field}' unusable; used "
-                        f"simple mean of {canonical}.")
+            return float(series.sum()), "registry_computed", f"sum of {canonical}."
+        if agg in ("avg", "mean"):
+            return float(series.mean()), "registry_computed", f"mean of {canonical}."
+        if agg == "median":
+            return float(series.median()), "registry_computed", f"median of {canonical}."
+        if agg == "weighted_avg":
+            wf = spec.get("weight_field") or (fspec.weight_field if fspec else None) \
+                or self.reg.default_weight_field
+            if wf in data.df.columns:
+                val = _weighted_avg(data.df[canonical], data.df[wf])
+                if not _is_nan(val):
+                    return val, "registry_computed", f"{canonical} weighted by {wf}."
+            mean_val = float(series.mean())
+            return mean_val, "registry_computed", f"mean of {canonical} (weight absent)."
+        return float(series.sum()), "registry_computed", f"sum of {canonical}."
+
+    def _forecast_funded(self, spec):
+        """Registry forecast bridge: funded balance + Σ weighted pipeline."""
+        funded = self.lenses.get("funded")
+        pipe = self.lenses.get("pipeline")
+        if funded is None or funded.df.empty or funded.balance_col is None:
+            return None, "unavailable", "Funded lens unavailable."
+        funded_sum = float(pd.to_numeric(
+            funded.df[funded.balance_col], errors="coerce").sum())
+        if pipe is None or pipe.df.empty:
+            return None, "unavailable", "Pipeline lens unavailable for forecast bridge."
+        if _WEIGHTED_PIPELINE_COL in pipe.df.columns:
+            weighted = float(pd.to_numeric(
+                pipe.df[_WEIGHTED_PIPELINE_COL], errors="coerce").sum())
+        elif "completion_probability" in pipe.df.columns and pipe.balance_col:
+            weighted = float((pd.to_numeric(pipe.df[pipe.balance_col], errors="coerce")
+                              * pd.to_numeric(pipe.df["completion_probability"],
+                                              errors="coerce")).sum())
         else:
-            val = float(series.sum())
+            return None, "unavailable", "Pipeline weighting fields absent."
+        return (funded_sum + weighted), "registry_computed", \
+            "Registry forecast bridge: funded + Σ(weighted pipeline)."
 
-        if val is None or (isinstance(val, float) and math.isnan(val)):
-            return self._unavailable(key, label, fmt, "Aggregation produced no value.")
-
-        return self._finish(
-            key, label, val, fmt, "registry_computed",
-            f"{agg} of {canonical} (registry-authorised).")
-
-    def _largest_exposure(self, key, label, spec) -> MetricResult:
-        """Largest single-category exposure share for a dimension."""
+    def _largest(self, spec, data: ResolvedData):
         dim = spec.get("dimension")
-        fmt = spec.get("format", "percent")
-        df = self.data.df
-        bal = self.data.balance_col
-        if not dim or dim not in df.columns or bal is None:
-            return self._unavailable(key, label, fmt,
-                                     f"Dimension '{dim}' or balance unavailable.")
+        if not dim or dim not in data.df.columns or data.balance_col is None:
+            return None, "unavailable", f"Dimension '{dim}' or balance unavailable."
         try:
             from analytics_lib.concentration import group_shares
-            table = group_shares(df, dim, bal)
+            table = group_shares(data.df, dim, data.balance_col)
         except Exception as exc:  # pragma: no cover
-            return self._unavailable(key, label, fmt, f"Concentration failed: {exc}")
+            return None, "unavailable", f"Concentration failed: {exc}"
         if table is None or table.empty:
-            return self._unavailable(key, label, fmt, "No groups to rank.")
+            return None, "unavailable", "No groups to rank."
         top = table.iloc[0]
-        share = float(top.get("balance_share", float("nan")))
-        name = str(top.get(dim, "—"))
-        display = f"{name} · {format_percent(share)}"
-        return MetricResult(
-            key=key, label=label, value=share, fmt=fmt, available=True,
-            basis="registry_computed",
-            note=f"Largest {dim} exposure by balance share.", display=display,
-        )
+        return float(top.get("balance_share", float("nan"))), "registry_computed", \
+            f"Largest {dim} exposure share · {top.get(dim)}"
 
-    def _data_quality(self, key, label) -> MetricResult:
-        """Deterministic data-quality status from validation artifact or coverage."""
+    def _data_quality(self, data: ResolvedData):
         val_art = self.analytics.get("validation") if self.analytics else None
         status = None
         if isinstance(val_art, dict):
             status = (val_art.get("status") or val_art.get("overallStatus")
-                      or val_art.get("summary", {}).get("status"))
+                      or (val_art.get("summary", {}) or {}).get("status"))
         if not status:
-            # Derive a coarse status from field coverage / issues.
-            errs = [i for i in self.data.issues if i.get("severity") == "error"]
+            errs = [i for i in data.issues if i.get("severity") == "error"]
             status = "Amber" if errs else "Green"
-        status = str(status).title()
-        return MetricResult(
-            key=key, label=label, value=status, fmt="string", available=True,
-            basis="registry_computed", note="Pipeline validation status.",
-            display=status,
-        )
+        return str(status).title(), "registry_computed", "Pipeline validation status."
 
     # -------------------------------------------------------------- analytics
     def _from_analytics(self, key: str) -> Any:
-        """Look up a metric value in the loaded analytics artifact(s)."""
         for container in (self.analytics.get("metrics"), self.analytics.get("analytics")):
-            if isinstance(container, dict):
-                if key in container:
-                    entry = container[key]
-                    if isinstance(entry, dict):
-                        return entry.get("value")
-                    return entry
+            if isinstance(container, dict) and key in container:
+                entry = container[key]
+                return entry.get("value") if isinstance(entry, dict) else entry
         return None
 
-    # ----------------------------------------------------------------- helpers
-    def _finish(self, key, label, value, fmt, basis, note) -> MetricResult:
-        return MetricResult(
+    # ----------------------------------------------------------------- finish
+    def _finish(self, key, label, value, fmt, lens, basis, note, spec) -> MetricResult:
+        res = MetricResult(
             key=key, label=label, value=value, fmt=fmt, available=True,
-            basis=basis, note=note, display=format_value(value, fmt),
-        )
+            basis=basis, note=note, display=format_value(value, fmt), lens=lens)
+        # Prior-period delta (numeric metrics only; not largest/quality strings).
+        if isinstance(value, (int, float)) and not _is_nan(value) \
+                and spec.get("kind") not in ("largest", "data_quality"):
+            self._attach_delta(res, spec, lens)
+        # Secondary hint line (e.g. concentration category, MoM context).
+        if spec.get("kind") == "largest":
+            res.hint = str(note.split("·")[-1]).strip() if "·" in note else ""
+        return res
 
-    def _unavailable(self, key, label, fmt, note) -> MetricResult:
-        return MetricResult(
-            key=key, label=label, value=None, fmt=fmt, available=False,
-            basis="unavailable", note=note, display="—",
-        )
+    def _attach_delta(self, res: MetricResult, spec, lens) -> None:
+        prior = self.prior_lenses.get(lens)
+        if prior is None or prior.df is None or prior.df.empty:
+            return
+        pv, _b, _n = self._compute(spec, prior)
+        if pv is None or _is_nan(pv) or pv == 0:
+            return
+        delta = float(res.value) - float(pv)
+        res.delta = delta
+        res.delta_pct = delta / abs(pv) if pv else None
+        # Treat a delta that rounds to zero at display precision as "no change".
+        eps = {"currency": 500.0, "percent": 5e-4, "rate": 5e-3,
+               "integer": 0.5, "count": 0.5, "years": 0.05}.get(res.fmt, 1e-6)
+        if abs(delta) < eps:
+            res.delta_dir = "flat"
+            res.delta_display = "no change vs prior"
+            return
+        res.delta_dir = "up" if delta > 0 else "down"
+        sign = "−" if delta < 0 else "+"
+        if res.fmt == "currency":
+            mag = signed_currency(delta)
+        elif res.fmt == "percent":
+            mag = f"{sign}{abs(delta) * 100:.1f}pp"
+        elif res.fmt in ("integer", "count"):
+            mag = f"{sign}{compact_number(abs(delta))}"
+        elif res.fmt == "rate":
+            mag = f"{sign}{abs(delta):.2f}pp"
+        else:
+            mag = f"{sign}{abs(delta):.1f}"
+        res.delta_display = f"{mag} vs prior"
+
+    def _unavailable(self, key, label, fmt, lens, note) -> MetricResult:
+        return MetricResult(key=key, label=label, value=None, fmt=fmt,
+                            available=False, basis="unavailable", note=note,
+                            display="—", lens=lens)
