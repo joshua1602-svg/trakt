@@ -103,7 +103,8 @@ describe("compact chat behaviour", () => {
     expect(screen.getByText(/Open table in workspace/)).toBeInTheDocument();
     // A key-number chip is surfaced compactly (not the full chart inline).
     expect(screen.getByText("Groups:")).toBeInTheDocument();
-    expect(screen.queryByText("Show here")).toBeInTheDocument();
+    // No inline-expand: outputs render in the workspace, not duplicated in chat.
+    expect(screen.queryByText("Show here")).toBeNull();
   });
 
   it("surfaces reconciliation coverage as a compact key number", () => {

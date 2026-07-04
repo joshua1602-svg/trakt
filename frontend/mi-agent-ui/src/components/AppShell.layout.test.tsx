@@ -12,7 +12,7 @@ describe("AppShell — UI division, collapse and declutter (A)", () => {
     // 1) Agent chat (its own surface), 2) core dashboard, 3) artifact workspace.
     expect(document.querySelector('[data-surface="ai-chat"]')).toBeTruthy();
     expect(screen.getByTestId("core-dashboard")).toBeInTheDocument();
-    expect(screen.getByText("Core dashboard")).toBeInTheDocument();
+    expect(screen.getByText("Core Dashboard")).toBeInTheDocument();
     expect(screen.getByTestId("artifact-region")).toBeInTheDocument();
     expect(screen.getByText("Artifact Workspace")).toBeInTheDocument();
   });
@@ -22,7 +22,7 @@ describe("AppShell — UI division, collapse and declutter (A)", () => {
     await waitFor(() => expect(screen.getByText("Funded Book Snapshot")).toBeInTheDocument());
     const toggle = screen.getByTestId("core-dashboard-toggle");
     fireEvent.click(toggle);
-    expect(screen.getByText(/Core dashboard collapsed/)).toBeInTheDocument();
+    expect(screen.getByText(/Core Dashboard collapsed/)).toBeInTheDocument();
     expect(screen.queryByText("Funded Book Snapshot")).not.toBeInTheDocument();
     // Expanding restores the loaded snapshot (data was never discarded).
     fireEvent.click(toggle);

@@ -69,9 +69,6 @@ export function HeaderBar({
           <div className="text-sm font-semibold tracking-tight text-ink-100">
             Trakt <span className="font-normal text-ink-400">· MI Agent</span>
           </div>
-          <div className="text-[10px] uppercase tracking-wider text-ink-500">
-            Funded Portfolio Intelligence
-          </div>
         </div>
       </div>
 

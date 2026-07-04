@@ -35,10 +35,10 @@
      the three working areas are visually distinct without over-saturated navy. */
   --surface-dashboard: #12152b;        /* neutral, near-black panel */
   --surface-dashboard-line: #283154;
-  --surface-artifact: #161d3a;         /* faint blue-grey */
-  --surface-artifact-tint: rgba(145, 157, 209, 0.06);
-  --surface-artifact-line: #2b3766;
-  --surface-artifact-accent: #5b6aa8;  /* blue-grey accent rail */
+  --surface-artifact: #23262f;         /* restrained neutral grey (distinct from the navy dashboard + teal chat) */
+  --surface-artifact-tint: rgba(150, 155, 170, 0.05);
+  --surface-artifact-line: #383c47;
+  --surface-artifact-accent: #6b7180;  /* neutral grey accent rail */
   --surface-chat: #131a33;             /* faint blue-grey, chat column */
   --surface-chat-line: #243059;
 

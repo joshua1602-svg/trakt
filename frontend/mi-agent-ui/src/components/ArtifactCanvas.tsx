@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, LayoutList, Rows3, Trash2 } from "lucide-react";
+import { ChevronDown, LayoutGrid, LayoutList, Rows3, Trash2 } from "lucide-react";
 import type { Artifact, ArtifactType } from "@/domain";
 import { ArtifactCard } from "@/components/ArtifactCard";
 import { EmptyState, LoadingState } from "@/components/states/States";
@@ -53,25 +53,43 @@ export function ArtifactCanvas({
     () => [...artifacts].sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned)),
     [artifacts],
   );
-  const visible = useMemo(
+  const visibleArtifacts = useMemo(
     () => (filter === "all" ? ordered : ordered.filter((a) => a.type === filter)),
     [ordered, filter],
   );
+  // Group same-title artifacts into ONE logical artifact so a chart + its table
+  // don't render as two duplicate same-name entries. Each group renders as a
+  // single card with an internal Chart / Table view toggle.
+  const groups = useMemo(() => {
+    const map = new Map<string, Artifact[]>();
+    for (const a of visibleArtifacts) {
+      const key = formatHeading(a.title).toLowerCase();
+      const arr = map.get(key);
+      if (arr) arr.push(a);
+      else map.set(key, [a]);
+    }
+    return Array.from(map.values());
+  }, [visibleArtifacts]);
   const presentTypes = useMemo(
     () => Array.from(new Set(ordered.map((a) => a.type))) as ArtifactType[],
     [ordered],
   );
 
-  const active = visible[Math.min(activeTab, visible.length - 1)];
+  const activeGroup = groups[Math.min(activeTab, groups.length - 1)];
 
   return (
     <section className="flex h-full min-w-0 flex-1 flex-col">
       <header className="flex items-center justify-between gap-3 border-b border-[var(--color-line)] px-6 py-3">
-        <div>
-          <h2 className="text-sm font-semibold text-ink-100">Artifact Workspace</h2>
-          <p className="text-xs text-ink-400">
-            {artifacts.length} artifact{artifacts.length === 1 ? "" : "s"} · {portfolioName}
-          </p>
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-navy-700 text-peri-300">
+            <LayoutGrid size={18} />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-ink-100">Artifact Workspace</h2>
+            <p className="text-[11px] text-ink-400">
+              {artifacts.length} artifact{artifacts.length === 1 ? "" : "s"} · {portfolioName}
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-1 rounded-lg border border-[var(--color-line)] bg-navy-900/60 p-0.5">
           {([
@@ -132,21 +150,21 @@ export function ArtifactCanvas({
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
         {isWorking && <LoadingState />}
 
-        {view === "tabs" && visible.length > 0 && (
+        {view === "tabs" && groups.length > 0 && (
           <div className="mb-4 flex flex-wrap gap-1.5">
-            {visible.map((a, i) => (
+            {groups.map((g, i) => (
               <button
-                key={a.id}
+                key={g[0].id}
                 type="button"
                 onClick={() => setActiveTab(i)}
                 className={cn(
                   "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
-                  i === Math.min(activeTab, visible.length - 1)
+                  i === Math.min(activeTab, groups.length - 1)
                     ? "border-peri-400/40 bg-navy-700/60 text-ink-100"
                     : "border-[var(--color-line)] text-ink-400 hover:text-ink-100",
                 )}
               >
-                {formatHeading(a.title)}
+                {formatHeading(g[0].title)}
               </button>
             ))}
           </div>
@@ -154,21 +172,29 @@ export function ArtifactCanvas({
 
         {view === "stack" ? (
           <div className="flex flex-col gap-4">
-            {visible.map((a) => (
-              <div key={a.id} id={`artifact-${a.id}`}>
-                <ArtifactCard artifact={a} onTogglePin={onTogglePin} onDrill={onDrill} onAsk={onAsk} />
+            {groups.map((g) => (
+              <div key={g[0].id}>
+                {/* One scroll anchor per member id so "open in workspace" links
+                    (which target a specific chart/table id) still land here. */}
+                {g.map((a) => (
+                  <span key={a.id} id={`artifact-${a.id}`} aria-hidden className="block scroll-mt-4" />
+                ))}
+                <ArtifactCard artifact={g[0]} views={g} onTogglePin={onTogglePin} onDrill={onDrill} onAsk={onAsk} />
               </div>
             ))}
           </div>
         ) : (
-          active && (
-            <div id={`artifact-${active.id}`}>
-              <ArtifactCard artifact={active} onTogglePin={onTogglePin} onDrill={onDrill} onAsk={onAsk} />
+          activeGroup && (
+            <div>
+              {activeGroup.map((a) => (
+                <span key={a.id} id={`artifact-${a.id}`} aria-hidden className="block scroll-mt-4" />
+              ))}
+              <ArtifactCard artifact={activeGroup[0]} views={activeGroup} onTogglePin={onTogglePin} onDrill={onDrill} onAsk={onAsk} />
             </div>
           )
         )}
 
-        {visible.length === 0 && !isWorking && (
+        {groups.length === 0 && !isWorking && (
           <EmptyState
             title={filter === "all" ? "No artifacts yet" : `No ${TYPE_LABEL[filter as ArtifactType]} artifacts`}
             hint={filter === "all" ? "Ask the MI Agent a question to generate analysis." : "Try a different filter or ask another question."}

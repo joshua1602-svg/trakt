@@ -20,17 +20,23 @@ export function ViewToggle({
   active,
   onChange,
   disabledViews = [],
+  className,
 }: {
   active: WorkspaceView;
   onChange: (view: WorkspaceView) => void;
   disabledViews?: WorkspaceView[];
+  /** Optional wrapper classes (e.g. `flex-1` to span the dashboard width). */
+  className?: string;
 }) {
   const disabled = new Set(disabledViews);
   return (
     <div
       role="tablist"
       aria-label="MI workspace view"
-      className="inline-flex items-center gap-1 rounded-lg border border-navy-600 bg-navy-950/80 p-1 shadow-inner ring-1 ring-inset ring-white/5"
+      className={cn(
+        "flex w-full items-stretch gap-1 rounded-lg border border-navy-600 bg-navy-950/80 p-1 shadow-inner ring-1 ring-inset ring-white/5",
+        className,
+      )}
     >
       {VIEWS.map(({ id, label, icon: Icon }) => {
         const selected = active === id;
@@ -46,7 +52,8 @@ export function ViewToggle({
             title={isDisabled ? "Not applicable for an acquired back book (Funded only)" : undefined}
             onClick={() => !isDisabled && onChange(id)}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all",
+              // Each tab flexes to share the row evenly across the full width.
+              "inline-flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all",
               isDisabled
                 ? "cursor-not-allowed text-ink-600 opacity-40"
                 : selected
