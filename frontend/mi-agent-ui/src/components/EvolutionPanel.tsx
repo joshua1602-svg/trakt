@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Bar, CartesianGrid, ComposedChart, Line, LineChart, ReferenceLine,
   ResponsiveContainer, Tooltip, XAxis, YAxis, Legend,
 } from "recharts";
-import { Activity, ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
+import { Activity, ArrowDownRight, ArrowUpRight, ChevronDown, Maximize2, Minus, X } from "lucide-react";
 import type { AgentClient } from "@/api";
 import type {
   FundedEvolution,
@@ -216,11 +216,57 @@ function pct1(v: number | null | undefined): string {
   return v == null ? "n/a" : `${v.toFixed(1)}%`;
 }
 
+/** Collapsed-by-default "Conversion vs KFI" disclosure. Same computed stats,
+ * only hidden until expanded — keeps each card calm by default. */
+function ConversionDisclosure({ stage, conversion }: {
+  stage: string;
+  conversion: FunnelConversion;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-2 rounded-md border border-[var(--color-line-soft)] bg-navy-900/50 text-[10px]"
+      data-testid={`funnel-conversion-${stage}`}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left font-medium uppercase tracking-wide text-ink-400 hover:text-ink-200"
+      >
+        <ChevronDown size={12} className={cn("transition-transform", !open && "-rotate-90")} />
+        Conversion vs KFI
+      </button>
+      {open && (
+        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 px-2 pb-2" data-testid={`funnel-conversion-body-${stage}`}>
+          <div>
+            <span className="text-ink-500">5-week</span>{" "}
+            <span className="font-semibold text-mint-300">{pct1(conversion.fiveWeekCount)}</span>
+            <span className="text-ink-500"> by count</span>
+          </div>
+          <div>
+            <span className="font-semibold text-mint-300">{pct1(conversion.fiveWeekValue)}</span>
+            <span className="text-ink-500"> by value</span>
+          </div>
+          <div>
+            <span className="text-ink-500">Since inception</span>{" "}
+            <span className="font-semibold text-peri-200">{pct1(conversion.sinceInceptionCount)}</span>
+            <span className="text-ink-500"> by count</span>
+          </div>
+          <div>
+            <span className="font-semibold text-peri-200">{pct1(conversion.sinceInceptionValue)}</span>
+            <span className="text-ink-500"> by value</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** One origination-funnel stage: weekly-FLOW bars (default) with an optional
- * cumulative stock line, a 5-week trailing average of the WEEKLY FLOW, the Δ vs
- * prior week (flow − prior flow), and conversion vs KFI on two explicit bases. */
+ * stock line, a 5-week trailing average of the WEEKLY FLOW, the Δ vs prior week
+ * (flow − prior flow), and a collapsed conversion-vs-KFI disclosure. Renders
+ * compact in the 2×2 grid and larger inside the focus modal (``large``). */
 function FunnelStageCard({
-  stage, label, points, flowPoints, summary, conversion, showCumulative,
+  stage, label, points, flowPoints, summary, conversion, showCumulative, large, onExpand,
 }: {
   stage: string;
   label: string;
@@ -229,8 +275,12 @@ function FunnelStageCard({
   summary: PipelineFunnelEvolution["summary"][string] | undefined;
   conversion: FunnelConversion | null;
   showCumulative: boolean;
+  /** Larger chart for the focus modal. */
+  large?: boolean;
+  /** Open this stage in the focus modal (compact card only). */
+  onExpand?: () => void;
 }) {
-  // Join the weekly-flow bars with the cumulative stock level per week.
+  // Join the weekly-flow bars with the stock level per week.
   const data = flowPoints.map((f, i) => ({
     week: f.week ?? "",
     flow: f.flowValue,
@@ -239,15 +289,27 @@ function FunnelStageCard({
   const avgFlow = summary?.fiveWeekAvgFlowValue ?? null;
   const hasFlow = data.some((d) => d.flow != null);
   return (
-    <div className="rounded-xl border border-[var(--color-line)] bg-navy-900/40 p-4"
+    <div className={cn("rounded-xl border border-[var(--color-line)] bg-navy-900/40 p-4", large && "h-full")}
       data-testid={`funnel-stage-${stage}`}>
       <div className="mb-1 flex items-center justify-between">
         <div className="text-[12px] font-semibold text-ink-200">
           {label} <span className="font-normal text-ink-500">· weekly flow</span>
         </div>
-        <div className="flex items-center gap-1 text-[11px] text-ink-400">
+        <div className="flex items-center gap-1.5 text-[11px] text-ink-400">
           {summary && trendIcon(summary.trend)}
           <span>{summary?.weeksObserved ?? 0} wks</span>
+          {onExpand && (
+            <button
+              type="button"
+              onClick={onExpand}
+              aria-label={`Enlarge ${label} chart`}
+              title="View larger"
+              data-testid={`funnel-expand-${stage}`}
+              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-ink-400 hover:bg-navy-800 hover:text-ink-100"
+            >
+              <Maximize2 size={13} />
+            </button>
+          )}
         </div>
       </div>
       {!hasFlow ? (
@@ -255,16 +317,16 @@ function FunnelStageCard({
           Need ≥2 weekly extracts to show weekly flow.
         </p>
       ) : (
-        <div style={{ width: "100%", height: 160 }}>
+        <div style={{ width: "100%", height: large ? 380 : 160 }}>
           <ResponsiveContainer>
             <ComposedChart data={data} margin={{ top: 6, right: 12, bottom: 4, left: 4 }}>
               <CartesianGrid stroke="#23304d" strokeDasharray="3 3" />
-              <XAxis dataKey="week" tick={{ fill: "#8a97ad", fontSize: 10 }} />
+              <XAxis dataKey="week" tick={{ fill: "#8a97ad", fontSize: large ? 11 : 10 }} />
               <YAxis yAxisId="flow" tickFormatter={gbpCompact}
-                tick={{ fill: "#8a97ad", fontSize: 10 }} width={56} />
+                tick={{ fill: "#8a97ad", fontSize: large ? 11 : 10 }} width={56} />
               {showCumulative && (
                 <YAxis yAxisId="stock" orientation="right" tickFormatter={gbpCompact}
-                  tick={{ fill: "#6f7b91", fontSize: 10 }} width={56} />
+                  tick={{ fill: "#6f7b91", fontSize: large ? 11 : 10 }} width={56} />
               )}
               <Tooltip
                 formatter={(v: number, name: string) => [gbpCompact(Number(v)), name]}
@@ -276,7 +338,7 @@ function FunnelStageCard({
               <Bar yAxisId="flow" dataKey="flow" name="Weekly flow (£)"
                 fill="#7c9cf0" radius={[2, 2, 0, 0]} />
               {showCumulative && (
-                <Line yAxisId="stock" type="monotone" dataKey="stock" name="Cumulative stock (£)"
+                <Line yAxisId="stock" type="monotone" dataKey="stock" name="Stock (£)"
                   stroke="#5ec6b8" strokeWidth={2} dot={false} />
               )}
             </ComposedChart>
@@ -322,38 +384,72 @@ function FunnelStageCard({
           </div>
         </div>
       )}
-      {summary && (
-        <div className="mt-1 text-[10px] text-ink-500" data-testid={`funnel-stock-${stage}`}>
-          Current stock level: {summary.latestStockValue != null ? gbpCompact(summary.latestStockValue) : "—"}
-          {" "}· {summary.latestStockCount} cases
+      {conversion && <ConversionDisclosure stage={stage} conversion={conversion} />}
+    </div>
+  );
+}
+
+/** Lightweight focus modal for a single enlarged chart. Escape / backdrop /
+ * close button all dismiss it; only one chart is enlarged at a time. */
+function ChartFocusModal({ title, onClose, children }: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      data-testid="funnel-focus-modal"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/70 p-4 backdrop-blur-sm"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[var(--color-line)] bg-navy-900 shadow-2xl">
+        <div className="flex items-center justify-between gap-3 border-b border-[var(--color-line)] px-4 py-3">
+          <h3 className="text-sm font-semibold text-ink-100">{title}</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close enlarged chart"
+            data-testid="funnel-focus-close"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-400 hover:bg-navy-800 hover:text-ink-100"
+          >
+            <X size={16} />
+          </button>
         </div>
-      )}
-      {conversion && (
-        <div className="mt-2 rounded-md border border-[var(--color-line-soft)] bg-navy-900/50 px-2 py-1.5 text-[10px]"
-          data-testid={`funnel-conversion-${stage}`}>
-          <div className="mb-1 font-medium uppercase tracking-wide text-ink-500">
-            Conversion vs KFI
-          </div>
-          <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-            <div>
-              <span className="text-ink-500">5-week</span>{" "}
-              <span className="font-semibold text-mint-300">{pct1(conversion.fiveWeekCount)}</span>
-              <span className="text-ink-500"> by count</span>
-            </div>
-            <div>
-              <span className="font-semibold text-mint-300">{pct1(conversion.fiveWeekValue)}</span>
-              <span className="text-ink-500"> by value</span>
-            </div>
-            <div>
-              <span className="text-ink-500">Since inception</span>{" "}
-              <span className="font-semibold text-peri-200">{pct1(conversion.sinceInceptionCount)}</span>
-              <span className="text-ink-500"> by count</span>
-            </div>
-            <div>
-              <span className="font-semibold text-peri-200">{pct1(conversion.sinceInceptionValue)}</span>
-              <span className="text-ink-500"> by value</span>
-            </div>
-          </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+/** Short, collapsed methodology note (replaces the long inline paragraph). */
+function MethodologyDisclosure() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        data-testid="origination-methodology-toggle"
+        className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-navy-900/60 px-2 py-1 text-[10px] text-ink-400 hover:text-ink-200"
+      >
+        <ChevronDown size={11} className={cn("transition-transform", !open && "-rotate-90")} />
+        Methodology
+      </button>
+      {open && (
+        <div className="absolute right-0 z-20 mt-1 w-72 rounded-lg border border-[var(--color-line)] bg-navy-900 px-3 py-2 text-[11px] leading-relaxed text-ink-300 shadow-xl"
+          data-testid="origination-methodology-body">
+          Bars show <span className="text-ink-100">weekly flow</span> — the week-on-week change in each
+          stage. The 5-week average and Δ-vs-prior-week are on this weekly-flow basis. Toggle
+          “Show stock line” to overlay the stock level.
         </div>
       )}
     </div>
@@ -472,8 +568,10 @@ export function EvolutionPanel({
   const [loading, setLoading] = useState(false);
   const [stageMode, setStageMode] = useState<StageViewMode>("amount");
   const [includeKfi, setIncludeKfi] = useState(true);
-  // Origination funnel: overlay the cumulative stock line on the weekly-flow bars.
+  // Origination funnel: overlay the stock line on the weekly-flow bars.
   const [showCumulative, setShowCumulative] = useState(false);
+  // Which origination stage (if any) is enlarged in the focus modal.
+  const [expandedStage, setExpandedStage] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -676,19 +774,13 @@ export function EvolutionPanel({
 
       {view === "origination" && (
         <div className="space-y-3" data-testid="origination-funnel">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <p className="max-w-2xl text-[11px] text-ink-400">
-              Weekly origination funnel — KFI → Application → Offer → Completion.{" "}
-              <span className="text-ink-300">Bars show weekly flow</span> (the new
-              origination each week, i.e. the week-on-week change in the stage level);
-              the 5-week average and Δ-vs-prior-week are both on this weekly-flow basis.
-              Toggle the cumulative line to overlay the stock level.
-            </p>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <MethodologyDisclosure />
             <label className="flex shrink-0 items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-navy-900/60 px-2 py-1 text-[10px] text-ink-300">
               <input type="checkbox" checked={showCumulative}
                 onChange={(e) => setShowCumulative(e.target.checked)}
-                aria-label="Show cumulative stock line" />
-              Show cumulative stock line
+                aria-label="Show stock line" />
+              Show stock line
             </label>
           </div>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -699,18 +791,31 @@ export function EvolutionPanel({
                 flowPoints={funnel?.flowSeries?.[stage] ?? []}
                 summary={funnel?.summary?.[stage]}
                 conversion={funnel?.summary?.[stage]?.conversion ?? null}
-                showCumulative={showCumulative} />
+                showCumulative={showCumulative}
+                onExpand={() => setExpandedStage(stage)} />
             ))}
           </div>
           {funnel?.sourceFiles?.length ? (
             <p className="text-[10px] text-ink-500">
               Source: {funnel.uniqueWeeklyExtractsUsed ?? funnel.sourceFiles.length} governed
-              weekly extract(s). Weekly flow = week-on-week change in the stage level; 5-week
-              average = trailing mean of the last 5 weeks of weekly flow (not the average stock
-              level). Conversion vs KFI is shown on a 5-week trailing and a since-inception basis,
-              by count and by value.
+              weekly extract(s).
             </p>
           ) : null}
+          {expandedStage && funnel && (
+            <ChartFocusModal
+              title={`${funnel.stageLabels?.[expandedStage] ?? expandedStage} · weekly origination flow`}
+              onClose={() => setExpandedStage(null)}
+            >
+              <FunnelStageCard stage={expandedStage}
+                label={funnel.stageLabels?.[expandedStage] ?? expandedStage}
+                points={funnel.series?.[expandedStage] ?? []}
+                flowPoints={funnel.flowSeries?.[expandedStage] ?? []}
+                summary={funnel.summary?.[expandedStage]}
+                conversion={funnel.summary?.[expandedStage]?.conversion ?? null}
+                showCumulative={showCumulative}
+                large />
+            </ChartFocusModal>
+          )}
         </div>
       )}
 
