@@ -33,13 +33,44 @@ function rgbAt(t: number): string {
   return `rgb(${last[0]}, ${last[1]}, ${last[2]})`;
 }
 
+/**
+ * Numeric sort key for a bucket-band label ("20-30%", "<40", "80+", "£100k-200k")
+ * so a bucket axis reads in natural band order, not the order rows happened to
+ * arrive in (the executor ranks rows by value). Returns null for a non-numeric
+ * category (broker names, borrower type, …), which keeps insertion order.
+ */
+export function bucketSortKey(label: string): number | null {
+  const s = label.replace(/[£$,%\s]/g, "");
+  const m = s.match(/-?\d+(?:\.\d+)?/);
+  if (!m) return null;
+  let key = parseFloat(m[0]);
+  const mult = /\dk\b/i.test(s) || /k[-+>]?/i.test(s) ? 1e3 : /\dm\b/i.test(s) ? 1e6 : 1;
+  key *= mult;
+  if (/^</.test(s)) key -= 0.5; // "<40" sits just below the "40-…" band
+  return key;
+}
+
+/** Order axis values by bucket band when numeric; else preserve insertion order.
+ * Non-numeric buckets (e.g. "Unknown / Missing") sort last, stably. */
+export function orderAxis(vals: string[]): string[] {
+  const keyed = vals.map((v, i) => ({ v, i, k: bucketSortKey(v) }));
+  if (!keyed.some((x) => x.k !== null)) return vals;
+  return [...keyed]
+    .sort((a, b) => {
+      const ka = a.k ?? Infinity;
+      const kb = b.k ?? Infinity;
+      return ka !== kb ? ka - kb : a.i - b.i;
+    })
+    .map((x) => x.v);
+}
+
 export function HeatmapArtifactView({ artifact }: { artifact: ChartArtifact }) {
   const { xKey, yKey, valueKey, rows, valueFormat } = artifact;
 
   const model = useMemo(() => {
     if (!xKey || !yKey || !valueKey) return null;
-    const xs: string[] = [];
-    const ys: string[] = [];
+    const xsSeen: string[] = [];
+    const ysSeen: string[] = [];
     const cells = new Map<string, number>();
     let min = Infinity;
     let max = -Infinity;
@@ -47,13 +78,15 @@ export function HeatmapArtifactView({ artifact }: { artifact: ChartArtifact }) {
       const x = String(r[xKey]);
       const y = String(r[yKey]);
       const v = Number(r[valueKey]) || 0;
-      if (!xs.includes(x)) xs.push(x);
-      if (!ys.includes(y)) ys.push(y);
+      if (!xsSeen.includes(x)) xsSeen.push(x);
+      if (!ysSeen.includes(y)) ysSeen.push(y);
       cells.set(`${x}||${y}`, v);
       if (v < min) min = v;
       if (v > max) max = v;
     }
-    return { xs, ys, cells, min, max };
+    // Order both axes in natural band order (a bucket axis reads 20-30, 30-40,
+    // 40-50, …, not by cell count); non-bucket axes keep insertion order.
+    return { xs: orderAxis(xsSeen), ys: orderAxis(ysSeen), cells, min, max };
   }, [xKey, yKey, valueKey, rows]);
 
   if (!model) {
