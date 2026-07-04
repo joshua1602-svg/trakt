@@ -560,12 +560,47 @@ def snapshot(portfolioId: Optional[str] = None,
     return result
 
 
+#: A trailing dated (or ``latest``) folder in a pipeline snapshot pointer.
+_PIPELINE_URI_TAIL_RE = re.compile(r"^(?:\d{4}-\d{2}-\d{2}|latest)$", re.IGNORECASE)
+
+
+def _pipeline_root_from_uri() -> Optional[str]:
+    """Derive a pipeline DISCOVERY ROOT from ``MI_AGENT_PIPELINE_URI`` (the weekly
+    snapshot pointer) when ``MI_AGENT_PIPELINE_ROOT`` is not set.
+
+    The URI points at a SINGLE snapshot (``…/{date|latest}/pipeline_snapshot.csv``,
+    a ``.json`` pointer, or a ``latest/`` dir). Discovery/evolution/funnel need the
+    CONTAINING root so they can enumerate ALL dated weekly cuts, not just one — so
+    strip the filename and a trailing ``{date}``/``latest`` folder to reach it."""
+    uri = os.environ.get("MI_AGENT_PIPELINE_URI")
+    if not uri:
+        return None
+    path = uri.rstrip("/")
+    if path.endswith(".csv") or path.endswith(".json"):
+        path = path.rsplit("/", 1)[0]
+    last = path.rsplit("/", 1)[-1]
+    if _PIPELINE_URI_TAIL_RE.match(last):
+        path = path.rsplit("/", 1)[0]
+    return path or None
+
+
 def _pipeline_root() -> Optional[str]:
-    """Root to discover governed pipeline sources (18a tape / M2L KFI extracts)."""
-    for key in ("MI_AGENT_PIPELINE_ROOT", "MI_AGENT_ONBOARDING_OUTPUT_ROOT"):
-        root = os.environ.get(key)
-        if root:
-            return root
+    """Root to discover governed pipeline sources (18a tape / M2L KFI extracts).
+
+    Precedence: explicit ``MI_AGENT_PIPELINE_ROOT`` → a root DERIVED from the
+    weekly ``MI_AGENT_PIPELINE_URI`` pointer → ``MI_AGENT_ONBOARDING_OUTPUT_ROOT``
+    → the inferred onboarding root. The URI-derived root comes before the
+    onboarding root because the onboarding/platform root holds FUNDED cuts, not
+    the weekly pipeline extracts."""
+    explicit = os.environ.get("MI_AGENT_PIPELINE_ROOT")
+    if explicit:
+        return explicit
+    derived = _pipeline_root_from_uri()
+    if derived:
+        return derived
+    root = os.environ.get("MI_AGENT_ONBOARDING_OUTPUT_ROOT")
+    if root:
+        return root
     return _onboarding_output_root()
 
 

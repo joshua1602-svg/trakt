@@ -1,5 +1,8 @@
 [
   { "name": "MI_AGENT_PLATFORM_URI", "value": "blob://processed-v2/platform/ERE/latest/platform_canonical_typed.csv" },
+  { "_comment": "Multi-period roots: funded evolution/forecast/compare read >=2 DATED platform cuts under the platform root; weekly pipeline funnel/conversion reads the dated snapshots under the pipeline root. Omit either only if that book is not published.",
+    "name": "MI_AGENT_ONBOARDING_OUTPUT_ROOT", "value": "blob://processed-v2/platform/ERE" },
+  { "name": "MI_AGENT_PIPELINE_ROOT", "value": "blob://processed-v2/pipeline/ERE" },
   { "name": "TRAKT_BLOB_CONNECTION", "value": "<storage-connection-string>" },
   { "name": "TRAKT_STORAGE_BACKEND", "value": "blob" },
   { "name": "TRAKT_PROCESSED_CONTAINER", "value": "processed-v2" },
