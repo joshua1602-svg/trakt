@@ -1,16 +1,21 @@
-"""mi_agent_pptx.chart_resolver — registry-authorised static chart rendering.
+"""mi_agent_pptx.chart_resolver — dashboard-faithful static chart rendering.
 
-Renders the deck's charts as high-resolution PNGs styled to the MI Agent React
-dark theme, so a chart drops onto its slide panel with no white pasted box. All
-aggregation is delegated to the registry-authorised shared analytics library
-(:mod:`analytics_lib` — ``stratify`` / ``concentration`` / ``cohort``); this
-module only shapes the already-authorised numbers into a figure. When a chart's
-source dimension/measure is unavailable it returns a *branded placeholder* result
-(via :mod:`placeholders`) plus a coverage note, never a crash.
+Renders the deck's charts as PNGs that reproduce the MI Agent **React dashboard**
+visual language (Recharts / BarList / heatmap), so the pack reads as a direct,
+automated export of the dashboard rather than generic plotting output:
 
-Chart kinds supported (v1): ``bar``, ``dual_bar`` (balance + count),
-``hbar``, ``heatmap`` (2-dim balance matrix), ``bubble``, ``line`` and
-``cohort`` (vintage/origination). Each renders onto the theme panel background.
+* the signature breakdown visual is the dashboard **BarList** — a horizontal bar
+  with the category label on the left, a periwinkle fill proportional to the
+  max, and a right-aligned mono value (``£X.XMM``);
+* time series use monotone lines with a top→bottom gradient area fill;
+* the heatmap uses the dashboard's navy→periwinkle→mint ramp with contrast-
+  flipping cell values;
+* every figure is rendered at the **exact width×height of its slide panel** so
+  python-pptx never stretches it (the root cause of the earlier distortion).
+
+All aggregation is delegated to the registry-authorised ``analytics_lib``. Each
+resolver is bound to a single lens's frame; a slide routes to the resolver for
+its lens, so pipeline charts never render funded data.
 """
 
 from __future__ import annotations
@@ -22,72 +27,64 @@ from typing import Any, Dict, List, Optional, Tuple
 import matplotlib
 
 matplotlib.use("Agg")
+import matplotlib.font_manager as fm  # noqa: E402
+import matplotlib.patches as mpatches  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
+from matplotlib.colors import LinearSegmentedColormap, to_rgb  # noqa: E402
 from matplotlib.ticker import FuncFormatter  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
 from .data_resolver import ResolvedData  # noqa: E402
-from .metric_resolver import compact_currency, compact_number  # noqa: E402
+from .metric_resolver import compact_currency, compact_number, format_percent  # noqa: E402
 from .placeholders import render_placeholder_png  # noqa: E402
 from .pptx_theme import PptxTheme, THEME  # noqa: E402
 from .registry_loader import RegistryLoader  # noqa: E402
 
+# ---- fonts: prefer a clean humanist sans; mono for numeric values ----------
+_SANS = next((f for f in ("Inter", "Liberation Sans", "DejaVu Sans")
+              if f in {ff.name for ff in fm.fontManager.ttflist}), "DejaVu Sans")
+_MONO = next((f for f in ("Liberation Mono", "DejaVu Sans Mono")
+              if f in {ff.name for ff in fm.fontManager.ttflist}), "DejaVu Sans Mono")
+plt.rcParams.update({
+    "font.family": _SANS,
+    "font.size": 11,
+    "axes.unicode_minus": False,
+    "svg.fonttype": "none",
+})
+_MONO_FP = fm.FontProperties(family=_MONO)
+
 
 @dataclass
 class ChartResult:
-    """Outcome of resolving/rendering a single chart spec."""
-
     chart_id: str
     title: str
     path: Optional[Path] = None
     available: bool = False
     placeholder: bool = False
     note: str = ""
-    kind: str = "bar"
+    kind: str = "barlist"
 
     @property
     def ok(self) -> bool:
         return self.available and self.path is not None
 
 
-def _apply_axes_style(ax, theme: PptxTheme) -> None:
-    ax.set_facecolor(theme.bg_panel)
-    for spine in ("top", "right"):
-        ax.spines[spine].set_visible(False)
-    for spine in ("left", "bottom"):
-        ax.spines[spine].set_color(theme.line)
-    ax.tick_params(colors=theme.ink_300, labelsize=9)
-    ax.grid(axis="y", color=theme.line_soft, linewidth=0.6, alpha=0.7)
-    ax.set_axisbelow(True)
-    for lbl in ax.get_xticklabels() + ax.get_yticklabels():
-        lbl.set_color(theme.ink_300)
-
-
-def _new_fig(theme: PptxTheme, width_in=9.6, height_in=4.6, dpi=200, ncols=1):
-    fig, axes = plt.subplots(1, ncols, figsize=(width_in, height_in), dpi=dpi)
-    fig.patch.set_facecolor(theme.bg_panel)
-    if ncols == 1:
-        axes = [axes]
-    for ax in axes:
-        _apply_axes_style(ax, theme)
-    return fig, axes
-
-
-def _currency_fmt(_x, _pos):
+def _currency_axis(_x, _pos):
     return compact_currency(_x)
 
 
 class ChartResolver:
-    """Resolve deck chart specs into rendered PNGs or branded placeholders."""
+    """Render a single lens's chart specs into dashboard-faithful PNGs."""
 
     def __init__(
         self,
-        data: ResolvedData,
+        data: Optional[ResolvedData],
         registries: RegistryLoader,
         out_dir: str | Path,
         theme: PptxTheme = THEME,
-        dpi: int = 200,
+        dpi: int = 220,
+        lens: str = "funded",
     ):
         self.data = data
         self.reg = registries
@@ -95,29 +92,60 @@ class ChartResolver:
         self.out_dir.mkdir(parents=True, exist_ok=True)
         self.theme = theme
         self.dpi = dpi
+        self.lens = lens
 
     # ------------------------------------------------------------------ public
-    def resolve(self, spec: Dict[str, Any]) -> ChartResult:
+    def resolve(self, spec: Dict[str, Any], width_in: float, height_in: float) -> ChartResult:
         chart_id = spec.get("id", "chart")
         title = spec.get("title", chart_id.replace("_", " ").title())
-        kind = spec.get("type", "bar")
+        kind = self._normalise_kind(spec.get("type", "barlist"))
+        if self.data is None or self.data.df is None or self.data.df.empty:
+            return self._placeholder(
+                chart_id, title, kind, width_in, height_in,
+                f"{self.lens.title()} lens data not available for this run.")
         try:
             handler = getattr(self, f"_render_{kind}", None)
             if handler is None:
-                return self._placeholder(chart_id, title, kind,
+                return self._placeholder(chart_id, title, kind, width_in, height_in,
                                          f"Unsupported chart type '{kind}'.")
-            return handler(spec, chart_id, title)
+            return handler(spec, chart_id, title, width_in, height_in)
         except Exception as exc:  # pragma: no cover - defensive
-            return self._placeholder(chart_id, title, kind,
+            return self._placeholder(chart_id, title, kind, width_in, height_in,
                                      f"Chart render error: {exc}")
 
-    # -------------------------------------------------------------- dimension
-    def _dimension_column(self, spec: Dict[str, Any]) -> Optional[str]:
-        """Resolve the physical column for a chart's dimension.
+    @staticmethod
+    def _normalise_kind(kind: str) -> str:
+        # Map legacy/simple kinds onto the dashboard renderers.
+        return {
+            "bar": "barlist", "dual_bar": "barlist", "hbar": "barlist",
+            "cohort": "area", "line": "area",
+        }.get(kind, kind)
 
-        A ``bucket`` key resolves to the materialised registry bucket column;
-        otherwise the categorical dimension column is used directly.
-        """
+    # --------------------------------------------------------------- figures
+    def _fig(self, width_in, height_in):
+        fig = plt.figure(figsize=(width_in, height_in), dpi=self.dpi)
+        fig.patch.set_facecolor(self.theme.bg_panel)
+        return fig
+
+    def _save(self, fig, chart_id, kind, title) -> ChartResult:
+        path = self.out_dir / f"{self.lens}_{chart_id}.png"
+        fig.savefig(path, facecolor=self.theme.bg_panel, dpi=self.dpi)
+        plt.close(fig)
+        return ChartResult(chart_id=chart_id, title=title, path=path,
+                           available=True, placeholder=False, kind=kind,
+                           note="Rendered from the latest pipeline run.")
+
+    def _placeholder(self, chart_id, title, kind, w, h, note) -> ChartResult:
+        path = self.out_dir / f"{self.lens}_{chart_id}_placeholder.png"
+        # The slide card header already carries the title — keep the placeholder
+        # image title-less so it does not duplicate.
+        render_placeholder_png(path, "", note, theme=self.theme,
+                               width_in=w, height_in=h, dpi=self.dpi)
+        return ChartResult(chart_id=chart_id, title=title, path=path,
+                           available=False, placeholder=True, kind=kind, note=note)
+
+    # ---------------------------------------------------------- dimension prep
+    def _dimension_column(self, spec: Dict[str, Any]) -> Optional[str]:
         bucket = spec.get("bucket")
         if bucket and bucket != "categorical":
             col = self.data.bucket_column(bucket)
@@ -126,224 +154,299 @@ class ChartResolver:
         dim = spec.get("dimension")
         if dim and dim in self.data.df.columns:
             return dim
-        # Fall back to the dimension's registry semantic field.
         if dim:
             sem = self.reg.dimension_semantic_field(dim)
             if sem and sem in self.data.df.columns:
                 return sem
         return None
 
-    def _stratify(self, dim_col: str, spec: Dict[str, Any]) -> Optional[pd.DataFrame]:
+    def _bucket_order(self, spec: Dict[str, Any]) -> Optional[List[str]]:
+        """Natural label order for an ordered bucket (LTV, age, …)."""
+        bucket = spec.get("bucket")
+        if not bucket or bucket == "categorical":
+            return spec.get("order")
+        bspec = self.reg.bucket_spec(bucket)
+        if bspec and isinstance(bspec.get("labels"), list):
+            return list(bspec["labels"])
+        return spec.get("order")
+
+    def _is_datelike(self, col: str) -> bool:
+        s = self.data.df[col]
+        if pd.api.types.is_datetime64_any_dtype(s):
+            return True
+        if not (s.dtype == object or pd.api.types.is_string_dtype(s)):
+            return False
+        # Only date-typed field names are treated as dates (avoids parsing
+        # arbitrary string columns and the associated dateutil warning).
+        if not any(tok in col.lower() for tok in ("date", "_dt", "period")):
+            return False
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            parsed = pd.to_datetime(s, errors="coerce")
+        return parsed.notna().mean() > 0.6 and s.notna().any()
+
+    def _breakdown(self, spec: Dict[str, Any]) -> Optional[pd.DataFrame]:
+        """Aggregate one dimension into an ordered label/value/count table."""
+        dim_col = self._dimension_column(spec)
+        if not dim_col:
+            return None
+        df = self.data.df
+        chronological = False
+        # Date dimensions: bucket into period labels (YYYY-MM) so a barlist shows
+        # months, not one bar per raw date, ordered chronologically.
+        if spec.get("period") or (dim_col not in (spec.get("bucket"),) and self._is_datelike(dim_col)):
+            period = spec.get("period", "M")
+            df = df.copy()
+            per = pd.to_datetime(df[dim_col], errors="coerce").dt.to_period(period)
+            df["_period_label"] = per.astype(str)
+            df.loc[per.isna(), "_period_label"] = "Unknown"
+            dim_col = "_period_label"
+            chronological = True
         from analytics_lib.stratify import stratify
         bal = self.data.balance_col
-        table = stratify(
-            self.data.df, dim_col, bal,
-            loan_id_col=self.data.loan_id_col,
-            sort_by="balance_sum" if bal else "loan_count",
-        )
+        table = stratify(df, dim_col, bal, loan_id_col=self.data.loan_id_col,
+                         sort_by="balance_sum" if bal else "loan_count")
         if table is None or table.empty:
             return None
-        top_n = spec.get("top_n")
-        if top_n:
-            table = table.head(int(top_n))
+        table = table.rename(columns={dim_col: "label"})
+        if chronological:
+            table = table[table["label"] != "Unknown"]
+            table = table.sort_values("label")
+            top_n = spec.get("top_n")
+            if top_n:
+                table = table.tail(int(top_n))
+            return table.reset_index(drop=True)
+        order = self._bucket_order(spec)
+        if order:
+            table["label"] = table["label"].astype(str)
+            table = (table.set_index("label").reindex([str(o) for o in order])
+                     .dropna(how="all").reset_index())
+        else:
+            table = table.sort_values(
+                "balance_sum" if bal else "loan_count", ascending=False)
+            top_n = spec.get("top_n")
+            if top_n:
+                table = table.head(int(top_n))
         return table.reset_index(drop=True)
 
-    # ----------------------------------------------------------------- renders
-    def _render_bar(self, spec, chart_id, title) -> ChartResult:
-        dim_col = self._dimension_column(spec)
-        if not dim_col:
-            return self._placeholder(chart_id, title, "bar",
+    # ------------------------------------------------------------- BARLIST
+    def _render_barlist(self, spec, chart_id, title, w, h) -> ChartResult:
+        table = self._breakdown(spec)
+        if table is None or table.empty:
+            return self._placeholder(chart_id, title, "barlist", w, h,
                                      f"Dimension '{spec.get('dimension')}' unavailable.")
-        table = self._stratify(dim_col, spec)
-        if table is None:
-            return self._placeholder(chart_id, title, "bar", "No data to aggregate.")
         measure = spec.get("measure", "balance")
-        y = table["balance_sum"] if (measure == "balance" and "balance_sum" in table) \
-            else table["loan_count"]
-        fig, (ax,) = _new_fig(self.theme, dpi=self.dpi)
-        ax.bar(table[dim_col].astype(str), y, color=self.theme.navy,
-               edgecolor=self.theme.peri, linewidth=0.4)
-        if measure == "balance":
-            ax.yaxis.set_major_formatter(FuncFormatter(_currency_fmt))
-        ax.set_title(title, color=self.theme.ink_100, fontsize=13,
-                     fontweight="bold", loc="left", pad=10)
-        self._rotate_if_needed(ax, table[dim_col])
-        return self._save(fig, chart_id, title, "bar")
+        use_balance = (measure == "balance" and "balance_sum" in table
+                       and self.data.balance_col is not None)
+        values = (table["balance_sum"] if use_balance else table["loan_count"]).astype(float)
+        labels = table["label"].astype(str).tolist()
+        counts = table["loan_count"].astype(int).tolist() if "loan_count" in table else None
+        fmt = compact_currency if use_balance else compact_number
 
-    def _render_hbar(self, spec, chart_id, title) -> ChartResult:
-        dim_col = self._dimension_column(spec)
-        if not dim_col:
-            return self._placeholder(chart_id, title, "hbar",
-                                     f"Dimension '{spec.get('dimension')}' unavailable.")
-        table = self._stratify(dim_col, spec)
-        if table is None:
-            return self._placeholder(chart_id, title, "hbar", "No data to aggregate.")
-        table = table.iloc[::-1]
+        fig = self._fig(w, h)
+        ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
+        ax.set_facecolor(self.theme.bg_panel)
+        ax.set_xlim(0, 1)
+        ax.axis("off")
+
+        n = len(labels)
+        vmax = max(float(values.max()), 1.0)
+        pad_top, pad_bot = 0.10, 0.05
+        band = (1.0 - pad_top - pad_bot) / max(n, 1)
+        bar_h = min(band * 0.62, 0.135)
+        label_x, track_x0, track_x1 = 0.005, 0.335, 0.85
+        track_w = track_x1 - track_x0
+        # Truncate labels to the label column so they never overrun the track.
+        max_chars = max(10, int((track_x0 - label_x) * w * 72 / (10.5 * 0.56)))
+        labels = [(lab if len(lab) <= max_chars else lab[:max_chars - 1].rstrip() + "…")
+                  for lab in labels]
+        peri = self.theme.peri
+        track_c = self.theme.bg_panel_alt
+
+        for i, (lab, val) in enumerate(zip(labels, values)):
+            yc = 1.0 - pad_top - (i + 0.5) * band
+            y0 = yc - bar_h / 2
+            # track
+            ax.add_patch(mpatches.FancyBboxPatch(
+                (track_x0, y0), track_w, bar_h,
+                boxstyle="round,pad=0,rounding_size=0.012",
+                linewidth=0, facecolor=track_c, alpha=0.7,
+                mutation_aspect=h / w, zorder=1))
+            frac = max(float(val) / vmax, 0.012)
+            ax.add_patch(mpatches.FancyBboxPatch(
+                (track_x0, y0), track_w * frac, bar_h,
+                boxstyle="round,pad=0,rounding_size=0.012",
+                linewidth=0, facecolor=peri, alpha=0.9,
+                mutation_aspect=h / w, zorder=2))
+            # label (left)
+            ax.text(label_x, yc, lab, va="center", ha="left",
+                    color=self.theme.ink_300, fontsize=10.5, zorder=3)
+            # value (right, mono)
+            vtxt = fmt(val)
+            if use_balance and counts:
+                vtxt = f"{vtxt}"
+            ax.text(0.995, yc, vtxt, va="center", ha="right",
+                    color=self.theme.ink_100, fontsize=10.5,
+                    fontproperties=_MONO_FP, zorder=3)
+        return self._save(fig, chart_id, "barlist", title)
+
+    # ------------------------------------------------------------- AREA / LINE
+    def _render_area(self, spec, chart_id, title, w, h) -> ChartResult:
+        date_field = spec.get("date_field", "origination_date")
+        df = self.data.df
+        bal = self.data.balance_col
+        if date_field not in df.columns or bal is None:
+            return self._placeholder(chart_id, title, "area", w, h,
+                                     f"Date field '{date_field}' or balance unavailable.")
+        try:
+            from analytics_lib.cohort import cohort_table
+            table, _ = cohort_table(df, date_field, bal,
+                                    period=spec.get("period", "M"),
+                                    loan_id_col=self.data.loan_id_col)
+        except Exception as exc:  # pragma: no cover
+            return self._placeholder(chart_id, title, "area", w, h, f"Cohort failed: {exc}")
+        cohort_col = f"{date_field}_cohort"
+        if table is None or table.empty or cohort_col not in table.columns:
+            return self._placeholder(chart_id, title, "area", w, h, "No time-series data.")
+        table = table.sort_values(cohort_col)
+        x = list(range(len(table)))
+        xlabels = table[cohort_col].astype(str).tolist()
         measure = spec.get("measure", "balance")
-        x = table["balance_sum"] if (measure == "balance" and "balance_sum" in table) \
-            else table["loan_count"]
-        fig, (ax,) = _new_fig(self.theme, dpi=self.dpi)
-        ax.barh(table[dim_col].astype(str), x, color=self.theme.navy,
-                edgecolor=self.theme.peri, linewidth=0.4)
-        if measure == "balance":
-            ax.xaxis.set_major_formatter(FuncFormatter(_currency_fmt))
-        ax.set_title(title, color=self.theme.ink_100, fontsize=13,
-                     fontweight="bold", loc="left", pad=10)
-        return self._save(fig, chart_id, title, "hbar")
+        use_balance = measure == "balance" and "balance_sum" in table
+        y = (table["balance_sum"] if use_balance else table["loan_count"]).astype(float).tolist()
+        cumulative = bool(spec.get("cumulative"))
+        if cumulative:
+            y = list(np.cumsum(y))
 
-    def _render_dual_bar(self, spec, chart_id, title) -> ChartResult:
-        dim_col = self._dimension_column(spec)
-        if not dim_col:
-            return self._placeholder(chart_id, title, "dual_bar",
-                                     f"Dimension '{spec.get('dimension')}' unavailable.")
-        table = self._stratify(dim_col, spec)
-        if table is None:
-            return self._placeholder(chart_id, title, "dual_bar", "No data to aggregate.")
-        fig, axes = _new_fig(self.theme, width_in=9.6, height_in=4.4,
-                             dpi=self.dpi, ncols=2)
-        cats = table[dim_col].astype(str)
-        if "balance_sum" in table:
-            axes[0].bar(cats, table["balance_sum"], color=self.theme.navy,
-                        edgecolor=self.theme.peri, linewidth=0.4)
-            axes[0].yaxis.set_major_formatter(FuncFormatter(_currency_fmt))
-        axes[0].set_title("Balance", color=self.theme.ink_300, fontsize=11,
-                          loc="left")
-        axes[1].bar(cats, table["loan_count"], color=self.theme.peri,
-                    edgecolor=self.theme.navy, linewidth=0.4)
-        axes[1].set_title("Loan count", color=self.theme.ink_300, fontsize=11,
-                          loc="left")
-        for ax in axes:
-            self._rotate_if_needed(ax, table[dim_col])
-        fig.suptitle(title, color=self.theme.ink_100, fontsize=13,
-                     fontweight="bold", x=0.06, ha="left")
-        return self._save(fig, chart_id, title, "dual_bar")
+        series_color = self.theme.mint if self.lens == "forecast" else self.theme.peri
+        fig = self._fig(w, h)
+        ax = fig.add_axes([0.085, 0.16, 0.895, 0.80])
+        self._axis_style(ax, use_balance)
+        ax.plot(x, y, color=series_color, linewidth=2.4, zorder=3,
+                solid_capstyle="round")
+        ax.fill_between(x, y, color=series_color, alpha=0.16, zorder=2)
+        ax.scatter([x[-1]], [y[-1]], s=26, color=series_color, zorder=4,
+                   edgecolors=self.theme.bg_panel, linewidths=1.2)
+        self._time_xticks(ax, x, xlabels)
+        ax.set_ylim(bottom=0)
+        return self._save(fig, chart_id, "area", title)
 
-    def _render_heatmap(self, spec, chart_id, title) -> ChartResult:
+    # ------------------------------------------------------------- HEATMAP
+    def _render_heatmap(self, spec, chart_id, title, w, h) -> ChartResult:
         d1 = self._dimension_column({"dimension": spec.get("dimension"),
                                      "bucket": spec.get("bucket")})
         d2 = self._dimension_column({"dimension": spec.get("dimension2"),
                                      "bucket": spec.get("bucket2")})
         bal = self.data.balance_col
         if not d1 or not d2 or not bal:
-            return self._placeholder(chart_id, title, "heatmap",
-                                     "Two dimensions + balance required for heatmap.")
+            return self._placeholder(chart_id, title, "heatmap", w, h,
+                                     "Two dimensions + balance required.")
         df = self.data.df
-        pivot = pd.pivot_table(
-            df, index=d1, columns=d2,
-            values=bal, aggfunc="sum", fill_value=0.0,
-        )
+        pivot = pd.pivot_table(df, index=d1, columns=d2, values=bal,
+                               aggfunc="sum", fill_value=0.0)
+        o1 = self._bucket_order({"bucket": spec.get("bucket"),
+                                 "dimension": spec.get("dimension")})
+        o2 = self._bucket_order({"bucket": spec.get("bucket2"),
+                                 "dimension": spec.get("dimension2")})
+        if o1:
+            pivot = pivot.reindex([x for x in o1 if x in pivot.index])
+        if o2:
+            pivot = pivot.reindex(columns=[x for x in o2 if x in pivot.columns])
         if pivot.empty:
-            return self._placeholder(chart_id, title, "heatmap", "No data for heatmap.")
-        fig, (ax,) = _new_fig(self.theme, width_in=9.6, height_in=5.0, dpi=self.dpi)
-        cmap = matplotlib.colors.LinearSegmentedColormap.from_list(
-            "trakt_seq", self.theme.sequential)
-        im = ax.imshow(pivot.values, cmap=cmap, aspect="auto")
-        ax.set_xticks(range(len(pivot.columns)))
-        ax.set_xticklabels([str(c) for c in pivot.columns], rotation=45, ha="right")
-        ax.set_yticks(range(len(pivot.index)))
-        ax.set_yticklabels([str(i) for i in pivot.index])
-        ax.set_xlabel(self.reg.label_for(spec.get("dimension2", d2)),
-                      color=self.theme.ink_300, fontsize=10)
-        ax.set_ylabel(self.reg.label_for(spec.get("dimension", d1)),
-                      color=self.theme.ink_300, fontsize=10)
-        ax.grid(False)
-        cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-        cbar.ax.tick_params(colors=self.theme.ink_300, labelsize=8)
-        cbar.outline.set_edgecolor(self.theme.line)
-        ax.set_title(title, color=self.theme.ink_100, fontsize=13,
-                     fontweight="bold", loc="left", pad=10)
-        return self._save(fig, chart_id, title, "heatmap")
+            return self._placeholder(chart_id, title, "heatmap", w, h, "No data.")
 
-    def _render_bubble(self, spec, chart_id, title) -> ChartResult:
-        x_field = spec.get("x")
-        y_field = spec.get("y")
+        ramp = LinearSegmentedColormap.from_list(
+            "trakt_ramp", [(0.0, "#1b2240"), (0.55, "#919dd1"), (1.0, "#36c2a8")])
+        vals = pivot.values.astype(float)
+        vmax = max(vals.max(), 1.0)
+
+        fig = self._fig(w, h)
+        ax = fig.add_axes([0.14, 0.20, 0.83, 0.74])
+        ax.set_facecolor(self.theme.bg_panel)
+        nrows, ncols = vals.shape
+        gap = 0.06
+        for i in range(nrows):
+            for j in range(ncols):
+                t = vals[i, j] / vmax
+                ax.add_patch(mpatches.Rectangle(
+                    (j + gap / 2, (nrows - 1 - i) + gap / 2), 1 - gap, 1 - gap,
+                    facecolor=ramp(t), edgecolor="none"))
+                if vals[i, j] > 0:
+                    txt_c = "#0c1024" if t > 0.45 else self.theme.ink_100
+                    ax.text(j + 0.5, (nrows - 1 - i) + 0.5, compact_currency(vals[i, j]),
+                            ha="center", va="center", color=txt_c, fontsize=8.5,
+                            fontproperties=_MONO_FP)
+        ax.set_xlim(0, ncols)
+        ax.set_ylim(0, nrows)
+        ax.set_xticks([j + 0.5 for j in range(ncols)])
+        ax.set_xticklabels([str(c) for c in pivot.columns], fontsize=9,
+                           color=self.theme.ink_300, rotation=0)
+        ax.set_yticks([(nrows - 1 - i) + 0.5 for i in range(nrows)])
+        ax.set_yticklabels([str(r) for r in pivot.index], fontsize=9,
+                           color=self.theme.ink_300)
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        ax.tick_params(length=0)
+        ax.set_xlabel(self.reg.label_for(spec.get("dimension2", d2)),
+                      color=self.theme.ink_400, fontsize=9.5, labelpad=6)
+        ax.set_ylabel(self.reg.label_for(spec.get("dimension", d1)),
+                      color=self.theme.ink_400, fontsize=9.5, labelpad=6)
+        return self._save(fig, chart_id, "heatmap", title)
+
+    # ------------------------------------------------------------- BUBBLE
+    def _render_bubble(self, spec, chart_id, title, w, h) -> ChartResult:
+        x_field, y_field = spec.get("x"), spec.get("y")
         df = self.data.df
         bal = self.data.balance_col
-        if not x_field or not y_field or x_field not in df.columns \
-                or y_field not in df.columns:
-            return self._placeholder(chart_id, title, "bubble",
+        if not x_field or not y_field or x_field not in df.columns or y_field not in df.columns:
+            return self._placeholder(chart_id, title, "bubble", w, h,
                                      "Bubble requires x and y fields present.")
         x = pd.to_numeric(df[x_field], errors="coerce")
         y = pd.to_numeric(df[y_field], errors="coerce")
         size = pd.to_numeric(df[bal], errors="coerce") if bal else None
         mask = x.notna() & y.notna()
         if mask.sum() == 0:
-            return self._placeholder(chart_id, title, "bubble", "No plottable points.")
+            return self._placeholder(chart_id, title, "bubble", w, h, "No plottable points.")
         s = None
         if size is not None:
-            s = (size[mask] / max(size[mask].max(), 1)) * 600 + 15
-        fig, (ax,) = _new_fig(self.theme, dpi=self.dpi)
-        ax.scatter(x[mask], y[mask], s=s, alpha=0.6, color=self.theme.peri,
-                   edgecolors=self.theme.navy, linewidths=0.5)
-        ax.set_xlabel(self.reg.label_for(x_field), color=self.theme.ink_300)
-        ax.set_ylabel(self.reg.label_for(y_field), color=self.theme.ink_300)
-        ax.set_title(title, color=self.theme.ink_100, fontsize=13,
-                     fontweight="bold", loc="left", pad=10)
-        return self._save(fig, chart_id, title, "bubble")
+            s = (size[mask] / max(size[mask].max(), 1)) * 520 + 24
+        fig = self._fig(w, h)
+        ax = fig.add_axes([0.085, 0.16, 0.895, 0.80])
+        self._axis_style(ax, False)
+        pct_x = self.reg.format_for(x_field) == "percent"
+        xv = x[mask] * 100 if pct_x else x[mask]
+        ax.scatter(xv, y[mask], s=s, alpha=0.55, color=self.theme.peri,
+                   edgecolors=self.theme.navy, linewidths=0.6, zorder=3)
+        ax.set_xlabel(self.reg.label_for(x_field), color=self.theme.ink_400, fontsize=9.5)
+        ax.set_ylabel(self.reg.label_for(y_field), color=self.theme.ink_400, fontsize=9.5)
+        if pct_x:
+            ax.xaxis.set_major_formatter(FuncFormatter(lambda v, p: f"{v:.0f}%"))
+        return self._save(fig, chart_id, "bubble", title)
 
-    def _render_line(self, spec, chart_id, title) -> ChartResult:
-        return self._render_cohort(spec, chart_id, title, as_line=True)
+    # ------------------------------------------------------------- helpers
+    def _axis_style(self, ax, currency_y: bool) -> None:
+        ax.set_facecolor(self.theme.bg_panel)
+        for s in ("top", "right", "left"):
+            ax.spines[s].set_visible(False)
+        ax.spines["bottom"].set_color(self.theme.line_soft)
+        ax.tick_params(colors=self.theme.ink_500, labelsize=9, length=0)
+        ax.grid(axis="y", color=self.theme.line_soft, linewidth=0.7,
+                linestyle=(0, (3, 3)), alpha=0.9)
+        ax.set_axisbelow(True)
+        for lbl in ax.get_xticklabels() + ax.get_yticklabels():
+            lbl.set_color(self.theme.ink_500)
+        if currency_y:
+            ax.yaxis.set_major_formatter(FuncFormatter(_currency_axis))
 
-    def _render_cohort(self, spec, chart_id, title, as_line=True) -> ChartResult:
-        date_field = spec.get("date_field", "origination_date")
-        df = self.data.df
-        bal = self.data.balance_col
-        if date_field not in df.columns or not bal:
-            return self._placeholder(chart_id, title, "cohort",
-                                     f"Date field '{date_field}' or balance unavailable.")
-        try:
-            from analytics_lib.cohort import cohort_table
-            period = spec.get("period", "M")
-            table, _issues = cohort_table(
-                df, date_field, bal, period=period,
-                loan_id_col=self.data.loan_id_col)
-        except Exception as exc:  # pragma: no cover
-            return self._placeholder(chart_id, title, "cohort", f"Cohort failed: {exc}")
-        cohort_col = f"{date_field}_cohort"
-        if table is None or table.empty or cohort_col not in table.columns:
-            return self._placeholder(chart_id, title, "cohort", "No cohort data.")
-        table = table.sort_values(cohort_col)
-        x = table[cohort_col].astype(str)
-        measure = spec.get("measure", "balance")
-        y = table["balance_sum"] if (measure == "balance" and "balance_sum" in table) \
-            else table["loan_count"]
-        fig, (ax,) = _new_fig(self.theme, dpi=self.dpi)
-        if as_line:
-            ax.plot(x, y, color=self.theme.peri, marker="o", markersize=4,
-                    linewidth=2)
-            ax.fill_between(range(len(x)), y, color=self.theme.navy, alpha=0.35)
-        else:
-            ax.bar(x, y, color=self.theme.navy, edgecolor=self.theme.peri,
-                   linewidth=0.4)
-        if measure == "balance":
-            ax.yaxis.set_major_formatter(FuncFormatter(_currency_fmt))
-        self._rotate_if_needed(ax, x)
-        ax.set_title(title, color=self.theme.ink_100, fontsize=13,
-                     fontweight="bold", loc="left", pad=10)
-        return self._save(fig, chart_id, title, "cohort")
-
-    # ------------------------------------------------------------------ helpers
-    def _rotate_if_needed(self, ax, labels) -> None:
-        n = len(labels)
-        longest = max((len(str(x)) for x in labels), default=0)
-        if n > 6 or longest > 8:
-            for lbl in ax.get_xticklabels():
-                lbl.set_rotation(40)
-                lbl.set_ha("right")
-
-    def _save(self, fig, chart_id, title, kind) -> ChartResult:
-        fig.tight_layout()
-        path = self.out_dir / f"{chart_id}.png"
-        fig.savefig(path, facecolor=self.theme.bg_panel, dpi=self.dpi,
-                    bbox_inches="tight")
-        plt.close(fig)
-        return ChartResult(chart_id=chart_id, title=title, path=path,
-                           available=True, placeholder=False, kind=kind,
-                           note="Rendered from latest pipeline run.")
-
-    def _placeholder(self, chart_id, title, kind, note) -> ChartResult:
-        path = self.out_dir / f"{chart_id}_placeholder.png"
-        render_placeholder_png(path, title, "Chart unavailable — " + note,
-                               theme=self.theme)
-        return ChartResult(chart_id=chart_id, title=title, path=path,
-                           available=False, placeholder=True, kind=kind, note=note)
+    def _time_xticks(self, ax, x, xlabels) -> None:
+        n = len(x)
+        if n == 0:
+            return
+        # Evenly spaced ticks that always include the first and last, with no
+        # collision at the right edge.
+        want = min(7, n)
+        idx = sorted(set(int(round(k)) for k in np.linspace(0, n - 1, want)))
+        ax.set_xticks([x[i] for i in idx])
+        ax.set_xticklabels([xlabels[i] for i in idx], fontsize=8.5,
+                           color=self.theme.ink_500, rotation=0)

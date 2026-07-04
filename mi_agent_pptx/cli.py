@@ -7,11 +7,12 @@ Usage
         --deck-config configs/pptx/investor_pack.yaml \
         --client-name "Client Name" \
         --as-of-date "YYYY-MM-DD" \
-        --output reports/client_investor_pack_YYYYMMDD.pptx
+        --output out/runs/<run_id>/reports/investor_pack.pptx
 
-The generator consumes MI Agent run artifacts only — it never imports Streamlit
-or the legacy ``streamlit_app_erm.py``. Missing artifacts degrade to branded
-placeholders and appendix coverage notes rather than failing.
+Optional ``--prior-run-dir`` supplies the previous reporting period so KPI tiles
+render prior-period deltas ("+£0.7MM vs prior"). The generator consumes MI Agent
+run artifacts only — never Streamlit — and resolves each lens (funded / pipeline
+/ forecast) from its own frame so the pipeline total is never the funded total.
 """
 
 from __future__ import annotations
@@ -19,11 +20,13 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
-from .artifact_loader import load_run_artifacts
+import pandas as pd
+
+from .artifact_loader import RunArtifacts, load_run_artifacts
 from .chart_resolver import ChartResolver
-from .data_resolver import resolve_data
+from .data_resolver import ResolvedData, resolve_data
 from .deck_config import load_deck_config
 from .insight_resolver import StraplineResolver
 from .metric_resolver import MetricResolver
@@ -31,51 +34,50 @@ from .placeholders import AppendixNotes
 from .pptx_builder import BuildContext, DeckBuilder
 from .pptx_theme import THEME
 from .registry_loader import RegistryLoader
-from .validation import validate_build, validate_deck_config
 
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="python -m mi_agent_pptx.cli",
         description="Generate an institutional investor/funder PPTX pack from a "
-                    "completed MI Agent pipeline run.",
-    )
-    p.add_argument("--run-dir", required=True,
-                   help="MI Agent run directory (e.g. out/runs/<run_id>).")
-    p.add_argument("--deck-config",
-                   default="configs/pptx/investor_pack.yaml",
-                   help="Path to the deck config YAML.")
-    p.add_argument("--client-name", default="Client",
-                   help="Client / portfolio name shown on the cover.")
-    p.add_argument("--as-of-date", default=None,
-                   help="Data cut-off date (YYYY-MM-DD). Inferred from the tape "
-                        "when omitted.")
-    p.add_argument("--output", default=None,
-                   help="Output .pptx path (default: reports/<client>_investor_pack.pptx).")
-    p.add_argument("--lens", default=None,
-                   help="Portfolio lens (total|direct|acquired|cohort). "
-                        "Defaults to the deck config's default_lens.")
-    p.add_argument("--consolidated", action="store_true",
-                   help="Consolidated funded lens — suppress broker channel where "
-                        "acquired portfolios carry no broker data.")
-    p.add_argument("--work-dir", default=None,
-                   help="Directory for intermediate chart PNGs (default: a "
-                        "'_charts' folder beside the output).")
-    p.add_argument("--repo-root", default=None,
-                   help="Override repo root for registry resolution.")
+                    "completed MI Agent pipeline run.")
+    p.add_argument("--run-dir", required=True)
+    p.add_argument("--deck-config", default="configs/pptx/investor_pack.yaml")
+    p.add_argument("--client-name", default="Client")
+    p.add_argument("--as-of-date", default=None)
+    p.add_argument("--output", default=None)
+    p.add_argument("--prior-run-dir", default=None,
+                   help="Previous reporting-period run directory (enables MoM deltas).")
+    p.add_argument("--lens", default=None)
+    p.add_argument("--consolidated", action="store_true")
+    p.add_argument("--work-dir", default=None)
+    p.add_argument("--repo-root", default=None)
     return p
 
 
 def _default_output(client_name: str) -> str:
-    slug = "".join(ch if ch.isalnum() else "_" for ch in client_name.lower()).strip("_")
+    slug = "".join(c if c.isalnum() else "_" for c in client_name.lower()).strip("_")
     return f"reports/{slug or 'client'}_investor_pack.pptx"
+
+
+def _lens_bundle(artifacts: RunArtifacts, registries: RegistryLoader,
+                 as_of: Optional[str]) -> Dict[str, Optional[ResolvedData]]:
+    """Resolve the funded / pipeline / forecast frames for a run."""
+    funded = resolve_data(artifacts.tape if artifacts.has_tape else pd.DataFrame(),
+                          registries, as_of_date=as_of)
+    pipeline = (resolve_data(artifacts.pipeline_tape, registries, as_of_date=as_of)
+                if artifacts.has_pipeline else None)
+    # Forecast charts (run-rate / cumulative) draw from the pipeline frame's
+    # expected-completion data; the forecast KPI uses the registry bridge.
+    forecast = pipeline
+    return {"funded": funded, "pipeline": pipeline, "forecast": forecast}
 
 
 def run(argv: Optional[List[str]] = None) -> int:
     args = build_parser().parse_args(argv)
 
-    # --- config + registries -------------------------------------------
     config = load_deck_config(args.deck_config)
+    from .validation import validate_build, validate_deck_config
     cfg_report = validate_deck_config(config)
     for w in cfg_report.warnings:
         print(f"[config][warn] {w}")
@@ -84,7 +86,6 @@ def run(argv: Optional[List[str]] = None) -> int:
 
     registries = RegistryLoader(Path(args.repo_root) if args.repo_root else None)
 
-    # --- artifacts + data ----------------------------------------------
     artifacts = load_run_artifacts(args.run_dir)
     for note in artifacts.coverage_notes:
         print(f"[artifacts] {note}")
@@ -92,65 +93,62 @@ def run(argv: Optional[List[str]] = None) -> int:
     appendix = AppendixNotes()
     appendix.extend(artifacts.coverage_notes)
 
-    if artifacts.has_tape:
-        resolved = resolve_data(artifacts.tape, registries,
-                                as_of_date=args.as_of_date)
-    else:
-        # Empty analytical frame — deck renders fully with placeholders.
-        import pandas as pd
-        resolved = resolve_data(pd.DataFrame(), registries,
-                                as_of_date=args.as_of_date)
+    lenses = _lens_bundle(artifacts, registries, args.as_of_date)
+    as_of = args.as_of_date or (lenses["funded"].as_of_date if lenses["funded"] else "") or ""
+    if not artifacts.has_tape:
         appendix.add("No canonical typed tape resolved — deck rendered with "
                      "branded placeholders throughout.")
+    if not artifacts.has_pipeline:
+        appendix.add("No pipeline tape in run — pipeline & forecast lenses render "
+                     "as branded placeholders (not funded data).")
 
-    as_of = args.as_of_date or resolved.as_of_date or ""
+    # Prior-period lenses (for MoM deltas), optional.
+    prior_lenses: Dict[str, Optional[ResolvedData]] = {}
+    prior_label = ""
+    if args.prior_run_dir:
+        prior_art = load_run_artifacts(args.prior_run_dir)
+        prior_lenses = _lens_bundle(prior_art, registries, None)
+        pdate = prior_lenses["funded"].as_of_date if prior_lenses["funded"] else ""
+        prior_label = f"prior run {Path(args.prior_run_dir).name}" + (
+            f" (as-of {pdate})" if pdate else "")
 
-    # --- resolvers ------------------------------------------------------
-    analytics = {
-        "analytics": artifacts.artifact("analytics"),
-        "metrics": artifacts.artifact("metrics"),
-        "validation": artifacts.artifact("validation"),
-        "risk_monitor": artifacts.artifact("risk_monitor"),
-    }
-    metric_resolver = MetricResolver(resolved, registries, analytics=analytics)
-    strapline_metrics = {
-        k: metric_resolver.resolve(config.metric_spec(k))
-        for k in config.metrics.keys()
-    }
+    analytics = {k: artifacts.artifact(k) for k in
+                 ("analytics", "metrics", "validation", "risk_monitor")}
+    metric_resolver = MetricResolver(lenses, registries, analytics=analytics,
+                                     prior_lenses=prior_lenses, default_lens="funded")
+    strapline_metrics = {k: metric_resolver.resolve(config.metric_spec(k))
+                         for k in config.metrics.keys()}
     strapline_resolver = StraplineResolver(
-        metrics=strapline_metrics,
-        llm_artifact=artifacts.artifact("straplines"),
-    )
+        metrics=strapline_metrics, llm_artifact=artifacts.artifact("straplines"))
 
     output = args.output or _default_output(args.client_name)
     work_dir = args.work_dir or str(Path(output).with_suffix("")) + "_charts"
-    chart_resolver = ChartResolver(resolved, registries, work_dir, theme=THEME)
+    chart_resolvers: Dict[str, Optional[ChartResolver]] = {}
+    for lens in ("funded", "pipeline", "forecast"):
+        data = lenses.get(lens)
+        chart_resolvers[lens] = (
+            ChartResolver(data, registries, work_dir, theme=THEME, lens=lens)
+            if (data is not None and data.df is not None and not data.df.empty)
+            else None)
 
-    # --- context --------------------------------------------------------
-    source_artifacts = []
+    source_artifacts: List[str] = []
     if artifacts.tape_path:
-        source_artifacts.append(str(artifacts.tape_path.name))
+        source_artifacts.append(artifacts.tape_path.name)
     if artifacts.pipeline_tape_path:
-        source_artifacts.append(str(artifacts.pipeline_tape_path.name))
-    source_artifacts.extend(sorted(
-        p.name for k, p in artifacts.json_paths.items() if k != "run_state"))
+        source_artifacts.append(artifacts.pipeline_tape_path.name)
+    source_artifacts += sorted(p.name for k, p in artifacts.json_paths.items()
+                               if k != "run_state")
 
     ctx = BuildContext(
-        client_name=args.client_name,
-        as_of_date=as_of,
-        run_dir=str(args.run_dir),
-        lens=args.lens or config.default_lens,
-        consolidated=args.consolidated,
-        logo_path=config.logo_path,
-        source_artifacts=source_artifacts,
-    )
+        client_name=args.client_name, as_of_date=as_of, run_dir=str(args.run_dir),
+        lens=args.lens or config.default_lens, consolidated=args.consolidated,
+        logo_path=config.logo_path, prior_label=prior_label,
+        source_artifacts=source_artifacts)
 
-    # --- build ----------------------------------------------------------
-    builder = DeckBuilder(config, ctx, metric_resolver, chart_resolver,
+    builder = DeckBuilder(config, ctx, metric_resolver, chart_resolvers,
                           strapline_resolver, appendix, theme=THEME)
     build_report = builder.build(output)
 
-    # --- validate -------------------------------------------------------
     build_validation = validate_build(build_report)
     print(f"\nDeck: {build_report['output']}")
     print(f"Slides: {len(build_report['slides'])}")
@@ -160,13 +158,11 @@ def run(argv: Optional[List[str]] = None) -> int:
     for w in build_validation.warnings:
         print(f"[build][warn] {w}")
     if build_report["coverage_notes"]:
-        print(f"Coverage notes: {len(build_report['coverage_notes'])} "
-              f"(see appendix slide).")
-
+        print(f"Coverage notes: {len(build_report['coverage_notes'])} (see appendix).")
     return 0 if build_validation.ok else 2
 
 
-def main() -> None:  # pragma: no cover - thin entrypoint
+def main() -> None:  # pragma: no cover
     sys.exit(run())
 
 
