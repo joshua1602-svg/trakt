@@ -90,3 +90,21 @@ def test_unknown_vintage_bucketed_not_dropped():
 if __name__ == "__main__":
     import pytest
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+def test_points_scaled_rate_is_normalised_to_fraction():
+    # The ERE tape stores LTV as a fraction (0.40) but the interest rate in
+    # POINTS (9.55). A single ×100 UI formatter turned 9.55% into 955%. The
+    # endpoint must emit both as fractions so the UI renders them correctly.
+    df = pd.DataFrame({
+        "vintage_year": [2025, 2025, 2024, 2024],
+        "current_outstanding_balance": [100_000, 100_000, 100_000, 100_000],
+        "current_loan_to_value": [0.40, 0.38, 0.42, 0.30],   # fraction
+        "current_interest_rate": [9.55, 9.52, 9.56, 9.29],    # points
+    })
+    out = cohorts_mod.cohort_analysis(df, client_id="c")
+    by = {c["vintage"]: c for c in out["cohorts"]}
+    # LTV already a fraction — unchanged; rate normalised points→fraction.
+    assert 0.30 <= by["2025"]["waLtv"] <= 0.45
+    assert 0.09 <= by["2025"]["waRate"] <= 0.10, by["2025"]["waRate"]
+    assert 0.09 <= by["2024"]["waRate"] <= 0.10

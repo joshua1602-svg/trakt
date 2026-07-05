@@ -113,3 +113,39 @@ def test_strapline_never_empty_without_data():
     text = sr.resolve("pipeline_conversion", "charts")
     assert text and isinstance(text, str)
     assert len(text.split()) <= MAX_WORDS
+
+
+def test_waterfall_bridge_renders_from_explicit_rows(sample_tape, registries, tmp_path):
+    rd = resolve_data(sample_tape, registries)
+    cr = ChartResolver(rd, registries, tmp_path, lens="funded")
+    rows = [
+        {"label": "2025-10", "value": 600000, "type": "total"},
+        {"label": "South East", "value": 300000, "type": "delta"},
+        {"label": "Wales", "value": -100000, "type": "delta"},
+        {"label": "2026-03 (latest)", "value": 800000, "type": "total"},
+    ]
+    res = cr.resolve({"id": "bridge", "title": "Balance bridge", "type": "waterfall",
+                      "rows": rows}, 8.0, 3.6)
+    assert res.ok and res.path.exists()
+    assert res.kind == "waterfall"
+    assert _panel_corner(res.path) == THEME.rgb(THEME.bg_panel)
+    im = Image.open(res.path)
+    assert abs(im.size[0] / im.size[1] - 8.0 / 3.6) < 0.02
+
+
+def test_waterfall_buildup_from_dimension(sample_tape, registries, tmp_path):
+    rd = resolve_data(sample_tape, registries)
+    cr = ChartResolver(rd, registries, tmp_path, lens="funded")
+    # No explicit rows → within-run build-up decomposed by a present dimension.
+    res = cr.resolve({"id": "buildup", "title": "Balance by LTV build-up",
+                      "type": "waterfall", "dimension": "current_loan_to_value",
+                      "bucket": "ltv_bucket", "measure": "balance"}, 8.0, 3.6)
+    assert res.ok and res.path.exists()
+
+
+def test_waterfall_missing_dimension_placeholder(sample_tape, registries, tmp_path):
+    rd = resolve_data(sample_tape, registries)
+    cr = ChartResolver(rd, registries, tmp_path, lens="funded")
+    res = cr.resolve({"id": "wf_missing", "title": "Bridge", "type": "waterfall",
+                      "dimension": "broker_channel", "measure": "balance"}, 8.0, 3.6)
+    assert not res.ok and res.placeholder and res.path.exists()

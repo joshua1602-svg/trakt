@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from analytics_lib.numeric import coerce_numeric
+from mi_agent.mi_dataset_profile import PERCENT_POINTS, percent_storage_scale
 
 _BALANCE = "current_outstanding_balance"
 _LTV = "current_loan_to_value"
@@ -34,6 +35,20 @@ def _weighted_avg(values: pd.Series, weights: pd.Series) -> Optional[float]:
     if denom == 0:
         return None
     return round(float((v[mask] * w[mask]).sum() / denom), 4)
+
+
+def _weighted_avg_pct(values: pd.Series, weights: pd.Series) -> Optional[float]:
+    """Balance-weighted average of a PERCENT column, normalised to a FRACTION
+    (0.0955 == 9.55%). The funded tape stores LTV as a fraction but the interest
+    rate in points (9.55), so a single ×100 formatter turned 9.55% into 955%.
+    Detect the column's storage scale and emit a fraction so the UI's percent
+    formatter renders every rate/LTV correctly regardless of tape convention."""
+    wavg = _weighted_avg(values, weights)
+    if wavg is None:
+        return None
+    if percent_storage_scale(values) == PERCENT_POINTS:
+        return round(wavg / 100.0, 6)
+    return wavg
 
 
 def _vintage_series(df: pd.DataFrame) -> Optional[pd.Series]:
@@ -113,9 +128,9 @@ def cohort_analysis(df: pd.DataFrame, *, client_id: str = "",
             row["sharePct"] = (round(bal / total_balance * 100, 2)
                                if total_balance else None)
         if _LTV in sub.columns and sub_balance is not None:
-            row["waLtv"] = _weighted_avg(sub[_LTV], sub[_BALANCE])
+            row["waLtv"] = _weighted_avg_pct(sub[_LTV], sub[_BALANCE])
         if _RATE in sub.columns and sub_balance is not None:
-            row["waRate"] = _weighted_avg(sub[_RATE], sub[_BALANCE])
+            row["waRate"] = _weighted_avg_pct(sub[_RATE], sub[_BALANCE])
         if _MOB in sub.columns and sub_balance is not None:
             row["waMonthsOnBook"] = _weighted_avg(sub[_MOB], sub[_BALANCE])
         cohorts.append(row)
