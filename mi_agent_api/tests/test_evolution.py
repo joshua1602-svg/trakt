@@ -217,3 +217,70 @@ def test_funded_evolution_blob_error_falls_back(monkeypatch, tmp_path):
     monkeypatch.setattr(blob, "build_funded_evolution_frames", boom)
     out = evo.funded_evolution("blob://processed-v2/platform/ERE", "client_001")
     assert out.get("periods") == []
+
+
+# --------------------------------------------------------------------------- #
+# Funded balance BRIDGE (attribution waterfall)
+# --------------------------------------------------------------------------- #
+def _bridge_frame(regions, bal=100_000):
+    n = len(regions)
+    return pd.DataFrame({
+        "current_outstanding_balance": [bal] * n,
+        "geographic_region_obligor": regions,
+        "source_portfolio_type": ["direct"] * n,
+    })
+
+
+def test_funded_bridge_reconciles_to_net_change(monkeypatch):
+    from mi_agent_api import platform_snapshots_blob as blob
+    import apps.blob_trigger_app.storage as storage_mod
+    monkeypatch.setattr(storage_mod, "open_storage", lambda: object())
+
+    def frames(root, storage, scope, to_run_id, prepare_fn):
+        return [
+            {"run_id": "2025-10-31", "reporting_date": "2025-10-31",
+             "df": _bridge_frame(["South East", "South East", "London", "London", "Wales", "Wales"]),
+             "source": "blob://…/2025-10-31"},
+            {"run_id": "2026-03-31", "reporting_date": "2026-03-31",
+             "df": _bridge_frame(["South East"] * 5 + ["London"] * 2 + ["Wales"] * 1),
+             "source": "blob://…/2026-03-31"},
+        ]
+
+    monkeypatch.setattr(blob, "build_funded_evolution_frames", frames)
+    br = evo.funded_bridge("blob://processed-v2/platform/ERE", "client_001",
+                           ["geographic_region_obligor"], start_period="2025-10")
+    assert br["available"], br
+    assert br["start"]["total"] == 600_000 and br["end"]["total"] == 800_000
+    assert br["netChange"] == 200_000
+    # Per-category deltas reconcile EXACTLY to the net change.
+    assert round(sum(c["delta"] for c in br["contributions"]), 2) == br["netChange"]
+    se = next(c for c in br["contributions"] if c["category"] == "South East")
+    assert se["delta"] == 300_000
+
+
+def test_funded_bridge_picks_present_candidate_column(monkeypatch):
+    # The region family is passed as candidates; the bridge must use whichever
+    # column the data actually carries (here geographic_region_obligor).
+    from mi_agent_api import platform_snapshots_blob as blob
+    import apps.blob_trigger_app.storage as storage_mod
+    monkeypatch.setattr(storage_mod, "open_storage", lambda: object())
+    monkeypatch.setattr(blob, "build_funded_evolution_frames", lambda *a, **k: [
+        {"run_id": "2025-10-31", "reporting_date": "2025-10-31", "df": _bridge_frame(["A", "B"]), "source": "x"},
+        {"run_id": "2026-03-31", "reporting_date": "2026-03-31", "df": _bridge_frame(["A", "A", "B"]), "source": "y"},
+    ])
+    br = evo.funded_bridge("blob://x", "client_001",
+                           ["collateral_geography", "geographic_region_obligor"])
+    assert br["available"]
+    assert br["dimensionCol"] == "geographic_region_obligor"
+
+
+def test_funded_bridge_needs_two_periods(monkeypatch):
+    from mi_agent_api import platform_snapshots_blob as blob
+    import apps.blob_trigger_app.storage as storage_mod
+    monkeypatch.setattr(storage_mod, "open_storage", lambda: object())
+    monkeypatch.setattr(blob, "build_funded_evolution_frames", lambda *a, **k: [
+        {"run_id": "2026-03-31", "reporting_date": "2026-03-31", "df": _bridge_frame(["A", "B"]), "source": "y"},
+    ])
+    br = evo.funded_bridge("blob://x", "client_001", ["geographic_region_obligor"])
+    assert br["available"] is False
+    assert "two funded reporting periods" in br["reason"]

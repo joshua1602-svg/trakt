@@ -46,3 +46,38 @@ describe("ChartArtifactView bubble", () => {
     expect(container.querySelector(".recharts-responsive-container")).not.toBeNull();
   });
 });
+
+/** The exact waterfall artifact the funded-bridge route emits: an opening
+ *  `total`, signed `delta` contributions, and a closing `total`. */
+function bridgeWaterfall(): ChartArtifact {
+  return {
+    id: "art_wf",
+    type: "chart",
+    title: "Funded balance bridge by Region",
+    source: { engine: "mi_agent.workflow", label: "MI Agent · waterfall", nativeChartType: "waterfall" },
+    createdAt: new Date().toISOString(),
+    mock: false,
+    chartType: "waterfall",
+    xKey: "label",
+    valueKey: "value",
+    valueFormat: "gbp",
+    displayHints: { value: { format: "gbp", scale: null } },
+    series: [{ key: "value", label: "Region", color: "#919dd1" }],
+    rows: [
+      { label: "2025-10", value: 600000, type: "total" },
+      { label: "South East", value: 300000, type: "delta" },
+      { label: "Wales", value: -100000, type: "delta" },
+      { label: "2026-03 (latest)", value: 800000, type: "total" },
+    ],
+  } as unknown as ChartArtifact;
+}
+
+describe("ChartArtifactView waterfall (funded-bridge contract)", () => {
+  it("renders the bridge rows emitted by the backend without throwing", () => {
+    const { container } = render(<ChartArtifactView artifact={bridgeWaterfall()} />);
+    // Native Recharts bar-based waterfall (not a scatter/plotly fallback).
+    expect(container.querySelector(".recharts-responsive-container")).not.toBeNull();
+    // A start/total and a delta legend are present.
+    expect(container.textContent).toMatch(/Base \/ total/i);
+  });
+});

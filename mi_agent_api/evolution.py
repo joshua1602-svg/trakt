@@ -178,28 +178,26 @@ def assemble_funded_evolution(frames: List[Dict[str, Any]], client_id: str,
     }
 
 
-def funded_evolution(output_root: str | os.PathLike, client_id: str,
-                     to_run_id: Optional[str] = None,
-                     breakdowns: Optional[List[str]] = None) -> Dict[str, Any]:
-    """Funded time series across monthly runs up to ``to_run_id`` (inclusive).
+def funded_frames(output_root: str | os.PathLike, client_id: str,
+                  to_run_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Ordered prepared funded run frames ``[{run_id, reporting_date, df, source}]``
+    (oldest → newest), up to ``to_run_id`` inclusive.
 
     Blob-aware: the on-disk tape walk (``snap.discover_snapshots``) is
     filesystem-only and cannot enumerate a ``blob://`` platform root, so on such
-    a root it would return ZERO periods — which is why funded evolution /
-    forecast / compare reported "no reporting periods" / "£0" even though dated
-    platform canonicals exist. When ``output_root`` is a blob root, build the
-    series from the dated platform canonicals (the same source that already
-    powers ``/mi/evolution/funded``); fall back to the tape walk on any error."""
+    a root it returns ZERO periods (the cause of the "no reporting periods" / "£0"
+    failures). On a blob root, build from the dated platform canonicals (the same
+    source that powers ``/mi/evolution/funded``); fall back to the tape walk on any
+    error. Shared by funded_evolution and funded_bridge so both see identical
+    periods regardless of source."""
     from . import platform_snapshots_blob as _blob
     if _blob.is_blob_root(output_root):
         try:
             from apps.blob_trigger_app.storage import open_storage
             from .funded_prep import prepare_funded_mi_dataset
-            blob_frames = _blob.build_funded_evolution_frames(
+            return _blob.build_funded_evolution_frames(
                 str(output_root), open_storage(), client_id, to_run_id,
                 prepare_funded_mi_dataset)
-            return assemble_funded_evolution(
-                blob_frames, client_id, to_run_id, breakdowns)
         except Exception:  # noqa: BLE001 - never break the series on a blob error
             pass
     frames: List[Dict[str, Any]] = []
@@ -218,7 +216,128 @@ def funded_evolution(output_root: str | os.PathLike, client_id: str,
             "df": df,
             "source": str(tape),
         })
-    return assemble_funded_evolution(frames, client_id, to_run_id, breakdowns)
+    return frames
+
+
+def funded_evolution(output_root: str | os.PathLike, client_id: str,
+                     to_run_id: Optional[str] = None,
+                     breakdowns: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Funded time series across monthly runs up to ``to_run_id`` (inclusive)."""
+    return assemble_funded_evolution(
+        funded_frames(output_root, client_id, to_run_id),
+        client_id, to_run_id, breakdowns)
+
+
+# --------------------------------------------------------------------------- #
+# Funded balance BRIDGE (attribution waterfall between two periods)
+# --------------------------------------------------------------------------- #
+def _period_label(fr: Dict[str, Any]) -> str:
+    rd = fr.get("reporting_date") or fr.get("run_id")
+    return str(rd)[:7] if rd else str(fr.get("run_id"))
+
+
+def _scope_frame_lens(df, lens_filters: Optional[Dict[str, str]]):
+    """Narrow a funded frame to a source-portfolio lens (consolidated = no
+    filter; a cohort/type lens filters ``source_portfolio_id``/``_type``).
+    Case/whitespace-insensitive; a filter on an absent column is a no-op."""
+    if not lens_filters or df is None:
+        return df
+    work = df
+    for col, val in lens_filters.items():
+        if col in work.columns:
+            work = work[work[col].astype(str).str.strip().str.casefold()
+                        == str(val).strip().casefold()]
+    return work
+
+
+_MISSING_TOKENS = {"", "nan", "none", "nat", "<na>"}
+
+
+def _group_balance(df, col: str) -> Dict[str, float]:
+    """Funded balance summed by a dimension column; blank/NaN → 'Unknown / Missing'."""
+    if df is None or col not in df.columns:
+        return {}
+    s = df[col].astype(str).str.strip()
+    s = s.mask(s.str.casefold().isin(_MISSING_TOKENS), "Unknown / Missing")
+    bal = coerce_numeric(df[_BALANCE])
+    grp = bal.groupby(s).sum()
+    return {str(k): float(v) for k, v in grp.items()}
+
+
+def funded_bridge(output_root: str | os.PathLike, client_id: str,
+                  dimension_col, *, start_period: Optional[str] = None,
+                  to_run_id: Optional[str] = None,
+                  lens_filters: Optional[Dict[str, str]] = None,
+                  lens_label: str = "Total", top_n: int = 8) -> Dict[str, Any]:
+    """Attribution bridge: opening funded balance (start period) → per-category
+    change over ``dimension_col`` → closing funded balance (the LATEST period, or
+    ``to_run_id``). The per-category deltas sum EXACTLY to (close − open), so the
+    waterfall reconciles to the book. ``lens_filters`` scopes the frames for a
+    consolidated (None) vs cohort/type view.
+
+    ``dimension_col`` may be a single column or an ordered list of candidate
+    columns (e.g. the region family) — the first one actually present in the data
+    is used, so attribution works regardless of which column the tape carries."""
+    scoped: List[Dict[str, Any]] = []
+    for fr in funded_frames(output_root, client_id, to_run_id):
+        d = _scope_frame_lens(fr.get("df"), lens_filters)
+        if d is not None and len(d):
+            scoped.append({**fr, "df": d})
+    if len(scoped) < 2:
+        return {"available": False, "lens": lens_label,
+                "reason": "at least two funded reporting periods are needed for a bridge"}
+
+    # Resolve the dimension column data-aware from the candidate(s).
+    candidates = [dimension_col] if isinstance(dimension_col, str) else list(dimension_col or [])
+    present_cols = set().union(*[set(f["df"].columns) for f in scoped]) if scoped else set()
+    col = next((c for c in candidates if c in present_cols), candidates[0] if candidates else None)
+    if not col:
+        return {"available": False, "lens": lens_label,
+                "reason": "no attribution dimension is available in the funded data"}
+
+    end = scoped[-1]                       # the latest period is always the close
+    start = None
+    if start_period:
+        sp = str(start_period)[:7]
+        start = next((f for f in scoped if _period_label(f) == sp), None)
+    if start is None or _period_label(start) == _period_label(end):
+        start = scoped[0]                  # default: earliest available period
+    if _period_label(start) == _period_label(end):
+        return {"available": False, "lens": lens_label,
+                "reason": "the start and latest period resolve to the same period"}
+
+    a = _group_balance(start["df"], col)
+    b = _group_balance(end["df"], col)
+    cats = set(a) | set(b)
+    contribs = [{"category": c, "start": round(a.get(c, 0.0), 2),
+                 "end": round(b.get(c, 0.0), 2),
+                 "delta": round(b.get(c, 0.0) - a.get(c, 0.0), 2)} for c in cats]
+    contribs.sort(key=lambda r: abs(r["delta"]), reverse=True)
+    open_total = round(sum(a.values()), 2)
+    close_total = round(sum(b.values()), 2)
+
+    # Top-N contributors by absolute movement + an aggregated "Other" so a
+    # many-category bridge stays legible AND still reconciles (Other carries the
+    # residual delta).
+    if top_n and len(contribs) > top_n:
+        head, tail = contribs[:top_n], contribs[top_n:]
+        head.append({"category": "Other", "isOther": True, "count": len(tail),
+                     "start": round(sum(r["start"] for r in tail), 2),
+                     "end": round(sum(r["end"] for r in tail), 2),
+                     "delta": round(sum(r["delta"] for r in tail), 2)})
+        contribs = head
+
+    return {
+        "available": True,
+        "dimensionCol": col,
+        "lens": lens_label,
+        "start": {"period": _period_label(start),
+                  "reporting_date": start.get("reporting_date"), "total": open_total},
+        "end": {"period": _period_label(end),
+                "reporting_date": end.get("reporting_date"), "total": close_total},
+        "netChange": round(close_total - open_total, 2),
+        "contributions": contribs,
+    }
 
 
 # --------------------------------------------------------------------------- #

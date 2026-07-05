@@ -794,6 +794,55 @@ def _risk_limit_category(q: str) -> Optional[str]:
     return None
 
 
+# A funded-balance ATTRIBUTION bridge (waterfall): opening balance → per-category
+# change → latest balance. Triggered by explicit "waterfall"/"bridge" or an
+# attribution phrasing ("what drove / contributed to the growth/movement"). NB the
+# forecast recogniser runs FIRST and owns "…bridge to £<target>" (a scale-up), so a
+# £-target bridge never reaches here.
+_BRIDGE_TRIGGER_RE = re.compile(
+    r"\bwaterfall\b|\bbridge\b|"
+    r"what (?:drove|is driving|contributed)|"
+    r"contribut(?:ion|ions|ed|ors?)\b|"
+    r"(?:growth|movement|change|increase|decrease|swing)\s+(?:by|across|driven|attribut)")
+
+
+def _bridge_recognizer(q: str, title: str, semantics: dict, available_columns=None
+                       ) -> Optional[Tuple[MIQuerySpec, dict]]:
+    """Funded balance attribution bridge → governed ``bridge_query`` plan
+    (resolved by the API's funded-bridge service into a waterfall)."""
+    if not _BRIDGE_TRIGGER_RE.search(q):
+        return None
+    dim_keys, terms, _rem = _explicit_dimensions(q, semantics,
+                                                 available_columns=available_columns)
+    dim = dim_keys[0] if dim_keys else None
+    # A bare numeric axis after "by" ("… by LTV", "… by age") attributes by that
+    # measure's BAND. Scoped to the post-"by" text so the word "balance" in
+    # "balance bridge" never selects a ticket-band attribution by accident.
+    if dim is None and " by " in q:
+        after_by = q.split(" by ", 1)[1]
+        for term, bucket in sorted(_NUMERIC_AXIS_BUCKET.items(),
+                                   key=lambda kv: len(kv[0]), reverse=True):
+            if bucket in _fields(semantics) and re.search(r"\b" + re.escape(term) + r"\b", after_by):
+                dim = bucket
+                if not terms:
+                    terms = [term]
+                break
+    periods = _detect_periods(q)
+    start = periods[0] if periods else None
+    spec = MIQuerySpec(
+        intent="chart", chart_type="none", metric=None, aggregation="sum",
+        execution_mode="temporal", bridge_query=True, bridge_dimension=dim,
+        compare_periods=([start] if start else []),
+        output_format="chart", title=title,
+        explanation=("Funded balance attribution bridge: opening balance → per-"
+                     "category change over the chosen dimension → the latest "
+                     "balance. Deltas reconcile to the net change; a source-"
+                     "portfolio lens (total / direct / acquired / cohort) scopes it."))
+    return spec, _det_meta("high", bool(dim_keys),
+                           terms or ([dim] if dim else ["funded_bridge"]),
+                           note="funded_bridge")
+
+
 def _risk_limit_recognizer(q: str, title: str
                            ) -> Optional[Tuple[MIQuerySpec, dict]]:
     """Risk-limit / concentration question → governed
@@ -1301,6 +1350,9 @@ def _deterministic_parse(question: str, semantics: dict,
     fc = _forecast_scale_recognizer(q, title)
     if fc is not None:
         return fc
+    br = _bridge_recognizer(q, title, semantics, available_columns=available_columns)
+    if br is not None:
+        return br
     cmp_spec = _compare_recognizer(q, title, semantics)
     if cmp_spec is not None:
         return cmp_spec

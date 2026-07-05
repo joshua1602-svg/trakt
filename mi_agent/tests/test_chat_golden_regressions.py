@@ -170,6 +170,28 @@ def test_scatter_axes_are_never_invented(semantics):
 # --------------------------------------------------------------------------- #
 # 3. Completion conversion rates
 # --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("q,expected_dim", [
+    ("show a waterfall of balance from October and the regions that contributed to growth", None),  # region default
+    ("funded balance bridge by borrower type", "borrower_type"),
+    ("what drove the balance movement by LTV", "ltv_bucket"),
+    ("bridge the balance by ticket size", "ticket_bucket"),
+])
+def test_bridge_recogniser_flags_bridge_and_dimension(q, expected_dim, semantics):
+    spec, meta = _deterministic_parse(q, semantics)
+    assert spec.bridge_query is True, q
+    assert meta["note"] == "funded_bridge"
+    if expected_dim is not None:
+        assert spec.bridge_dimension == expected_dim
+
+
+def test_pipeline_bridge_to_target_stays_a_forecast_not_a_balance_bridge(semantics):
+    # "pipeline bridge to £100mm" is a scale-up FORECAST, not an attribution
+    # bridge — the forecast recogniser must win.
+    spec, _ = _deterministic_parse("generate pipeline bridge to £100mm securitisation size", semantics)
+    assert spec.bridge_query is False
+    assert spec.forecast_mode == "extrapolation"
+
+
 def test_completion_conversion_rates_route_to_conversion_forecast(semantics):
     spec, meta = _deterministic_parse(
         "increase in completion conversion rates", semantics)

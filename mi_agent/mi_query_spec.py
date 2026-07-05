@@ -151,6 +151,10 @@ class MIQuerySpec:
     forecast_probability_source: Optional[str] = None  # row|config|explicit_balance
     allow_config_probability: Optional[bool] = None
 
+    # Balance bridge (attribution waterfall between two funded periods)
+    bridge_query: bool = False
+    bridge_dimension: Optional[str] = None       # semantic dimension key to attribute by
+
     # Risk monitor
     risk_monitor_mode: Optional[str] = None      # migration|concentration|trajectory|flags
     migration_dimension: Optional[str] = None
