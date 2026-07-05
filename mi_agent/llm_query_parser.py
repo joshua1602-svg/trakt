@@ -21,12 +21,15 @@ names, because canonical field names differ across deployments.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from .mi_query_spec import MIQuerySpec
 from .mi_query_validator import load_mi_semantics, validate_mi_query
+
+logger = logging.getLogger(__name__)
 
 # Cheap default model for NL->spec parsing.  Overridable via the `model` arg.
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
@@ -1579,20 +1582,46 @@ def parse_llm_response_to_spec(response_json: Any) -> MIQuerySpec:
 # Token / cost observability
 # --------------------------------------------------------------------------- #
 
-# Conservative USD pricing per 1,000,000 tokens (input, output).
+# USD pricing per 1,000,000 tokens (input, output), keyed by model-family.
+# Kept current with published Anthropic list prices. Cache reads bill at 0.1x
+# input and cache writes at 1.25x input (applied in ``estimate_cost``).
 _PRICING = {
     "haiku": (1.00, 5.00),
     "sonnet": (3.00, 15.00),
-    "opus": (15.00, 75.00),
+    "opus": (5.00, 25.00),
+    "fable": (10.00, 50.00),
+    "mythos": (10.00, 50.00),
 }
+
+# Longest family tokens first so "opus"/"sonnet" win before any generic key,
+# and so a future family whose name embeds another ("fable" vs "able") can't
+# be shadowed by a shorter substring.
+_PRICING_KEYS = sorted(_PRICING, key=len, reverse=True)
 
 
 def _price_for_model(model: str):
+    """Look up (input, output) $/1M for a model id by family token.
+
+    Returns ``None`` for an unrecognised model and logs a warning once so an
+    overridden ``MI_AGENT_LLM_MODEL`` that we have no price for surfaces as a
+    'cost unknown' status rather than a silent $0 estimate.
+    """
     m = (model or "").lower()
-    for key, price in _PRICING.items():
+    for key in _PRICING_KEYS:
         if key in m:
-            return price
+            return _PRICING[key]
+    if m and m not in _UNPRICED_WARNED:
+        _UNPRICED_WARNED.add(m)
+        logger.warning(
+            "No pricing entry for model %r; cost estimate will report status "
+            "'unknown'. Add its family to _PRICING to enable cost tracking.",
+            model,
+        )
     return None
+
+
+# Models we've already warned about, so the log line fires once per process.
+_UNPRICED_WARNED: set = set()
 
 
 def estimate_cost(model: str, usage: Optional[dict]) -> dict:
@@ -1652,6 +1681,21 @@ def _message_text(message) -> str:
     return "".join(parts)
 
 
+# Model families that REJECT sampling params (`temperature`/`top_p`/`top_k`)
+# with an HTTP 400. Newer reasoning models fix their own sampling; sending
+# `temperature=0.0` to them fails the request outright. When overriding
+# ``MI_AGENT_LLM_MODEL`` to one of these, we must omit the sampling kwargs.
+_NO_SAMPLING_MODELS = (
+    "opus-4-7", "opus-4-8", "opus-4.7", "opus-4.8",
+    "sonnet-5", "fable", "mythos",
+)
+
+
+def _supports_temperature(model: str) -> bool:
+    m = (model or "").lower()
+    return not any(tok in m for tok in _NO_SAMPLING_MODELS)
+
+
 def _call_llm(prompt: Dict[str, str], model: str, use_cache: bool = True):
     """Live Claude call. Returns (text, usage_dict, prompt_cache_supported)."""
     import os
@@ -1664,24 +1708,29 @@ def _call_llm(prompt: Dict[str, str], model: str, use_cache: bool = True):
         ) from exc
 
     client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+    # Determinism where the model allows it; newer models reject `temperature`
+    # and are deterministic enough for strict-JSON parsing without it.
+    sampling = {"temperature": 0.0} if _supports_temperature(model) else {}
     cache_supported = False
     message = None
     if use_cache:
         try:
             message = client.messages.create(
-                model=model, max_tokens=1024, temperature=0.0,
+                model=model, max_tokens=1024,
                 system=[{"type": "text", "text": prompt["system"],
                          "cache_control": {"type": "ephemeral"}}],
                 messages=[{"role": "user", "content": prompt["user"]}],
+                **sampling,
             )
             cache_supported = True
         except Exception:  # pragma: no cover - SDK without cache support
             message = None
     if message is None:
         message = client.messages.create(
-            model=model, max_tokens=1024, temperature=0.0,
+            model=model, max_tokens=1024,
             system=prompt["system"],
             messages=[{"role": "user", "content": prompt["user"]}],
+            **sampling,
         )
     text = _message_text(message)
     u = getattr(message, "usage", None)

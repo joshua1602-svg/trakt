@@ -20,6 +20,8 @@ import pytest
 
 from mi_agent.llm_query_parser import (
     _deterministic_parse,
+    _price_for_model,
+    _supports_temperature,
     build_prompt,
     compact_catalogue,
     estimate_cost,
@@ -242,6 +244,38 @@ def test_estimate_cost_known_and_unknown_models():
     unknown = estimate_cost("some-future-model", usage)
     assert unknown["cost_estimate_status"] == "unknown"
     assert unknown["total_tokens"] == 1200  # tokens still reported
+
+
+def test_pricing_matches_published_list_prices():
+    # Opus family is $5/$25 per 1M (a prior map used a stale $15/$75), and the
+    # Fable/Mythos family is priced above Opus. Any future drift here silently
+    # mis-bills every LLM parse, so lock the ratios in.
+    assert _price_for_model("claude-opus-4-8") == (5.00, 25.00)
+    assert _price_for_model("claude-opus-4-7") == (5.00, 25.00)
+    assert _price_for_model("claude-haiku-4-5-20251001") == (1.00, 5.00)
+    assert _price_for_model("claude-sonnet-5") == (3.00, 15.00)
+    assert _price_for_model("claude-fable-5") == (10.00, 50.00)
+    # An unrecognised model has no price (status becomes 'unknown', not $0).
+    assert _price_for_model("some-future-model") is None
+
+
+def test_opus_cost_uses_current_price_not_stale():
+    usage = {"input_tokens": 1_000_000, "output_tokens": 1_000_000}
+    opus = estimate_cost("claude-opus-4-8", usage)
+    # 1M in @ $5 + 1M out @ $25 = $30.00, not the old $90.00 (15+75).
+    assert opus["estimated_total_cost"] == pytest.approx(30.0, abs=1e-6)
+
+
+def test_temperature_gated_for_models_that_reject_it():
+    # Newer reasoning models 400 on temperature/top_p/top_k; older ones accept it.
+    assert _supports_temperature("claude-haiku-4-5-20251001") is True
+    assert _supports_temperature("claude-sonnet-4-6") is True
+    assert _supports_temperature("claude-opus-4-6") is True
+    assert _supports_temperature("claude-opus-4-8") is False
+    assert _supports_temperature("claude-opus-4-7") is False
+    assert _supports_temperature("claude-sonnet-5") is False
+    assert _supports_temperature("claude-fable-5") is False
+    assert _supports_temperature("claude-mythos-5") is False
 
 
 def test_llm_metadata_includes_tokens_when_usage_returned(df, semantics):

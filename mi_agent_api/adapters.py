@@ -601,6 +601,29 @@ def adapt_workflow_result(
     # main user-facing output, but retain them in metadata.diagnostics.
     warnings, diagnostics = split_warnings(raw_warnings)
 
+    # Parser provenance / LLM cost observability. Now that the LLM parser can be
+    # enabled by default (deterministic-first with LLM fallback), surface which
+    # path answered, how many repairs it took, and the estimated LLM spend so an
+    # operator can see cost per query instead of a bare "parserMode" flag.
+    wf_meta = workflow.get("metadata") or {}
+    llm_meta = wf_meta.get("llm") or {}
+    parser_observability = {
+        "parserModeDetail": (workflow.get("parser_mode_detail")
+                             or wf_meta.get("parser_mode_detail")),
+        "repairAttempts": wf_meta.get("repair_attempts"),
+        "repairSkippedReason": wf_meta.get("repair_skipped_reason"),
+        "llm": {
+            "calls": llm_meta.get("calls"),
+            "model": llm_meta.get("model"),
+            "inputTokens": llm_meta.get("input_tokens"),
+            "outputTokens": llm_meta.get("output_tokens"),
+            "totalTokens": llm_meta.get("total_tokens"),
+            "estimatedTotalCost": llm_meta.get("estimated_total_cost"),
+            "costEstimateStatus": llm_meta.get("cost_estimate_status"),
+            "promptCacheUsed": llm_meta.get("prompt_cache_used"),
+        } if llm_meta else None,
+    }
+
     return {
         "ok": bool(workflow.get("ok")),
         "error": workflow.get("error"),
@@ -623,6 +646,10 @@ def adapt_workflow_result(
             "source": "python",
             "mock": False,
             "parserMode": workflow.get("parser_mode"),
+            "parserModeDetail": parser_observability["parserModeDetail"],
+            "repairAttempts": parser_observability["repairAttempts"],
+            "repairSkippedReason": parser_observability["repairSkippedReason"],
+            "llm": parser_observability["llm"],
             "resultType": qr.get("result_type") if qr else None,
             "rowCount": qr.get("row_count") if qr else None,
             "chartType": chart_type,
