@@ -88,10 +88,12 @@ describe("EvolutionPanel origination conversion footers", () => {
     // Expanding reveals the existing stats, labelled explicitly.
     fireEvent.click(within(disclosure).getByRole("button", { name: /Conversion vs KFI/ }));
     const body = screen.getByTestId("funnel-conversion-body-APPLICATION");
-    expect(body.textContent).toMatch(/5-week/);
-    expect(body.textContent).toMatch(/Since inception/);
+    expect(body.textContent).toMatch(/Weekly rate/);
     expect(body.textContent).toMatch(/by count/);
     expect(body.textContent).toMatch(/by value/);
+    // Transparent about the lagged KFI denominator, not a same-period share.
+    expect(body.textContent).toMatch(/Avg weekly flow/);
+    expect(body.textContent).toMatch(/KFI stock/);
   });
 
   it("shows weekly-flow summary, a 'Show stock line' toggle, and no stock-level text row", async () => {

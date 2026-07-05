@@ -819,6 +819,22 @@ def _pipeline_history(client_id: str) -> Optional[Dict[str, Any]]:
     return model
 
 
+def _kfi_completion_lag_weeks(client_id: str) -> Optional[int]:
+    """Median KFI->completion lag, in whole weeks, from the historical model.
+
+    Feeds the funnel's forward conversion rate so the KFI denominator is shifted
+    back to the book those completions came from. Returns None (unlagged) when no
+    multi-week history or timing is available; never raises."""
+    model = _pipeline_history(client_id)
+    if not model:
+        return None
+    timing = (model.get("historicalCompletionTimingByStage") or {}).get("KFI") or {}
+    median_days = timing.get("medianDays")
+    if not median_days:
+        return None
+    return max(1, round(float(median_days) / 7.0))
+
+
 @app.get("/mi/pipeline/snapshot")
 def pipeline_snapshot(portfolioId: Optional[str] = None,
                       client_id: Optional[str] = None,
@@ -1033,7 +1049,9 @@ def funnel_evolution(portfolioId: Optional[str] = None, client_id: Optional[str]
                 "stages": [], "weeks": [], "series": {}, "summary": {},
                 "singlePeriod": True, "error": "no pipeline root configured"}
     try:
-        return evolution_mod.pipeline_funnel_evolution(root, cid, pipeline_cut)
+        lag_weeks = _kfi_completion_lag_weeks(cid)
+        return evolution_mod.pipeline_funnel_evolution(
+            root, cid, pipeline_cut, lag_weeks=lag_weeks)
     except Exception as exc:  # noqa: BLE001
         logger.warning("funnel evolution failed: %s", exc)
         return {"dataset": "pipeline_funnel", "portfolioId": cid, "toRunId": pipeline_cut,

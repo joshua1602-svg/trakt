@@ -91,9 +91,50 @@ def test_funnel_summary_metrics():
     for stage in ("APPLICATION", "OFFER", "COMPLETED"):
         conv = summ[stage]["conversion"]
         assert conv is not None
-        for k in ("fiveWeekCount", "fiveWeekValue",
-                  "sinceInceptionCount", "sinceInceptionValue"):
+        for k in ("basis", "lagWeeks", "lagApplied", "denominatorWeek",
+                  "avgWeeklyFlowCount", "avgWeeklyFlowValue",
+                  "kfiStockCount", "kfiStockValue",
+                  "weeklyRateCount", "weeklyRateValue"):
             assert k in conv
+
+
+def test_funnel_conversion_is_flow_over_lagged_kfi_stock():
+    """The forward conversion rate = avg weekly flow into a stage (last 5 weeks)
+    over the KFI STOCK as it stood `lag_weeks` earlier — never a sum of stock
+    across weeks (the old bug that could exceed 100%)."""
+    warnings.simplefilter("ignore")
+    lag = 3
+    out = evo.pipeline_funnel_evolution(_PIPELINE_FIXTURE, "client_001", None,
+                                        lag_weeks=lag)
+    assert out["conversionLagWeeks"] == lag
+    weeks = out["weeks"]
+    kfi_counts = [float(p["count"]) for p in out["series"]["KFI"]]
+    kfi_values = [p["value"] for p in out["series"]["KFI"]]
+    denom_idx = max(0, len(kfi_counts) - 1 - lag)
+    for stage in ("APPLICATION", "OFFER", "COMPLETED"):
+        conv = out["summary"][stage]["conversion"]
+        assert conv["lagWeeks"] == lag and conv["lagApplied"] is True
+        # Denominator is the lagged KFI stock, not a sum across weeks.
+        assert conv["kfiStockCount"] == int(kfi_counts[denom_idx])
+        assert conv["kfiStockValue"] == kfi_values[denom_idx]
+        assert conv["denominatorWeek"] == weeks[denom_idx]
+        # Numerator is the trailing-5 average weekly flow into the stage.
+        flows = [f["flowValue"] for f in out["flowSeries"][stage]]
+        assert conv["avgWeeklyFlowValue"] == evo._trailing_avg(flows, 5)
+        # Rate reconciles: numerator / denominator (divide-by-zero safe).
+        if conv["kfiStockValue"]:
+            assert conv["weeklyRateValue"] == round(
+                conv["avgWeeklyFlowValue"] / conv["kfiStockValue"] * 100.0, 2)
+
+
+def test_funnel_conversion_unlagged_when_lag_unknown():
+    warnings.simplefilter("ignore")
+    out = evo.pipeline_funnel_evolution(_PIPELINE_FIXTURE, "client_001", None)
+    assert out["conversionLagWeeks"] is None
+    conv = out["summary"]["COMPLETED"]["conversion"]
+    assert conv["lagWeeks"] is None and conv["lagApplied"] is False
+    # Unlagged denominator is the latest KFI stock.
+    assert conv["kfiStockCount"] == out["summary"]["KFI"]["latestStockCount"]
 
 
 def test_funnel_flow_series_reconciles_with_stock():
