@@ -105,15 +105,24 @@ def main():
             "No features with geometry. This looks like a 'Names and Codes' file "
             "(geometry: null) — download the ITL3 'Boundaries' dataset instead.")
 
-    # Global bbox for the projection.
-    lons, lats = [], []
+    # Pass 1: extract every ring in source coords, applying the Shetland inset so
+    # the far-north islands don't stretch the whole map with an empty sea gap.
+    # (record[code] = {"name", "rings": [[(x, y), ...], ...]})
+    records = {}
     for f in feats:
+        props = f["properties"]
+        code = nuts_to_itl(_prop(props, "code"))
+        rec = records.setdefault(code, {"name": _prop(props, "name") or code, "rings": []})
         for poly in _polys(f["geometry"]):
             for ring in poly:
-                for lon, lat in ring:
-                    lons.append(lon); lats.append(lat)
-    x0, x1 = min(lons), max(lons)
-    y0, y1 = min(lats), max(lats)
+                rec["rings"].append([(x, y) for x, y in ring])
+
+    _inset_shetland(records)
+
+    # Global bbox over the (possibly inset) coordinates.
+    xs = [p[0] for r in records.values() for ring in r["rings"] for p in ring]
+    ys = [p[1] for r in records.values() for ring in r["rings"] for p in ring]
+    x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
     # Auto-detect the coordinate system. lon/lat are small (|value| < 400); a
     # projected grid such as British National Grid (EPSG:27700, metres) is large
     # — use it planar (no cos-lat correction; BNG is already metric/equal-aspect).
@@ -131,21 +140,15 @@ def main():
         return round(x, 1), round(y, 1)
 
     areas = {}
-    for f in feats:
-        props = f["properties"]
-        code = nuts_to_itl(_prop(props, "code"))
-        name = _prop(props, "name") or code
+    for code, rec in records.items():
         parts = []
-        for poly in _polys(f["geometry"]):
-            for ring in poly:
-                proj = [project(lon, lat) for lon, lat in ring]
-                proj = dp_simplify(proj, DP_EPS)
-                if len(proj) < 3:
-                    continue
-                d = "M" + " ".join(f"{x},{y}" for x, y in proj) + "Z"
-                parts.append(d)
+        for ring in rec["rings"]:
+            proj = dp_simplify([project(x, y) for x, y in ring], DP_EPS)
+            if len(proj) < 3:
+                continue
+            parts.append("M" + " ".join(f"{x},{y}" for x, y in proj) + "Z")
         if parts:
-            areas[code] = {"name": name, "d": "".join(parts)}
+            areas[code] = {"name": rec["name"], "d": "".join(parts)}
 
     out = {"viewBox": f"0 0 {W:g} {H:g}", "areas": areas,
            "note": f"UK ITL3 boundaries, simplified from {INPUT.split('/')[-1]}. "
@@ -154,6 +157,30 @@ def main():
         json.dump(out, fh, separators=(",", ":"))
     import os
     print(f"areas={len(areas)} viewBox='{out['viewBox']}' bytes={os.path.getsize(OUT):,}")
+
+
+# Shetland inset (British National Grid, metres). Rings whose southernmost point
+# is above the threshold are Shetland; translate them south/east into the empty
+# North Sea beside the mainland so the map isn't stretched by the ~200km gap.
+_SHETLAND_MIN_NORTHING = 1_090_000
+_SHETLAND_DX = 140_000    # east, into open sea
+_SHETLAND_DY = -330_000   # south, closing the gap
+
+
+def _inset_shetland(records):
+    """In-place: translate far-north Shetland rings into an inset position. No-op
+    for lon/lat data (degrees) or when nothing qualifies."""
+    pts = [p for r in records.values() for ring in r["rings"] for p in ring]
+    if not pts or max(abs(p[1]) for p in pts) <= 800:  # lon/lat -> not BNG metres
+        return
+    moved = 0
+    for rec in records.values():
+        for i, ring in enumerate(rec["rings"]):
+            if min(p[1] for p in ring) > _SHETLAND_MIN_NORTHING:
+                rec["rings"][i] = [(x + _SHETLAND_DX, y + _SHETLAND_DY) for x, y in ring]
+                moved += 1
+    if moved:
+        print(f"inset: moved {moved} Shetland ring(s)")
 
 
 def _polys(geom):
