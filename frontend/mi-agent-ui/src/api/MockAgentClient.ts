@@ -149,8 +149,10 @@ export class MockAgentClient implements AgentClient {
     return null; // mock cannot serve real .pptx bytes
   }
 
-  getCohorts(portfolioId: string): Promise<import("@/domain").CohortAnalysis> {
-    return Promise.resolve(mockCohorts(portfolioId));
+  getCohorts(portfolioId: string, _grain?: import("@/domain").CohortGrain,
+             dimension?: import("@/domain").CohortDimension,
+             ): Promise<import("@/domain").CohortAnalysis> {
+    return Promise.resolve(mockCohorts(portfolioId, dimension ?? "vintage"));
   }
 
   getCohortProgression(portfolioId: string,

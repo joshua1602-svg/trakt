@@ -10,6 +10,7 @@ import type {
   AgentRequest,
   AgentResponse,
   CohortAnalysis,
+  CohortDimension,
   CohortGrain,
   CohortProgression,
   CohortProgressionQuery,
@@ -83,9 +84,10 @@ export interface AgentClient {
    * or `null` when the client cannot serve decks (e.g. the mock). */
   deckDownloadUrl(portfolioId: string, period?: string | null): string | null;
 
-  /** Funded origination-vintage (static-pool) cohort analysis for a portfolio.
-   *  ``grain`` (Y|Q|M) sets the vintage grain (default Y). */
-  getCohorts(portfolioId: string, grain?: CohortGrain,
+  /** Funded static-pool cohort analysis for a portfolio, grouped by
+   *  ``dimension`` (vintage | age | ltv | channel; default vintage). ``grain``
+   *  (Y|Q|M) sets the vintage grain (vintage dimension only). */
+  getCohorts(portfolioId: string, grain?: CohortGrain, dimension?: CohortDimension,
              signal?: AbortSignal): Promise<CohortAnalysis>;
 
   /** Static-pool cohort PROGRESSION across reporting periods for a cohort — a
