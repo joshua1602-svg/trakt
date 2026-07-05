@@ -10,6 +10,9 @@ import type {
   AgentRequest,
   AgentResponse,
   CohortAnalysis,
+  CohortGrain,
+  CohortProgression,
+  CohortProgressionQuery,
   DeckIndex,
   ForecastEvolution,
   ForecastExtrapolation,
@@ -79,8 +82,16 @@ export interface AgentClient {
    * or `null` when the client cannot serve decks (e.g. the mock). */
   deckDownloadUrl(portfolioId: string, period?: string | null): string | null;
 
-  /** Funded origination-vintage (static-pool) cohort analysis for a portfolio. */
-  getCohorts(portfolioId: string, signal?: AbortSignal): Promise<CohortAnalysis>;
+  /** Funded origination-vintage (static-pool) cohort analysis for a portfolio.
+   *  ``grain`` (Y|Q|M) sets the vintage grain (default Y). */
+  getCohorts(portfolioId: string, grain?: CohortGrain,
+             signal?: AbortSignal): Promise<CohortAnalysis>;
+
+  /** Static-pool cohort PROGRESSION across reporting periods for a cohort — a
+   *  source-portfolio ``lens`` optionally narrowed to an origination ``vintage``
+   *  at ``grain``. */
+  getCohortProgression(portfolioId: string, query?: CohortProgressionQuery,
+                       signal?: AbortSignal): Promise<CohortProgression>;
 }
 
 /** Error thrown by clients for transport/agent failures. */

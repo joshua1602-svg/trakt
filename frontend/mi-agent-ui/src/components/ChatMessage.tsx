@@ -19,6 +19,11 @@ export function ChatMessage({
 }) {
   const isUser = message.role === "user";
   const hasInlineResult = !isUser && !!message.artifacts && message.artifacts.length > 0;
+  // Minimal client-facing provenance: only WHICH BOOK answered (funded /
+  // pipeline / forecast), since that materially changes what a number means.
+  // The full interpretation / parse mode stays backend-side (response metadata).
+  const showDatasetBadge =
+    !isUser && !message.pending && !message.error && !!message.datasetContext;
 
   return (
     <div className="animate-fade-in flex gap-2.5" data-role={message.role}>
@@ -74,6 +79,17 @@ export function ChatMessage({
             <RefreshCw size={12} />
             Retry
           </button>
+        )}
+
+        {showDatasetBadge && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+            <span
+              title="The book this answer was computed from"
+              className="inline-flex items-center rounded-full border border-slate-500/30 bg-slate-700/30 px-2 py-0.5 font-medium uppercase tracking-wider text-slate-300"
+            >
+              {message.datasetContext}
+            </span>
+          </div>
         )}
 
         {message.assumptions && message.assumptions.length > 0 && (

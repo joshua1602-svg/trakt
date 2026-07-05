@@ -280,11 +280,99 @@ EXPLICIT_DIMENSION_TERMS = {
     "rate type": "interest_rate_type",
     "borrower jurisdiction": "borrower_jurisdiction",
     "jurisdiction": "borrower_jurisdiction",
+    # Borrower-type family (single vs joint). Resolved data-aware via
+    # _preferred_borrower_dim (materialised borrower_type first, then the
+    # legacy borrower_structure band) — see _BORROWER_GENERIC_TERMS.
+    "borrower types": "borrower_type",
+    "borrower type": "borrower_type",
+    "borrower structure": "borrower_type",
+    "applicant type": "borrower_type",
+    "single vs joint": "borrower_type",
+    "joint vs single": "borrower_type",
+    "single or joint": "borrower_type",
+    "sole or joint": "borrower_type",
+    "joint or single": "borrower_type",
+    "joint or sole": "borrower_type",
 }
+
+# Single-word tokens that must NOT be auto-mapped from registry synonyms: they
+# are either too generic (would hijack unrelated questions) or collide with
+# other grammar (ranking / count / summary intents, metric buckets). Curated
+# EXPLICIT_DIMENSION_TERMS still map them where a specific meaning is intended.
+_GENERIC_DIM_TOKENS = frozenset({
+    "type", "types", "status", "band", "bands", "bucket", "buckets", "date",
+    "year", "name", "code", "id", "value", "amount", "rate", "balance", "age",
+    "ltv", "region", "regions", "geography", "geographic", "group", "total",
+    "class", "level", "score", "stage", "grade", "term",
+    # collide with other grammar / are ambiguous on their own:
+    "ranking",     # top-N ranking grammar
+    "portfolio",   # "portfolio summary" / "the portfolio"
+    "borrowers",   # count intent ("how many borrowers")
+    "charge",      # "early repayment charge" etc.
+})
+
+
+def _registry_dimension_terms(semantics: dict) -> Dict[str, str]:
+    """Business synonyms / names for every dimension-role field, so the parser
+    recognises a term the MOMENT it is added to the registry (no code change).
+
+    Curated ``EXPLICIT_DIMENSION_TERMS`` override these; an ambiguous synonym
+    (mapping to more than one dimension) and over-generic single tokens
+    (``_GENERIC_DIM_TOKENS``) are dropped so registry vocabulary can never
+    hijack an unrelated question. Multi-word phrases are always safe to add."""
+    out: Dict[str, str] = {}
+    ambiguous: set = set()
+    for key, entry in _fields(semantics).items():
+        if entry.get("role") != "dimension":
+            continue
+        phrases = list(_synonyms(entry))
+        for name in (entry.get("business_name"), entry.get("display_name")):
+            if name:
+                phrases.append(str(name))
+        phrases.append(key.replace("_", " "))
+        for phrase in phrases:
+            p = str(phrase).strip().lower()
+            if len(p) < 3:
+                continue
+            if " " not in p and p in _GENERIC_DIM_TOKENS:
+                continue
+            existing = out.get(p)
+            if existing is not None and existing != key:
+                ambiguous.add(p)
+            else:
+                out[p] = key
+    for p in ambiguous:
+        out.pop(p, None)
+    return out
+
 
 # Generic region terms resolved by data-aware preference (see _preferred_region).
 _REGION_GENERIC_TERMS = {"region", "regions", "geography", "geographic",
                          "geographic region"}
+# Borrower-type terms resolved by data-aware preference (see
+# _preferred_borrower_dim). borrower_type is the dimension the funded prep
+# actually materialises; borrower_structure is a legacy band kept for datasets
+# that carry it.
+_BORROWER_GENERIC_TERMS = {"borrower type", "borrower types", "borrower structure",
+                           "applicant type", "single vs joint", "joint vs single",
+                           "single or joint", "sole or joint", "joint or single",
+                           "joint or sole"}
+_BORROWER_DIM_PREFERENCE = ("borrower_type", "borrower_structure")
+
+
+def _preferred_borrower_dim(semantics: dict, available_columns=None) -> Optional[str]:
+    """Pick the single-vs-joint dimension: the materialised ``borrower_type``
+    first, then ``borrower_structure``. With column context, only a field whose
+    canonical column is actually present is returned."""
+    fields = _fields(semantics)
+    cols = set(available_columns) if available_columns is not None else None
+    for key in _BORROWER_DIM_PREFERENCE:
+        entry = fields.get(key)
+        if not entry:
+            continue
+        if cols is None or entry.get("canonical_field", key) in cols:
+            return key
+    return None
 # Preference for the MI "Region" dimension: readable display field first, then
 # NUTS3 code fields. geographic_region_classification (a YEAR) is never a region.
 _REGION_PREFERENCE = ("collateral_geography", "geographic_region_collateral",
@@ -350,7 +438,11 @@ def _explicit_dimensions(q: str, semantics: dict, grouping: bool = False,
     bare "age" axis -> age_bucket) used by heatmap/treemap.
     """
     fields = _fields(semantics)
-    terms_map = dict(EXPLICIT_DIMENSION_TERMS)
+    # Registry-derived dimension synonyms first, then the curated map on top so
+    # curated disambiguation always wins. This makes a synonym added to the
+    # semantic registry immediately understood by the chat, without a code edit.
+    terms_map = _registry_dimension_terms(semantics)
+    terms_map.update(EXPLICIT_DIMENSION_TERMS)
     if grouping:
         # In a grouping chart (heatmap/treemap) a bare "age" axis means the
         # age band, not the numeric age metric. Same idea for the other
@@ -363,6 +455,8 @@ def _explicit_dimensions(q: str, semantics: dict, grouping: bool = False,
     for term in sorted(terms_map, key=len, reverse=True):
         if term in _REGION_GENERIC_TERMS:
             key = _preferred_region(semantics, available_columns)
+        elif term in _BORROWER_GENERIC_TERMS:
+            key = _preferred_borrower_dim(semantics, available_columns)
         else:
             key = terms_map[term]
         if not key or key not in fields:
@@ -489,6 +583,14 @@ def _detect_top_n(q: str) -> Optional[int]:
 # governed evolution / forecast / risk-monitor data.
 # --------------------------------------------------------------------------- #
 
+# An explicit whole-book summary intent. Only these questions may fall back to
+# the whole-book count+balance summary; anything else that resolves no metric
+# and no dimension is an UNMAPPED question and must be refused, not answered.
+_SUMMARY_INTENT_RE = re.compile(
+    r"\b(summary|summarise|summarize|overview|snapshot|at a glance|"
+    r"key metrics|kpis?|headlines?|portfolio (?:summary|overview|position)|"
+    r"the (?:whole )?book|total (?:balance|exposure))\b")
+
 # A "count of things" intent that the legacy metric grammar does not surface as a
 # metric token (e.g. "number of loans"). Used to keep loan/case COUNT evolutions
 # as a count metric instead of defaulting to balance/sum.
@@ -578,7 +680,14 @@ _FORECAST_SCALE_RE = re.compile(
     r"when (?:do|does|will|can) (?:we|the book|it|the portfolio) reach|"
     r"time to (?:reach|securitisation|scale)|reach £?\s?\d|"
     r"(?:downside|upside|base) forecast|securitisation scale|"
+    # A pipeline/funding "bridge" to a target amount, and "securitisation
+    # size/target", are scale-up questions (gap to target + time at run-rate).
+    r"(?:pipeline|funding|completion) bridge|bridge to £?\s?\d|"
+    r"securitisation (?:size|target|threshold)|"
     r"how much pipeline is needed|completion rate is assumed|what conversion rate|"
+    # KFI→completion conversion-rate questions route to the governed
+    # conversion assumption (not a point-in-time KPI).
+    r"conversion rates?\b|completion conversion|"
     r"funded balance extrapolation|annualised completion|"
     r"what happens if .*run.?rate|milestone|"
     # A "forecast curve" / "projection curve" / "balance curve" is a request for
@@ -586,11 +695,18 @@ _FORECAST_SCALE_RE = re.compile(
     r"forecast curve|projection curve|balance curve|"
     r"(?:forecast|projected|project).{0,20}curve|curve.{0,20}(?:forecast|funded balance)")
 
+# Magnitude suffixes for a forecast target. "mm" (securitisation notation for
+# millions) must sort before "m", and "bn"/"billion" before "b".
+_TARGET_MULTIPLIER = {"k": 1e3, "m": 1e6, "mm": 1e6, "million": 1e6,
+                      "b": 1e9, "bn": 1e9, "billion": 1e9}
+_TARGET_VALUE_RE = re.compile(
+    r"£?\s*(\d+(?:\.\d+)?)\s*(mm|million|bn|billion|b|m|k)\b")
+
 
 def _forecast_target_value(q: str) -> Optional[float]:
-    m = re.search(r"£?\s*(\d+(?:\.\d+)?)\s*m(?:illion)?\b", q)
+    m = _TARGET_VALUE_RE.search(q)
     if m:
-        return float(m.group(1)) * 1_000_000
+        return float(m.group(1)) * _TARGET_MULTIPLIER[m.group(2)]
     m2 = re.search(r"£\s*([\d,]{4,})", q)
     if m2:
         try:
@@ -603,7 +719,14 @@ def _forecast_target_value(q: str) -> Optional[float]:
 def _forecast_question_kind(q: str) -> str:
     if "compare" in q and ("forecast" in q or "extrapolat" in q or "run" in q):
         return "compare_models"
+    if "conversion rate" in q or "completion conversion" in q \
+            or "what conversion" in q:
+        return "conversion"
     if "how much pipeline" in q and "reach" in q:
+        return "pipeline_needed"
+    # A "bridge to £X" asks for the gap to the target (additional completions /
+    # pipeline needed), not just the milestone date.
+    if "bridge" in q and _forecast_target_value(q):
         return "pipeline_needed"
     if "reach" in q and ("when" in q or re.search(r"£?\s?\d+\s*m", q)):
         return "reach_threshold"
@@ -672,6 +795,114 @@ def _risk_limit_category(q: str) -> Optional[str]:
         if re.search(pattern, q):
             return cat
     return None
+
+
+# A funded-balance ATTRIBUTION bridge (waterfall): opening balance → per-category
+# change → latest balance. Triggered by explicit "waterfall"/"bridge" or an
+# attribution phrasing ("what drove / contributed to the growth/movement"). NB the
+# forecast recogniser runs FIRST and owns "…bridge to £<target>" (a scale-up), so a
+# £-target bridge never reaches here.
+_BRIDGE_TRIGGER_RE = re.compile(
+    r"\bwaterfall\b|\bbridge\b|"
+    r"what (?:drove|is driving|contributed)|"
+    r"contribut(?:ion|ions|ed|ors?)\b|"
+    r"(?:growth|movement|change|increase|decrease|swing)\s+(?:by|across|driven|attribut)")
+
+
+def _bridge_recognizer(q: str, title: str, semantics: dict, available_columns=None
+                       ) -> Optional[Tuple[MIQuerySpec, dict]]:
+    """Funded balance attribution bridge → governed ``bridge_query`` plan
+    (resolved by the API's funded-bridge service into a waterfall)."""
+    if not _BRIDGE_TRIGGER_RE.search(q):
+        return None
+    dim_keys, terms, _rem = _explicit_dimensions(q, semantics,
+                                                 available_columns=available_columns)
+    dim = dim_keys[0] if dim_keys else None
+    # A bare numeric axis after "by" ("… by LTV", "… by age") attributes by that
+    # measure's BAND. Scoped to the post-"by" text so the word "balance" in
+    # "balance bridge" never selects a ticket-band attribution by accident.
+    if dim is None and " by " in q:
+        after_by = q.split(" by ", 1)[1]
+        for term, bucket in sorted(_NUMERIC_AXIS_BUCKET.items(),
+                                   key=lambda kv: len(kv[0]), reverse=True):
+            if bucket in _fields(semantics) and re.search(r"\b" + re.escape(term) + r"\b", after_by):
+                dim = bucket
+                if not terms:
+                    terms = [term]
+                break
+    periods = _detect_periods(q)
+    start = periods[0] if periods else None
+    spec = MIQuerySpec(
+        intent="chart", chart_type="none", metric=None, aggregation="sum",
+        execution_mode="temporal", bridge_query=True, bridge_dimension=dim,
+        compare_periods=([start] if start else []),
+        output_format="chart", title=title,
+        explanation=("Funded balance attribution bridge: opening balance → per-"
+                     "category change over the chosen dimension → the latest "
+                     "balance. Deltas reconcile to the net change; a source-"
+                     "portfolio lens (total / direct / acquired / cohort) scopes it."))
+    return spec, _det_meta("high", bool(dim_keys),
+                           terms or ([dim] if dim else ["funded_bridge"]),
+                           note="funded_bridge")
+
+
+# Static-pool cohort progression: how a cohort's funded metrics EVOLVE across
+# reporting periods. Distinguished from a plain whole-book evolution by a cohort
+# SCOPE — a source portfolio (acquired_001 / the acquired book / direct) and/or
+# an origination vintage.
+_PROGRESSION_MARKER_RE = re.compile(
+    r"\bevolv|\bprogress|\bseason|static[\s-]?pool|over time|\btrend|"
+    r"how (?:has|have|did).*(?:evolv|change|move|progress|grow|season|track)|"
+    r"across (?:periods|reports|reporting)|by reporting")
+_VINTAGE_PHRASE_RE = re.compile(
+    r"originated in\s+(20\d{2})(?:[-\s]?q([1-4]))?|"
+    r"vintage\s+(20\d{2})(?:[-\s]?q([1-4]))?|"
+    r"(20\d{2})(?:[-\s]?q([1-4]))?\s+vintage|"
+    r"\bcohort\b.*?(20\d{2})")
+
+
+def _cohort_vintage(q: str) -> Tuple[Optional[str], Optional[str]]:
+    """(vintage_label, grain) from an origination-vintage phrase, e.g.
+    'originated in 2023' → ('2023', 'Y'); '2023 q2 vintage' → ('2023-Q2', 'Q')."""
+    m = _VINTAGE_PHRASE_RE.search(q)
+    if not m:
+        return None, None
+    groups = [g for g in m.groups() if g]
+    year = next((g for g in groups if re.fullmatch(r"20\d{2}", g)), None)
+    quarter = next((g for g in groups if re.fullmatch(r"[1-4]", g)), None)
+    if not year:
+        return None, None
+    if quarter:
+        return f"{year}-Q{quarter}", "Q"
+    return year, "Y"
+
+
+def _cohort_progression_recognizer(q: str, title: str, semantics: dict
+                                   ) -> Optional[Tuple[MIQuerySpec, dict]]:
+    """Cohort static-pool progression → governed ``cohort_progression`` plan.
+
+    Fires only when the question has BOTH a progression marker and a cohort
+    scope — a source portfolio (``mentions_portfolio``) or an origination
+    vintage — so a plain whole-book 'balance evolution' stays with the ordinary
+    evolution route."""
+    if not _PROGRESSION_MARKER_RE.search(q):
+        return None
+    from .portfolio_lens import mentions_portfolio  # local: avoid import cycle at load
+    vintage, grain = _cohort_vintage(q)
+    if not (vintage or mentions_portfolio(q)):
+        return None
+    metric, _agg, _matched = _detect_metric(q, semantics)
+    spec = MIQuerySpec(
+        intent="chart", chart_type="line", metric=metric, aggregation="sum",
+        execution_mode="temporal", cohort_progression=True,
+        cohort_vintage=vintage, cohort_grain=grain,
+        output_format="chart", title=title,
+        explanation=("Static-pool cohort progression: the chosen funded metric "
+                     "(balance / LTV / rate / NNEG) for a cohort — a source "
+                     "portfolio ± origination vintage — tracked across reporting "
+                     "periods."))
+    return spec, _det_meta("high", False, [vintage or "cohort_progression"],
+                           note="cohort_progression")
 
 
 def _risk_limit_recognizer(q: str, title: str
@@ -854,6 +1085,27 @@ def _resolve_numeric_axis(term: str, semantics: dict, available_columns=None) ->
     return None
 
 
+def _scatter_axes(q: str, semantics: dict, available_columns=None
+                  ) -> Optional[Tuple[str, str]]:
+    """The two numeric axes a scatter question actually names, in order of
+    appearance ("ltv vs age" -> (ltv, age)), or None when the question does not
+    name two distinct numeric measures. A scatter is only ever emitted from
+    axes resolved here — axes are NEVER defaulted/invented, so categorical
+    "X vs Y" phrasing ("single vs joint") is not hijacked into a scatter."""
+    found: List[Tuple[int, str]] = []
+    for term in sorted(_NUMERIC_AXIS_BUCKET, key=len, reverse=True):
+        m = re.search(r"\b" + re.escape(term) + r"\b", q)
+        if not m:
+            continue
+        fld = _resolve_numeric_axis(term, semantics, available_columns)
+        if fld and all(fld != f for _, f in found):
+            found.append((m.start(), fld))
+    found.sort(key=lambda t: t[0])
+    if len(found) >= 2:
+        return found[0][1], found[1][1]
+    return None
+
+
 def _grouping_segments(q: str) -> Tuple[str, List[str]]:
     """Split ``<metric part> by <dim> [by/and <dim> ...]`` into the metric part
     (before the first ``by``) and the ordered list of grouping segments after it.
@@ -956,15 +1208,19 @@ _BORROWER_STRUCTURE_TERMS = (
     ("sole borrower", "sole"), ("single borrower", "sole"), ("sole", "sole"),
 )
 _BORROWER_STRUCTURE_VALUE = {"joint": "Joint", "sole": "Sole"}
+# The materialised borrower_type dimension uses "joint"/"single" values
+# (matched case-insensitively by the executor).
+_BORROWER_TYPE_VALUE = {"joint": "Joint", "sole": "Single"}
 
 
 def _borrower_structure_filter(q: str, semantics: dict, available_columns=None
                                ) -> Optional[Tuple[Dict[str, Any], str]]:
     """Detect a 'joint'/'sole' borrower intent and resolve it to a filter.
 
-    Returns ``(filters, note)`` or None. Prefers a ``borrower_structure`` value
-    filter; falls back to a ``number_of_borrowers`` threshold (>=2 joint / ==1
-    sole) and notes the substitution; if neither field exists, returns an empty
+    Returns ``(filters, note)`` or None. Prefers the materialised
+    ``borrower_type`` value filter, then a ``borrower_structure`` value filter;
+    falls back to a ``number_of_borrowers`` threshold (>=2 joint / ==1 sole) and
+    notes the substitution; if none of those fields exists, returns an empty
     filter set with a note suggesting number_of_borrowers.
     """
     fields = _fields(semantics)
@@ -978,6 +1234,9 @@ def _borrower_structure_filter(q: str, semantics: dict, available_columns=None
     cols = set(available_columns) if available_columns is not None else None
     has = lambda key: key in fields and (cols is None or
                                          fields[key].get("canonical_field", key) in cols)
+    if has("borrower_type"):
+        return {"borrower_type": _BORROWER_TYPE_VALUE[kind]}, \
+            f"borrower_type = {_BORROWER_TYPE_VALUE[kind]}"
     if has("borrower_structure"):
         return {"borrower_structure": _BORROWER_STRUCTURE_VALUE[kind]}, \
             f"borrower_structure = {_BORROWER_STRUCTURE_VALUE[kind]}"
@@ -1153,6 +1412,12 @@ def _deterministic_parse(question: str, semantics: dict,
     fc = _forecast_scale_recognizer(q, title)
     if fc is not None:
         return fc
+    br = _bridge_recognizer(q, title, semantics, available_columns=available_columns)
+    if br is not None:
+        return br
+    cp = _cohort_progression_recognizer(q, title, semantics)
+    if cp is not None:
+        return cp
     cmp_spec = _compare_recognizer(q, title, semantics)
     if cmp_spec is not None:
         return cmp_spec
@@ -1242,8 +1507,13 @@ def _deterministic_parse(question: str, semantics: dict,
     # *bucket*, …) makes this a grouped matrix (heatmap), NOT a loan-level bubble.
     # Two NUMERIC axes (e.g. ltv & age) remain a bubble (handled below).
     metric_part, seg_classes = _classify_segments(q, semantics, available_columns)
+    # Two resolvable numeric axes joined by "vs"/"scatter" make this a plot.
+    # A bare " vs " between categorical values ("single vs joint") does NOT —
+    # that phrasing stays with the categorical grouping/filter grammar.
+    scatter_axes = (_scatter_axes(q, semantics, available_columns)
+                    if ("scatter" in q or " vs " in q or " versus " in q) else None)
     explicit_plot = ("bubble" in q or "scatter" in q or "sized by" in q
-                     or " vs " in q or "plot" in q or "against" in q)
+                     or scatter_axes is not None or "plot" in q or "against" in q)
     numeric_bubble = False
     if len(seg_classes) >= 2 and not explicit_plot and "treemap" not in q:
         n_categorical = sum(1 for c in seg_classes if c[0] == "categorical")
@@ -1256,6 +1526,15 @@ def _deterministic_parse(question: str, semantics: dict,
                 key = c[1] if c[0] == "categorical" else c[2]
                 if key and key not in dims:
                     dims.append(key)
+            # The first dimension may sit in the metric position ("ticket size
+            # by borrower type"): recover it from the explicitly-named
+            # dimensions, in question order.
+            if len(dims) < 2 and dim_keys:
+                merged: List[str] = []
+                for k in list(dim_keys) + dims:
+                    if k and k not in merged:
+                        merged.append(k)
+                dims = merged[:2]
             metric, _agg, matched = _detect_metric(metric_part, semantics)
             return _build_two_dim_spec(metric, dims, semantics, title, True,
                                        [c[1] for c in seg_classes[:2]],
@@ -1263,8 +1542,21 @@ def _deterministic_parse(question: str, semantics: dict,
         # All-numeric two-segment grouping -> bubble (two numeric axes + size).
         numeric_bubble = True
 
-    # ---- ranked / "largest" queries ---------------------------------------
     is_ranking, rank_dir, rank_limit = _detect_ranking(q)
+
+    # ---- two explicit dimensions ("<dim> by <dim>") -> matrix --------------
+    # "ticket size by borrower type": the first dimension sits in the metric
+    # position, so the segment classifier above sees only one grouping segment.
+    # Two explicitly-named dimensions with no ranking/plot intent are a
+    # cross-tab of the two (count, or the named metric).
+    if (len(dim_keys) >= 2 and not explicit_plot and not is_ranking
+            and "treemap" not in q):
+        metric, _agg, matched = _detect_metric(remaining, semantics)
+        return _build_two_dim_spec(metric, dim_keys[:2], semantics, title, True,
+                                   dim_terms,
+                                   has_count=("count" in matched or _wants_count(q)))
+
+    # ---- ranked / "largest" queries ---------------------------------------
     if is_ranking and "treemap" not in q and "heatmap" not in q:
         ranked = _build_ranking_spec(q, title, rank_dir, rank_limit, top_n,
                                      semantics, available_columns)
@@ -1315,19 +1607,18 @@ def _deterministic_parse(question: str, semantics: dict,
             _det_meta("medium", explicit, dim_terms))
 
     # ---- scatter ----------------------------------------------------------
-    if "scatter" in q or " vs " in q:
-        if "ltv" in q and "rate" in q:
-            x, y = _ltv_metric(semantics, available_columns), _rate_metric(
-                semantics, available_columns)
-        else:
-            x = _ltv_metric(semantics, available_columns)
-            y = _age_metric(semantics, available_columns)
+    # Only when the question actually names two numeric measures ("ltv vs age",
+    # "scatter of rate vs balance"). Axes are never invented: an explicit
+    # "scatter" with no resolvable axes, or a categorical "X vs Y" ("single vs
+    # joint"), falls through to the grouping / refusal grammar instead.
+    if scatter_axes is not None:
+        x, y = scatter_axes
         return (MIQuerySpec(
             intent="chart", chart_type="scatter", x=x, y=y,
             aggregation="loan_level", title=title,
             explanation="Scatter of two numeric measures.",
             output_format="chart"),
-            _det_meta("medium", explicit, dim_terms))
+            _det_meta("high" if "scatter" in q else "medium", explicit, dim_terms))
 
     # ---- line (trend over time) -------------------------------------------
     is_line = ("over time" in q or "trend" in q or "monthly" in q
@@ -1397,12 +1688,23 @@ def _deterministic_parse(question: str, semantics: dict,
             metric, agg = _balance_metric(semantics), "sum"
 
     if dimension is None and metric is None:
-        # Nothing usable -> summary (no chart), low confidence.
+        # An explicit portfolio-summary / count intent keeps the whole-book
+        # summary. ANYTHING ELSE is marked "unmapped" so the workflow returns a
+        # controlled "I couldn't interpret this" response instead of silently
+        # answering a different question with a whole-book KPI.
+        wants_summary = (bool(_SUMMARY_INTENT_RE.search(q)) or is_count_q
+                         or is_balance_q or _wants_count(q))
+        if wants_summary:
+            return (MIQuerySpec(
+                intent="summary", chart_type="none", aggregation="count", title=title,
+                explanation="Whole-book portfolio summary (count + balance).",
+                output_format="text"),
+                _det_meta("medium", explicit, dim_terms, note="portfolio_summary"))
         return (MIQuerySpec(
             intent="summary", chart_type="none", aggregation="count", title=title,
-            explanation="Could not map question to a chart deterministically.",
+            explanation="Could not map question to a governed analytic.",
             output_format="text"),
-            _det_meta("low", explicit, dim_terms))
+            _det_meta("low", explicit, dim_terms, note="unmapped"))
 
     # ---- single-metric KPI (a metric with NO grouping dimension) ----------
     # A bare metric ("interest rate", "total balance") is a single number — a
@@ -1713,6 +2015,10 @@ def _call_llm(prompt: Dict[str, str], model: str, use_cache: bool = True):
     sampling = {"temperature": 0.0} if _supports_temperature(model) else {}
     cache_supported = False
     message = None
+    # NOTE: ``temperature`` is intentionally NOT sent. Newer Claude models
+    # (Sonnet 5 / Opus 4.x …) reject it with a 400 "temperature is deprecated"
+    # error; the model's default sampling is used. The task is a constrained
+    # NL->JSON parse validated downstream, so a fixed temperature isn't needed.
     if use_cache:
         try:
             message = client.messages.create(
@@ -1924,7 +2230,7 @@ def parse_with_repair(
         }
         meta.update({k: det_meta[k] for k in (
             "explicit_dimension_requested", "requested_dimension_terms",
-            "dimension_substituted", "parser_confidence")})
+            "dimension_substituted", "parser_confidence", "note")})
         return det_spec, meta
 
     # No LLM at all -> deterministic only.

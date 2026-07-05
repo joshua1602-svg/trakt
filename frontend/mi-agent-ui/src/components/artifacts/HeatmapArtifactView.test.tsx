@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import type { ChartArtifact } from "@/domain";
 import { ArtifactRenderer } from "./ArtifactRenderer";
-import { HeatmapArtifactView } from "./HeatmapArtifactView";
+import { HeatmapArtifactView, bucketSortKey, orderAxis } from "./HeatmapArtifactView";
 
 /** A `balance by ltv by region` matrix artifact (rows=region, cols=ltv bucket). */
 function heatmapArtifact(overrides: Partial<ChartArtifact> = {}): ChartArtifact {
@@ -49,6 +49,59 @@ describe("HeatmapArtifactView", () => {
   it("shows an incomplete-data fallback when a dimension/measure is missing", () => {
     render(<HeatmapArtifactView artifact={heatmapArtifact({ valueKey: undefined })} />);
     expect(screen.getByText(/Heatmap data is incomplete/i)).toBeInTheDocument();
+  });
+
+  it("orders the bucket axis in band order, not the row order (ranked by count)", () => {
+    // Rows arrive ranked by count (30-40 first) — the axis must still read
+    // 20-30, 30-40, 40-50, 50-60 across the top.
+    const artifact = heatmapArtifact({
+      valueKey: "count",
+      valueFormat: "number",
+      rows: [
+        { geographic_region_obligor: "South West", ltv_bucket: "30-40%", count: 22 },
+        { geographic_region_obligor: "South West", ltv_bucket: "40-50%", count: 11 },
+        { geographic_region_obligor: "London", ltv_bucket: "20-30%", count: 8 },
+        { geographic_region_obligor: "London", ltv_bucket: "50-60%", count: 3 },
+      ],
+    });
+    render(<HeatmapArtifactView artifact={artifact} />);
+    const headers = screen
+      .getAllByRole("columnheader")
+      .map((h) => h.textContent?.trim())
+      .filter((t): t is string => !!t && /%/.test(t));
+    expect(headers).toEqual(["20-30%", "30-40%", "40-50%", "50-60%"]);
+  });
+});
+
+describe("bucketSortKey / orderAxis", () => {
+  it("orders LTV bands by their lower bound", () => {
+    expect(orderAxis(["30-40%", "40-50%", "20-30%", "50-60%"])).toEqual([
+      "20-30%",
+      "30-40%",
+      "40-50%",
+      "50-60%",
+    ]);
+  });
+
+  it("places a '<40' band first and '80+' last", () => {
+    expect(orderAxis(["40-60", "80+", "<40", "60-80"])).toEqual(["<40", "40-60", "60-80", "80+"]);
+  });
+
+  it("orders £-ticket bands with k / m magnitudes", () => {
+    expect(orderAxis(["£100k-200k", "£1m+", "<£100k"])).toEqual(["<£100k", "£100k-200k", "£1m+"]);
+  });
+
+  it("keeps non-numeric categories in insertion order", () => {
+    expect(orderAxis(["joint", "single"])).toEqual(["joint", "single"]);
+    expect(bucketSortKey("joint")).toBeNull();
+  });
+
+  it("sorts a stray 'Unknown / Missing' bucket last", () => {
+    expect(orderAxis(["30-40%", "Unknown / Missing", "20-30%"])).toEqual([
+      "20-30%",
+      "30-40%",
+      "Unknown / Missing",
+    ]);
   });
 });
 

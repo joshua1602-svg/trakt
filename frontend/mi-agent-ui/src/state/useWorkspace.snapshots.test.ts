@@ -47,6 +47,7 @@ function makeClient(): AgentClient {
     getFunnelEvolution: any,
     getRiskLimits: any,
     getForecastExtrapolation: any,
+    getCohortProgression: any,
     getMe: any,
     getDecks: any,
     deckDownloadUrl: () => null,

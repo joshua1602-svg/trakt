@@ -71,6 +71,8 @@ function makeClient(ask: (req: AgentRequest) => Promise<AgentResponse>): AgentCl
     getRiskLimits: async () => ({}) as any,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     getForecastExtrapolation: async () => ({}) as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    getCohortProgression: async () => ({}) as any,
     getMe: async () => ({ authenticated: false }),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     getDecks: async () => ({ available: false, latest: null, decks: [], client_id: "" }) as any,
@@ -122,6 +124,30 @@ describe("useWorkspace — analysis context", () => {
     expect(answer.artifacts?.[0]?.type).toBe("chart");
     // The raw interpretation is still retained for the Query Logic disclosure.
     expect(answer.interpreted).toBeDefined();
+  });
+
+  it("flags the answering book ONLY when it differs from the active tab", async () => {
+    // Active tab defaults to "funded". A question routed to the pipeline book
+    // must be flagged; a funded answer on the funded tab must not.
+    const ask = vi.fn(async (req: AgentRequest) => ({
+      ...regionResult(req.question),
+      datasetContext: req.question.includes("pipeline") ? "pipeline" : "funded",
+    }));
+    const { result } = renderHook(() => useWorkspace(makeClient(ask)));
+    await waitFor(() => expect(result.current.selectedRunId).toBe("mi_2025_11"));
+
+    act(() => result.current.ask("show pipeline amount by region"));
+    await waitFor(() =>
+      expect(result.current.messages.some((m) => m.role === "assistant" && !m.pending)).toBe(true),
+    );
+    const surprising = [...result.current.messages].reverse().find((m) => m.role === "assistant" && !m.pending)!;
+    expect(surprising.datasetContext).toBe("pipeline");
+
+    act(() => result.current.ask("show balance by region"));
+    await waitFor(() => expect(ask).toHaveBeenCalledTimes(2));
+    const expected = [...result.current.messages].reverse().find((m) => m.role === "assistant" && !m.pending)!;
+    // Funded answer on the funded tab — nothing surprising, so no badge.
+    expect(expected.datasetContext).toBeUndefined();
   });
 
   it("resolves a follow-up against context and dispatches the rewritten query", async () => {

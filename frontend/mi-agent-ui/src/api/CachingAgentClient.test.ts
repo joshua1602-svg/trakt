@@ -33,6 +33,7 @@ function fakeClient(response: AgentResponse): { client: AgentClient; ask: Return
     getFunnelEvolution: vi.fn(),
     getRiskLimits: vi.fn(),
     getForecastExtrapolation: vi.fn(),
+    getCohortProgression: vi.fn(),
     getMe: vi.fn(),
     getDecks: vi.fn(),
     deckDownloadUrl: vi.fn(() => null),

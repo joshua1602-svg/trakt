@@ -2,16 +2,14 @@
 # MI Agent — Investor / Funder PPTX pack (config-driven deck definition).
 # =========================================================================
 #
-# This file is the single source of truth for the deck: slides, titles,
-# strapline sources, chart specs, metric specs, lens applicability and broker
-# suppression. The generator (`python -m mi_agent_pptx.cli`) renders whatever is
-# declared here against the MI Agent registries and post-pipeline artifacts.
-#
-# Field bindings reference the MI Agent semantic registry keys
-# (mi_agent/mi_semantics_field_registry.yaml); bucket keys reference
+# Single source of truth for the deck: slides, titles, strapline sources, chart
+# specs, metric specs, lens applicability and broker suppression. Field bindings
+# reference the MI Agent semantic registry keys; bucket keys reference
 # config/mi/buckets.yaml; dimensions reference config/mi/stratification_catalogue.yaml.
-# No economic derivation is defined here — only field bindings + registry-declared
-# aggregations. Missing fields degrade to branded placeholders + appendix notes.
+#
+# Every metric and slide declares a LENS (funded | pipeline | forecast). Metrics
+# resolve against that lens's frame only, so pipeline totals are never funded
+# totals. Missing fields/lenses degrade to branded placeholders + appendix notes.
 
 deck:
   name: "Investor & Funder MI Pack"
@@ -19,15 +17,11 @@ deck:
   default_lens: total
   footer: "trakt MI Agent · Confidential — for institutional funders/investors"
   max_strapline_words: 24
-  # Broker channel is allowed for pipeline and SPV-level funded views, but
-  # suppressed for consolidated funded views (acquired portfolios carry no
-  # broker data). Toggle per-run with the CLI --consolidated flag.
   suppress_broker_consolidated: true
   logo_path: null
 
 # --------------------------------------------------------------------------- #
-# Metric registry — each KPI binds a semantic field + a registry-authorised
-# aggregation. `weighted_avg` uses the field's registry weight_field.
+# Metric registry — semantic field + registry-authorised aggregation + lens.
 # --------------------------------------------------------------------------- #
 metrics:
   total_pipeline:
@@ -40,64 +34,75 @@ metrics:
     label: "Funded Balance"
     field: current_outstanding_balance
     aggregation: sum
+    lens: funded
+    format: currency
+  forecast_funded_balance:
+    label: "Forecast Funded"
+    kind: forecast_funded
+    lens: forecast
     format: currency
   loan_count:
-    label: "Loan Count"
+    label: "Funded Loans"
     kind: count
+    lens: funded
+    format: integer
+  pipeline_cases:
+    label: "Pipeline Cases"
+    kind: count
+    lens: pipeline
     format: integer
   wa_ticket_size:
     label: "WA Ticket Size"
     field: current_outstanding_balance
     aggregation: avg
+    lens: funded
     format: currency
   wa_current_ltv:
     label: "WA Current LTV"
     field: current_loan_to_value
     aggregation: weighted_avg
+    lens: funded
     format: percent
   wa_original_ltv:
     label: "WA Original LTV"
     field: original_loan_to_value
     aggregation: weighted_avg
+    lens: funded
     format: percent
   wa_borrower_age:
     label: "WA Borrower Age"
     field: youngest_borrower_age
     aggregation: weighted_avg
     weight_field: current_outstanding_balance
+    lens: funded
     format: years
   wa_current_rate:
     label: "WA Current Rate"
     field: current_interest_rate
     aggregation: weighted_avg
     weight_field: current_outstanding_balance
+    lens: funded
     format: rate
   largest_region:
     label: "Largest Region"
     kind: largest
-    dimension: geographic_region_obligor
+    dimension: region
+    lens: funded
     format: percent
   largest_broker:
     label: "Largest Channel"
     kind: largest
     dimension: broker_channel
+    lens: pipeline
     format: percent
-  forecast_funded_balance:
-    label: "Forecast Funded"
-    field: forecast_funded_balance
-    aggregation: sum
-    format: currency
-  limits_breached:
-    label: "Limits Breached"
-    field: null
-    format: integer
   data_quality:
     label: "Data Quality"
     kind: data_quality
+    lens: funded
     format: string
 
 # --------------------------------------------------------------------------- #
-# Slides (12–15). Each has a title + strapline; charts degrade to placeholders.
+# Slides (12–15).
 # --------------------------------------------------------------------------- #
 slides:
   # 1 -------------------------------------------------------------- Cover
@@ -114,13 +119,13 @@ slides:
     kpis:
       - total_pipeline
       - funded_balance
+      - forecast_funded_balance
       - loan_count
       - wa_ticket_size
       - wa_current_ltv
-      - wa_borrower_age
       - wa_current_rate
+      - wa_borrower_age
       - largest_region
-      - largest_broker
       - data_quality
 
   # 3 ----------------------------------------------------- Pipeline Overview
@@ -131,16 +136,18 @@ slides:
     strapline_source: deterministic
     charts:
       - id: pipeline_by_stage
-        title: "Pipeline by Stage"
-        type: bar
+        title: "Pipeline Balance by Stage"
+        type: barlist
         dimension: pipeline_stage
         measure: balance
+        order: ["Application", "KFI Issued", "Offer Issued", "Legals", "Completion Pending"]
       - id: pipeline_channel_mix
-        title: "Channel Mix"
-        type: bar
+        title: "Channel Mix (Pipeline)"
+        type: barlist
         dimension: broker_channel
         measure: balance
         broker: true
+        top_n: 8
 
   # 4 --------------------------------------------------- Pipeline Conversion
   - id: pipeline_conversion
@@ -150,10 +157,11 @@ slides:
     strapline_source: deterministic
     charts:
       - id: conversion_by_stage
-        title: "Conversion by Stage"
-        type: bar
+        title: "Cases by Stage"
+        type: barlist
         dimension: pipeline_stage
         measure: count
+        order: ["Application", "KFI Issued", "Offer Issued", "Legals", "Completion Pending"]
 
   # 5 ------------------------------------------- Pipeline Run-Rate / Forecast
   - id: pipeline_forecast
@@ -162,11 +170,17 @@ slides:
     lens: forecast
     strapline_source: deterministic
     charts:
-      - id: monthly_run_rate
-        title: "Monthly Origination Run-Rate"
-        type: line
-        date_field: origination_date
+      - id: cumulative_expected_funded
+        title: "Cumulative Expected Funded"
+        type: area
+        date_field: expected_completion_date
         period: M
+        measure: balance
+        cumulative: true
+      - id: monthly_expected_funded
+        title: "Expected Funded by Month"
+        type: barlist
+        dimension: expected_completion_date
         measure: balance
 
   # 6 ------------------------------------------------- Funded Balance Evolution
@@ -177,15 +191,16 @@ slides:
     strapline_source: deterministic
     charts:
       - id: funded_balance_over_time
-        title: "Funded Balance by Vintage"
-        type: cohort
+        title: "Funded Balance by Origination Vintage"
+        type: area
         date_field: origination_date
         period: M
         measure: balance
+        cumulative: true
         mandatory: true
       - id: funded_count_over_time
-        title: "Funded Loan Count by Vintage"
-        type: cohort
+        title: "Funded Loans by Vintage"
+        type: area
         date_field: origination_date
         period: M
         measure: count
@@ -199,14 +214,14 @@ slides:
     charts:
       - id: balance_by_ltv
         title: "Balance by LTV Bucket"
-        type: bar
+        type: barlist
         dimension: current_loan_to_value
         bucket: ltv_bucket
         measure: balance
         mandatory: true
       - id: balance_by_ticket
         title: "Balance by Ticket Size"
-        type: bar
+        type: barlist
         dimension: current_outstanding_balance
         bucket: balance_band
         measure: balance
@@ -214,20 +229,21 @@ slides:
   # 8 ---------------------------------------------- Funded Stratifications II
   - id: stratification_2
     type: charts
-    title: "Funded Stratifications — Borrower Age & Structure"
+    title: "Funded Stratifications — Borrower Age & Rate"
     lens: funded
     strapline_source: deterministic
     charts:
       - id: balance_by_age
         title: "Balance by Borrower Age"
-        type: bar
+        type: barlist
         dimension: youngest_borrower_age
         bucket: borrower_age_bucket
         measure: balance
-      - id: balance_by_borrower_structure
-        title: "Balance by Borrower Structure"
-        type: bar
-        dimension: borrower_structure
+      - id: balance_by_rate
+        title: "Balance by Interest Rate"
+        type: barlist
+        dimension: current_interest_rate
+        bucket: interest_rate_bucket
         measure: balance
 
   # 9 --------------------------------------------- Funded Stratifications III
@@ -240,14 +256,14 @@ slides:
     charts:
       - id: balance_by_region
         title: "Balance by Region (Top 10)"
-        type: hbar
-        dimension: geographic_region_obligor
+        type: barlist
+        dimension: region
         measure: balance
         top_n: 10
         mandatory: true
       - id: balance_by_broker
         title: "Balance by Broker Channel"
-        type: bar
+        type: barlist
         dimension: broker_channel
         measure: balance
         broker: true
@@ -281,16 +297,16 @@ slides:
     charts:
       - id: vintage_balance
         title: "Origination Balance by Vintage"
-        type: cohort
-        date_field: origination_date
-        period: Y
+        type: barlist
+        dimension: origination_date
         measure: balance
-      - id: vintage_count
-        title: "Loan Count by Vintage"
-        type: cohort
-        date_field: origination_date
-        period: Y
-        measure: count
+        top_n: 12
+      - id: vintage_ltv
+        title: "Balance by LTV Bucket"
+        type: barlist
+        dimension: current_loan_to_value
+        bucket: ltv_bucket
+        measure: balance
 
   # 12 ---------------------------------------- Scenario / Forecast Snapshot
   - id: forecast_snapshot
@@ -299,11 +315,12 @@ slides:
     lens: forecast
     strapline_source: deterministic
     charts:
-      - id: scenario_base_curve
-        title: "Base Projected Balance Curve"
-        type: line
-        date_field: forecast_scenario_date  # absent -> branded placeholder
+      - id: expected_by_stage
+        title: "Weighted Expected Funded by Stage"
+        type: barlist
+        dimension: pipeline_stage
         measure: balance
+        order: ["Application", "KFI Issued", "Offer Issued", "Legals", "Completion Pending"]
 
   # 13 --------------------------------------------------------- Risk Monitor
   - id: risk_monitor

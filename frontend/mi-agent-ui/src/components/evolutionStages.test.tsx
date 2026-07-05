@@ -28,6 +28,7 @@ function client(over: Partial<AgentClient> = {}): AgentClient {
     getFunnelEvolution: vi.fn(async () => mockFunnelEvolution("client_001")),
     getRiskLimits: vi.fn(async () => mockRiskLimits("client_001")),
     getForecastExtrapolation: vi.fn(async () => mockForecastExtrapolation("client_001")),
+    getCohortProgression: vi.fn(),
     getMe: vi.fn(async () => ({ authenticated: true, isOperator: true })),
     getDecks: vi.fn(async () => ({ available: false, latest: null, decks: [], client_id: "client_001" })),
     deckDownloadUrl: vi.fn(() => null),

@@ -149,9 +149,22 @@ export class HttpAgentClient implements AgentClient {
     return `${this.baseUrl}/mi/decks/download?${q.toString()}`;
   }
 
-  getCohorts(portfolioId: string, signal?: AbortSignal): Promise<import("@/domain").CohortAnalysis> {
+  getCohorts(portfolioId: string, grain?: import("@/domain").CohortGrain,
+             signal?: AbortSignal): Promise<import("@/domain").CohortAnalysis> {
+    const g = grain ? `&grain=${grain}` : "";
     return this.getJson<import("@/domain").CohortAnalysis>(
-      `/mi/cohorts?portfolioId=${encodeURIComponent(portfolioId)}`, signal);
+      `/mi/cohorts?portfolioId=${encodeURIComponent(portfolioId)}${g}`, signal);
+  }
+
+  getCohortProgression(portfolioId: string,
+                       query?: import("@/domain").CohortProgressionQuery,
+                       signal?: AbortSignal): Promise<import("@/domain").CohortProgression> {
+    const p = new URLSearchParams({ portfolioId });
+    if (query?.lens) p.set("lens", query.lens);
+    if (query?.vintage) p.set("vintage", query.vintage);
+    if (query?.grain) p.set("grain", query.grain);
+    return this.getJson<import("@/domain").CohortProgression>(
+      `/mi/cohorts/progression?${p.toString()}`, signal);
   }
 
   async ask(request: AgentRequest, signal?: AbortSignal): Promise<AgentResponse> {
@@ -199,6 +212,9 @@ export class HttpAgentClient implements AgentClient {
     }
 
     const artifacts = (body.artifacts ?? []).filter(isArtifact) as Artifact[];
+    const meta = body.metadata ?? {};
+    const asString = (v: unknown): string | undefined =>
+      typeof v === "string" && v.length > 0 ? v : undefined;
 
     return {
       ok: !!body.ok,
@@ -211,6 +227,7 @@ export class HttpAgentClient implements AgentClient {
       warnings: body.warnings ?? [],
       diagnostics: body.diagnostics ?? [],
       spec: body.spec,
+      datasetContext: asString(meta.datasetContext),
       error: body.error ?? undefined,
     };
   }

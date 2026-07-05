@@ -249,5 +249,63 @@ def test_forecast_funded_balance_not_routed_to_extrapolation():
     assert r.get("metadata", {}).get("route") != "forecast_extrapolation"
 
 
+def _ask_run(question: str, run_id: str) -> dict:
+    return client.post("/mi/query", json={
+        "question": question, "portfolioId": f"client_001/{run_id}",
+        "datasetContext": "funded",
+    }).json()
+
+
+def test_funded_balance_bridge_returns_reconciling_waterfall():
+    # The fixture writes Oct (60) and Nov (70×1.15) funded runs. A waterfall
+    # bridge by region must return a waterfall artifact whose region deltas
+    # reconcile to the opening→latest net change.
+    r = _ask("show a waterfall of the balance bridge by region and what contributed to the growth")
+    assert r.get("metadata", {}).get("route") == "funded_bridge", r.get("answer")
+    charts = [a for a in r.get("artifacts", []) if a.get("chartType") == "waterfall"]
+    assert charts, r.get("artifacts")
+    rows = charts[0]["rows"]
+    totals = [x for x in rows if x["type"] == "total"]
+    deltas = [x for x in rows if x["type"] != "total"]
+    assert len(totals) == 2 and deltas
+    opening, closing = totals[0]["value"], totals[-1]["value"]
+    assert abs(sum(d["value"] for d in deltas) - (closing - opening)) < 1.0
+
+
+def test_cohort_progression_route_returns_metric_line():
+    # A static-pool progression scoped to a source portfolio returns a metric
+    # line across periods (the fixture's two runs).
+    r = client.post("/mi/query", json={
+        "question": "how has funded balance evolved for the direct book",
+        "portfolioId": "client_001/mi_2025_11", "datasetContext": "funded",
+    }).json()
+    assert r.get("metadata", {}).get("route") == "cohort_progression", r.get("answer")
+    lines = [a for a in r.get("artifacts", []) if a.get("chartType") == "line"]
+    assert lines and lines[0]["rows"]
+
+
+def test_funded_query_honours_selected_run():
+    # The fixture writes two funded runs of DIFFERENT sizes (Oct=60, Nov=70).
+    # A point-in-time funded question must be answered from the SELECTED run,
+    # not the active/latest dataset — otherwise the earlier run is silently
+    # mislabelled with the latest data.
+    oct_rows = _record_count(_ask_run("how many loans", "mi_2025_10"))
+    nov_rows = _record_count(_ask_run("how many loans", "mi_2025_11"))
+    assert oct_rows == 60, oct_rows
+    assert nov_rows == 70, nov_rows
+
+
+def _record_count(resp: dict) -> int:
+    assert resp.get("ok") is True, resp.get("error")
+    recon = resp.get("reconciliation") or {}
+    if recon.get("total_records") is not None:
+        return int(recon["total_records"])
+    for art in resp.get("artifacts", []):
+        art_recon = art.get("reconciliation") or {}
+        if art_recon.get("total_records") is not None:
+            return int(art_recon["total_records"])
+    raise AssertionError(f"no reconciliation record count in {resp.get('artifacts')}")
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

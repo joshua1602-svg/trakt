@@ -80,10 +80,30 @@ coverage).
 
 ## Charting
 
-Static matplotlib PNGs at 200 DPI, rendered onto the theme panel background
-(`#12152b`) so there are no white boxes on the dark slides. Colours and
-typography mirror the React dashboard (navy `#232D55`, periwinkle `#919DD1`,
-Inter). No `plotly`/`kaleido` dependency is required.
+Static matplotlib PNGs that reproduce the React dashboard's visual language:
+
+- the signature breakdown visual is the dashboard **BarList** — horizontal
+  periwinkle bars with the category label left and a right-aligned mono value
+  (`£X.XMM`), ordered by the registry bucket order (LTV/age ascending);
+- time series use monotone lines with a top→bottom gradient area fill;
+- the heatmap uses the dashboard navy→periwinkle→mint ramp with contrast-
+  flipping cell values;
+- each figure is rendered at the **exact width×height of its slide panel**, so
+  python-pptx never stretches it (no distortion), onto the panel background
+  (`#12152b`) so there are no white boxes.
+
+Colours/typography mirror the dashboard (navy `#232D55`, periwinkle `#919DD1`,
+`£X.XMM`/`£XK` value format). No `plotly`/`kaleido`/Chrome dependency — it runs
+headless in Azure Functions.
+
+## Lenses & deltas
+
+Every metric and slide declares a **lens** (`funded` / `pipeline` / `forecast`)
+and resolves against that lens's frame only — the pipeline total is never the
+funded total. A slide whose lens has no data renders a branded placeholder
+instead of borrowing another lens's numbers. Pass `--prior-run-dir <dir>` to
+render **prior-period deltas** on the KPI tiles ("▲ +£0.7MM vs prior"); with no
+prior run, tiles show the value without a fabricated delta.
 
 ## Tests
 

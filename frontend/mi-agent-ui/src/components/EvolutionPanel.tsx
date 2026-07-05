@@ -14,10 +14,12 @@ import type {
   FunnelFlowPoint,
   FunnelPoint,
   CohortAnalysis,
+  CohortGrain,
+  CohortProgression,
+  SourcePortfolioLens,
   StagePoint,
 } from "@/domain";
 import { TimingDisclosureBanner } from "@/components/TimingDisclosureBanner";
-import { StatTile } from "@/components/pipeline/bits";
 import { cn, formatGBP } from "@/lib/utils";
 
 type EvoView = "funded" | "pipeline" | "forecast" | "origination" | "cohorts";
@@ -479,86 +481,182 @@ function mobFmt(v: number | null | undefined): string {
   return v == null ? "—" : `${Math.round(v)} mo`;
 }
 
-/** Funded origination-vintage (static-pool) cohorts. Surfaces ONLY the computed
- * aggregates the backend returns — balance / count / share and balance-weighted
- * LTV / rate / months-on-book by origination year — with an honest empty state
- * when no vintage is available (never fabricated curves). */
-function CohortView({ cohorts }: { cohorts: CohortAnalysis | null }) {
-  if (cohorts && !cohorts.available) {
-    return (
-      <div className="rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-[11px] text-amber-300/90"
-        data-testid="cohorts-unavailable">
-        No computed cohort data for this run{cohorts.reason ? ` — ${cohorts.reason}` : ""}.
-        Cohort analysis needs an origination date / vintage on the funded tape.
-      </div>
-    );
-  }
+/** A compact labelled dropdown used by the cohort selector row. */
+function CohortSelect({ label, value, onChange, options, testId }: {
+  label: string; value: string; onChange: (v: string) => void;
+  options: { value: string; label: string }[]; testId?: string;
+}) {
+  return (
+    <label className="flex flex-col gap-0.5">
+      <span className="text-[9px] font-medium uppercase tracking-wider text-ink-500">{label}</span>
+      <select
+        data-testid={testId}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="rounded-md border border-[var(--color-line)] bg-navy-900 px-2 py-1 text-[11px] text-ink-100 focus:border-peri-400/50 focus:outline-none"
+      >
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </label>
+  );
+}
+
+const _PROG_METRICS: { key: string; label: string; fmt: "gbp" | "pct" | "count"; nneg?: boolean }[] = [
+  { key: "funded_balance", label: "Funded balance", fmt: "gbp" },
+  { key: "wa_ltv", label: "WA LTV", fmt: "pct" },
+  { key: "wa_interest_rate", label: "WA rate", fmt: "pct" },
+  { key: "nneg_headroom_pct", label: "NNEG headroom", fmt: "pct", nneg: true },
+  { key: "loan_count", label: "Loan count", fmt: "count" },
+];
+
+/** Funded cohort view: a static-pool PROGRESSION (how a cohort — a source
+ * portfolio ± origination vintage — seasons across reporting periods) plus the
+ * point-in-time vintage composition table at a selectable grain. Replaces the
+ * old single-snapshot vintage bar (redundant with the table's balance column). */
+function CohortView({ client, portfolioId }: { client: AgentClient; portfolioId: string }) {
+  const [grain, setGrain] = useState<CohortGrain>("Y");
+  const [lens, setLens] = useState("total");
+  const [vintage, setVintage] = useState("");
+  const [metric, setMetric] = useState("funded_balance");
+  const [lenses, setLenses] = useState<SourcePortfolioLens[]>([]);
+  const [cohorts, setCohorts] = useState<CohortAnalysis | null>(null);
+  const [prog, setProg] = useState<CohortProgression | null>(null);
+
+  useEffect(() => {
+    let c = false;
+    Promise.resolve(client.getSourcePortfolios())
+      .then((r) => { if (!c && r) setLenses(r.lenses ?? []); }).catch(() => {});
+    return () => { c = true; };
+  }, [client]);
+
+  useEffect(() => {
+    let c = false;
+    Promise.resolve(client.getCohorts(portfolioId, grain))
+      .then((r) => { if (!c) setCohorts(r); }).catch(() => {});
+    return () => { c = true; };
+  }, [client, portfolioId, grain]);
+
+  useEffect(() => {
+    let c = false;
+    Promise.resolve(client.getCohortProgression(portfolioId,
+      { lens, vintage: vintage || undefined, grain }))
+      .then((r) => { if (!c) setProg(r); }).catch(() => {});
+    return () => { c = true; };
+  }, [client, portfolioId, lens, vintage, grain]);
+
   const rows = cohorts?.cohorts ?? [];
-  const metrics = new Set(cohorts?.metricsAvailable ?? []);
-  const chartData = rows.map((r) => ({ vintage: r.vintage, balance: r.balance ?? 0 }));
+  const cmetrics = new Set(cohorts?.metricsAvailable ?? []);
+  const vintageOpts = rows.map((r) => r.vintage).filter((v) => v && v !== "Unknown");
+  const hasNneg = (prog?.metricsAvailable ?? []).includes("nneg_headroom_pct");
+  const metricOpts = _PROG_METRICS.filter((m) => !m.nneg || hasNneg);
+  const pm = metricOpts.find((m) => m.key === metric) ?? metricOpts[0];
+  const progData = (prog?.periods ?? []).map((p) => ({ period: p.period, value: p.metrics?.[pm.key] ?? null }));
+  const scope = (prog?.lens ?? "Total") + (vintage ? `, ${vintage} vintage` : "");
+  const portfolioOptions = [
+    { value: "total", label: "Consolidated (Total)" },
+    ...lenses.filter((l) => l.id !== "total").map((l) => ({ value: l.id, label: l.label })),
+  ];
+
   return (
     <div className="space-y-3" data-testid="cohorts-view">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile label="Vintages" value={String(rows.length)} />
-        <StatTile label="Total loans" value={(cohorts?.totalLoanCount ?? 0).toLocaleString("en-GB")} />
-        {cohorts?.totalBalance != null && (
-          <StatTile label="Total balance" value={gbpCompact(cohorts.totalBalance)} />
-        )}
-        {cohorts?.reportingDate && (
-          <StatTile label="As of" value={cohorts.reportingDate} />
-        )}
+      {/* Cohort selector: source portfolio × vintage × grain × metric. */}
+      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-[var(--color-line)] bg-navy-900/40 px-3 py-2.5">
+        <CohortSelect label="Portfolio" value={lens} onChange={setLens} options={portfolioOptions} testId="cohort-lens" />
+        <CohortSelect label="Vintage" value={vintage} onChange={setVintage}
+          options={[{ value: "", label: "All vintages" }, ...vintageOpts.map((v) => ({ value: v, label: v }))]}
+          testId="cohort-vintage" />
+        <CohortSelect label="Grain" value={grain} onChange={(v) => setGrain(v as CohortGrain)}
+          options={[{ value: "Y", label: "Year" }, { value: "Q", label: "Quarter" }, { value: "M", label: "Month" }]}
+          testId="cohort-grain" />
+        <CohortSelect label="Metric" value={pm.key} onChange={setMetric}
+          options={metricOpts.map((m) => ({ value: m.key, label: m.label }))} testId="cohort-metric" />
       </div>
 
-      {metrics.has("balance") && chartData.length > 0 && (
-        <div className="rounded-xl border border-[var(--color-line)] bg-navy-900/40 p-4">
-          <div className="mb-2 text-[12px] font-semibold text-ink-200">Funded balance by origination vintage</div>
-          <div style={{ width: "100%", height: 200 }}>
-            <ResponsiveContainer>
-              <ComposedChart data={chartData} margin={{ top: 6, right: 12, bottom: 4, left: 4 }}>
-                <CartesianGrid stroke="#23304d" strokeDasharray="3 3" />
-                <XAxis dataKey="vintage" tick={{ fill: "#8a97ad", fontSize: 11 }} />
-                <YAxis tickFormatter={gbpCompact} tick={{ fill: "#8a97ad", fontSize: 11 }} width={64} />
-                <Tooltip formatter={(v: number) => gbpCompact(Number(v))}
-                  contentStyle={{ background: "#0f1626", border: "1px solid #23304d", fontSize: 12 }} />
-                <Bar dataKey="balance" name="Balance" fill="#7c9cf0" radius={[2, 2, 0, 0]} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
+      {/* Static-pool progression (the hero visual). */}
+      {prog && !prog.available ? (
+        <div className="rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-[11px] text-amber-300/90"
+          data-testid="cohort-progression-unavailable">
+          No progression for {scope}{prog.reason ? ` — ${prog.reason}` : ""}. A static pool needs
+          at least two reporting periods of matching loans.
+        </div>
+      ) : (
+        <EvoLineChart title={`${pm.label} — ${scope} (static pool)`} data={progData}
+          lines={[{ key: "value", label: pm.label }]} valueFormat={pm.fmt}
+          source={prog?.lineage?.source as string | undefined} />
+      )}
+
+      {/* Cohort metrics by reporting period. */}
+      {prog?.available && prog.periods.length > 0 && (
+        <div className="overflow-x-auto rounded-xl border border-[var(--color-line)] bg-navy-900/40">
+          <table className="w-full text-[11px]" data-testid="cohort-progression-table">
+            <thead>
+              <tr className="border-b border-[var(--color-line)] text-ink-400">
+                <th className="px-3 py-2 text-left font-medium">Period</th>
+                <th className="px-3 py-2 text-right font-medium">Loans</th>
+                <th className="px-3 py-2 text-right font-medium">Balance</th>
+                <th className="px-3 py-2 text-right font-medium">WA LTV</th>
+                <th className="px-3 py-2 text-right font-medium">WA rate</th>
+                {hasNneg && <th className="px-3 py-2 text-right font-medium">NNEG headroom</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {prog.periods.map((p) => (
+                <tr key={p.period} className="border-b border-[var(--color-line-soft)] last:border-0">
+                  <td className="px-3 py-1.5 text-left font-medium text-ink-100">{p.period}</td>
+                  <td className="px-3 py-1.5 text-right text-ink-200">{(p.loanCount ?? 0).toLocaleString("en-GB")}</td>
+                  <td className="px-3 py-1.5 text-right text-ink-200">{p.metrics?.funded_balance != null ? gbpCompact(p.metrics.funded_balance) : "—"}</td>
+                  <td className="px-3 py-1.5 text-right text-ink-200">{pctFmt(p.metrics?.wa_ltv)}</td>
+                  <td className="px-3 py-1.5 text-right text-ink-200">{pctFmt(p.metrics?.wa_interest_rate)}</td>
+                  {hasNneg && <td className="px-3 py-1.5 text-right text-ink-200">{pctFmt(p.metrics?.nneg_headroom_pct)}</td>}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-[var(--color-line)] bg-navy-900/40">
-        <table className="w-full text-[11px]" data-testid="cohorts-table">
-          <thead>
-            <tr className="border-b border-[var(--color-line)] text-ink-400">
-              <th className="px-3 py-2 text-left font-medium">Vintage</th>
-              <th className="px-3 py-2 text-right font-medium">Loans</th>
-              {metrics.has("balance") && <th className="px-3 py-2 text-right font-medium">Balance</th>}
-              {metrics.has("balance") && <th className="px-3 py-2 text-right font-medium">Book share</th>}
-              {metrics.has("waLtv") && <th className="px-3 py-2 text-right font-medium">WA LTV</th>}
-              {metrics.has("waRate") && <th className="px-3 py-2 text-right font-medium">WA rate</th>}
-              {metrics.has("waMonthsOnBook") && <th className="px-3 py-2 text-right font-medium">WA MOB</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.vintage} className="border-b border-[var(--color-line-soft)] last:border-0">
-                <td className="px-3 py-1.5 text-left font-medium text-ink-100">{r.vintage}</td>
-                <td className="px-3 py-1.5 text-right text-ink-200">{r.loanCount.toLocaleString("en-GB")}</td>
-                {metrics.has("balance") && <td className="px-3 py-1.5 text-right text-ink-200">{r.balance != null ? gbpCompact(r.balance) : "—"}</td>}
-                {metrics.has("balance") && <td className="px-3 py-1.5 text-right text-ink-400">{r.sharePct != null ? `${r.sharePct.toFixed(1)}%` : "—"}</td>}
-                {metrics.has("waLtv") && <td className="px-3 py-1.5 text-right text-ink-200">{pctFmt(r.waLtv)}</td>}
-                {metrics.has("waRate") && <td className="px-3 py-1.5 text-right text-ink-200">{pctFmt(r.waRate)}</td>}
-                {metrics.has("waMonthsOnBook") && <td className="px-3 py-1.5 text-right text-ink-200">{mobFmt(r.waMonthsOnBook)}</td>}
+      {/* Point-in-time vintage composition at the selected grain. */}
+      <div className="text-[11px] font-semibold text-ink-300">Vintage composition (as of {cohorts?.reportingDate ?? "latest"})</div>
+      {cohorts && !cohorts.available ? (
+        <div className="rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-[11px] text-amber-300/90"
+          data-testid="cohorts-unavailable">
+          No computed vintage data for this run{cohorts.reason ? ` — ${cohorts.reason}` : ""}.
+          Vintage composition needs an origination date on the funded tape.
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-[var(--color-line)] bg-navy-900/40">
+          <table className="w-full text-[11px]" data-testid="cohorts-table">
+            <thead>
+              <tr className="border-b border-[var(--color-line)] text-ink-400">
+                <th className="px-3 py-2 text-left font-medium">Vintage</th>
+                <th className="px-3 py-2 text-right font-medium">Loans</th>
+                {cmetrics.has("balance") && <th className="px-3 py-2 text-right font-medium">Balance</th>}
+                {cmetrics.has("balance") && <th className="px-3 py-2 text-right font-medium">Book share</th>}
+                {cmetrics.has("waLtv") && <th className="px-3 py-2 text-right font-medium">WA LTV</th>}
+                {cmetrics.has("waRate") && <th className="px-3 py-2 text-right font-medium">WA rate</th>}
+                {cmetrics.has("waMonthsOnBook") && <th className="px-3 py-2 text-right font-medium">WA MOB</th>}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.vintage} className="border-b border-[var(--color-line-soft)] last:border-0">
+                  <td className="px-3 py-1.5 text-left font-medium text-ink-100">{r.vintage}</td>
+                  <td className="px-3 py-1.5 text-right text-ink-200">{r.loanCount.toLocaleString("en-GB")}</td>
+                  {cmetrics.has("balance") && <td className="px-3 py-1.5 text-right text-ink-200">{r.balance != null ? gbpCompact(r.balance) : "—"}</td>}
+                  {cmetrics.has("balance") && <td className="px-3 py-1.5 text-right text-ink-400">{r.sharePct != null ? `${r.sharePct.toFixed(1)}%` : "—"}</td>}
+                  {cmetrics.has("waLtv") && <td className="px-3 py-1.5 text-right text-ink-200">{pctFmt(r.waLtv)}</td>}
+                  {cmetrics.has("waRate") && <td className="px-3 py-1.5 text-right text-ink-200">{pctFmt(r.waRate)}</td>}
+                  {cmetrics.has("waMonthsOnBook") && <td className="px-3 py-1.5 text-right text-ink-200">{mobFmt(r.waMonthsOnBook)}</td>}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       <p className="text-[10px] text-ink-500">
-        Source: governed funded central lender tape (origination vintage). Point-in-time vintage
-        aggregates only — redemption / completion / performance curves are not computed in the MI
-        path and are not shown.
+        Static-pool seasoning across governed reporting periods (balance / LTV / rate / NNEG) for the
+        selected cohort, plus point-in-time vintage composition at the chosen grain. Source: governed
+        funded central lender tape.
       </p>
     </div>
   );
@@ -580,7 +678,6 @@ export function EvolutionPanel({
   const [pipeline, setPipeline] = useState<PipelineEvolution | null>(null);
   const [forecast, setForecast] = useState<ForecastEvolution | null>(null);
   const [funnel, setFunnel] = useState<PipelineFunnelEvolution | null>(null);
-  const [cohorts, setCohorts] = useState<CohortAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [stageMode, setStageMode] = useState<StageViewMode>("amount");
   const [includeKfi, setIncludeKfi] = useState(true);
@@ -597,7 +694,7 @@ export function EvolutionPanel({
         if (view === "funded") setFunded(await client.getFundedEvolution(portfolioId));
         else if (view === "pipeline") setPipeline(await client.getPipelineEvolution(portfolioId));
         else if (view === "origination") setFunnel(await client.getFunnelEvolution(portfolioId));
-        else if (view === "cohorts") setCohorts(await client.getCohorts(portfolioId));
+        else if (view === "cohorts") { /* CohortView is self-contained (owns its fetches) */ }
         else setForecast(await client.getForecastEvolution(portfolioId));
       } catch {
         /* keep prior state; charts show empty */
@@ -837,7 +934,7 @@ export function EvolutionPanel({
         </div>
       )}
 
-      {view === "cohorts" && <CohortView cohorts={cohorts} />}
+      {view === "cohorts" && <CohortView client={client} portfolioId={portfolioId} />}
 
       {view === "forecast" && (
         <div className="space-y-3" data-testid="forecast-evolution">

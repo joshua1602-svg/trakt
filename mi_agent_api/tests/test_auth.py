@@ -119,3 +119,25 @@ def test_auth_disabled_injects_synthetic_operator(monkeypatch):
     r = client.get("/me")
     assert r.status_code == 200
     assert r.json()["isOperator"] is True
+
+
+def test_empty_auth_flag_fails_closed(monkeypatch):
+    # An empty MI_AGENT_AUTH_ENABLED (blanked / forgotten env var) must NOT run
+    # the API open — it enforces auth just like the unset default.
+    monkeypatch.setenv("MI_AGENT_AUTH_ENABLED", "")
+    assert auth_mod._auth_enabled() is True
+    r = client.get("/me")
+    assert r.status_code == 401
+
+
+def test_whitespace_auth_flag_fails_closed(monkeypatch):
+    monkeypatch.setenv("MI_AGENT_AUTH_ENABLED", "   ")
+    assert auth_mod._auth_enabled() is True
+    r = client.get("/me")
+    assert r.status_code == 401
+
+
+@pytest.mark.parametrize("val", ["false", "0", "no", "off", "FALSE", "Off"])
+def test_explicit_opt_out_disables_auth(monkeypatch, val):
+    monkeypatch.setenv("MI_AGENT_AUTH_ENABLED", val)
+    assert auth_mod._auth_enabled() is False

@@ -131,15 +131,31 @@ describe("ChatMessage suggestions", () => {
 });
 
 describe("ChatMessage clean default view", () => {
-  it("shows only the conversational narrative — no query-logic / routing internals", () => {
+  it("shows only the conversational narrative — no interpretation, spec or diagnostics", () => {
     render(<ChatMessage message={answeredMessage} />);
     // Narrative is visible.
     expect(screen.getByText(/Average LTV is highest in London/)).toBeInTheDocument();
-    // Technical routing internals are not exposed in the client chat at all —
-    // no Query logic disclosure, interpretation, spec or diagnostics.
+    // The client chat stays clean: no interpretation line, no query-logic
+    // controls, no raw diagnostics (that provenance stays backend-side).
     expect(screen.queryByRole("button", { name: /query logic/i })).toBeNull();
     expect(screen.queryByText(/interpreted as/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/total_funded/)).not.toBeInTheDocument();
     expect(screen.queryByText(/resolved region via NUTS 2024/)).not.toBeInTheDocument();
+  });
+
+  it("shows only a minimal dataset badge (which book answered), nothing else", () => {
+    const msg: ChatMessageType = {
+      ...answeredMessage,
+      interpreted:
+        "Chart: Bar · Metric: Current Outstanding Balance · Dimension: Region · Parser: deterministic · Validation: Passed",
+      datasetContext: "pipeline",
+    };
+    render(<ChatMessage message={msg} />);
+    // The book that answered IS shown (it materially changes the number's meaning).
+    expect(screen.getByText(/^pipeline$/i)).toBeInTheDocument();
+    // But the interpretation / parse internals are NOT rendered client-side.
+    expect(screen.queryByText(/interpreted as/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Parser:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Validation:/)).not.toBeInTheDocument();
   });
 });

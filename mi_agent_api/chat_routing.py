@@ -26,6 +26,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from mi_agent.llm_query_parser import _deterministic_parse
 from mi_agent.mi_agent_workflow import _detect_unsupported_concept
 
+from mi_agent import portfolio_lens as _portfolio_lens
+
 from . import temporal_compare as compare_mod
 from . import evolution as evolution_mod
 from . import forecast_extrapolation as fx_mod
@@ -616,6 +618,230 @@ def _route_risk(question, spec, spec_dict, *, client_id, run_id, output_root,
 
 
 # --------------------------------------------------------------------------- #
+# E. Funded balance bridge (attribution waterfall between two periods)
+# --------------------------------------------------------------------------- #
+# Preferred attribution dimension when the question names none.
+_BRIDGE_DEFAULT_DIMS = ("geographic_region_obligor", "collateral_geography",
+                        "broker_channel", "erm_product_type")
+
+
+# The region family — any of these columns may carry the geography depending on
+# the tape; the bridge resolves whichever is actually present.
+_REGION_FAMILY = ("collateral_geography", "geographic_region_collateral",
+                  "geographic_region_obligor")
+
+
+def _bridge_dimension(spec, semantics: Dict[str, Any]) -> Tuple[Optional[str], Any, str]:
+    """(semantic_key, candidate_column(s), business_label) for the bridge
+    attribution dimension — the one named in the question, else a sensible
+    default. Region resolves to the whole family so the bridge picks whichever
+    geography column the funded tape actually carries."""
+    fields = semantics.get("fields", {})
+    key = spec.bridge_dimension
+    if not key or key not in fields:
+        key = next((k for k in _BRIDGE_DEFAULT_DIMS if k in fields), None)
+    if not key:
+        return None, None, ""
+    entry = fields.get(key, {}) or {}
+    label = entry.get("business_name") or entry.get("display_name") or key.replace("_", " ")
+    if key in _REGION_FAMILY:
+        cols = [fields.get(k, {}).get("canonical_field", k)
+                for k in _REGION_FAMILY if k in fields]
+        return key, (cols or [entry.get("canonical_field", key)]), label
+    return key, entry.get("canonical_field", key), label
+
+
+def _route_bridge(question, spec, spec_dict, *, client_id, run_id, output_root,
+                  portfolio_id, as_of, semantics, source_lens=None) -> Dict[str, Any]:
+    """Governed funded-balance ATTRIBUTION bridge → a waterfall artifact.
+
+    Opening balance (a named start period, else the earliest) → per-category
+    change over the chosen dimension → the LATEST balance. A source-portfolio
+    lens named in the question (or the active dropdown) scopes it — so a
+    consolidated (Total) and cohort (direct / acquired / cohort id) bridge are
+    both available. Deltas reconcile exactly to the net change."""
+    _key, dim_col, dim_label = _bridge_dimension(spec, semantics)
+    if not dim_col:
+        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
+                         answer="I couldn't resolve a dimension to attribute the bridge by.",
+                         route="funded_bridge", warnings=["no attribution dimension resolved."])
+
+    default_lens = (_portfolio_lens.lens_from_selection(source_lens)
+                    if source_lens is not None else None)
+    lens = _portfolio_lens.resolve_lens_with_default(question, default_lens)
+    start_period = (spec.compare_periods or [None])[0]
+
+    br = evolution_mod.funded_bridge(
+        output_root, client_id, dim_col, start_period=start_period, to_run_id=run_id,
+        lens_filters=lens.filters or None, lens_label=lens.label)
+
+    if not br.get("available"):
+        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
+                         answer=(f"I can't build a funded balance bridge yet: "
+                                 f"{br.get('reason', 'insufficient reporting periods')}."),
+                         route="funded_bridge",
+                         warnings=["insufficient-data: a bridge needs two funded reporting periods."])
+
+    start, end = br["start"], br["end"]
+    net = br["netChange"]
+    arrow = "up" if net > 0 else ("down" if net < 0 else "flat")
+    rows = [{"label": start["period"], "value": start["total"], "type": "total"}]
+    for c in br["contributions"]:
+        rows.append({"label": c["category"], "value": c["delta"], "type": "delta"})
+    rows.append({"label": f"{end['period']} (latest)", "value": end["total"], "type": "total"})
+
+    lens_suffix = "" if lens.name == _portfolio_lens.LENS_TOTAL else f" — {lens.label}"
+    title = f"Funded balance bridge by {dim_label}{lens_suffix}"
+    chart = _chart_artifact(
+        title, chart_type="waterfall", x_key="label", rows=rows,
+        series=[{"key": "value", "label": dim_label, "color": _PALETTE[0]}],
+        value_format="gbp", spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of,
+        display_hints={"value": {"format": "gbp", "scale": None}},
+        description=(f"Opening {start['period']} → {dim_label.lower()} contributions "
+                     f"→ latest {end['period']}."))
+
+    top = max(br["contributions"], key=lambda c: abs(c["delta"]), default=None)
+    top_txt = ""
+    if top:
+        td = top["delta"]
+        top_txt = (f" Largest mover: {top['category']} "
+                   f"({'+' if td >= 0 else '−'}{_gbp(abs(td))}).")
+    answer = (f"{dim_label} bridge ({lens.label}): funded balance moved from "
+              f"{_gbp(start['total'])} in {start['period']} to {_gbp(end['total'])} at "
+              f"{end['period']} (latest) — a net change of "
+              f"{'+' if net >= 0 else '−'}{_gbp(abs(net))} ({arrow}).{top_txt}")
+
+    table = _table_artifact(
+        f"{dim_label} contribution to balance change", columns=[
+            {"key": "category", "label": dim_label, "align": "left", "format": "text"},
+            {"key": "start", "label": start["period"], "align": "right", "format": "gbp"},
+            {"key": "end", "label": end["period"], "align": "right", "format": "gbp"},
+            {"key": "delta", "label": "Δ", "align": "right", "format": "gbp"},
+        ],
+        rows=[{"category": c["category"], "start": c["start"], "end": c["end"],
+               "delta": c["delta"]} for c in br["contributions"]],
+        spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of)
+
+    recon = {"dataset": "funded", "coverage_by_balance_pct": 100.0,
+             "reporting_date": end.get("reporting_date")}
+    notes = [{"field": "bridge_periods",
+              "note": f"Opening {start.get('reporting_date') or start['period']}; "
+                      f"closing {end.get('reporting_date') or end['period']} (latest); "
+                      f"attributed by {dim_label.lower()}; deltas reconcile to the net change."}]
+    return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
+                     artifacts=[chart, table], reconciliation=recon, source_notes=notes,
+                     route="funded_bridge")
+
+
+# --------------------------------------------------------------------------- #
+# F. Cohort static-pool progression (a cohort's metrics across periods)
+# --------------------------------------------------------------------------- #
+# (question keyword) -> (metric key, label, chart valueFormat, display scale)
+_PROG_METRICS: Dict[str, Tuple[str, str, str, Optional[str]]] = {
+    "balance": ("funded_balance", "Funded balance", "gbp", None),
+    "ltv": ("wa_ltv", "WA LTV", "pct", "percent_fraction"),
+    "rate": ("wa_interest_rate", "WA interest rate", "pct", "percent_fraction"),
+    "nneg": ("nneg_headroom_pct", "NNEG headroom", "pct", "percent_fraction"),
+    "nneg_exposure": ("nneg_exposure", "NNEG exposure", "gbp", None),
+    "count": ("loan_count", "Loan count", "number", None),
+    "age": ("avg_borrower_age", "Avg borrower age", "decimal", None),
+}
+
+
+def _prog_metric_key(q: str) -> str:
+    if "negative equity" in q or "nneg" in q or "no-negative" in q or "headroom" in q:
+        return "nneg_exposure" if "exposure" in q else "nneg"
+    if "ltv" in q or "loan to value" in q:
+        return "ltv"
+    if "rate" in q or "interest" in q or "coupon" in q:
+        return "rate"
+    if "how many" in q or "loan count" in q or "number of loans" in q:
+        return "count"
+    if "borrower age" in q or "age" in q:
+        return "age"
+    return "balance"
+
+
+def _route_cohort_progression(question, spec, spec_dict, *, client_id, run_id,
+                              output_root, portfolio_id, as_of, source_lens=None
+                              ) -> Dict[str, Any]:
+    """Governed static-pool cohort progression → a metric line across reporting
+    periods for a cohort (source portfolio ± origination vintage) + a full
+    metrics table."""
+    default_lens = (_portfolio_lens.lens_from_selection(source_lens)
+                    if source_lens is not None else None)
+    lens = _portfolio_lens.resolve_lens_with_default(question, default_lens)
+    vintage = getattr(spec, "cohort_vintage", None)
+    grain = getattr(spec, "cohort_grain", None) or "Y"
+
+    prog = evolution_mod.funded_cohort_progression(
+        output_root, client_id, lens_filters=lens.filters or None,
+        lens_label=lens.label, vintage=vintage, grain=grain, to_run_id=run_id)
+
+    scope = lens.label + (f", {vintage} vintage" if vintage else "")
+    if not prog.get("available"):
+        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
+                         answer=(f"I can't build a progression for {scope}: "
+                                 f"{prog.get('reason', 'no matching loans')}."),
+                         route="cohort_progression",
+                         warnings=[f"insufficient-data: {prog.get('reason', 'no matching cohort')}"])
+
+    q = question.lower()
+    mkey = _prog_metric_key(q)
+    if mkey in ("nneg", "nneg_exposure") and not any(
+            "nneg_exposure" in p["metrics"] for p in prog["periods"]):
+        mkey = "balance"  # no valuation → NNEG not derivable; fall back to balance
+    metric_key, label, vfmt, scale = _PROG_METRICS[mkey]
+
+    periods = prog["periods"]
+    rows = [{"period": p["period"], metric_key: (p["metrics"] or {}).get(metric_key)}
+            for p in periods]
+    chart = _chart_artifact(
+        f"{label} — {scope}", chart_type="line", x_key="period", rows=rows,
+        series=[{"key": metric_key, "label": label, "color": _PALETTE[0]}],
+        value_format=vfmt, spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of,
+        display_hints={metric_key: {"format": vfmt, "scale": scale}},
+        description=f"Static-pool {label.lower()} for {scope} across reporting periods.")
+
+    # Full metrics table (all periods).
+    tcols = [{"key": "period", "label": "Period", "align": "left", "format": "text"},
+             {"key": "loan_count", "label": "Loans", "align": "right", "format": "number"},
+             {"key": "funded_balance", "label": "Balance", "align": "right", "format": "gbp"},
+             {"key": "wa_ltv", "label": "WA LTV", "align": "right", "format": "pct", "scale": "percent_fraction"},
+             {"key": "wa_interest_rate", "label": "WA rate", "align": "right", "format": "pct", "scale": "percent_fraction"}]
+    if "nneg_headroom_pct" in prog.get("metricsAvailable", []):
+        tcols.append({"key": "nneg_headroom_pct", "label": "NNEG headroom", "align": "right",
+                      "format": "pct", "scale": "percent_fraction"})
+    trows = [{"period": p["period"], **{k: (p["metrics"] or {}).get(k)
+              for k in ("loan_count", "funded_balance", "wa_ltv", "wa_interest_rate", "nneg_headroom_pct")}}
+             for p in periods]
+    table = _table_artifact(f"{scope} — metrics by period", columns=tcols, rows=trows,
+                            spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of)
+
+    live = [p for p in periods if p["loanCount"]]
+    first, last = (live[0] if live else None), (live[-1] if live else None)
+    def _mv(p):
+        return None if p is None else (p["metrics"] or {}).get(metric_key)
+    fv, lv = _mv(first), _mv(last)
+    trend = ""
+    if fv is not None and lv is not None:
+        trend = " up" if lv > fv else (" down" if lv < fv else " flat")
+    answer = (f"{label} for {scope}: tracked across {len(live)} reporting period(s) "
+              f"({first['period'] if first else '—'} → {last['period'] if last else '—'}"
+              f"){trend}.")
+    warnings = []
+    if prog.get("singlePeriod"):
+        warnings.append("Only one reporting period has loans for this cohort — a "
+                        "progression reads best with two or more periods.")
+    recon = {"dataset": "funded", "coverage_by_balance_pct": 100.0,
+             "reporting_date": (last or {}).get("reporting_date")}
+    notes = [{"field": "cohort", "note": prog["lineage"]["note"]}]
+    return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
+                     artifacts=[chart, table], reconciliation=recon, source_notes=notes,
+                     warnings=warnings, route="cohort_progression")
+
+
+# --------------------------------------------------------------------------- #
 # Detection + dispatch
 # --------------------------------------------------------------------------- #
 _EVOLUTION_MARKERS = ("evolution", "over time", "trend", "by month", "monthly",
@@ -637,7 +863,8 @@ def _is_evolution(question: str, spec) -> bool:
 def try_route(question: str, *, portfolio_id: Optional[str], view: str,
               output_root: Optional[str], pipeline_root: Optional[str],
               semantics: Dict[str, Any], history_model: Optional[Dict[str, Any]] = None,
-              as_of: Optional[str] = None) -> Optional[Dict[str, Any]]:
+              as_of: Optional[str] = None,
+              source_lens: Optional[Any] = None) -> Optional[Dict[str, Any]]:
     """Route a question to an internal analytical service, or return None to defer
     to the existing point-in-time MI Agent path. Never raises for analytics issues —
     the caller wraps this defensively and falls back on any exception."""
@@ -662,6 +889,16 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
 
     if spec.forecast_mode == "extrapolation":
         return _route_forecast(question, spec, spec_dict, history_model=history_model, **kw)
+    if getattr(spec, "bridge_query", False):
+        return _route_bridge(question, spec, spec_dict,
+                             client_id=client_id, run_id=run_id, output_root=output_root,
+                             portfolio_id=portfolio_id, as_of=as_of, semantics=semantics,
+                             source_lens=source_lens)
+    if getattr(spec, "cohort_progression", False):
+        return _route_cohort_progression(question, spec, spec_dict,
+                                        client_id=client_id, run_id=run_id,
+                                        output_root=output_root, portfolio_id=portfolio_id,
+                                        as_of=as_of, source_lens=source_lens)
     if spec.temporal_mode == "compare":
         return _route_compare(question, spec, spec_dict, view=view, **kw)
     if spec.risk_limit_query:

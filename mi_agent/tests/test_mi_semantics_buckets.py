@@ -106,15 +106,20 @@ def test_bucket_field_metadata(semantics, key):
 def test_registry_field_count_and_tiers(semantics):
     m = semantics["metadata"]
     # derived = 8 LTV/age/etc bucket fields + 2 ITL3 drilldown fields
-    # (obligor/collateral) + 4 Phase 0B risk/borrower bands
-    # (pd_bucket, lgd_bucket, ead_bucket, borrower_structure).
-    assert m["derived_field_count"] == len(DERIVED_BUCKETS) + 2 + 4
+    # (obligor/collateral) + 5 Phase 0B risk/borrower bands
+    # (pd_bucket, lgd_bucket, ead_bucket, borrower_structure, borrower_type).
+    assert m["derived_field_count"] == len(DERIVED_BUCKETS) + 2 + 5
     assert m["field_count"] == m["core_field_count"] + m["extended_field_count"]
     # v0.2.x set == 72; Phase 0B adds 27 MI/M&A risk + segmentation/snapshot
     # semantic fields == 99; the funded-book vs pipeline date-semantics work adds
-    # the separate pipeline_snapshot_date core dimension == 100.
-    assert m["field_count"] == 100
-    assert m["core_field_count"] == 68
+    # the separate pipeline_snapshot_date core dimension == 100; the
+    # source-portfolio provenance lens adds 4 (source_portfolio_id/type/label,
+    # acquired_portfolio_id) == 104; borrower_type (single vs joint, derived
+    # from second-applicant presence) == 105.
+    assert m["field_count"] == 105
+    assert m["core_field_count"] == 72
+    # The generated metadata counts must match the actual entries (drift guard).
+    assert m["field_count"] == len(semantics["fields"])
     assert "derived bucket semantic fields added" in (m.get("cleanup_notes") or [])
 
 

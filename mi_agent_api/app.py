@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 
 from .auth import auth_guard, principal_from_request
 
+from mi_agent.mi_agent_config import get_llm_config
 from mi_agent.mi_agent_workflow import run_mi_agent_query
 from mi_agent.mi_query_validator import load_mi_semantics
 
@@ -165,6 +166,9 @@ def health() -> Dict[str, Any]:
         # summary fields above.
         "dataAvailable": csv != "unavailable",
         "semantics": semantics_path().name,
+        # LLM parser availability (ENABLE_LLM_MI_AGENT + key). The chat runs
+        # deterministically when unavailable — surface which mode is live.
+        "llm": get_llm_config().to_dict(),
     }
 
 
@@ -556,12 +560,47 @@ def snapshot(portfolioId: Optional[str] = None,
     return result
 
 
+#: A trailing dated (or ``latest``) folder in a pipeline snapshot pointer.
+_PIPELINE_URI_TAIL_RE = re.compile(r"^(?:\d{4}-\d{2}-\d{2}|latest)$", re.IGNORECASE)
+
+
+def _pipeline_root_from_uri() -> Optional[str]:
+    """Derive a pipeline DISCOVERY ROOT from ``MI_AGENT_PIPELINE_URI`` (the weekly
+    snapshot pointer) when ``MI_AGENT_PIPELINE_ROOT`` is not set.
+
+    The URI points at a SINGLE snapshot (``…/{date|latest}/pipeline_snapshot.csv``,
+    a ``.json`` pointer, or a ``latest/`` dir). Discovery/evolution/funnel need the
+    CONTAINING root so they can enumerate ALL dated weekly cuts, not just one — so
+    strip the filename and a trailing ``{date}``/``latest`` folder to reach it."""
+    uri = os.environ.get("MI_AGENT_PIPELINE_URI")
+    if not uri:
+        return None
+    path = uri.rstrip("/")
+    if path.endswith(".csv") or path.endswith(".json"):
+        path = path.rsplit("/", 1)[0]
+    last = path.rsplit("/", 1)[-1]
+    if _PIPELINE_URI_TAIL_RE.match(last):
+        path = path.rsplit("/", 1)[0]
+    return path or None
+
+
 def _pipeline_root() -> Optional[str]:
-    """Root to discover governed pipeline sources (18a tape / M2L KFI extracts)."""
-    for key in ("MI_AGENT_PIPELINE_ROOT", "MI_AGENT_ONBOARDING_OUTPUT_ROOT"):
-        root = os.environ.get(key)
-        if root:
-            return root
+    """Root to discover governed pipeline sources (18a tape / M2L KFI extracts).
+
+    Precedence: explicit ``MI_AGENT_PIPELINE_ROOT`` → a root DERIVED from the
+    weekly ``MI_AGENT_PIPELINE_URI`` pointer → ``MI_AGENT_ONBOARDING_OUTPUT_ROOT``
+    → the inferred onboarding root. The URI-derived root comes before the
+    onboarding root because the onboarding/platform root holds FUNDED cuts, not
+    the weekly pipeline extracts."""
+    explicit = os.environ.get("MI_AGENT_PIPELINE_ROOT")
+    if explicit:
+        return explicit
+    derived = _pipeline_root_from_uri()
+    if derived:
+        return derived
+    root = os.environ.get("MI_AGENT_ONBOARDING_OUTPUT_ROOT")
+    if root:
+        return root
     return _onboarding_output_root()
 
 
@@ -1061,7 +1100,8 @@ def funnel_evolution(portfolioId: Optional[str] = None, client_id: Optional[str]
 
 @app.get("/mi/cohorts")
 def cohorts(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
-            runId: Optional[str] = None, run_id: Optional[str] = None) -> Dict[str, Any]:
+            runId: Optional[str] = None, run_id: Optional[str] = None,
+            grain: str = "Y") -> Dict[str, Any]:
     """Funded origination-vintage (static-pool) cohort analysis for a run.
 
     Balance / loan count / book share and balance-weighted LTV, rate and
@@ -1083,11 +1123,45 @@ def cohorts(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
         df, _report = _resolve_run_dataframe(client_id, run_id, root)
         reporting_date = snapshots_mod.infer_reporting_date(run_id, df)
         return cohorts_mod.cohort_analysis(
-            df, client_id=client_id, portfolio_id=pid, reporting_date=reporting_date)
+            df, client_id=client_id, portfolio_id=pid, reporting_date=reporting_date,
+            grain=grain)
     except Exception as exc:  # noqa: BLE001 - cohort analysis must never 500
         logger.warning("cohort analysis failed for %s: %s", pid, exc)
         return {"dataset": "cohorts", "portfolioId": pid, "available": False,
                 "reason": str(exc), "cohorts": [], "metricsAvailable": []}
+
+
+@app.get("/mi/cohorts/progression")
+def cohort_progression(portfolioId: Optional[str] = None,
+                       client_id: Optional[str] = None,
+                       lens: Optional[str] = None,
+                       vintage: Optional[str] = None,
+                       grain: str = "Y") -> Dict[str, Any]:
+    """Static-pool cohort PROGRESSION: how a cohort's funded metrics (balance,
+    loan count, WA LTV / rate, NNEG exposure / headroom) evolve ACROSS reporting
+    periods. The cohort is a source-portfolio ``lens`` (total | direct | acquired
+    | a cohort id such as ``acquired_001``) optionally narrowed to an origination
+    ``vintage`` at ``grain`` (Y|Q|M) — e.g. acquired_001 loans originated in 2023.
+    Never 500s; returns ``available=false`` with a reason when the cohort is empty.
+    """
+    cid = "client_001"
+    if portfolioId and "/" in portfolioId:
+        cid = portfolioId.split("/", 1)[0]
+    elif portfolioId:
+        cid = portfolioId
+    cid = client_id or cid
+    try:
+        from mi_agent import portfolio_lens as plens
+        lens_obj = plens.lens_from_selection(lens) if lens else plens.total_lens()
+        return evolution_mod.funded_cohort_progression(
+            _onboarding_output_root(), cid,
+            lens_filters=lens_obj.filters or None, lens_label=lens_obj.label,
+            vintage=vintage, grain=grain)
+    except Exception as exc:  # noqa: BLE001 - progression must never 500
+        logger.warning("cohort progression failed for %s: %s", cid, exc)
+        return {"dataset": "cohort_progression", "portfolioId": cid,
+                "available": False, "reason": str(exc), "periods": [],
+                "metricsAvailable": []}
 
 
 _PPTX_MEDIA_TYPE = (
@@ -1304,7 +1378,23 @@ def _resolve_query_frame(view: str, portfolio_id: Optional[str]):
         client_id = portfolio_id
 
     if view == "funded":
-        return get_dataframe(), None  # existing behaviour, unchanged
+        # Honour the selected reporting run: when the portfolio id carries a
+        # run_id, load THAT run's funded book (exactly as /mi/snapshot does)
+        # instead of the active/latest dataset. Otherwise an earlier-run
+        # selection would be answered from the latest snapshot yet labelled with
+        # the selected date — a stale, mislabelled answer. Falls back to the
+        # active dataset when no run_id is given or the run cannot be resolved.
+        if run_id:
+            try:
+                run_df, _ = _resolve_run_dataframe(
+                    client_id, run_id, _onboarding_output_root())
+            except Exception as exc:  # noqa: BLE001 - fall back to active source
+                logger.warning("funded run resolution failed for %s/%s: %s",
+                               client_id, run_id, exc)
+                run_df = None
+            if run_df is not None and len(run_df):
+                return run_df, None
+        return get_dataframe(), None  # active/latest funded dataset
 
     pipeline_df = None
     source = _resolve_pipeline_source(client_id, run_id)
@@ -1384,7 +1474,8 @@ def query(req: QueryRequest) -> Dict[str, Any]:
             output_root=_onboarding_output_root(),
             pipeline_root=_pipeline_discovery_root(),
             semantics=load_mi_semantics(semantics_path()),
-            history_model=_pipeline_history(cid), as_of=req.asOfDate)
+            history_model=_pipeline_history(cid), as_of=req.asOfDate,
+            source_lens=req.sourcePortfolioLens or None)
     except Exception as exc:  # noqa: BLE001 - routing must never break the chat
         logger.warning("chat routing failed; using point-in-time path: %s", exc)
         routed = None
@@ -1416,6 +1507,13 @@ def query(req: QueryRequest) -> Dict[str, Any]:
     meta = result.setdefault("metadata", {}) if isinstance(result, dict) else {}
     if isinstance(meta, dict):
         meta["datasetContext"] = view
+        meta["llm"] = {"enabled": llm_cfg.enabled, "available": llm_cfg.available,
+                       "model": llm_cfg.model if llm_cfg.available else None,
+                       "status": llm_cfg.status}
         if workflow.get("portfolio_lens"):
             meta["portfolioLens"] = workflow["portfolio_lens"]
+    # An LLM that was requested but is unusable (missing key / package) is a
+    # configuration fault the operator must see, not a silent downgrade.
+    if llm_cfg.enabled and not llm_cfg.available and isinstance(result, dict):
+        result.setdefault("warnings", []).extend(llm_cfg.warnings)
     return result

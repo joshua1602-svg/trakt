@@ -628,7 +628,11 @@ def adapt_workflow_result(
         "ok": bool(workflow.get("ok")),
         "error": workflow.get("error"),
         "question": workflow.get("question"),
-        "answer": _answer(workflow.get("interpreted"), qr, chart_type),
+        # A controlled response (unmapped question / unsupported concept)
+        # carries its own user-facing answer — never replace it with the
+        # generic lead sentence.
+        "answer": workflow.get("answer") or _answer(workflow.get("interpreted"),
+                                                    qr, chart_type),
         "interpreted": _interpreted_string(workflow.get("interpreted")),
         "spec": spec,
         "validation": validation,
@@ -653,6 +657,8 @@ def adapt_workflow_result(
             "resultType": qr.get("result_type") if qr else None,
             "rowCount": qr.get("row_count") if qr else None,
             "chartType": chart_type,
+            "unmappedQuestion": bool(workflow.get("unmapped_question")),
+            "controlledUnsupported": bool(workflow.get("controlled_unsupported")),
             # Technical diagnostics retained for engineers / an expandable UI panel.
             "diagnostics": diagnostics,
         },
