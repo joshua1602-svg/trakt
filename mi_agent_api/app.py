@@ -1463,6 +1463,26 @@ def _mi_llm_config() -> SimpleNamespace:
                            status=status, warnings=warnings)
 
 
+_CLIENT_CURRENCY_CACHE: Dict[str, str] = {}
+
+
+def _apply_request_currency(cid: str, portfolio_id: Optional[str]) -> None:
+    """Set the request-scoped display currency for a client (tape -> config ->
+    GBP), cached per client. Resolved from the client's funded book, which is
+    book-level (one currency), so it covers the routed answers too. Never raises."""
+    code = _CLIENT_CURRENCY_CACHE.get(cid)
+    if code is None:
+        code = "GBP"
+        try:
+            fdf, ferr = _resolve_query_frame("funded", portfolio_id)
+            if fdf is not None and not ferr:
+                code = currency_mod.resolve_currency_code(fdf)
+        except Exception as exc:  # noqa: BLE001 - currency is presentational
+            logger.warning("currency resolution failed for %s: %s", cid, exc)
+        _CLIENT_CURRENCY_CACHE[cid] = code
+    currency_mod.set_currency(code)
+
+
 @app.post("/mi/query")
 def query(req: QueryRequest) -> Dict[str, Any]:
     portfolio_id = req.portfolioId or (req.portfolio.id if req.portfolio else None)
@@ -1486,6 +1506,11 @@ def query(req: QueryRequest) -> Dict[str, Any]:
     try:
         cid, _rid = (portfolio_id.split("/", 1) + [None])[:2] if (portfolio_id and "/" in portfolio_id) \
             else ((portfolio_id or "client_001"), None)
+        # Set the request-scoped display currency BEFORE routing so the routed
+        # evolution/forecast/compare answers format in the book's currency too
+        # (tape -> config -> GBP; cached per client). The point-in-time path
+        # below re-resolves from its own df, which is a no-op for the same book.
+        _apply_request_currency(cid, portfolio_id)
         routed = chat_routing_mod.try_route(
             req.question, portfolio_id=portfolio_id, view=view,
             output_root=_onboarding_output_root(),
