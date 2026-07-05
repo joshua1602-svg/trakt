@@ -8,7 +8,7 @@ import {
   mockForecastEvolution,
 } from "@/data/mockEvolution";
 import { mockFunnelEvolution } from "@/data/mockFunnel";
-import { mockCohorts } from "@/data/mockCohorts";
+import { mockCohorts, mockCohortProgression } from "@/data/mockCohorts";
 import { mockRiskLimits } from "@/data/mockRiskLimits";
 import { mockForecastExtrapolation } from "@/data/mockForecastExtrapolation";
 
@@ -42,6 +42,7 @@ function client(over: Partial<AgentClient> = {}): AgentClient {
     getDecks: vi.fn(async () => ({ available: false, latest: null, decks: [], client_id: "client_001" })),
     deckDownloadUrl: vi.fn(() => null),
     getCohorts: vi.fn(async () => mockCohorts("client_001")),
+    getCohortProgression: vi.fn(async () => mockCohortProgression("client_001")),
     ...over,
   };
 }
@@ -96,6 +97,35 @@ describe("EvolutionPanel", () => {
     // No fabricated redemption/performance curves are shown.
     expect(screen.queryByText(/redemption curve/i)).toBeNull();
     expect(c.getCohorts).toHaveBeenCalled();
+  });
+
+  it("renders the cohort static-pool progression with selectors (close the loop)", async () => {
+    const c = client();
+    render(<EvolutionPanel client={c} portfolioId="client_001/mi_2025_11" />);
+    await screen.findByText("Funded balance by month");
+    fireEvent.click(screen.getByRole("tab", { name: "Cohorts" }));
+    // The selector row (source portfolio × vintage × grain × metric).
+    expect(await screen.findByTestId("cohort-lens")).toBeInTheDocument();
+    expect(screen.getByTestId("cohort-vintage")).toBeInTheDocument();
+    expect(screen.getByTestId("cohort-grain")).toBeInTheDocument();
+    expect(screen.getByTestId("cohort-metric")).toBeInTheDocument();
+    // The progression (across periods) is fetched and its table rendered.
+    expect(c.getCohortProgression).toHaveBeenCalled();
+    expect(await screen.findByTestId("cohort-progression-table")).toBeInTheDocument();
+    // The redundant single-snapshot "balance by origination vintage" BAR is gone.
+    expect(screen.queryByText(/Funded balance by origination vintage/i)).toBeNull();
+  });
+
+  it("re-fetches the progression when the grain selector changes", async () => {
+    const c = client();
+    render(<EvolutionPanel client={c} portfolioId="client_001/mi_2025_11" />);
+    await screen.findByText("Funded balance by month");
+    fireEvent.click(screen.getByRole("tab", { name: "Cohorts" }));
+    await screen.findByTestId("cohort-grain");
+    const before = (c.getCohortProgression as ReturnType<typeof vi.fn>).mock.calls.length;
+    fireEvent.change(screen.getByTestId("cohort-grain"), { target: { value: "Q" } });
+    await waitFor(() =>
+      expect((c.getCohortProgression as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(before));
   });
 
   it("shows an honest empty state when cohort data is unavailable", async () => {

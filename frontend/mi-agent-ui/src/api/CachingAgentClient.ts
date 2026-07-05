@@ -141,8 +141,13 @@ export function withCache(
       resource(`forecastExtrapolation|${portfolioId}`, () => client.getForecastExtrapolation(portfolioId, signal)),
     getDecks: (portfolioId, signal) =>
       resource(`decks|${portfolioId}`, () => client.getDecks(portfolioId, signal)),
-    getCohorts: (portfolioId, signal) =>
-      resource(`cohorts|${portfolioId}`, () => client.getCohorts(portfolioId, signal)),
+    getCohorts: (portfolioId, grain, signal) =>
+      resource(`cohorts|${portfolioId}|${grain ?? "Y"}`,
+        () => client.getCohorts(portfolioId, grain, signal)),
+    getCohortProgression: (portfolioId, query, signal) =>
+      resource(
+        `cohortProg|${portfolioId}|${query?.lens ?? "total"}|${query?.vintage ?? ""}|${query?.grain ?? "Y"}`,
+        () => client.getCohortProgression(portfolioId, query, signal)),
     deckDownloadUrl: (portfolioId, period) => client.deckDownloadUrl(portfolioId, period),
   };
 }

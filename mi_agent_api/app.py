@@ -1082,7 +1082,8 @@ def funnel_evolution(portfolioId: Optional[str] = None, client_id: Optional[str]
 
 @app.get("/mi/cohorts")
 def cohorts(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
-            runId: Optional[str] = None, run_id: Optional[str] = None) -> Dict[str, Any]:
+            runId: Optional[str] = None, run_id: Optional[str] = None,
+            grain: str = "Y") -> Dict[str, Any]:
     """Funded origination-vintage (static-pool) cohort analysis for a run.
 
     Balance / loan count / book share and balance-weighted LTV, rate and
@@ -1104,7 +1105,8 @@ def cohorts(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
         df, _report = _resolve_run_dataframe(client_id, run_id, root)
         reporting_date = snapshots_mod.infer_reporting_date(run_id, df)
         return cohorts_mod.cohort_analysis(
-            df, client_id=client_id, portfolio_id=pid, reporting_date=reporting_date)
+            df, client_id=client_id, portfolio_id=pid, reporting_date=reporting_date,
+            grain=grain)
     except Exception as exc:  # noqa: BLE001 - cohort analysis must never 500
         logger.warning("cohort analysis failed for %s: %s", pid, exc)
         return {"dataset": "cohorts", "portfolioId": pid, "available": False,

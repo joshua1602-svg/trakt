@@ -28,7 +28,7 @@ import {
   mockForecastEvolution,
 } from "@/data/mockEvolution";
 import { mockFunnelEvolution } from "@/data/mockFunnel";
-import { mockCohorts } from "@/data/mockCohorts";
+import { mockCohorts, mockCohortProgression } from "@/data/mockCohorts";
 import { mockRiskLimits } from "@/data/mockRiskLimits";
 import { mockForecastExtrapolation } from "@/data/mockForecastExtrapolation";
 import { AgentError, type AgentClient } from "./AgentClient";
@@ -150,5 +150,11 @@ export class MockAgentClient implements AgentClient {
 
   getCohorts(portfolioId: string): Promise<import("@/domain").CohortAnalysis> {
     return Promise.resolve(mockCohorts(portfolioId));
+  }
+
+  getCohortProgression(portfolioId: string,
+                       query?: import("@/domain").CohortProgressionQuery,
+                       ): Promise<import("@/domain").CohortProgression> {
+    return Promise.resolve(mockCohortProgression(portfolioId, query));
   }
 }
