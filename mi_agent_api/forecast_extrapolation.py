@@ -247,6 +247,8 @@ def kfi_conversion_model(current_balance: float,
                          weekly_inflow: Optional[float],
                          weekly_conversion_rate: Optional[float], *,
                          lag_weeks: Optional[int] = None,
+                         rate_weeks: Optional[int] = None,
+                         min_rate_weeks: int = 3,
                          reporting_period: Optional[str] = None,
                          thresholds: Optional[List[float]] = None) -> Dict[str, Any]:
     """Project completions from the KFI book (Model B).
@@ -258,6 +260,9 @@ def kfi_conversion_model(current_balance: float,
 
     ``weekly_conversion_rate`` is the recent (5-week) completion-vs-KFI rate as a
     fraction (avg weekly completions ÷ the KFI stock ``lag_weeks`` earlier).
+    ``rate_weeks`` is how many weeks that average is built on; the projection is
+    withheld until at least ``min_rate_weeks`` are observed, because a 1-2 week
+    rate is too volatile to forecast off.
     """
     thresholds = thresholds or _THRESHOLDS
     if (kfi_stock_now is None or kfi_stock_now <= 0
@@ -267,6 +272,15 @@ def kfi_conversion_model(current_balance: float,
                 "caveat": ("No current KFI stock or no trackable recent KFI→completion "
                            "conversion rate; KFI-based projection unavailable."),
                 "kfiStockNow": round(kfi_stock_now, 2) if kfi_stock_now else 0.0}
+    if rate_weeks is not None and rate_weeks < min_rate_weeks:
+        return {"model": "kfi_conversion", "available": False,
+                "status": "limited_history",
+                "caveat": (f"Recent conversion rate is based on only {rate_weeks} week(s); "
+                           f"at least {min_rate_weeks} are needed before projecting off it "
+                           "to avoid week-to-week volatility."),
+                "kfiStockNow": round(float(kfi_stock_now), 2),
+                "weeklyConversionRate": round(float(weekly_conversion_rate), 4),
+                "rateWeeks": rate_weeks, "minRateWeeks": min_rate_weeks}
 
     monthly_inflow = max(0.0, float(weekly_inflow or 0.0)) * _MONTHS_PER_WEEK
     # Monthly fraction of the KFI book that completes, from the weekly rate.
@@ -290,6 +304,7 @@ def kfi_conversion_model(current_balance: float,
         "monthlyKfiInflow": round(monthly_inflow, 2),
         "weeklyConversionRate": round(float(weekly_conversion_rate), 4),
         "conversionRate": round(float(weekly_conversion_rate), 4),  # back-compat key
+        "rateWeeks": rate_weeks,
         "lagWeeks": lag_weeks,
         "lagMonths": lag_months,
         "expectedMonthlyCompletion": first_completion["base"],
@@ -370,8 +385,11 @@ def build_extrapolation(output_root, pipeline_root, client_id: str,
     weekly_inflow = kfi_summary.get("fiveWeekAvgFlowValue")
     weekly_rate_pct = completed_conv.get("weeklyRateValue")
     weekly_conv = (weekly_rate_pct / 100.0) if weekly_rate_pct is not None else None
+    rate_weeks = completed_conv.get("weeksInWindow")
+    min_rate_weeks = completed_conv.get("minWeeks", 3)
     model_b = kfi_conversion_model(current_balance, kfi_stock_now, weekly_inflow,
                                    weekly_conv, lag_weeks=lag_weeks,
+                                   rate_weeks=rate_weeks, min_rate_weeks=min_rate_weeks,
                                    reporting_period=reporting_period)
 
     sufficiency = ("ok" if model_a.get("status") == "ok"

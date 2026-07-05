@@ -265,6 +265,12 @@ function ConversionDisclosure({ stage, conversion }: {
           <div className="mt-1.5 text-[9px] leading-snug text-ink-500">
             Avg weekly flow (last 5 wks) ÷ {lagLabel}.
           </div>
+          {!conversion.sufficient && (
+            <div className="mt-1 text-[9px] font-medium leading-snug text-amber-300"
+              data-testid={`funnel-conversion-provisional-${stage}`}>
+              Provisional — based on {conversion.weeksInWindow} of {conversion.minWeeks}+ weeks; too few to forecast off yet.
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -94,8 +94,11 @@ def test_funnel_summary_metrics():
         for k in ("basis", "lagWeeks", "lagApplied", "denominatorWeek",
                   "avgWeeklyFlowCount", "avgWeeklyFlowValue",
                   "kfiStockCount", "kfiStockValue",
-                  "weeklyRateCount", "weeklyRateValue"):
+                  "weeklyRateCount", "weeklyRateValue",
+                  "weeksInWindow", "minWeeks", "sufficient"):
             assert k in conv
+        # 'sufficient' reflects whether enough weeks fed the trailing average.
+        assert conv["sufficient"] == (conv["weeksInWindow"] >= conv["minWeeks"])
 
 
 def test_funnel_conversion_is_flow_over_lagged_kfi_stock():

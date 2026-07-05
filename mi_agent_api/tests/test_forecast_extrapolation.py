@@ -108,6 +108,20 @@ def test_kfi_conversion_unavailable_without_rate():
     assert out2["available"] is False
 
 
+def test_kfi_conversion_withheld_when_rate_too_few_weeks():
+    # A rate built on only 2 weeks is too volatile to forecast off.
+    out = fx.kfi_conversion_model(12_500_000.0, 20_000_000.0, 1_000_000.0, 0.05,
+                                  rate_weeks=2, min_rate_weeks=3)
+    assert out["available"] is False
+    assert out["status"] == "limited_history"
+    assert out["rateWeeks"] == 2
+    # Enough weeks -> it projects.
+    ok = fx.kfi_conversion_model(12_500_000.0, 20_000_000.0, 1_000_000.0, 0.05,
+                                 rate_weeks=4, min_rate_weeks=3)
+    assert ok["available"] is True
+    assert ok["rateWeeks"] == 4
+
+
 if __name__ == "__main__":
     import pytest
     raise SystemExit(pytest.main([__file__, "-q"]))

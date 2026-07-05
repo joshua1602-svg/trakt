@@ -291,6 +291,19 @@ _FUNNEL_STAGES = ("KFI", "APPLICATION", "OFFER", "COMPLETED")
 _FUNNEL_LABELS = {"KFI": "KFIs", "APPLICATION": "Applications",
                   "OFFER": "Offers", "COMPLETED": "Completions"}
 
+# The recent conversion rate averages weekly flow over a 5-week window. Require
+# at least this many observed weeks in that window before the rate is treated as
+# reliable — a 1-2 week rate is too volatile to publish or forecast off.
+_CONVERSION_WINDOW = 5
+_MIN_CONVERSION_WEEKS = 3
+
+
+def _window_count(values: List[Optional[float]], window: int) -> int:
+    """How many non-null values fall in the trailing ``window`` (i.e. how many
+    weeks actually contributed to a trailing average)."""
+    tail = [v for v in values[-window:] if v is not None]
+    return len(tail)
+
 
 def _trailing_avg(values: List[Optional[float]], window: int = 5) -> Optional[float]:
     vals = [v for v in values if v is not None]
@@ -451,15 +464,18 @@ def pipeline_funnel_evolution(pipeline_root: str | os.PathLike, client_id: str,
         prior_flow_value = value_flows[-2] if len(value_flows) >= 2 else None
         prior_flow_count = count_flows[-2] if len(count_flows) >= 2 else None
 
-        avg_flow_value = _trailing_avg(value_flows, 5)
-        avg_flow_count = _trailing_avg(count_flows, 5)
+        avg_flow_value = _trailing_avg(value_flows, _CONVERSION_WINDOW)
+        avg_flow_count = _trailing_avg(count_flows, _CONVERSION_WINDOW)
 
         # Forward conversion vs KFI (never for KFI itself, the denominator):
         # average weekly flow into this stage (last 5 weeks) over the lagged KFI
         # stock. A weekly rate; transparent about the lag and the denominator
-        # week so it can't be misread as a same-period share.
+        # week so it can't be misread as a same-period share. Flagged
+        # insufficient (not to be forecast off) until a few weeks are observed.
         conversion: Optional[Dict[str, Any]] = None
         if stage != "KFI":
+            weeks_in_window = _window_count(value_flows, _CONVERSION_WINDOW)
+            sufficient = weeks_in_window >= _MIN_CONVERSION_WEEKS
             conversion = {
                 "basis": "avg_weekly_flow_over_lagged_kfi_stock",
                 "lagWeeks": lagged,
@@ -472,6 +488,9 @@ def pipeline_funnel_evolution(pipeline_root: str | os.PathLike, client_id: str,
                 "kfiStockValue": kfi_denom_value,
                 "weeklyRateCount": _conversion_pct(avg_flow_count, kfi_denom_count),
                 "weeklyRateValue": _conversion_pct(avg_flow_value, kfi_denom_value),
+                "weeksInWindow": weeks_in_window,
+                "minWeeks": _MIN_CONVERSION_WEEKS,
+                "sufficient": sufficient,
             }
 
         summary[stage] = {

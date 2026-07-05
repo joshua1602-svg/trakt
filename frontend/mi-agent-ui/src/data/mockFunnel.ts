@@ -115,6 +115,9 @@ export function mockFunnelEvolution(portfolioId: string): PipelineFunnelEvolutio
               kfiStockValue: kfiDenomValue,
               weeklyRateCount: conv(trailingAvg(cFlow), kfiDenomCount),
               weeklyRateValue: conv(trailingAvg(vFlow), kfiDenomValue),
+              weeksInWindow: Math.min(5, vFlow.filter((v) => v != null).length),
+              minWeeks: 3,
+              sufficient: Math.min(5, vFlow.filter((v) => v != null).length) >= 3,
             },
     };
   }

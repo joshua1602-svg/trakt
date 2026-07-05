@@ -109,6 +109,11 @@ export interface FunnelConversion {
   kfiStockValue: number | null;
   weeklyRateCount: number | null;
   weeklyRateValue: number | null;
+  /** Weeks feeding the trailing average, the minimum needed, and whether the
+   * rate is reliable enough to publish/forecast off (not built on 1-2 weeks). */
+  weeksInWindow: number;
+  minWeeks: number;
+  sufficient: boolean;
 }
 
 export interface FunnelStageSummary {
