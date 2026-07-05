@@ -71,6 +71,8 @@ function makeClient(ask: (req: AgentRequest) => Promise<AgentResponse>): AgentCl
     getRiskLimits: async () => ({}) as any,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     getForecastExtrapolation: async () => ({}) as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    getCohortProgression: async () => ({}) as any,
     getMe: async () => ({ authenticated: false }),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     getDecks: async () => ({ available: false, latest: null, decks: [], client_id: "" }) as any,

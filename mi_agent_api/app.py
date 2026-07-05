@@ -1082,7 +1082,8 @@ def funnel_evolution(portfolioId: Optional[str] = None, client_id: Optional[str]
 
 @app.get("/mi/cohorts")
 def cohorts(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
-            runId: Optional[str] = None, run_id: Optional[str] = None) -> Dict[str, Any]:
+            runId: Optional[str] = None, run_id: Optional[str] = None,
+            grain: str = "Y") -> Dict[str, Any]:
     """Funded origination-vintage (static-pool) cohort analysis for a run.
 
     Balance / loan count / book share and balance-weighted LTV, rate and
@@ -1104,11 +1105,45 @@ def cohorts(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
         df, _report = _resolve_run_dataframe(client_id, run_id, root)
         reporting_date = snapshots_mod.infer_reporting_date(run_id, df)
         return cohorts_mod.cohort_analysis(
-            df, client_id=client_id, portfolio_id=pid, reporting_date=reporting_date)
+            df, client_id=client_id, portfolio_id=pid, reporting_date=reporting_date,
+            grain=grain)
     except Exception as exc:  # noqa: BLE001 - cohort analysis must never 500
         logger.warning("cohort analysis failed for %s: %s", pid, exc)
         return {"dataset": "cohorts", "portfolioId": pid, "available": False,
                 "reason": str(exc), "cohorts": [], "metricsAvailable": []}
+
+
+@app.get("/mi/cohorts/progression")
+def cohort_progression(portfolioId: Optional[str] = None,
+                       client_id: Optional[str] = None,
+                       lens: Optional[str] = None,
+                       vintage: Optional[str] = None,
+                       grain: str = "Y") -> Dict[str, Any]:
+    """Static-pool cohort PROGRESSION: how a cohort's funded metrics (balance,
+    loan count, WA LTV / rate, NNEG exposure / headroom) evolve ACROSS reporting
+    periods. The cohort is a source-portfolio ``lens`` (total | direct | acquired
+    | a cohort id such as ``acquired_001``) optionally narrowed to an origination
+    ``vintage`` at ``grain`` (Y|Q|M) — e.g. acquired_001 loans originated in 2023.
+    Never 500s; returns ``available=false`` with a reason when the cohort is empty.
+    """
+    cid = "client_001"
+    if portfolioId and "/" in portfolioId:
+        cid = portfolioId.split("/", 1)[0]
+    elif portfolioId:
+        cid = portfolioId
+    cid = client_id or cid
+    try:
+        from mi_agent import portfolio_lens as plens
+        lens_obj = plens.lens_from_selection(lens) if lens else plens.total_lens()
+        return evolution_mod.funded_cohort_progression(
+            _onboarding_output_root(), cid,
+            lens_filters=lens_obj.filters or None, lens_label=lens_obj.label,
+            vintage=vintage, grain=grain)
+    except Exception as exc:  # noqa: BLE001 - progression must never 500
+        logger.warning("cohort progression failed for %s: %s", cid, exc)
+        return {"dataset": "cohort_progression", "portfolioId": cid,
+                "available": False, "reason": str(exc), "periods": [],
+                "metricsAvailable": []}
 
 
 _PPTX_MEDIA_TYPE = (
@@ -1400,7 +1435,8 @@ def query(req: QueryRequest) -> Dict[str, Any]:
             output_root=_onboarding_output_root(),
             pipeline_root=_pipeline_discovery_root(),
             semantics=load_mi_semantics(semantics_path()),
-            history_model=_pipeline_history(cid), as_of=req.asOfDate)
+            history_model=_pipeline_history(cid), as_of=req.asOfDate,
+            source_lens=req.sourcePortfolioLens or None)
     except Exception as exc:  # noqa: BLE001 - routing must never break the chat
         logger.warning("chat routing failed; using point-in-time path: %s", exc)
         routed = None

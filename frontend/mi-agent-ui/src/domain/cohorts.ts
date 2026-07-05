@@ -32,3 +32,40 @@ export interface CohortAnalysis {
   cohorts: CohortRow[];
   lineage?: Record<string, unknown>;
 }
+
+/** Vintage grain for cohort views. */
+export type CohortGrain = "Y" | "Q" | "M";
+
+/** One reporting period's funded metrics for a static-pool cohort. */
+export interface CohortProgressionPeriod {
+  period: string;
+  reporting_date?: string | null;
+  loanCount: number;
+  metrics: Record<string, number | null>;
+}
+
+/**
+ * Static-pool cohort PROGRESSION — mirrors
+ * `mi_agent_api.evolution.funded_cohort_progression`. How a cohort (a source
+ * portfolio ± origination vintage) seasons across reporting periods.
+ */
+export interface CohortProgression {
+  dataset: "cohort_progression";
+  portfolioId: string;
+  available: boolean;
+  reason?: string | null;
+  lens: string;
+  vintage?: string | null;
+  grain?: CohortGrain;
+  metricsAvailable: string[];
+  periods: CohortProgressionPeriod[];
+  singlePeriod?: boolean;
+  lineage?: Record<string, unknown>;
+}
+
+/** Options for a cohort-progression request. */
+export interface CohortProgressionQuery {
+  lens?: string;
+  vintage?: string;
+  grain?: CohortGrain;
+}

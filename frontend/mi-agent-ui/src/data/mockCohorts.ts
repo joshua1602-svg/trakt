@@ -31,3 +31,49 @@ export function mockCohorts(portfolioId: string): CohortAnalysis {
     },
   };
 }
+
+/** Deterministic mock cohort PROGRESSION (synthetic). Three reporting periods
+ * of static-pool seasoning for the requested cohort — balance grows, NNEG
+ * headroom shrinks — so the Cohort tab renders with the demo client. */
+export function mockCohortProgression(
+  portfolioId: string,
+  query?: { lens?: string; vintage?: string; grain?: string },
+): import("@/domain").CohortProgression {
+  const client = portfolioId.split("/")[0] || "client_001";
+  const lens = query?.lens && query.lens !== "total" ? query.lens : "Total";
+  const scale = lens === "Total" ? 1 : 0.4;
+  const vintageScale = query?.vintage ? 0.5 : 1;
+  const s = scale * vintageScale;
+  const mk = (period: string, reporting_date: string, growth: number, hr: number) => ({
+    period,
+    reporting_date,
+    loanCount: Math.round(60 * s),
+    metrics: {
+      funded_balance: Math.round(9_000_000 * s * growth),
+      loan_count: Math.round(60 * s),
+      wa_ltv: 0.39,
+      wa_interest_rate: 0.0955,
+      avg_borrower_age: 72,
+      nneg_exposure: 0,
+      nneg_headroom: Math.round(6_000_000 * s * hr),
+      nneg_headroom_pct: hr,
+    } as Record<string, number | null>,
+  });
+  return {
+    dataset: "cohort_progression",
+    portfolioId: `${client}/mi_2025_11`,
+    available: true,
+    lens,
+    vintage: query?.vintage ?? null,
+    grain: (query?.grain as "Y" | "Q" | "M") ?? "Y",
+    metricsAvailable: ["funded_balance", "loan_count", "wa_ltv", "wa_interest_rate",
+      "avg_borrower_age", "nneg_exposure", "nneg_headroom", "nneg_headroom_pct"],
+    periods: [
+      mk("2025-09", "2025-09-30", 0.92, 0.62),
+      mk("2025-10", "2025-10-31", 0.97, 0.58),
+      mk("2025-11", "2025-11-30", 1.0, 0.55),
+    ],
+    singlePeriod: false,
+    lineage: { note: "Static-pool seasoning across reporting periods (synthetic)." },
+  };
+}

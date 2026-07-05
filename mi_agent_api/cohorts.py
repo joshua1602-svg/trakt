@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from analytics_lib.numeric import coerce_numeric
+from mi_agent.mi_dataset_profile import PERCENT_POINTS, percent_storage_scale
 
 _BALANCE = "current_outstanding_balance"
 _LTV = "current_loan_to_value"
@@ -36,23 +37,49 @@ def _weighted_avg(values: pd.Series, weights: pd.Series) -> Optional[float]:
     return round(float((v[mask] * w[mask]).sum() / denom), 4)
 
 
-def _vintage_series(df: pd.DataFrame) -> Optional[pd.Series]:
-    """The origination-year label per row: the derived ``vintage_year`` column
-    when present, else parsed from ``origination_date``. None when neither
-    exists (no vintage analysis possible)."""
-    if _VINTAGE in df.columns and df[_VINTAGE].notna().any():
-        return df[_VINTAGE]
+def _weighted_avg_pct(values: pd.Series, weights: pd.Series) -> Optional[float]:
+    """Balance-weighted average of a PERCENT column, normalised to a FRACTION
+    (0.0955 == 9.55%). The funded tape stores LTV as a fraction but the interest
+    rate in points (9.55), so a single ×100 formatter turned 9.55% into 955%.
+    Detect the column's storage scale and emit a fraction so the UI's percent
+    formatter renders every rate/LTV correctly regardless of tape convention."""
+    wavg = _weighted_avg(values, weights)
+    if wavg is None:
+        return None
+    if percent_storage_scale(values) == PERCENT_POINTS:
+        return round(wavg / 100.0, 6)
+    return wavg
+
+
+def _vintage_series(df: pd.DataFrame, grain: str = "Y") -> Optional[pd.Series]:
+    """The origination-cohort label per row at ``grain`` (Y|Q|M). Parsed from
+    ``origination_date`` (finer grains need the date); falls back to the derived
+    ``vintage_year`` for year grain. None when neither exists.
+
+    A finer grain (quarter / month) is useful for a YOUNG book where every loan
+    shares one origination year — a single 'Y' bucket hides the seasoning that
+    'Q'/'M' reveals."""
+    g = (grain or "Y").upper()
     if _ORIG_DATE in df.columns:
         od = pd.to_datetime(df[_ORIG_DATE], errors="coerce", dayfirst=True)
         if od.notna().any():
+            if g == "Q":
+                return (od.dt.year.astype("Int64").astype("string") + "-Q"
+                        + od.dt.quarter.astype("Int64").astype("string"))
+            if g == "M":
+                return od.dt.strftime("%Y-%m").astype("string").where(od.notna())
             return od.dt.year.astype("Int64")
+    if g == "Y" and _VINTAGE in df.columns and df[_VINTAGE].notna().any():
+        return df[_VINTAGE]
     return None
 
 
 def cohort_analysis(df: pd.DataFrame, *, client_id: str = "",
                     portfolio_id: str = "",
-                    reporting_date: Optional[str] = None) -> Dict[str, Any]:
-    """Per-origination-year cohort table for a funded run.
+                    reporting_date: Optional[str] = None,
+                    grain: str = "Y") -> Dict[str, Any]:
+    """Per-origination-vintage cohort table for a funded run, at ``grain``
+    (Y|Q|M).
 
     Returns a UI-ready view-model. ``available`` is False (with a ``reason``)
     when the tape carries no origination vintage — the UI then shows an honest
@@ -62,14 +89,14 @@ def cohort_analysis(df: pd.DataFrame, *, client_id: str = "",
         "dataset": "cohorts",
         "portfolioId": portfolio_id or client_id,
         "cohortBasis": _ORIG_DATE,
-        "period": "Y",
+        "period": (grain or "Y").upper(),
         "reportingDate": reporting_date,
     }
     if df is None or len(df) == 0:
         return {**base, "available": False, "reason": "no funded rows for this run",
                 "cohorts": [], "metricsAvailable": []}
 
-    vintages = _vintage_series(df)
+    vintages = _vintage_series(df, grain)
     if vintages is None:
         return {**base, "available": False,
                 "reason": "no origination date / vintage on the funded tape",
@@ -113,17 +140,19 @@ def cohort_analysis(df: pd.DataFrame, *, client_id: str = "",
             row["sharePct"] = (round(bal / total_balance * 100, 2)
                                if total_balance else None)
         if _LTV in sub.columns and sub_balance is not None:
-            row["waLtv"] = _weighted_avg(sub[_LTV], sub[_BALANCE])
+            row["waLtv"] = _weighted_avg_pct(sub[_LTV], sub[_BALANCE])
         if _RATE in sub.columns and sub_balance is not None:
-            row["waRate"] = _weighted_avg(sub[_RATE], sub[_BALANCE])
+            row["waRate"] = _weighted_avg_pct(sub[_RATE], sub[_BALANCE])
         if _MOB in sub.columns and sub_balance is not None:
             row["waMonthsOnBook"] = _weighted_avg(sub[_MOB], sub[_BALANCE])
         cohorts.append(row)
 
-    # Sort by vintage year ascending; the Unknown bucket sinks to the end.
+    # Sort by vintage ascending; the Unknown bucket sinks to the end. Lexicographic
+    # order is chronological for every grain ("2023" < "2023-Q2" < "2024",
+    # "2025-03" < "2025-06").
     def _key(r: Dict[str, Any]):
-        v = r["vintage"]
-        return (1, 0) if v == "Unknown" else (0, int(v)) if v.isdigit() else (0, 0)
+        v = str(r["vintage"])
+        return (1, "") if v == "Unknown" else (0, v)
 
     cohorts.sort(key=_key)
 

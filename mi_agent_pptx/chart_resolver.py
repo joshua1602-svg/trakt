@@ -118,7 +118,7 @@ class ChartResolver:
         # Map legacy/simple kinds onto the dashboard renderers.
         return {
             "bar": "barlist", "dual_bar": "barlist", "hbar": "barlist",
-            "cohort": "area", "line": "area",
+            "cohort": "area", "line": "area", "bridge": "waterfall",
         }.get(kind, kind)
 
     # --------------------------------------------------------------- figures
@@ -331,6 +331,85 @@ class ChartResolver:
         self._time_xticks(ax, x, xlabels)
         ax.set_ylim(bottom=0)
         return self._save(fig, chart_id, "area", title)
+
+    # ------------------------------------------------------------- WATERFALL
+    def _waterfall_items(self, spec) -> Optional[List[Tuple[str, float, str]]]:
+        """(label, value, kind∈{total,add,sub}) for the waterfall.
+
+        Uses explicit ``spec['rows']`` (a period BRIDGE: opening total → signed
+        deltas → closing total) when present; otherwise a within-run BUILD-UP —
+        the funded balance decomposed by a dimension into additive segments from
+        zero to the book total (top contributors + an aggregated 'Other')."""
+        rows = spec.get("rows")
+        if rows:
+            out: List[Tuple[str, float, str]] = []
+            for r in rows:
+                val = float(r.get("value", 0) or 0)
+                kind = "total" if str(r.get("type")) == "total" else ("sub" if val < 0 else "add")
+                out.append((str(r.get("label", "")), val, kind))
+            return out or None
+        table = self._breakdown(spec)
+        if (table is None or table.empty or "balance_sum" not in table
+                or self.data.balance_col is None):
+            return None
+        labels = table["label"].astype(str).tolist()
+        vals = [float(v) for v in table["balance_sum"].tolist()]
+        items = [(lab, v, "add") for lab, v in zip(labels, vals)]
+        total = float(pd.to_numeric(self.data.df[self.data.balance_col],
+                                    errors="coerce").sum())
+        residual = total - sum(vals)
+        if residual > max(total * 0.005, 1.0):
+            items.append(("Other", residual, "add"))
+        items.append(("Total", total, "total"))
+        return items
+
+    def _render_waterfall(self, spec, chart_id, title, w, h) -> ChartResult:
+        items = self._waterfall_items(spec)
+        if not items:
+            return self._placeholder(chart_id, title, "waterfall", w, h,
+                                     f"Dimension '{spec.get('dimension')}' unavailable for a bridge.")
+        # Colours mirror the React waterfall (base / inflow / fallout / total).
+        col = {"add": self.theme.peri, "sub": self.theme.negative,
+               "total": self.theme.mint, "base": "#3d4a82"}
+        n = len(items)
+        bar_w = 0.62
+        levels: List[float] = []
+        rects: List[Tuple[float, float]] = []  # (y0, top) per bar
+        lvl = 0.0
+        for _lab, val, kind in items:
+            if kind == "total":
+                y0, top, lvl = 0.0, val, val
+            elif val >= 0:
+                y0, top = lvl, lvl + val
+                lvl += val
+            else:
+                y0, top = lvl + val, lvl
+                lvl += val
+            rects.append((y0, top))
+            levels.append(lvl)
+
+        ymax = max(top for _, top in rects)
+        fig = self._fig(w, h)
+        ax = fig.add_axes([0.085, 0.20, 0.895, 0.76])
+        self._axis_style(ax, currency_y=True)
+        for i, (lab, val, kind) in enumerate(items):
+            y0, top = rects[i]
+            ax.bar(i, top - y0, bottom=y0, width=bar_w, color=col[kind],
+                   linewidth=0, zorder=3)
+            vtxt = ("" if kind == "total" else ("+" if val >= 0 else "−")) + compact_currency(abs(val))
+            ax.text(i, top + ymax * 0.015, vtxt, ha="center", va="bottom",
+                    fontsize=8.5, color=self.theme.ink_300,
+                    fontproperties=_MONO_FP, zorder=4)
+        # Step connectors between consecutive bars at the running level.
+        for i in range(n - 1):
+            ax.plot([i + bar_w / 2, i + 1 - bar_w / 2], [levels[i], levels[i]],
+                    color=self.theme.line, linewidth=1.0, zorder=2)
+        ax.set_xticks(list(range(n)))
+        ax.set_xticklabels([lab for lab, _, _ in items], rotation=20, ha="right",
+                           fontsize=8.5, color=self.theme.ink_400)
+        ax.set_xlim(-0.6, n - 0.4)
+        ax.set_ylim(bottom=0, top=max(top for _, top in rects) * 1.12)
+        return self._save(fig, chart_id, "waterfall", title)
 
     # ------------------------------------------------------------- HEATMAP
     def _render_heatmap(self, spec, chart_id, title, w, h) -> ChartResult:

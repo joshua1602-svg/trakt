@@ -256,6 +256,34 @@ def _ask_run(question: str, run_id: str) -> dict:
     }).json()
 
 
+def test_funded_balance_bridge_returns_reconciling_waterfall():
+    # The fixture writes Oct (60) and Nov (70×1.15) funded runs. A waterfall
+    # bridge by region must return a waterfall artifact whose region deltas
+    # reconcile to the opening→latest net change.
+    r = _ask("show a waterfall of the balance bridge by region and what contributed to the growth")
+    assert r.get("metadata", {}).get("route") == "funded_bridge", r.get("answer")
+    charts = [a for a in r.get("artifacts", []) if a.get("chartType") == "waterfall"]
+    assert charts, r.get("artifacts")
+    rows = charts[0]["rows"]
+    totals = [x for x in rows if x["type"] == "total"]
+    deltas = [x for x in rows if x["type"] != "total"]
+    assert len(totals) == 2 and deltas
+    opening, closing = totals[0]["value"], totals[-1]["value"]
+    assert abs(sum(d["value"] for d in deltas) - (closing - opening)) < 1.0
+
+
+def test_cohort_progression_route_returns_metric_line():
+    # A static-pool progression scoped to a source portfolio returns a metric
+    # line across periods (the fixture's two runs).
+    r = client.post("/mi/query", json={
+        "question": "how has funded balance evolved for the direct book",
+        "portfolioId": "client_001/mi_2025_11", "datasetContext": "funded",
+    }).json()
+    assert r.get("metadata", {}).get("route") == "cohort_progression", r.get("answer")
+    lines = [a for a in r.get("artifacts", []) if a.get("chartType") == "line"]
+    assert lines and lines[0]["rows"]
+
+
 def test_funded_query_honours_selected_run():
     # The fixture writes two funded runs of DIFFERENT sizes (Oct=60, Nov=70).
     # A point-in-time funded question must be answered from the SELECTED run,
