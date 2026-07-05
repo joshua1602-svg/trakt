@@ -63,10 +63,17 @@ def _default_output(client_name: str) -> str:
 def _lens_bundle(artifacts: RunArtifacts, registries: RegistryLoader,
                  as_of: Optional[str]) -> Dict[str, Optional[ResolvedData]]:
     """Resolve the funded / pipeline / forecast frames for a run."""
+    from .pipeline_prep import canonicalise_pipeline
+
     funded = resolve_data(artifacts.tape if artifacts.has_tape else pd.DataFrame(),
                           registries, as_of_date=as_of)
-    pipeline = (resolve_data(artifacts.pipeline_tape, registries, as_of_date=as_of)
-                if artifacts.has_pipeline else None)
+    pipeline = None
+    if artifacts.has_pipeline:
+        # Canonicalise raw pipeline tapes (18a / M2L source aliases) so pipeline
+        # & forecast charts resolve against real data, not placeholders.
+        pipe_df = canonicalise_pipeline(artifacts.pipeline_tape,
+                                        as_of=as_of or artifacts.run_state.get("reporting_date"))
+        pipeline = resolve_data(pipe_df, registries, as_of_date=as_of)
     # Forecast charts (run-rate / cumulative) draw from the pipeline frame's
     # expected-completion data; the forecast KPI uses the registry bridge.
     forecast = pipeline
