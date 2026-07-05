@@ -193,6 +193,12 @@ export class HttpAgentClient implements AgentClient {
       `/mi/cohorts?portfolioId=${encodeURIComponent(portfolioId)}${g}`, signal);
   }
 
+  getGeoExposure(portfolioId: string,
+                 signal?: AbortSignal): Promise<import("@/domain").GeoExposure> {
+    return this.getJson<import("@/domain").GeoExposure>(
+      `/mi/geo/exposure?portfolioId=${encodeURIComponent(portfolioId)}`, signal);
+  }
+
   getCohortProgression(portfolioId: string,
                        query?: import("@/domain").CohortProgressionQuery,
                        signal?: AbortSignal): Promise<import("@/domain").CohortProgression> {

@@ -29,6 +29,7 @@ import {
 } from "@/data/mockEvolution";
 import { mockFunnelEvolution } from "@/data/mockFunnel";
 import { mockCohorts, mockCohortProgression } from "@/data/mockCohorts";
+import { mockGeoExposure } from "@/data/mockGeoExposure";
 import { mockRiskLimits } from "@/data/mockRiskLimits";
 import { mockForecastExtrapolation } from "@/data/mockForecastExtrapolation";
 import { AgentError, type AgentClient } from "./AgentClient";
@@ -156,5 +157,9 @@ export class MockAgentClient implements AgentClient {
                        query?: import("@/domain").CohortProgressionQuery,
                        ): Promise<import("@/domain").CohortProgression> {
     return Promise.resolve(mockCohortProgression(portfolioId, query));
+  }
+
+  getGeoExposure(portfolioId: string): Promise<import("@/domain").GeoExposure> {
+    return Promise.resolve(mockGeoExposure(portfolioId));
   }
 }

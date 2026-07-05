@@ -38,6 +38,7 @@ function fakeClient(response: AgentResponse): { client: AgentClient; ask: Return
     getDecks: vi.fn(),
     deckDownloadUrl: vi.fn(() => null),
     getCohorts: vi.fn(),
+    getGeoExposure: vi.fn(),
   };
   return { client, ask };
 }

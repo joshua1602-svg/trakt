@@ -33,6 +33,7 @@ function client(over: Partial<AgentClient> = {}): AgentClient {
     getDecks: vi.fn(async () => ({ available: false, latest: null, decks: [], client_id: "client_001" })),
     deckDownloadUrl: vi.fn(() => null),
     getCohorts: vi.fn(async () => mockCohorts("client_001")),
+    getGeoExposure: vi.fn(),
     ...over,
   };
 }

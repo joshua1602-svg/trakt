@@ -19,6 +19,7 @@ import type {
   ForecastSnapshot,
   FundedEvolution,
   FundedSnapshot,
+  GeoExposure,
   PipelineEvolution,
   PipelineFunnelEvolution,
   RiskLimitsSnapshot,
@@ -92,6 +93,9 @@ export interface AgentClient {
    *  at ``grain``. */
   getCohortProgression(portfolioId: string, query?: CohortProgressionQuery,
                        signal?: AbortSignal): Promise<CohortProgression>;
+
+  /** Funded exposure per UK ITL3 area — the Geography tab's choropleth feed. */
+  getGeoExposure(portfolioId: string, signal?: AbortSignal): Promise<GeoExposure>;
 }
 
 /** Error thrown by clients for transport/agent failures. */

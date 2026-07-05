@@ -42,10 +42,15 @@ export function UkChoropleth({
   const [hover, setHover] = useState<ChoroHover | null>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
 
-  const max = useMemo(
-    () => Math.max(0, ...Object.values(valueByCode)),
-    [valueByCode],
-  );
+  // Colour against the 85th percentile, not the max: a single dominant area
+  // (e.g. Bristol) otherwise crushes every other area to the same dark colour.
+  // Areas at/above p85 saturate to "hot"; the rest spread across the ramp.
+  const denom = useMemo(() => {
+    const vals = Object.values(valueByCode).filter((v) => v > 0).sort((a, b) => a - b);
+    if (!vals.length) return 0;
+    const p85 = vals[Math.min(vals.length - 1, Math.floor(0.85 * vals.length))];
+    return p85 || vals[vals.length - 1];
+  }, [valueByCode]);
   const codes = useMemo(() => Object.keys(atlas.areas), [atlas]);
 
   function enter(code: string) {
@@ -74,7 +79,7 @@ export function UkChoropleth({
               key={code}
               d={atlas.areas[code].d}
               data-code={code}
-              fill={value > 0 && max > 0 ? heat(value / max) : "var(--color-navy-800, #141b2b)"}
+              fill={value > 0 && denom > 0 ? heat(Math.min(1, value / denom)) : "var(--color-navy-800, #141b2b)"}
               stroke="#0b0f18"
               strokeWidth={0.6}
               className="cursor-pointer transition-[filter] duration-100 hover:brightness-125 [stroke:#0b0f18] hover:[stroke:#fff] hover:[stroke-width:1.1]"

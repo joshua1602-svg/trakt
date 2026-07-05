@@ -148,6 +148,8 @@ export function withCache(
       resource(
         `cohortProg|${portfolioId}|${query?.lens ?? "total"}|${query?.vintage ?? ""}|${query?.grain ?? "Y"}`,
         () => client.getCohortProgression(portfolioId, query, signal)),
+    getGeoExposure: (portfolioId, signal) =>
+      resource(`geoExposure|${portfolioId}`, () => client.getGeoExposure(portfolioId, signal)),
     deckDownloadUrl: (portfolioId, period) => client.deckDownloadUrl(portfolioId, period),
   };
 }
