@@ -186,60 +186,149 @@ def _milestones(current: float, scenarios: Dict[str, float],
 # --------------------------------------------------------------------------- #
 # Model B — KFI run-rate × completion-rate
 # --------------------------------------------------------------------------- #
-def kfi_conversion_model(current_balance: float, kfi_amounts: List[float],
-                         conversion_rate: Optional[float], *,
-                         lag_months: Optional[int] = None,
+_MONTHS_PER_WEEK = 52 / 12  # weeks per month (≈4.33)
+
+
+def _project_kfi_flow(current: float, kfi0: float, monthly_inflow: float,
+                      w_monthly: float, scenarios: Dict[str, float],
+                      reporting_period: Optional[str]) -> List[Dict[str, Any]]:
+    """Monthly stock-flow projection of the funded balance from the KFI book.
+
+    Each month the KFI STOCK converts to completions at ``w_monthly`` (a monthly
+    fraction, capped so it can't complete more than the book holds), the funded
+    balance grows by those completions, and the book is REPLENISHED by the KFI
+    inflow run-rate. So the existing stock drains into completions while new KFIs
+    sustain the run-rate — the number can never multiply the whole book by an
+    annualisation factor (the old bug)."""
+    state = {name: {"funded": current, "kfi": kfi0} for name in scenarios}
+    rows: List[Dict[str, Any]] = [
+        {"month": _add_months(reporting_period or "2025-01", 0), "offset": 0,
+         **{name: round(current, 2) for name in scenarios}}]
+    for m in range(1, _HORIZON_MONTHS + 1):
+        row: Dict[str, Any] = {"month": _add_months(reporting_period or "2025-01", m),
+                               "offset": m}
+        for name, mult in scenarios.items():
+            s = state[name]
+            completion = min(s["kfi"], s["kfi"] * w_monthly * mult)
+            s["funded"] += completion
+            s["kfi"] = max(0.0, s["kfi"] + monthly_inflow - completion)
+            row[name] = round(s["funded"], 2)
+        rows.append(row)
+    return rows
+
+
+def _milestones_from_series(rows: List[Dict[str, Any]], current: float,
+                            thresholds: List[float]) -> List[Dict[str, Any]]:
+    """First month each scenario's projected balance crosses each threshold."""
+    scen_names = [k for k in rows[0] if k not in ("month", "offset")]
+    out: List[Dict[str, Any]] = []
+    for thr in thresholds:
+        row: Dict[str, Any] = {"threshold": thr, "thresholdLabel": f"£{int(thr / 1_000_000)}m"}
+        if current >= thr:
+            row["reached"] = True
+            for n in scen_names:
+                row[f"{n}Date"] = "reached"
+            out.append(row)
+            continue
+        row["reached"] = False
+        for n in scen_names:
+            hit = next((r for r in rows if isinstance(r[n], (int, float)) and r[n] >= thr), None)
+            if hit:
+                row[f"{n}Date"] = hit["month"]
+                row[f"{n}Months"] = hit["offset"]
+            else:
+                row[f"{n}Date"] = None
+        out.append(row)
+    return out
+
+
+def kfi_conversion_model(current_balance: float,
+                         kfi_stock_now: Optional[float],
+                         weekly_inflow: Optional[float],
+                         weekly_conversion_rate: Optional[float], *,
+                         lag_weeks: Optional[int] = None,
+                         rate_weeks: Optional[int] = None,
+                         min_rate_weeks: int = 3,
                          reporting_period: Optional[str] = None,
                          thresholds: Optional[List[float]] = None) -> Dict[str, Any]:
-    """KFI inflow × KFI→completion conversion rate → projected completions/balance."""
+    """Project completions from the KFI book (Model B).
+
+    The current KFI STOCK converts at the recent weekly conversion rate and the
+    book is replenished by the weekly KFI inflow run-rate — a monthly stock-flow
+    loop. This replaces the prior ``standing_stock × rate × 52/12`` which
+    multiplied the whole book by ~4.33 every month.
+
+    ``weekly_conversion_rate`` is the recent (5-week) completion-vs-KFI rate as a
+    fraction (avg weekly completions ÷ the KFI stock ``lag_weeks`` earlier).
+    ``rate_weeks`` is how many weeks that average is built on; the projection is
+    withheld until at least ``min_rate_weeks`` are observed, because a 1-2 week
+    rate is too volatile to forecast off.
+    """
     thresholds = thresholds or _THRESHOLDS
-    obs = [k for k in kfi_amounts if k is not None]
-    if not obs or conversion_rate is None or conversion_rate <= 0:
+    if (kfi_stock_now is None or kfi_stock_now <= 0
+            or not weekly_conversion_rate or weekly_conversion_rate <= 0):
         return {"model": "kfi_conversion", "available": False,
                 "status": "insufficient_data",
-                "caveat": ("Insufficient KFI history or no trackable KFI→completion "
+                "caveat": ("No current KFI stock or no trackable recent KFI→completion "
                            "conversion rate; KFI-based projection unavailable."),
-                "observedWeeks": len(obs)}
-    avg_kfi = sum(obs[-min(8, len(obs)):]) / min(8, len(obs))
-    # Convert weekly KFI inflow to an expected monthly completion value.
-    monthly_completion = round(avg_kfi * conversion_rate * (52 / 12), 2)
-    scenarios = {"downside": round(monthly_completion * 0.75, 2),
-                 "base": monthly_completion,
-                 "upside": round(monthly_completion * 1.25, 2)}
+                "kfiStockNow": round(kfi_stock_now, 2) if kfi_stock_now else 0.0}
+    if rate_weeks is not None and rate_weeks < min_rate_weeks:
+        return {"model": "kfi_conversion", "available": False,
+                "status": "limited_history",
+                "caveat": (f"Recent conversion rate is based on only {rate_weeks} week(s); "
+                           f"at least {min_rate_weeks} are needed before projecting off it "
+                           "to avoid week-to-week volatility."),
+                "kfiStockNow": round(float(kfi_stock_now), 2),
+                "weeklyConversionRate": round(float(weekly_conversion_rate), 4),
+                "rateWeeks": rate_weeks, "minRateWeeks": min_rate_weeks}
+
+    monthly_inflow = max(0.0, float(weekly_inflow or 0.0)) * _MONTHS_PER_WEEK
+    # Monthly fraction of the KFI book that completes, from the weekly rate.
+    w_monthly = float(weekly_conversion_rate) * _MONTHS_PER_WEEK
+    scen = {"downside": 0.75, "base": 1.0, "upside": 1.25}
+
+    projected = _project_kfi_flow(current_balance, float(kfi_stock_now),
+                                  monthly_inflow, w_monthly, scen, reporting_period)
+    # First-month completion per scenario (indicative monthly run-rate).
+    first_completion = {
+        name: round(min(kfi_stock_now, kfi_stock_now * w_monthly * mult), 2)
+        for name, mult in scen.items()}
+    lag_months = round(lag_weeks / _MONTHS_PER_WEEK, 1) if lag_weeks else None
+
     return {
         "model": "kfi_conversion",
         "available": True,
         "status": "ok",
-        "observedWeeks": len(obs),
-        "avgWeeklyKfiInflow": round(avg_kfi, 2),
-        "conversionRate": round(conversion_rate, 4),
+        "kfiStockNow": round(float(kfi_stock_now), 2),
+        "avgWeeklyKfiInflow": round(float(weekly_inflow or 0.0), 2),
+        "monthlyKfiInflow": round(monthly_inflow, 2),
+        "weeklyConversionRate": round(float(weekly_conversion_rate), 4),
+        "conversionRate": round(float(weekly_conversion_rate), 4),  # back-compat key
+        "rateWeeks": rate_weeks,
+        "lagWeeks": lag_weeks,
         "lagMonths": lag_months,
-        "expectedMonthlyCompletion": monthly_completion,
-        "scenarioMonthlyRunRate": scenarios,
-        "projectedBalances": _project_series(current_balance, scenarios, reporting_period),
-        "milestones": _milestones(current_balance, scenarios, reporting_period, thresholds),
+        "expectedMonthlyCompletion": first_completion["base"],
+        "scenarioMonthlyRunRate": first_completion,
+        "projectedBalances": projected,
+        "milestones": _milestones_from_series(projected, current_balance, thresholds),
         "assumptions": {
-            "conversionRate": round(conversion_rate, 4),
-            "lagMonths": lag_months,
-            "kfiLookbackWeeks": min(8, len(obs)),
+            "weeklyConversionRate": round(float(weekly_conversion_rate), 4),
+            "conversionBasis": "recent 5-week completion-vs-KFI rate (responsive)",
+            "kfiStockNow": round(float(kfi_stock_now), 2),
+            "weeklyKfiInflow": round(float(weekly_inflow or 0.0), 2),
+            "lagWeeks": lag_weeks,
             "currentFundedBalance": round(current_balance, 2),
+            "model": "KFI stock converts at the recent weekly rate; the inflow "
+                     "run-rate replenishes the book each month",
         },
-        "caveats": ["KFI→completion conversion and lag are empirical estimates; "
-                    "scenario bands are indicative (75%/125% of base)."],
+        "caveats": ["Recent conversion rate and KFI→completion lag are empirical "
+                    "estimates; scenario bands are indicative (75%/125% of the rate)."],
     }
 
 
 # --------------------------------------------------------------------------- #
 # Entry point — wires the governed evolution series into the three models
 # --------------------------------------------------------------------------- #
-def _kfi_weekly_amounts(pipeline_evo: Dict[str, Any]) -> List[float]:
-    out: List[float] = []
-    for s in pipeline_evo.get("byStage", []):
-        if str(s.get("stage", "")).upper() == "KFI":
-            out.append(float(s.get("value", 0.0)))
-    return out
-
-
 def build_extrapolation(output_root, pipeline_root, client_id: str,
                         to_run_id: Optional[str], *,
                         history_model: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -276,17 +365,32 @@ def build_extrapolation(output_root, pipeline_root, client_id: str,
                              reporting_period=reporting_period)
     model_a["completionHistory"] = comp
 
-    # Model B — KFI conversion (needs a trackable conversion rate from history).
-    conv = None
-    lag = None
+    # Model B — KFI conversion. Uses the RECENT weekly completion-vs-KFI rate
+    # (from the governed funnel, lagged by the KFI→completion timeline) applied
+    # to the current KFI stock, replenished by the KFI inflow run-rate.
+    lag_weeks = None
     if history_model and history_model.get("available"):
-        rates = (history_model.get("stage_rates") or {})
-        conv = rates.get("KFI") or rates.get("kfi")
         timing = (history_model.get("historicalCompletionTimingByStage") or {}).get("KFI", {})
         median_days = timing.get("medianDays")
-        lag = round(median_days / 30) if median_days else None
-    model_b = kfi_conversion_model(current_balance, _kfi_weekly_amounts(pipeline),
-                                   conv, lag_months=lag, reporting_period=reporting_period)
+        lag_weeks = max(1, round(median_days / 7)) if median_days else None
+    try:
+        funnel = evolution_mod.pipeline_funnel_evolution(
+            pipeline_root, client_id, to_run_id, lag_weeks=lag_weeks)
+    except Exception:  # noqa: BLE001 - forecast must not 500 on a funnel error
+        funnel = {"summary": {}}
+    fsum = funnel.get("summary", {}) or {}
+    kfi_summary = fsum.get("KFI", {}) or {}
+    completed_conv = (fsum.get("COMPLETED", {}) or {}).get("conversion") or {}
+    kfi_stock_now = kfi_summary.get("latestStockValue")
+    weekly_inflow = kfi_summary.get("fiveWeekAvgFlowValue")
+    weekly_rate_pct = completed_conv.get("weeklyRateValue")
+    weekly_conv = (weekly_rate_pct / 100.0) if weekly_rate_pct is not None else None
+    rate_weeks = completed_conv.get("weeksInWindow")
+    min_rate_weeks = completed_conv.get("minWeeks", 3)
+    model_b = kfi_conversion_model(current_balance, kfi_stock_now, weekly_inflow,
+                                   weekly_conv, lag_weeks=lag_weeks,
+                                   rate_weeks=rate_weeks, min_rate_weeks=min_rate_weeks,
+                                   reporting_period=reporting_period)
 
     sufficiency = ("ok" if model_a.get("status") == "ok"
                    else ("limited_history" if model_a.get("available") else "insufficient_data"))

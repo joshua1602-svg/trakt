@@ -451,8 +451,19 @@ def _route_forecast(question, spec, spec_dict, *, client_id, run_id, output_root
                   f"vs a base of {_gbp(scenarios.get('base'))}. {caveat}")
     elif kind == "conversion":
         if kfi.get("available"):
-            answer = (f"The assumed KFI→completion conversion rate is "
-                      f"{kfi.get('conversionRate', 0) * 100:.1f}% with a ~{kfi.get('lagMonths')}-month lag.")
+            # This is the COHORT completion rate from the historical weekly-snapshot
+            # model — the share of KFI cases (tracked across snapshots) that have
+            # since completed — NOT the Evolution funnel's observed same-week
+            # KFI→Completion ratio. It reads lower because recent KFI cases have not
+            # yet had time to complete (right-censored), so it is a floor.
+            rate = kfi.get("conversionRate", 0) * 100
+            lag = kfi.get("lagMonths")
+            answer = (
+                f"About {rate:.1f}% of KFI cases have since completed, tracked cohort-style "
+                f"across the weekly snapshots, with a ~{lag}-month median KFI→completion lag. "
+                f"This is a floor — recent KFIs haven't had time to complete yet — and is measured "
+                f"differently from the Evolution funnel's observed same-week KFI→Completion ratio, "
+                f"which reads higher.")
         else:
             answer = ("A KFI→completion conversion rate can't be derived from the current history; "
                       f"using the completion run-rate (~{_gbp(base)}/month) instead.")

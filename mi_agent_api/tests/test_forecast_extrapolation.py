@@ -80,18 +80,46 @@ def test_run_rate_no_history():
 
 
 def test_kfi_conversion_model():
-    out = fx.kfi_conversion_model(12_500_000.0, [500_000, 600_000, 550_000],
-                                  0.3, lag_months=2, reporting_period="2025-11")
+    # Recent weekly rate 5%/week on a £20m KFI book, £1m/week inflow, ~6w lag.
+    out = fx.kfi_conversion_model(12_500_000.0, kfi_stock_now=20_000_000.0,
+                                  weekly_inflow=1_000_000.0,
+                                  weekly_conversion_rate=0.05, lag_weeks=6,
+                                  reporting_period="2025-11")
     assert out["available"] is True
-    assert out["conversionRate"] == 0.3
+    assert out["weeklyConversionRate"] == 0.05
     assert out["expectedMonthlyCompletion"] > 0
     assert out["milestones"]
+    # The stock-flow model must NOT multiply the whole KFI book by an
+    # annualisation factor: one month's completion is a fraction of the book.
+    assert out["expectedMonthlyCompletion"] < 20_000_000.0
+    # First projected point is the current balance; the series then grows.
+    proj = out["projectedBalances"]
+    assert proj[0]["base"] == 12_500_000.0
+    assert proj[-1]["base"] > proj[0]["base"]
 
 
 def test_kfi_conversion_unavailable_without_rate():
-    out = fx.kfi_conversion_model(12_500_000.0, [500_000], None)
+    # No conversion rate -> unavailable.
+    out = fx.kfi_conversion_model(12_500_000.0, 20_000_000.0, 1_000_000.0, None)
     assert out["available"] is False
     assert out["status"] == "insufficient_data"
+    # No KFI stock -> unavailable too.
+    out2 = fx.kfi_conversion_model(12_500_000.0, 0.0, 1_000_000.0, 0.05)
+    assert out2["available"] is False
+
+
+def test_kfi_conversion_withheld_when_rate_too_few_weeks():
+    # A rate built on only 2 weeks is too volatile to forecast off.
+    out = fx.kfi_conversion_model(12_500_000.0, 20_000_000.0, 1_000_000.0, 0.05,
+                                  rate_weeks=2, min_rate_weeks=3)
+    assert out["available"] is False
+    assert out["status"] == "limited_history"
+    assert out["rateWeeks"] == 2
+    # Enough weeks -> it projects.
+    ok = fx.kfi_conversion_model(12_500_000.0, 20_000_000.0, 1_000_000.0, 0.05,
+                                 rate_weeks=4, min_rate_weeks=3)
+    assert ok["available"] is True
+    assert ok["rateWeeks"] == 4
 
 
 if __name__ == "__main__":

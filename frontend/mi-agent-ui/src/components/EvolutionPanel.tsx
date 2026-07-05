@@ -188,17 +188,26 @@ export function funnelLineStages(stages: string[], includeKfi: boolean): string[
 }
 
 /** Conversion-vs-KFI series (COUNT based): Application/Offer/Completion only —
- * KFI is the denominator (KFI/KFI = 100% is dropped). Divide-by-zero safe. */
-export function stageConversionSeries(rows: StagePoint[]): {
+ * KFI is the denominator (KFI/KFI = 100% is dropped). Divide-by-zero safe.
+ *
+ * `lagWeeks` shifts the KFI denominator back by the KFI→completion timeline so
+ * each week's stage count is measured against the KFI book those cases came
+ * from — not the current (still-growing) book. When null the series is unlagged
+ * (same-week). The lag is in periods; the by-stage extracts are weekly, matching
+ * the funnel's `conversionLagWeeks`. */
+export function stageConversionSeries(rows: StagePoint[], lagWeeks?: number | null): {
   data: Array<Record<string, number | string>>; stages: string[];
 } {
   const { data: countPivot } = pivotStage(rows, "count");
   const present = orderStages(Array.from(new Set(rows.map((r) => r.stage))));
   const stages = present.filter((s) =>
     ["APPLICATION", "OFFER", "COMPLETED"].includes(normaliseStage(s)));
-  const data = countPivot.map((r) => {
+  const lag = Math.max(0, Math.round(lagWeeks ?? 0));
+  const data = countPivot.map((r, i) => {
     const out: Record<string, number | string> = { period: r.period };
-    const kfi = (r.KFI as number) || 0;
+    // Denominator: KFI stock `lag` periods earlier (clamped to the first week).
+    const denomRow = countPivot[Math.max(0, i - lag)];
+    const kfi = (denomRow.KFI as number) || 0;
     for (const s of stages) {
       const v = r[s] as number;
       out[s] = kfi ? Math.round((v / kfi) * 1000) / 10 : 0;
@@ -218,13 +227,18 @@ function pct1(v: number | null | undefined): string {
   return v == null ? "n/a" : `${v.toFixed(1)}%`;
 }
 
-/** Collapsed-by-default "Conversion vs KFI" disclosure. Same computed stats,
- * only hidden until expanded — keeps each card calm by default. */
+/** Collapsed-by-default "Conversion vs KFI" disclosure. Shows the forward
+ * weekly conversion rate — average weekly flow into the stage (last 5 weeks)
+ * over the KFI stock as it stood `lagWeeks` earlier — so a growing pipeline
+ * isn't compared against itself. Hidden until expanded to keep the card calm. */
 function ConversionDisclosure({ stage, conversion }: {
   stage: string;
   conversion: FunnelConversion;
 }) {
   const [open, setOpen] = useState(false);
+  const lagLabel = conversion.lagApplied && conversion.lagWeeks != null
+    ? `KFI stock lagged ${conversion.lagWeeks}w${conversion.denominatorWeek ? ` (${conversion.denominatorWeek})` : ""}`
+    : "KFI stock unlagged — lag unknown";
   return (
     <div className="mt-2 rounded-md border border-[var(--color-line-soft)] bg-navy-900/50 text-[10px]"
       data-testid={`funnel-conversion-${stage}`}>
@@ -238,25 +252,27 @@ function ConversionDisclosure({ stage, conversion }: {
         Conversion vs KFI
       </button>
       {open && (
-        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 px-2 pb-2" data-testid={`funnel-conversion-body-${stage}`}>
-          <div>
-            <span className="text-ink-500">5-week</span>{" "}
-            <span className="font-semibold text-mint-300">{pct1(conversion.fiveWeekCount)}</span>
-            <span className="text-ink-500"> by count</span>
+        <div className="px-2 pb-2" data-testid={`funnel-conversion-body-${stage}`}>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+            <div>
+              <span className="text-ink-500">Weekly rate</span>{" "}
+              <span className="font-semibold text-mint-300">{pct1(conversion.weeklyRateCount)}</span>
+              <span className="text-ink-500"> by count</span>
+            </div>
+            <div>
+              <span className="font-semibold text-mint-300">{pct1(conversion.weeklyRateValue)}</span>
+              <span className="text-ink-500"> by value</span>
+            </div>
           </div>
-          <div>
-            <span className="font-semibold text-mint-300">{pct1(conversion.fiveWeekValue)}</span>
-            <span className="text-ink-500"> by value</span>
+          <div className="mt-1.5 text-[9px] leading-snug text-ink-500">
+            Avg weekly flow (last 5 wks) ÷ {lagLabel}.
           </div>
-          <div>
-            <span className="text-ink-500">Since inception</span>{" "}
-            <span className="font-semibold text-peri-200">{pct1(conversion.sinceInceptionCount)}</span>
-            <span className="text-ink-500"> by count</span>
-          </div>
-          <div>
-            <span className="font-semibold text-peri-200">{pct1(conversion.sinceInceptionValue)}</span>
-            <span className="text-ink-500"> by value</span>
-          </div>
+          {!conversion.sufficient && (
+            <div className="mt-1 text-[9px] font-medium leading-snug text-amber-300"
+              data-testid={`funnel-conversion-provisional-${stage}`}>
+              Provisional — based on {conversion.weeksInWindow} of {conversion.minWeeks}+ weeks; too few to forecast off yet.
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -709,14 +725,14 @@ export function EvolutionPanel({
   const stageChart = useMemo(() => {
     const rows = pipeline?.byStage ?? [];
     if (stageMode === "conversion") {
-      const conv = stageConversionSeries(rows);
+      const conv = stageConversionSeries(rows, funnel?.conversionLagWeeks);
       return { data: conv.data, lines: conv.stages, format: "pct" as const };
     }
     const piv = pivotStage(rows, stageMode === "count" ? "count" : "value");
     const lines = funnelLineStages(piv.stages, includeKfi);
     return { data: piv.data, lines,
       format: (stageMode === "count" ? "count" : "gbp") as "count" | "gbp" };
-  }, [pipeline, stageMode, includeKfi]);
+  }, [pipeline, funnel, stageMode, includeKfi]);
   const hasWithdrawn = useMemo(
     () => (pipeline?.byStage ?? []).some((r) => normaliseStage(r.stage) === "WITHDRAWN"),
     [pipeline],
@@ -860,7 +876,9 @@ export function EvolutionPanel({
               source="weekly pipeline extracts" />
             <p className="mt-1 text-[10px] text-ink-500" data-testid="stage-mode-note">
               {stageMode === "conversion"
-                ? "Conversion = each stage as a % of KFIs in the same week (count). KFI is the denominator and is not charted."
+                ? (funnel?.conversionLagWeeks != null
+                    ? `Conversion = each stage as a % of the KFI book ${funnel.conversionLagWeeks} week(s) earlier (count), so a growing pipeline isn't compared against itself. KFI is the denominator and is not charted.`
+                    : "Conversion = each stage as a % of KFIs in the same week (count); KFI→completion lag unknown, so unlagged. KFI is the denominator and is not charted.")
                 : `${stageMode === "amount" ? "Amount (£)" : "Case count"} for the main funnel`
                   + ` (KFI → Application → Offer → Completion).${hasWithdrawn ? " Withdrawn is tracked separately, not in the funnel." : ""}`
                   + " Toggle 'Include KFI' off to read the smaller downstream stages."}

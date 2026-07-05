@@ -564,6 +564,19 @@ _FUNNEL_STAGES = ("KFI", "APPLICATION", "OFFER", "COMPLETED")
 _FUNNEL_LABELS = {"KFI": "KFIs", "APPLICATION": "Applications",
                   "OFFER": "Offers", "COMPLETED": "Completions"}
 
+# The recent conversion rate averages weekly flow over a 5-week window. Require
+# at least this many observed weeks in that window before the rate is treated as
+# reliable — a 1-2 week rate is too volatile to publish or forecast off.
+_CONVERSION_WINDOW = 5
+_MIN_CONVERSION_WEEKS = 3
+
+
+def _window_count(values: List[Optional[float]], window: int) -> int:
+    """How many non-null values fall in the trailing ``window`` (i.e. how many
+    weeks actually contributed to a trailing average)."""
+    tail = [v for v in values[-window:] if v is not None]
+    return len(tail)
+
 
 def _trailing_avg(values: List[Optional[float]], window: int = 5) -> Optional[float]:
     vals = [v for v in values if v is not None]
@@ -601,23 +614,33 @@ def weekly_flow(levels: List[Optional[float]]) -> List[Optional[float]]:
     return out
 
 
-def _sum_window(values: List[Optional[float]], window: Optional[int] = None) -> float:
-    """Sum the non-null tail of ``values`` (all of it when ``window`` is None)."""
-    vals = [float(v) for v in values if v is not None]
-    if window is not None:
-        vals = vals[-window:]
-    return float(sum(vals))
-
-
-def _conversion_pct(numerator: float, denominator: float) -> Optional[float]:
+def _conversion_pct(numerator: Optional[float], denominator: Optional[float]) -> Optional[float]:
     """Conversion share (%) of a stage relative to KFI, divide-by-zero safe."""
-    if not denominator:
+    if not denominator or numerator is None:
         return None
     return round(numerator / denominator * 100.0, 2)
 
 
+def _lagged_value(series: List[Optional[float]], lag: int) -> Tuple[Optional[float], Optional[int]]:
+    """The value ``lag`` steps before the latest, with the index it came from.
+
+    Used to shift the KFI denominator back by the KFI->completion timeline so a
+    growing pipeline is not compared against itself. ``lag`` is clamped into the
+    available history; a missing (``None``) value at the target index returns
+    ``(None, idx)`` rather than fabricating a neighbour.
+    """
+    n = len(series)
+    if n == 0:
+        return None, None
+    idx = n - 1 - max(0, int(lag or 0))
+    if idx < 0:
+        idx = 0
+    return series[idx], idx
+
+
 def pipeline_funnel_evolution(pipeline_root: str | os.PathLike, client_id: str,
-                              to_run_id: Optional[str] = None) -> Dict[str, Any]:
+                              to_run_id: Optional[str] = None,
+                              lag_weeks: Optional[int] = None) -> Dict[str, Any]:
     """Weekly origination funnel: KFI / Application / Offer / Completion per
     governed weekly extract, FLOW-FIRST.
 
@@ -636,9 +659,15 @@ def pipeline_funnel_evolution(pipeline_root: str | os.PathLike, client_id: str,
       * ``deltaFlow*`` is the latest weekly flow minus the prior weekly flow;
       * ``*Stock*`` fields carry the level for the optional cumulative line.
 
-    Conversion vs KFI is exposed on two bases (Task 6): a 5-week trailing share
-    and a since-inception share, each by count and by value. Reuses the governed
-    weekly pipeline extracts (same source as ``pipeline_evolution``).
+    Conversion vs KFI is a *forward* conversion rate: the average weekly FLOW
+    into a stage over the last 5 weeks divided by the KFI STOCK as it stood
+    ``lag_weeks`` earlier — i.e. the KFI book at the time today's completions
+    entered the pipeline. Shifting the denominator back by the KFI->completion
+    timeline stops a growing pipeline being compared against itself (the old
+    metric summed per-week stock and could exceed 100%). ``lag_weeks`` is the
+    median KFI->completion lag in weeks (from the historical completion model);
+    when unknown the rate is computed unlagged and flagged as such. Reuses the
+    governed weekly pipeline extracts (same source as ``pipeline_evolution``).
     """
     inv = pipeline_mod.weekly_extract_inventory(pipeline_root, client_id)
     extracts = inv.get("extracts", [])
@@ -685,6 +714,15 @@ def pipeline_funnel_evolution(pipeline_root: str | os.PathLike, client_id: str,
     kfi_counts = [float(p["count"]) for p in series["KFI"]]
     kfi_values = [p["value"] for p in series["KFI"]]
 
+    # KFI denominator, shifted back by the KFI->completion lag so the numerator
+    # (recent completions) is measured against the KFI book those completions
+    # actually came from — not today's larger book.
+    lagged = int(lag_weeks) if lag_weeks not in (None, "") else None
+    lag_applied = lagged if lagged is not None else 0
+    kfi_denom_count, kfi_denom_idx = _lagged_value(kfi_counts, lag_applied)
+    kfi_denom_value, _ = _lagged_value(kfi_values, lag_applied)
+    denom_week = weeks[kfi_denom_idx] if kfi_denom_idx is not None and kfi_denom_idx < len(weeks) else None
+
     summary: Dict[str, Any] = {}
     for stage in _FUNNEL_STAGES:
         pts = series[stage]
@@ -699,18 +737,33 @@ def pipeline_funnel_evolution(pipeline_root: str | os.PathLike, client_id: str,
         prior_flow_value = value_flows[-2] if len(value_flows) >= 2 else None
         prior_flow_count = count_flows[-2] if len(count_flows) >= 2 else None
 
-        # Conversion vs KFI on two bases (never for KFI itself, the denominator).
+        avg_flow_value = _trailing_avg(value_flows, _CONVERSION_WINDOW)
+        avg_flow_count = _trailing_avg(count_flows, _CONVERSION_WINDOW)
+
+        # Forward conversion vs KFI (never for KFI itself, the denominator):
+        # average weekly flow into this stage (last 5 weeks) over the lagged KFI
+        # stock. A weekly rate; transparent about the lag and the denominator
+        # week so it can't be misread as a same-period share. Flagged
+        # insufficient (not to be forecast off) until a few weeks are observed.
         conversion: Optional[Dict[str, Any]] = None
         if stage != "KFI":
+            weeks_in_window = _window_count(value_flows, _CONVERSION_WINDOW)
+            sufficient = weeks_in_window >= _MIN_CONVERSION_WEEKS
             conversion = {
-                "fiveWeekCount": _conversion_pct(
-                    _sum_window(counts, 5), _sum_window(kfi_counts, 5)),
-                "fiveWeekValue": _conversion_pct(
-                    _sum_window(values, 5), _sum_window(kfi_values, 5)),
-                "sinceInceptionCount": _conversion_pct(
-                    _sum_window(counts), _sum_window(kfi_counts)),
-                "sinceInceptionValue": _conversion_pct(
-                    _sum_window(values), _sum_window(kfi_values)),
+                "basis": "avg_weekly_flow_over_lagged_kfi_stock",
+                "lagWeeks": lagged,
+                "lagApplied": bool(lagged),
+                "denominatorWeek": denom_week,
+                "avgWeeklyFlowCount": avg_flow_count,
+                "avgWeeklyFlowValue": avg_flow_value,
+                "kfiStockCount": (int(kfi_denom_count)
+                                  if kfi_denom_count is not None else None),
+                "kfiStockValue": kfi_denom_value,
+                "weeklyRateCount": _conversion_pct(avg_flow_count, kfi_denom_count),
+                "weeklyRateValue": _conversion_pct(avg_flow_value, kfi_denom_value),
+                "weeksInWindow": weeks_in_window,
+                "minWeeks": _MIN_CONVERSION_WEEKS,
+                "sufficient": sufficient,
             }
 
         summary[stage] = {
@@ -752,11 +805,14 @@ def pipeline_funnel_evolution(pipeline_root: str | os.PathLike, client_id: str,
         "series": series,
         "flowSeries": flow_series,
         "summary": summary,
+        "conversionLagWeeks": lagged,
         "lineage": {
             "source": "governed weekly pipeline extracts (deduplicated)",
             "metric": "weekly KFI / Application / Offer / Completion — weekly flow (default) and stock level",
             "fiveWeekAverage": "trailing mean of the last 5 weeks of WEEKLY FLOW (level week-on-week change), not the average stock level",
-            "conversion": "share of the KFI pipeline reaching each stage, on a 5-week trailing and a since-inception basis, by count and by value",
+            "conversion": ("forward conversion rate: average weekly flow into a stage (last 5 weeks) "
+                           "over the KFI stock lagWeeks earlier (the KFI->completion timeline); "
+                           "unlagged when the lag is unknown"),
         },
         "singlePeriod": len(weeks) <= 1,
     }

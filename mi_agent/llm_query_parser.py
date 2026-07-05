@@ -21,12 +21,15 @@ names, because canonical field names differ across deployments.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from .mi_query_spec import MIQuerySpec
 from .mi_query_validator import load_mi_semantics, validate_mi_query
+
+logger = logging.getLogger(__name__)
 
 # Cheap default model for NL->spec parsing.  Overridable via the `model` arg.
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
@@ -1881,20 +1884,46 @@ def parse_llm_response_to_spec(response_json: Any) -> MIQuerySpec:
 # Token / cost observability
 # --------------------------------------------------------------------------- #
 
-# Conservative USD pricing per 1,000,000 tokens (input, output).
+# USD pricing per 1,000,000 tokens (input, output), keyed by model-family.
+# Kept current with published Anthropic list prices. Cache reads bill at 0.1x
+# input and cache writes at 1.25x input (applied in ``estimate_cost``).
 _PRICING = {
     "haiku": (1.00, 5.00),
     "sonnet": (3.00, 15.00),
-    "opus": (15.00, 75.00),
+    "opus": (5.00, 25.00),
+    "fable": (10.00, 50.00),
+    "mythos": (10.00, 50.00),
 }
+
+# Longest family tokens first so "opus"/"sonnet" win before any generic key,
+# and so a future family whose name embeds another ("fable" vs "able") can't
+# be shadowed by a shorter substring.
+_PRICING_KEYS = sorted(_PRICING, key=len, reverse=True)
 
 
 def _price_for_model(model: str):
+    """Look up (input, output) $/1M for a model id by family token.
+
+    Returns ``None`` for an unrecognised model and logs a warning once so an
+    overridden ``MI_AGENT_LLM_MODEL`` that we have no price for surfaces as a
+    'cost unknown' status rather than a silent $0 estimate.
+    """
     m = (model or "").lower()
-    for key, price in _PRICING.items():
+    for key in _PRICING_KEYS:
         if key in m:
-            return price
+            return _PRICING[key]
+    if m and m not in _UNPRICED_WARNED:
+        _UNPRICED_WARNED.add(m)
+        logger.warning(
+            "No pricing entry for model %r; cost estimate will report status "
+            "'unknown'. Add its family to _PRICING to enable cost tracking.",
+            model,
+        )
     return None
+
+
+# Models we've already warned about, so the log line fires once per process.
+_UNPRICED_WARNED: set = set()
 
 
 def estimate_cost(model: str, usage: Optional[dict]) -> dict:
@@ -1931,6 +1960,44 @@ def estimate_cost(model: str, usage: Optional[dict]) -> dict:
     return out
 
 
+def _message_text(message) -> str:
+    """The concatenated text of an Anthropic message's TEXT blocks.
+
+    Robust to a leading non-text block: when extended thinking is enabled the
+    first content block is a ``ThinkingBlock`` (which exposes ``.thinking``, not
+    ``.text``), and tool-use blocks carry no text either. Reading
+    ``message.content[0].text`` blindly then raises
+    ``'ThinkingBlock' object has no attribute 'text'``. We instead walk every
+    block and keep only real text, so the parser works whether or not the
+    account/model returns thinking blocks.
+    """
+    parts = []
+    for block in getattr(message, "content", None) or []:
+        # Thinking blocks have no ``.text``; a genuine text block does and its
+        # ``.type`` is "text". ``getattr`` keeps us safe across SDK versions.
+        if getattr(block, "type", "text") == "thinking":
+            continue
+        txt = getattr(block, "text", None)
+        if isinstance(txt, str):
+            parts.append(txt)
+    return "".join(parts)
+
+
+# Model families that REJECT sampling params (`temperature`/`top_p`/`top_k`)
+# with an HTTP 400. Newer reasoning models fix their own sampling; sending
+# `temperature=0.0` to them fails the request outright. When overriding
+# ``MI_AGENT_LLM_MODEL`` to one of these, we must omit the sampling kwargs.
+_NO_SAMPLING_MODELS = (
+    "opus-4-7", "opus-4-8", "opus-4.7", "opus-4.8",
+    "sonnet-5", "fable", "mythos",
+)
+
+
+def _supports_temperature(model: str) -> bool:
+    m = (model or "").lower()
+    return not any(tok in m for tok in _NO_SAMPLING_MODELS)
+
+
 def _call_llm(prompt: Dict[str, str], model: str, use_cache: bool = True):
     """Live Claude call. Returns (text, usage_dict, prompt_cache_supported)."""
     import os
@@ -1943,6 +2010,9 @@ def _call_llm(prompt: Dict[str, str], model: str, use_cache: bool = True):
         ) from exc
 
     client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+    # Determinism where the model allows it; newer models reject `temperature`
+    # and are deterministic enough for strict-JSON parsing without it.
+    sampling = {"temperature": 0.0} if _supports_temperature(model) else {}
     cache_supported = False
     message = None
     # NOTE: ``temperature`` is intentionally NOT sent. Newer Claude models
@@ -1956,6 +2026,7 @@ def _call_llm(prompt: Dict[str, str], model: str, use_cache: bool = True):
                 system=[{"type": "text", "text": prompt["system"],
                          "cache_control": {"type": "ephemeral"}}],
                 messages=[{"role": "user", "content": prompt["user"]}],
+                **sampling,
             )
             cache_supported = True
         except Exception:  # pragma: no cover - SDK without cache support
@@ -1965,8 +2036,9 @@ def _call_llm(prompt: Dict[str, str], model: str, use_cache: bool = True):
             model=model, max_tokens=1024,
             system=prompt["system"],
             messages=[{"role": "user", "content": prompt["user"]}],
+            **sampling,
         )
-    text = message.content[0].text
+    text = _message_text(message)
     u = getattr(message, "usage", None)
     usage = {}
     if u is not None:
@@ -2056,6 +2128,40 @@ def _empty_llm_meta(provider: str, model: Optional[str]) -> dict:
     }
 
 
+# Layering signals — a question with any of these reads better via the LLM than
+# the narrow deterministic matcher, so we do NOT short-circuit to deterministic
+# for it even when the deterministic parse looks confident.
+_LAYERED_COMPARISON = (
+    " vs ", " vs.", "versus", "compare", "compared", "relative to", " against ",
+    "difference between", "year on year", "year-on-year", "over time", "trend",
+)
+_LAYERED_CONDITIONAL = (
+    "where", "among", "sitting on", "that have", "who have", "with high",
+    "with older", "with low", "combined with", "as well as", "both ", "exposed to",
+    "concentrat", "breakdown of", "split by",
+)
+
+
+def _is_layered_question(question: str) -> bool:
+    """True when a question is multi-faceted / layered rather than a single
+    deterministic lookup. Deliberately errs toward the LLM: any comparison or
+    conditional phrasing, or two+ ``by`` dimension clauses, counts as layered."""
+    q = f" {(question or '').lower().strip()} "
+    if any(tok in q for tok in _LAYERED_COMPARISON):
+        return True
+    if any(tok in q for tok in _LAYERED_CONDITIONAL):
+        return True
+    if q.count(" by ") >= 2:  # two+ dimensions ("balance by region by vintage")
+        return True
+    # "and" joining two substantive clauses (not a trailing filler) — e.g.
+    # "older borrowers and high LTV". Require some length on each side.
+    if " and " in q:
+        left, _, right = q.partition(" and ")
+        if len(left.strip()) >= 8 and len(right.strip()) >= 8:
+            return True
+    return False
+
+
 def parse_with_repair(
     user_question: str,
     semantics,
@@ -2131,12 +2237,18 @@ def parse_with_repair(
     if not use_llm:
         return _det_result("deterministic")
 
-    # Zero-cost-first: avoid the LLM where the deterministic parser is decisive.
-    # HIGH confidence only — a "medium" parse is a heuristic guess (e.g. a
-    # defaulted axis or substituted dimension) and must be checked by the LLM
-    # when one is available rather than short-circuiting it.
+    # Zero-cost-first: skip the LLM only for genuinely SIMPLE, high-confidence
+    # questions (a single-variable metric/dimension the deterministic parser
+    # matches cleanly — "portfolio summary", "balance by region"). Layered or
+    # multi-faceted questions ("older borrowers sitting on high LTVs", "X vs Y",
+    # multiple dimensions) go to the LLM even when the deterministic parser is
+    # confident, because deterministic NLQ coverage is narrow and the LLM reads
+    # the intent better. Only applies when the LLM is actually available (above,
+    # ``not use_llm`` already returned a deterministic result).
     if zero_cost_first:
-        if det_vr.ok and det_meta["parser_confidence"] == "high":
+        layered = _is_layered_question(user_question)
+        if (det_vr.ok and not layered
+                and det_meta["parser_confidence"] == "high"):
             return _det_result("deterministic_zero_cost")
         # Explicit request that fails ONLY because the column is missing:
         # the LLM cannot fix this without substituting — fail clearly, no call.
@@ -2160,8 +2272,13 @@ def parse_with_repair(
     model_id = model or DEFAULT_MODEL
 
     total_tries = max(1, int(max_attempts) + 1)  # initial try + repairs
+    llm_call_error: Optional[str] = None
     for i in range(total_tries):
-        text, usage, cache_supported = _invoke(prompt, model_id, llm_callable)
+        try:
+            text, usage, cache_supported = _invoke(prompt, model_id, llm_callable)
+        except Exception as exc:  # noqa: BLE001 - LLM call failed; deterministic is the safety net
+            llm_call_error = str(exc)
+            break
         _accumulate(usage, cache_supported, model_id)
         raw_text = text if isinstance(text, str) else json.dumps(text)
         try:
@@ -2210,12 +2327,32 @@ def parse_with_repair(
 
         prompt = _repair_prompt(base_prompt, raw_text, errors)
 
+    # ---- deterministic safety net ----------------------------------------
+    # The LLM is primary for hard questions, but the deterministic parser is the
+    # fallback for the MI Agent: when the LLM call failed outright, or produced a
+    # spec that does not validate, prefer a VALID deterministic parse over a
+    # broken LLM one rather than erroring the whole query.
+    if det_vr.ok and not (repair_skipped_reason == "missing_dataset_columns"):
+        spec, meta = _det_result("deterministic_fallback")
+        meta["llm"] = llm_meta
+        meta["repair_skipped_reason"] = repair_skipped_reason
+        meta["status"] = (
+            f"LLM parse unavailable ({llm_call_error}); used the deterministic parse"
+            if llm_call_error
+            else "LLM parse failed validation; fell back to the deterministic parse")
+        return spec, meta
+
     if last_spec is None:
         last_spec = MIQuerySpec(
             intent="summary", chart_type="none", aggregation="count",
             title=user_question.strip(),
             explanation="LLM did not return a usable MIQuerySpec.",
             output_format="text")
+    status = ("LLM output references a missing dataset column; repair skipped"
+              if repair_skipped_reason
+              else f"LLM call failed ({llm_call_error}); no valid deterministic parse either"
+              if llm_call_error
+              else "LLM output failed validation after repair attempts")
     return last_spec, {
         "parser_mode": "llm",
         "parser_mode_detail": "validation_failed",
@@ -2227,7 +2364,5 @@ def parse_with_repair(
         "model": model_id,
         "repair_skipped_reason": repair_skipped_reason,
         "llm": llm_meta,
-        "status": ("LLM output references a missing dataset column; repair skipped"
-                   if repair_skipped_reason
-                   else "LLM output failed validation after repair attempts"),
+        "status": status,
     }

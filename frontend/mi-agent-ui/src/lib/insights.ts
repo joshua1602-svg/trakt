@@ -127,6 +127,28 @@ function signedPct(ratio: number): string {
   return `${p >= 0 ? "+" : ""}${p.toFixed(1)}%`;
 }
 
+/** Dimension names that denote a point-in-time SNAPSHOT series (reporting month,
+ * weekly extract, etc.) — deliberately excludes cross-sectional cohorts like
+ * `vintage_year`, whose balances DO sum to the book total. */
+const SNAPSHOT_DIM_RE = /(period|month|week|quarter|reporting|as[_\s]?of|extract|snapshot)/i;
+/** A YYYY-MM or YYYY-MM-DD period value (a bare YYYY is treated as a cohort, not
+ * a snapshot series, so vintage-year breakdowns keep their part-to-whole shares). */
+const PERIOD_VALUE_RE = /^\d{4}-\d{2}(-\d{2})?$/;
+
+/**
+ * True when the dimension is a time-ordered STOCK snapshot series (e.g. funded
+ * balance by reporting month). Summing a stock across snapshots double-counts the
+ * overlapping book, so "% of total" / concentration / ranking observations are
+ * meaningless here and must be suppressed.
+ */
+function isSnapshotTimeSeries(model: DrillModel): boolean {
+  if (SNAPSHOT_DIM_RE.test(model.dimensionKey) || SNAPSHOT_DIM_RE.test(model.dimensionLabel)) {
+    return true;
+  }
+  const periodLike = model.values.filter((v) => PERIOD_VALUE_RE.test(String(v).trim()));
+  return periodLike.length >= 2 && periodLike.length >= Math.ceil(model.values.length * 0.8);
+}
+
 /* --------------------------- the engine --------------------------- */
 
 /**
@@ -163,6 +185,13 @@ export function computeInsights(
   const m = mean(values);
   const top3 = sorted.slice(0, 3);
 
+  // A stock snapshot series (funded balance by month) is NOT part-to-whole:
+  // summing balances across snapshots double-counts the overlapping book, so
+  // "% of total" concentration / ranking shares would be false. Only compute
+  // additive shares for genuine cross-sectional breakdowns.
+  const timeSeries = isSnapshotTimeSeries(model);
+  const shareable = focus.additive && !timeSeries && total !== 0;
+
   const statistics: InsightStatistics = {
     measureKey: focus.key,
     measureLabel: focus.label,
@@ -176,10 +205,10 @@ export function computeInsights(
     spread: top.value - bottom.value,
     topLabel: top.label,
     topValue: top.value,
-    topShare: focus.additive && total ? top.value / total : undefined,
+    topShare: shareable ? top.value / total : undefined,
     bottomLabel: bottom.label,
     bottomValue: bottom.value,
-    top3Share: focus.additive && total ? sum(top3.map((t) => t.value)) / total : undefined,
+    top3Share: shareable ? sum(top3.map((t) => t.value)) / total : undefined,
   };
 
   const mNoun = measureNoun(focus.label);
@@ -255,8 +284,27 @@ export function computeInsights(
     });
   }
 
+  // 4b. Trend — for a stock snapshot series, the meaningful movement is the
+  // change between the earliest and latest snapshot (NOT a share of a summed
+  // total). Uses the chronological endpoints of the series.
+  if (timeSeries) {
+    const chrono = [...series].sort((a, b) => String(a.label).localeCompare(String(b.label)));
+    const firstPt = chrono[0];
+    const lastPt = chrono[chrono.length - 1];
+    if (firstPt && lastPt && firstPt.label !== lastPt.label && firstPt.value !== 0) {
+      const ratio = (lastPt.value - firstPt.value) / Math.abs(firstPt.value);
+      const severity: Severity = Math.abs(ratio) > 0.25 ? "significant" : Math.abs(ratio) > 0.1 ? "watch" : "info";
+      observations.push({
+        id: "trend",
+        kind: "movement",
+        severity,
+        text: `${mNoun} moved from ${fmt(firstPt.value, focus)} (${firstPt.label}) to ${fmt(lastPt.value, focus)} (${lastPt.label}), ${signedPct(ratio)}.`,
+      });
+    }
+  }
+
   // 5. Movement — only when a prior total is supplied (never invented).
-  if (opts?.previousTotal !== undefined && opts.previousTotal !== 0) {
+  if (!timeSeries && opts?.previousTotal !== undefined && opts.previousTotal !== 0) {
     const ratio = (total - opts.previousTotal) / Math.abs(opts.previousTotal);
     const severity: Severity = Math.abs(ratio) > 0.25 ? "significant" : Math.abs(ratio) > 0.1 ? "watch" : "info";
     observations.push({

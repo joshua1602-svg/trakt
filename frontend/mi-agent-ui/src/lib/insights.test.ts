@@ -108,6 +108,72 @@ describe("computeInsights — movement", () => {
   });
 });
 
+/** A funded-balance-by-month TREND table (a stock snapshot series). */
+function trendTable(rows: Array<Record<string, string | number>>): TableArtifact {
+  return {
+    id: "trend",
+    type: "table",
+    title: "Funded balance trend",
+    source: { engine: "mi_agent.workflow", label: "MI Agent · table" },
+    createdAt: "2026-06-26T08:00:00Z",
+    mock: false,
+    columns: [
+      { key: "period", label: "Period", format: "text" },
+      { key: "funded_balance", label: "Funded balance", format: "gbp" },
+    ],
+    rows,
+  };
+}
+
+describe("computeInsights — stock snapshot time-series (bug: additive months)", () => {
+  const rows = [
+    { period: "2025-10", funded_balance: 4_200_000 },
+    { period: "2025-11", funded_balance: 8_900_000 },
+  ];
+
+  it("does NOT treat monthly stock balances as additive shares of a total", () => {
+    const s = computeInsights(trendTable(rows))!;
+    // No "% of the total" concentration/ranking claims for a snapshot series.
+    expect(s.observations.find((o) => o.kind === "concentration")).toBeUndefined();
+    expect(s.observations.find((o) => o.kind === "ranking")).toBeUndefined();
+    expect(s.statistics.topShare).toBeUndefined();
+    expect(s.statistics.top3Share).toBeUndefined();
+    expect(s.observations.every((o) => !/of the total/i.test(o.text))).toBe(true);
+    // No "Investigate <latest month>" concentration drill either.
+    expect(s.suggestions.some((g) => /Investigate 2025-11/.test(g.label))).toBe(false);
+  });
+
+  it("reports a correct trend movement between the first and latest snapshot", () => {
+    const s = computeInsights(trendTable(rows))!;
+    const trend = s.observations.find((o) => o.kind === "movement")!;
+    expect(trend.text).toMatch(/2025-10/);
+    expect(trend.text).toMatch(/2025-11/);
+    // (8.9 − 4.2) / 4.2 ≈ +111.9%
+    expect(trend.text).toMatch(/\+11[0-2]\.\d%/);
+  });
+
+  it("still computes part-to-whole shares for a cross-sectional vintage cohort", () => {
+    // vintage_year is a cohort breakdown (YYYY), NOT a snapshot series — shares valid.
+    const t: TableArtifact = {
+      id: "v", type: "table", title: "Balance by vintage",
+      source: { engine: "mi_agent.workflow", label: "MI Agent · table" },
+      createdAt: "2026-06-26T08:00:00Z", mock: false,
+      columns: [
+        { key: "vintage_year", label: "Vintage year", format: "text" },
+        { key: "balance", label: "Balance", format: "gbp" },
+      ],
+      rows: [
+        { vintage_year: "2021", balance: 700 },
+        { vintage_year: "2022", balance: 200 },
+        { vintage_year: "2023", balance: 100 },
+      ],
+    };
+    const s = computeInsights(t)!;
+    expect(s.statistics.topShare).toBeCloseTo(0.7);
+    expect(s.observations.find((o) => o.kind === "concentration")).toBeDefined();
+  });
+});
+
 describe("computeInsights — edge cases", () => {
   it("returns null for an empty artifact", () => {
     expect(computeInsights(chart([]))).toBeNull();
