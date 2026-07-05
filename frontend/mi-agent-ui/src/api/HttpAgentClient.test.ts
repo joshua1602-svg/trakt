@@ -54,6 +54,35 @@ describe("HttpAgentClient", () => {
     expect(res.artifacts[0].type).toBe("chart");
   });
 
+  it("normalises the snake_case wire spec to the camelCase MIQuerySpec shape", async () => {
+    const body = {
+      ...apiBody,
+      spec: { intent: "chart", chart_type: "bar", top_n: 10,
+              risk_monitor_mode: "concentration", metric: "current_outstanding_balance",
+              dimension: "broker_channel" },
+    };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(body), { status: 200 })));
+    const res = await new HttpAgentClient("http://localhost:8000").ask(request);
+    // camelCase fields the MIQuerySpec type promises are populated...
+    expect(res.spec?.chartType).toBe("bar");
+    expect(res.spec?.topN).toBe(10);
+    expect(res.spec?.riskMode).toBe("concentration");
+    expect(res.spec?.metric).toBe("current_outstanding_balance");
+    // ...and the snake_case keys are not leaked through.
+    expect((res.spec as Record<string, unknown>)?.chart_type).toBeUndefined();
+    expect((res.spec as Record<string, unknown>)?.top_n).toBeUndefined();
+    // Intent detection is unchanged (risk_monitor_mode present -> risk_monitoring).
+    expect(res.intent).toBe("risk_monitoring");
+  });
+
+  it("passes an already-camelCase (mock-shaped) spec through unchanged", async () => {
+    const body = { ...apiBody, spec: { intent: "chart", chartType: "line", topN: 5 } };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(body), { status: 200 })));
+    const res = await new HttpAgentClient("http://localhost:8000").ask(request);
+    expect(res.spec?.chartType).toBe("line");
+    expect(res.spec?.topN).toBe(5);
+  });
+
   it("includes the active datasetContext in the query body", async () => {
     const spy = vi.fn(async () => new Response(JSON.stringify(apiBody), { status: 200 }));
     vi.stubGlobal("fetch", spy);
