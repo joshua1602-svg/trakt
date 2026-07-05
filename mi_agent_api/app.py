@@ -50,6 +50,7 @@ from . import chat_routing as chat_routing_mod
 from . import pipeline_timing as timing_mod
 from . import decks as decks_mod
 from . import cohorts as cohorts_mod
+from . import geo as geo_mod
 
 logger = logging.getLogger("mi_agent_api")
 
@@ -1137,6 +1138,34 @@ def cohorts(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
         logger.warning("cohort analysis failed for %s: %s", pid, exc)
         return {"dataset": "cohorts", "portfolioId": pid, "available": False,
                 "reason": str(exc), "cohorts": [], "metricsAvailable": []}
+
+
+@app.get("/mi/geo/exposure")
+def geo_exposure(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
+                 runId: Optional[str] = None, run_id: Optional[str] = None) -> Dict[str, Any]:
+    """Funded exposure per UK ITL3 area (e.g. Bristol) for a run — the DATA layer
+    for the geographic view. ITL3 comes from the tape's ITL3 field or is derived
+    from the property postcode via the in-repo master lookup. Returns
+    ``available=false`` (with a reason) when neither is present. Never 500s."""
+    run_id = runId or run_id
+    if portfolioId and "/" in portfolioId:
+        client_id, run_id = portfolioId.split("/", 1)
+    client_id = client_id or "client_001"
+    pid = f"{client_id}/{run_id or ''}"
+    if not run_id:
+        return {"dataset": "geo_itl3", "portfolioId": pid, "available": False,
+                "reason": "portfolioId (client_id/run_id) is required", "areas": []}
+    try:
+        df, _report = _resolve_run_dataframe(client_id, run_id, _onboarding_output_root())
+        currency_mod.resolve_and_set(df)
+        result = geo_mod.exposure_by_itl3(df)
+        result.update({"dataset": "geo_itl3", "portfolioId": pid,
+                       "currencyCode": currency_mod.current_code()})
+        return result
+    except Exception as exc:  # noqa: BLE001 - geo view must never 500
+        logger.warning("geo exposure failed for %s: %s", pid, exc)
+        return {"dataset": "geo_itl3", "portfolioId": pid, "available": False,
+                "reason": str(exc), "areas": []}
 
 
 @app.get("/mi/cohorts/progression")
