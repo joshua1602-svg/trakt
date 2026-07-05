@@ -272,6 +272,18 @@ def test_funded_balance_bridge_returns_reconciling_waterfall():
     assert abs(sum(d["value"] for d in deltas) - (closing - opening)) < 1.0
 
 
+def test_cohort_progression_route_returns_metric_line():
+    # A static-pool progression scoped to a source portfolio returns a metric
+    # line across periods (the fixture's two runs).
+    r = client.post("/mi/query", json={
+        "question": "how has funded balance evolved for the direct book",
+        "portfolioId": "client_001/mi_2025_11", "datasetContext": "funded",
+    }).json()
+    assert r.get("metadata", {}).get("route") == "cohort_progression", r.get("answer")
+    lines = [a for a in r.get("artifacts", []) if a.get("chartType") == "line"]
+    assert lines and lines[0]["rows"]
+
+
 def test_funded_query_honours_selected_run():
     # The fixture writes two funded runs of DIFFERENT sizes (Oct=60, Nov=70).
     # A point-in-time funded question must be answered from the SELECTED run,

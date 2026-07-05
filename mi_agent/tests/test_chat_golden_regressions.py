@@ -184,6 +184,26 @@ def test_bridge_recogniser_flags_bridge_and_dimension(q, expected_dim, semantics
         assert spec.bridge_dimension == expected_dim
 
 
+@pytest.mark.parametrize("q,vintage,grain", [
+    ("how has balance evolved for acquired_001 originated in 2023", "2023", "Y"),
+    ("show the seasoning of the acquired book LTV", None, None),
+    ("nneg headroom progression for direct_001", None, None),
+    ("balance progression for 2023 q2 vintage", "2023-Q2", "Q"),
+])
+def test_cohort_progression_recogniser(q, vintage, grain, semantics):
+    spec, meta = _deterministic_parse(q, semantics)
+    assert spec.cohort_progression is True, q
+    assert meta["note"] == "cohort_progression"
+    assert spec.cohort_vintage == vintage
+    assert spec.cohort_grain == grain
+
+
+def test_whole_book_evolution_is_not_a_cohort_progression(semantics):
+    # No cohort scope → the ordinary evolution route, not a static-pool cohort.
+    spec, _ = _deterministic_parse("balance evolution by month", semantics)
+    assert spec.cohort_progression is False
+
+
 def test_pipeline_bridge_to_target_stays_a_forecast_not_a_balance_bridge(semantics):
     # "pipeline bridge to £100mm" is a scale-up FORECAST, not an attribution
     # bridge — the forecast recogniser must win.

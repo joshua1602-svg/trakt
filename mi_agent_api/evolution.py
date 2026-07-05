@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from analytics_lib.numeric import coerce_numeric
+from mi_agent.mi_dataset_profile import PERCENT_POINTS, percent_storage_scale
 
 from . import snapshots as snap
 from . import pipeline_contract as pipeline_mod
@@ -337,6 +338,139 @@ def funded_bridge(output_root: str | os.PathLike, client_id: str,
                 "reporting_date": end.get("reporting_date"), "total": close_total},
         "netChange": round(close_total - open_total, 2),
         "contributions": contribs,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Funded cohort PROGRESSION (static-pool seasoning across reporting periods)
+# --------------------------------------------------------------------------- #
+_VALUATION_COLS = ("indexed_valuation_amount", "current_valuation_amount",
+                   "indexed_value", "original_valuation_amount")
+_ORIG_DATE = "origination_date"
+_VINTAGE = "vintage_year"
+
+
+def _pct_fraction(df, col: str) -> Optional[float]:
+    """Balance-weighted average of a percent column, normalised to a FRACTION so
+    the UI's ×100 formatter renders it correctly (the tape stores LTV as a
+    fraction but the interest rate in points)."""
+    wavg = _weighted_avg(df, col)
+    if wavg is None:
+        return None
+    if col in df.columns and percent_storage_scale(df[col]) == PERCENT_POINTS:
+        return round(wavg / 100.0, 6)
+    return wavg
+
+
+def _nneg_metrics(df) -> Dict[str, Any]:
+    """NNEG (no-negative-equity-guarantee) exposure/headroom for a lifetime book:
+    exposure = Σ max(0, balance − property value); headroom% = 1 − balance/value
+    (balance-weighted). Empty when no valuation column is present."""
+    val_col = next((c for c in _VALUATION_COLS if c in df.columns), None)
+    if val_col is None:
+        return {}
+    bal = coerce_numeric(df[_BALANCE])
+    val = coerce_numeric(df[val_col])
+    mask = bal.notna() & val.notna() & (val > 0)
+    if not bool(mask.any()):
+        return {}
+    b, v = bal[mask], val[mask]
+    exposure = float((b - v).clip(lower=0).sum())
+    vsum = float(v.sum())
+    return {
+        "nneg_exposure": round(exposure, 2),
+        "nneg_headroom": round(float((v - b).sum()), 2),
+        "nneg_headroom_pct": (round(1.0 - float(b.sum()) / vsum, 6) if vsum else None),
+    }
+
+
+def _origination_labels(df, grain: str = "Y"):
+    """Per-row origination-cohort label at the requested grain (Y / Q / M), from
+    ``origination_date`` (else ``vintage_year`` for year grain). None if neither."""
+    if _ORIG_DATE in df.columns:
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            od = pd.to_datetime(df[_ORIG_DATE], errors="coerce", dayfirst=True)
+        if od.notna().any():
+            g = (grain or "Y").upper()
+            if g == "Q":
+                return (od.dt.year.astype("Int64").astype(str) + "-Q"
+                        + od.dt.quarter.astype("Int64").astype(str))
+            if g == "M":
+                return od.dt.strftime("%Y-%m")
+            return od.dt.year.astype("Int64").astype(str)
+    if _VINTAGE in df.columns and df[_VINTAGE].notna().any():
+        return df[_VINTAGE].astype("Int64").astype(str)
+    return None
+
+
+def funded_cohort_progression(output_root: str | os.PathLike, client_id: str, *,
+                              lens_filters: Optional[Dict[str, str]] = None,
+                              lens_label: str = "Total",
+                              vintage: Optional[str] = None, grain: str = "Y",
+                              to_run_id: Optional[str] = None) -> Dict[str, Any]:
+    """Static-pool progression: how a cohort's funded metrics (balance, loan
+    count, WA LTV, WA rate, NNEG exposure/headroom) evolve ACROSS reporting
+    periods. The cohort is defined by a source-portfolio lens (Total / direct /
+    acquired / a cohort id like ``acquired_001``) AND, optionally, an origination
+    ``vintage`` at the chosen ``grain`` (Y/Q/M) — so "acquired_001 loans
+    originated in 2023" is a first-class cohort even within the consolidated book."""
+    vintage_filterable = True
+    periods: List[Dict[str, Any]] = []
+    for fr in funded_frames(output_root, client_id, to_run_id):
+        d = _scope_frame_lens(fr.get("df"), lens_filters)
+        if d is None:
+            continue
+        if vintage:
+            labels = _origination_labels(d, grain)
+            if labels is None:
+                vintage_filterable = False
+                d = d.iloc[0:0]
+            else:
+                d = d[labels.astype(str) == str(vintage)]
+        metrics: Dict[str, Any] = {
+            "funded_balance": _bal_sum(d),
+            "loan_count": int(len(d)),
+            "wa_ltv": _pct_fraction(d, "current_loan_to_value"),
+            "wa_interest_rate": _pct_fraction(d, "current_interest_rate"),
+            "avg_borrower_age": _simple_avg(d, "youngest_borrower_age"),
+        }
+        metrics.update(_nneg_metrics(d))
+        periods.append({
+            "period": _period_label(fr),
+            "reporting_date": fr.get("reporting_date"),
+            "loanCount": int(len(d)),
+            "metrics": metrics,
+        })
+
+    available = any(p["loanCount"] for p in periods)
+    reason = None
+    if not available:
+        reason = ("no loans match this cohort in any reporting period"
+                  if vintage_filterable else
+                  "origination vintage is not available on the funded tape")
+    metric_keys = ["funded_balance", "loan_count", "wa_ltv", "wa_interest_rate",
+                   "avg_borrower_age"]
+    if any("nneg_exposure" in p["metrics"] for p in periods):
+        metric_keys += ["nneg_exposure", "nneg_headroom", "nneg_headroom_pct"]
+    return {
+        "dataset": "cohort_progression",
+        "portfolioId": client_id,
+        "available": available,
+        "reason": reason,
+        "lens": lens_label,
+        "vintage": vintage,
+        "grain": grain,
+        "metricsAvailable": metric_keys,
+        "periods": periods,
+        "singlePeriod": len([p for p in periods if p["loanCount"]]) <= 1,
+        "lineage": {
+            "source": "governed funded reporting periods (static pool)",
+            "metric": "cohort funded metrics per reporting period",
+            "note": ("Static-pool seasoning: the SAME cohort (source portfolio "
+                     "± origination vintage) tracked across reporting periods."),
+        },
     }
 
 

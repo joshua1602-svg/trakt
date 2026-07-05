@@ -284,3 +284,68 @@ def test_funded_bridge_needs_two_periods(monkeypatch):
     br = evo.funded_bridge("blob://x", "client_001", ["geographic_region_obligor"])
     assert br["available"] is False
     assert "two funded reporting periods" in br["reason"]
+
+
+# --------------------------------------------------------------------------- #
+# Cohort PROGRESSION (static pool across periods; source-portfolio + vintage)
+# --------------------------------------------------------------------------- #
+def _prog_frame(scale):
+    return pd.DataFrame({
+        "current_outstanding_balance": [100_000 * scale] * 6,
+        "current_valuation_amount": [250_000] * 6,
+        "current_loan_to_value": [0.40, 0.42, 0.38, 0.55, 0.30, 0.48],
+        "current_interest_rate": [9.5] * 6,
+        "youngest_borrower_age": [70, 72, 68, 80, 66, 74],
+        "source_portfolio_id": ["direct_001"] * 3 + ["acquired_001"] * 3,
+        "source_portfolio_type": ["direct"] * 3 + ["acquired"] * 3,
+        "origination_date": ["2025-03-01", "2025-06-01", "2023-05-01",
+                             "2023-08-01", "2023-02-01", "2024-01-01"],
+    })
+
+
+def _prog_env(monkeypatch):
+    from mi_agent_api import platform_snapshots_blob as blob
+    import apps.blob_trigger_app.storage as storage_mod
+    monkeypatch.setattr(storage_mod, "open_storage", lambda: object())
+    monkeypatch.setattr(blob, "build_funded_evolution_frames", lambda *a, **k: [
+        {"run_id": "2025-10-31", "reporting_date": "2025-10-31", "df": _prog_frame(1.0), "source": "x"},
+        {"run_id": "2026-03-31", "reporting_date": "2026-03-31", "df": _prog_frame(1.2), "source": "y"},
+    ])
+
+
+def test_cohort_progression_consolidated_and_nneg(monkeypatch):
+    _prog_env(monkeypatch)
+    out = evo.funded_cohort_progression("blob://x", "client_001")
+    assert out["available"]
+    bals = [p["metrics"]["funded_balance"] for p in out["periods"]]
+    assert bals == [600_000, 720_000]
+    # NNEG headroom shrinks as balance grows toward valuation.
+    hr = [p["metrics"]["nneg_headroom_pct"] for p in out["periods"]]
+    assert hr[0] > hr[1]
+    # WA rate normalised points→fraction (9.5 → ~0.095), not 9.5.
+    assert 0.09 <= out["periods"][0]["metrics"]["wa_interest_rate"] <= 0.10
+
+
+def test_cohort_progression_source_portfolio_and_vintage(monkeypatch):
+    _prog_env(monkeypatch)
+    # acquired_001 as a cohort.
+    acq = evo.funded_cohort_progression(
+        "blob://x", "client_001", lens_filters={"source_portfolio_id": "acquired_001"},
+        lens_label="acquired_001")
+    assert acq["available"]
+    assert [p["metrics"]["funded_balance"] for p in acq["periods"]] == [300_000, 360_000]
+    # acquired_001 loans originated in 2023 — a cohort WITHIN the consolidated book.
+    v = evo.funded_cohort_progression(
+        "blob://x", "client_001", lens_filters={"source_portfolio_id": "acquired_001"},
+        lens_label="acquired_001", vintage="2023")
+    assert v["available"]
+    assert [p["loanCount"] for p in v["periods"]] == [2, 2]
+
+
+def test_cohort_progression_empty_cohort_is_controlled(monkeypatch):
+    _prog_env(monkeypatch)
+    out = evo.funded_cohort_progression(
+        "blob://x", "client_001", lens_filters={"source_portfolio_id": "acquired_001"},
+        vintage="2023-Q2", grain="Q")  # acquired 2023 loans are Q1/Q3, not Q2
+    assert out["available"] is False
+    assert "no loans match" in out["reason"]

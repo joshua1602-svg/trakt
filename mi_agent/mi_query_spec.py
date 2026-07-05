@@ -155,6 +155,11 @@ class MIQuerySpec:
     bridge_query: bool = False
     bridge_dimension: Optional[str] = None       # semantic dimension key to attribute by
 
+    # Cohort progression (static-pool seasoning across reporting periods)
+    cohort_progression: bool = False
+    cohort_vintage: Optional[str] = None         # origination vintage (e.g. 2023 / 2023-Q2)
+    cohort_grain: Optional[str] = None           # Y|Q|M vintage grain
+
     # Risk monitor
     risk_monitor_mode: Optional[str] = None      # migration|concentration|trajectory|flags
     migration_dimension: Optional[str] = None

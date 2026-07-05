@@ -108,3 +108,21 @@ def test_points_scaled_rate_is_normalised_to_fraction():
     assert 0.30 <= by["2025"]["waLtv"] <= 0.45
     assert 0.09 <= by["2025"]["waRate"] <= 0.10, by["2025"]["waRate"]
     assert 0.09 <= by["2024"]["waRate"] <= 0.10
+
+
+def test_finer_vintage_grain_quarter_and_month():
+    # A young book all originated in 2025 collapses to one 'Y' bucket; finer
+    # grain reveals the seasoning spread.
+    df = pd.DataFrame({
+        "origination_date": ["2025-01-15", "2025-02-10", "2025-05-20", "2025-08-01"],
+        "current_outstanding_balance": [100_000, 100_000, 100_000, 100_000],
+        "current_loan_to_value": [0.40, 0.42, 0.38, 0.30],
+    })
+    y = cohorts_mod.cohort_analysis(df, client_id="c", grain="Y")
+    assert {c["vintage"] for c in y["cohorts"]} == {"2025"}
+    q = cohorts_mod.cohort_analysis(df, client_id="c", grain="Q")
+    labels = [c["vintage"] for c in q["cohorts"]]
+    assert labels == sorted(labels)  # chronological
+    assert set(labels) == {"2025-Q1", "2025-Q2", "2025-Q3"}
+    m = cohorts_mod.cohort_analysis(df, client_id="c", grain="M")
+    assert "2025-01" in {c["vintage"] for c in m["cohorts"]}

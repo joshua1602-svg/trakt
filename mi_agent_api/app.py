@@ -1111,6 +1111,39 @@ def cohorts(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
                 "reason": str(exc), "cohorts": [], "metricsAvailable": []}
 
 
+@app.get("/mi/cohorts/progression")
+def cohort_progression(portfolioId: Optional[str] = None,
+                       client_id: Optional[str] = None,
+                       lens: Optional[str] = None,
+                       vintage: Optional[str] = None,
+                       grain: str = "Y") -> Dict[str, Any]:
+    """Static-pool cohort PROGRESSION: how a cohort's funded metrics (balance,
+    loan count, WA LTV / rate, NNEG exposure / headroom) evolve ACROSS reporting
+    periods. The cohort is a source-portfolio ``lens`` (total | direct | acquired
+    | a cohort id such as ``acquired_001``) optionally narrowed to an origination
+    ``vintage`` at ``grain`` (Y|Q|M) — e.g. acquired_001 loans originated in 2023.
+    Never 500s; returns ``available=false`` with a reason when the cohort is empty.
+    """
+    cid = "client_001"
+    if portfolioId and "/" in portfolioId:
+        cid = portfolioId.split("/", 1)[0]
+    elif portfolioId:
+        cid = portfolioId
+    cid = client_id or cid
+    try:
+        from mi_agent import portfolio_lens as plens
+        lens_obj = plens.lens_from_selection(lens) if lens else plens.total_lens()
+        return evolution_mod.funded_cohort_progression(
+            _onboarding_output_root(), cid,
+            lens_filters=lens_obj.filters or None, lens_label=lens_obj.label,
+            vintage=vintage, grain=grain)
+    except Exception as exc:  # noqa: BLE001 - progression must never 500
+        logger.warning("cohort progression failed for %s: %s", cid, exc)
+        return {"dataset": "cohort_progression", "portfolioId": cid,
+                "available": False, "reason": str(exc), "periods": [],
+                "metricsAvailable": []}
+
+
 _PPTX_MEDIA_TYPE = (
     "application/vnd.openxmlformats-officedocument.presentationml.presentation")
 

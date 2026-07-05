@@ -723,6 +723,114 @@ def _route_bridge(question, spec, spec_dict, *, client_id, run_id, output_root,
 
 
 # --------------------------------------------------------------------------- #
+# F. Cohort static-pool progression (a cohort's metrics across periods)
+# --------------------------------------------------------------------------- #
+# (question keyword) -> (metric key, label, chart valueFormat, display scale)
+_PROG_METRICS: Dict[str, Tuple[str, str, str, Optional[str]]] = {
+    "balance": ("funded_balance", "Funded balance", "gbp", None),
+    "ltv": ("wa_ltv", "WA LTV", "pct", "percent_fraction"),
+    "rate": ("wa_interest_rate", "WA interest rate", "pct", "percent_fraction"),
+    "nneg": ("nneg_headroom_pct", "NNEG headroom", "pct", "percent_fraction"),
+    "nneg_exposure": ("nneg_exposure", "NNEG exposure", "gbp", None),
+    "count": ("loan_count", "Loan count", "number", None),
+    "age": ("avg_borrower_age", "Avg borrower age", "decimal", None),
+}
+
+
+def _prog_metric_key(q: str) -> str:
+    if "negative equity" in q or "nneg" in q or "no-negative" in q or "headroom" in q:
+        return "nneg_exposure" if "exposure" in q else "nneg"
+    if "ltv" in q or "loan to value" in q:
+        return "ltv"
+    if "rate" in q or "interest" in q or "coupon" in q:
+        return "rate"
+    if "how many" in q or "loan count" in q or "number of loans" in q:
+        return "count"
+    if "borrower age" in q or "age" in q:
+        return "age"
+    return "balance"
+
+
+def _route_cohort_progression(question, spec, spec_dict, *, client_id, run_id,
+                              output_root, portfolio_id, as_of, source_lens=None
+                              ) -> Dict[str, Any]:
+    """Governed static-pool cohort progression → a metric line across reporting
+    periods for a cohort (source portfolio ± origination vintage) + a full
+    metrics table."""
+    default_lens = (_portfolio_lens.lens_from_selection(source_lens)
+                    if source_lens is not None else None)
+    lens = _portfolio_lens.resolve_lens_with_default(question, default_lens)
+    vintage = getattr(spec, "cohort_vintage", None)
+    grain = getattr(spec, "cohort_grain", None) or "Y"
+
+    prog = evolution_mod.funded_cohort_progression(
+        output_root, client_id, lens_filters=lens.filters or None,
+        lens_label=lens.label, vintage=vintage, grain=grain, to_run_id=run_id)
+
+    scope = lens.label + (f", {vintage} vintage" if vintage else "")
+    if not prog.get("available"):
+        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
+                         answer=(f"I can't build a progression for {scope}: "
+                                 f"{prog.get('reason', 'no matching loans')}."),
+                         route="cohort_progression",
+                         warnings=[f"insufficient-data: {prog.get('reason', 'no matching cohort')}"])
+
+    q = question.lower()
+    mkey = _prog_metric_key(q)
+    if mkey in ("nneg", "nneg_exposure") and not any(
+            "nneg_exposure" in p["metrics"] for p in prog["periods"]):
+        mkey = "balance"  # no valuation → NNEG not derivable; fall back to balance
+    metric_key, label, vfmt, scale = _PROG_METRICS[mkey]
+
+    periods = prog["periods"]
+    rows = [{"period": p["period"], metric_key: (p["metrics"] or {}).get(metric_key)}
+            for p in periods]
+    chart = _chart_artifact(
+        f"{label} — {scope}", chart_type="line", x_key="period", rows=rows,
+        series=[{"key": metric_key, "label": label, "color": _PALETTE[0]}],
+        value_format=vfmt, spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of,
+        display_hints={metric_key: {"format": vfmt, "scale": scale}},
+        description=f"Static-pool {label.lower()} for {scope} across reporting periods.")
+
+    # Full metrics table (all periods).
+    tcols = [{"key": "period", "label": "Period", "align": "left", "format": "text"},
+             {"key": "loan_count", "label": "Loans", "align": "right", "format": "number"},
+             {"key": "funded_balance", "label": "Balance", "align": "right", "format": "gbp"},
+             {"key": "wa_ltv", "label": "WA LTV", "align": "right", "format": "pct", "scale": "percent_fraction"},
+             {"key": "wa_interest_rate", "label": "WA rate", "align": "right", "format": "pct", "scale": "percent_fraction"}]
+    if "nneg_headroom_pct" in prog.get("metricsAvailable", []):
+        tcols.append({"key": "nneg_headroom_pct", "label": "NNEG headroom", "align": "right",
+                      "format": "pct", "scale": "percent_fraction"})
+    trows = [{"period": p["period"], **{k: (p["metrics"] or {}).get(k)
+              for k in ("loan_count", "funded_balance", "wa_ltv", "wa_interest_rate", "nneg_headroom_pct")}}
+             for p in periods]
+    table = _table_artifact(f"{scope} — metrics by period", columns=tcols, rows=trows,
+                            spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of)
+
+    live = [p for p in periods if p["loanCount"]]
+    first, last = (live[0] if live else None), (live[-1] if live else None)
+    def _mv(p):
+        return None if p is None else (p["metrics"] or {}).get(metric_key)
+    fv, lv = _mv(first), _mv(last)
+    trend = ""
+    if fv is not None and lv is not None:
+        trend = " up" if lv > fv else (" down" if lv < fv else " flat")
+    answer = (f"{label} for {scope}: tracked across {len(live)} reporting period(s) "
+              f"({first['period'] if first else '—'} → {last['period'] if last else '—'}"
+              f"){trend}.")
+    warnings = []
+    if prog.get("singlePeriod"):
+        warnings.append("Only one reporting period has loans for this cohort — a "
+                        "progression reads best with two or more periods.")
+    recon = {"dataset": "funded", "coverage_by_balance_pct": 100.0,
+             "reporting_date": (last or {}).get("reporting_date")}
+    notes = [{"field": "cohort", "note": prog["lineage"]["note"]}]
+    return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
+                     artifacts=[chart, table], reconciliation=recon, source_notes=notes,
+                     warnings=warnings, route="cohort_progression")
+
+
+# --------------------------------------------------------------------------- #
 # Detection + dispatch
 # --------------------------------------------------------------------------- #
 _EVOLUTION_MARKERS = ("evolution", "over time", "trend", "by month", "monthly",
@@ -775,6 +883,11 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
                              client_id=client_id, run_id=run_id, output_root=output_root,
                              portfolio_id=portfolio_id, as_of=as_of, semantics=semantics,
                              source_lens=source_lens)
+    if getattr(spec, "cohort_progression", False):
+        return _route_cohort_progression(question, spec, spec_dict,
+                                        client_id=client_id, run_id=run_id,
+                                        output_root=output_root, portfolio_id=portfolio_id,
+                                        as_of=as_of, source_lens=source_lens)
     if spec.temporal_mode == "compare":
         return _route_compare(question, spec, spec_dict, view=view, **kw)
     if spec.risk_limit_query:

@@ -843,6 +843,65 @@ def _bridge_recognizer(q: str, title: str, semantics: dict, available_columns=No
                            note="funded_bridge")
 
 
+# Static-pool cohort progression: how a cohort's funded metrics EVOLVE across
+# reporting periods. Distinguished from a plain whole-book evolution by a cohort
+# SCOPE — a source portfolio (acquired_001 / the acquired book / direct) and/or
+# an origination vintage.
+_PROGRESSION_MARKER_RE = re.compile(
+    r"\bevolv|\bprogress|\bseason|static[\s-]?pool|over time|\btrend|"
+    r"how (?:has|have|did).*(?:evolv|change|move|progress|grow|season|track)|"
+    r"across (?:periods|reports|reporting)|by reporting")
+_VINTAGE_PHRASE_RE = re.compile(
+    r"originated in\s+(20\d{2})(?:[-\s]?q([1-4]))?|"
+    r"vintage\s+(20\d{2})(?:[-\s]?q([1-4]))?|"
+    r"(20\d{2})(?:[-\s]?q([1-4]))?\s+vintage|"
+    r"\bcohort\b.*?(20\d{2})")
+
+
+def _cohort_vintage(q: str) -> Tuple[Optional[str], Optional[str]]:
+    """(vintage_label, grain) from an origination-vintage phrase, e.g.
+    'originated in 2023' → ('2023', 'Y'); '2023 q2 vintage' → ('2023-Q2', 'Q')."""
+    m = _VINTAGE_PHRASE_RE.search(q)
+    if not m:
+        return None, None
+    groups = [g for g in m.groups() if g]
+    year = next((g for g in groups if re.fullmatch(r"20\d{2}", g)), None)
+    quarter = next((g for g in groups if re.fullmatch(r"[1-4]", g)), None)
+    if not year:
+        return None, None
+    if quarter:
+        return f"{year}-Q{quarter}", "Q"
+    return year, "Y"
+
+
+def _cohort_progression_recognizer(q: str, title: str, semantics: dict
+                                   ) -> Optional[Tuple[MIQuerySpec, dict]]:
+    """Cohort static-pool progression → governed ``cohort_progression`` plan.
+
+    Fires only when the question has BOTH a progression marker and a cohort
+    scope — a source portfolio (``mentions_portfolio``) or an origination
+    vintage — so a plain whole-book 'balance evolution' stays with the ordinary
+    evolution route."""
+    if not _PROGRESSION_MARKER_RE.search(q):
+        return None
+    from .portfolio_lens import mentions_portfolio  # local: avoid import cycle at load
+    vintage, grain = _cohort_vintage(q)
+    if not (vintage or mentions_portfolio(q)):
+        return None
+    metric, _agg, _matched = _detect_metric(q, semantics)
+    spec = MIQuerySpec(
+        intent="chart", chart_type="line", metric=metric, aggregation="sum",
+        execution_mode="temporal", cohort_progression=True,
+        cohort_vintage=vintage, cohort_grain=grain,
+        output_format="chart", title=title,
+        explanation=("Static-pool cohort progression: the chosen funded metric "
+                     "(balance / LTV / rate / NNEG) for a cohort — a source "
+                     "portfolio ± origination vintage — tracked across reporting "
+                     "periods."))
+    return spec, _det_meta("high", False, [vintage or "cohort_progression"],
+                           note="cohort_progression")
+
+
 def _risk_limit_recognizer(q: str, title: str
                            ) -> Optional[Tuple[MIQuerySpec, dict]]:
     """Risk-limit / concentration question → governed
@@ -1353,6 +1412,9 @@ def _deterministic_parse(question: str, semantics: dict,
     br = _bridge_recognizer(q, title, semantics, available_columns=available_columns)
     if br is not None:
         return br
+    cp = _cohort_progression_recognizer(q, title, semantics)
+    if cp is not None:
+        return cp
     cmp_spec = _compare_recognizer(q, title, semantics)
     if cmp_spec is not None:
         return cmp_spec
