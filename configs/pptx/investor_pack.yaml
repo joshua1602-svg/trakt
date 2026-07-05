@@ -140,7 +140,7 @@ slides:
         type: barlist
         dimension: pipeline_stage
         measure: balance
-        order: ["Application", "KFI Issued", "Offer Issued", "Legals", "Completion Pending"]
+        order: ["KFI Issued", "Application", "Offer Issued", "Completed", "Withdrawn"]
       - id: pipeline_channel_mix
         title: "Channel Mix (Pipeline)"
         type: barlist
@@ -161,7 +161,7 @@ slides:
         type: barlist
         dimension: pipeline_stage
         measure: count
-        order: ["Application", "KFI Issued", "Offer Issued", "Legals", "Completion Pending"]
+        order: ["KFI Issued", "Application", "Offer Issued", "Completed", "Withdrawn"]
 
   # 5 ------------------------------------------- Pipeline Run-Rate / Forecast
   - id: pipeline_forecast
@@ -171,17 +171,18 @@ slides:
     strapline_source: deterministic
     charts:
       - id: cumulative_expected_funded
-        title: "Cumulative Expected Funded"
+        title: "Cumulative Expected Funded (Weighted)"
         type: area
         date_field: expected_completion_date
         period: M
-        measure: balance
+        measure_field: weighted_expected_funded_amount
         cumulative: true
       - id: monthly_expected_funded
-        title: "Expected Funded by Month"
+        title: "Expected Funded by Month (Weighted)"
         type: barlist
         dimension: expected_completion_date
-        measure: balance
+        measure_field: weighted_expected_funded_amount
+        period: M
 
   # 6 ------------------------------------------------- Funded Balance Evolution
   - id: funded_evolution
@@ -249,10 +250,9 @@ slides:
   # 9 --------------------------------------------- Funded Stratifications III
   - id: stratification_3
     type: charts
-    title: "Funded Stratifications — Region & Channel"
+    title: "Funded Stratifications — Region & Origination LTV"
     lens: funded
     strapline_source: deterministic
-    suppress_broker_consolidated: true
     charts:
       - id: balance_by_region
         title: "Balance by Region (Top 10)"
@@ -261,12 +261,12 @@ slides:
         measure: balance
         top_n: 10
         mandatory: true
-      - id: balance_by_broker
-        title: "Balance by Broker Channel"
+      - id: balance_by_original_ltv
+        title: "Balance by Original LTV"
         type: barlist
-        dimension: broker_channel
+        dimension: original_loan_to_value
+        bucket: original_ltv_bucket
         measure: balance
-        broker: true
 
   # 10 --------------------------------------- Multi-Dimensional Risk Analytics
   - id: risk_analytics
@@ -308,19 +308,22 @@ slides:
         bucket: ltv_bucket
         measure: balance
 
-  # 12 ---------------------------------------- Scenario / Forecast Snapshot
+  # 12 ------------------------------------------------- Forecast Bridge
   - id: forecast_snapshot
     type: charts
-    title: "Scenario & Forecast Snapshot"
+    title: "Forecast Bridge — Funded to Forecast"
     lens: forecast
     strapline_source: deterministic
     charts:
+      - id: forecast_bridge
+        title: "Funded + Weighted Pipeline → Forecast Funded"
+        type: bridge
       - id: expected_by_stage
         title: "Weighted Expected Funded by Stage"
         type: barlist
         dimension: pipeline_stage
-        measure: balance
-        order: ["Application", "KFI Issued", "Offer Issued", "Legals", "Completion Pending"]
+        measure_field: weighted_expected_funded_amount
+        order: ["KFI Issued", "Application", "Offer Issued", "Completed"]
 
   # 13 --------------------------------------------------------- Risk Monitor
   - id: risk_monitor

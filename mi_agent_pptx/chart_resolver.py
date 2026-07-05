@@ -74,6 +74,68 @@ def _currency_axis(_x, _pos):
     return compact_currency(_x)
 
 
+def render_bridge_waterfall(out_path, steps, width_in, height_in, theme=THEME,
+                            dpi=220):
+    """Render a forecast-bridge waterfall (funded → +weighted pipeline → forecast).
+
+    *steps* is an ordered list of ``(label, value, kind)`` where kind is
+    ``base`` / ``add`` / ``sub`` / ``total``. Mirrors the dashboard waterfall
+    colours (base navy, add periwinkle, total mint).
+    """
+    from pathlib import Path as _P
+    colors = {"base": theme.navy, "add": theme.peri, "sub": theme.negative,
+              "total": theme.mint}
+    fig = plt.figure(figsize=(width_in, height_in), dpi=dpi)
+    fig.patch.set_facecolor(theme.bg_panel)
+    ax = fig.add_axes([0.11, 0.14, 0.86, 0.80])
+    ax.set_facecolor(theme.bg_panel)
+    for s in ("top", "right", "left"):
+        ax.spines[s].set_visible(False)
+    ax.spines["bottom"].set_color(theme.line_soft)
+    ax.tick_params(colors=theme.ink_300, labelsize=9.5, length=0)
+    ax.grid(axis="y", color=theme.line_soft, linewidth=0.7,
+            linestyle=(0, (3, 3)), alpha=0.9)
+    ax.set_axisbelow(True)
+    ax.yaxis.set_major_formatter(FuncFormatter(_currency_axis))
+
+    running = 0.0
+    xs = list(range(len(steps)))
+    prev_top = None
+    for i, (label, value, kind) in enumerate(steps):
+        if kind in ("base", "total"):
+            bottom, top = 0.0, value
+            running = value
+        elif kind == "add":
+            bottom, top = running, running + value
+            running += value
+        else:  # sub
+            bottom, top = running - value, running
+            running -= value
+        ax.bar(i, top - bottom, bottom=bottom, width=0.62,
+               color=colors.get(kind, theme.peri),
+               edgecolor=theme.bg_panel, linewidth=0.5, zorder=3)
+        # connector line
+        if prev_top is not None and kind not in ("total",):
+            ax.plot([i - 1 + 0.31, i - 0.31], [prev_top, prev_top],
+                    color=theme.ink_500, linewidth=0.8, linestyle=(0, (2, 2)),
+                    zorder=2)
+        elif prev_top is not None and kind == "total":
+            ax.plot([i - 1 + 0.31, i - 0.31], [prev_top, prev_top],
+                    color=theme.ink_500, linewidth=0.8, linestyle=(0, (2, 2)),
+                    zorder=2)
+        ax.text(i, top + (max(v for _, v, _ in steps) * 0.02), compact_currency(value),
+                ha="center", va="bottom", color=theme.ink_100, fontsize=10.5,
+                fontproperties=_MONO_FP, zorder=4)
+        prev_top = top
+    ax.set_xticks(xs)
+    ax.set_xticklabels([lab for lab, _, _ in steps], fontsize=9.5,
+                       color=theme.ink_300)
+    ax.set_ylim(0, max(v for _, v, k in steps if k in ("base", "total", "add")) * 1.16)
+    fig.savefig(_P(out_path), facecolor=theme.bg_panel, dpi=dpi)
+    plt.close(fig)
+    return _P(out_path)
+
+
 class ChartResolver:
     """Render a single lens's chart specs into dashboard-faithful PNGs."""
 
@@ -204,7 +266,10 @@ class ChartResolver:
             dim_col = "_period_label"
             chronological = True
         from analytics_lib.stratify import stratify
-        bal = self.data.balance_col
+        # An explicit measure_field (e.g. weighted_expected_funded_amount) lets a
+        # forecast chart aggregate a registry-declared amount other than balance.
+        mfield = spec.get("measure_field")
+        bal = mfield if (mfield and mfield in df.columns) else self.data.balance_col
         table = stratify(df, dim_col, bal, loan_id_col=self.data.loan_id_col,
                          sort_by="balance_sum" if bal else "loan_count")
         if table is None or table.empty:
@@ -295,7 +360,8 @@ class ChartResolver:
     def _render_area(self, spec, chart_id, title, w, h) -> ChartResult:
         date_field = spec.get("date_field", "origination_date")
         df = self.data.df
-        bal = self.data.balance_col
+        mfield = spec.get("measure_field")
+        bal = mfield if (mfield and mfield in df.columns) else self.data.balance_col
         if date_field not in df.columns or bal is None:
             return self._placeholder(chart_id, title, "area", w, h,
                                      f"Date field '{date_field}' or balance unavailable.")

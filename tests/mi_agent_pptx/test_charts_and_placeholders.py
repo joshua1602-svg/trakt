@@ -67,6 +67,27 @@ def test_lens_unavailable_resolver_none():
     assert res.placeholder
 
 
+def test_forecast_bridge_waterfall_renders(tmp_path):
+    from mi_agent_pptx.chart_resolver import render_bridge_waterfall
+    steps = [("Funded", 5_400_000, "base"),
+             ("+ Weighted Pipeline", 2_200_000, "add"),
+             ("Forecast Funded", 7_600_000, "total")]
+    p = render_bridge_waterfall(tmp_path / "bridge.png", steps, 6.0, 4.5, theme=THEME)
+    assert p.exists()
+    assert _panel_corner(p) == THEME.rgb(THEME.bg_panel)
+
+
+def test_measure_field_barlist(sample_tape, registries, tmp_path):
+    # A weighted measure_field aggregates that column instead of balance.
+    rd = resolve_data(sample_tape, registries)
+    rd.df["weighted_expected_funded_amount"] = rd.df["current_outstanding_balance"] * 0.5
+    cr = ChartResolver(rd, registries, tmp_path, lens="forecast")
+    res = cr.resolve({"id": "w", "title": "Weighted", "type": "barlist",
+                     "dimension": "current_loan_to_value", "bucket": "ltv_bucket",
+                     "measure_field": "weighted_expected_funded_amount"}, 6.0, 4.5)
+    assert res.ok
+
+
 def test_render_placeholder_png(tmp_path):
     p = render_placeholder_png(tmp_path / "ph.png", "Title", "Message",
                                theme=THEME)
