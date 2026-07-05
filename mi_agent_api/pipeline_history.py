@@ -135,6 +135,18 @@ def build_historical_completion_model(
         if sufficient and rate is not None:
             stage_rates[stage] = rate
 
+    # Cumulative cohort progression: of the ORIGINAL KFI cohort, the % that has
+    # reached each milestone (KFI -> Application -> Offer -> Funded) by each week.
+    # This is a true cohort-tracked funnel (case timelines), NOT a ratio of
+    # point-in-time stage stocks — so the lines are monotonic and show where the
+    # pipeline leaks. The latest Funded % is the canonical "cumulative cohort
+    # conversion" (% of the KFI cohort funded to date).
+    cohort_weeks = sorted(set(dates))
+    cohort_progression = _cohort_progression(timelines, cohort_weeks)
+    cumulative_cohort_conversion = (
+        cohort_progression["series"]["COMPLETED"][-1]
+        if cohort_progression and cohort_progression["series"]["COMPLETED"] else None)
+
     # Evidence aggregates.
     observed_completion_count = sum(1 for t in timelines.values() if COMPLETED in t["ever"])
     excluded_stage_counts: Dict[str, int] = {}
@@ -170,7 +182,57 @@ def build_historical_completion_model(
         "observationWindowStart": min(dates) if dates else None,
         "observationWindowEnd": max(dates) if dates else None,
         "stage_rates": stage_rates,
+        "cohortProgression": cohort_progression,
+        "cumulativeCohortConversion": cumulative_cohort_conversion,
     }
+
+
+# Origination funnel milestone order (entry -> exit). Funded == COMPLETED.
+_COHORT_FUNNEL_ORDER = ("KFI", "APPLICATION", "OFFER", COMPLETED)
+
+
+def _cohort_progression(timelines: Dict[str, Dict[str, Any]],
+                        weeks: List[str]) -> Optional[Dict[str, Any]]:
+    """Cumulative % of the KFI cohort reaching each milestone by each week.
+
+    ``reached_date(case, milestone_i)`` is the earliest date the case was seen at
+    milestone ``i`` OR any later milestone — so the funnel is monotonic (Funded
+    ⊆ Offer ⊆ Application ⊆ KFI) and a missing intermediate snapshot never breaks
+    it. The cohort is every case with any funnel-stage observation (the
+    origination population). ISO date strings sort chronologically, so ``<=`` on
+    them is a valid time comparison.
+    """
+    order = _COHORT_FUNNEL_ORDER
+    cohort: List[str] = []
+    reached: Dict[str, Dict[str, Optional[str]]] = {}
+    for cid, t in timelines.items():
+        stage_dates = dict(t.get("stages") or {})
+        done = t.get("completed_on")
+        if done and (COMPLETED not in stage_dates or str(done) < str(stage_dates[COMPLETED])):
+            stage_dates[COMPLETED] = done  # prefer the precise completion date
+        funnel_dates = {s: d for s, d in stage_dates.items() if s in order and d}
+        if not funnel_dates:
+            continue
+        cohort.append(cid)
+        rd: Dict[str, Optional[str]] = {}
+        for i, milestone in enumerate(order):
+            later = [funnel_dates[order[j]] for j in range(i, len(order))
+                     if order[j] in funnel_dates]
+            rd[milestone] = min(later) if later else None
+        reached[cid] = rd
+
+    n = len(cohort)
+    if n == 0 or not weeks:
+        return None
+    series: Dict[str, List[float]] = {m: [] for m in order}
+    for w in weeks:
+        for milestone in order:
+            hit = sum(1 for cid in cohort
+                      if reached[cid][milestone] is not None
+                      and str(reached[cid][milestone]) <= w)
+            series[milestone].append(round(hit / n * 100.0, 2))
+    return {"weeks": list(weeks), "stages": list(order), "series": series,
+            "cohortSize": n}
 
 
 def _identifier_used(df: pd.DataFrame) -> Optional[str]:

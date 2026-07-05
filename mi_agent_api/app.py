@@ -860,20 +860,18 @@ def _pipeline_history(client_id: str) -> Optional[Dict[str, Any]]:
     return model
 
 
+def _kfi_lag_weeks_from_model(model: Optional[Dict[str, Any]]) -> Optional[int]:
+    """Median KFI->completion lag in whole weeks from an already-built history
+    model. Returns None when no timing is available."""
+    timing = ((model or {}).get("historicalCompletionTimingByStage") or {}).get("KFI") or {}
+    median_days = timing.get("medianDays")
+    return max(1, round(float(median_days) / 7.0)) if median_days else None
+
+
 def _kfi_completion_lag_weeks(client_id: str) -> Optional[int]:
     """Median KFI->completion lag, in whole weeks, from the historical model.
-
-    Feeds the funnel's forward conversion rate so the KFI denominator is shifted
-    back to the book those completions came from. Returns None (unlagged) when no
-    multi-week history or timing is available; never raises."""
-    model = _pipeline_history(client_id)
-    if not model:
-        return None
-    timing = (model.get("historicalCompletionTimingByStage") or {}).get("KFI") or {}
-    median_days = timing.get("medianDays")
-    if not median_days:
-        return None
-    return max(1, round(float(median_days) / 7.0))
+    Convenience wrapper that builds the model; never raises."""
+    return _kfi_lag_weeks_from_model(_pipeline_history(client_id))
 
 
 @app.get("/mi/pipeline/snapshot")
@@ -1090,9 +1088,17 @@ def funnel_evolution(portfolioId: Optional[str] = None, client_id: Optional[str]
                 "stages": [], "weeks": [], "series": {}, "summary": {},
                 "singlePeriod": True, "error": "no pipeline root configured"}
     try:
-        lag_weeks = _kfi_completion_lag_weeks(cid)
-        return evolution_mod.pipeline_funnel_evolution(
+        model = _pipeline_history(cid)  # built once: feeds both the lag and the cohort funnel
+        lag_weeks = _kfi_lag_weeks_from_model(model)
+        result = evolution_mod.pipeline_funnel_evolution(
             root, cid, pipeline_cut, lag_weeks=lag_weeks)
+        # Canonical conversion = cumulative cohort progression (% of the KFI
+        # cohort reaching each milestone to date). The weekly-flow rate on each
+        # stage stays available as an operational velocity, not "conversion".
+        if model:
+            result["cohortProgression"] = model.get("cohortProgression")
+            result["cumulativeCohortConversion"] = model.get("cumulativeCohortConversion")
+        return result
     except Exception as exc:  # noqa: BLE001
         logger.warning("funnel evolution failed: %s", exc)
         return {"dataset": "pipeline_funnel", "portfolioId": cid, "toRunId": pipeline_cut,

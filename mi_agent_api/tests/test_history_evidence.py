@@ -74,6 +74,26 @@ class TestHistoryEvidenceUnit(unittest.TestCase):
         self.assertIn("OFFER", ev["stagesUsingHistoricalRates"])
         self.assertEqual(ev["completionProbabilityBasis"], "mixed_historical_and_config")
 
+    def test_cohort_progression_is_a_monotonic_funnel(self):
+        model = build_historical_completion_model(
+            pc.collect_weekly_history(self.tmp, "client_001"))
+        prog = model["cohortProgression"]
+        self.assertIsNotNone(prog)
+        self.assertEqual(prog["cohortSize"], 16)
+        self.assertEqual(prog["stages"], ["KFI", "APPLICATION", "OFFER", "COMPLETED"])
+        s = prog["series"]
+        # 10 of 16 cases funded -> cumulative cohort conversion 62.5% to date.
+        self.assertEqual(s["COMPLETED"][-1], 62.5)
+        self.assertEqual(model["cumulativeCohortConversion"], 62.5)
+        # Every week: Funded <= Offer <= Application <= KFI (nested funnel).
+        for i in range(len(prog["weeks"])):
+            self.assertLessEqual(s["COMPLETED"][i], s["OFFER"][i])
+            self.assertLessEqual(s["OFFER"][i], s["APPLICATION"][i])
+            self.assertLessEqual(s["APPLICATION"][i], s["KFI"][i])
+        # Completions are non-decreasing over time (cumulative).
+        self.assertTrue(all(s["COMPLETED"][i] <= s["COMPLETED"][i + 1]
+                            for i in range(len(s["COMPLETED"]) - 1)))
+
     def test_funder_file_not_counted(self):
         names = [Path(e["source_file"]).name for e in pc.collect_weekly_history(self.tmp, "client_001")]
         self.assertTrue(all("Funder" not in n and "Principal" not in n for n in names), names)

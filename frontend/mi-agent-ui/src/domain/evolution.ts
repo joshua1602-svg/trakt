@@ -149,9 +149,24 @@ export interface PipelineFunnelEvolution {
   series: Record<string, FunnelPoint[]>;
   flowSeries: Record<string, FunnelFlowPoint[]>;
   summary: Record<string, FunnelStageSummary>;
-  /** Median KFI→completion lag (weeks) applied to the conversion denominator; null when unlagged. */
+  /** Median KFI→completion lag (weeks) applied to the velocity denominator; null when unlagged. */
   conversionLagWeeks?: number | null;
+  /** Canonical conversion: cumulative % of the original KFI cohort reaching each
+   * milestone by each week (a true cohort funnel, not a stock ratio). */
+  cohortProgression?: KfiCohortProgression | null;
+  /** Headline KPI: % of the KFI cohort funded to date (latest Funded point). */
+  cumulativeCohortConversion?: number | null;
   lineage?: Record<string, unknown>;
   singlePeriod: boolean;
   error?: string;
+}
+
+/** Cumulative KFI-cohort funnel: for each week, the % of the original KFI cohort
+ * that has reached each milestone (KFI → Application → Offer → Funded). Distinct
+ * from the vintage static-pool `CohortProgression` in domain/cohorts. */
+export interface KfiCohortProgression {
+  weeks: string[];
+  stages: string[];
+  series: Record<string, number[]>;
+  cohortSize: number;
 }
