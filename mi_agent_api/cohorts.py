@@ -12,7 +12,8 @@ emit them. Each returned metric is present only when its source column exists, a
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+import re
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
@@ -25,6 +26,45 @@ _RATE = "current_interest_rate"
 _MOB = "months_on_book"
 _VINTAGE = "vintage_year"
 _ORIG_DATE = "origination_date"
+
+# Cohort dimensions (asset-class-agnostic). Each groups the static pool by a
+# generic origination/risk attribute; metrics are identical across dimensions.
+_AGE_BUCKET = "age_bucket"
+_YOUNGEST_AGE = "youngest_borrower_age"
+_ORIG_LTV_BUCKET = "original_ltv_bucket"
+_LTV_BUCKET = "ltv_bucket"
+_ORIG_LTV = "original_loan_to_value"
+_ORIG_CHANNEL = "origination_channel"
+_BROKER = "broker_channel"
+
+_DIMENSION_LABELS = {
+    "vintage": "Vintage", "age": "Borrower age",
+    "ltv": "LTV band", "channel": "Origination channel",
+}
+# Fallback bands when the tape has no pre-bucketed column.
+_AGE_BINS = [0, 60, 65, 70, 75, 80, 85, 200]
+_AGE_LABELS = ["<60", "60–64", "65–69", "70–74", "75–79", "80–84", "85+"]
+_LTV_BINS = [0, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 10]
+_LTV_LABELS = ["<20%", "20–30%", "30–40%", "40–50%", "50–60%", "60–70%", "70–80%", "80%+"]
+
+
+def _ltv_as_fraction(series: pd.Series) -> pd.Series:
+    """LTV as a fraction (0.55) regardless of tape convention (0.55 or 55)."""
+    v = coerce_numeric(series)
+    if percent_storage_scale(series) == PERCENT_POINTS:
+        v = v / 100.0
+    return v
+
+
+def _has_values(df: pd.DataFrame, col: str) -> bool:
+    return col in df.columns and coerce_numeric(df[col]).notna().any()
+
+
+def _has_labels(df: pd.DataFrame, col: str) -> bool:
+    if col not in df.columns:
+        return False
+    s = df[col].astype("string").str.strip()
+    return s.replace("", pd.NA).notna().any()
 
 
 def _weighted_avg(values: pd.Series, weights: pd.Series) -> Optional[float]:
@@ -74,36 +114,90 @@ def _vintage_series(df: pd.DataFrame, grain: str = "Y") -> Optional[pd.Series]:
     return None
 
 
+def _dimension_series(df: pd.DataFrame, dimension: str,
+                      grain: str) -> Tuple[Optional[pd.Series], str]:
+    """The per-row cohort label for ``dimension``, and its column header.
+
+    Prefers a pre-bucketed column derived by ``funded_prep`` (age_bucket,
+    original_ltv_bucket …); falls back to banding the raw value. Returns
+    ``(None, header)`` when the tape carries no source for the dimension."""
+    header = _DIMENSION_LABELS.get(dimension, "Cohort")
+    if dimension == "vintage":
+        return _vintage_series(df, grain), header
+    if dimension == "age":
+        if _has_labels(df, _AGE_BUCKET):
+            return df[_AGE_BUCKET].astype("string"), header
+        if _has_values(df, _YOUNGEST_AGE):
+            banded = pd.cut(coerce_numeric(df[_YOUNGEST_AGE]), _AGE_BINS,
+                            labels=_AGE_LABELS, right=False)
+            return banded.astype("string"), header
+        return None, header
+    if dimension == "ltv":
+        for col in (_ORIG_LTV_BUCKET, _LTV_BUCKET):
+            if _has_labels(df, col):
+                return df[col].astype("string"), header
+        for col in (_ORIG_LTV, _LTV):
+            if _has_values(df, col):
+                banded = pd.cut(_ltv_as_fraction(df[col]), _LTV_BINS,
+                                labels=_LTV_LABELS, right=False)
+                return banded.astype("string"), header
+        return None, header
+    if dimension == "channel":
+        for col in (_ORIG_CHANNEL, _BROKER):
+            if _has_labels(df, col):
+                return df[col].astype("string"), header
+        return None, header
+    return None, header
+
+
+def _available_dimensions(df: pd.DataFrame) -> List[str]:
+    """Which cohort dimensions the tape can actually support (drives the UI
+    selector so it never offers a lens with no data)."""
+    out: List[str] = []
+    for dim in ("vintage", "age", "ltv", "channel"):
+        series, _ = _dimension_series(df, dim, "Y")
+        if series is not None and series.notna().any():
+            out.append(dim)
+    return out
+
+
 def cohort_analysis(df: pd.DataFrame, *, client_id: str = "",
                     portfolio_id: str = "",
                     reporting_date: Optional[str] = None,
-                    grain: str = "Y") -> Dict[str, Any]:
-    """Per-origination-vintage cohort table for a funded run, at ``grain``
-    (Y|Q|M).
+                    grain: str = "Y", dimension: str = "vintage") -> Dict[str, Any]:
+    """Static-pool cohort table for a funded run, grouped by ``dimension``
+    (vintage | age | ltv | channel), at ``grain`` (Y|Q|M — vintage only).
 
-    Returns a UI-ready view-model. ``available`` is False (with a ``reason``)
-    when the tape carries no origination vintage — the UI then shows an honest
+    Asset-class-agnostic: the same generic metrics (balance / loan count / book
+    share and balance-weighted LTV, interest rate and months-on-book) are shown
+    for every dimension. ``available`` is False (with a ``reason``) when the tape
+    carries no source for the chosen dimension — the UI then shows an honest
     'no computed cohort data' state rather than a fabricated one.
     """
+    dimension = dimension if dimension in _DIMENSION_LABELS else "vintage"
+    available_dims = _available_dimensions(df) if df is not None and len(df) else []
     base = {
         "dataset": "cohorts",
         "portfolioId": portfolio_id or client_id,
         "cohortBasis": _ORIG_DATE,
         "period": (grain or "Y").upper(),
         "reportingDate": reporting_date,
+        "dimension": dimension,
+        "dimensionLabel": _DIMENSION_LABELS[dimension],
+        "availableDimensions": available_dims,
     }
     if df is None or len(df) == 0:
         return {**base, "available": False, "reason": "no funded rows for this run",
                 "cohorts": [], "metricsAvailable": []}
 
-    vintages = _vintage_series(df, grain)
-    if vintages is None:
+    series, header = _dimension_series(df, dimension, grain)
+    if series is None:
         return {**base, "available": False,
-                "reason": "no origination date / vintage on the funded tape",
+                "reason": f"no {header.lower()} field on the funded tape",
                 "cohorts": [], "metricsAvailable": []}
 
     work = df.copy()
-    work["_vintage"] = vintages
+    work["_vintage"] = series
     has_balance = _BALANCE in work.columns
     balance = coerce_numeric(work[_BALANCE]) if has_balance else None
     total_balance = float(balance.sum()) if balance is not None else None
@@ -119,19 +213,24 @@ def cohort_analysis(df: pd.DataFrame, *, client_id: str = "",
         metrics_available.append("waMonthsOnBook")
 
     cohorts: List[Dict[str, Any]] = []
-    # Drop rows with a missing vintage into an explicit bucket so the table
+    # Rows with a missing label go into an explicit "Unknown" bucket so the table
     # reconciles to the book total (never silently dropped).
-    for vintage, sub in work.groupby(work["_vintage"].astype("object"), dropna=False):
-        if pd.isna(vintage):
+    for value, sub in work.groupby(work["_vintage"].astype("object"), dropna=False):
+        if pd.isna(value) or str(value).strip() in ("", "nan", "None"):
             label = "Unknown"
-        else:
+        elif dimension == "vintage":
             try:
-                label = str(int(vintage))
+                label = str(int(value))
             except (TypeError, ValueError):
-                label = str(vintage)
+                label = str(value)
+        else:
+            label = str(value)
         sub_balance = coerce_numeric(sub[_BALANCE]) if has_balance else None
         bal = float(sub_balance.sum()) if sub_balance is not None else None
+        # ``cohort`` is the generic label; ``vintage`` kept as an alias for
+        # backward compatibility with the vintage-only contract.
         row: Dict[str, Any] = {
+            "cohort": label,
             "vintage": label,
             "loanCount": int(len(sub)),
         }
@@ -147,12 +246,19 @@ def cohort_analysis(df: pd.DataFrame, *, client_id: str = "",
             row["waMonthsOnBook"] = _weighted_avg(sub[_MOB], sub[_BALANCE])
         cohorts.append(row)
 
-    # Sort by vintage ascending; the Unknown bucket sinks to the end. Lexicographic
-    # order is chronological for every grain ("2023" < "2023-Q2" < "2024",
-    # "2025-03" < "2025-06").
+    # Ordering: vintage chronological (lexicographic is chronological across
+    # grains); age/LTV by the band's leading number; channel by balance desc.
+    # The "Unknown" bucket always sinks to the end.
     def _key(r: Dict[str, Any]):
-        v = str(r["vintage"])
-        return (1, "") if v == "Unknown" else (0, v)
+        label = str(r["cohort"])
+        if label == "Unknown":
+            return (2, 0.0, "")
+        if dimension in ("age", "ltv"):
+            m = re.search(r"\d+", label)
+            return (0, float(m.group()) if m else 0.0, label)
+        if dimension == "channel":
+            return (0, -float(r.get("balance") or 0.0), label)
+        return (0, 0.0, label)  # vintage — lexicographic
 
     cohorts.sort(key=_key)
 
@@ -164,11 +270,11 @@ def cohort_analysis(df: pd.DataFrame, *, client_id: str = "",
         "metricsAvailable": metrics_available,
         "cohorts": cohorts,
         "lineage": {
-            "source": "governed funded central lender tape (origination vintage)",
+            "source": f"governed funded central lender tape (by {header.lower()})",
             "metric": "balance / loan count / book share and balance-weighted "
-                      "LTV, interest rate and months-on-book by origination year",
-            "note": "Point-in-time vintage aggregates only. Redemption / completion "
-                    "/ performance curves are not computed in the MI path and are "
-                    "not shown.",
+                      "LTV, interest rate and months-on-book",
+            "note": "Point-in-time static-pool aggregates only. Redemption / "
+                    "completion / performance curves are not computed in the MI "
+                    "path and are not shown.",
         },
     }

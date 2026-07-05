@@ -52,6 +52,7 @@ function makeClient(): AgentClient {
     getDecks: any,
     deckDownloadUrl: () => null,
     getCohorts: any,
+    getGeoExposure: any,
   };
 }
 

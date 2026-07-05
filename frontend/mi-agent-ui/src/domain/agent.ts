@@ -47,7 +47,8 @@ export type WorkspaceView =
   | "pipeline"
   | "forecast"
   | "evolution"
-  | "risk_limits";
+  | "risk_limits"
+  | "geography";
 
 export interface AgentRequest {
   question: string;

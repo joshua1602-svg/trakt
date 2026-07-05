@@ -136,6 +136,22 @@ describe("HttpAgentClient", () => {
     expect(res.forecastBridge?.forecastFundedBalance).toBe(9_966_249.7);
   });
 
+  it("fetches geographic exposure from /mi/geo/exposure", async () => {
+    const geo = {
+      dataset: "geo_itl3", portfolioId: "client_001/mi_2025_11", available: true,
+      areas: [{ itl3_code: "TLK51", itl3_name: "Bristol, City of", balance: 31_000_000, count: 97, sharePct: 11.0 }],
+      total: 281_400_000,
+    };
+    const spy = vi.fn(async () => new Response(JSON.stringify(geo), { status: 200 }));
+    vi.stubGlobal("fetch", spy);
+    const res = await new HttpAgentClient("http://localhost:8000").getGeoExposure("client_001/mi_2025_11");
+    expect(spy).toHaveBeenCalledWith(
+      "http://localhost:8000/mi/geo/exposure?portfolioId=client_001%2Fmi_2025_11",
+      expect.anything(),
+    );
+    expect(res.areas[0].itl3_code).toBe("TLK51");
+  });
+
   it("returns ok:false with a validation artifact for an invalid spec", async () => {
     const body = {
       ok: false,

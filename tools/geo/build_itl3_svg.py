@@ -1,24 +1,54 @@
 #!/usr/bin/env python3
-"""Build a compact UK ITL3 SVG-path atlas from NUTS3 GeoJSON.
+"""Build a compact UK ITL3 SVG-path atlas from an ITL3/NUTS3 GeoJSON.
 
-Fetches England+Wales NUTS3 boundaries, projects lon/lat to an SVG viewBox
+Reads a LOCAL GeoJSON (or a URL), projects lon/lat to an SVG viewBox
 (equirectangular with a cos(lat) aspect correction), simplifies each ring with
 Douglas-Peucker, and emits { viewBox, areas: { ITL3_CODE: {name, d} } }.
 
-NUTS3 == ITL3 (same boundaries); codes only re-prefix UK... -> TL...
+Purpose: turn the ONS full-resolution ITL3 Boundaries GeoJSON (~100MB) into a
+tiny (~100-300KB) atlas suitable for a web choropleth. Pure stdlib — no installs.
+
+Usage:
+    python3 build_itl3_svg.py INPUT.geojson [OUTPUT.json]
+    # INPUT may be a local path or an http(s) URL.
+
+Handles the ONS field names across vintages: ITL325CD/NM (Jan 2025),
+ITL321CD/NM (Jan 2021), or NUTS312CD/NM (2012, re-prefixed UK->TL).
 """
 import json
 import math
 import sys
 import urllib.request
 
-URL = "https://raw.githubusercontent.com/martinjc/UK-GeoJSON/master/json/eurostat/ew/nuts3.json"
+# First CLI arg is the INPUT geojson (local path or URL); second is the OUTPUT.
+INPUT = sys.argv[1] if len(sys.argv) > 1 else \
+    "https://raw.githubusercontent.com/martinjc/UK-GeoJSON/master/json/eurostat/ew/nuts3.json"
+OUT = sys.argv[2] if len(sys.argv) > 2 else "uk_itl3_paths.json"
 TARGET_W = 800.0
 DP_EPS = 1.2       # simplification tolerance in projected px
-OUT = sys.argv[1] if len(sys.argv) > 1 else "uk_itl3_paths.json"
+
+# Property keys to try, most-recent vintage first: (code_key, name_key).
+_PROP_KEYS = (("ITL325CD", "ITL325NM"), ("ITL321CD", "ITL321NM"),
+              ("NUTS312CD", "NUTS312NM"), ("nuts312cd", "nuts312nm"))
+
+
+def _prop(props, which):
+    for code_key, name_key in _PROP_KEYS:
+        key = code_key if which == "code" else name_key
+        if props.get(key):
+            return props[key]
+    return ""
+
+
+def _load(src):
+    if src.startswith("http://") or src.startswith("https://"):
+        return json.loads(urllib.request.urlopen(src, timeout=120).read())
+    with open(src) as fh:
+        return json.load(fh)
 
 
 def nuts_to_itl(code: str) -> str:
+    """Normalise to an ITL (TL...) code. ITL is already TL; NUTS 2012 is UK...."""
     c = (code or "").strip().upper()
     return ("TL" + c[2:]) if c.startswith("UK") else c
 
@@ -68,56 +98,89 @@ def dp_simplify(pts, eps):
 
 
 def main():
-    raw = urllib.request.urlopen(URL, timeout=60).read()
-    gj = json.loads(raw)
-    feats = gj["features"]
+    gj = _load(INPUT)
+    feats = [f for f in gj["features"] if f.get("geometry")]  # skip null-geometry rows
+    if not feats:
+        raise SystemExit(
+            "No features with geometry. This looks like a 'Names and Codes' file "
+            "(geometry: null) — download the ITL3 'Boundaries' dataset instead.")
 
-    # Global bbox for the projection.
-    lons, lats = [], []
+    # Pass 1: extract every ring in source coords, applying the Shetland inset so
+    # the far-north islands don't stretch the whole map with an empty sea gap.
+    # (record[code] = {"name", "rings": [[(x, y), ...], ...]})
+    records = {}
     for f in feats:
+        props = f["properties"]
+        code = nuts_to_itl(_prop(props, "code"))
+        rec = records.setdefault(code, {"name": _prop(props, "name") or code, "rings": []})
         for poly in _polys(f["geometry"]):
             for ring in poly:
-                for lon, lat in ring:
-                    lons.append(lon); lats.append(lat)
-    lon0, lon1 = min(lons), max(lons)
-    lat0, lat1 = min(lats), max(lats)
-    mid_lat = math.radians((lat0 + lat1) / 2)
-    kx = math.cos(mid_lat)
-    span_x = (lon1 - lon0) * kx
-    span_y = (lat1 - lat0)
+                rec["rings"].append([(x, y) for x, y in ring])
+
+    _inset_shetland(records)
+
+    # Global bbox over the (possibly inset) coordinates.
+    xs = [p[0] for r in records.values() for ring in r["rings"] for p in ring]
+    ys = [p[1] for r in records.values() for ring in r["rings"] for p in ring]
+    x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+    # Auto-detect the coordinate system. lon/lat are small (|value| < 400); a
+    # projected grid such as British National Grid (EPSG:27700, metres) is large
+    # — use it planar (no cos-lat correction; BNG is already metric/equal-aspect).
+    geographic = abs(x1) <= 400 and abs(y1) <= 400
+    kx = math.cos(math.radians((y0 + y1) / 2)) if geographic else 1.0
+    span_x = (x1 - x0) * kx
+    span_y = (y1 - y0)
     scale = TARGET_W / span_x
     W = TARGET_W
     H = round(span_y * scale, 1)
 
-    def project(lon, lat):
-        x = (lon - lon0) * kx * scale
-        y = (lat1 - lat) * scale  # flip so north is up
+    def project(px, py):
+        x = (px - x0) * kx * scale
+        y = (y1 - py) * scale  # flip so north is up
         return round(x, 1), round(y, 1)
 
     areas = {}
-    for f in feats:
-        props = f["properties"]
-        code = nuts_to_itl(props.get("NUTS312CD") or props.get("nuts312cd") or "")
-        name = props.get("NUTS312NM") or props.get("nuts312nm") or code
+    for code, rec in records.items():
         parts = []
-        for poly in _polys(f["geometry"]):
-            for ring in poly:
-                proj = [project(lon, lat) for lon, lat in ring]
-                proj = dp_simplify(proj, DP_EPS)
-                if len(proj) < 3:
-                    continue
-                d = "M" + " ".join(f"{x},{y}" for x, y in proj) + "Z"
-                parts.append(d)
+        for ring in rec["rings"]:
+            proj = dp_simplify([project(x, y) for x, y in ring], DP_EPS)
+            if len(proj) < 3:
+                continue
+            parts.append("M" + " ".join(f"{x},{y}" for x, y in proj) + "Z")
         if parts:
-            areas[code] = {"name": name, "d": "".join(parts)}
+            areas[code] = {"name": rec["name"], "d": "".join(parts)}
 
     out = {"viewBox": f"0 0 {W:g} {H:g}", "areas": areas,
-           "note": "England & Wales ITL3 (NUTS3) boundaries, simplified. "
-                   "Codes re-prefixed UK->TL. Source: martinjc/UK-GeoJSON (Eurostat)."}
+           "note": f"UK ITL3 boundaries, simplified from {INPUT.split('/')[-1]}. "
+                   "Codes are ITL (TL...); source: ONS Open Geography Portal (OGL)."}
     with open(OUT, "w") as fh:
         json.dump(out, fh, separators=(",", ":"))
     import os
     print(f"areas={len(areas)} viewBox='{out['viewBox']}' bytes={os.path.getsize(OUT):,}")
+
+
+# Shetland inset (British National Grid, metres). Rings whose southernmost point
+# is above the threshold are Shetland; translate them south/east into the empty
+# North Sea beside the mainland so the map isn't stretched by the ~200km gap.
+_SHETLAND_MIN_NORTHING = 1_090_000
+_SHETLAND_DX = 140_000    # east, into open sea
+_SHETLAND_DY = -330_000   # south, closing the gap
+
+
+def _inset_shetland(records):
+    """In-place: translate far-north Shetland rings into an inset position. No-op
+    for lon/lat data (degrees) or when nothing qualifies."""
+    pts = [p for r in records.values() for ring in r["rings"] for p in ring]
+    if not pts or max(abs(p[1]) for p in pts) <= 800:  # lon/lat -> not BNG metres
+        return
+    moved = 0
+    for rec in records.values():
+        for i, ring in enumerate(rec["rings"]):
+            if min(p[1] for p in ring) > _SHETLAND_MIN_NORTHING:
+                rec["rings"][i] = [(x + _SHETLAND_DX, y + _SHETLAND_DY) for x, y in ring]
+                moved += 1
+    if moved:
+        print(f"inset: moved {moved} Shetland ring(s)")
 
 
 def _polys(geom):

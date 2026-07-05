@@ -14,6 +14,7 @@ import type {
   FunnelFlowPoint,
   FunnelPoint,
   CohortAnalysis,
+  CohortDimension,
   CohortGrain,
   CohortProgression,
   SourcePortfolioLens,
@@ -61,7 +62,7 @@ const EVO_SUBTITLES: Record<EvoView, string> = {
   // D: distinct from the main Forecast tab (which is the forward projection from
   // the latest run). This is the HISTORY of the forecast across reporting runs.
   forecast: "Forecast Evolution — historical movement in forecast metrics across reporting runs (how the forecast changed over time, and actual funded vs the prior run's forecast). For the forward projection from the latest run, use the main Forecast tab.",
-  cohorts: "Cohorts — funded book by origination vintage (static pool): balance, loan count, book share and balance-weighted LTV / rate / months-on-book per origination year, as of the selected reporting date.",
+  cohorts: "Cohorts — funded book by a selectable lens (vintage, borrower age, LTV band or origination channel): balance, loan count, book share and balance-weighted LTV / rate / months-on-book per cohort, as of the selected reporting date.",
 };
 
 // Sub-tab button labels (the "forecast" view reads as "Forecast Evolution").
@@ -512,16 +513,19 @@ const _PROG_METRICS: { key: string; label: string; fmt: "gbp" | "pct" | "count";
 ];
 
 /** Funded cohort view: a static-pool PROGRESSION (how a cohort — a source
- * portfolio ± origination vintage — seasons across reporting periods) plus the
- * point-in-time vintage composition table at a selectable grain. Replaces the
- * old single-snapshot vintage bar (redundant with the table's balance column). */
+ * portfolio ± origination vintage — seasons across reporting periods) plus a
+ * point-in-time cohort composition table across a selectable lens (vintage,
+ * borrower age, LTV band or origination channel). Replaces the old
+ * single-snapshot vintage bar (redundant with the table's balance column). */
 function CohortView({ client, portfolioId }: { client: AgentClient; portfolioId: string }) {
   const [grain, setGrain] = useState<CohortGrain>("Y");
   const [lens, setLens] = useState("total");
   const [vintage, setVintage] = useState("");
   const [metric, setMetric] = useState("funded_balance");
+  const [dimension, setDimension] = useState<CohortDimension>("vintage");
   const [lenses, setLenses] = useState<SourcePortfolioLens[]>([]);
   const [cohorts, setCohorts] = useState<CohortAnalysis | null>(null);
+  const [composition, setComposition] = useState<CohortAnalysis | null>(null);
   const [prog, setProg] = useState<CohortProgression | null>(null);
 
   useEffect(() => {
@@ -531,12 +535,22 @@ function CohortView({ client, portfolioId }: { client: AgentClient; portfolioId:
     return () => { c = true; };
   }, [client]);
 
+  // Vintage cohorts feed the progression's vintage selector (always vintage).
   useEffect(() => {
     let c = false;
     Promise.resolve(client.getCohorts(portfolioId, grain))
       .then((r) => { if (!c) setCohorts(r); }).catch(() => {});
     return () => { c = true; };
   }, [client, portfolioId, grain]);
+
+  // The composition table follows the selected cohort dimension (deduped with
+  // the vintage fetch above when dimension === "vintage").
+  useEffect(() => {
+    let c = false;
+    Promise.resolve(client.getCohorts(portfolioId, grain, dimension))
+      .then((r) => { if (!c) setComposition(r); }).catch(() => {});
+    return () => { c = true; };
+  }, [client, portfolioId, grain, dimension]);
 
   useEffect(() => {
     let c = false;
@@ -546,9 +560,18 @@ function CohortView({ client, portfolioId }: { client: AgentClient; portfolioId:
     return () => { c = true; };
   }, [client, portfolioId, lens, vintage, grain]);
 
-  const rows = cohorts?.cohorts ?? [];
-  const cmetrics = new Set(cohorts?.metricsAvailable ?? []);
-  const vintageOpts = rows.map((r) => r.vintage).filter((v) => v && v !== "Unknown");
+  // Progression's vintage options come from the vintage fetch; the composition
+  // table follows the selected dimension.
+  const vintageOpts = (cohorts?.cohorts ?? [])
+    .map((r) => r.vintage ?? r.cohort).filter((v): v is string => !!v && v !== "Unknown");
+  const rows = composition?.cohorts ?? [];
+  const cmetrics = new Set(composition?.metricsAvailable ?? []);
+  const dimLabel = composition?.dimensionLabel ?? "Vintage";
+  const DIM_LABELS: Record<CohortDimension, string> = {
+    vintage: "Vintage", age: "Borrower age", ltv: "LTV band", channel: "Origination channel",
+  };
+  const dimOptions = (composition?.availableDimensions ?? cohorts?.availableDimensions ?? ["vintage"])
+    .map((d) => ({ value: d, label: DIM_LABELS[d] }));
   const hasNneg = (prog?.metricsAvailable ?? []).includes("nneg_headroom_pct");
   const metricOpts = _PROG_METRICS.filter((m) => !m.nneg || hasNneg);
   const pm = metricOpts.find((m) => m.key === metric) ?? metricOpts[0];
@@ -617,20 +640,26 @@ function CohortView({ client, portfolioId }: { client: AgentClient; portfolioId:
         </div>
       )}
 
-      {/* Point-in-time vintage composition at the selected grain. */}
-      <div className="text-[11px] font-semibold text-ink-300">Vintage composition (as of {cohorts?.reportingDate ?? "latest"})</div>
-      {cohorts && !cohorts.available ? (
+      {/* Point-in-time static-pool composition by the selected dimension. */}
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div className="text-[11px] font-semibold text-ink-300">
+          Cohort composition — by {dimLabel.toLowerCase()} (as of {composition?.reportingDate ?? "latest"})
+        </div>
+        <CohortSelect label="Cohort by" value={dimension}
+          onChange={(v) => setDimension(v as CohortDimension)}
+          options={dimOptions} testId="cohort-dimension" />
+      </div>
+      {composition && !composition.available ? (
         <div className="rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-[11px] text-amber-300/90"
           data-testid="cohorts-unavailable">
-          No computed vintage data for this run{cohorts.reason ? ` — ${cohorts.reason}` : ""}.
-          Vintage composition needs an origination date on the funded tape.
+          No {dimLabel.toLowerCase()} composition for this run{composition.reason ? ` — ${composition.reason}` : ""}.
         </div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-[var(--color-line)] bg-navy-900/40">
           <table className="w-full text-[11px]" data-testid="cohorts-table">
             <thead>
               <tr className="border-b border-[var(--color-line)] text-ink-400">
-                <th className="px-3 py-2 text-left font-medium">Vintage</th>
+                <th className="px-3 py-2 text-left font-medium">{dimLabel}</th>
                 <th className="px-3 py-2 text-right font-medium">Loans</th>
                 {cmetrics.has("balance") && <th className="px-3 py-2 text-right font-medium">Balance</th>}
                 {cmetrics.has("balance") && <th className="px-3 py-2 text-right font-medium">Book share</th>}
@@ -641,8 +670,8 @@ function CohortView({ client, portfolioId }: { client: AgentClient; portfolioId:
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.vintage} className="border-b border-[var(--color-line-soft)] last:border-0">
-                  <td className="px-3 py-1.5 text-left font-medium text-ink-100">{r.vintage}</td>
+                <tr key={r.cohort} className="border-b border-[var(--color-line-soft)] last:border-0">
+                  <td className="px-3 py-1.5 text-left font-medium text-ink-100">{r.cohort}</td>
                   <td className="px-3 py-1.5 text-right text-ink-200">{r.loanCount.toLocaleString("en-GB")}</td>
                   {cmetrics.has("balance") && <td className="px-3 py-1.5 text-right text-ink-200">{r.balance != null ? gbpCompact(r.balance) : "—"}</td>}
                   {cmetrics.has("balance") && <td className="px-3 py-1.5 text-right text-ink-400">{r.sharePct != null ? `${r.sharePct.toFixed(1)}%` : "—"}</td>}
@@ -657,7 +686,7 @@ function CohortView({ client, portfolioId }: { client: AgentClient; portfolioId:
       )}
       <p className="text-[10px] text-ink-500">
         Static-pool seasoning across governed reporting periods (balance / LTV / rate / NNEG) for the
-        selected cohort, plus point-in-time vintage composition at the chosen grain. Source: governed
+        selected cohort, plus point-in-time cohort composition across the chosen lens. Source: governed
         funded central lender tape.
       </p>
     </div>

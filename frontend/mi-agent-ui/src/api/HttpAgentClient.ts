@@ -187,10 +187,18 @@ export class HttpAgentClient implements AgentClient {
   }
 
   getCohorts(portfolioId: string, grain?: import("@/domain").CohortGrain,
+             dimension?: import("@/domain").CohortDimension,
              signal?: AbortSignal): Promise<import("@/domain").CohortAnalysis> {
     const g = grain ? `&grain=${grain}` : "";
+    const d = dimension ? `&dimension=${dimension}` : "";
     return this.getJson<import("@/domain").CohortAnalysis>(
-      `/mi/cohorts?portfolioId=${encodeURIComponent(portfolioId)}${g}`, signal);
+      `/mi/cohorts?portfolioId=${encodeURIComponent(portfolioId)}${g}${d}`, signal);
+  }
+
+  getGeoExposure(portfolioId: string,
+                 signal?: AbortSignal): Promise<import("@/domain").GeoExposure> {
+    return this.getJson<import("@/domain").GeoExposure>(
+      `/mi/geo/exposure?portfolioId=${encodeURIComponent(portfolioId)}`, signal);
   }
 
   getCohortProgression(portfolioId: string,

@@ -61,6 +61,55 @@ def test_balance_weighted_metrics():
         "balance", "loanCount", "waLtv", "waRate", "waMonthsOnBook"}
 
 
+def _wave1_df() -> pd.DataFrame:
+    return pd.DataFrame({
+        "origination_date": ["2021-03-01", "2022-05-01", "2022-06-01", "2023-01-01"],
+        "current_outstanding_balance": [100_000, 300_000, 200_000, 50_000],
+        "current_loan_to_value": [0.60, 0.80, 0.50, 0.40],
+        "age_bucket": ["65–69", "70–74", "65–69", "80–84"],
+        "original_loan_to_value": [0.55, 0.75, 0.48, 0.38],
+        "origination_channel": ["Broker A", "Broker B", "Broker A", "Direct"],
+    })
+
+
+def test_available_dimensions_reflect_the_tape():
+    out = cohorts_mod.cohort_analysis(_wave1_df())
+    assert out["availableDimensions"] == ["vintage", "age", "ltv", "channel"]
+    # The slim tape has vintage + current LTV (ltv falls back to current_loan_to_value),
+    # but no age/channel fields.
+    slim = cohorts_mod.cohort_analysis(_funded_df())
+    assert slim["availableDimensions"] == ["vintage", "ltv"]
+
+
+def test_cohort_by_borrower_age():
+    out = cohorts_mod.cohort_analysis(_wave1_df(), dimension="age")
+    assert out["available"] is True
+    assert out["dimension"] == "age" and out["dimensionLabel"] == "Borrower age"
+    by = {c["cohort"]: c for c in out["cohorts"]}
+    assert by["65–69"]["loanCount"] == 2  # two loans in that band
+    assert [c["cohort"] for c in out["cohorts"]] == ["65–69", "70–74", "80–84"]  # by age
+
+
+def test_cohort_by_ltv_band_and_channel():
+    ltv = cohorts_mod.cohort_analysis(_wave1_df(), dimension="ltv")
+    assert ltv["dimensionLabel"] == "LTV band"
+    # Bands ordered by their leading number.
+    labels = [c["cohort"] for c in ltv["cohorts"]]
+    assert labels == sorted(labels, key=lambda s: int(__import__("re").search(r"\d+", s).group()))
+    ch = cohorts_mod.cohort_analysis(_wave1_df(), dimension="channel")
+    assert ch["dimensionLabel"] == "Origination channel"
+    # Channels ranked by balance (Broker A = 300k leads).
+    assert ch["cohorts"][0]["cohort"] == "Broker A"
+
+
+def test_dimension_unavailable_is_honest():
+    # No channel/age/ltv fields -> those dimensions are unavailable, vintage still works.
+    out = cohorts_mod.cohort_analysis(_funded_df(), dimension="channel")
+    assert out["available"] is False
+    assert "origination channel" in out["reason"].lower()
+    assert "channel" not in out["availableDimensions"]
+
+
 def test_no_fabricated_curves():
     out = cohorts_mod.cohort_analysis(_funded_df())
     for c in out["cohorts"]:

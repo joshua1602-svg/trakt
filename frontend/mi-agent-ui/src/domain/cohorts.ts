@@ -5,9 +5,12 @@
  * are never fabricated here.
  */
 
-/** One origination-year cohort row. Metrics present only when computed. */
+/** One static-pool cohort row. Metrics present only when computed. */
 export interface CohortRow {
-  vintage: string;
+  /** The cohort label (vintage year, age band, LTV band or channel). */
+  cohort: string;
+  /** Alias of `cohort`, kept for the vintage-only contract. */
+  vintage?: string;
   loanCount: number;
   balance?: number;
   sharePct?: number | null;
@@ -16,6 +19,9 @@ export interface CohortRow {
   waMonthsOnBook?: number | null;
 }
 
+/** The dimension a static pool is grouped by (asset-class-agnostic). */
+export type CohortDimension = "vintage" | "age" | "ltv" | "channel";
+
 export interface CohortAnalysis {
   dataset: "cohorts";
   portfolioId: string;
@@ -23,8 +29,13 @@ export interface CohortAnalysis {
   period?: string;
   reportingDate?: string | null;
   available: boolean;
-  /** Why cohort analysis is unavailable (no vintage on the tape, etc.). */
+  /** Why cohort analysis is unavailable (no source for the dimension, etc.). */
   reason?: string;
+  /** The dimension these cohorts are grouped by + its column header. */
+  dimension?: CohortDimension;
+  dimensionLabel?: string;
+  /** Which dimensions the tape can support (drives the selector). */
+  availableDimensions?: CohortDimension[];
   totalBalance?: number | null;
   totalLoanCount?: number;
   /** Which per-cohort metrics were actually computed (drives the columns). */

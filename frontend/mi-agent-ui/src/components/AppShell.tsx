@@ -10,6 +10,7 @@ import { ForecastView } from "@/components/ForecastView";
 import { ForecastExtrapolationPanel } from "@/components/ForecastExtrapolationPanel";
 import { EvolutionPanel } from "@/components/EvolutionPanel";
 import { RiskLimitsPanel } from "@/components/RiskLimitsPanel";
+import { GeographyPanel } from "@/components/GeographyPanel";
 import { ViewToggle } from "@/components/ViewToggle";
 import { SourcePortfolioSelector } from "@/components/SourcePortfolioSelector";
 import { LineagePanel } from "@/components/LineagePanel";
@@ -55,6 +56,7 @@ const VIEW_SUBTITLES: Record<string, string> = {
   forecast: "Scenario / portfolio forecast — forward-looking projection from the latest selected run (funded balance + weighted pipeline + run-rate scale-up). For how the forecast changed across runs, see Evolution → Forecast Evolution.",
   evolution: "Evolution — time-series movement across multiple reporting extracts (funded / pipeline / origination funnel / forecast).",
   risk_limits: "Risk Limits — Schedule 8 concentration limits vs funded actual exposure, headroom and status.",
+  geography: "Geography — funded exposure concentration across UK ITL3 areas, from each loan's property location.",
 };
 
 export function AppShell() {
@@ -215,6 +217,10 @@ export function AppShell() {
                 )}
                 {ws.activeView === "risk_limits" && (
                   <RiskLimitsPanel key={`risk-${ws.dataVersion}`}
+                    client={client} portfolioId={workspacePortfolioId} />
+                )}
+                {ws.activeView === "geography" && (
+                  <GeographyPanel key={`geo-${ws.dataVersion}`}
                     client={client} portfolioId={workspacePortfolioId} />
                 )}
               </div>
