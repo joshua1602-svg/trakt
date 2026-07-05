@@ -1,20 +1,33 @@
 # UK ITL3 choropleth geometry
 
-`build_itl3_svg.py` fetches UK ITL3 boundary polygons, projects them to an SVG
-viewBox (equirectangular + cos(lat) aspect), simplifies each ring with
-Douglas-Peucker, and emits a compact `{ viewBox, areas: { ITL3_CODE: {name, d} } }`
-atlas for the frontend choropleth.
+`build_itl3_svg.py` turns an ONS ITL3 **Boundaries** GeoJSON into a compact
+`{ viewBox, areas: { ITL3_CODE: {name, d} } }` SVG-path atlas for the frontend
+choropleth. It projects lon/lat to an SVG viewBox (equirectangular + cos(lat)
+aspect), simplifies each ring with Douglas-Peucker, and rounds coordinates —
+taking the ONS full-resolution file (~100MB) down to ~100-300KB.
 
-## IMPORTANT — boundary vintage
-The MI tape uses **ITL3 January 2021** codes (`geographic_region_collateral_itl3`,
-e.g. `TLK11` = Bristol). The pipeline MUST be built against **2021 ITL3**
-boundaries so the codes align with the tape.
+**Pure Python standard library — no pip installs.**
 
-The authoritative source is the ONS Open Geography Portal
-(International Territorial Level 3, January 2021, UK BUC/BGC). Point `URL` at that
-GeoJSON (ArcGIS FeatureServer `f=geojson`, fields `ITL321CD`/`ITL321NM`) and set
-`nuts_to_itl` to a pass-through.
+## The problem it solves
+The ONS full-resolution ITL3 Boundaries GeoJSON is ~100MB — too big to upload or
+commit. A web choropleth needs almost none of that detail. Run this **locally**
+on the big file; commit/upload only the tiny atlas it produces.
 
-The default `URL` here is a GitHub mirror of **NUTS3 2012** boundaries, used only
-to validate the projection/simplification pipeline end-to-end. Its codes DO NOT
-fully match the 2021 tape codes — do not ship its output as production geometry.
+## Usage
+```bash
+python3 build_itl3_svg.py INPUT.geojson OUTPUT.json
+# INPUT  = the ONS ITL3 Boundaries GeoJSON (local path or URL)
+# OUTPUT = the compact atlas to commit (e.g. uk_itl3_paths.json, ~100-300KB)
+```
+
+## Sourcing the input (matches the tape)
+The tape uses **ITL3 January 2025** codes (confirmed: 182/182 match
+`uk_itl_master_lookup_v2.csv`). From the ONS Open Geography Portal
+(geoportal.statistics.gov.uk), download the dataset titled
+**"International Territorial Level 3 (January 2025) Boundaries UK BUC"** as
+GeoJSON — the **Boundaries** product (features have real `geometry`), NOT the
+**Names and Codes** product (every `geometry` is `null`). BUC = Ultra Generalised
+(smallest); BGC also fine. Field names `ITL325CD` / `ITL325NM` are handled
+automatically (as are the 2021 `ITL321*` and 2012 `NUTS312*` variants).
+
+Open Government Licence — free to bundle with attribution.

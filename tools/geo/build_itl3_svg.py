@@ -1,24 +1,54 @@
 #!/usr/bin/env python3
-"""Build a compact UK ITL3 SVG-path atlas from NUTS3 GeoJSON.
+"""Build a compact UK ITL3 SVG-path atlas from an ITL3/NUTS3 GeoJSON.
 
-Fetches England+Wales NUTS3 boundaries, projects lon/lat to an SVG viewBox
+Reads a LOCAL GeoJSON (or a URL), projects lon/lat to an SVG viewBox
 (equirectangular with a cos(lat) aspect correction), simplifies each ring with
 Douglas-Peucker, and emits { viewBox, areas: { ITL3_CODE: {name, d} } }.
 
-NUTS3 == ITL3 (same boundaries); codes only re-prefix UK... -> TL...
+Purpose: turn the ONS full-resolution ITL3 Boundaries GeoJSON (~100MB) into a
+tiny (~100-300KB) atlas suitable for a web choropleth. Pure stdlib — no installs.
+
+Usage:
+    python3 build_itl3_svg.py INPUT.geojson [OUTPUT.json]
+    # INPUT may be a local path or an http(s) URL.
+
+Handles the ONS field names across vintages: ITL325CD/NM (Jan 2025),
+ITL321CD/NM (Jan 2021), or NUTS312CD/NM (2012, re-prefixed UK->TL).
 """
 import json
 import math
 import sys
 import urllib.request
 
-URL = "https://raw.githubusercontent.com/martinjc/UK-GeoJSON/master/json/eurostat/ew/nuts3.json"
+# First CLI arg is the INPUT geojson (local path or URL); second is the OUTPUT.
+INPUT = sys.argv[1] if len(sys.argv) > 1 else \
+    "https://raw.githubusercontent.com/martinjc/UK-GeoJSON/master/json/eurostat/ew/nuts3.json"
+OUT = sys.argv[2] if len(sys.argv) > 2 else "uk_itl3_paths.json"
 TARGET_W = 800.0
 DP_EPS = 1.2       # simplification tolerance in projected px
-OUT = sys.argv[1] if len(sys.argv) > 1 else "uk_itl3_paths.json"
+
+# Property keys to try, most-recent vintage first: (code_key, name_key).
+_PROP_KEYS = (("ITL325CD", "ITL325NM"), ("ITL321CD", "ITL321NM"),
+              ("NUTS312CD", "NUTS312NM"), ("nuts312cd", "nuts312nm"))
+
+
+def _prop(props, which):
+    for code_key, name_key in _PROP_KEYS:
+        key = code_key if which == "code" else name_key
+        if props.get(key):
+            return props[key]
+    return ""
+
+
+def _load(src):
+    if src.startswith("http://") or src.startswith("https://"):
+        return json.loads(urllib.request.urlopen(src, timeout=120).read())
+    with open(src) as fh:
+        return json.load(fh)
 
 
 def nuts_to_itl(code: str) -> str:
+    """Normalise to an ITL (TL...) code. ITL is already TL; NUTS 2012 is UK...."""
     c = (code or "").strip().upper()
     return ("TL" + c[2:]) if c.startswith("UK") else c
 
@@ -68,9 +98,12 @@ def dp_simplify(pts, eps):
 
 
 def main():
-    raw = urllib.request.urlopen(URL, timeout=60).read()
-    gj = json.loads(raw)
-    feats = gj["features"]
+    gj = _load(INPUT)
+    feats = [f for f in gj["features"] if f.get("geometry")]  # skip null-geometry rows
+    if not feats:
+        raise SystemExit(
+            "No features with geometry. This looks like a 'Names and Codes' file "
+            "(geometry: null) — download the ITL3 'Boundaries' dataset instead.")
 
     # Global bbox for the projection.
     lons, lats = [], []
@@ -97,8 +130,8 @@ def main():
     areas = {}
     for f in feats:
         props = f["properties"]
-        code = nuts_to_itl(props.get("NUTS312CD") or props.get("nuts312cd") or "")
-        name = props.get("NUTS312NM") or props.get("nuts312nm") or code
+        code = nuts_to_itl(_prop(props, "code"))
+        name = _prop(props, "name") or code
         parts = []
         for poly in _polys(f["geometry"]):
             for ring in poly:
@@ -112,8 +145,8 @@ def main():
             areas[code] = {"name": name, "d": "".join(parts)}
 
     out = {"viewBox": f"0 0 {W:g} {H:g}", "areas": areas,
-           "note": "England & Wales ITL3 (NUTS3) boundaries, simplified. "
-                   "Codes re-prefixed UK->TL. Source: martinjc/UK-GeoJSON (Eurostat)."}
+           "note": f"UK ITL3 boundaries, simplified from {INPUT.split('/')[-1]}. "
+                   "Codes are ITL (TL...); source: ONS Open Geography Portal (OGL)."}
     with open(OUT, "w") as fh:
         json.dump(out, fh, separators=(",", ":"))
     import os
