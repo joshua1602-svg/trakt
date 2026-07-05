@@ -1874,8 +1874,13 @@ def parse_with_repair(
     model_id = model or DEFAULT_MODEL
 
     total_tries = max(1, int(max_attempts) + 1)  # initial try + repairs
+    llm_call_error: Optional[str] = None
     for i in range(total_tries):
-        text, usage, cache_supported = _invoke(prompt, model_id, llm_callable)
+        try:
+            text, usage, cache_supported = _invoke(prompt, model_id, llm_callable)
+        except Exception as exc:  # noqa: BLE001 - LLM call failed; deterministic is the safety net
+            llm_call_error = str(exc)
+            break
         _accumulate(usage, cache_supported, model_id)
         raw_text = text if isinstance(text, str) else json.dumps(text)
         try:
@@ -1924,12 +1929,32 @@ def parse_with_repair(
 
         prompt = _repair_prompt(base_prompt, raw_text, errors)
 
+    # ---- deterministic safety net ----------------------------------------
+    # The LLM is primary for hard questions, but the deterministic parser is the
+    # fallback for the MI Agent: when the LLM call failed outright, or produced a
+    # spec that does not validate, prefer a VALID deterministic parse over a
+    # broken LLM one rather than erroring the whole query.
+    if det_vr.ok and not (repair_skipped_reason == "missing_dataset_columns"):
+        spec, meta = _det_result("deterministic_fallback")
+        meta["llm"] = llm_meta
+        meta["repair_skipped_reason"] = repair_skipped_reason
+        meta["status"] = (
+            f"LLM parse unavailable ({llm_call_error}); used the deterministic parse"
+            if llm_call_error
+            else "LLM parse failed validation; fell back to the deterministic parse")
+        return spec, meta
+
     if last_spec is None:
         last_spec = MIQuerySpec(
             intent="summary", chart_type="none", aggregation="count",
             title=user_question.strip(),
             explanation="LLM did not return a usable MIQuerySpec.",
             output_format="text")
+    status = ("LLM output references a missing dataset column; repair skipped"
+              if repair_skipped_reason
+              else f"LLM call failed ({llm_call_error}); no valid deterministic parse either"
+              if llm_call_error
+              else "LLM output failed validation after repair attempts")
     return last_spec, {
         "parser_mode": "llm",
         "parser_mode_detail": "validation_failed",
@@ -1941,7 +1966,5 @@ def parse_with_repair(
         "model": model_id,
         "repair_skipped_reason": repair_skipped_reason,
         "llm": llm_meta,
-        "status": ("LLM output references a missing dataset column; repair skipped"
-                   if repair_skipped_reason
-                   else "LLM output failed validation after repair attempts"),
+        "status": status,
     }

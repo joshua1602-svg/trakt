@@ -314,3 +314,38 @@ def test_message_text_no_text_blocks_returns_empty():
     from mi_agent.llm_query_parser import _message_text
     assert _message_text(_Message([_ThinkingBlock("only thinking")])) == ""
     assert _message_text(_Message([])) == ""
+
+
+# --------------------------------------------------------------------------- #
+# Deterministic fallback — the LLM is primary for hard questions, but a broken
+# or unavailable LLM must fall back to a valid deterministic parse (never error).
+# --------------------------------------------------------------------------- #
+def test_llm_call_failure_falls_back_to_deterministic(df, semantics):
+    cols = set(df.columns)
+
+    def _boom(_prompt):
+        raise RuntimeError("'ThinkingBlock' object has no attribute 'text'")
+
+    # zero_cost_first off → LLM is attempted; it raises → deterministic safety net.
+    spec, meta = parse_with_repair(
+        "Show balance by region", semantics, available_columns=cols,
+        llm_enabled=True, zero_cost_first=False, llm_callable=_boom)
+    assert meta["ok"] is True
+    assert meta["parser_mode"] == "deterministic"
+    assert meta["parser_mode_detail"] == "deterministic_fallback"
+    assert "used the deterministic parse" in meta["status"]
+    assert spec.dimension == "geographic_region_obligor"
+
+
+def test_llm_invalid_output_falls_back_to_deterministic(df, semantics):
+    cols = set(df.columns)
+    # LLM returns unparseable output every attempt; deterministic parse is valid.
+    mock = lambda _p: "not json at all"  # noqa: E731
+    spec, meta = parse_with_repair(
+        "Show balance by region", semantics, available_columns=cols,
+        llm_enabled=True, zero_cost_first=False, max_attempts=1, llm_callable=mock)
+    assert meta["ok"] is True
+    assert meta["parser_mode_detail"] == "deterministic_fallback"
+    assert "fell back to the deterministic parse" in meta["status"]
+    # Cost accounting from the (failed) LLM attempts is preserved.
+    assert meta["llm"]["calls"] >= 1

@@ -1317,6 +1317,27 @@ def _resolve_query_frame(view: str, portfolio_id: Optional[str]):
     return frame, None
 
 
+def _mi_llm_config() -> tuple:
+    """(llm_enabled, model) for the MI Agent query parser.
+
+    The LLM is the FALLBACK for questions the deterministic parser can't resolve
+    (``zero_cost_first`` keeps easy questions free — no LLM call). It is enabled
+    by default whenever an ``ANTHROPIC_API_KEY`` is configured; with no key the
+    parser stays deterministic-only (never crashes). Operators can force it with
+    ``MI_AGENT_LLM_PARSER=on|off|auto`` and override the model with
+    ``MI_AGENT_LLM_MODEL``.
+    """
+    mode = os.environ.get("MI_AGENT_LLM_PARSER", "auto").strip().lower()
+    has_key = bool(os.environ.get("ANTHROPIC_API_KEY"))
+    if mode in ("off", "0", "false", "no"):
+        enabled = False
+    elif mode in ("on", "1", "true", "yes"):
+        enabled = True
+    else:  # auto
+        enabled = has_key
+    return enabled, (os.environ.get("MI_AGENT_LLM_MODEL") or None)
+
+
 @app.post("/mi/query")
 def query(req: QueryRequest) -> Dict[str, Any]:
     portfolio_id = req.portfolioId or (req.portfolio.id if req.portfolio else None)
@@ -1362,8 +1383,13 @@ def query(req: QueryRequest) -> Dict[str, Any]:
     if frame_error:
         return _error(frame_error)
 
+    # LLM parser is the fallback for complex questions (deterministic-first via
+    # zero_cost_first; falls back to deterministic on any LLM failure).
+    llm_enabled, llm_model = _mi_llm_config()
     workflow = run_mi_agent_query(
-        req.question, df, str(semantics_path()), parser_mode="deterministic",
+        req.question, df, str(semantics_path()),
+        parser_mode="llm" if llm_enabled else "deterministic",
+        llm_enabled=llm_enabled, model=llm_model,
         extra_filters=req.filters or None,
         source_portfolio_lens=req.sourcePortfolioLens or None)
     result = adapt_workflow_result(workflow, portfolio_id=portfolio_id, as_of=req.asOfDate)
