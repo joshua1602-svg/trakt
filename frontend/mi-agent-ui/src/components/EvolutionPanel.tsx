@@ -227,18 +227,20 @@ function pct1(v: number | null | undefined): string {
   return v == null ? "n/a" : `${v.toFixed(1)}%`;
 }
 
-/** Collapsed-by-default "Conversion vs KFI" disclosure. Shows the forward
- * weekly conversion rate — average weekly flow into the stage (last 5 weeks)
- * over the KFI stock as it stood `lagWeeks` earlier — so a growing pipeline
- * isn't compared against itself. Hidden until expanded to keep the card calm. */
-function ConversionDisclosure({ stage, conversion }: {
+/** Collapsed-by-default conversion disclosure. Leads with the CANONICAL metric —
+ * cumulative cohort conversion (% of the original KFI cohort that has reached
+ * this milestone to date) — and shows the weekly completion velocity below it as
+ * a labelled operational/forecast input, NOT as "conversion". Hidden until
+ * expanded to keep the card calm. */
+function ConversionDisclosure({ stage, conversion, cohortPct }: {
   stage: string;
   conversion: FunnelConversion;
+  cohortPct: number | null;
 }) {
   const [open, setOpen] = useState(false);
   const lagLabel = conversion.lagApplied && conversion.lagWeeks != null
-    ? `KFI stock lagged ${conversion.lagWeeks}w${conversion.denominatorWeek ? ` (${conversion.denominatorWeek})` : ""}`
-    : "KFI stock unlagged — lag unknown";
+    ? `KFI stock lagged ${conversion.lagWeeks}w`
+    : "KFI stock unlagged";
   return (
     <div className="mt-2 rounded-md border border-[var(--color-line-soft)] bg-navy-900/50 text-[10px]"
       data-testid={`funnel-conversion-${stage}`}>
@@ -246,31 +248,29 @@ function ConversionDisclosure({ stage, conversion }: {
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left font-medium uppercase tracking-wide text-ink-400 hover:text-ink-200"
+        className="flex w-full items-center justify-between gap-1.5 px-2 py-1.5 text-left font-medium uppercase tracking-wide text-ink-400 hover:text-ink-200"
       >
-        <ChevronDown size={12} className={cn("transition-transform", !open && "-rotate-90")} />
-        Conversion vs KFI
+        <span className="flex items-center gap-1.5">
+          <ChevronDown size={12} className={cn("transition-transform", !open && "-rotate-90")} />
+          Cohort conversion
+        </span>
+        {cohortPct != null && <span className="font-semibold normal-case text-mint-300">{pct1(cohortPct)}</span>}
       </button>
       {open && (
         <div className="px-2 pb-2" data-testid={`funnel-conversion-body-${stage}`}>
-          <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-            <div>
-              <span className="text-ink-500">Weekly rate</span>{" "}
-              <span className="font-semibold text-mint-300">{pct1(conversion.weeklyRateCount)}</span>
-              <span className="text-ink-500"> by count</span>
-            </div>
-            <div>
-              <span className="font-semibold text-mint-300">{pct1(conversion.weeklyRateValue)}</span>
-              <span className="text-ink-500"> by value</span>
-            </div>
+          <div className="text-[10px] leading-snug">
+            <span className="font-semibold text-mint-300">{pct1(cohortPct)}</span>
+            <span className="text-ink-500"> of the KFI cohort has reached this milestone to date (cumulative, cohort-tracked).</span>
           </div>
-          <div className="mt-1.5 text-[9px] leading-snug text-ink-500">
-            Avg weekly flow (last 5 wks) ÷ {lagLabel}.
+          <div className="mt-1.5 border-t border-[var(--color-line-soft)] pt-1.5 text-[9px] leading-snug text-ink-500">
+            <span className="uppercase tracking-wide text-ink-400">Weekly velocity</span> — forecast input, not conversion:{" "}
+            <span className="text-ink-300">{pct1(conversion.weeklyRateValue)}/wk by value · {pct1(conversion.weeklyRateCount)}/wk by count</span>{" "}
+            (avg weekly flow, last 5 wks ÷ {lagLabel}).
           </div>
           {!conversion.sufficient && (
             <div className="mt-1 text-[9px] font-medium leading-snug text-amber-300"
               data-testid={`funnel-conversion-provisional-${stage}`}>
-              Provisional — based on {conversion.weeksInWindow} of {conversion.minWeeks}+ weeks; too few to forecast off yet.
+              Velocity provisional — {conversion.weeksInWindow} of {conversion.minWeeks}+ weeks; too few to forecast off yet.
             </div>
           )}
         </div>
@@ -284,7 +284,7 @@ function ConversionDisclosure({ stage, conversion }: {
  * (flow − prior flow), and a collapsed conversion-vs-KFI disclosure. Renders
  * compact in the 2×2 grid and larger inside the focus modal (``large``). */
 function FunnelStageCard({
-  stage, label, points, flowPoints, summary, conversion, showCumulative, large, onExpand,
+  stage, label, points, flowPoints, summary, conversion, cohortPct, showCumulative, large, onExpand,
 }: {
   stage: string;
   label: string;
@@ -292,6 +292,8 @@ function FunnelStageCard({
   flowPoints: FunnelFlowPoint[];
   summary: PipelineFunnelEvolution["summary"][string] | undefined;
   conversion: FunnelConversion | null;
+  /** Latest cumulative cohort % for this stage (the canonical conversion). */
+  cohortPct: number | null;
   showCumulative: boolean;
   /** Larger chart for the focus modal. */
   large?: boolean;
@@ -402,7 +404,7 @@ function FunnelStageCard({
           </div>
         </div>
       )}
-      {conversion && <ConversionDisclosure stage={stage} conversion={conversion} />}
+      {conversion && <ConversionDisclosure stage={stage} conversion={conversion} cohortPct={cohortPct} />}
     </div>
   );
 }
@@ -725,6 +727,19 @@ export function EvolutionPanel({
   const stageChart = useMemo(() => {
     const rows = pipeline?.byStage ?? [];
     if (stageMode === "conversion") {
+      // Canonical conversion: cumulative cohort progression — % of the original
+      // KFI cohort reaching each milestone (KFI → Application → Offer → Funded)
+      // by each week. A true cohort funnel, so the lines nest and show leakage.
+      const prog = funnel?.cohortProgression;
+      if (prog?.weeks?.length) {
+        const data = prog.weeks.map((w, i) => {
+          const row: Record<string, number | string> = { period: w };
+          for (const st of prog.stages) row[st] = prog.series[st]?.[i] ?? 0;
+          return row;
+        });
+        return { data, lines: prog.stages, format: "pct" as const };
+      }
+      // Fallback only when no cohort funnel is available (single/thin history).
       const conv = stageConversionSeries(rows, funnel?.conversionLagWeeks);
       return { data: conv.data, lines: conv.stages, format: "pct" as const };
     }
@@ -737,6 +752,11 @@ export function EvolutionPanel({
     () => (pipeline?.byStage ?? []).some((r) => normaliseStage(r.stage) === "WITHDRAWN"),
     [pipeline],
   );
+  // Latest cumulative cohort % for a stage — the canonical conversion figure.
+  const cohortPctFor = (stage: string): number | null => {
+    const arr = funnel?.cohortProgression?.series?.[stage];
+    return arr && arr.length ? arr[arr.length - 1] : null;
+  };
   const forecastSeries = useMemo(
     () => (forecast?.periods ?? []).map((p) => ({ period: p.period, ...p.metrics })),
     [forecast],
@@ -869,16 +889,16 @@ export function EvolutionPanel({
             <EvoLineChart
               title={stageMode === "amount" ? "Pipeline amount by stage (£)"
                 : stageMode === "count" ? "Pipeline case count by stage"
-                : "Conversion vs KFI (Application / Offer / Completion)"}
+                : "Cumulative cohort conversion (KFI → Application → Offer → Funded)"}
               data={stageChart.data}
               lines={stageChart.lines.map((s) => ({ key: s, label: STAGE_LABEL[normaliseStage(s)] ?? s }))}
               valueFormat={stageChart.format === "pct" ? "pct_points" : stageChart.format}
               source="weekly pipeline extracts" />
             <p className="mt-1 text-[10px] text-ink-500" data-testid="stage-mode-note">
               {stageMode === "conversion"
-                ? (funnel?.conversionLagWeeks != null
-                    ? `Conversion = each stage as a % of the KFI book ${funnel.conversionLagWeeks} week(s) earlier (count), so a growing pipeline isn't compared against itself. KFI is the denominator and is not charted.`
-                    : "Conversion = each stage as a % of KFIs in the same week (count); KFI→completion lag unknown, so unlagged. KFI is the denominator and is not charted.")
+                ? (funnel?.cohortProgression?.weeks?.length
+                    ? `Conversion = cumulative % of the original KFI cohort${funnel.cohortProgression.cohortSize ? ` (${funnel.cohortProgression.cohortSize.toLocaleString()} cases)` : ""} that has reached each milestone to date. Cohort-tracked, so the lines nest (Funded ≤ Offer ≤ Application ≤ KFI) and show where the pipeline leaks — not point-in-time stage stocks.`
+                    : "Conversion = cumulative % of the KFI cohort reaching each milestone to date. Cohort history is thin for this book, so a lagged stock-ratio approximation is shown until more weeks accrue.")
                 : `${stageMode === "amount" ? "Amount (£)" : "Case count"} for the main funnel`
                   + ` (KFI → Application → Offer → Completion).${hasWithdrawn ? " Withdrawn is tracked separately, not in the funnel." : ""}`
                   + " Toggle 'Include KFI' off to read the smaller downstream stages."}
@@ -906,6 +926,7 @@ export function EvolutionPanel({
                 flowPoints={funnel?.flowSeries?.[stage] ?? []}
                 summary={funnel?.summary?.[stage]}
                 conversion={funnel?.summary?.[stage]?.conversion ?? null}
+                cohortPct={cohortPctFor(stage)}
                 showCumulative={showCumulative}
                 onExpand={() => setExpandedStage(stage)} />
             ))}
@@ -927,6 +948,7 @@ export function EvolutionPanel({
                 flowPoints={funnel.flowSeries?.[expandedStage] ?? []}
                 summary={funnel.summary?.[expandedStage]}
                 conversion={funnel.summary?.[expandedStage]?.conversion ?? null}
+                cohortPct={cohortPctFor(expandedStage)}
                 showCumulative={showCumulative}
                 large />
             </ChartFocusModal>

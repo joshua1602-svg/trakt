@@ -75,7 +75,7 @@ describe("EvolutionPanel origination conversion footers", () => {
     expect(screen.getByTestId("funnel-conversion-COMPLETED")).toBeInTheDocument();
     // KFI is the denominator — no conversion footer on it.
     expect(screen.queryByTestId("funnel-conversion-KFI")).toBeNull();
-    expect(screen.getAllByText(/Conversion vs KFI/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Cohort conversion/).length).toBeGreaterThan(0);
   });
 
   it("keeps conversion stats collapsed by default and reveals them on expand", async () => {
@@ -84,17 +84,16 @@ describe("EvolutionPanel origination conversion footers", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Origination" }));
     const disclosure = await screen.findByTestId("funnel-conversion-APPLICATION");
     // Collapsed by default: the label shows but the detailed stats do not.
-    expect(disclosure.textContent).toMatch(/Conversion vs KFI/);
+    expect(disclosure.textContent).toMatch(/Cohort conversion/);
     expect(screen.queryByTestId("funnel-conversion-body-APPLICATION")).toBeNull();
-    // Expanding reveals the existing stats, labelled explicitly.
-    fireEvent.click(within(disclosure).getByRole("button", { name: /Conversion vs KFI/ }));
+    // Expanding reveals the canonical cohort figure + the demoted velocity.
+    fireEvent.click(within(disclosure).getByRole("button", { name: /Cohort conversion/ }));
     const body = screen.getByTestId("funnel-conversion-body-APPLICATION");
-    expect(body.textContent).toMatch(/Weekly rate/);
-    expect(body.textContent).toMatch(/by count/);
-    expect(body.textContent).toMatch(/by value/);
-    // Transparent about the lagged KFI denominator, not a same-period share.
-    expect(body.textContent).toMatch(/Avg weekly flow/);
-    expect(body.textContent).toMatch(/KFI stock/);
+    // Leads with the cumulative cohort conversion, not the weekly rate.
+    expect(body.textContent).toMatch(/of the KFI cohort has reached this milestone/);
+    // Weekly velocity is present but explicitly NOT labelled "conversion".
+    expect(body.textContent).toMatch(/Weekly velocity/);
+    expect(body.textContent).toMatch(/forecast input, not conversion/);
   });
 
   it("shows weekly-flow summary, a 'Show stock line' toggle, and no stock-level text row", async () => {
@@ -258,8 +257,8 @@ describe("EvolutionPanel stage mode toggle (C)", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Count" }));
     expect(screen.getByTestId("stage-mode-note").textContent).toMatch(/Case count/);
     fireEvent.click(screen.getByRole("tab", { name: "Conversion" }));
-    // Conversion note explains the KFI denominator — lagged when the funnel
-    // carries a KFI→completion lag, same-week when it's unknown.
-    expect(screen.getByTestId("stage-mode-note").textContent).toMatch(/% of (the )?KFI/);
+    // Conversion note describes the cumulative KFI-cohort funnel (the mock
+    // provides cohortProgression), not a stock ratio.
+    expect(screen.getByTestId("stage-mode-note").textContent).toMatch(/KFI cohort/);
   });
 });

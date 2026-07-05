@@ -32,6 +32,7 @@ from mi_agent.risk_monitor import schedule8_extractor as extractor
 from mi_agent.risk_monitor import risk_limits_contract as contract
 
 from . import snapshots as snap
+from . import currency as currency_mod
 
 _BALANCE = "current_outstanding_balance"
 _REGION = "geographic_region_obligor"
@@ -318,10 +319,14 @@ def _has_top_n(limit: Dict[str, Any]) -> Optional[int]:
     return int(m.group(1)) if m else None
 
 
-def _gbp_threshold(limit: Dict[str, Any]) -> Optional[float]:
+def _amount_threshold(limit: Dict[str, Any]) -> Optional[float]:
+    """Parse a monetary threshold from a limit's source snippet, currency-agnostic
+    (GBP/£, EUR/€, USD/$, or a bare amount) so a EUR/USD limit parses too."""
     import re
     snip = (limit.get("source_snippet") or "")
-    m = re.search(r"(?:GBP|£)\s*([\d,]+)", snip)
+    # A currency symbol/code before the number, or a number followed by a code.
+    m = re.search(r"(?:GBP|EUR|USD|£|€|\$)\s*([\d,]+(?:\.\d+)?)", snip, re.I) \
+        or re.search(r"([\d,]+(?:\.\d+)?)\s*(?:GBP|EUR|USD)", snip, re.I)
     return float(m.group(1).replace(",", "")) if m else None
 
 
@@ -329,6 +334,7 @@ def _compute_tests(df: pd.DataFrame, limits: List[Dict[str, Any]],
                    prior_df: Optional[pd.DataFrame], limits_source: str
                    ) -> List[Dict[str, Any]]:
     tests: List[Dict[str, Any]] = []
+    currency_mod.resolve_and_set(df)  # display currency from the tape (falls back to GBP)
     region_shares = _region_shares(df)
     prior_region_shares = _region_shares(prior_df) if prior_df is not None else None
     region_lookup = ({str(r[_REGION]).lower(): float(r["balance_share"]) * 100.0
@@ -390,11 +396,12 @@ def _compute_tests(df: pd.DataFrame, limits: List[Dict[str, Any]],
                                    label=f"Largest single broker ({top_broker})"))
 
         elif cat == "large_loan_concentration":
-            gbp = _gbp_threshold(lim)
-            if gbp:
-                actual = _aggregate_large_loans_pct(df, gbp)
+            amount = _amount_threshold(lim)
+            if amount:
+                actual = _aggregate_large_loans_pct(df, amount)
+                sym = currency_mod.current_symbol()
                 tests.append(_test(lim, actual=actual, actual_basis="funded exposure %",
-                                   label=f"Loans > £{int(gbp):,} aggregate"))
+                                   label=f"Loans > {sym}{int(amount):,} aggregate"))
             else:
                 actual = _largest_single_loan_pct(df)
                 tests.append(_test(lim, actual=actual, actual_basis="single loan funded exposure %",

@@ -29,6 +29,7 @@ from mi_agent.mi_agent_workflow import _detect_unsupported_concept
 from mi_agent import portfolio_lens as _portfolio_lens
 
 from . import temporal_compare as compare_mod
+from . import currency as currency_mod
 from . import evolution as evolution_mod
 from . import forecast_extrapolation as fx_mod
 from . import risk_limits as risk_mod
@@ -60,16 +61,9 @@ def _now() -> str:
 
 
 def _gbp(v: Optional[float]) -> str:
-    if v is None:
-        return "—"
-    v = float(v)
-    if abs(v) >= 1e9:
-        return f"£{v / 1e9:.2f}bn"
-    if abs(v) >= 1e6:
-        return f"£{v / 1e6:.1f}m"
-    if abs(v) >= 1e3:
-        return f"£{v / 1e3:.0f}k"
-    return f"£{v:,.0f}"
+    # Name kept for call-site stability; the symbol is the request's resolved
+    # currency (tape -> config -> GBP), not a hardcoded £.
+    return currency_mod.format_money(v, suffixes=("bn", "m", "k"))
 
 
 def _disp(value: Optional[float], metric_key: str) -> str:

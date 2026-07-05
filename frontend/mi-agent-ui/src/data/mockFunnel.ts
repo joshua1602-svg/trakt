@@ -121,6 +121,27 @@ export function mockFunnelEvolution(portfolioId: string): PipelineFunnelEvolutio
             },
     };
   }
+  // Cumulative cohort progression (canonical conversion): a nested funnel where
+  // each milestone rises to its terminal share, with progressively more lag.
+  const N = WEEKS.length;
+  const TERMINAL: Record<string, number> = { KFI: 100, APPLICATION: 84, OFFER: 58, COMPLETED: 34 };
+  const LAG_FRAC: Record<string, number> = { KFI: 0, APPLICATION: 0.1, OFFER: 0.25, COMPLETED: 0.45 };
+  const cohortSeries: Record<string, number[]> = {};
+  for (const st of STAGES) {
+    cohortSeries[st] = WEEKS.map((_, i) => {
+      const prog = Math.max(0, (i / (N - 1) - LAG_FRAC[st]) / (1 - LAG_FRAC[st]));
+      return round2(TERMINAL[st] * Math.min(1, prog));
+    });
+  }
+  // Enforce the nesting KFI ≥ Application ≥ Offer ≥ Funded at every week.
+  for (let i = 0; i < N; i++) {
+    for (let s = 1; s < STAGES.length; s++) {
+      cohortSeries[STAGES[s]][i] = Math.min(cohortSeries[STAGES[s]][i], cohortSeries[STAGES[s - 1]][i]);
+    }
+  }
+  const cohortProgression = {
+    weeks: WEEKS, stages: [...STAGES], series: cohortSeries, cohortSize: 420,
+  };
   return {
     dataset: "pipeline_funnel",
     portfolioId: client,
@@ -134,6 +155,8 @@ export function mockFunnelEvolution(portfolioId: string): PipelineFunnelEvolutio
     flowSeries,
     summary,
     conversionLagWeeks: MOCK_LAG_WEEKS,
+    cohortProgression,
+    cumulativeCohortConversion: cohortSeries.COMPLETED[N - 1],
     lineage: {
       source: "governed weekly pipeline extracts (deduplicated)",
       metric: "weekly KFI / Application / Offer / Completion — weekly flow (default) and stock level",
