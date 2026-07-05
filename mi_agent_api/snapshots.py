@@ -30,6 +30,7 @@ import pandas as pd
 
 from analytics_lib.numeric import coerce_numeric
 
+from . import currency as currency_mod
 from .funded_prep import prepare_funded_mi_dataset
 from .mi_dataset_contract import build_dataset_contract
 
@@ -223,19 +224,9 @@ def _to_points(value: Optional[float], scale: Optional[str]) -> Optional[float]:
 
 
 def _fmt_gbp(value: Optional[float], *, signed: bool = False) -> str:
-    if value is None:
-        return "—"
-    sign = "+" if (signed and value >= 0) else ("-" if signed and value < 0 else "")
-    v = abs(value) if signed else value
-    if abs(v) >= 1e9:
-        body = f"£{v / 1e9:.2f}BN"
-    elif abs(v) >= 1e6:
-        body = f"£{v / 1e6:.1f}MM"
-    elif abs(v) >= 1e3:
-        body = f"£{v / 1e3:.0f}K"
-    else:
-        body = f"£{v:,.0f}"
-    return f"{sign}{body}"
+    # Name kept for call-site stability; the symbol is the request's resolved
+    # currency (tape -> config -> GBP). KPI tiles use BN/MM/K suffixes.
+    return currency_mod.format_money(value, signed=signed, suffixes=("BN", "MM", "K"))
 
 
 def _fmt_pct_points(points: Optional[float], *, signed: bool = False) -> str:
@@ -345,6 +336,8 @@ def compute_funded_snapshot(
     and any business-facing warnings (missing data / partial result). All numbers
     are derived from the prepared dataset and the dataset contract — never the parser.
     """
+    # Resolve the display currency from this run's tape (falls back to GBP).
+    currency_mod.resolve_and_set(df)
     contract = build_dataset_contract(df, semantics, prep_report)
     warnings: List[str] = []
     diagnostics: List[str] = []

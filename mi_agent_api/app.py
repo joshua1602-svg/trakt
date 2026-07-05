@@ -38,6 +38,7 @@ from .data_source import (
     semantics_path,
 )
 from . import snapshots as snapshots_mod
+from . import currency as currency_mod
 from . import platform_snapshots_blob as platform_blob_mod
 from . import pipeline_contract as pipeline_mod
 from . import pipeline_history
@@ -1491,6 +1492,9 @@ def query(req: QueryRequest) -> Dict[str, Any]:
         return _error(str(exc))
     if frame_error:
         return _error(frame_error)
+
+    # Display currency from this request's tape (falls back to GBP).
+    currency_mod.resolve_and_set(df)
 
     # LLM parser is the fallback for complex questions (deterministic-first via
     # zero_cost_first; falls back to deterministic on any LLM failure).
