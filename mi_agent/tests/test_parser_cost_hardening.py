@@ -167,6 +167,44 @@ def test_zero_cost_first_handles_known_prompt_without_llm(df, semantics):
     assert res["metadata"]["llm"]["calls"] == 0
 
 
+def test_layered_question_routes_to_llm_even_when_deterministic_parses(df, semantics):
+    # A layered/multi-faceted question ("... and ...", "vs", conditional) reads
+    # better via the LLM, so we do NOT short-circuit to deterministic for it —
+    # deterministic NLQ coverage is too narrow for these.
+    good = json.dumps({"intent": "chart", "chart_type": "bar",
+                       "metric": "current_outstanding_balance",
+                       "dimension": "geographic_region_obligor",
+                       "aggregation": "sum"})
+    calls = {"n": 0}
+
+    def mock(prompt):
+        calls["n"] += 1
+        return good
+
+    res = run_mi_agent_query(
+        "Show balance by region and by broker channel", df, semantics,
+        llm_enabled=True, parser_mode="llm", zero_cost_first=True,
+        llm_callable=mock)
+    assert res["ok"]
+    assert calls["n"] >= 1
+    assert res["metadata"]["llm"]["calls"] >= 1
+    assert res["parser_mode_detail"] != "deterministic_zero_cost"
+
+
+def test_is_layered_question_heuristic():
+    from mi_agent.llm_query_parser import _is_layered_question
+    # Simple single-variable lookups stay deterministic.
+    assert _is_layered_question("portfolio summary") is False
+    assert _is_layered_question("Show balance by region") is False
+    assert _is_layered_question("total funded balance") is False
+    # Layered: comparison, conditional, two dimensions, or joined clauses.
+    assert _is_layered_question("balance by region vs vintage year") is True
+    assert _is_layered_question("older borrowers sitting on high LTVs") is True
+    assert _is_layered_question("balance by region by vintage_year") is True
+    assert _is_layered_question("where are we most exposed to high LTV") is True
+    assert _is_layered_question("funded balance trend over time") is True
+
+
 def test_missing_column_skips_llm_repair(df_no_broker, semantics):
     calls = {"n": 0}
 

@@ -186,17 +186,26 @@ export function funnelLineStages(stages: string[], includeKfi: boolean): string[
 }
 
 /** Conversion-vs-KFI series (COUNT based): Application/Offer/Completion only —
- * KFI is the denominator (KFI/KFI = 100% is dropped). Divide-by-zero safe. */
-export function stageConversionSeries(rows: StagePoint[]): {
+ * KFI is the denominator (KFI/KFI = 100% is dropped). Divide-by-zero safe.
+ *
+ * `lagWeeks` shifts the KFI denominator back by the KFI→completion timeline so
+ * each week's stage count is measured against the KFI book those cases came
+ * from — not the current (still-growing) book. When null the series is unlagged
+ * (same-week). The lag is in periods; the by-stage extracts are weekly, matching
+ * the funnel's `conversionLagWeeks`. */
+export function stageConversionSeries(rows: StagePoint[], lagWeeks?: number | null): {
   data: Array<Record<string, number | string>>; stages: string[];
 } {
   const { data: countPivot } = pivotStage(rows, "count");
   const present = orderStages(Array.from(new Set(rows.map((r) => r.stage))));
   const stages = present.filter((s) =>
     ["APPLICATION", "OFFER", "COMPLETED"].includes(normaliseStage(s)));
-  const data = countPivot.map((r) => {
+  const lag = Math.max(0, Math.round(lagWeeks ?? 0));
+  const data = countPivot.map((r, i) => {
     const out: Record<string, number | string> = { period: r.period };
-    const kfi = (r.KFI as number) || 0;
+    // Denominator: KFI stock `lag` periods earlier (clamped to the first week).
+    const denomRow = countPivot[Math.max(0, i - lag)];
+    const kfi = (denomRow.KFI as number) || 0;
     for (const s of stages) {
       const v = r[s] as number;
       out[s] = kfi ? Math.round((v / kfi) * 1000) / 10 : 0;
@@ -613,14 +622,14 @@ export function EvolutionPanel({
   const stageChart = useMemo(() => {
     const rows = pipeline?.byStage ?? [];
     if (stageMode === "conversion") {
-      const conv = stageConversionSeries(rows);
+      const conv = stageConversionSeries(rows, funnel?.conversionLagWeeks);
       return { data: conv.data, lines: conv.stages, format: "pct" as const };
     }
     const piv = pivotStage(rows, stageMode === "count" ? "count" : "value");
     const lines = funnelLineStages(piv.stages, includeKfi);
     return { data: piv.data, lines,
       format: (stageMode === "count" ? "count" : "gbp") as "count" | "gbp" };
-  }, [pipeline, stageMode, includeKfi]);
+  }, [pipeline, funnel, stageMode, includeKfi]);
   const hasWithdrawn = useMemo(
     () => (pipeline?.byStage ?? []).some((r) => normaliseStage(r.stage) === "WITHDRAWN"),
     [pipeline],
@@ -764,7 +773,9 @@ export function EvolutionPanel({
               source="weekly pipeline extracts" />
             <p className="mt-1 text-[10px] text-ink-500" data-testid="stage-mode-note">
               {stageMode === "conversion"
-                ? "Conversion = each stage as a % of KFIs in the same week (count). KFI is the denominator and is not charted."
+                ? (funnel?.conversionLagWeeks != null
+                    ? `Conversion = each stage as a % of the KFI book ${funnel.conversionLagWeeks} week(s) earlier (count), so a growing pipeline isn't compared against itself. KFI is the denominator and is not charted.`
+                    : "Conversion = each stage as a % of KFIs in the same week (count); KFI→completion lag unknown, so unlagged. KFI is the denominator and is not charted.")
                 : `${stageMode === "amount" ? "Amount (£)" : "Case count"} for the main funnel`
                   + ` (KFI → Application → Offer → Completion).${hasWithdrawn ? " Withdrawn is tracked separately, not in the funnel." : ""}`
                   + " Toggle 'Include KFI' off to read the smaller downstream stages."}

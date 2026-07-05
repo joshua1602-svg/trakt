@@ -233,6 +233,19 @@ describe("by-stage pivots (C)", () => {
     ];
     expect(stageConversionSeries(rows).data[0]).toMatchObject({ APPLICATION: 0, OFFER: 0 });
   });
+
+  it("lags the KFI denominator by lagWeeks (not the same week)", () => {
+    // KFI grows 10 -> 20; a stage count of 5 in w2 is 5/20=25% same-week but
+    // 5/10=50% against the KFI book one week earlier (lag=1).
+    const rows: StagePoint[] = [
+      { period: "w1", stage: "KFI", value: 0, count: 10 },
+      { period: "w1", stage: "APPLICATION", value: 0, count: 3 },
+      { period: "w2", stage: "KFI", value: 0, count: 20 },
+      { period: "w2", stage: "APPLICATION", value: 0, count: 5 },
+    ];
+    expect(stageConversionSeries(rows, 0).data[1]).toMatchObject({ APPLICATION: 25 });
+    expect(stageConversionSeries(rows, 1).data[1]).toMatchObject({ APPLICATION: 50 });
+  });
 });
 
 describe("EvolutionPanel stage mode toggle (C)", () => {
@@ -244,6 +257,8 @@ describe("EvolutionPanel stage mode toggle (C)", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Count" }));
     expect(screen.getByTestId("stage-mode-note").textContent).toMatch(/Case count/);
     fireEvent.click(screen.getByRole("tab", { name: "Conversion" }));
-    expect(screen.getByTestId("stage-mode-note").textContent).toMatch(/% of KFIs/);
+    // Conversion note explains the KFI denominator — lagged when the funnel
+    // carries a KFI→completion lag, same-week when it's unknown.
+    expect(screen.getByTestId("stage-mode-note").textContent).toMatch(/% of (the )?KFI/);
   });
 });

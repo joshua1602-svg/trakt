@@ -1822,6 +1822,40 @@ def _empty_llm_meta(provider: str, model: Optional[str]) -> dict:
     }
 
 
+# Layering signals — a question with any of these reads better via the LLM than
+# the narrow deterministic matcher, so we do NOT short-circuit to deterministic
+# for it even when the deterministic parse looks confident.
+_LAYERED_COMPARISON = (
+    " vs ", " vs.", "versus", "compare", "compared", "relative to", " against ",
+    "difference between", "year on year", "year-on-year", "over time", "trend",
+)
+_LAYERED_CONDITIONAL = (
+    "where", "among", "sitting on", "that have", "who have", "with high",
+    "with older", "with low", "combined with", "as well as", "both ", "exposed to",
+    "concentrat", "breakdown of", "split by",
+)
+
+
+def _is_layered_question(question: str) -> bool:
+    """True when a question is multi-faceted / layered rather than a single
+    deterministic lookup. Deliberately errs toward the LLM: any comparison or
+    conditional phrasing, or two+ ``by`` dimension clauses, counts as layered."""
+    q = f" {(question or '').lower().strip()} "
+    if any(tok in q for tok in _LAYERED_COMPARISON):
+        return True
+    if any(tok in q for tok in _LAYERED_CONDITIONAL):
+        return True
+    if q.count(" by ") >= 2:  # two+ dimensions ("balance by region by vintage")
+        return True
+    # "and" joining two substantive clauses (not a trailing filler) — e.g.
+    # "older borrowers and high LTV". Require some length on each side.
+    if " and " in q:
+        left, _, right = q.partition(" and ")
+        if len(left.strip()) >= 8 and len(right.strip()) >= 8:
+            return True
+    return False
+
+
 def parse_with_repair(
     user_question: str,
     semantics,
@@ -1897,9 +1931,18 @@ def parse_with_repair(
     if not use_llm:
         return _det_result("deterministic")
 
-    # Zero-cost-first: avoid the LLM where the deterministic parser is decisive.
+    # Zero-cost-first: skip the LLM only for genuinely SIMPLE, high-confidence
+    # questions (a single-variable metric/dimension the deterministic parser
+    # matches cleanly — "portfolio summary", "balance by region"). Layered or
+    # multi-faceted questions ("older borrowers sitting on high LTVs", "X vs Y",
+    # multiple dimensions) go to the LLM even when the deterministic parser is
+    # confident, because deterministic NLQ coverage is narrow and the LLM reads
+    # the intent better. Only applies when the LLM is actually available (above,
+    # ``not use_llm`` already returned a deterministic result).
     if zero_cost_first:
-        if det_vr.ok and det_meta["parser_confidence"] in ("high", "medium"):
+        layered = _is_layered_question(user_question)
+        if (det_vr.ok and not layered
+                and det_meta["parser_confidence"] == "high"):
             return _det_result("deterministic_zero_cost")
         # Explicit request that fails ONLY because the column is missing:
         # the LLM cannot fix this without substituting — fail clearly, no call.
