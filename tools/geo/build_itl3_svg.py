@@ -112,19 +112,22 @@ def main():
             for ring in poly:
                 for lon, lat in ring:
                     lons.append(lon); lats.append(lat)
-    lon0, lon1 = min(lons), max(lons)
-    lat0, lat1 = min(lats), max(lats)
-    mid_lat = math.radians((lat0 + lat1) / 2)
-    kx = math.cos(mid_lat)
-    span_x = (lon1 - lon0) * kx
-    span_y = (lat1 - lat0)
+    x0, x1 = min(lons), max(lons)
+    y0, y1 = min(lats), max(lats)
+    # Auto-detect the coordinate system. lon/lat are small (|value| < 400); a
+    # projected grid such as British National Grid (EPSG:27700, metres) is large
+    # — use it planar (no cos-lat correction; BNG is already metric/equal-aspect).
+    geographic = abs(x1) <= 400 and abs(y1) <= 400
+    kx = math.cos(math.radians((y0 + y1) / 2)) if geographic else 1.0
+    span_x = (x1 - x0) * kx
+    span_y = (y1 - y0)
     scale = TARGET_W / span_x
     W = TARGET_W
     H = round(span_y * scale, 1)
 
-    def project(lon, lat):
-        x = (lon - lon0) * kx * scale
-        y = (lat1 - lat) * scale  # flip so north is up
+    def project(px, py):
+        x = (px - x0) * kx * scale
+        y = (y1 - py) * scale  # flip so north is up
         return round(x, 1), round(y, 1)
 
     areas = {}
