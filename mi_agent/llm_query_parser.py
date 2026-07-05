@@ -1629,6 +1629,29 @@ def estimate_cost(model: str, usage: Optional[dict]) -> dict:
     return out
 
 
+def _message_text(message) -> str:
+    """The concatenated text of an Anthropic message's TEXT blocks.
+
+    Robust to a leading non-text block: when extended thinking is enabled the
+    first content block is a ``ThinkingBlock`` (which exposes ``.thinking``, not
+    ``.text``), and tool-use blocks carry no text either. Reading
+    ``message.content[0].text`` blindly then raises
+    ``'ThinkingBlock' object has no attribute 'text'``. We instead walk every
+    block and keep only real text, so the parser works whether or not the
+    account/model returns thinking blocks.
+    """
+    parts = []
+    for block in getattr(message, "content", None) or []:
+        # Thinking blocks have no ``.text``; a genuine text block does and its
+        # ``.type`` is "text". ``getattr`` keeps us safe across SDK versions.
+        if getattr(block, "type", "text") == "thinking":
+            continue
+        txt = getattr(block, "text", None)
+        if isinstance(txt, str):
+            parts.append(txt)
+    return "".join(parts)
+
+
 def _call_llm(prompt: Dict[str, str], model: str, use_cache: bool = True):
     """Live Claude call. Returns (text, usage_dict, prompt_cache_supported)."""
     import os
@@ -1660,7 +1683,7 @@ def _call_llm(prompt: Dict[str, str], model: str, use_cache: bool = True):
             system=prompt["system"],
             messages=[{"role": "user", "content": prompt["user"]}],
         )
-    text = message.content[0].text
+    text = _message_text(message)
     u = getattr(message, "usage", None)
     usage = {}
     if u is not None:

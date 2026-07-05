@@ -265,3 +265,52 @@ def test_llm_metadata_includes_tokens_when_usage_returned(df, semantics):
     assert llm["total_tokens"] == 920
     assert llm["estimated_total_cost"] > 0
     assert llm["cost_estimate_status"] == "estimated"
+
+
+# --------------------------------------------------------------------------- #
+# ThinkingBlock hardening — the live Claude call must not crash on a leading
+# non-text block (extended thinking) with "'ThinkingBlock' object has no
+# attribute 'text'".
+# --------------------------------------------------------------------------- #
+class _ThinkingBlock:
+    """Mimics anthropic's ThinkingBlock: has `.thinking`, no `.text`."""
+    type = "thinking"
+
+    def __init__(self, thinking: str):
+        self.thinking = thinking
+
+
+class _TextBlock:
+    type = "text"
+
+    def __init__(self, text: str):
+        self.text = text
+
+
+class _Message:
+    def __init__(self, content):
+        self.content = content
+
+
+def test_message_text_skips_leading_thinking_block():
+    from mi_agent.llm_query_parser import _message_text
+    msg = _Message([_ThinkingBlock("let me reason..."), _TextBlock('{"metric": "x"}')])
+    # Would previously crash on content[0].text; now returns the text block.
+    assert _message_text(msg) == '{"metric": "x"}'
+
+
+def test_message_text_plain_text_first():
+    from mi_agent.llm_query_parser import _message_text
+    assert _message_text(_Message([_TextBlock("hello")])) == "hello"
+
+
+def test_message_text_concatenates_multiple_text_blocks():
+    from mi_agent.llm_query_parser import _message_text
+    msg = _Message([_ThinkingBlock("..."), _TextBlock("a"), _TextBlock("b")])
+    assert _message_text(msg) == "ab"
+
+
+def test_message_text_no_text_blocks_returns_empty():
+    from mi_agent.llm_query_parser import _message_text
+    assert _message_text(_Message([_ThinkingBlock("only thinking")])) == ""
+    assert _message_text(_Message([])) == ""
