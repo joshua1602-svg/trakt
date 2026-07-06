@@ -66,7 +66,26 @@ export interface FundedSnapshot {
   loan_count: number;
   current_outstanding_balance: number;
   kpis: SnapshotKPI[];
+  /** Point-in-time balance/share breakdowns by dimension (may be empty). */
+  stratifications?: FundedStratification[];
   monthly_change: MonthlyChange | null;
   warnings: string[];
   diagnostics: string[];
+}
+
+/** One band/category of a point-in-time funded stratification. */
+export interface FundedStratBar {
+  label: string;
+  balance: number;
+  count: number;
+  sharePct: number;
+  /** Balance-weighted LTV for the band (fraction), when derivable. */
+  waLtv?: number;
+}
+
+/** A funded stratification by one dimension (LTV band / age / region / …). */
+export interface FundedStratification {
+  key: string;
+  label: string;
+  bars: FundedStratBar[];
 }
