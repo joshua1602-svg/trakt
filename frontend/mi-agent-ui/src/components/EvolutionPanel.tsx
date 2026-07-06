@@ -703,13 +703,22 @@ function CohortView({ client, portfolioId }: { client: AgentClient; portfolioId:
  * governed monthly funded runs and weekly pipeline extracts via the evolution
  * endpoints; every chart carries source lineage + per-period reconciliation.
  */
+const ALL_EVO_TABS: EvoView[] = ["funded", "pipeline", "origination", "cohorts", "forecast"];
+
 export function EvolutionPanel({
-  client, portfolioId,
+  client, portfolioId, tabs, heading = true,
 }: {
   client: AgentClient;
   portfolioId: string;
+  /** Restrict to a subset of series (the IA hosts subsets under Funded /
+   * Pipeline / Forecast). Defaults to all five. */
+  tabs?: EvoView[];
+  /** Show the "Evolution" heading + series tab row. Off when a parent workspace
+   * already provides the sub-tab (single-series hosting). */
+  heading?: boolean;
 }) {
-  const [view, setView] = useState<EvoView>("funded");
+  const allowed = (tabs && tabs.length ? tabs : ALL_EVO_TABS).filter((t) => ALL_EVO_TABS.includes(t));
+  const [view, setView] = useState<EvoView>(allowed[0] ?? "funded");
   const [funded, setFunded] = useState<FundedEvolution | null>(null);
   const [pipeline, setPipeline] = useState<PipelineEvolution | null>(null);
   const [forecast, setForecast] = useState<ForecastEvolution | null>(null);
@@ -815,26 +824,32 @@ export function EvolutionPanel({
 
   return (
     <section className="space-y-4" data-testid="evolution-panel">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm font-semibold text-ink-100">
-          <Activity size={16} className="text-peri-300" /> Evolution
+      {(heading || allowed.length > 1) && (
+        <div className="flex items-center justify-between">
+          {heading && (
+            <div className="flex items-center gap-2 text-sm font-semibold text-ink-100">
+              <Activity size={16} className="text-peri-300" /> Evolution
+            </div>
+          )}
+          {allowed.length > 1 && (
+            <div role="tablist" aria-label="Evolution series"
+              className="inline-flex items-center gap-1 rounded-lg border border-navy-600 bg-navy-950/80 p-1 ring-1 ring-inset ring-white/5">
+              {allowed.map((v) => (
+                <button key={v} type="button" role="tab" aria-selected={view === v}
+                  onClick={() => setView(v)}
+                  className={cn(
+                    "rounded-md px-3 py-1 text-[12px] font-medium transition-all",
+                    view === v
+                      ? "bg-peri-400/20 text-ink-100 ring-1 ring-inset ring-peri-400/50"
+                      : "cursor-pointer bg-navy-800/70 text-ink-300 ring-1 ring-inset ring-white/5 hover:bg-navy-700 hover:text-ink-100",
+                  )}>
+                  {EVO_TAB_LABEL[v]}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-        <div role="tablist" aria-label="Evolution series"
-          className="inline-flex items-center gap-1 rounded-lg border border-navy-600 bg-navy-950/80 p-1 ring-1 ring-inset ring-white/5">
-          {(["funded", "pipeline", "origination", "cohorts", "forecast"] as EvoView[]).map((v) => (
-            <button key={v} type="button" role="tab" aria-selected={view === v}
-              onClick={() => setView(v)}
-              className={cn(
-                "rounded-md px-3 py-1 text-[12px] font-medium transition-all",
-                view === v
-                  ? "bg-peri-400/20 text-ink-100 ring-1 ring-inset ring-peri-400/50"
-                  : "cursor-pointer bg-navy-800/70 text-ink-300 ring-1 ring-inset ring-white/5 hover:bg-navy-700 hover:text-ink-100",
-              )}>
-              {EVO_TAB_LABEL[v]}
-            </button>
-          ))}
-        </div>
-      </div>
+      )}
 
       <p className="text-[11px] text-ink-500" data-testid="evo-subtitle">
         {EVO_SUBTITLES[view]}
