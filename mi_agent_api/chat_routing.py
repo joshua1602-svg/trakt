@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from mi_agent.llm_query_parser import _deterministic_parse
 from mi_agent.mi_agent_workflow import _detect_unsupported_concept
@@ -32,6 +32,7 @@ from . import temporal_compare as compare_mod
 from . import currency as currency_mod
 from . import evolution as evolution_mod
 from . import forecast_extrapolation as fx_mod
+from . import geo as geo_mod
 from . import risk_limits as risk_mod
 
 _PALETTE = ["#919dd1", "#36c2a8", "#e0a93b", "#c46b8f", "#3d4a82", "#6fcf97"]
@@ -836,6 +837,94 @@ def _route_cohort_progression(question, spec, spec_dict, *, client_id, run_id,
 
 
 # --------------------------------------------------------------------------- #
+# G. Geographic exposure (ITL3) — "where is the book concentrated?"
+# --------------------------------------------------------------------------- #
+# Location words + an exposure/superlative intent route to the ITL3 exposure
+# engine. A "limit / breach / appetite" framing is a risk-monitor question and is
+# deliberately left to _route_risk (which owns concentration LIMITS).
+_GEO_TERMS = ("geograph", "region", "area", "postcode", "post code", "itl3",
+              "location", "county", "city", "town", "map", "where")
+_GEO_MARKERS = ("concentrat", "exposure", "largest", "biggest", "top ", "hotspot",
+                "heat", "where", "spread", "distribut", "by region", "by area")
+_RISK_LIMIT_TERMS = ("limit", "breach", "appetite", "covenant", "threshold",
+                     "rag", "amber", " red ")
+
+
+def _is_geo_exposure(question: str) -> bool:
+    q = f" {question.lower()} "
+    if any(t in q for t in _RISK_LIMIT_TERMS):
+        return False  # a limit/breach question is a risk-monitor question
+    if "bridge" in q:
+        return False  # a balance bridge by region is the bridge route
+    return any(t in q for t in _GEO_TERMS) and any(m in q for m in _GEO_MARKERS)
+
+
+def _route_geo(question, spec_dict, *, client_id, run_id, frame_resolver,
+               portfolio_id, as_of) -> Dict[str, Any]:
+    """Funded exposure by UK ITL3 area → a ranked bar + table, from the ITL3
+    exposure engine (tape ITL3 field, else postcode-derived). Answers "largest
+    geographic concentration / where is the book". Degrades honestly when the
+    tape carries no ITL3 or postcode."""
+    if frame_resolver is None or not run_id:
+        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
+                         answer="I can't resolve the funded book for a geographic view here.",
+                         route="geo_exposure",
+                         warnings=["insufficient-data: no funded frame for the run."])
+    try:
+        df = frame_resolver(client_id, run_id)
+    except Exception:  # noqa: BLE001 - a resolution hiccup degrades, never 500s
+        df = None
+    if df is None:
+        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
+                         answer="I couldn't load the funded book for this run to map exposure.",
+                         route="geo_exposure",
+                         warnings=["insufficient-data: no funded frame for the run."])
+
+    result = geo_mod.exposure_by_itl3(df)
+    if not result.get("available"):
+        reason = result.get("reason", "no ITL3 area or property postcode on the tape")
+        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
+                         answer=(f"I can't build a geographic exposure view for this book: "
+                                 f"{reason}."),
+                         route="geo_exposure",
+                         warnings=[f"insufficient-data: {reason}"])
+
+    areas = result.get("areas", [])
+    top = areas[0]
+    rows = [{"area": a["itl3_name"] or a["itl3_code"], "code": a["itl3_code"],
+             "balance": a["balance"], "count": a["count"],
+             "share": (f"{a['sharePct']:.1f}%" if a.get("sharePct") is not None else "—")}
+            for a in areas[:15]]
+    chart = _chart_artifact(
+        "Funded exposure by ITL3 area (top 15)", chart_type="bar", x_key="area",
+        rows=rows, series=[{"key": "balance", "label": "Exposure", "color": _PALETTE[0]}],
+        value_format="gbp", spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of,
+        display_hints={"balance": {"format": "gbp", "scale": None}})
+    table = _table_artifact(
+        "Funded exposure by ITL3 area", columns=[
+            {"key": "area", "label": "ITL3 area", "align": "left", "format": "text"},
+            {"key": "code", "label": "Code", "align": "left", "format": "text"},
+            {"key": "balance", "label": "Exposure", "align": "right", "format": "gbp"},
+            {"key": "count", "label": "Loans", "align": "right", "format": "number"},
+            {"key": "share", "label": "Book share", "align": "right", "format": "text"},
+        ], rows=rows, spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of)
+    top_name = top["itl3_name"] or top["itl3_code"]
+    answer = (f"Largest geographic concentration: {top_name} at {_gbp(top['balance'])} "
+              f"({top['sharePct']:.1f}% of the book) across {result.get('areaCount', len(areas))} "
+              f"ITL3 area(s). Basis: {result.get('basis', 'tape')}; "
+              f"resolved coverage {result.get('coveragePct', 0)}%.")
+    notes = [{"field": "geo_basis",
+              "note": (f"ITL3 basis {result.get('basis', 'tape')}: "
+                       f"{result.get('resolvedFromItl3Field', 0)} from the ITL3 field, "
+                       f"{result.get('resolvedFromPostcode', 0)} postcode-derived.")}]
+    recon = {"dataset": "funded",
+             "coverage_by_balance_pct": result.get("coveragePct", 100.0)}
+    return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
+                     artifacts=[chart, table], reconciliation=recon,
+                     source_notes=notes, route="geo_exposure")
+
+
+# --------------------------------------------------------------------------- #
 # Detection + dispatch
 # --------------------------------------------------------------------------- #
 _EVOLUTION_MARKERS = ("evolution", "over time", "trend", "by month", "monthly",
@@ -858,7 +947,9 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
               output_root: Optional[str], pipeline_root: Optional[str],
               semantics: Dict[str, Any], history_model: Optional[Dict[str, Any]] = None,
               as_of: Optional[str] = None,
-              source_lens: Optional[Any] = None) -> Optional[Dict[str, Any]]:
+              source_lens: Optional[Any] = None,
+              frame_resolver: Optional[Callable[[str, Optional[str]], Any]] = None,
+              ) -> Optional[Dict[str, Any]]:
     """Route a question to an internal analytical service, or return None to defer
     to the existing point-in-time MI Agent path. Never raises for analytics issues —
     the caller wraps this defensively and falls back on any exception."""
@@ -893,6 +984,9 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
                                         client_id=client_id, run_id=run_id,
                                         output_root=output_root, portfolio_id=portfolio_id,
                                         as_of=as_of, source_lens=source_lens)
+    if _is_geo_exposure(question):
+        return _route_geo(question, spec_dict, client_id=client_id, run_id=run_id,
+                          frame_resolver=frame_resolver, portfolio_id=portfolio_id, as_of=as_of)
     if spec.temporal_mode == "compare":
         return _route_compare(question, spec, spec_dict, view=view, **kw)
     if spec.risk_limit_query:

@@ -1569,13 +1569,19 @@ def query(req: QueryRequest) -> Dict[str, Any]:
         # (tape -> config -> GBP; cached per client). The point-in-time path
         # below re-resolves from its own df, which is a no-op for the same book.
         _apply_request_currency(cid, portfolio_id)
+        def _routed_frame(cli: str, rid: Optional[str]):
+            """Resolve the funded frame for a routed intent (e.g. geographic
+            exposure) using the same discovery as the dashboard endpoints."""
+            frame, _report = _resolve_run_dataframe(cli, rid, _onboarding_output_root())
+            return frame
         routed = chat_routing_mod.try_route(
             req.question, portfolio_id=portfolio_id, view=view,
             output_root=_onboarding_output_root(),
             pipeline_root=_pipeline_discovery_root(),
             semantics=load_mi_semantics(semantics_path()),
             history_model=_pipeline_history(cid), as_of=req.asOfDate,
-            source_lens=req.sourcePortfolioLens or None)
+            source_lens=req.sourcePortfolioLens or None,
+            frame_resolver=_routed_frame)
     except Exception as exc:  # noqa: BLE001 - routing must never break the chat
         logger.warning("chat routing failed; using point-in-time path: %s", exc)
         routed = None

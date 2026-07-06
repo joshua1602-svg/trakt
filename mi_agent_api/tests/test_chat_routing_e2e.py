@@ -9,6 +9,7 @@ source notes), WITHOUT regressing existing point-in-time questions.
 """
 from __future__ import annotations
 
+import os
 import sys
 import warnings
 from pathlib import Path
@@ -212,6 +213,54 @@ def test_geographic_limits_returns_only_geographic_category():
     # A broker-scoped query, by contrast, returns broker rows.
     rb = _ask("Show broker concentration limits.")
     assert rb["answer"].lower().startswith("broker")
+
+
+# --------------------------------------------------------------------------- #
+# E. Geographic exposure (ITL3) — the new engine wired into chat
+# --------------------------------------------------------------------------- #
+def _rewrite_latest_tape_with_postcodes() -> None:
+    root = Path(os.environ["MI_AGENT_ONBOARDING_OUTPUT_ROOT"])
+    d = root / "client_001" / "mi_2025_11" / "output" / "central"
+    d.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({
+        "loan_identifier": [f"g_{i}" for i in range(6)],
+        # BS1 group dominates -> Bristol (TLK51) is the largest concentration.
+        "current_outstanding_balance": [500_000, 400_000, 300_000, 200_000, 150_000, 100_000],
+        "current_loan_to_value": [40.0] * 6,
+        "current_interest_rate": [5.0] * 6,
+        "youngest_borrower_age": [70] * 6,
+        "property_post_code": ["BS1 4DJ", "BS1 5TR", "AB10 1AB", "AB10 2CD", "EH1 1AA", "M1 1AA"],
+        "reporting_date": ["2025-11-30"] * 6,
+    }).to_csv(d / "18_central_lender_tape.csv", index=False)
+
+
+def test_geographic_exposure_routes_to_itl3_engine():
+    # A location + superlative question (no "limit") routes to the ITL3 exposure
+    # engine, NOT the risk-limit monitor.
+    _rewrite_latest_tape_with_postcodes()
+    r = _ask("What is the largest geographic area concentration?")
+    assert r["ok"] is True and r["metadata"]["route"] == "geo_exposure"
+    assert "largest geographic concentration" in r["answer"].lower()
+    assert "bristol" in r["answer"].lower()
+    tbl = next(a for a in r["artifacts"] if a["type"] == "table")
+    assert {"area", "balance", "count"} <= {c["key"] for c in tbl["columns"]}
+    assert any(a["type"] == "chart" for a in r["artifacts"])
+
+
+def test_geographic_exposure_degrades_honestly_without_itl3_or_postcode():
+    # The default fixture tape carries region NAMES only (no ITL3 code / postcode),
+    # so the ITL3 engine can't resolve areas — the route still owns the answer and
+    # explains why, rather than silently falling back.
+    r = _ask("Where is the book concentrated geographically?")
+    assert r["ok"] is True and r["metadata"]["route"] == "geo_exposure"
+    assert "geographic exposure" in r["answer"].lower()
+    assert r["artifacts"] == []
+
+
+def test_geographic_concentration_limits_still_route_to_risk():
+    # Guard: a LIMIT-framed geographic question stays on the risk monitor.
+    r = _ask("Show geographic concentration limits.")
+    assert r["ok"] is True and r["metadata"]["route"] == "risk_limits"
 
 
 def test_funded_balance_forecast_curve_returns_line_chart():
