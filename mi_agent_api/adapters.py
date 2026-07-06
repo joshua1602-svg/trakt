@@ -667,6 +667,7 @@ def adapt_workflow_result(
         # applied, rejected, or (never, by construction) silently dropped.
         "queryTrace": query_trace,
         "dimensionInvariant": workflow.get("dimension_invariant"),
+        "filterInvariant": workflow.get("filter_invariant"),
         "metadata": {
             "portfolioId": portfolio_id,
             "asOfDate": as_of,

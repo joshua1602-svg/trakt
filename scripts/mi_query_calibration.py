@@ -29,6 +29,7 @@ from mi_agent import mi_query_harness as H
 _CLASS_MEANING = {
     "parser": "the query's dimension/metric was not recognised by the parser",
     "executor": "a parsed dimension/metric was not applied in execution (silent drop)",
+    "filter": "a parsed value filter was not applied to the execution mask (silent omission)",
     "renderer": "an applied dimension was absent from BOTH the chart axes and the table",
     "rejection": "an unsupported concept was answered with a stand-in instead of refused",
     "error": "the pipeline raised or returned a hard validation error",
@@ -71,6 +72,23 @@ def build_markdown(results, summary) -> str:
       "rejected** with a reason — **never silently dropped**. A requested metric "
       "must likewise appear in the result payload rather than being substituted "
       "with the default balance.")
+    A("")
+
+    A("## Fail-closed invariants (tracked separately)")
+    A("")
+    dim = summary.get("dimension_invariant", {})
+    filt = summary.get("filter_invariant", {})
+    A("| Invariant | Cases checked | Held | Breached |")
+    A("|---|---:|---:|---:|")
+    A(f"| Dimension (parsed dim applied or explicitly rejected) | "
+      f"{dim.get('checked', 0)} | {dim.get('held', 0)} | {dim.get('breached', 0)} |")
+    A(f"| Filter (parsed filter applied or explicitly surfaced) | "
+      f"{filt.get('checked', 0)} | {filt.get('held', 0)} | {filt.get('breached', 0)} |")
+    A("")
+    A(f"Value filters were genuinely exercised on **{summary.get('filters_exercised', 0)}** "
+      "cases (parsed AND applied to the execution mask). A parsed filter that is "
+      "neither applied nor explicitly surfaced fails the query closed rather than "
+      "returning silently unfiltered data.")
     A("")
 
     A("## Coverage by query class")
@@ -118,26 +136,26 @@ def build_markdown(results, summary) -> str:
                 A(f"  - {q}")
             A("")
 
-    lim = summary.get("grouped_filter_limitation")
-    if lim is not None:
-        A("## Known limitations")
+    sup = summary.get("grouped_filter_support")
+    if sup is not None:
+        A("## Grouped query + value filter (now supported)")
         A("")
-        A("**Grouped query + value filter** — evidenced from live behaviour:")
+        A("Evidenced from live behaviour:")
         A("")
-        A(f"- Probe: `{lim['query']}`")
-        A(f"- Filter parsed into the spec: **{lim['filter_parsed']}**")
-        A(f"- Filter applied (reconciliation): **{lim['filters_applied']}** "
-          f"({lim['records_after_filters']} of {lim['total_records']} records)")
-        A(f"- Omission surfaced to the user (warning): **{lim['omission_surfaced']}**")
-        A(f"- Supported today: **{lim['supported']}**")
+        A(f"- Probe: `{sup['query']}`")
+        A(f"- Filter parsed into the spec: **{sup['filter_parsed']}**")
+        A(f"- Filter applied (reconciliation): **{sup['filters_applied']}** "
+          f"({sup['records_after_filters']} of {sup['total_records']} records)")
+        A(f"- Supported: **{sup['supported']}**")
         A("")
         A("A value filter combined with a grouping (`… by <dim> where <measure> "
-          "above <x>`) is **not** applied today, and the omission is not yet "
-          "surfaced as a warning. The supported filtered shape is the ungrouped "
-          "filtered KPI (`how many loans have LTV above 50%`), verified by the "
-          "`filtered_kpi` class above. Recommended follow-up: extend the "
-          "fail-closed guard to filters (warn/refuse when a recognised filter "
-          "phrase is not applied) and add grouped+filter parsing.")
+          "above <x>`, ranges, and categorical `… for joint borrowers`) is now "
+          "applied to the execution mask **before** grouping — both the grouping "
+          "and the filter survive. The fail-closed **filter invariant** refuses "
+          "the query if a parsed filter is not applied, so unfiltered grouped "
+          "data is never returned silently. A filter on a field ABSENT from the "
+          "dataset is refused or surfaced as unavailable (`filter_unsupported` "
+          "class), never silently ignored.")
         A("")
 
     A("## Correctly-rejected unsupported concepts")

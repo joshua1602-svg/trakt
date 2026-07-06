@@ -259,10 +259,7 @@ def generate_cases(df: pd.DataFrame, semantics: dict, *,
             kind="three_dim", expected_metric=balance, expected_dims=[a, b, c],
             min_columns=3))
 
-    # 4) filtered KPI — the parser applies a value filter to a whole-book count.
-    #    (A GROUPED query + value filter is a known parser limitation, probed and
-    #    reported separately by ``probe_grouped_filter_limitation`` rather than
-    #    asserted here — see the calibration report's "Known limitations".)
+    # 4a) filtered KPI — the parser applies a value filter to a whole-book count.
     _filter_probes = [
         ("current_loan_to_value", "LTV", [30, 50, 60]),
         ("current_outstanding_balance", "balance", [150000, 200000]),
@@ -278,6 +275,43 @@ def generate_cases(df: pd.DataFrame, semantics: dict, *,
                 query=f"how many loans have {noun} above {thr}{unit}",
                 kind="filtered_kpi", expected_metric=None,
                 expected_filters=[fld], chart_expected=False, min_columns=1))
+
+    # 4b) GROUPED query + value filter — the filter is applied to the mask BEFORE
+    #     grouping. Both the grouping AND the filter must survive (the filter
+    #     invariant asserts filters_applied). Numeric, range and categorical.
+    for d in dims:
+        cases.append(GeneratedCase(
+            id=nxt("gfilter_num"),
+            query=f"balance by {_dim_phrase(semantics, d)} where LTV above 50%",
+            kind="grouped_filter", expected_metric=balance, expected_dims=[d],
+            expected_filters=[ltv], min_columns=2))
+    for d in dims[:6]:
+        cases.append(GeneratedCase(
+            id=nxt("gfilter_range"),
+            query=f"balance by {_dim_phrase(semantics, d)} where LTV between 40 and 60",
+            kind="grouped_filter", expected_metric=balance, expected_dims=[d],
+            expected_filters=[ltv], min_columns=2))
+    # Categorical grouped filter (borrower structure) — only for non-borrower dims.
+    if "borrower_type" in metrics or "borrower_type" in semantics.get("fields", {}):
+        for d in [x for x in dims if x not in ("borrower_type", "borrower_structure")][:6]:
+            cases.append(GeneratedCase(
+                id=nxt("gfilter_cat"),
+                query=f"balance by {_dim_phrase(semantics, d)} for joint borrowers",
+                kind="grouped_filter", expected_metric=balance, expected_dims=[d],
+                expected_filters=["borrower_type"], min_columns=2))
+
+    # 4c) unsupported filter shape — a filter on a field ABSENT from the dataset
+    #     must be refused or surfaced (unavailable), never silently ignored.
+    _absent = [f for f in ("internal_risk_score", "arrears_balance",
+                           "number_of_days_in_arrears")
+               if f in semantics.get("fields", {}) and f not in df.columns]
+    for fld in _absent[:1]:
+        bn = business_name_of(fld, semantics)
+        cases.append(GeneratedCase(
+            id=nxt("filter_unsupported"),
+            query=f"how many loans have {bn} above 700",
+            kind="filter_unsupported", expect_rejection=True,
+            chart_expected=False, table_expected=False))
 
     # 5) top-N
     for d in dims:
@@ -337,6 +371,10 @@ class CaseResult:
     result_columns: List[str] = field(default_factory=list)
     chart_type: Optional[str] = None
     chart_axes: List[str] = field(default_factory=list)
+    # Per-invariant outcomes (tracked separately for the calibration report).
+    dimension_invariant_ok: Optional[bool] = None
+    filter_invariant_ok: Optional[bool] = None
+    filters_applied: Optional[bool] = None
 
 
 def _artifact_columns(artifacts: List[dict]) -> Tuple[Optional[str], List[str], List[str]]:
@@ -359,13 +397,25 @@ def _artifact_columns(artifacts: List[dict]) -> Tuple[Optional[str], List[str], 
 
 
 def evaluate_case(case: GeneratedCase, df: pd.DataFrame, semantics: dict) -> CaseResult:
-    """Run one case through the real pipeline and apply the invariant checks."""
+    """Run one case through the real pipeline, apply the invariant checks, and
+    tag the outcome with the dimension- and filter-invariant flags (so the
+    calibration report can report the two invariants separately)."""
     try:
         res = run_mi_agent_query(case.query, df, semantics)
     except Exception as exc:  # pragma: no cover - defensive
         return CaseResult(case=case, ok=False, failure_class="error",
                           detail=f"pipeline raised: {exc}")
+    result = _evaluate_case_impl(case, res, semantics)
+    dinv = res.get("dimension_invariant") or {}
+    finv = res.get("filter_invariant") or {}
+    result.dimension_invariant_ok = dinv.get("ok")
+    result.filter_invariant_ok = finv.get("ok")
+    result.filters_applied = finv.get("filters_applied")
+    return result
 
+
+def _evaluate_case_impl(case: GeneratedCase, res: Dict[str, Any], semantics: dict) -> CaseResult:
+    """Apply the invariant checks to a completed pipeline result."""
     inv = res.get("dimension_invariant") or {}
     applied = list(inv.get("applied") or [])
     rejected = [r.get("dimension") for r in (inv.get("rejected") or [])]
@@ -420,8 +470,8 @@ def evaluate_case(case: GeneratedCase, df: pd.DataFrame, semantics: dict) -> Cas
 
     # Parser check — the query's dimensions were recognised.
     expected_present = [d for d in case.expected_dims if d in parsed]
-    if case.kind in ("single_dim", "two_dim", "filtered_kpi", "top_n",
-                     "ranking", "weighted_avg", "count") and case.expected_dims:
+    if case.kind in ("single_dim", "two_dim", "filtered_kpi", "grouped_filter",
+                     "top_n", "ranking", "weighted_avg", "count") and case.expected_dims:
         missing = [d for d in case.expected_dims if d not in parsed]
         if missing:
             return CaseResult(case=case, ok=False, failure_class="parser",
@@ -495,7 +545,7 @@ def run_suite(df: Optional[pd.DataFrame] = None, semantics: Optional[dict] = Non
     cases = generate_cases(df, semantics, usable_dims=usable, **gen_kwargs)
     results = [evaluate_case(c, df, semantics) for c in cases]
     summary = summarise(results, usable_dims=usable)
-    summary["grouped_filter_limitation"] = probe_grouped_filter_limitation(df, semantics)
+    summary["grouped_filter_support"] = probe_grouped_filter_limitation(df, semantics)
     return results, summary
 
 
@@ -517,6 +567,17 @@ def summarise(results: List[CaseResult], *, usable_dims: Optional[List[str]] = N
         else:
             failures.append(r)
             by_class[r.failure_class or "unknown"] = by_class.get(r.failure_class or "unknown", 0) + 1
+
+    # Track the two fail-closed invariants SEPARATELY (requirement 6). A case
+    # counts toward an invariant only where that invariant applies (flag is not
+    # None); ``ok is False`` is a breach.
+    def _inv_stats(attr: str) -> Dict[str, int]:
+        checked = [getattr(r, attr) for r in results if getattr(r, attr) is not None]
+        return {"checked": len(checked),
+                "held": sum(1 for v in checked if v),
+                "breached": sum(1 for v in checked if v is False)}
+
+    filters_exercised = sum(1 for r in results if r.filters_applied)
     return {
         "total": total,
         "passed": passed,
@@ -526,6 +587,9 @@ def summarise(results: List[CaseResult], *, usable_dims: Optional[List[str]] = N
         "by_kind": by_kind,
         "rejections_correct": rejections_ok,
         "usable_dimensions": list(usable_dims or []),
+        "dimension_invariant": _inv_stats("dimension_invariant_ok"),
+        "filter_invariant": _inv_stats("filter_invariant_ok"),
+        "filters_exercised": filters_exercised,
     }
 
 

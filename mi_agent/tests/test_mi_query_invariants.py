@@ -67,30 +67,52 @@ def test_suite_is_large_enough_to_be_meaningful(suite):
     # Hundreds of generated variants across all query classes.
     assert summary["total"] >= 200, summary["total"]
     for kind in ("single_dim", "two_dim", "three_dim", "filtered_kpi",
-                 "top_n", "ranking", "weighted_avg", "count", "rejection"):
+                 "grouped_filter", "filter_unsupported", "top_n", "ranking",
+                 "weighted_avg", "count", "rejection"):
         assert kind in summary["by_kind"], kind
 
 
-def test_filters_reach_the_mask_on_supported_shape(suite):
-    """Filtered KPIs must genuinely apply the filter (parsed into the spec AND
-    reflected in the reconciliation) — the harness verifies this rather than
-    assuming it."""
-    results, _ = suite
-    fkpi = [r for r in results if r.case.kind == "filtered_kpi"]
-    assert fkpi, "expected filtered_kpi cases"
-    assert all(r.ok for r in fkpi), [r.detail for r in fkpi if not r.ok]
-
-
-def test_grouped_filter_limitation_is_evidenced(suite):
-    """A grouped query + value filter is a KNOWN limitation: the filter is not
-    applied. This test pins the current behaviour so the calibration report
-    documents it honestly and any future fix trips this tripwire."""
+def test_both_invariants_hold_across_the_suite(suite):
+    """Dimension AND filter invariants are tracked separately and both hold for
+    every case where they apply."""
     _, summary = suite
-    lim = summary.get("grouped_filter_limitation")
-    assert lim is not None
-    # Documented as unsupported today. If this flips to True, grouped+filter now
-    # works — update the report's Known Limitations section and this assertion.
-    assert lim["supported"] is False, lim
+    dim = summary["dimension_invariant"]
+    filt = summary["filter_invariant"]
+    assert dim["checked"] > 0 and dim["breached"] == 0, dim
+    assert filt["checked"] > 0 and filt["breached"] == 0, filt
+    # Filters were genuinely exercised (not a vacuous pass).
+    assert summary["filters_exercised"] >= 10, summary["filters_exercised"]
+
+
+def test_filters_reach_the_mask_on_supported_shape(suite):
+    """Filtered KPIs AND grouped filters must genuinely apply the filter (parsed
+    into the spec AND reflected in the reconciliation)."""
+    results, _ = suite
+    fcases = [r for r in results if r.case.kind in ("filtered_kpi", "grouped_filter")]
+    assert fcases, "expected filtered cases"
+    assert all(r.ok for r in fcases), [(r.case.query, r.detail) for r in fcases if not r.ok]
+
+
+def test_grouped_filter_now_supported(suite):
+    """Grouped query + value filter is now SUPPORTED: execution applies the
+    filter to the mask before grouping. (Previously an evidenced limitation.)"""
+    _, summary = suite
+    sup = summary.get("grouped_filter_support")
+    assert sup is not None
+    assert sup["supported"] is True, sup
+    assert sup["filter_parsed"] is True and sup["filters_applied"] is True, sup
+    assert sup["records_after_filters"] < sup["total_records"], sup
+
+
+def test_no_silent_filter_omission(suite):
+    """No case may fail because a parsed filter was silently omitted, and no
+    'ok' case may carry a breached filter invariant."""
+    results, _ = suite
+    silent = [r for r in results
+              if not r.ok and r.failure_class == "filter"]
+    assert not silent, [(r.case.query, r.detail) for r in silent]
+    leaked = [r for r in results if r.ok and r.filter_invariant_ok is False]
+    assert not leaked, [r.case.query for r in leaked]
 
 
 def test_no_silent_drops_anywhere(suite):
@@ -141,6 +163,92 @@ def test_a_simulated_silent_drop_is_refused(df, semantics):
     inv = check_dimension_invariant(spec, fake, semantics)
     assert inv.ok is False
     assert any(d["dimension"] == "geographic_region_obligor" for d in inv.dropped)
+
+
+# --------------------------------------------------------------------------- #
+# Filter invariant — the five required shapes.
+# --------------------------------------------------------------------------- #
+def _recon(res):
+    qr = res.get("query_result")
+    return (getattr(qr, "metadata", {}) or {}).get("reconciliation") or {} if qr else {}
+
+
+def test_filter_simple_filtered_kpi(df, semantics):
+    res = run_mi_agent_query("how many loans have LTV above 50%", df, semantics)
+    assert res.get("ok") is True, res.get("error")
+    fi = res["filter_invariant"]
+    assert fi["ok"] and fi["filters_applied"]
+    assert "current_loan_to_value" in fi["applied_filters"]
+    assert _recon(res)["records_after_filters"] < _recon(res)["total_records"]
+
+
+def test_filter_grouped_categorical(df, semantics):
+    """Grouped query + categorical filter: both the grouping and the filter
+    survive."""
+    res = run_mi_agent_query("balance by broker for joint borrowers", df, semantics)
+    assert res.get("ok") is True, res.get("error")
+    fi = res["filter_invariant"]
+    assert fi["ok"] and fi["filters_applied"]
+    assert "borrower_type" in fi["applied_filters"]
+    cols = [str(c) for c in res["query_result"].data.columns]
+    assert "broker_channel" in cols  # grouping preserved
+    assert _recon(res)["filters_applied"] is True
+
+
+def test_filter_grouped_numeric_range(df, semantics):
+    """Grouped query + range filter: filter applied to the mask before grouping."""
+    res = run_mi_agent_query("balance by region where LTV between 40 and 60", df, semantics)
+    assert res.get("ok") is True, res.get("error")
+    fi = res["filter_invariant"]
+    assert fi["ok"] and fi["filters_applied"]
+    assert "current_loan_to_value" in fi["applied_filters"]
+    recon = _recon(res)
+    assert 0 < recon["records_after_filters"] < recon["total_records"]
+
+
+def test_filter_unsupported_shape_is_refused(df, semantics):
+    """A filter on a field ABSENT from the dataset is refused / surfaced, never
+    silently answered with unfiltered data."""
+    res = run_mi_agent_query("how many loans have Risk Grade above 700", df, semantics)
+    # Refused (not answered) OR the predicate is surfaced as unavailable.
+    fi = res.get("filter_invariant") or {}
+    refused = res.get("ok") is False or bool(res.get("controlled_unsupported"))
+    surfaced = bool(fi.get("unavailable_filters"))
+    assert refused or surfaced, res.get("error")
+    # Never silently returned filtered-looking data with the filter dropped.
+    if res.get("ok"):
+        assert not (fi.get("parsed_filters") and not fi.get("filters_applied"))
+
+
+def test_no_silent_fall_through_to_unfiltered_data(df, semantics):
+    """If a parsed filter is NOT applied to the mask, the workflow fails closed
+    rather than returning unfiltered grouped data."""
+    from mi_agent.mi_query_contract import check_filter_invariant
+    from mi_agent.mi_query_spec import MIQuerySpec
+    from mi_agent.mi_query_executor import execute_mi_query
+    # A spec that carries a filter; simulate the executor not applying it by
+    # blanking the reconciliation's applied filters, then check fail-closed.
+    spec = MIQuerySpec(intent="chart", metric="current_outstanding_balance",
+                       aggregation="sum", chart_type="bar",
+                       dimension="geographic_region_obligor",
+                       filters={"current_loan_to_value": {"op": "gt", "value": 50.0}})
+    qr = execute_mi_query(spec, df, semantics)
+    # Sanity: normally applied.
+    assert check_filter_invariant(spec, qr, semantics).ok is True
+
+    class _FakeQR:
+        pass
+    fake = _FakeQR()
+    meta = dict(qr.metadata or {})
+    recon = dict(meta.get("reconciliation") or {})
+    recon["filters_applied"] = False
+    recon["filters"] = {}
+    meta["reconciliation"] = recon
+    fake.metadata = meta
+    fake.data = qr.data
+    finv = check_filter_invariant(spec, fake, semantics)
+    assert finv.ok is False
+    assert any(d["filter"] == "current_loan_to_value" for d in finv.dropped)
 
 
 # --------------------------------------------------------------------------- #

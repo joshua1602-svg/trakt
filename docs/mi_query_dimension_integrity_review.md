@@ -183,11 +183,11 @@ it is not part of the CI path.
 - **Parser hardening:** consider promoting `rejected_dimensions` /
   `rejectedFilters` into a visible UI chip so an analyst always sees when a
   requested slice could not be honoured.
-- **Grouped query + value filter (known limitation):** `… by <dim> where
-  <measure> above <x>` does **not** apply the filter today (the ungrouped
-  filtered KPI does), and the omission is not surfaced as a warning. Evidenced
-  live by `probe_grouped_filter_limitation` and pinned by
-  `test_grouped_filter_limitation_is_evidenced`. Recommended follow-up: extend
-  the fail-closed guard to **filters** (warn/refuse when a recognised filter
-  phrase is not applied) and add grouped+filter parsing. The dimension
-  invariant does not cover filters.
+- **Grouped query + value filter (now supported):** `… by <dim> where <measure>
+  above <x>`, ranges, and categorical `… for joint borrowers` now apply the
+  filter to the execution mask **before** grouping — both the grouping and the
+  filter survive. The parser attaches value filters on the grouped bar / heatmap
+  / treemap / ranking paths (execution already supported filter+group), and a
+  fail-closed **filter invariant** (`check_filter_invariant`) refuses the query
+  if a parsed filter is not applied. See
+  `docs/mi_query_filter_integrity.md`.

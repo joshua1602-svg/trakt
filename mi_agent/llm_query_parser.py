@@ -1383,9 +1383,40 @@ def _parse_filters(q: str, semantics: dict, available_columns=None) -> Dict[str,
     return filters
 
 
+def _grouped_value_filters(q: str, semantics: dict, available_columns,
+                           exclude_dims: Iterable[str] = ()) -> Tuple[Dict[str, Any], List[str]]:
+    """Value filters expressed ALONGSIDE a grouping, e.g. 'balance by region where
+    LTV above 50%' or 'balance by broker in the north'. Execution applies filters
+    to the mask BEFORE grouping, so a grouped spec may legitimately carry them.
+
+    A filter whose field is itself a grouping dimension is dropped (that is the
+    grouping, not a filter). Returns ``(filters, unavailable_notes)`` — mirrors
+    the filtered-KPI branch so a grouped filter is never silently discarded."""
+    exclude = set(exclude_dims or ())
+    filters = _parse_filters(q, semantics, available_columns)
+    unavailable: List[str] = []
+    # A borrower-structure value filter ("... for joint borrowers") resolves to a
+    # categorical filter (or an unavailable note). Skip it when the grouping IS
+    # the borrower dimension (that is the breakdown, not a filter).
+    bstruct = _borrower_structure_filter(q, semantics, available_columns)
+    if bstruct is not None:
+        bfilters, bnote = bstruct
+        bfilters = {k: v for k, v in (bfilters or {}).items() if k not in exclude}
+        if bfilters:
+            filters.update(bfilters)
+        elif bnote and not (bfilters and set(bfilters) & exclude):
+            unavailable.append(bnote)
+    for d in exclude:
+        filters.pop(d, None)
+    return filters, unavailable
+
+
 def _build_two_dim_spec(metric: Optional[str], dims: List[str], semantics: dict,
                         title: str, explicit: bool, terms: List[str],
-                        has_count: bool = False) -> Tuple[MIQuerySpec, dict]:
+                        has_count: bool = False,
+                        filters: Optional[Dict[str, Any]] = None,
+                        unavailable_filters: Optional[List[str]] = None
+                        ) -> Tuple[MIQuerySpec, dict]:
     """Build a two-dimensional grouped (heatmap / matrix) spec."""
     fields = _fields(semantics)
     if has_count or metric is None:
@@ -1397,6 +1428,7 @@ def _build_two_dim_spec(metric: Optional[str], dims: List[str], semantics: dict,
     spec = MIQuerySpec(
         intent="chart", chart_type="heatmap", metric=metric,
         dimensions=[d for d in dims if d][:2], aggregation=agg, weight_field=weight,
+        filters=filters or {}, unavailable_filters=unavailable_filters or [],
         title=title, explanation="Matrix of a metric across two dimensions.",
         output_format="chart")
     return spec, _det_meta(conf, explicit, terms)
@@ -1447,10 +1479,16 @@ def _build_ranking_spec(q: str, title: str, rank_dir: str, rank_limit: Optional[
 
     if dim is not None:
         weight = _default_weight(semantics, rmetric) if ragg == "weighted_avg" else None
+        # A value filter on the ranked population ("top 5 regions by balance where
+        # LTV above 50%") is applied before ranking — attach it (excluding the
+        # ranking dimension itself) so it is never silently dropped.
+        g_filters, g_unavail = _grouped_value_filters(
+            q, semantics, available_columns, exclude_dims=[dim])
         spec = MIQuerySpec(
             intent="chart", chart_type="bar", metric=rmetric, dimension=dim,
             aggregation=ragg, weight_field=weight, top_n=(rank_limit or top_n),
             sort_by=rmetric, sort_direction=rank_dir, ranking_mode="grouped",
+            filters=g_filters, unavailable_filters=g_unavail,
             title=title, explanation="Ranked bar of a metric by dimension.",
             output_format="chart")
         return spec, _det_meta("high", True, gterms or [dim])
@@ -1608,9 +1646,12 @@ def _deterministic_parse(question: str, semantics: dict,
                         merged.append(k)
                 dims = merged[:2]
             metric, _agg, matched = _detect_metric(metric_part, semantics)
+            g_filters, g_unavail = _grouped_value_filters(
+                q, semantics, available_columns, exclude_dims=dims)
             return _build_two_dim_spec(metric, dims, semantics, title, True,
                                        [c[1] for c in seg_classes[:2]],
-                                       has_count=("count" in matched))
+                                       has_count=("count" in matched),
+                                       filters=g_filters, unavailable_filters=g_unavail)
         # All-numeric two-segment grouping -> bubble (two numeric axes + size).
         numeric_bubble = True
 
@@ -1624,9 +1665,12 @@ def _deterministic_parse(question: str, semantics: dict,
     if (len(dim_keys) >= 2 and not explicit_plot and not is_ranking
             and "treemap" not in q):
         metric, _agg, matched = _detect_metric(remaining, semantics)
+        g_filters, g_unavail = _grouped_value_filters(
+            q, semantics, available_columns, exclude_dims=dim_keys[:2])
         return _build_two_dim_spec(metric, dim_keys[:2], semantics, title, True,
                                    dim_terms,
-                                   has_count=("count" in matched or _wants_count(q)))
+                                   has_count=("count" in matched or _wants_count(q)),
+                                   filters=g_filters, unavailable_filters=g_unavail)
 
     # ---- ranked / "largest" queries ---------------------------------------
     if is_ranking and "treemap" not in q and "heatmap" not in q:
@@ -1642,9 +1686,12 @@ def _deterministic_parse(question: str, semantics: dict,
         if metric is None:
             metric, agg = _balance_metric(semantics), "sum"
         conf = "high" if len(g_keys) >= 1 else "low"
+        g_filters, g_unavail = _grouped_value_filters(
+            q, semantics, available_columns, exclude_dims=g_keys[:3])
         return (MIQuerySpec(
             intent="chart", chart_type="treemap", metric=metric,
             hierarchy=g_keys[:3], aggregation=agg, top_n=top_n, title=title,
+            filters=g_filters, unavailable_filters=g_unavail,
             explanation="Treemap sized by metric across a dimension hierarchy.",
             output_format="chart"),
             _det_meta(conf, bool(g_keys), g_terms))
@@ -1802,9 +1849,15 @@ def _deterministic_parse(question: str, semantics: dict,
         metric, agg = _balance_metric(semantics, available_columns), "sum"
     weight = _default_weight(semantics, metric) if agg == "weighted_avg" else None
     conf = "high" if explicit else ("medium" if not generic else "low")
+    # A value filter expressed alongside the grouping ("balance by region where
+    # LTV above 50%") is applied to the mask before grouping — attach it so it is
+    # never silently dropped. The grouping dimension itself is excluded.
+    g_filters, g_unavail = _grouped_value_filters(
+        q, semantics, available_columns, exclude_dims=[dimension] if dimension else [])
     return (MIQuerySpec(
         intent="chart", chart_type="bar", metric=metric, dimension=dimension,
         aggregation=agg, weight_field=weight, top_n=top_n, title=title,
+        filters=g_filters, unavailable_filters=g_unavail,
         explanation=f"Bar chart of {agg} metric by dimension.",
         output_format="chart"),
         _det_meta(conf, explicit, dim_terms))
