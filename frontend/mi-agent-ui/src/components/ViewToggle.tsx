@@ -1,14 +1,15 @@
-import { Activity, GitBranch, Landmark, Map, ShieldAlert, TrendingUp } from "lucide-react";
+import { GitBranch, Landmark, ShieldAlert, TrendingUp } from "lucide-react";
 import type { WorkspaceView } from "@/domain";
 import { cn } from "@/lib/utils";
 
+// Top-level tabs follow the book lifecycle: Funded → Pipeline → Forecast, plus
+// the cross-cutting Risk Limits monitor. Each of Funded/Pipeline/Forecast hosts
+// its own sub-tabs (stratifications / geography / evolution / cohorts / …).
 const VIEWS: { id: WorkspaceView; label: string; icon: typeof Landmark }[] = [
   { id: "funded", label: "Funded", icon: Landmark },
   { id: "pipeline", label: "Pipeline", icon: GitBranch },
   { id: "forecast", label: "Forecast", icon: TrendingUp },
-  { id: "evolution", label: "Evolution", icon: Activity },
   { id: "risk_limits", label: "Risk Limits", icon: ShieldAlert },
-  { id: "geography", label: "Geography", icon: Map },
 ];
 
 /** Segmented control selecting the active MI workspace view.

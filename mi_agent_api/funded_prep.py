@@ -32,6 +32,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
+from analytics_lib.dates import coerce_dates
 from analytics_lib.numeric import coerce_numeric
 
 # Percent-vs-fraction detector (mirrors analytics_lib.buckets median heuristic):
@@ -184,7 +185,7 @@ def _derive_youngest_age(out: pd.DataFrame, derived: List[str]) -> None:
         return
     ages = pd.DataFrame(index=out.index)
     for c in dob_cols:
-        dob = pd.to_datetime(out[c], errors="coerce", dayfirst=True)
+        dob = coerce_dates(out[c])
         ages[c] = (rd - dob).dt.days / 365.25
     youngest = ages.min(axis=1, skipna=True)  # youngest borrower => minimum age
     if youngest.notna().any():
@@ -272,7 +273,7 @@ def _derive_source_fields(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str], Li
             derived.append(target)
 
     if "origination_date" in out.columns:
-        od = pd.to_datetime(out["origination_date"], errors="coerce", dayfirst=True)
+        od = coerce_dates(out["origination_date"])
         if od.notna().any():
             if "vintage_year" not in out.columns:
                 out["vintage_year"] = od.dt.year.astype("Int64")

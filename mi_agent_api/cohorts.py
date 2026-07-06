@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
+from analytics_lib.dates import coerce_dates
 from analytics_lib.numeric import coerce_numeric
 from mi_agent.mi_dataset_profile import PERCENT_POINTS, percent_storage_scale
 
@@ -101,7 +102,7 @@ def _vintage_series(df: pd.DataFrame, grain: str = "Y") -> Optional[pd.Series]:
     'Q'/'M' reveals."""
     g = (grain or "Y").upper()
     if _ORIG_DATE in df.columns:
-        od = pd.to_datetime(df[_ORIG_DATE], errors="coerce", dayfirst=True)
+        od = coerce_dates(df[_ORIG_DATE])
         if od.notna().any():
             if g == "Q":
                 return (od.dt.year.astype("Int64").astype("string") + "-Q"

@@ -57,6 +57,35 @@ const NOV_SNAPSHOT: FundedSnapshot = {
     kpi({ id: "exited_loans", label: "Exited / redeemed loans", value: "0", raw: 0, deltaIntent: "neutral" }),
     kpi({ id: "nneg_risk", label: "NNEG exposure (current)", value: "£0", format: "gbp", raw: 0, deltaIntent: "positive", hint: "0 loan(s) with balance above current valuation" }),
   ],
+  stratifications: [
+    { key: "ltv", label: "By LTV band", bars: [
+      { label: "40–50%", balance: 3_000_000, count: 24, sharePct: 33.7, waLtv: 0.46 },
+      { label: "50–60%", balance: 2_300_000, count: 19, sharePct: 25.8, waLtv: 0.55 },
+      { label: "30–40%", balance: 1_900_000, count: 16, sharePct: 21.3, waLtv: 0.36 },
+      { label: "60–70%", balance: 1_100_000, count: 9, sharePct: 12.4, waLtv: 0.65 },
+      { label: "20–30%", balance: 602_999.7, count: 5, sharePct: 6.8, waLtv: 0.27 },
+    ] },
+    { key: "age", label: "By borrower age", bars: [
+      { label: "70–74", balance: 2_600_000, count: 21, sharePct: 29.2 },
+      { label: "65–69", balance: 2_100_000, count: 18, sharePct: 23.6 },
+      { label: "75–79", balance: 1_700_000, count: 14, sharePct: 19.1 },
+      { label: "60–64", balance: 1_300_000, count: 12, sharePct: 14.6 },
+      { label: "80–84", balance: 1_202_999.7, count: 8, sharePct: 13.5 },
+    ] },
+    { key: "region", label: "By region", bars: [
+      { label: "London", balance: 2_800_000, count: 20, sharePct: 31.4 },
+      { label: "South East", balance: 2_200_000, count: 18, sharePct: 24.7 },
+      { label: "South West", balance: 1_700_000, count: 16, sharePct: 19.1 },
+      { label: "Scotland", balance: 1_300_000, count: 11, sharePct: 14.6 },
+      { label: "Wales", balance: 902_999.7, count: 8, sharePct: 10.1 },
+    ] },
+    { key: "rate", label: "By rate band", bars: [
+      { label: "3–4%", balance: 3_600_000, count: 30, sharePct: 40.4 },
+      { label: "4–5%", balance: 2_400_000, count: 20, sharePct: 27.0 },
+      { label: "2–3%", balance: 1_800_000, count: 15, sharePct: 20.2 },
+      { label: "5–6%", balance: 1_102_999.7, count: 8, sharePct: 12.4 },
+    ] },
+  ],
   monthly_change: {
     prior_run_id: "mi_2025_10",
     prior_reporting_date: "2025-10-31",

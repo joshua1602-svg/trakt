@@ -12,6 +12,7 @@ import { EvolutionPanel } from "@/components/EvolutionPanel";
 import { RiskLimitsPanel } from "@/components/RiskLimitsPanel";
 import { GeographyPanel } from "@/components/GeographyPanel";
 import { ViewToggle } from "@/components/ViewToggle";
+import { SubTabs } from "@/components/SubTabs";
 import { SourcePortfolioSelector } from "@/components/SourcePortfolioSelector";
 import { LineagePanel } from "@/components/LineagePanel";
 import type { ViewLineage } from "@/domain";
@@ -49,14 +50,13 @@ function pipelineLineage(forecast: ReturnType<typeof useWorkspace>["forecast"]):
   };
 }
 
-// Tab semantics (A3 / A10): what each top-level view represents and its source.
+// Tab semantics (A3 / A10): what each top-level view represents. Each of
+// Funded / Pipeline / Forecast hosts sub-tabs (see the workspace render below).
 const VIEW_SUBTITLES: Record<string, string> = {
-  funded: "Funded book — latest funded-loan snapshot as of the selected reporting date (governed central lender tape).",
-  pipeline: "Pipeline — latest open-pipeline snapshot (weighted expected funded balance) as of the selected reporting date.",
-  forecast: "Scenario / portfolio forecast — forward-looking projection from the latest selected run (funded balance + weighted pipeline + run-rate scale-up). For how the forecast changed across runs, see Evolution → Forecast Evolution.",
-  evolution: "Evolution — time-series movement across multiple reporting extracts (funded / pipeline / origination funnel / forecast).",
+  funded: "Funded book — the funded-loan book as of the selected reporting date: stratifications, geographic exposure, time-series evolution and static-pool cohorts.",
+  pipeline: "Pipeline — the open origination pipeline: current stratifications, and its evolution (stock levels over time and the weekly origination funnel flow).",
+  forecast: "Forecast — forward projection from the latest run (funded + weighted pipeline + run-rate scale-up), and how the forecast has moved across runs.",
   risk_limits: "Risk Limits — Schedule 8 concentration limits vs funded actual exposure, headroom and status.",
-  geography: "Geography — funded exposure concentration across UK ITL3 areas, from each loan's property location.",
 };
 
 export function AppShell() {
@@ -88,6 +88,12 @@ export function AppShell() {
       localStorage.setItem("mi.coreDashboard.collapsed", dashCollapsed ? "1" : "0");
     }
   }, [dashCollapsed]);
+
+  // Sub-tab state per top-level workspace (Funded / Pipeline / Forecast). Each is
+  // independent so switching top-level tabs preserves the last sub-view.
+  const [fundedTab, setFundedTab] = useState<"strat" | "geo" | "evo" | "cohorts">("strat");
+  const [pipelineTab, setPipelineTab] = useState<"strat" | "evo">("strat");
+  const [forecastTab, setForecastTab] = useState<"projection" | "evolution">("projection");
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
@@ -188,39 +194,89 @@ export function AppShell() {
               </p>
             ) : (
               <div className="space-y-4 p-4">
+                {/* FUNDED — stratifications · geography · evolution · cohorts */}
                 {ws.activeView === "funded" && (
-                  <>
-                    <FundedSnapshotPanel snapshot={ws.snapshot} loading={ws.snapshotLoading} />
-                    <LineagePanel lineage={fundedLineage(ws.snapshot?.portfolio.reporting_date ?? null)} />
-                  </>
+                  <div className="space-y-4">
+                    <SubTabs ariaLabel="Funded sub-view" testId="funded-subtabs"
+                      active={fundedTab} onChange={setFundedTab}
+                      tabs={[
+                        { id: "strat", label: "Stratifications" },
+                        { id: "geo", label: "Geography" },
+                        { id: "evo", label: "Evolution" },
+                        { id: "cohorts", label: "Cohorts" },
+                      ]} />
+                    {fundedTab === "strat" && (
+                      <>
+                        <FundedSnapshotPanel snapshot={ws.snapshot} loading={ws.snapshotLoading} />
+                        <LineagePanel lineage={fundedLineage(ws.snapshot?.portfolio.reporting_date ?? null)} />
+                      </>
+                    )}
+                    {fundedTab === "geo" && (
+                      <GeographyPanel key={`geo-${ws.dataVersion}`}
+                        client={client} portfolioId={workspacePortfolioId} />
+                    )}
+                    {fundedTab === "evo" && (
+                      <EvolutionPanel key={`evo-funded-${ws.dataVersion}`} heading={false}
+                        tabs={["funded"]} client={client} portfolioId={workspacePortfolioId} />
+                    )}
+                    {fundedTab === "cohorts" && (
+                      <EvolutionPanel key={`evo-cohorts-${ws.dataVersion}`} heading={false}
+                        tabs={["cohorts"]} client={client} portfolioId={workspacePortfolioId} />
+                    )}
+                  </div>
                 )}
+
+                {/* PIPELINE — stratifications · evolution (stock + origination flow) */}
                 {ws.activeView === "pipeline" && (
-                  <>
-                    <PipelineSnapshotPanel
-                      snapshot={ws.forecast?.pipelineSnapshot ?? null}
-                      loading={ws.forecastLoading}
-                    />
-                    <LineagePanel lineage={ws.forecast?.lineage ?? pipelineLineage(ws.forecast)} />
-                    <PipelineWatchlist items={ws.forecast?.watchlist ?? []} />
-                  </>
+                  <div className="space-y-4">
+                    <SubTabs ariaLabel="Pipeline sub-view" testId="pipeline-subtabs"
+                      active={pipelineTab} onChange={setPipelineTab}
+                      tabs={[
+                        { id: "strat", label: "Stratifications" },
+                        { id: "evo", label: "Evolution" },
+                      ]} />
+                    {pipelineTab === "strat" && (
+                      <>
+                        <PipelineSnapshotPanel
+                          snapshot={ws.forecast?.pipelineSnapshot ?? null}
+                          loading={ws.forecastLoading}
+                        />
+                        <LineagePanel lineage={ws.forecast?.lineage ?? pipelineLineage(ws.forecast)} />
+                        <PipelineWatchlist items={ws.forecast?.watchlist ?? []} />
+                      </>
+                    )}
+                    {pipelineTab === "evo" && (
+                      <EvolutionPanel key={`evo-pipeline-${ws.dataVersion}`} heading={false}
+                        tabs={["pipeline", "origination"]} client={client} portfolioId={workspacePortfolioId} />
+                    )}
+                  </div>
                 )}
+
+                {/* FORECAST — projection · forecast evolution */}
                 {ws.activeView === "forecast" && (
-                  <>
-                    <ForecastView forecast={ws.forecast} loading={ws.forecastLoading} />
-                    <ForecastExtrapolationPanel key={`fx-${ws.dataVersion}`}
-                      client={client} portfolioId={workspacePortfolioId} />
-                  </>
+                  <div className="space-y-4">
+                    <SubTabs ariaLabel="Forecast sub-view" testId="forecast-subtabs"
+                      active={forecastTab} onChange={setForecastTab}
+                      tabs={[
+                        { id: "projection", label: "Projection" },
+                        { id: "evolution", label: "Forecast Evolution" },
+                      ]} />
+                    {forecastTab === "projection" && (
+                      <>
+                        <ForecastView forecast={ws.forecast} loading={ws.forecastLoading} />
+                        <ForecastExtrapolationPanel key={`fx-${ws.dataVersion}`}
+                          client={client} portfolioId={workspacePortfolioId} />
+                      </>
+                    )}
+                    {forecastTab === "evolution" && (
+                      <EvolutionPanel key={`evo-forecast-${ws.dataVersion}`} heading={false}
+                        tabs={["forecast"]} client={client} portfolioId={workspacePortfolioId} />
+                    )}
+                  </div>
                 )}
-                {ws.activeView === "evolution" && (
-                  <EvolutionPanel key={`evo-${ws.dataVersion}`}
-                    client={client} portfolioId={workspacePortfolioId} />
-                )}
+
                 {ws.activeView === "risk_limits" && (
                   <RiskLimitsPanel key={`risk-${ws.dataVersion}`}
-                    client={client} portfolioId={workspacePortfolioId} />
-                )}
-                {ws.activeView === "geography" && (
-                  <GeographyPanel key={`geo-${ws.dataVersion}`}
                     client={client} portfolioId={workspacePortfolioId} />
                 )}
               </div>

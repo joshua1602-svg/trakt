@@ -26,6 +26,23 @@ describe("FundedSnapshotPanel", () => {
     expect(screen.getByText(/vs prior run · 2025-10-31/)).toBeInTheDocument();
   });
 
+  it("renders point-in-time stratifications (balance by dimension)", () => {
+    render(<FundedSnapshotPanel snapshot={mockSnapshot("client_001/mi_2025_11")} />);
+    expect(screen.getByText(/Stratifications · balance by dimension/)).toBeInTheDocument();
+    expect(screen.getByText("By LTV band")).toBeInTheDocument();
+    expect(screen.getByText("By borrower age")).toBeInTheDocument();
+    expect(screen.getByText("By region")).toBeInTheDocument();
+    expect(screen.getByText("By rate band")).toBeInTheDocument();
+    // A band label from the LTV breakdown is present.
+    expect(screen.getByText("40–50%")).toBeInTheDocument();
+  });
+
+  it("omits the stratifications section when the tape carries none", () => {
+    const snap: FundedSnapshot = { ...mockSnapshot("client_001/mi_2025_11"), stratifications: [] };
+    render(<FundedSnapshotPanel snapshot={snap} />);
+    expect(screen.queryByText(/Stratifications · balance by dimension/)).toBeNull();
+  });
+
   it("shows 'No prior reporting date available' for the earliest run", () => {
     render(<FundedSnapshotPanel snapshot={mockSnapshot("client_001/mi_2025_10")} />);
     expect(screen.getByText(/No prior reporting date available/)).toBeInTheDocument();
