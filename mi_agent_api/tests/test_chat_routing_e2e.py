@@ -263,6 +263,34 @@ def test_geographic_concentration_limits_still_route_to_risk():
     assert r["ok"] is True and r["metadata"]["route"] == "risk_limits"
 
 
+# --------------------------------------------------------------------------- #
+# F. Cumulative cohort conversion — the single canonical "conversion"
+# --------------------------------------------------------------------------- #
+def test_cumulative_cohort_conversion_routes():
+    r = _ask("What is our cumulative cohort conversion?", view="pipeline")
+    assert r["ok"] is True and r["metadata"]["route"] == "cohort_conversion"
+    # The fixture has weekly pipeline snapshots -> a real cohort progression: a
+    # multi-line KFI→Application→Offer→Funded chart, not the insufficient-data path.
+    chart = next((a for a in r["artifacts"] if a["type"] == "chart"), None)
+    assert chart is not None, r["answer"]
+    labels = {s["label"] for s in chart["series"]}
+    assert {"KFI", "Funded"} <= labels
+    assert "single definition of conversion" in r["answer"]
+
+
+def test_bare_conversion_rate_uses_cohort_definition_not_forecast():
+    # A bare "conversion rate" resolves to the canonical cohort definition, not the
+    # forecast route's differently-measured KFI→completion rate.
+    r = _ask("What is our conversion rate?")
+    assert r["ok"] is True and r["metadata"]["route"] == "cohort_conversion"
+
+
+def test_conversion_with_threshold_stays_on_forecast():
+    # A projection/threshold framing ("reach £50m") is NOT a conversion answer.
+    r = _ask("What conversion do we need to reach £50m funded balance?")
+    assert r["ok"] is True and r["metadata"]["route"] == "forecast_extrapolation"
+
+
 def test_funded_balance_forecast_curve_returns_line_chart():
     # The known miss: "forecast curve" returned only a summary. It must now route
     # to the forecast extrapolation and return a projected line chart.

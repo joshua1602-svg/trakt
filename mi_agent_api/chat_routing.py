@@ -925,6 +925,81 @@ def _route_geo(question, spec_dict, *, client_id, run_id, frame_resolver,
 
 
 # --------------------------------------------------------------------------- #
+# H. Cumulative cohort conversion — the canonical "conversion" answer
+# --------------------------------------------------------------------------- #
+# One definition of conversion everywhere: the % of the ORIGINAL KFI cohort that
+# has reached each milestone (KFI -> Application -> Offer -> Funded) to date. A
+# forecast / threshold / scenario framing is a projection question and stays with
+# the forecast route.
+_COHORT_STAGE_LABELS = {"KFI": "KFI", "APPLICATION": "Application",
+                        "OFFER": "Offer", "COMPLETED": "Funded"}
+_CONVERSION_EXCLUDE = ("reach", "forecast", "project", "run rate", "run-rate",
+                       "increase", "increased", "scenario", "if ", "target",
+                       "milestone", "when will", "when do", "how long", "£", "$")
+
+
+def _is_conversion(question: str) -> bool:
+    q = f" {question.lower()} "
+    if any(x in q for x in _CONVERSION_EXCLUDE):
+        return False  # a projection / what-if question -> forecast route
+    if "conversion" in q or "convert" in q:
+        return True
+    return "cohort" in q and ("fund" in q or "complet" in q)
+
+
+def _route_conversion(question, spec_dict, *, history_model, portfolio_id, as_of
+                      ) -> Dict[str, Any]:
+    """Cumulative cohort conversion: the % of the original KFI cohort reaching each
+    milestone (KFI → Application → Offer → Funded) by week, plus the headline
+    latest Funded %. Matches the dashboard's canonical conversion metric."""
+    model = history_model or {}
+    prog = model.get("cohortProgression")
+    conv = model.get("cumulativeCohortConversion")
+    if not prog or not prog.get("weeks"):
+        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
+                         answer=("I can't compute cumulative cohort conversion yet — it needs the "
+                                 "weekly pipeline snapshots that track KFI cases through to funding."),
+                         route="cohort_conversion",
+                         warnings=["insufficient-data: no cohort-tracked pipeline history."])
+    weeks = prog["weeks"]
+    stages = prog.get("stages", [])
+    series = prog.get("series", {})
+    rows: List[Dict[str, Any]] = []
+    for i, w in enumerate(weeks):
+        row: Dict[str, Any] = {"week": w}
+        for st in stages:
+            vals = series.get(st) or []
+            row[st] = vals[i] if i < len(vals) else None
+        rows.append(row)
+    chart = _chart_artifact(
+        "Cumulative cohort conversion — % of the KFI cohort reaching each milestone",
+        chart_type="line", x_key="week", rows=rows,
+        series=[{"key": st, "label": _COHORT_STAGE_LABELS.get(st, st.title()),
+                 "color": _PALETTE[i % len(_PALETTE)]} for i, st in enumerate(stages)],
+        value_format="pct", spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of,
+        display_hints={st: {"format": "pct", "scale": "percent_points"} for st in stages})
+    table = _table_artifact(
+        "Cohort progression by milestone",
+        columns=[{"key": "week", "label": "Week", "align": "left", "format": "date"}]
+        + [{"key": st, "label": _COHORT_STAGE_LABELS.get(st, st.title()),
+            "align": "right", "format": "pct", "scale": "percent_points"} for st in stages],
+        rows=rows, spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of)
+    conv_txt = f"{conv:.1f}%" if isinstance(conv, (int, float)) else "n/a"
+    answer = (f"Cumulative cohort conversion is {conv_txt} — the share of the original KFI "
+              f"cohort ({prog.get('cohortSize')} case(s)) that has funded to date. The chart "
+              f"tracks that cohort through KFI → Application → Offer → Funded across "
+              f"{len(weeks)} week(s). This is the single definition of conversion used on the "
+              f"KPI card, the funnel and the forecast.")
+    notes = [{"field": "cohort_conversion",
+              "note": ("Cumulative cohort progression: of the original KFI cohort, the % reaching "
+                       "each milestone to date — case-tracked across weekly snapshots, monotonic.")}]
+    recon = {"dataset": "pipeline", "coverage_by_balance_pct": 100.0}
+    return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
+                     artifacts=[chart, table], reconciliation=recon, source_notes=notes,
+                     route="cohort_conversion")
+
+
+# --------------------------------------------------------------------------- #
 # Detection + dispatch
 # --------------------------------------------------------------------------- #
 _EVOLUTION_MARKERS = ("evolution", "over time", "trend", "by month", "monthly",
@@ -972,6 +1047,13 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
     kw = dict(client_id=client_id, run_id=run_id, output_root=output_root,
               pipeline_root=pipeline_root, portfolio_id=portfolio_id, as_of=as_of)
 
+    # Conversion (cohort-tracked) is the canonical "conversion" answer and is
+    # checked before forecast so a bare "conversion rate" resolves to the single
+    # cumulative-cohort definition; projection/threshold/what-if framings are
+    # excluded by _is_conversion and fall through to the forecast route.
+    if _is_conversion(question):
+        return _route_conversion(question, spec_dict, history_model=history_model,
+                                 portfolio_id=portfolio_id, as_of=as_of)
     if spec.forecast_mode == "extrapolation":
         return _route_forecast(question, spec, spec_dict, history_model=history_model, **kw)
     if getattr(spec, "bridge_query", False):
