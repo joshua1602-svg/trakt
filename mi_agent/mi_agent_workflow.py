@@ -442,6 +442,29 @@ def run_mi_agent_query(
     result["query_result"] = qres
     warnings.extend(qres.warnings)
 
+    # ---- fail-closed dimension invariant ----------------------------------
+    # Every grouping dimension the parser attached MUST be applied in execution
+    # or explicitly rejected with a reason. A parsed dimension that is neither is
+    # a SILENT DROP (e.g. "balance by borrower type by region" grouping only by
+    # borrower type) — refuse rather than answer with a misleading result.
+    from .mi_query_contract import check_dimension_invariant
+    invariant = check_dimension_invariant(spec, qres, semantics)
+    result["dimension_invariant"] = {
+        "ok": invariant.ok, "applied": invariant.applied,
+        "rejected": invariant.rejected, "dropped": invariant.dropped}
+    if not invariant.ok:
+        val = result.get("validation") or {"ok": True, "errors": [], "warnings": [],
+                                            "resolved_fields": {}}
+        val["ok"] = False
+        val.setdefault("errors", []).append(invariant.message())
+        val["dropped_dimensions"] = invariant.dropped
+        result["validation"] = val
+        if isinstance(result.get("interpreted"), dict):
+            result["interpreted"]["Validation"] = "Failed"
+        result["error"] = invariant.message()
+        result["warnings"] = _dedupe(warnings + [invariant.message()])
+        return result
+
     # Reconciliation / coverage footer (every artifact). When some balance is
     # excluded (e.g. the operator asked to exclude missing dims), say so plainly.
     recon = (qres.metadata or {}).get("reconciliation")
@@ -491,6 +514,14 @@ def run_mi_agent_query(
             f"showing the result table only."
         )
     result["chart_result"] = chart_result
+
+    # ---- end-to-end query trace (parser -> executor -> invariant) ---------
+    # Makes it immediately clear whether a fault is parser-, executor- or
+    # renderer-side. The adapter enriches it with the emitted chart axes.
+    from .mi_query_contract import build_query_trace
+    result["query_trace"] = build_query_trace(
+        question=question, spec=spec, parse_meta=parse_meta,
+        query_result=qres, semantics=semantics, invariant=invariant)
 
     result["ok"] = True
     # The chart factory copies the executor's warnings onto its result, so the

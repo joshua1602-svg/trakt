@@ -286,6 +286,7 @@ def _chart_artifact(
     series: List[Dict[str, Any]] = []
     value_format = "number"
     other_categories: Dict[str, List[str]] = {}
+    promoted_to_heatmap = False
 
     def _value_column(exclude: List[str]) -> Optional[str]:
         cand = [c for c in columns if c not in exclude]
@@ -313,6 +314,23 @@ def _chart_artifact(
                 size_label = _label_for(size_key, resolved)
                 series.append({"key": size_key, "label": size_label, "color": _PALETTE[2]})
             value_format = _hint(hints, y_key).get("format") or _infer_col_format(y_key, resolved)
+    elif chart_type in ("bar", "line") and len(_dimension_columns(resolved, columns)) >= 2:
+        # Safe chart selection (never drop a dimension to fit a chart): a bar/line
+        # carries a single categorical axis + one series, so a result grouped by
+        # TWO categorical dimensions would silently lose the second on the chart.
+        # Two categorical dimensions + one numeric metric → promote to a heatmap/
+        # matrix so both dimensions survive. The full detail also stays in the
+        # accompanying table artifact.
+        dims = _dimension_columns(resolved, columns)
+        a, b = dims[0], dims[1]
+        if _is_bucket_column(b) and not _is_bucket_column(a):
+            x_key, y_key = b, a
+        else:
+            x_key, y_key = a, b
+        value_key = _value_column([d for d in (x_key, y_key) if d])
+        value_format = _hint(hints, value_key or "").get("format") or _infer_col_format(value_key or "", resolved)
+        chart_type = "heatmap"  # render as a matrix; both dimensions preserved
+        promoted_to_heatmap = True
     elif chart_type in ("bar", "line"):
         # Grouped categorical (bar) / ordered (line): one dimension + one value.
         x_key = _dimension_column(resolved, columns)
@@ -361,6 +379,11 @@ def _chart_artifact(
     keep_figure = chart_type in ("heatmap", "treemap") or chart_type not in (
         "bar", "line", "scatter", "bubble", "heatmap", "treemap"
     )
+    # A bar/line promoted to a heatmap has only the ORIGINAL (single-dimension)
+    # bar figure attached — keeping it would re-introduce the dropped dimension.
+    # Render the promoted matrix natively and discard the misleading figure.
+    if promoted_to_heatmap:
+        keep_figure = False
     figure_out = cr.get("figure") if (keep_figure and has_figure) else None
 
     native_ok = bool(series) or (
@@ -601,6 +624,25 @@ def adapt_workflow_result(
     # main user-facing output, but retain them in metadata.diagnostics.
     warnings, diagnostics = split_warnings(raw_warnings)
 
+    # End-to-end query trace (parser → executor → renderer). The workflow builds
+    # it without the artifact axes (those are produced here), so back-fill the
+    # chart axes from the emitted chart artifact for the parser/executor/renderer
+    # attribution to be complete.
+    query_trace = workflow.get("query_trace")
+    if isinstance(query_trace, dict):
+        chart_art = next((a for a in artifacts if a.get("type") == "chart"), None)
+        if chart_art is not None:
+            query_trace = {
+                **query_trace,
+                "chartAxes": {
+                    "chartType": chart_art.get("chartType"),
+                    "xKey": chart_art.get("xKey"),
+                    "yKey": chart_art.get("yKey"),
+                    "valueKey": chart_art.get("valueKey"),
+                    "seriesKeys": [s.get("key") for s in (chart_art.get("series") or [])],
+                },
+            }
+
     return {
         "ok": bool(workflow.get("ok")),
         "error": workflow.get("error"),
@@ -620,6 +662,11 @@ def adapt_workflow_result(
         "diagnostics": diagnostics,
         # The MI Agent does not emit narrative assumptions; kept for schema parity.
         "assumptions": [],
+        # Parser → executor → renderer diagnostics + the fail-closed dimension
+        # invariant, so it is immediately obvious at which layer a dimension was
+        # applied, rejected, or (never, by construction) silently dropped.
+        "queryTrace": query_trace,
+        "dimensionInvariant": workflow.get("dimension_invariant"),
         "metadata": {
             "portfolioId": portfolio_id,
             "asOfDate": as_of,

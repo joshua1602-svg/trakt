@@ -547,20 +547,95 @@ def _apply_agg_intent(metric_key: Optional[str], default_agg: str,
     return default_agg
 
 
+# Over-generic single tokens the registry-driven metric pass must NOT bind on
+# its own (they are handled by the curated grammar / default resolution and
+# would otherwise let a measure synonym hijack an unrelated question).
+_GENERIC_METRIC_TOKENS = {
+    "balance", "value", "amount", "rate", "count", "age", "ltv", "exposure",
+    "total", "sum", "principal", "interest", "loan", "loans", "mortgage",
+    "income", "margin", "ratio", "period", "number", "term",
+}
+
+
+def _registry_metric_terms(semantics: dict) -> Dict[str, str]:
+    """Business synonyms / names for every measure-role field, so a governed
+    metric the parser would otherwise not recognise (e.g. 'valuation', 'original
+    balance') resolves to its OWN field instead of silently falling back to the
+    default balance metric. Mirrors :func:`_registry_dimension_terms`:
+    multi-word phrases are always safe; over-generic single tokens
+    (``_GENERIC_METRIC_TOKENS``) and ambiguous phrases are dropped."""
+    out: Dict[str, str] = {}
+    ambiguous: set = set()
+    for key, entry in _fields(semantics).items():
+        if entry.get("role") not in ("metric", "measure"):
+            continue
+        phrases = list(_synonyms(entry))
+        for name in (entry.get("business_name"), entry.get("display_name")):
+            if name:
+                phrases.append(str(name))
+        phrases.append(key.replace("_", " "))
+        for phrase in phrases:
+            p = str(phrase).strip().lower()
+            if len(p) < 3:
+                continue
+            if " " not in p and p in _GENERIC_METRIC_TOKENS:
+                continue
+            existing = out.get(p)
+            if existing is not None and existing != key:
+                ambiguous.add(p)
+            else:
+                out[p] = key
+    for p in ambiguous:
+        out.pop(p, None)
+    return out
+
+
 def _detect_metric(text: str, semantics: dict) -> Tuple[Optional[str], str, List[str]]:
     """Return (metric_key, aggregation, matched_terms) from free text.
 
     An explicit aggregation qualifier ("average"/"weighted average"/"total") in the
     same phrase overrides the metric's default aggregation, so "average loan
     balance" means the mean balance, not the total.
+
+    Resolution order: the curated ``_METRIC_TERMS`` grammar governs the core
+    measures (balance / ltv / rate / age / count) and always wins for its tokens.
+    A registry-driven pass then recognises any OTHER governed measure by its
+    business synonym (longest phrase first) so a requested metric is never
+    silently substituted with the default balance.
     """
     matched: List[str] = []
     intent = _aggregation_intent(text)
+    reg_terms = _registry_metric_terms(semantics)
+
+    def _resolve_registry(term: str) -> Tuple[Optional[str], str]:
+        key = reg_terms[term]
+        entry = _fields(semantics).get(key, {})
+        default_agg = entry.get("default_aggregation") or (
+            "weighted_avg" if entry.get("format") == "percent" else "sum")
+        return key, _apply_agg_intent(key, default_agg, intent, semantics)
+
+    # 1) Registry MULTI-WORD phrases first (longest, most specific): a governed
+    #    measure named by a phrase — "original balance", "property value" — must
+    #    beat a curated single token it happens to contain (e.g. "balance").
+    multi = sorted((t for t in reg_terms if " " in t), key=len, reverse=True)
+    for term in multi:
+        if re.search(r"\b" + re.escape(term) + r"\b", text):
+            key, agg = _resolve_registry(term)
+            matched.append(term)
+            return key, agg, matched
+    # 2) Curated grammar — the core measures and their disambiguation.
     for term, token in _METRIC_TERMS:
         if re.search(r"\b" + re.escape(term) + r"\b", text):
             key, agg = _resolve_metric(token, semantics)
             if token != "count":
                 agg = _apply_agg_intent(key, agg, intent, semantics)
+            matched.append(term)
+            return key, agg, matched
+    # 3) Registry SINGLE-WORD synonyms for any remaining governed measure.
+    single = sorted((t for t in reg_terms if " " not in t), key=len, reverse=True)
+    for term in single:
+        if re.search(r"\b" + re.escape(term) + r"\b", text):
+            key, agg = _resolve_registry(term)
             matched.append(term)
             return key, agg, matched
     return None, "sum", matched
