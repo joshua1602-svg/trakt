@@ -640,14 +640,19 @@ function CohortView({ client, portfolioId }: { client: AgentClient; portfolioId:
         </div>
       )}
 
-      {/* Point-in-time static-pool composition by the selected dimension. */}
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <div className="text-[11px] font-semibold text-ink-300">
-          Cohort composition — by {dimLabel.toLowerCase()} (as of {composition?.reportingDate ?? "latest"})
-        </div>
+      {/* Point-in-time static-pool composition across the selected dimension.
+          The lens control gets its own selector row (mirroring the progression
+          selectors above) so it reads as the primary switch for the table. */}
+      <div className="pt-1 text-[11px] font-semibold text-ink-300">
+        Cohort composition — point-in-time static pool (as of {composition?.reportingDate ?? "latest"})
+      </div>
+      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-[var(--color-line)] bg-navy-900/40 px-3 py-2.5">
         <CohortSelect label="Cohort by" value={dimension}
           onChange={(v) => setDimension(v as CohortDimension)}
           options={dimOptions} testId="cohort-dimension" />
+        <div className="self-end pb-1 text-[10px] text-ink-500">
+          Slice the funded book by {dimOptions.map((o) => o.label).join(" · ")}.
+        </div>
       </div>
       {composition && !composition.available ? (
         <div className="rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-[11px] text-amber-300/90"
