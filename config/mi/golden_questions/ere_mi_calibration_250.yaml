@@ -1,0 +1,5099 @@
+meta:
+  name: ERE MI Agent curated calibration bank
+  description: 250+ realistic business-user MI questions with expected semantic behaviour + output checks.
+    Additional to the generated registry harness (mi_agent/mi_query_harness.py).
+  count: 252
+  fixture: mi_agent.mi_query_harness.build_fixture (funded tape)
+  enforced_by: mi_agent/tests/test_mi_calibration_bank.py
+questions:
+- id: kpi_001
+  category: basic_kpi
+  question: What is our total funded balance?
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions: &id001 []
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Whole-book balance KPI.
+- id: kpi_002
+  category: basic_kpi
+  question: total funded balance
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions: *id001
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Whole-book balance KPI.
+- id: kpi_003
+  category: basic_kpi
+  question: show me the total balance of the book
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions: *id001
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Whole-book balance KPI.
+- id: kpi_004
+  category: basic_kpi
+  question: what is the total exposure
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions: *id001
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Whole-book balance KPI.
+- id: kpi_005
+  category: basic_kpi
+  question: how many loans are in the book
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: *id001
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include:
+  - loan_count
+  expected_min_columns: 1
+  known_gap: null
+  notes: Whole-book loan count (count aggregation).
+- id: kpi_006
+  category: basic_kpi
+  question: number of loans
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: *id001
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include:
+  - loan_count
+  expected_min_columns: 1
+  known_gap: null
+  notes: Whole-book loan count (count aggregation).
+- id: kpi_007
+  category: basic_kpi
+  question: loan count
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: *id001
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include:
+  - loan_count
+  expected_min_columns: 1
+  known_gap: null
+  notes: Whole-book loan count (count aggregation).
+- id: kpi_008
+  category: basic_kpi
+  question: how many mortgages do we have
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: *id001
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include:
+  - loan_count
+  expected_min_columns: 1
+  known_gap: null
+  notes: Whole-book loan count (count aggregation).
+- id: kpi_009
+  category: basic_kpi
+  question: average loan balance
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions: *id001
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Mean loan balance (avg aggregation).
+- id: kpi_010
+  category: basic_kpi
+  question: what is the mean loan balance
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions: *id001
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: ''
+- id: kpi_011
+  category: basic_kpi
+  question: weighted average LTV
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_loan_to_value
+  expected_metrics: null
+  expected_dimensions: *id001
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Balance-weighted average LTV.
+- id: kpi_012
+  category: basic_kpi
+  question: what's the weighted average LTV
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_loan_to_value
+  expected_metrics: null
+  expected_dimensions: *id001
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Balance-weighted average LTV.
+- id: kpi_013
+  category: basic_kpi
+  question: portfolio weighted average loan to value
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_loan_to_value
+  expected_metrics: null
+  expected_dimensions: *id001
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Balance-weighted average LTV.
+- id: kpi_014
+  category: basic_kpi
+  question: WA LTV
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_loan_to_value
+  expected_metrics: null
+  expected_dimensions: *id001
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Balance-weighted average LTV.
+- id: kpi_015
+  category: basic_kpi
+  question: weighted average interest rate
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_interest_rate
+  expected_metrics: null
+  expected_dimensions: *id001
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: ''
+- id: kpi_016
+  category: basic_kpi
+  question: average interest rate
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_interest_rate
+  expected_metrics: null
+  expected_dimensions: *id001
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: ''
+- id: kpi_017
+  category: basic_kpi
+  question: what is the weighted average coupon
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_interest_rate
+  expected_metrics: null
+  expected_dimensions: *id001
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: ''
+- id: kpi_018
+  category: basic_kpi
+  question: average borrower age
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: youngest_borrower_age
+  expected_metrics: null
+  expected_dimensions: *id001
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Mean borrower age (age is a simple mean, not balance-weighted).
+- id: kpi_019
+  category: basic_kpi
+  question: what is the average age of borrowers
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: youngest_borrower_age
+  expected_metrics: null
+  expected_dimensions: *id001
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Mean borrower age (age is a simple mean, not balance-weighted).
+- id: kpi_020
+  category: basic_kpi
+  question: mean borrower age
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: youngest_borrower_age
+  expected_metrics: null
+  expected_dimensions: *id001
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Mean borrower age (age is a simple mean, not balance-weighted).
+- id: kpi_021
+  category: basic_kpi
+  question: what is the largest loan
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: table
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: 'Loan-level ranking: the single largest loan.'
+- id: kpi_022
+  category: basic_kpi
+  question: show me the biggest loan
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: table
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: 'Loan-level ranking: the single largest loan.'
+- id: kpi_023
+  category: basic_kpi
+  question: largest single loan by balance
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: table
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: 'Loan-level ranking: the single largest loan.'
+- id: kpi_024
+  category: basic_kpi
+  question: what is the total collateral valuation
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_valuation_amount
+  expected_metrics: null
+  expected_dimensions: *id001
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Whole-book measure KPI.
+- id: kpi_025
+  category: basic_kpi
+  question: total property valuation
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_valuation_amount
+  expected_metrics: null
+  expected_dimensions: *id001
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Whole-book measure KPI.
+- id: kpi_026
+  category: basic_kpi
+  question: total original principal
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: original_principal_balance
+  expected_metrics: null
+  expected_dimensions: *id001
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Whole-book measure KPI.
+- id: kpi_027
+  category: basic_kpi
+  question: what is the total original balance
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: original_principal_balance
+  expected_metrics: null
+  expected_dimensions: *id001
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Whole-book measure KPI.
+- id: kpi_028
+  category: basic_kpi
+  question: portfolio summary
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Whole-book summary (count + balance).
+- id: kpi_029
+  category: basic_kpi
+  question: portfolio overview
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Whole-book summary (count + balance).
+- id: kpi_030
+  category: basic_kpi
+  question: book overview
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Whole-book summary (count + balance).
+- id: kpi_031
+  category: basic_kpi
+  question: key metrics
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Whole-book summary (count + balance).
+- id: kpi_032
+  category: basic_kpi
+  question: average loan size
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions: *id001
+  expected_filters: []
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: '''size'' is parsed as the ticket-size dimension, so this returns balance by ticket bucket
+    instead of a mean-size KPI. Use ''average loan balance''. Follow-up: metric vocabulary for ''loan
+    size''.'
+  notes: Known parser quirk.
+- id: grp1_033
+  category: single_dim
+  question: balance by region
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance grouped by region.
+- id: grp1_034
+  category: single_dim
+  question: balance by borrower type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - borrower_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance grouped by borrower type.
+- id: grp1_035
+  category: single_dim
+  question: balance by product type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - erm_product_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance grouped by product type.
+- id: grp1_036
+  category: single_dim
+  question: balance by LTV bucket
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - ltv_bucket
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance grouped by LTV bucket.
+- id: grp1_037
+  category: single_dim
+  question: balance by age bucket
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - age_bucket
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance grouped by age bucket.
+- id: grp1_038
+  category: single_dim
+  question: balance by broker
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - broker_channel
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance grouped by broker.
+- id: grp1_039
+  category: single_dim
+  question: balance by account status
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - account_status
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance grouped by account status.
+- id: grp1_040
+  category: single_dim
+  question: balance by origination channel
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - origination_channel
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance grouped by origination channel.
+- id: grp1_041
+  category: single_dim
+  question: balance by rate type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - interest_rate_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance grouped by rate type.
+- id: grp1_042
+  category: single_dim
+  question: balance by occupancy type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - occupancy_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance grouped by occupancy type.
+- id: grp1_043
+  category: single_dim
+  question: balance by term bucket
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - term_bucket
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance grouped by term bucket.
+- id: grp1_044
+  category: single_dim
+  question: balance by ticket size
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - ticket_bucket
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance grouped by ticket size.
+- id: grp1_045
+  category: single_dim
+  question: loan count by region
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include:
+  - loan_count
+  expected_min_columns: 2
+  known_gap: null
+  notes: Loan count grouped by region.
+- id: grp1_046
+  category: single_dim
+  question: loan count by borrower type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions:
+  - borrower_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include:
+  - loan_count
+  expected_min_columns: 2
+  known_gap: null
+  notes: Loan count grouped by borrower type.
+- id: grp1_047
+  category: single_dim
+  question: loan count by product type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions:
+  - erm_product_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include:
+  - loan_count
+  expected_min_columns: 2
+  known_gap: null
+  notes: Loan count grouped by product type.
+- id: grp1_048
+  category: single_dim
+  question: loan count by LTV bucket
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions:
+  - ltv_bucket
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include:
+  - loan_count
+  expected_min_columns: 2
+  known_gap: null
+  notes: Loan count grouped by LTV bucket.
+- id: grp1_049
+  category: single_dim
+  question: loan count by age bucket
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions:
+  - age_bucket
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include:
+  - loan_count
+  expected_min_columns: 2
+  known_gap: null
+  notes: Loan count grouped by age bucket.
+- id: grp1_050
+  category: single_dim
+  question: loan count by broker
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions:
+  - broker_channel
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include:
+  - loan_count
+  expected_min_columns: 2
+  known_gap: null
+  notes: Loan count grouped by broker.
+- id: grp1_051
+  category: single_dim
+  question: loan count by account status
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions:
+  - account_status
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include:
+  - loan_count
+  expected_min_columns: 2
+  known_gap: null
+  notes: Loan count grouped by account status.
+- id: grp1_052
+  category: single_dim
+  question: loan count by origination channel
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions:
+  - origination_channel
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include:
+  - loan_count
+  expected_min_columns: 2
+  known_gap: null
+  notes: Loan count grouped by origination channel.
+- id: grp1_053
+  category: single_dim
+  question: loan count by rate type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions:
+  - interest_rate_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include:
+  - loan_count
+  expected_min_columns: 2
+  known_gap: null
+  notes: Loan count grouped by rate type.
+- id: grp1_054
+  category: single_dim
+  question: loan count by occupancy type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions:
+  - occupancy_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include:
+  - loan_count
+  expected_min_columns: 2
+  known_gap: null
+  notes: Loan count grouped by occupancy type.
+- id: grp1_055
+  category: single_dim
+  question: loan count by term bucket
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions:
+  - term_bucket
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include:
+  - loan_count
+  expected_min_columns: 2
+  known_gap: null
+  notes: Loan count grouped by term bucket.
+- id: grp1_056
+  category: single_dim
+  question: loan count by ticket size
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions:
+  - ticket_bucket
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include:
+  - loan_count
+  expected_min_columns: 2
+  known_gap: null
+  notes: Loan count grouped by ticket size.
+- id: grp1_057
+  category: single_dim
+  question: average LTV by region
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_loan_to_value
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: WA LTV by region.
+- id: grp1_058
+  category: single_dim
+  question: average LTV by product type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_loan_to_value
+  expected_metrics: null
+  expected_dimensions:
+  - erm_product_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: WA LTV by product type.
+- id: grp1_059
+  category: single_dim
+  question: average LTV by broker
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_loan_to_value
+  expected_metrics: null
+  expected_dimensions:
+  - broker_channel
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: WA LTV by broker.
+- id: grp1_060
+  category: single_dim
+  question: average LTV by age bucket
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_loan_to_value
+  expected_metrics: null
+  expected_dimensions:
+  - age_bucket
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: WA LTV by age bucket.
+- id: grp1_061
+  category: single_dim
+  question: average LTV by borrower type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_loan_to_value
+  expected_metrics: null
+  expected_dimensions:
+  - borrower_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: WA LTV by borrower type.
+- id: grp1_062
+  category: single_dim
+  question: average LTV by account status
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_loan_to_value
+  expected_metrics: null
+  expected_dimensions:
+  - account_status
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: WA LTV by account status.
+- id: grp1_063
+  category: single_dim
+  question: average LTV by rate type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_loan_to_value
+  expected_metrics: null
+  expected_dimensions:
+  - interest_rate_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: WA LTV by rate type.
+- id: grp1_064
+  category: single_dim
+  question: average LTV by occupancy type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_loan_to_value
+  expected_metrics: null
+  expected_dimensions:
+  - occupancy_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: WA LTV by occupancy type.
+- id: grp1_065
+  category: single_dim
+  question: average borrower age by region
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: youngest_borrower_age
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: ''
+- id: grp1_066
+  category: single_dim
+  question: average borrower age by product type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: youngest_borrower_age
+  expected_metrics: null
+  expected_dimensions:
+  - erm_product_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: ''
+- id: grp1_067
+  category: single_dim
+  question: average borrower age by broker
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: youngest_borrower_age
+  expected_metrics: null
+  expected_dimensions:
+  - broker_channel
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: ''
+- id: grp1_068
+  category: single_dim
+  question: average borrower age by borrower type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: youngest_borrower_age
+  expected_metrics: null
+  expected_dimensions:
+  - borrower_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: ''
+- id: grp1_069
+  category: single_dim
+  question: weighted average interest rate by region
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_interest_rate
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: ''
+- id: grp1_070
+  category: single_dim
+  question: weighted average interest rate by product type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_interest_rate
+  expected_metrics: null
+  expected_dimensions:
+  - erm_product_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: ''
+- id: grp1_071
+  category: single_dim
+  question: weighted average interest rate by broker
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_interest_rate
+  expected_metrics: null
+  expected_dimensions:
+  - broker_channel
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: ''
+- id: grp1_072
+  category: single_dim
+  question: weighted average interest rate by rate type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_interest_rate
+  expected_metrics: null
+  expected_dimensions:
+  - interest_rate_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: ''
+- id: grp1_073
+  category: single_dim
+  question: weighted average interest rate by borrower type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_interest_rate
+  expected_metrics: null
+  expected_dimensions:
+  - borrower_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: ''
+- id: grp1_074
+  category: single_dim
+  question: weighted average interest rate by age bucket
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_interest_rate
+  expected_metrics: null
+  expected_dimensions:
+  - age_bucket
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: ''
+- id: grp1_075
+  category: single_dim
+  question: show me balance by region
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance breakdown (phrasing variant).
+- id: grp1_076
+  category: single_dim
+  question: show me balance by borrower type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - borrower_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance breakdown (phrasing variant).
+- id: grp1_077
+  category: single_dim
+  question: show me balance by product type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - erm_product_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance breakdown (phrasing variant).
+- id: grp1_078
+  category: single_dim
+  question: show me balance by broker
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - broker_channel
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance breakdown (phrasing variant).
+- id: grp1_079
+  category: single_dim
+  question: break down balance by region
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance breakdown (phrasing variant).
+- id: grp1_080
+  category: single_dim
+  question: break down balance by borrower type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - borrower_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance breakdown (phrasing variant).
+- id: grp1_081
+  category: single_dim
+  question: break down balance by product type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - erm_product_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance breakdown (phrasing variant).
+- id: grp1_082
+  category: single_dim
+  question: break down balance by broker
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - broker_channel
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance breakdown (phrasing variant).
+- id: grp1_083
+  category: single_dim
+  question: balance split by region
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance breakdown (phrasing variant).
+- id: grp1_084
+  category: single_dim
+  question: balance split by borrower type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - borrower_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance breakdown (phrasing variant).
+- id: grp1_085
+  category: single_dim
+  question: balance split by product type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - erm_product_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance breakdown (phrasing variant).
+- id: grp1_086
+  category: single_dim
+  question: balance split by broker
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - broker_channel
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance breakdown (phrasing variant).
+- id: grp1_087
+  category: single_dim
+  question: exposure by region
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance breakdown (phrasing variant).
+- id: grp1_088
+  category: single_dim
+  question: exposure by borrower type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - borrower_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance breakdown (phrasing variant).
+- id: grp1_089
+  category: single_dim
+  question: exposure by product type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - erm_product_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance breakdown (phrasing variant).
+- id: grp1_090
+  category: single_dim
+  question: exposure by broker
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - broker_channel
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance breakdown (phrasing variant).
+- id: grp1_091
+  category: single_dim
+  question: total valuation by region
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_valuation_amount
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Collateral valuation by dimension.
+- id: grp1_092
+  category: single_dim
+  question: original balance by region
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: original_principal_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Original advance by dimension.
+- id: grp1_093
+  category: single_dim
+  question: total valuation by product type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_valuation_amount
+  expected_metrics: null
+  expected_dimensions:
+  - erm_product_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Collateral valuation by dimension.
+- id: grp1_094
+  category: single_dim
+  question: original balance by product type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: original_principal_balance
+  expected_metrics: null
+  expected_dimensions:
+  - erm_product_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Original advance by dimension.
+- id: grp1_095
+  category: single_dim
+  question: total valuation by broker
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_valuation_amount
+  expected_metrics: null
+  expected_dimensions:
+  - broker_channel
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Collateral valuation by dimension.
+- id: grp1_096
+  category: single_dim
+  question: original balance by broker
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: original_principal_balance
+  expected_metrics: null
+  expected_dimensions:
+  - broker_channel
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Original advance by dimension.
+- id: grp2_097
+  category: two_dim
+  question: balance by borrower type by region
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - borrower_type
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: heatmap
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 3
+  known_gap: null
+  notes: Two categorical dims -> matrix.
+- id: grp2_098
+  category: two_dim
+  question: balance by LTV bucket by age bucket
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - ltv_bucket
+  - age_bucket
+  expected_filters: []
+  expected_artifact_type: heatmap
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 3
+  known_gap: null
+  notes: Two categorical dims -> matrix.
+- id: grp2_099
+  category: two_dim
+  question: balance by region by product type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  - erm_product_type
+  expected_filters: []
+  expected_artifact_type: heatmap
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 3
+  known_gap: null
+  notes: Two categorical dims -> matrix.
+- id: grp2_100
+  category: two_dim
+  question: balance by broker by product type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - broker_channel
+  - erm_product_type
+  expected_filters: []
+  expected_artifact_type: heatmap
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 3
+  known_gap: null
+  notes: Two categorical dims -> matrix.
+- id: grp2_101
+  category: two_dim
+  question: balance by account status by region
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - account_status
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: heatmap
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 3
+  known_gap: null
+  notes: Two categorical dims -> matrix.
+- id: grp2_102
+  category: two_dim
+  question: balance by product type by age bucket
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - erm_product_type
+  - age_bucket
+  expected_filters: []
+  expected_artifact_type: heatmap
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 3
+  known_gap: null
+  notes: Two categorical dims -> matrix.
+- id: grp2_103
+  category: two_dim
+  question: balance by region by LTV bucket
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  - ltv_bucket
+  expected_filters: []
+  expected_artifact_type: heatmap
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 3
+  known_gap: null
+  notes: Two categorical dims -> matrix.
+- id: grp2_104
+  category: two_dim
+  question: balance by occupancy type by region
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - occupancy_type
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: heatmap
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 3
+  known_gap: null
+  notes: Two categorical dims -> matrix.
+- id: grp2_105
+  category: two_dim
+  question: balance by rate type by product type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - interest_rate_type
+  - erm_product_type
+  expected_filters: []
+  expected_artifact_type: heatmap
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 3
+  known_gap: null
+  notes: Two categorical dims -> matrix.
+- id: grp2_106
+  category: two_dim
+  question: WA LTV by product type and region
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_loan_to_value
+  expected_metrics: null
+  expected_dimensions:
+  - erm_product_type
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: heatmap
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 3
+  known_gap: null
+  notes: Two categorical dims -> matrix.
+- id: grp2_107
+  category: two_dim
+  question: average LTV by region and age bucket
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_loan_to_value
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  - age_bucket
+  expected_filters: []
+  expected_artifact_type: heatmap
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 3
+  known_gap: null
+  notes: Two categorical dims -> matrix.
+- id: grp2_108
+  category: two_dim
+  question: average interest rate by product type and rate type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_interest_rate
+  expected_metrics: null
+  expected_dimensions:
+  - erm_product_type
+  - interest_rate_type
+  expected_filters: []
+  expected_artifact_type: heatmap
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 3
+  known_gap: null
+  notes: Two categorical dims -> matrix.
+- id: grp2_109
+  category: two_dim
+  question: loan count by region and borrower type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  - borrower_type
+  expected_filters: []
+  expected_artifact_type: heatmap
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 3
+  known_gap: null
+  notes: Two-dim count matrix.
+- id: grp2_110
+  category: two_dim
+  question: count by age bucket and LTV bucket
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions:
+  - age_bucket
+  - ltv_bucket
+  expected_filters: []
+  expected_artifact_type: heatmap
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 3
+  known_gap: null
+  notes: Two-dim count matrix.
+- id: grp2_111
+  category: two_dim
+  question: number of loans by broker and product type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions:
+  - broker_channel
+  - erm_product_type
+  expected_filters: []
+  expected_artifact_type: heatmap
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 3
+  known_gap: null
+  notes: Two-dim count matrix.
+- id: grp2_112
+  category: two_dim
+  question: balance by borrower type by product type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - borrower_type
+  - erm_product_type
+  expected_filters: []
+  expected_artifact_type: heatmap
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 3
+  known_gap: null
+  notes: Two categorical dims -> matrix.
+- id: grp2_113
+  category: two_dim
+  question: balance by region by age bucket
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  - age_bucket
+  expected_filters: []
+  expected_artifact_type: heatmap
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 3
+  known_gap: null
+  notes: Two categorical dims -> matrix.
+- id: grp2_114
+  category: two_dim
+  question: balance by broker by region
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - broker_channel
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: heatmap
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 3
+  known_gap: null
+  notes: Two categorical dims -> matrix.
+- id: grp2_115
+  category: two_dim
+  question: balance by account status by product type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - account_status
+  - erm_product_type
+  expected_filters: []
+  expected_artifact_type: heatmap
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 3
+  known_gap: null
+  notes: Two categorical dims -> matrix.
+- id: grp2_116
+  category: two_dim
+  question: balance by term bucket by LTV bucket
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - term_bucket
+  - ltv_bucket
+  expected_filters: []
+  expected_artifact_type: heatmap
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 3
+  known_gap: null
+  notes: Two categorical dims -> matrix.
+- id: grp2_117
+  category: two_dim
+  question: balance by ticket size by region
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - ticket_bucket
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: heatmap
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 3
+  known_gap: null
+  notes: Two categorical dims -> matrix.
+- id: grp2_118
+  category: two_dim
+  question: average LTV by borrower type and region
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_loan_to_value
+  expected_metrics: null
+  expected_dimensions:
+  - borrower_type
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: heatmap
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 3
+  known_gap: null
+  notes: Two categorical dims -> matrix.
+- id: grp2_119
+  category: two_dim
+  question: balance by origination channel by region
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - origination_channel
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: heatmap
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 3
+  known_gap: null
+  notes: Two categorical dims -> matrix.
+- id: grp2_120
+  category: two_dim
+  question: balance by rate type by region
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - interest_rate_type
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: heatmap
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 3
+  known_gap: null
+  notes: Two categorical dims -> matrix.
+- id: grp2_121
+  category: two_dim
+  question: balance by borrower type by age bucket
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - borrower_type
+  - age_bucket
+  expected_filters: []
+  expected_artifact_type: heatmap
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 3
+  known_gap: null
+  notes: Two categorical dims -> matrix.
+- id: grp2_122
+  category: two_dim
+  question: WA interest rate by broker and product type
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_interest_rate
+  expected_metrics: null
+  expected_dimensions:
+  - broker_channel
+  - erm_product_type
+  expected_filters: []
+  expected_artifact_type: heatmap
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 3
+  known_gap: null
+  notes: Two categorical dims -> matrix.
+- id: filt_123
+  category: filtered
+  question: how many loans have LTV above 50%
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters:
+  - current_loan_to_value
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include:
+  - loan_count
+  expected_min_columns: 1
+  known_gap: null
+  notes: Filtered whole-book KPI.
+- id: filt_124
+  category: filtered
+  question: how many loans have LTV above 40%
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters:
+  - current_loan_to_value
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include:
+  - loan_count
+  expected_min_columns: 1
+  known_gap: null
+  notes: Filtered whole-book KPI.
+- id: filt_125
+  category: filtered
+  question: how many borrowers are over 70
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters:
+  - youngest_borrower_age
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include:
+  - loan_count
+  expected_min_columns: 1
+  known_gap: null
+  notes: Filtered whole-book KPI.
+- id: filt_126
+  category: filtered
+  question: how many loans have a balance above £250k
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters:
+  - current_outstanding_balance
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include:
+  - loan_count
+  expected_min_columns: 1
+  known_gap: null
+  notes: Filtered whole-book KPI.
+- id: filt_127
+  category: filtered
+  question: total balance where LTV is above 50%
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters:
+  - current_loan_to_value
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Filtered whole-book KPI.
+- id: filt_128
+  category: filtered
+  question: how much balance is in loans with a balance above £250k
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters:
+  - current_outstanding_balance
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Filtered whole-book KPI.
+- id: filt_129
+  category: filtered
+  question: how many joint borrowers are there
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters:
+  - borrower_type
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include:
+  - loan_count
+  expected_min_columns: 1
+  known_gap: null
+  notes: Filtered whole-book KPI.
+- id: filt_130
+  category: filtered
+  question: balance by region where LTV above 50%
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters:
+  - current_loan_to_value
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Grouped query + value filter (mask before grouping).
+- id: filt_131
+  category: filtered
+  question: balance by broker where LTV above 50%
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - broker_channel
+  expected_filters:
+  - current_loan_to_value
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Grouped query + value filter (mask before grouping).
+- id: filt_132
+  category: filtered
+  question: balance by product type for loans above £250k
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - erm_product_type
+  expected_filters:
+  - current_outstanding_balance
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Grouped query + value filter (mask before grouping).
+- id: filt_133
+  category: filtered
+  question: balance by region where LTV between 40 and 60
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters:
+  - current_loan_to_value
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Grouped query + value filter (mask before grouping).
+- id: filt_134
+  category: filtered
+  question: count by borrower type where age is over 70
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions:
+  - borrower_type
+  expected_filters:
+  - youngest_borrower_age
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Grouped query + value filter (mask before grouping).
+- id: filt_135
+  category: filtered
+  question: WA LTV by region for joint borrowers
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_loan_to_value
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters:
+  - borrower_type
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Grouped query + value filter (mask before grouping).
+- id: filt_136
+  category: filtered
+  question: average LTV by product type for joint borrowers
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_loan_to_value
+  expected_metrics: null
+  expected_dimensions:
+  - erm_product_type
+  expected_filters:
+  - borrower_type
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Grouped query + value filter (mask before grouping).
+- id: filt_137
+  category: filtered
+  question: balance by broker for loans above £250k
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - broker_channel
+  expected_filters:
+  - current_outstanding_balance
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Grouped query + value filter (mask before grouping).
+- id: filt_138
+  category: filtered
+  question: balance by region where LTV above 30%
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters:
+  - current_loan_to_value
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Grouped balance filtered by LTV threshold.
+- id: filt_139
+  category: filtered
+  question: balance by region where LTV above 40%
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters:
+  - current_loan_to_value
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Grouped balance filtered by LTV threshold.
+- id: filt_140
+  category: filtered
+  question: balance by region where LTV above 60%
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters:
+  - current_loan_to_value
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Grouped balance filtered by LTV threshold.
+- id: filt_141
+  category: filtered
+  question: balance by region where LTV above 70%
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters:
+  - current_loan_to_value
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Grouped balance filtered by LTV threshold.
+- id: filt_142
+  category: filtered
+  question: balance by broker where LTV above 50%
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - broker_channel
+  expected_filters:
+  - current_loan_to_value
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Grouped balance + LTV filter.
+- id: filt_143
+  category: filtered
+  question: balance by product type where LTV above 50%
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - erm_product_type
+  expected_filters:
+  - current_loan_to_value
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Grouped balance + LTV filter.
+- id: filt_144
+  category: filtered
+  question: balance by borrower type where LTV above 50%
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - borrower_type
+  expected_filters:
+  - current_loan_to_value
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Grouped balance + LTV filter.
+- id: filt_145
+  category: filtered
+  question: balance by age bucket where LTV above 50%
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - age_bucket
+  expected_filters:
+  - current_loan_to_value
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Grouped balance + LTV filter.
+- id: filt_146
+  category: filtered
+  question: balance by region for loans above £250k
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters:
+  - current_outstanding_balance
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Grouped balance + balance-threshold filter.
+- id: filt_147
+  category: filtered
+  question: balance by broker for loans above £250k
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - broker_channel
+  expected_filters:
+  - current_outstanding_balance
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Grouped balance + balance-threshold filter.
+- id: filt_148
+  category: filtered
+  question: balance by product type for loans above £250k
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - erm_product_type
+  expected_filters:
+  - current_outstanding_balance
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Grouped balance + balance-threshold filter.
+- id: filt_149
+  category: filtered
+  question: how many loans have a balance above 200000
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters:
+  - current_outstanding_balance
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include:
+  - loan_count
+  expected_min_columns: 1
+  known_gap: null
+  notes: Filtered loan count KPI.
+- id: filt_150
+  category: filtered
+  question: how many loans have a balance above 300000
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters:
+  - current_outstanding_balance
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include:
+  - loan_count
+  expected_min_columns: 1
+  known_gap: null
+  notes: Filtered loan count KPI.
+- id: filt_151
+  category: filtered
+  question: balance by region for joint borrowers
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters:
+  - borrower_type
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Grouped balance + categorical (borrower-structure) filter.
+- id: filt_152
+  category: filtered
+  question: balance by product type for joint borrowers
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - erm_product_type
+  expected_filters:
+  - borrower_type
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Grouped balance + categorical (borrower-structure) filter.
+- id: filt_153
+  category: filtered
+  question: balance by broker for joint borrowers
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - broker_channel
+  expected_filters:
+  - borrower_type
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Grouped balance + categorical (borrower-structure) filter.
+- id: filt_154
+  category: filtered
+  question: balance by region where borrower age is over 70
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters:
+  - youngest_borrower_age
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Grouped balance + age filter.
+- id: filt_155
+  category: filtered
+  question: balance by region where borrower age is over 75
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters:
+  - youngest_borrower_age
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Grouped balance + age filter.
+- id: filt_156
+  category: filtered
+  question: balance by region where borrower age is over 80
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters:
+  - youngest_borrower_age
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Grouped balance + age filter.
+- id: filt_157
+  category: filtered
+  question: WA LTV by broker where LTV above 40%
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_loan_to_value
+  expected_metrics: null
+  expected_dimensions:
+  - broker_channel
+  expected_filters:
+  - current_loan_to_value
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Grouped WA LTV + LTV filter.
+- id: filt_158
+  category: filtered
+  question: WA LTV by product type where LTV above 40%
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_loan_to_value
+  expected_metrics: null
+  expected_dimensions:
+  - erm_product_type
+  expected_filters:
+  - current_loan_to_value
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Grouped WA LTV + LTV filter.
+- id: filt_159
+  category: filtered
+  question: balance where LTV above 50%
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters:
+  - current_loan_to_value
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: 'Bare ''balance where <filter>'' (no total/how-much/how-many cue) resolves the metric to
+    LTV and drops the filter. Use ''total balance where LTV above 50%''. Follow-up: treat ''balance where
+    ...'' as filtered balance.'
+  notes: Known parser gap on bare filtered balance.
+- id: rank_160
+  category: ranking
+  question: top 10 regions by balance
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Ranked grouped bar.
+- id: rank_161
+  category: ranking
+  question: top 5 brokers by balance
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - broker_channel
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Ranked grouped bar.
+- id: rank_162
+  category: ranking
+  question: top 10 products by balance
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - erm_product_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Ranked grouped bar.
+- id: rank_163
+  category: ranking
+  question: which region has the largest balance
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Ranked grouped bar.
+- id: rank_164
+  category: ranking
+  question: which broker has the largest balance
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - broker_channel
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Ranked grouped bar.
+- id: rank_165
+  category: ranking
+  question: which product type has the highest balance
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - erm_product_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Ranked grouped bar.
+- id: rank_166
+  category: ranking
+  question: regions with the most loans
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Ranked grouped bar.
+- id: rank_167
+  category: ranking
+  question: highest average LTV regions
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_loan_to_value
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Ranked grouped bar.
+- id: rank_168
+  category: ranking
+  question: which region has the highest average LTV
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_loan_to_value
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Ranked grouped bar.
+- id: rank_169
+  category: ranking
+  question: smallest region by balance
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Ranked grouped bar.
+- id: rank_170
+  category: ranking
+  question: largest loans
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: table
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Loan-level top-N ranking table.
+- id: rank_171
+  category: ranking
+  question: show the largest loans
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: table
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Loan-level top-N ranking table.
+- id: rank_172
+  category: ranking
+  question: highest LTV loans
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_loan_to_value
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: table
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Loan-level top-N ranking table.
+- id: rank_173
+  category: ranking
+  question: top 10 loans by balance
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: table
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Loan-level top-N ranking table.
+- id: rank_174
+  category: ranking
+  question: biggest 20 loans
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: table
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Loan-level top-N ranking table.
+- id: rank_175
+  category: ranking
+  question: top 5 region by balance
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Top-N grouped ranking.
+- id: rank_176
+  category: ranking
+  question: top 5 broker by balance
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - broker_channel
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Top-N grouped ranking.
+- id: rank_177
+  category: ranking
+  question: top 10 product type by balance
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - erm_product_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Top-N grouped ranking.
+- id: rank_178
+  category: ranking
+  question: top 3 age bucket by balance
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - age_bucket
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Top-N grouped ranking.
+- id: rank_179
+  category: ranking
+  question: top 5 account status by balance
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - account_status
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Top-N grouped ranking.
+- id: rank_180
+  category: ranking
+  question: which broker has the highest average LTV
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_loan_to_value
+  expected_metrics: null
+  expected_dimensions:
+  - broker_channel
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Ranked WA LTV by dimension.
+- id: rank_181
+  category: ranking
+  question: which product type has the highest average LTV
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_loan_to_value
+  expected_metrics: null
+  expected_dimensions:
+  - erm_product_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Ranked WA LTV by dimension.
+- id: rank_182
+  category: ranking
+  question: which borrower type has the highest average LTV
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_loan_to_value
+  expected_metrics: null
+  expected_dimensions:
+  - borrower_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Ranked WA LTV by dimension.
+- id: pipe_183
+  category: pipeline
+  question: pipeline amount by stage
+  expected_status: answer
+  execution: parse_only
+  expected_scope: pipeline
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'Pipeline scope: validated at parse level (no hallucinated fields); full execution requires the
+    pipeline runtime harness.'
+- id: pipe_184
+  category: pipeline
+  question: expected funded by stage
+  expected_status: answer
+  execution: parse_only
+  expected_scope: pipeline
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'Pipeline scope: validated at parse level (no hallucinated fields); full execution requires the
+    pipeline runtime harness.'
+- id: pipe_185
+  category: pipeline
+  question: pipeline by broker
+  expected_status: answer
+  execution: parse_only
+  expected_scope: pipeline
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'Pipeline scope: validated at parse level (no hallucinated fields); full execution requires the
+    pipeline runtime harness.'
+- id: pipe_186
+  category: pipeline
+  question: pipeline by stage
+  expected_status: answer
+  execution: parse_only
+  expected_scope: pipeline
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'Pipeline scope: validated at parse level (no hallucinated fields); full execution requires the
+    pipeline runtime harness.'
+- id: pipe_187
+  category: pipeline
+  question: completions by month
+  expected_status: answer
+  execution: parse_only
+  expected_scope: pipeline
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'Pipeline scope: validated at parse level (no hallucinated fields); full execution requires the
+    pipeline runtime harness.'
+- id: pipe_188
+  category: pipeline
+  question: pipeline conversion by stage
+  expected_status: answer
+  execution: parse_only
+  expected_scope: pipeline
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'Pipeline scope: validated at parse level (no hallucinated fields); full execution requires the
+    pipeline runtime harness.'
+- id: pipe_189
+  category: pipeline
+  question: top brokers by expected funded amount
+  expected_status: answer
+  execution: parse_only
+  expected_scope: pipeline
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'Pipeline scope: validated at parse level (no hallucinated fields); full execution requires the
+    pipeline runtime harness.'
+- id: pipe_190
+  category: pipeline
+  question: applications over the last four weeks
+  expected_status: answer
+  execution: parse_only
+  expected_scope: pipeline
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'Pipeline scope: validated at parse level (no hallucinated fields); full execution requires the
+    pipeline runtime harness.'
+- id: pipe_191
+  category: pipeline
+  question: pipeline by stage for broker Alpha
+  expected_status: answer
+  execution: parse_only
+  expected_scope: pipeline
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'Pipeline scope: validated at parse level (no hallucinated fields); full execution requires the
+    pipeline runtime harness.'
+- id: pipe_192
+  category: pipeline
+  question: weighted expected funded by week
+  expected_status: answer
+  execution: parse_only
+  expected_scope: pipeline
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'Pipeline scope: validated at parse level (no hallucinated fields); full execution requires the
+    pipeline runtime harness.'
+- id: pipe_193
+  category: pipeline
+  question: how many cases are in the pipeline
+  expected_status: answer
+  execution: parse_only
+  expected_scope: pipeline
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'Pipeline scope: validated at parse level (no hallucinated fields); full execution requires the
+    pipeline runtime harness.'
+- id: pipe_194
+  category: pipeline
+  question: pipeline amount by broker
+  expected_status: answer
+  execution: parse_only
+  expected_scope: pipeline
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'Pipeline scope: validated at parse level (no hallucinated fields); full execution requires the
+    pipeline runtime harness.'
+- id: fcast_195
+  category: forecast
+  question: forecast funded balance by month
+  expected_status: answer
+  execution: parse_only
+  expected_scope: forecast
+  expected_metric: forecast_funded_balance
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Forecast metric recognised at parse level.
+- id: fcast_196
+  category: forecast
+  question: expected funded amount by month
+  expected_status: answer
+  execution: parse_only
+  expected_scope: forecast
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'Forecast scope: parse-level (no hallucinated fields); full execution requires the forecast runtime
+    harness.'
+- id: fcast_197
+  category: forecast
+  question: show projected completions
+  expected_status: answer
+  execution: parse_only
+  expected_scope: forecast
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'Forecast scope: parse-level (no hallucinated fields); full execution requires the forecast runtime
+    harness.'
+- id: fcast_198
+  category: forecast
+  question: forecast by completion month
+  expected_status: answer
+  execution: parse_only
+  expected_scope: forecast
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'Forecast scope: parse-level (no hallucinated fields); full execution requires the forecast runtime
+    harness.'
+- id: fcast_199
+  category: forecast
+  question: compare current funded balance to expected funded
+  expected_status: answer
+  execution: parse_only
+  expected_scope: forecast
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'Forecast scope: parse-level (no hallucinated fields); full execution requires the forecast runtime
+    harness.'
+- id: fcast_200
+  category: forecast
+  question: forecast funded balance
+  expected_status: answer
+  execution: parse_only
+  expected_scope: forecast
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'Forecast scope: parse-level (no hallucinated fields); full execution requires the forecast runtime
+    harness.'
+- id: fcast_201
+  category: forecast
+  question: what is the projected funded balance next quarter
+  expected_status: answer
+  execution: parse_only
+  expected_scope: forecast
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'Forecast scope: parse-level (no hallucinated fields); full execution requires the forecast runtime
+    harness.'
+- id: fcast_202
+  category: forecast
+  question: expected completions over the next three months
+  expected_status: answer
+  execution: parse_only
+  expected_scope: forecast
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'Forecast scope: parse-level (no hallucinated fields); full execution requires the forecast runtime
+    harness.'
+- id: fcast_203
+  category: forecast
+  question: run-rate forecast of funded balance
+  expected_status: answer
+  execution: parse_only
+  expected_scope: forecast
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'Forecast scope: parse-level (no hallucinated fields); full execution requires the forecast runtime
+    harness.'
+- id: risk_204
+  category: risk
+  question: balance by region
+  expected_status: answer
+  execution: full
+  expected_scope: risk
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Concentration view.
+- id: risk_205
+  category: risk
+  question: balance by LTV bucket
+  expected_status: answer
+  execution: full
+  expected_scope: risk
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - ltv_bucket
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Concentration view.
+- id: risk_206
+  category: risk
+  question: exposure by region
+  expected_status: answer
+  execution: full
+  expected_scope: risk
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Concentration view.
+- id: risk_207
+  category: risk
+  question: largest regional concentration
+  expected_status: answer
+  execution: full
+  expected_scope: risk
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: 'Resolves to a loan-level ranking TABLE, not a region concentration bar. Use ''which region
+    has the largest balance''. Follow-up: route ''largest <dim> concentration'' to a grouped concentration
+    bar.'
+  notes: 'Known gap: concentration phrasing -> loan-level table.'
+- id: risk_208
+  category: risk
+  question: how many loans have a balance above £250k
+  expected_status: answer
+  execution: full
+  expected_scope: risk
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters:
+  - current_outstanding_balance
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Filtered risk exposure KPI.
+- id: risk_209
+  category: risk
+  question: how much balance is above 60% LTV
+  expected_status: answer
+  execution: full
+  expected_scope: risk
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters:
+  - current_loan_to_value
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Filtered risk exposure KPI.
+- id: risk_210
+  category: risk
+  question: how many loans are over 80 years old
+  expected_status: answer
+  execution: full
+  expected_scope: risk
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters:
+  - youngest_borrower_age
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Filtered risk exposure KPI.
+- id: risk_211
+  category: risk
+  question: exposure to London
+  expected_status: answer
+  execution: full
+  expected_scope: risk
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters:
+  - geographic_region_obligor
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: 'A place name (''exposure to London'') is not turned into a region filter — the whole-book
+    balance is returned. Follow-up: parse place names as region-value filters (or clarify).'
+  notes: 'Known gap: place-name exposure not filtered.'
+- id: risk_212
+  category: risk
+  question: exposure to the South East
+  expected_status: answer
+  execution: full
+  expected_scope: risk
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters:
+  - geographic_region_obligor
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: 'A place name (''exposure to London'') is not turned into a region filter — the whole-book
+    balance is returned. Follow-up: parse place names as region-value filters (or clarify).'
+  notes: 'Known gap: place-name exposure not filtered.'
+- id: risk_213
+  category: risk
+  question: concentration by region
+  expected_status: answer
+  execution: full
+  expected_scope: risk
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance concentration by a categorical dimension.
+- id: risk_214
+  category: risk
+  question: concentration by product type
+  expected_status: answer
+  execution: full
+  expected_scope: risk
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - erm_product_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance concentration by a categorical dimension.
+- id: risk_215
+  category: risk
+  question: concentration by borrower type
+  expected_status: answer
+  execution: full
+  expected_scope: risk
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - borrower_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance concentration by a categorical dimension.
+- id: risk_216
+  category: risk
+  question: concentration by account status
+  expected_status: answer
+  execution: full
+  expected_scope: risk
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - account_status
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Balance concentration by a categorical dimension.
+- id: risk_217
+  category: risk
+  question: concentration by LTV bucket
+  expected_status: answer
+  execution: full
+  expected_scope: risk
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - ltv_bucket
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: 'The bucket field name pulls the MEASURE (WA LTV / mean age) instead of balance, so ''concentration
+    by LTV bucket'' returns WA LTV per bucket, not the balance concentration. Use ''balance by LTV bucket''.
+    Follow-up: prefer balance for ''concentration by <bucket>''.'
+  notes: Known metric-resolution quirk on bucket concentration.
+- id: risk_218
+  category: risk
+  question: concentration by age bucket
+  expected_status: answer
+  execution: full
+  expected_scope: risk
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - age_bucket
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: 'The bucket field name pulls the MEASURE (WA LTV / mean age) instead of balance, so ''concentration
+    by LTV bucket'' returns WA LTV per bucket, not the balance concentration. Use ''balance by LTV bucket''.
+    Follow-up: prefer balance for ''concentration by <bucket>''.'
+  notes: Known metric-resolution quirk on bucket concentration.
+- id: risk_219
+  category: risk
+  question: how many loans are above 70% LTV
+  expected_status: answer
+  execution: full
+  expected_scope: risk
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters:
+  - current_loan_to_value
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Threshold risk exposure.
+- id: risk_220
+  category: risk
+  question: how much balance sits above 50% LTV
+  expected_status: answer
+  execution: full
+  expected_scope: risk
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters:
+  - current_loan_to_value
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Threshold risk exposure.
+- id: risk_221
+  category: risk
+  question: how many loans are over 75 years old
+  expected_status: answer
+  execution: full
+  expected_scope: risk
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters:
+  - youngest_borrower_age
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Threshold risk exposure.
+- id: risk_222
+  category: risk
+  question: balance by property value band
+  expected_status: answer
+  execution: full
+  expected_scope: risk
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - age_bucket
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: '''property value band'' is mis-mapped to the age bucket (no valuation-band dimension in
+    the tape). Follow-up: add a valuation-band dimension or refuse.'
+  notes: Known dimension mis-mapping.
+- id: risk_223
+  category: risk
+  question: high age borrower exposure
+  expected_status: answer
+  execution: full
+  expected_scope: risk
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters:
+  - youngest_borrower_age
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: 'No age threshold is parsed from ''high age'', so the whole-book balance is returned unfiltered.
+    Use ''balance for borrowers over 80''. Follow-up: qualitative-threshold handling or clarify.'
+  notes: 'Known: qualitative ''high age'' not turned into a filter.'
+- id: dq_224
+  category: data_quality
+  question: coverage for region
+  expected_status: answer
+  execution: full
+  expected_scope: data_quality
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Coverage is delivered via the reconciliation block on the grouped result.
+- id: dq_225
+  category: data_quality
+  question: coverage by borrower type
+  expected_status: answer
+  execution: full
+  expected_scope: data_quality
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - borrower_type
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Coverage is delivered via the reconciliation block on the grouped result.
+- id: dq_226
+  category: data_quality
+  question: data coverage by region
+  expected_status: answer
+  execution: full
+  expected_scope: data_quality
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters: []
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Coverage is delivered via the reconciliation block on the grouped result.
+- id: dq_227
+  category: data_quality
+  question: reconciliation for balance by region where LTV above 50%
+  expected_status: answer
+  execution: full
+  expected_scope: data_quality
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  expected_filters:
+  - current_loan_to_value
+  expected_artifact_type: bar
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 2
+  known_gap: null
+  notes: Filtered grouped result carries a reconciliation block.
+- id: dq_228
+  category: data_quality
+  question: missing region count
+  expected_status: clarify
+  execution: full
+  expected_scope: data_quality
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: 'No dedicated ''missing/excluded count'' intent — the system surfaces coverage via the reconciliation
+    block on a normal result, not as a standalone count. Follow-up: a data-quality intent that answers
+    missing/excluded counts directly.'
+  notes: 'Known gap: DQ counts are not a first-class query.'
+- id: dq_229
+  category: data_quality
+  question: missing borrower age count
+  expected_status: clarify
+  execution: full
+  expected_scope: data_quality
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: 'No dedicated ''missing/excluded count'' intent — the system surfaces coverage via the reconciliation
+    block on a normal result, not as a standalone count. Follow-up: a data-quality intent that answers
+    missing/excluded counts directly.'
+  notes: 'Known gap: DQ counts are not a first-class query.'
+- id: dq_230
+  category: data_quality
+  question: missing LTV count
+  expected_status: clarify
+  execution: full
+  expected_scope: data_quality
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: 'No dedicated ''missing/excluded count'' intent — the system surfaces coverage via the reconciliation
+    block on a normal result, not as a standalone count. Follow-up: a data-quality intent that answers
+    missing/excluded counts directly.'
+  notes: 'Known gap: DQ counts are not a first-class query.'
+- id: dq_231
+  category: data_quality
+  question: loans excluded from LTV analysis
+  expected_status: clarify
+  execution: full
+  expected_scope: data_quality
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: 'No dedicated ''missing/excluded count'' intent — the system surfaces coverage via the reconciliation
+    block on a normal result, not as a standalone count. Follow-up: a data-quality intent that answers
+    missing/excluded counts directly.'
+  notes: 'Known gap: DQ counts are not a first-class query.'
+- id: dq_232
+  category: data_quality
+  question: which fields are unavailable for this query
+  expected_status: clarify
+  execution: full
+  expected_scope: unknown
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Meta question — not a governed analytic; refused/clarified.
+- id: unsup_233
+  category: unsupported
+  question: show defaulted balance by region
+  expected_status: refuse
+  execution: full
+  expected_scope: unknown
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Field genuinely absent (default); must refuse with a reason, never fabricate or substitute.
+- id: unsup_234
+  category: unsupported
+  question: defaulted balance
+  expected_status: refuse
+  execution: full
+  expected_scope: unknown
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Field genuinely absent (default); must refuse with a reason, never fabricate or substitute.
+- id: unsup_235
+  category: unsupported
+  question: show NNEG by region
+  expected_status: refuse
+  execution: full
+  expected_scope: unknown
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Field genuinely absent (nneg); must refuse with a reason, never fabricate or substitute.
+- id: unsup_236
+  category: unsupported
+  question: NNEG exposure by LTV bucket
+  expected_status: refuse
+  execution: full
+  expected_scope: unknown
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Field genuinely absent (nneg); must refuse with a reason, never fabricate or substitute.
+- id: unsup_237
+  category: unsupported
+  question: show credit score by broker
+  expected_status: refuse
+  execution: full
+  expected_scope: unknown
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Field genuinely absent (credit); must refuse with a reason, never fabricate or substitute.
+- id: unsup_238
+  category: unsupported
+  question: average credit score by region
+  expected_status: refuse
+  execution: full
+  expected_scope: unknown
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Field genuinely absent (credit); must refuse with a reason, never fabricate or substitute.
+- id: unsup_239
+  category: unsupported
+  question: show arrears by region
+  expected_status: refuse
+  execution: full
+  expected_scope: unknown
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Field genuinely absent (arrears); must refuse with a reason, never fabricate or substitute.
+- id: unsup_240
+  category: unsupported
+  question: arrears balance by broker
+  expected_status: refuse
+  execution: full
+  expected_scope: unknown
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Field genuinely absent (arrears); must refuse with a reason, never fabricate or substitute.
+- id: unsup_241
+  category: unsupported
+  question: show recoveries in period
+  expected_status: refuse
+  execution: full
+  expected_scope: unknown
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Field genuinely absent (recover); must refuse with a reason, never fabricate or substitute.
+- id: unsup_242
+  category: unsupported
+  question: indexed value by region
+  expected_status: refuse
+  execution: full
+  expected_scope: unknown
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Field genuinely absent (index); must refuse with a reason, never fabricate or substitute.
+- id: ambig_243
+  category: ambiguous
+  question: show risky loans
+  expected_status: clarify
+  execution: full
+  expected_scope: unknown
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Ambiguous / no governed metric — must clarify or refuse, not guess.
+- id: ambig_244
+  category: ambiguous
+  question: show me the good loans
+  expected_status: clarify
+  execution: full
+  expected_scope: unknown
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Ambiguous / no governed metric — must clarify or refuse, not guess.
+- id: ambig_245
+  category: ambiguous
+  question: which loans should I worry about
+  expected_status: clarify
+  execution: full
+  expected_scope: unknown
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Ambiguous / no governed metric — must clarify or refuse, not guess.
+- id: ambig_246
+  category: ambiguous
+  question: loans above 500000
+  expected_status: clarify
+  execution: full
+  expected_scope: unknown
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: Ambiguous / no governed metric — must clarify or refuse, not guess.
+- id: ambig_247
+  category: ambiguous
+  question: show best brokers
+  expected_status: clarify
+  execution: full
+  expected_scope: unknown
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: 'Currently answered as balance by a dimension (a subjective/unavailable concept was silently
+    substituted with balance). Ideal: clarify or refuse. Follow-up: detect subjective/unavailable concepts
+    (''best'', ''bad'', ''interesting'', ''profitability'').'
+  notes: 'Known gap: subjective term silently mapped to balance.'
+- id: ambig_248
+  category: ambiguous
+  question: show bad regions
+  expected_status: clarify
+  execution: full
+  expected_scope: unknown
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: 'Currently answered as balance by a dimension (a subjective/unavailable concept was silently
+    substituted with balance). Ideal: clarify or refuse. Follow-up: detect subjective/unavailable concepts
+    (''best'', ''bad'', ''interesting'', ''profitability'').'
+  notes: 'Known gap: subjective term silently mapped to balance.'
+- id: ambig_249
+  category: ambiguous
+  question: show profitability by region
+  expected_status: clarify
+  execution: full
+  expected_scope: unknown
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: 'Currently answered as balance by a dimension (a subjective/unavailable concept was silently
+    substituted with balance). Ideal: clarify or refuse. Follow-up: detect subjective/unavailable concepts
+    (''best'', ''bad'', ''interesting'', ''profitability'').'
+  notes: 'Known gap: subjective term silently mapped to balance.'
+- id: ambig_250
+  category: ambiguous
+  question: show me interesting regions
+  expected_status: clarify
+  execution: full
+  expected_scope: unknown
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: 'Currently answered as balance by a dimension (a subjective/unavailable concept was silently
+    substituted with balance). Ideal: clarify or refuse. Follow-up: detect subjective/unavailable concepts
+    (''best'', ''bad'', ''interesting'', ''profitability'').'
+  notes: 'Known gap: subjective term silently mapped to balance.'
+- id: ambig_251
+  category: ambiguous
+  question: balance by region by borrower type by LTV bucket
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_metrics: null
+  expected_dimensions:
+  - geographic_region_obligor
+  - borrower_type
+  expected_filters: []
+  expected_artifact_type: heatmap
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings:
+  - Grouping not applied
+  expected_columns_include: []
+  expected_min_columns: 3
+  known_gap: 'The THIRD dimension (LTV bucket) is dropped at parse time (dim_keys[:2]) with no warning;
+    the dimension invariant does not catch it because it never reaches the spec. Follow-up: surface a
+    ''third dimension not applied'' warning at the parser, or route 3+ dims to a pivot table.'
+  notes: 'Known gap: 3rd dimension silently dropped at parse (no warning).'
+- id: ambig_252
+  category: ambiguous
+  question: balance trend where LTV above 50%
+  expected_status: refuse
+  execution: full
+  expected_scope: funded
+  expected_metric: null
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: 'Filtered time-series is not supported: the line path does not attach the filter, so today
+    it answers an UNFILTERED WA-LTV trend (a silent omission). Ideal: refuse or apply the filter. Follow-up:
+    attach filters on the line path or fail closed.'
+  notes: Known fail-closed gap on filtered trends.

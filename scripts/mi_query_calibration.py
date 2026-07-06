@@ -179,6 +179,78 @@ def build_markdown(results, summary) -> str:
     return "\n".join(lines)
 
 
+def build_curated_markdown() -> str:
+    """The curated calibration bank section (250+ realistic business questions)."""
+    from mi_agent import mi_calibration as CAL
+    results, s = CAL.run_bank()
+    lines: list = []
+    A = lines.append
+    A("")
+    A("---")
+    A("")
+    A("# Curated calibration bank (realistic business questions)")
+    A("")
+    A("Additional to the generated harness above: a hand-curated bank of realistic "
+      "lender / investor / credit-committee / portfolio-manager / ops questions, "
+      "each with declared expected semantic behaviour "
+      "(`config/mi/golden_questions/ere_mi_calibration_250.yaml`, enforced by "
+      "`mi_agent/tests/test_mi_calibration_bank.py`).")
+    A("")
+    A(f"- **Curated questions:** {s['total']}")
+    A(f"- **Held their declared expectation:** {s['passed']}")
+    A(f"- **Hard failures (non-known-gap):** {s['hard_failures']}")
+    A(f"- **Known gaps (documented follow-ups, xfailed):** {s['known_gaps']}")
+    A(f"- **Pass rate (incl. known gaps as not-passing):** {s['pass_rate'] * 100:.1f}%")
+    A("")
+    A("## Pass / fail by category")
+    A("")
+    A("| Category | Passed | Total | Known gaps | Hard fails |")
+    A("|---|---:|---:|---:|---:|")
+    for cat, agg in sorted(s["by_category"].items()):
+        hard = agg["total"] - agg["passed"] - agg["known_gap"] \
+            if (agg["total"] - agg["passed"]) > agg["known_gap"] else 0
+        # hard = cases neither passed nor known_gap
+        hardfails = sum(1 for r in results if r.category == cat and not r.ok and not r.known_gap)
+        A(f"| {cat} | {agg['passed']} | {agg['total']} | {agg['known_gap']} | {hardfails} |")
+    A("")
+    A("## Failure classes (hard failures only)")
+    A("")
+    defects = s["defects_by_class"]
+    if not defects:
+        A("None — every non-known-gap curated question held its declared expectation "
+          "(metric resolution, dimensions applied, filters applied, dimension & filter "
+          "invariants, artifact type, reconciliation).")
+    else:
+        A("| Class | Count |")
+        A("|---|---:|")
+        for cls, n in sorted(defects.items(), key=lambda kv: -kv[1]):
+            A(f"| {cls} | {n} |")
+    A("")
+    # Correctly-refused unsupported concepts.
+    refused = [r for r in results if r.category == "unsupported"]
+    A("## Unsupported concepts correctly refused")
+    A("")
+    for r in refused:
+        A(f"- {r.question} — {'refused ✅' if r.ok else 'NOT refused ⚠️'}")
+    A("")
+    A("## Known gaps / follow-ups (discovered, not loosened)")
+    A("")
+    A("These curated questions state the IDEAL behaviour; the system does not yet "
+      "meet it, so they are xfailed with the reason below rather than having their "
+      "expectation weakened.")
+    A("")
+    seen = set()
+    for rid, q, gap in s["known_gap_cases"]:
+        key = gap[:60]
+        if key in seen:
+            A(f"- `{rid}` {q}")
+            continue
+        seen.add(key)
+        A(f"- `{rid}` **{q}** — {gap}")
+    A("")
+    return "\n".join(lines)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(_REPO_ROOT / "docs" / "mi_query_calibration_report.md"))
@@ -186,15 +258,18 @@ def main() -> int:
     args = ap.parse_args()
 
     results, summary = H.run_suite()
-    md = build_markdown(results, summary)
+    md = build_markdown(results, summary) + "\n" + build_curated_markdown()
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(md, encoding="utf-8")
-    print(f"wrote {out} ({summary['passed']}/{summary['total']} passed, "
-          f"{summary['pass_rate'] * 100:.2f}%)")
+    from mi_agent import mi_calibration as CAL
+    _, cur = CAL.run_bank()
+    print(f"wrote {out} (generated {summary['passed']}/{summary['total']}; "
+          f"curated {cur['passed']}/{cur['total']} held, {cur['hard_failures']} hard fails, "
+          f"{cur['known_gaps']} known gaps)")
     if args.do_print:
         print(md)
-    return 0 if summary["failed"] == 0 else 1
+    return 0 if (summary["failed"] == 0 and cur["hard_failures"] == 0) else 1
 
 
 if __name__ == "__main__":

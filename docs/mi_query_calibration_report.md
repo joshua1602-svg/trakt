@@ -151,3 +151,73 @@ python -m pytest mi_agent/tests/test_mi_query_invariants.py -q
 # Regenerate this report:
 python scripts/mi_query_calibration.py
 ```
+
+
+---
+
+# Curated calibration bank (realistic business questions)
+
+Additional to the generated harness above: a hand-curated bank of realistic lender / investor / credit-committee / portfolio-manager / ops questions, each with declared expected semantic behaviour (`config/mi/golden_questions/ere_mi_calibration_250.yaml`, enforced by `mi_agent/tests/test_mi_calibration_bank.py`).
+
+- **Curated questions:** 252
+- **Held their declared expectation:** 234
+- **Hard failures (non-known-gap):** 0
+- **Known gaps (documented follow-ups, xfailed):** 19
+- **Pass rate (incl. known gaps as not-passing):** 92.9%
+
+## Pass / fail by category
+
+| Category | Passed | Total | Known gaps | Hard fails |
+|---|---:|---:|---:|---:|
+| ambiguous | 4 | 10 | 6 | 0 |
+| basic_kpi | 31 | 32 | 1 | 0 |
+| data_quality | 5 | 9 | 4 | 0 |
+| filtered | 36 | 37 | 1 | 0 |
+| forecast | 9 | 9 | 0 | 0 |
+| pipeline | 12 | 12 | 0 | 0 |
+| ranking | 23 | 23 | 0 | 0 |
+| risk | 14 | 20 | 7 | 0 |
+| single_dim | 64 | 64 | 0 | 0 |
+| two_dim | 26 | 26 | 0 | 0 |
+| unsupported | 10 | 10 | 0 | 0 |
+
+## Failure classes (hard failures only)
+
+None — every non-known-gap curated question held its declared expectation (metric resolution, dimensions applied, filters applied, dimension & filter invariants, artifact type, reconciliation).
+
+## Unsupported concepts correctly refused
+
+- show defaulted balance by region — refused ✅
+- defaulted balance — refused ✅
+- show NNEG by region — refused ✅
+- NNEG exposure by LTV bucket — refused ✅
+- show credit score by broker — refused ✅
+- average credit score by region — refused ✅
+- show arrears by region — refused ✅
+- arrears balance by broker — refused ✅
+- show recoveries in period — refused ✅
+- indexed value by region — refused ✅
+
+## Known gaps / follow-ups (discovered, not loosened)
+
+These curated questions state the IDEAL behaviour; the system does not yet meet it, so they are xfailed with the reason below rather than having their expectation weakened.
+
+- `kpi_032` **average loan size** — 'size' is parsed as the ticket-size dimension, so this returns balance by ticket bucket instead of a mean-size KPI. Use 'average loan balance'. Follow-up: metric vocabulary for 'loan size'.
+- `filt_159` **balance where LTV above 50%** — Bare 'balance where <filter>' (no total/how-much/how-many cue) resolves the metric to LTV and drops the filter. Use 'total balance where LTV above 50%'. Follow-up: treat 'balance where ...' as filtered balance.
+- `risk_207` **largest regional concentration** — Resolves to a loan-level ranking TABLE, not a region concentration bar. Use 'which region has the largest balance'. Follow-up: route 'largest <dim> concentration' to a grouped concentration bar.
+- `risk_211` **exposure to London** — A place name ('exposure to London') is not turned into a region filter — the whole-book balance is returned. Follow-up: parse place names as region-value filters (or clarify).
+- `risk_212` exposure to the South East
+- `risk_217` **concentration by LTV bucket** — The bucket field name pulls the MEASURE (WA LTV / mean age) instead of balance, so 'concentration by LTV bucket' returns WA LTV per bucket, not the balance concentration. Use 'balance by LTV bucket'. Follow-up: prefer balance for 'concentration by <bucket>'.
+- `risk_218` concentration by age bucket
+- `risk_222` **balance by property value band** — 'property value band' is mis-mapped to the age bucket (no valuation-band dimension in the tape). Follow-up: add a valuation-band dimension or refuse.
+- `risk_223` **high age borrower exposure** — No age threshold is parsed from 'high age', so the whole-book balance is returned unfiltered. Use 'balance for borrowers over 80'. Follow-up: qualitative-threshold handling or clarify.
+- `dq_228` **missing region count** — No dedicated 'missing/excluded count' intent — the system surfaces coverage via the reconciliation block on a normal result, not as a standalone count. Follow-up: a data-quality intent that answers missing/excluded counts directly.
+- `dq_229` missing borrower age count
+- `dq_230` missing LTV count
+- `dq_231` loans excluded from LTV analysis
+- `ambig_247` **show best brokers** — Currently answered as balance by a dimension (a subjective/unavailable concept was silently substituted with balance). Ideal: clarify or refuse. Follow-up: detect subjective/unavailable concepts ('best', 'bad', 'interesting', 'profitability').
+- `ambig_248` show bad regions
+- `ambig_249` show profitability by region
+- `ambig_250` show me interesting regions
+- `ambig_251` **balance by region by borrower type by LTV bucket** — The THIRD dimension (LTV bucket) is dropped at parse time (dim_keys[:2]) with no warning; the dimension invariant does not catch it because it never reaches the spec. Follow-up: surface a 'third dimension not applied' warning at the parser, or route 3+ dims to a pivot table.
+- `ambig_252` **balance trend where LTV above 50%** — Filtered time-series is not supported: the line path does not attach the filter, so today it answers an UNFILTERED WA-LTV trend (a silent omission). Ideal: refuse or apply the filter. Follow-up: attach filters on the line path or fail closed.
