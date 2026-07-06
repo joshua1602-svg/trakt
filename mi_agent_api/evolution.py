@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
+from analytics_lib.dates import coerce_dates
 from analytics_lib.numeric import coerce_numeric
 from mi_agent.mi_dataset_profile import PERCENT_POINTS, percent_storage_scale
 
@@ -388,10 +389,7 @@ def _origination_labels(df, grain: str = "Y"):
     """Per-row origination-cohort label at the requested grain (Y / Q / M), from
     ``origination_date`` (else ``vintage_year`` for year grain). None if neither."""
     if _ORIG_DATE in df.columns:
-        import warnings
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            od = pd.to_datetime(df[_ORIG_DATE], errors="coerce", dayfirst=True)
+        od = coerce_dates(df[_ORIG_DATE])
         if od.notna().any():
             g = (grain or "Y").upper()
             if g == "Q":

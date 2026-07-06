@@ -136,6 +136,27 @@ def test_unknown_vintage_bucketed_not_dropped():
     assert out["totalLoanCount"] == 6
 
 
+def test_mixed_iso_and_uk_dates_all_parse():
+    """Regression: an origination_date column that MIXES ISO (YYYY-MM-DD) and UK
+    (DD/MM/YYYY) rows must parse per element — previously pandas inferred a single
+    format from the first value and NaT'd the rest into a spurious 'Unknown'
+    bucket (59 of 73 loans on the live November book)."""
+    df = pd.DataFrame({
+        # 3 ISO + 3 UK, all genuine 2025 dates; UK days > 12 to prove dayfirst.
+        "origination_date": ["2025-01-15", "28/11/2025", "2025-06-30",
+                             "03/10/2025", "2025-09-01", "17/07/2025"],
+        "current_outstanding_balance": [100_000, 200_000, 150_000,
+                                       250_000, 120_000, 180_000],
+        "current_loan_to_value": [0.55, 0.60, 0.50, 0.65, 0.58, 0.62],
+    })
+    out = cohorts_mod.cohort_analysis(df)
+    labels = [c["vintage"] for c in out["cohorts"]]
+    # Every row is a valid 2025 date — nothing may leak into 'Unknown'.
+    assert labels == ["2025"]
+    assert "Unknown" not in labels
+    assert out["cohorts"][0]["loanCount"] == 6
+
+
 if __name__ == "__main__":
     import pytest
     raise SystemExit(pytest.main([__file__, "-q"]))
