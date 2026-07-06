@@ -23,6 +23,7 @@ from __future__ import annotations
 import calendar
 import os
 import re
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -483,7 +484,45 @@ def compute_funded_snapshot(
     }
 
 
+#: Per-run prepared-frame cache, keyed by ``path:mtime_ns:size`` so a re-published
+#: tape (new mtime) is a fresh key and reloads, while an unchanged tape is served
+#: without re-reading the CSV or re-running the MI prep. Bounded so a long monthly
+#: history (evolution walks every run) cannot grow it without limit; insertion
+#: order is FIFO-evicted. Mirrors the read-only contract of ``data_source._active``
+#: (consumers must not mutate the returned frame in place — they copy first).
+_PREPARED_RUN_CACHE: "OrderedDict[str, Tuple[pd.DataFrame, Dict[str, Any]]]" = OrderedDict()
+_PREPARED_RUN_CACHE_MAX = 24  # ~2 years of monthly runs kept warm
+
+
+def _prepared_run_key(path: Path) -> Optional[str]:
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    return f"{path}:{st.st_mtime_ns}:{st.st_size}"
+
+
 def load_prepared_run(tape_path: str | os.PathLike) -> Tuple[pd.DataFrame, Dict[str, Any]]:
-    """Read a central lender tape and apply the funded MI preparation layer."""
-    raw = pd.read_csv(Path(tape_path), low_memory=False)
-    return prepare_funded_mi_dataset(raw)
+    """Read a central lender tape and apply the funded MI preparation layer.
+
+    Memoised by ``(path, mtime, size)``: the same tape (hit by ``/mi/snapshot``,
+    ``/mi/cohorts``, ``/mi/geo``, forecast and each evolution period) is read and
+    prepared once, not on every request. The cached frame is returned directly —
+    callers treat it as read-only, exactly as they already do for the active
+    ``get_dataframe()``.
+    """
+    path = Path(tape_path)
+    key = _prepared_run_key(path)
+    if key is not None:
+        hit = _PREPARED_RUN_CACHE.get(key)
+        if hit is not None:
+            _PREPARED_RUN_CACHE.move_to_end(key)  # mark recently used
+            return hit
+    raw = pd.read_csv(path, low_memory=False)
+    value = prepare_funded_mi_dataset(raw)
+    if key is not None:
+        _PREPARED_RUN_CACHE[key] = value
+        _PREPARED_RUN_CACHE.move_to_end(key)
+        while len(_PREPARED_RUN_CACHE) > _PREPARED_RUN_CACHE_MAX:
+            _PREPARED_RUN_CACHE.popitem(last=False)  # evict oldest
+    return value

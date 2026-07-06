@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 
@@ -54,11 +55,33 @@ from . import geo as geo_mod
 
 logger = logging.getLogger("mi_agent_api")
 
+
+def _warm_caches() -> None:
+    """Best-effort warm so the FIRST user request isn't cold. Loads the active
+    dataset (populating the signature cache) and parses the semantics registry
+    (populating its mtime cache). Never fatal: a deploy with no data source yet
+    still starts; the first request simply pays the cold cost as before."""
+    try:
+        get_dataframe()
+    except Exception as exc:  # noqa: BLE001 - warming must never block startup
+        logger.info("startup dataset warm skipped: %s", exc)
+    try:
+        load_mi_semantics(semantics_path())
+    except Exception as exc:  # noqa: BLE001
+        logger.info("startup semantics warm skipped: %s", exc)
+
+
+@asynccontextmanager
+async def _lifespan(_app: "FastAPI"):
+    _warm_caches()
+    yield
+
+
 # Global authentication guard: every /mi/* route requires an authenticated
 # principal carrying an MI role (client|operator). Probe/index/docs routes stay
 # open. Enforcement is toggled by MI_AGENT_AUTH_ENABLED (default on); see auth.py.
 app = FastAPI(title="Trakt MI Agent API", version="1.0.0",
-              dependencies=[Depends(auth_guard)])
+              dependencies=[Depends(auth_guard)], lifespan=_lifespan)
 
 # CORS. With the SWA linked-backend deployment the UI calls the API same-origin,
 # so CORS is not relied on for security. We still restrict it: allowed origins

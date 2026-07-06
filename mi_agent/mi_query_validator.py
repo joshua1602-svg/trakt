@@ -73,11 +73,35 @@ class ValidationResult:
 # --------------------------------------------------------------------------- #
 
 
+#: mtime-keyed cache for the semantics registry. It is re-read and re-parsed on
+#: nearly every endpoint (validation runs per query) for zero benefit — a large
+#: static YAML. Keyed by ``path:mtime_ns:size`` so a genuine edit still reloads.
+#: The registry is consumed read-only (this module is pure/side-effect free), so
+#: the shared dict is returned directly.
+_SEMANTICS_CACHE: Dict[str, dict] = {}
+
+
 def load_mi_semantics(path) -> dict:
-    """Load the MI semantic registry YAML into a dict with a 'fields' mapping."""
-    data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+    """Load the MI semantic registry YAML into a dict with a 'fields' mapping.
+
+    Memoised by ``(path, mtime, size)`` so the registry is parsed once rather than
+    on every validation call; a genuine edit (new mtime) reloads it.
+    """
+    p = Path(path)
+    key: Optional[str] = None
+    try:
+        st = p.stat()
+        key = f"{p}:{st.st_mtime_ns}:{st.st_size}"
+    except OSError:
+        key = None
+    if key is not None and key in _SEMANTICS_CACHE:
+        return _SEMANTICS_CACHE[key]
+    data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
     if "fields" not in data or not isinstance(data["fields"], dict):
         raise ValueError(f"MI semantics file missing 'fields' mapping: {path}")
+    if key is not None:
+        _SEMANTICS_CACHE.clear()  # single-file registry — no need to retain stale mtimes
+        _SEMANTICS_CACHE[key] = data
     return data
 
 
