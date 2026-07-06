@@ -322,6 +322,39 @@ def test_filtered_funded_evolution_applies_filter_per_period():
                                         if a["type"] == "table")["rows"])
 
 
+# --------------------------------------------------------------------------- #
+# C2. Scenario / what-if (perturb the run-rate, re-solve the milestone)
+# --------------------------------------------------------------------------- #
+def test_scenario_conversion_uplift_routes_and_compares():
+    r = _ask("If our completed conversion rate increased by 10%, what is the impact "
+             "on the time to reach £50m funded balance?")
+    assert r["ok"] is True and r["metadata"]["route"] == "scenario"
+    assert "+10%" in r["answer"]
+    chart = next(a for a in r["artifacts"] if a["type"] == "chart")
+    assert {"base", "scenario"} <= {s["key"] for s in chart["series"]}
+    # A base-vs-scenario comparison table is present when a target is named.
+    assert any(a["type"] == "table" for a in r["artifacts"])
+
+
+def test_scenario_double_run_rate_without_target():
+    r = _ask("What if our completion run-rate doubled?")
+    assert r["ok"] is True and r["metadata"]["route"] == "scenario"
+    assert "doubled" in r["answer"]
+
+
+def test_unquantified_scenario_falls_through_to_forecast():
+    # "improves" with no magnitude can't be quantified -> defer to the forecast
+    # route rather than fabricate a multiplier.
+    r = _ask("If conversion improves, when do we reach £50m funded balance?")
+    assert r["ok"] is True and r["metadata"]["route"] == "forecast_extrapolation"
+
+
+def test_plain_threshold_is_not_a_scenario():
+    # No change verb -> a normal forecast projection, not a what-if.
+    r = _ask("When do we reach £50m funded balance?")
+    assert r["ok"] is True and r["metadata"]["route"] == "forecast_extrapolation"
+
+
 def test_funded_balance_forecast_curve_returns_line_chart():
     # The known miss: "forecast curve" returned only a summary. It must now route
     # to the forecast extrapolation and return a projected line chart.

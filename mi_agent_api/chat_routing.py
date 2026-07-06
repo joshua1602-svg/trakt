@@ -19,6 +19,7 @@ forecast/data-quality questions are completely unaffected.
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -35,6 +36,7 @@ from . import evolution as evolution_mod
 from . import forecast_extrapolation as fx_mod
 from . import geo as geo_mod
 from . import risk_limits as risk_mod
+from . import scenario as scenario_mod
 
 _PALETTE = ["#919dd1", "#36c2a8", "#e0a93b", "#c46b8f", "#3d4a82", "#6fcf97"]
 
@@ -583,6 +585,136 @@ def _route_forecast(question, spec, spec_dict, *, client_id, run_id, output_root
     return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
                      artifacts=artifacts, reconciliation=recon, source_notes=notes,
                      warnings=warnings, route="forecast_extrapolation")
+
+
+# --------------------------------------------------------------------------- #
+# C2. Scenario / what-if — perturb the completion run-rate, re-solve the milestone
+# --------------------------------------------------------------------------- #
+_SCENARIO_CONDITIONALS = ("if ", "were to", "suppose", "what if", "assuming",
+                          "hypothetical", "scenario")
+_SCENARIO_CHANGES = ("increase", "increas", "rise", "rose", "grow", "grew", "improv",
+                     "higher", "up by", "boost", "double", "doubl", "fall", "fell",
+                     "drop", "lower", "declin", "reduc", "cut", "halve", "halv", "down by")
+_SCENARIO_LEVERS = ("conversion", "convert", "run rate", "run-rate", "completion")
+
+
+def _is_scenario(question: str) -> bool:
+    q = f" {question.lower()} "
+    return (any(c in q for c in _SCENARIO_CONDITIONALS)
+            and any(c in q for c in _SCENARIO_CHANGES)
+            and any(l in q for l in _SCENARIO_LEVERS))
+
+
+def _scenario_multiplier(question: str) -> Optional[Tuple[float, str]]:
+    """(run-rate multiplier, human change label) from a what-if phrasing, or None
+    when the magnitude can't be quantified (caller then defers)."""
+    q = question.lower()
+    if "double" in q or "doubl" in q:
+        return 2.0, "doubled"
+    if "halve" in q or "halv" in q:
+        return 0.5, "halved"
+    m = re.search(r"(\d+(?:\.\d+)?)\s*(?:%|percent|percentage points?|pts?|pp)\b", q)
+    if not m:
+        m = re.search(r"\bby\s+(\d+(?:\.\d+)?)\b", q)
+    if not m:
+        return None
+    pct = float(m.group(1))
+    down = any(w in q for w in ("decreas", "fall", "fell", "drop", "lower",
+                                "declin", "reduc", "cut", "down"))
+    signed = -pct if down else pct
+    return scenario_mod.multiplier_from_conversion_delta(signed), f"{'-' if down else '+'}{pct:g}%"
+
+
+def _scenario_target(spec, question: str) -> Optional[float]:
+    tv = getattr(spec, "forecast_target_value", None)
+    if tv:
+        return float(tv)
+    m = re.search(r"£?\s*(\d+(?:\.\d+)?)\s*(bn|billion|mm|m|million)\b", question.lower())
+    if not m:
+        return None
+    val = float(m.group(1))
+    return val * (1e9 if m.group(2) in ("bn", "billion") else 1e6)
+
+
+def _route_scenario(question, spec, spec_dict, *, client_id, run_id, output_root,
+                    pipeline_root, history_model, portfolio_id, as_of
+                    ) -> Optional[Dict[str, Any]]:
+    """A deterministic what-if: perturb the completion run-rate (a conversion
+    change maps proportionally) and re-solve the milestone date to a target. The
+    math lives in the pure ``scenario`` engine; here we resolve the base from the
+    forecast and shape the answer. Returns None (defer) when the change magnitude
+    can't be quantified."""
+    parsed = _scenario_multiplier(question)
+    if parsed is None:
+        return None
+    mult, change_txt = parsed
+    target = _scenario_target(spec, question)
+
+    fx = fx_mod.build_extrapolation(output_root, pipeline_root, client_id, run_id,
+                                    history_model=history_model)
+    rr = fx.get("completionRunRateForecast", {})
+    cur = fx.get("currentFundedBalance", 0.0)
+    if not rr.get("available"):
+        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
+                         answer=("I can't run a what-if on the completion run-rate yet: "
+                                 f"{rr.get('caveat', 'insufficient completion history')}."),
+                         route="scenario",
+                         warnings=["insufficient-data: no run-rate to perturb."])
+    base = rr.get("baseMonthlyRunRate")
+    proj = rr.get("projectedBalances") or []
+    period = proj[0]["month"] if proj else (as_of or "2025-01")[:7]
+    res = scenario_mod.apply_scenario(
+        current_balance=cur, base_monthly_run_rate=base, reporting_period=period,
+        run_rate_multiplier=mult, target_value=target)
+
+    caveat = ("What-if assumption: a conversion change maps proportionally to the completion "
+              "run-rate (KFI inflow held constant); dates share the base forecast's basis and "
+              "carry the same downside/base/upside uncertainty.")
+    rows = [{"month": p["month"], "base": p["base"], "scenario": p["scenario"]}
+            for p in res["projectedSeries"]]
+    chart = _chart_artifact(
+        f"Projected funded balance — base vs scenario ({change_txt} run-rate)",
+        chart_type="line", x_key="month", rows=rows,
+        series=[{"key": "base", "label": "Base", "color": _PALETTE[0]},
+                {"key": "scenario", "label": f"Scenario ({change_txt})", "color": _PALETTE[1]}],
+        value_format="gbp", spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of)
+    artifacts: List[Dict[str, Any]] = [chart]
+
+    if target is not None:
+        trows = [
+            {"metric": "Monthly run-rate", "base": _gbp(res["baseMonthlyRunRate"]),
+             "scenario": _gbp(res["scenarioMonthlyRunRate"])},
+            {"metric": f"Date to {_gbp(target)}",
+             "base": res["baseTargetDate"] or "beyond horizon",
+             "scenario": res["scenarioTargetDate"] or "beyond horizon"},
+        ]
+        artifacts.append(_table_artifact(
+            "Base vs scenario", columns=[
+                {"key": "metric", "label": "", "align": "left", "format": "text"},
+                {"key": "base", "label": "Base", "align": "right", "format": "text"},
+                {"key": "scenario", "label": f"Scenario ({change_txt})", "align": "right", "format": "text"},
+            ], rows=trows, spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of))
+
+    if target is not None and res["baseTargetDate"] == "reached":
+        answer = f"The book has already reached {_gbp(target)} (current funded balance {_gbp(cur)})."
+    elif target is not None and res["monthsSaved"] is None:
+        answer = (f"Even with a {change_txt} completion run-rate (~{_gbp(res['scenarioMonthlyRunRate'])}/mo) "
+                  f"the book doesn't reach {_gbp(target)} within the projection horizon. {caveat}")
+    elif target is not None:
+        saved = res["monthsSaved"]
+        faster = "sooner" if saved > 0 else ("later" if saved < 0 else "unchanged")
+        answer = (f"A {change_txt} completion run-rate moves the {_gbp(target)} milestone from "
+                  f"{res['baseTargetDate']} (base ~{_gbp(base)}/mo) to {res['scenarioTargetDate']} "
+                  f"(~{_gbp(res['scenarioMonthlyRunRate'])}/mo) — about {abs(saved)} month(s) {faster}. {caveat}")
+    else:
+        answer = (f"A {change_txt} completion run-rate lifts the monthly run-rate from {_gbp(base)} "
+                  f"to {_gbp(res['scenarioMonthlyRunRate'])} (annualised {_gbp(res['scenarioMonthlyRunRate'] * 12)}). "
+                  f"{caveat}")
+    notes = [{"field": "scenario", "note": caveat}]
+    return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
+                     artifacts=artifacts,
+                     reconciliation={"dataset": "forecast", "coverage_by_balance_pct": 100.0},
+                     source_notes=notes, warnings=[caveat], route="scenario")
 
 
 # --------------------------------------------------------------------------- #
@@ -1139,6 +1271,14 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
     spec_dict = spec.to_dict()
     kw = dict(client_id=client_id, run_id=run_id, output_root=output_root,
               pipeline_root=pipeline_root, portfolio_id=portfolio_id, as_of=as_of)
+
+    # What-if / scenario is checked first: it perturbs the run-rate and re-solves
+    # the milestone. If the magnitude can't be quantified it returns None and we
+    # fall through to the normal forecast / conversion routing.
+    if _is_scenario(question):
+        scen = _route_scenario(question, spec, spec_dict, history_model=history_model, **kw)
+        if scen is not None:
+            return scen
 
     # Conversion (cohort-tracked) is the canonical "conversion" answer and is
     # checked before forecast so a bare "conversion rate" resolves to the single
