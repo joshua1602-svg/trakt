@@ -160,16 +160,16 @@ python scripts/mi_query_calibration.py
 Additional to the generated harness above: a hand-curated bank of realistic lender / investor / credit-committee / portfolio-manager / ops questions, each with declared expected semantic behaviour (`config/mi/golden_questions/ere_mi_calibration_250.yaml`, enforced by `mi_agent/tests/test_mi_calibration_bank.py`).
 
 - **Curated questions:** 252
-- **Held their declared expectation:** 234
+- **Held their declared expectation:** 236
 - **Hard failures (non-known-gap):** 0
-- **Known gaps (documented follow-ups, xfailed):** 19
-- **Pass rate (incl. known gaps as not-passing):** 92.9%
+- **Known-gap cases (flagged):** 17 — of which **16** currently fail (xfailed with a reason) and **1** already meet the ideal (flag can be retired).
+- **Pass rate (known gaps counted as not-passing):** 93.7%
 
 ## Pass / fail by category
 
 | Category | Passed | Total | Known gaps | Hard fails |
 |---|---:|---:|---:|---:|
-| ambiguous | 4 | 10 | 6 | 0 |
+| ambiguous | 6 | 10 | 4 | 0 |
 | basic_kpi | 31 | 32 | 1 | 0 |
 | data_quality | 5 | 9 | 4 | 0 |
 | filtered | 36 | 37 | 1 | 0 |
@@ -219,5 +219,3 @@ These curated questions state the IDEAL behaviour; the system does not yet meet 
 - `ambig_248` show bad regions
 - `ambig_249` show profitability by region
 - `ambig_250` show me interesting regions
-- `ambig_251` **balance by region by borrower type by LTV bucket** — The THIRD dimension (LTV bucket) is dropped at parse time (dim_keys[:2]) with no warning; the dimension invariant does not catch it because it never reaches the spec. Follow-up: surface a 'third dimension not applied' warning at the parser, or route 3+ dims to a pivot table.
-- `ambig_252` **balance trend where LTV above 50%** — Filtered time-series is not supported: the line path does not attach the filter, so today it answers an UNFILTERED WA-LTV trend (a silent omission). Ideal: refuse or apply the filter. Follow-up: attach filters on the line path or fail closed.

@@ -90,8 +90,8 @@ python -m pytest mi_agent -q               # full parser/executor/workflow regre
 - The filter invariant relies on the executor reconciliation's `filters` /
   `filters_applied` block, present on every filtered path (summary, table,
   loan-level, grouped).
-- Time-series (`line`) queries do not yet attach value filters; a filtered trend
-  would be refused by the guard rather than silently unfiltered. Follow-up if
-  filtered trends are needed.
+- Time-series (`line`) queries now attach value filters too — a filtered trend
+  ("balance by month where LTV above 50%") applies the filter to the mask before
+  the trend is built (see `docs/mi_calibration_bank.md`, Priority-1 fixes).
 - Frontend does not yet render `filterInvariant` / `queryTrace` — surfacing them
   in the Query Logic disclosure is tracked in the dimension-integrity review.

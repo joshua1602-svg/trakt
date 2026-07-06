@@ -264,6 +264,16 @@ def build_query_trace(*, question: str, spec, parse_meta: Optional[dict],
         "rejectedFilters": [
             {"filter": f, "reason": "field unavailable in this dataset"}
             for f in (_spec_get(spec, "unavailable_filters") or [])],
+        # Explicit requested/applied/rejected sets (frontend / API trace contract).
+        "requested_dimensions": parsed,
+        "applied_dimensions": inv.applied,
+        "rejected_dimensions": inv.rejected,
+        "requested_filters": list((_spec_get(spec, "filters") or {}).keys()),
+        "applied_filters": finv.applied_filters,
+        "rejected_filters": (finv.rejected_filters
+                             + [{"filter": f, "reason": "field unavailable in this dataset"}
+                                for f in finv.unavailable_filters]),
+        "artifact_type": None,  # back-filled by the adapter from the emitted artifact
         "executedGroupFieldKeys": list(meta.get("group_field_keys") or []),
         "executedGroupCols": [canonical_of(k, semantics)
                               for k in (meta.get("group_field_keys") or [])],

@@ -1072,6 +1072,12 @@ def execute_mi_query(
         keys = _all_group_dims(spec)
         if keys:
             metadata["group_field_keys"] = list(keys)
+            if len(keys) > 2:
+                # 3+ dimensions cannot be charted — say so plainly (the full
+                # breakdown is preserved as a table; nothing is dropped).
+                warnings.append(
+                    f"Showing a table across {len(keys)} dimensions: a chart shows "
+                    "at most two, so the full breakdown is presented as a table.")
             data_out, result_type = _execute_grouped(
                 spec, work, semantics, warnings, balance_col, keys,
                 use_bucket=False, top_n_allowed=True, rank_priority=top_n_rank_priority,

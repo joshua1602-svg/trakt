@@ -631,16 +631,19 @@ def adapt_workflow_result(
     query_trace = workflow.get("query_trace")
     if isinstance(query_trace, dict):
         chart_art = next((a for a in artifacts if a.get("type") == "chart"), None)
+        table_art = next((a for a in artifacts if a.get("type") == "table"), None)
+        kpi_art = next((a for a in artifacts if a.get("type") == "kpi"), None)
+        # The emitted artifact type (chart type wins, then table, then kpi, else none).
+        artifact_type = (chart_art.get("chartType") if chart_art
+                         else "table" if table_art else "kpi" if kpi_art else "none")
+        query_trace = {**query_trace, "artifact_type": artifact_type}
         if chart_art is not None:
-            query_trace = {
-                **query_trace,
-                "chartAxes": {
-                    "chartType": chart_art.get("chartType"),
-                    "xKey": chart_art.get("xKey"),
-                    "yKey": chart_art.get("yKey"),
-                    "valueKey": chart_art.get("valueKey"),
-                    "seriesKeys": [s.get("key") for s in (chart_art.get("series") or [])],
-                },
+            query_trace["chartAxes"] = {
+                "chartType": chart_art.get("chartType"),
+                "xKey": chart_art.get("xKey"),
+                "yKey": chart_art.get("yKey"),
+                "valueKey": chart_art.get("valueKey"),
+                "seriesKeys": [s.get("key") for s in (chart_art.get("series") or [])],
             }
 
     return {

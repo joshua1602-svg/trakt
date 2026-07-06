@@ -5063,37 +5063,37 @@ questions:
   expected_dimensions:
   - geographic_region_obligor
   - borrower_type
+  - ltv_bucket
   expected_filters: []
-  expected_artifact_type: heatmap
+  expected_artifact_type: table
   expected_reconciliation: true
   expected_dimension_invariant_ok: true
   expected_filter_invariant_ok: true
   expected_warnings:
-  - Grouping not applied
+  - Showing a table across 3 dimensions
   expected_columns_include: []
-  expected_min_columns: 3
-  known_gap: 'The THIRD dimension (LTV bucket) is dropped at parse time (dim_keys[:2]) with no warning;
-    the dimension invariant does not catch it because it never reaches the spec. Follow-up: surface a
-    ''third dimension not applied'' warning at the parser, or route 3+ dims to a pivot table.'
-  notes: 'Known gap: 3rd dimension silently dropped at parse (no warning).'
+  expected_min_columns: 4
+  known_gap: null
+  notes: '3+ dims: all requested dimensions preserved as a table (no silent truncation); the dimension
+    invariant sees all three applied.'
 - id: ambig_252
   category: ambiguous
   question: balance trend where LTV above 50%
-  expected_status: refuse
+  expected_status: answer
   execution: full
   expected_scope: funded
-  expected_metric: null
+  expected_metric: current_outstanding_balance
   expected_metrics: null
   expected_dimensions: []
-  expected_filters: []
-  expected_artifact_type: none
-  expected_reconciliation: false
+  expected_filters:
+  - current_loan_to_value
+  expected_artifact_type: line
+  expected_reconciliation: true
   expected_dimension_invariant_ok: true
   expected_filter_invariant_ok: true
   expected_warnings: []
   expected_columns_include: []
-  expected_min_columns: 1
-  known_gap: 'Filtered time-series is not supported: the line path does not attach the filter, so today
-    it answers an UNFILTERED WA-LTV trend (a silent omission). Ideal: refuse or apply the filter. Follow-up:
-    attach filters on the line path or fail closed.'
-  notes: Known fail-closed gap on filtered trends.
+  expected_min_columns: 2
+  known_gap: null
+  notes: 'Filtered time-series: LTV filter applied before the trend is built; reconciliation shows fewer
+    records. Never a silently unfiltered trend.'

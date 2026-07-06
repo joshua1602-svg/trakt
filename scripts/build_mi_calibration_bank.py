@@ -536,30 +536,25 @@ def build() -> List[Dict[str, Any]]:
                                 "Ideal: clarify or refuse. Follow-up: detect subjective/"
                                 "unavailable concepts ('best', 'bad', 'interesting', 'profitability').",
                       notes="Known gap: subjective term silently mapped to balance."))
-    # 3+ dimensions: today only two survive and the third is dropped at PARSE time
-    # (dim_keys[:2]) with NO warning — a silent drop the invariant cannot catch
-    # because the third never reaches the spec. A real discovered gap.
+    # 3+ dimensions: ALL requested dimensions are preserved as a table/pivot
+    # (never silently truncated at parse); a chart shows at most two.
     C.append(case(_cat="ambig", category="ambiguous",
                   question="balance by region by borrower type by LTV bucket",
                   expected_metric=BAL,
-                  expected_dimensions=["geographic_region_obligor", "borrower_type"],
-                  expected_artifact_type="heatmap", expected_min_columns=3,
-                  expected_warnings=["Grouping not applied"],
-                  known_gap="The THIRD dimension (LTV bucket) is dropped at parse time "
-                            "(dim_keys[:2]) with no warning; the dimension invariant does not "
-                            "catch it because it never reaches the spec. Follow-up: surface a "
-                            "'third dimension not applied' warning at the parser, or route 3+ "
-                            "dims to a pivot table.",
-                  notes="Known gap: 3rd dimension silently dropped at parse (no warning)."))
-    # Filtered time-series — a KNOWN gap (line path drops the filter).
+                  expected_dimensions=["geographic_region_obligor", "borrower_type", "ltv_bucket"],
+                  expected_artifact_type="table", expected_min_columns=4,
+                  expected_warnings=["Showing a table across 3 dimensions"],
+                  notes="3+ dims: all requested dimensions preserved as a table (no silent "
+                        "truncation); the dimension invariant sees all three applied."))
+    # Filtered time-series: the value filter is applied to the mask BEFORE the
+    # trend is built — never an unfiltered trend.
     C.append(case(_cat="ambig", category="ambiguous", question="balance trend where LTV above 50%",
-                  expected_status="refuse", expected_scope="funded",
-                  expected_artifact_type="none", expected_reconciliation=False,
-                  known_gap="Filtered time-series is not supported: the line path does not "
-                            "attach the filter, so today it answers an UNFILTERED WA-LTV trend "
-                            "(a silent omission). Ideal: refuse or apply the filter. Follow-up: "
-                            "attach filters on the line path or fail closed.",
-                  notes="Known fail-closed gap on filtered trends."))
+                  expected_status="answer", expected_scope="funded",
+                  expected_metric=BAL, expected_filters=[LTV],
+                  expected_artifact_type="line", expected_reconciliation=True,
+                  expected_min_columns=2,
+                  notes="Filtered time-series: LTV filter applied before the trend is built; "
+                        "reconciliation shows fewer records. Never a silently unfiltered trend."))
 
     return C
 

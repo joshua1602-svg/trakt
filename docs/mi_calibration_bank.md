@@ -62,11 +62,24 @@ python scripts/build_mi_calibration_bank.py                     # regenerate the
 ## Result
 
 **0 hard failures** — every non-known-gap case holds its declared expectation
-(234/252 pass; 18 xfailed known gaps). Unsupported concepts (NNEG, credit score,
-defaulted balance, arrears, recoveries, indexed value) are all correctly refused
-with a reason, never fabricated.
+(236/252 pass; **16 xfailed** known gaps, 17 flagged of which 1 already meets the
+ideal). Unsupported concepts (NNEG, credit score, defaulted balance, arrears,
+recoveries, indexed value) are all correctly refused with a reason, never
+fabricated.
 
-## Discovered limitations (marked `known_gap`, not loosened)
+## Priority-1 gaps — now FIXED
+
+- **Filtered time-series** — "balance trend where LTV above 50%" /
+  "funded balance by month where LTV > 50%" now apply the LTV filter to the mask
+  *before* building the trend (reconciliation shows fewer records), and resolve
+  the **balance** measure (not the filter field). Never a silently unfiltered
+  trend; the filter invariant guards it.
+- **Third dimension** — "balance by region by borrower type by LTV bucket" now
+  preserves **all three** dimensions as a table/pivot (a chart shows at most two)
+  with a visible warning; the dimension invariant sees all three applied. No
+  silent parse-time truncation.
+
+## Remaining discovered limitations (marked `known_gap`, not loosened)
 
 Each states the IDEAL behaviour and is xfailed with a follow-up reason:
 
@@ -74,11 +87,6 @@ Each states the IDEAL behaviour and is xfailed with a follow-up reason:
   regions", "show profitability by region", "show me interesting regions" are
   silently answered as *balance by dimension*. Follow-up: detect subjective /
   unavailable concepts and clarify/refuse.
-- **3rd dimension silently dropped at parse** — "balance by region by borrower
-  type by LTV bucket" keeps only two dims; the third is dropped at parse time
-  (`dim_keys[:2]`) with no warning, and the dimension invariant cannot catch it
-  because it never reaches the spec. Follow-up: warn at the parser, or route 3+
-  dims to a pivot table.
 - **Place-name exposure not filtered** — "exposure to London / the South East"
   returns whole-book balance (no region filter). Follow-up: parse place names as
   region-value filters.
@@ -94,5 +102,18 @@ Each states the IDEAL behaviour and is xfailed with a follow-up reason:
   analysis") are not a first-class intent — coverage is delivered via the
   reconciliation block on a normal result. Follow-up: a dedicated data-quality
   intent.
-- **Filtered time-series** ("balance trend where LTV above 50%") answers an
-  unfiltered trend (the line path does not attach filters) — a fail-closed gap.
+
+## Live-LLM calibration
+
+Production runs with the LLM enabled. The deterministic invariant guards run
+**after** parsing regardless of parser, so an LLM parse is held to the same
+fail-closed contract before execution. To exercise it:
+
+```bash
+python scripts/mi_query_calibration.py --live-llm   # needs ANTHROPIC_API_KEY
+python -m pytest mi_agent/tests/test_mi_priority1_gaps.py -m live_llm
+```
+
+Without `ANTHROPIC_API_KEY` the live pass is skipped and CI stays deterministic.
+The live test asserts the same contract on the Priority-1 cases: no silent filter
+omission, no silent dimension truncation, both invariants enforced.

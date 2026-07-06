@@ -107,7 +107,18 @@ def _artifact_compatible(expected: str, tokens: List[str]) -> bool:
     return True
 
 
-def evaluate_case(case: Dict[str, Any], df, semantics: dict) -> CalibrationResult:
+def _run(q: str, df, semantics: dict, live_llm: bool):
+    """Run one question, deterministically (default) or via the LLM parser. The
+    deterministic dimension/filter invariant guards run either way, so a live LLM
+    parse is held to the SAME fail-closed contract before execution."""
+    if live_llm:
+        return run_mi_agent_query(q, df, semantics, llm_enabled=True,
+                                  parser_mode="llm", zero_cost_first=False)
+    return run_mi_agent_query(q, df, semantics)
+
+
+def evaluate_case(case: Dict[str, Any], df, semantics: dict,
+                  live_llm: bool = False) -> CalibrationResult:
     q = case["question"]
     status = case.get("expected_status", "answer")
     execution = case.get("execution", "full")
@@ -131,7 +142,7 @@ def evaluate_case(case: Dict[str, Any], df, semantics: dict) -> CalibrationResul
         r.ok = not fails
         return r
 
-    res = run_mi_agent_query(q, df, semantics)
+    res = _run(q, df, semantics, live_llm)
     spec = res.get("spec") or {}
     di = res.get("dimension_invariant") or {}
     fi = res.get("filter_invariant") or {}
@@ -200,7 +211,8 @@ def evaluate_case(case: Dict[str, Any], df, semantics: dict) -> CalibrationResul
     return r
 
 
-def run_bank(df=None, semantics=None, path: Optional[Path] = None
+def run_bank(df=None, semantics=None, path: Optional[Path] = None,
+             live_llm: bool = False
              ) -> Tuple[List[CalibrationResult], Dict[str, Any]]:
     if semantics is None:
         from .mi_query_validator import load_mi_semantics
@@ -210,8 +222,55 @@ def run_bank(df=None, semantics=None, path: Optional[Path] = None
         from .mi_query_harness import build_fixture
         df = build_fixture()
     cases = load_bank(path)
-    results = [evaluate_case(c, df, semantics) for c in cases]
+    results = [evaluate_case(c, df, semantics, live_llm=live_llm) for c in cases]
     return results, summarise_bank(results)
+
+
+# Priority-1 fail-closed cases — the ones most worth running through the LLM
+# parser to prove the deterministic invariants still hold after LLM parsing.
+PRIORITY1_QUESTIONS = [
+    "balance trend where LTV above 50%",
+    "funded balance by month where LTV > 50%",
+    "balance by region where LTV above 50%",
+    "balance by region by borrower type by LTV bucket",
+]
+
+
+def llm_available() -> bool:
+    import os
+    return bool(os.environ.get("ANTHROPIC_API_KEY"))
+
+
+def run_live_llm_priority(df=None, semantics=None) -> List[Dict[str, Any]]:
+    """Run the Priority-1 cases through the LLM parser and assert the SAME
+    fail-closed contract (no silent filter omission, no silent dimension
+    truncation; both invariants enforced after LLM parsing). Requires an
+    ANTHROPIC_API_KEY. Returns a per-question contract report."""
+    if semantics is None:
+        from .mi_query_validator import load_mi_semantics
+        semantics = load_mi_semantics(
+            Path(__file__).resolve().parent / "mi_semantics_field_registry.yaml")
+    if df is None:
+        from .mi_query_harness import build_fixture
+        df = build_fixture()
+    out: List[Dict[str, Any]] = []
+    for q in PRIORITY1_QUESTIONS:
+        res = _run(q, df, semantics, live_llm=True)
+        di = res.get("dimension_invariant") or {}
+        fi = res.get("filter_invariant") or {}
+        parse_meta = (res.get("metadata") or {}).get("parse_metadata") or {}
+        out.append({
+            "question": q,
+            "parser_mode": parse_meta.get("parser_mode") or res.get("parser_mode"),
+            "ok": res.get("ok"),
+            "dimension_invariant_ok": di.get("ok"),
+            "filter_invariant_ok": fi.get("ok"),
+            "applied_filters": fi.get("applied_filters"),
+            "applied_dimensions": di.get("applied"),
+            # The contract: invariants enforced, nothing silently dropped.
+            "contract_ok": bool(di.get("ok")) and bool(fi.get("ok")),
+        })
+    return out
 
 
 def summarise_bank(results: List[CalibrationResult]) -> Dict[str, Any]:
@@ -234,12 +293,18 @@ def summarise_bank(results: List[CalibrationResult]) -> Dict[str, Any]:
             defects[dc] = defects.get(dc, 0) + 1
     total = len(results)
     passed = sum(1 for r in results if r.ok)
+    flagged_known_gaps = [r for r in results if r.known_gap]
     return {
         "total": total,
         "passed": passed,
         "failed": total - passed,
         "hard_failures": len(hard_failures),
-        "known_gaps": len([r for r in results if r.known_gap]),
+        # A case flagged known_gap either currently fails (xfailed) or already
+        # passes (the behaviour now meets the ideal). Report both so the count is
+        # unambiguous and matches the pytest xfail total.
+        "known_gaps": len(flagged_known_gaps),
+        "known_gaps_xfailed": len([r for r in flagged_known_gaps if not r.ok]),
+        "known_gaps_passing": len([r for r in flagged_known_gaps if r.ok]),
         "pass_rate": round(passed / total, 4) if total else 0.0,
         "by_category": by_cat,
         "defects_by_class": defects,

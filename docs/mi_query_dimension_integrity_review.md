@@ -171,9 +171,10 @@ it is not part of the CI path.
 
 ## 11. Remaining unsupported shapes & hardening recommendations
 
-- **3+ dimensions:** two survive on the grid; extras are **rejected with a
-  reason** (surfaced in the trace), not silently dropped. A pivot/nested-table
-  renderer would let all three display — future work.
+- **3+ dimensions:** ALL requested dimensions are now preserved as a table/pivot
+  (a chart shows at most two) with a visible warning; the dimension invariant
+  sees all of them applied. No silent parse-time truncation (see
+  `docs/mi_calibration_bank.md`, Priority-1 fixes).
 - **LLM path:** the invariant guards ANY parser (deterministic or LLM), so an
   LLM that emits a 2-dimension spec is covered end to end. Recommend running the
   harness in a gated live-LLM mode periodically to calibrate the LLM parser.

@@ -199,8 +199,10 @@ def build_curated_markdown() -> str:
     A(f"- **Curated questions:** {s['total']}")
     A(f"- **Held their declared expectation:** {s['passed']}")
     A(f"- **Hard failures (non-known-gap):** {s['hard_failures']}")
-    A(f"- **Known gaps (documented follow-ups, xfailed):** {s['known_gaps']}")
-    A(f"- **Pass rate (incl. known gaps as not-passing):** {s['pass_rate'] * 100:.1f}%")
+    A(f"- **Known-gap cases (flagged):** {s['known_gaps']} — "
+      f"of which **{s['known_gaps_xfailed']}** currently fail (xfailed with a reason) "
+      f"and **{s['known_gaps_passing']}** already meet the ideal (flag can be retired).")
+    A(f"- **Pass rate (known gaps counted as not-passing):** {s['pass_rate'] * 100:.1f}%")
     A("")
     A("## Pass / fail by category")
     A("")
@@ -255,7 +257,23 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(_REPO_ROOT / "docs" / "mi_query_calibration_report.md"))
     ap.add_argument("--print", dest="do_print", action="store_true")
+    ap.add_argument("--live-llm", dest="live_llm", action="store_true",
+                    help="Also run the Priority-1 cases through the LLM parser "
+                         "(requires ANTHROPIC_API_KEY) and print the contract report.")
     args = ap.parse_args()
+
+    if args.live_llm:
+        from mi_agent import mi_calibration as CAL
+        if not CAL.llm_available():
+            print("--live-llm requested but ANTHROPIC_API_KEY is not set; skipping "
+                  "the live LLM pass (CI stays deterministic).")
+        else:
+            print("Live LLM Priority-1 contract report:")
+            for row in CAL.run_live_llm_priority():
+                mark = "OK" if row["contract_ok"] else "CONTRACT VIOLATION"
+                print(f"  [{mark}] {row['question']} — parser={row['parser_mode']} "
+                      f"dimInv={row['dimension_invariant_ok']} filtInv={row['filter_invariant_ok']} "
+                      f"filters={row['applied_filters']} dims={row['applied_dimensions']}")
 
     results, summary = H.run_suite()
     md = build_markdown(results, summary) + "\n" + build_curated_markdown()
