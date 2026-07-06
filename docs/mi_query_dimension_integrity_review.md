@@ -96,9 +96,11 @@ immediately obvious whether a fault is parser-, executor- or renderer-side.
 - `build_fixture()` — a deterministic funded tape with canonical columns.
 - `probe_usable_dimensions()` — discovers which registry dimensions parse **and**
   execute against the fixture (schema-driven; nothing hardcoded).
-- `generate_cases()` — single/two/three-dimension groupings, filter+group,
+- `generate_cases()` — single/two/three-dimension groupings, filtered KPIs,
   top-N, ranking (largest/smallest), weighted-average, count, and unsupported-
-  concept rejection cases, each over business names **and** synonyms.
+  concept rejection cases, each over business names **and** synonyms. The
+  `filtered_kpi` class asserts a value filter genuinely reaches the mask
+  (parsed into the spec **and** reflected in the reconciliation).
 - `evaluate_case()` — runs the REAL pipeline and applies the parser/executor/
   renderer invariant checks (dims applied-or-rejected, metric in payload, chart
   axes/table cover applied dims, two categorical dims never collapse to a bar).
@@ -181,3 +183,11 @@ it is not part of the CI path.
 - **Parser hardening:** consider promoting `rejected_dimensions` /
   `rejectedFilters` into a visible UI chip so an analyst always sees when a
   requested slice could not be honoured.
+- **Grouped query + value filter (known limitation):** `… by <dim> where
+  <measure> above <x>` does **not** apply the filter today (the ungrouped
+  filtered KPI does), and the omission is not surfaced as a warning. Evidenced
+  live by `probe_grouped_filter_limitation` and pinned by
+  `test_grouped_filter_limitation_is_evidenced`. Recommended follow-up: extend
+  the fail-closed guard to **filters** (warn/refuse when a recognised filter
+  phrase is not applied) and add grouped+filter parsing. The dimension
+  invariant does not cover filters.

@@ -118,6 +118,32 @@ def probe_usable_dimensions(df: pd.DataFrame, semantics: dict) -> List[str]:
     return usable
 
 
+def probe_grouped_filter_limitation(df: pd.DataFrame, semantics: dict,
+                                    dim_key: str = "geographic_region_obligor") -> Dict[str, Any]:
+    """Evidence the current handling of a GROUPED query that also carries a value
+    filter (e.g. 'balance by region where LTV above 50%'). Returns whether the
+    filter reached the mask and whether the omission was surfaced to the user —
+    so the calibration report documents this from live behaviour, not a guess."""
+    from .mi_query_contract import business_name_of
+    bn = business_name_of(dim_key, semantics)
+    q = f"balance by {bn} where LTV above 50%"
+    res = run_mi_agent_query(q, df, semantics)
+    spec = res.get("spec") or {}
+    filters = (spec.get("filters") if isinstance(spec, dict) else getattr(spec, "filters", None)) or {}
+    recon = (res.get("reconciliation") or {})
+    warnings = res.get("warnings") or []
+    filter_mentions_warning = any("filter" in str(w).lower() for w in warnings)
+    return {
+        "query": q,
+        "filter_parsed": bool(filters),
+        "filters_applied": recon.get("filters_applied"),
+        "records_after_filters": recon.get("records_after_filters"),
+        "total_records": recon.get("total_records"),
+        "omission_surfaced": filter_mentions_warning,
+        "supported": bool(filters) and recon.get("filters_applied") is True,
+    }
+
+
 def usable_metrics(df: pd.DataFrame, semantics: dict) -> Dict[str, dict]:
     fields = semantics.get("fields", {})
     out: Dict[str, dict] = {}
@@ -233,13 +259,25 @@ def generate_cases(df: pd.DataFrame, semantics: dict, *,
             kind="three_dim", expected_metric=balance, expected_dims=[a, b, c],
             min_columns=3))
 
-    # 4) filter + grouping
-    for d in dims:
-        cases.append(GeneratedCase(
-            id=nxt("filter"),
-            query=f"balance by {_dim_phrase(semantics, d)} where LTV above 50%",
-            kind="filter_group", expected_metric=balance, expected_dims=[d],
-            expected_filters=[ltv], min_columns=2))
+    # 4) filtered KPI — the parser applies a value filter to a whole-book count.
+    #    (A GROUPED query + value filter is a known parser limitation, probed and
+    #    reported separately by ``probe_grouped_filter_limitation`` rather than
+    #    asserted here — see the calibration report's "Known limitations".)
+    _filter_probes = [
+        ("current_loan_to_value", "LTV", [30, 50, 60]),
+        ("current_outstanding_balance", "balance", [150000, 200000]),
+        ("youngest_borrower_age", "borrower age", [70, 75]),
+    ]
+    for fld, noun, thresholds in _filter_probes:
+        if fld not in metrics and fld not in _MEASURE_SPECS:
+            continue
+        for thr in thresholds:
+            unit = "%" if fld == "current_loan_to_value" else ""
+            cases.append(GeneratedCase(
+                id=nxt("filter"),
+                query=f"how many loans have {noun} above {thr}{unit}",
+                kind="filtered_kpi", expected_metric=None,
+                expected_filters=[fld], chart_expected=False, min_columns=1))
 
     # 5) top-N
     for d in dims:
@@ -361,9 +399,28 @@ def evaluate_case(case: GeneratedCase, df: pd.DataFrame, semantics: dict) -> Cas
     qr = res.get("query_result")
     result_cols = [str(c) for c in getattr(qr, "data").columns] if qr is not None else []
 
+    # Filter check — an expressed value filter must actually reach the mask
+    # (parsed into spec.filters AND reflected in the reconciliation), never
+    # silently ignored.
+    if case.expected_filters:
+        spec_filters = set((spec or {}).get("filters") or {}) if isinstance(spec, dict) \
+            else set(getattr(spec, "filters", {}) or {})
+        recon = (getattr(qr, "metadata", {}) or {}).get("reconciliation") or {} if qr is not None else {}
+        for f in case.expected_filters:
+            if f not in spec_filters:
+                return CaseResult(case=case, ok=False, failure_class="filter",
+                                  detail=f"expected filter {f} not parsed into spec.filters",
+                                  parsed_dims=parsed, applied_dims=applied,
+                                  rejected_dims=rejected, result_columns=result_cols)
+        if recon and recon.get("filters_applied") is False:
+            return CaseResult(case=case, ok=False, failure_class="filter",
+                              detail="filter parsed but reconciliation reports filters_applied=False",
+                              parsed_dims=parsed, applied_dims=applied,
+                              rejected_dims=rejected, result_columns=result_cols)
+
     # Parser check — the query's dimensions were recognised.
     expected_present = [d for d in case.expected_dims if d in parsed]
-    if case.kind in ("single_dim", "two_dim", "filter_group", "top_n",
+    if case.kind in ("single_dim", "two_dim", "filtered_kpi", "top_n",
                      "ranking", "weighted_avg", "count") and case.expected_dims:
         missing = [d for d in case.expected_dims if d not in parsed]
         if missing:
@@ -438,6 +495,7 @@ def run_suite(df: Optional[pd.DataFrame] = None, semantics: Optional[dict] = Non
     cases = generate_cases(df, semantics, usable_dims=usable, **gen_kwargs)
     results = [evaluate_case(c, df, semantics) for c in cases]
     summary = summarise(results, usable_dims=usable)
+    summary["grouped_filter_limitation"] = probe_grouped_filter_limitation(df, semantics)
     return results, summary
 
 

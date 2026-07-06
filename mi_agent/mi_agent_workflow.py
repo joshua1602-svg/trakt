@@ -465,6 +465,15 @@ def run_mi_agent_query(
         result["warnings"] = _dedupe(warnings + [invariant.message()])
         return result
 
+    # A dimension the parser recognised but execution could not apply (e.g. a
+    # third dimension on a two-axis heatmap) is explicitly rejected WITH a reason.
+    # Surface that reason to the user as a warning — a rejection is only
+    # fail-closed if it is visible, not merely recorded in metadata.
+    for rej in (qres.metadata or {}).get("rejected_dimensions") or []:
+        name = rej.get("dimension")
+        reason = rej.get("reason") or "not applied"
+        warnings.append(f"Grouping not applied for '{name}': {reason}")
+
     # Reconciliation / coverage footer (every artifact). When some balance is
     # excluded (e.g. the operator asked to exclude missing dims), say so plainly.
     recon = (qres.metadata or {}).get("reconciliation")

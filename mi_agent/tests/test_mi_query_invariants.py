@@ -66,9 +66,31 @@ def test_suite_is_large_enough_to_be_meaningful(suite):
     _, summary = suite
     # Hundreds of generated variants across all query classes.
     assert summary["total"] >= 200, summary["total"]
-    for kind in ("single_dim", "two_dim", "three_dim", "filter_group",
+    for kind in ("single_dim", "two_dim", "three_dim", "filtered_kpi",
                  "top_n", "ranking", "weighted_avg", "count", "rejection"):
         assert kind in summary["by_kind"], kind
+
+
+def test_filters_reach_the_mask_on_supported_shape(suite):
+    """Filtered KPIs must genuinely apply the filter (parsed into the spec AND
+    reflected in the reconciliation) — the harness verifies this rather than
+    assuming it."""
+    results, _ = suite
+    fkpi = [r for r in results if r.case.kind == "filtered_kpi"]
+    assert fkpi, "expected filtered_kpi cases"
+    assert all(r.ok for r in fkpi), [r.detail for r in fkpi if not r.ok]
+
+
+def test_grouped_filter_limitation_is_evidenced(suite):
+    """A grouped query + value filter is a KNOWN limitation: the filter is not
+    applied. This test pins the current behaviour so the calibration report
+    documents it honestly and any future fix trips this tripwire."""
+    _, summary = suite
+    lim = summary.get("grouped_filter_limitation")
+    assert lim is not None
+    # Documented as unsupported today. If this flips to True, grouped+filter now
+    # works — update the report's Known Limitations section and this assertion.
+    assert lim["supported"] is False, lim
 
 
 def test_no_silent_drops_anywhere(suite):
@@ -140,6 +162,27 @@ def test_two_dimensions_do_not_collapse_onto_a_bar(df, semantics):
         assert canonical_of("geographic_region_obligor", semantics) in axes
     else:
         assert chart["chartType"] in ("heatmap", "treemap")
+
+
+# --------------------------------------------------------------------------- #
+# A rejected dimension is rejected WITH a reason (which the workflow surfaces
+# as a user warning) — never silently absent.
+# --------------------------------------------------------------------------- #
+def test_extra_heatmap_dimension_is_rejected_with_a_reason(df, semantics):
+    from mi_agent.mi_query_executor import execute_mi_query
+    from mi_agent.mi_query_spec import MIQuerySpec
+    spec = MIQuerySpec(intent="chart", metric="current_outstanding_balance",
+                       aggregation="sum", chart_type="heatmap",
+                       dimensions=["geographic_region_obligor", "borrower_type",
+                                   "account_status"])
+    res = execute_mi_query(spec, df, semantics)
+    rejected = (res.metadata or {}).get("rejected_dimensions") or []
+    names = {r["dimension"] for r in rejected}
+    assert "account_status" in names
+    assert all(r.get("reason") for r in rejected), rejected
+    # group columns carry exactly the two applied dimensions.
+    assert (res.metadata or {}).get("group_field_keys") == [
+        "geographic_region_obligor", "borrower_type"]
 
 
 # --------------------------------------------------------------------------- #

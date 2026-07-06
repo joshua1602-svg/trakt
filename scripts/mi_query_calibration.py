@@ -118,6 +118,28 @@ def build_markdown(results, summary) -> str:
                 A(f"  - {q}")
             A("")
 
+    lim = summary.get("grouped_filter_limitation")
+    if lim is not None:
+        A("## Known limitations")
+        A("")
+        A("**Grouped query + value filter** — evidenced from live behaviour:")
+        A("")
+        A(f"- Probe: `{lim['query']}`")
+        A(f"- Filter parsed into the spec: **{lim['filter_parsed']}**")
+        A(f"- Filter applied (reconciliation): **{lim['filters_applied']}** "
+          f"({lim['records_after_filters']} of {lim['total_records']} records)")
+        A(f"- Omission surfaced to the user (warning): **{lim['omission_surfaced']}**")
+        A(f"- Supported today: **{lim['supported']}**")
+        A("")
+        A("A value filter combined with a grouping (`… by <dim> where <measure> "
+          "above <x>`) is **not** applied today, and the omission is not yet "
+          "surfaced as a warning. The supported filtered shape is the ungrouped "
+          "filtered KPI (`how many loans have LTV above 50%`), verified by the "
+          "`filtered_kpi` class above. Recommended follow-up: extend the "
+          "fail-closed guard to filters (warn/refuse when a recognised filter "
+          "phrase is not applied) and add grouped+filter parsing.")
+        A("")
+
     A("## Correctly-rejected unsupported concepts")
     A("")
     for r in results:
