@@ -44,6 +44,27 @@ def test_prefers_tape_itl3_field_over_postcode():
     assert {a["itl3_code"] for a in out["areas"]} == {"TLK51", "TLM50"}
 
 
+def test_mixed_itl3_field_and_postcode_fallback():
+    # Row 0: ITL3 field present -> used directly. Row 1: blank field -> postcode
+    # fallback. Row 2: sentinel 'nan' field -> postcode fallback. Row 3: blank
+    # field + unmatched postcode -> unresolved.
+    warnings.simplefilter("ignore")
+    df = pd.DataFrame({
+        "current_outstanding_balance": [400_000, 300_000, 200_000, 100_000],
+        "geographic_region_collateral_itl3": ["TLM50", "", "nan", ""],
+        "property_post_code": ["ZZ9 9ZZ", "BS1 4DJ", "BS1 5TR", "XX99 9ZZ"],
+    })
+    out = geo.exposure_by_itl3(df)
+    assert out["available"] is True
+    assert out["resolvedFromItl3Field"] == 1          # only row 0
+    assert out["resolvedFromPostcode"] == 2           # rows 1 and 2 (both BS1)
+    assert out["coveragePct"] == 75.0                 # 3 of 4 resolved
+    codes = {a["itl3_code"] for a in out["areas"]}
+    assert codes == {"TLM50", "TLK51"}                # Bristol group from postcodes
+    bristol = next(a for a in out["areas"] if a["itl3_code"] == "TLK51")
+    assert bristol["count"] == 2                       # BS1 4DJ + BS1 5TR
+
+
 def test_unavailable_when_no_geography_on_tape():
     warnings.simplefilter("ignore")
     df = pd.DataFrame({"current_outstanding_balance": [100.0, 200.0]})

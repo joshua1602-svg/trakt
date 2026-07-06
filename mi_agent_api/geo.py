@@ -18,7 +18,7 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import pandas as pd
 
@@ -112,30 +112,35 @@ def exposure_by_itl3(df: pd.DataFrame) -> Dict[str, Any]:
                 "total": 0.0, "coveragePct": 0.0}
 
     n = len(df)
-    codes: List[str] = []
-    names: List[str] = []
-    resolved_from_itl3 = 0
-    resolved_from_postcode = 0
-    for i in range(n):
-        code = ""
-        name = ""
-        if itl3_field:
-            v = str(df[itl3_field].iloc[i]).strip().upper()
-            if v and v not in ("", "NAN", "NONE", "NULL"):
-                code = v
-                resolved_from_itl3 += 1
-        if not code and pc_field:
-            hit = _prefix_to_itl3(_outward_code(df[pc_field].iloc[i]), by_prefix)
-            if hit:
-                code = hit["itl3_code"]
-                name = hit["itl3_name"]
-                resolved_from_postcode += 1
-        if code and not name:
-            name = name_by_code.get(code, code)
-        codes.append(code)
-        names.append(name)
+    # Vectorised two-source resolution (replaces a per-row Python loop):
+    #   1. the tape's ITL3 field, normalised (uppercase, sentinel nulls -> "");
+    #   2. for rows still unresolved, the property postcode -> ITL3, resolving each
+    #      UNIQUE outward code once (there are few distinct districts) rather than
+    #      per row.
+    empty = pd.Series([""] * n, index=df.index, dtype="object")
+    if itl3_field:
+        raw = df[itl3_field].astype("string").str.strip().str.upper()
+        code_series = raw.where(~raw.isin(["", "NAN", "NONE", "NULL"]), "").fillna("")
+        code_series = code_series.astype("object")
+    else:
+        code_series = empty.copy()
+    resolved_from_itl3 = int((code_series != "").sum())
+    name_series = empty.copy()
 
-    work = pd.DataFrame({"itl3_code": codes, "itl3_name": names,
+    resolved_from_postcode = 0
+    if pc_field is not None:
+        need = code_series == ""
+        if bool(need.any()):
+            outward = df.loc[need, pc_field].map(_outward_code)
+            resolved = {o: _prefix_to_itl3(o, by_prefix) for o in outward.unique()}
+            pc_code = outward.map(lambda o: (resolved.get(o) or {}).get("itl3_code", ""))
+            pc_name = outward.map(lambda o: (resolved.get(o) or {}).get("itl3_name", ""))
+            code_series.loc[need] = pc_code
+            name_series.loc[need] = pc_name
+            resolved_from_postcode = int((pc_code != "").sum())
+
+    work = pd.DataFrame({"itl3_code": code_series.to_numpy(),
+                         "itl3_name": name_series.to_numpy(),
                          "balance": bal.fillna(0.0).to_numpy()})
     work = work[work["itl3_code"] != ""]
     resolved_rows = int(len(work))
