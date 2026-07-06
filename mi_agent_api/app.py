@@ -1581,7 +1581,8 @@ def query(req: QueryRequest) -> Dict[str, Any]:
             semantics=load_mi_semantics(semantics_path()),
             history_model=_pipeline_history(cid), as_of=req.asOfDate,
             source_lens=req.sourcePortfolioLens or None,
-            frame_resolver=_routed_frame)
+            frame_resolver=_routed_frame,
+            extra_filters=req.filters or None)
     except Exception as exc:  # noqa: BLE001 - routing must never break the chat
         logger.warning("chat routing failed; using point-in-time path: %s", exc)
         routed = None

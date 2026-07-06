@@ -291,6 +291,37 @@ def test_conversion_with_threshold_stays_on_forecast():
     assert r["ok"] is True and r["metadata"]["route"] == "forecast_extrapolation"
 
 
+# --------------------------------------------------------------------------- #
+# G. Filtered funded evolution (per-period filter, not refused)
+# --------------------------------------------------------------------------- #
+def _latest_value(resp: dict) -> float:
+    tbl = next(a for a in resp["artifacts"] if a["type"] == "table")
+    return tbl["rows"][-1]["value"]
+
+
+def test_filtered_funded_evolution_applies_filter_per_period():
+    # An explicit filter (drill-through / req.filters) on a funded-balance evolution
+    # question is applied WITHIN each period, not refused to the single-snapshot path.
+    unfiltered = _ask("Show funded balance evolution over time.")
+    assert unfiltered["metadata"]["route"] == "evolution"
+    r = client.post("/mi/query", json={
+        "question": "Show funded balance evolution over time.",
+        "portfolioId": "client_001/mi_2025_11",
+        "datasetContext": "funded", "asOfDate": "2025-11-30",
+        "filters": {"geographic_region_obligor": "London"},
+    }).json()
+    assert r["ok"] is True and r["metadata"]["route"] == "evolution"
+    # A per-period filter note documents the scope.
+    assert any(n.get("field") == "filter" for n in r.get("sourceNotes", []))
+    # The filtered series is a strict subset (London is a fraction of the book)
+    # -> latest filtered balance is strictly below the unfiltered one.
+    assert 0 < _latest_value(r) < _latest_value(unfiltered)
+    # Still a multi-period series (filter is applied within each period, not once).
+    tbl = next(a for a in r["artifacts"] if a["type"] == "table")
+    assert len(tbl["rows"]) == len(next(a for a in unfiltered["artifacts"]
+                                        if a["type"] == "table")["rows"])
+
+
 def test_funded_balance_forecast_curve_returns_line_chart():
     # The known miss: "forecast curve" returned only a summary. It must now route
     # to the forecast extrapolation and return a projected line chart.

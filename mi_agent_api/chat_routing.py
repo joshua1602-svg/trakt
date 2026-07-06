@@ -25,6 +25,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from mi_agent.llm_query_parser import _deterministic_parse
 from mi_agent.mi_agent_workflow import _detect_unsupported_concept
+from mi_agent.mi_query_executor import _apply_filters
 
 from mi_agent import portfolio_lens as _portfolio_lens
 
@@ -248,11 +249,74 @@ _FUNNEL_KEYWORDS = {"kfi": "KFI", "application": "APPLICATION", "offer": "OFFER"
                     "completion": "COMPLETED", "completed": "COMPLETED"}
 
 
+def _funded_metric_value(df, metric_key: str) -> Optional[float]:
+    """A single funded metric for one period frame — the SAME computation
+    assemble_funded_evolution uses per period, so a filtered series reconciles to
+    the unfiltered one when the filter is a no-op."""
+    if metric_key == "funded_balance":
+        return evolution_mod._bal_sum(df)
+    if metric_key == "loan_count":
+        return int(len(df))
+    if metric_key == "wa_ltv":
+        return evolution_mod._weighted_avg(df, "current_loan_to_value")
+    if metric_key == "wa_interest_rate":
+        return evolution_mod._weighted_avg(df, "current_interest_rate")
+    if metric_key == "avg_borrower_age":
+        return evolution_mod._simple_avg(df, "youngest_borrower_age")
+    return None
+
+
+def _filtered_funded_evo(output_root, client_id, run_id, spec, semantics,
+                         metric_key: str) -> Dict[str, Any]:
+    """A funded single-metric series across reporting periods with the spec's
+    filter applied WITHIN each period (via the canonical executor filter, so the
+    scope matches a point-in-time filtered answer). Raises on an invalid filter so
+    the caller can defer to the controlled point-in-time validation path."""
+    frames = evolution_mod.funded_frames(output_root, client_id, run_id)
+    periods: List[Dict[str, Any]] = []
+    sources: List[str] = []
+    for fr in frames:
+        df = fr.get("df")
+        if df is None:
+            continue
+        fdf = _apply_filters(df, spec, semantics, [])  # may raise -> caller defers
+        rd = fr.get("reporting_date") or fr.get("run_id")
+        periods.append({
+            "period": (str(rd)[:7] if rd else fr.get("run_id")),
+            "reporting_date": rd,
+            "metrics": {metric_key: _funded_metric_value(fdf, metric_key)},
+            "filteredRows": int(len(fdf)),
+        })
+        if fr.get("source"):
+            sources.append(str(fr["source"]))
+    return {"periods": periods, "sourceFiles": sources}
+
+
+def _filter_summary(spec) -> str:
+    """A short human description of the active spec filters for the answer/notes."""
+    parts: List[str] = []
+    for k, v in (getattr(spec, "filters", None) or {}).items():
+        if isinstance(v, dict):
+            op = v.get("op", "eq")
+            parts.append(f"{k} {op} {v.get('value', v.get('min', v.get('max')))}")
+        else:
+            parts.append(f"{k} = {v}")
+    return "; ".join(parts)
+
+
 def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_root,
-                     pipeline_root, view, portfolio_id, as_of) -> Optional[Dict[str, Any]]:
+                     pipeline_root, view, portfolio_id, as_of, semantics=None
+                     ) -> Optional[Dict[str, Any]]:
     q = question.lower()
     dataset = _dataset_for(question, view)
     is_count = spec.aggregation == "count"
+    filtered = bool(getattr(spec, "filters", None))
+
+    # Filtered trends are supported for the FUNDED single-metric series only
+    # (applied per period below). A filtered pipeline / funnel / stage trend defers
+    # to the point-in-time path, which handles filters within one snapshot.
+    if filtered and dataset != "funded":
+        return None
 
     # Funnel stage trend (KFI / Application / Offer / Completion by week).
     funnel_stage = next((stage for kw, stage in _FUNNEL_KEYWORDS.items() if kw in q), None)
@@ -329,12 +393,18 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
 
     # Funded / pipeline single-metric evolution.
     metric_key, label, fmt = compare_mod.resolve_metric_key(dataset, spec.metric, spec.aggregation)
+    period_field = "period"
     if dataset == "pipeline":
         evo = evolution_mod.pipeline_evolution(pipeline_root, client_id, run_id)
-        period_field = "period"
+    elif filtered:
+        # Filtered funded series: apply the filter within each period. On an invalid
+        # filter, defer to the controlled point-in-time validation path.
+        try:
+            evo = _filtered_funded_evo(output_root, client_id, run_id, spec, semantics or {}, metric_key)
+        except Exception:  # noqa: BLE001 - invalid filter -> point-in-time path
+            return None
     else:
         evo = evolution_mod.funded_evolution(output_root, client_id, run_id)
-        period_field = "period"
     periods = evo.get("periods", [])
     if not periods:
         return _envelope(ok=True, question=question,
@@ -343,15 +413,17 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
                          warnings=["insufficient-data: no governed reporting periods."])
     rows = [{"period": p.get(period_field), "value": (p.get("metrics") or {}).get(metric_key)}
             for p in periods]
+    filter_txt = _filter_summary(spec) if filtered else ""
+    scope_suffix = f" — {filter_txt}" if filter_txt else ""
     disp = _METRIC_DISPLAY.get(metric_key, ("decimal", "decimal", None))
     chart = _chart_artifact(
-        f"{label} by {'week' if dataset == 'pipeline' else 'month'}", chart_type="line",
+        f"{label} by {'week' if dataset == 'pipeline' else 'month'}{scope_suffix}", chart_type="line",
         x_key="period", rows=rows,
         series=[{"key": "value", "label": label, "color": _PALETTE[0]}],
         value_format=disp[1], spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of,
         display_hints={"value": {"format": disp[1], "scale": disp[2]}})
     table = _table_artifact(
-        f"{label} trend", columns=[
+        f"{label} trend{scope_suffix}", columns=[
             {"key": "period", "label": "Period", "align": "left", "format": "text"},
             {"key": "value", "label": label, "align": "right", "format": disp[1], "scale": disp[2]},
         ], rows=rows, spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of)
@@ -365,12 +437,19 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
     if len(vals) >= 2:
         d = vals[-1] - vals[0]
         trend_txt = f" ({'up' if d > 0 else 'down' if d < 0 else 'flat'} over the window)"
-    answer = (f"{label} over {len(rows)} period(s): latest {_disp(vals[-1] if vals else None, metric_key)}"
-              f"{trend_txt}.")
+    scope_answer = f" (scoped to {filter_txt})" if filter_txt else ""
+    answer = (f"{label} over {len(rows)} period(s){scope_answer}: latest "
+              f"{_disp(vals[-1] if vals else None, metric_key)}{trend_txt}.")
     src_files = evo.get("sourceFiles") or []
     notes = [{"field": "source_periods",
               "note": f"{len(periods)} governed period(s); source: "
                       f"{src_files[-1] if src_files else 'governed runs'}"}]
+    if filtered:
+        kept = [p.get("filteredRows") for p in periods if p.get("filteredRows") is not None]
+        notes.append({"field": "filter",
+                      "note": (f"Filter applied within each period: {filter_txt}. "
+                               f"Rows per period after filter: "
+                               f"{', '.join(str(k) for k in kept) or 'n/a'}.")})
     last_recon = (periods[-1].get("reconciliation") if periods else None) or {
         "dataset": dataset, "coverage_by_balance_pct": 100.0}
     return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
@@ -843,9 +922,13 @@ def _route_cohort_progression(question, spec, spec_dict, *, client_id, run_id,
 # engine. A "limit / breach / appetite" framing is a risk-monitor question and is
 # deliberately left to _route_risk (which owns concentration LIMITS).
 _GEO_TERMS = ("geograph", "region", "area", "postcode", "post code", "itl3",
-              "location", "county", "city", "town", "map", "where")
-_GEO_MARKERS = ("concentrat", "exposure", "largest", "biggest", "top ", "hotspot",
-                "heat", "where", "spread", "distribut", "by region", "by area")
+              "county", "city", "town")
+# Deliberately NARROW: a superlative / concentration / map intent — NOT generic
+# grouping words like "by region" (that is an ordinary point-in-time stratification
+# and must reach the standard executor, not the ITL3 engine).
+_GEO_MARKERS = ("concentrat", "largest", "biggest", "most exposed", "top ",
+                "hotspot", "where is", "where are", "where's",
+                "which region", "which area", "exposure")
 _RISK_LIMIT_TERMS = ("limit", "breach", "appetite", "covenant", "threshold",
                      "rag", "amber", " red ")
 
@@ -1012,8 +1095,8 @@ def _is_evolution(question: str, spec) -> bool:
         return False
     if spec.x == "vintage_year":
         return False
-    if spec.filters:
-        return False  # filtered trends keep the existing within-snapshot path
+    # A filter no longer forces the within-snapshot path: _route_evolution applies
+    # the filter WITHIN each period for a funded series (and defers otherwise).
     q = question.lower()
     return any(m in q for m in _EVOLUTION_MARKERS)
 
@@ -1024,6 +1107,7 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
               as_of: Optional[str] = None,
               source_lens: Optional[Any] = None,
               frame_resolver: Optional[Callable[[str, Optional[str]], Any]] = None,
+              extra_filters: Optional[Dict[str, Any]] = None,
               ) -> Optional[Dict[str, Any]]:
     """Route a question to an internal analytical service, or return None to defer
     to the existing point-in-time MI Agent path. Never raises for analytics issues —
@@ -1042,6 +1126,15 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
         # available_columns isn't known here; the workflow re-checks against the
         # real dataframe, so only skip when the concept clearly has no field at all.
         pass
+
+    # Merge caller-supplied filters (UI drill-through / req.filters) into the spec,
+    # mirroring the point-in-time path (mi_agent_workflow), so a routed evolution
+    # answer is scoped identically to a within-snapshot one.
+    if extra_filters:
+        try:
+            spec.filters = {**(spec.filters or {}), **extra_filters}
+        except Exception:  # noqa: BLE001 - never block routing on a bad filter dict
+            pass
 
     spec_dict = spec.to_dict()
     kw = dict(client_id=client_id, run_id=run_id, output_root=output_root,
@@ -1076,5 +1169,5 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
                            client_id=client_id, run_id=run_id, output_root=output_root,
                            portfolio_id=portfolio_id, as_of=as_of)
     if _is_evolution(question, spec):
-        return _route_evolution(question, spec, spec_dict, view=view, **kw)
+        return _route_evolution(question, spec, spec_dict, view=view, semantics=semantics, **kw)
     return None
