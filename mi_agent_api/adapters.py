@@ -646,6 +646,17 @@ def adapt_workflow_result(
                 "seriesKeys": [s.get("key") for s in (chart_art.get("series") or [])],
             }
 
+    # Parser observability (mode detail / repair attempts / LLM status) from the
+    # workflow metadata. Defined defensively — a missing block must never raise a
+    # NameError that turns a good answer into a 500.
+    _wf_meta = workflow.get("metadata") or {}
+    parser_observability = {
+        "parserModeDetail": _wf_meta.get("parser_mode_detail"),
+        "repairAttempts": _wf_meta.get("repair_attempts"),
+        "repairSkippedReason": _wf_meta.get("repair_skipped_reason"),
+        "llm": _wf_meta.get("llm"),
+    }
+
     return {
         "ok": bool(workflow.get("ok")),
         "error": workflow.get("error"),

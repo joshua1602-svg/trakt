@@ -1596,6 +1596,10 @@ def query(req: QueryRequest) -> Dict[str, Any]:
         df, frame_error = _resolve_query_frame(view, portfolio_id)
     except FileNotFoundError as exc:
         return _error(str(exc))
+    except Exception as exc:  # noqa: BLE001 - data load/prep must not raw-500
+        logger.exception("MI /mi/query frame resolution failed for portfolio=%r view=%r",
+                         portfolio_id, view)
+        return _error(f"Could not load the data for this query: {type(exc).__name__}: {exc}")
     if frame_error:
         return _error(frame_error)
 
@@ -1606,13 +1610,22 @@ def query(req: QueryRequest) -> Dict[str, Any]:
     # zero_cost_first; falls back to deterministic on any LLM failure).
     llm_cfg = _mi_llm_config()
     llm_enabled, llm_model = llm_cfg.enabled, llm_cfg.model
-    workflow = run_mi_agent_query(
-        req.question, df, str(semantics_path()),
-        parser_mode="llm" if llm_enabled else "deterministic",
-        llm_enabled=llm_enabled, model=llm_model,
-        extra_filters=req.filters or None,
-        source_portfolio_lens=req.sourcePortfolioLens or None)
-    result = adapt_workflow_result(workflow, portfolio_id=portfolio_id, as_of=req.asOfDate)
+    # A crash in the MI pipeline (parse / execute / adapt) must return a
+    # controlled error the operator can read — never a raw 500 that the UI
+    # reports as "could not reach the API". The full traceback is logged for the
+    # Azure Log stream so the exact fault is diagnosable.
+    try:
+        workflow = run_mi_agent_query(
+            req.question, df, str(semantics_path()),
+            parser_mode="llm" if llm_enabled else "deterministic",
+            llm_enabled=llm_enabled, model=llm_model,
+            extra_filters=req.filters or None,
+            source_portfolio_lens=req.sourcePortfolioLens or None)
+        result = adapt_workflow_result(workflow, portfolio_id=portfolio_id, as_of=req.asOfDate)
+    except Exception as exc:  # noqa: BLE001 - surface, don't 500
+        logger.exception("MI /mi/query failed for question=%r portfolio=%r",
+                         req.question, portfolio_id)
+        return _error(f"The MI Agent could not complete this query: {type(exc).__name__}: {exc}")
     # Surface which dataset/view answered (funded | pipeline | forecast) and the
     # active source-portfolio lens (total | direct | acquired | cohort).
     meta = result.setdefault("metadata", {}) if isinstance(result, dict) else {}
