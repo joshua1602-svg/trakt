@@ -61,6 +61,55 @@ def test_balance_weighted_metrics():
         "balance", "loanCount", "waLtv", "waRate", "waMonthsOnBook"}
 
 
+def _wave1_df() -> pd.DataFrame:
+    return pd.DataFrame({
+        "origination_date": ["2021-03-01", "2022-05-01", "2022-06-01", "2023-01-01"],
+        "current_outstanding_balance": [100_000, 300_000, 200_000, 50_000],
+        "current_loan_to_value": [0.60, 0.80, 0.50, 0.40],
+        "age_bucket": ["65–69", "70–74", "65–69", "80–84"],
+        "original_loan_to_value": [0.55, 0.75, 0.48, 0.38],
+        "origination_channel": ["Broker A", "Broker B", "Broker A", "Direct"],
+    })
+
+
+def test_available_dimensions_reflect_the_tape():
+    out = cohorts_mod.cohort_analysis(_wave1_df())
+    assert out["availableDimensions"] == ["vintage", "age", "ltv", "channel"]
+    # The slim tape has vintage + current LTV (ltv falls back to current_loan_to_value),
+    # but no age/channel fields.
+    slim = cohorts_mod.cohort_analysis(_funded_df())
+    assert slim["availableDimensions"] == ["vintage", "ltv"]
+
+
+def test_cohort_by_borrower_age():
+    out = cohorts_mod.cohort_analysis(_wave1_df(), dimension="age")
+    assert out["available"] is True
+    assert out["dimension"] == "age" and out["dimensionLabel"] == "Borrower age"
+    by = {c["cohort"]: c for c in out["cohorts"]}
+    assert by["65–69"]["loanCount"] == 2  # two loans in that band
+    assert [c["cohort"] for c in out["cohorts"]] == ["65–69", "70–74", "80–84"]  # by age
+
+
+def test_cohort_by_ltv_band_and_channel():
+    ltv = cohorts_mod.cohort_analysis(_wave1_df(), dimension="ltv")
+    assert ltv["dimensionLabel"] == "LTV band"
+    # Bands ordered by their leading number.
+    labels = [c["cohort"] for c in ltv["cohorts"]]
+    assert labels == sorted(labels, key=lambda s: int(__import__("re").search(r"\d+", s).group()))
+    ch = cohorts_mod.cohort_analysis(_wave1_df(), dimension="channel")
+    assert ch["dimensionLabel"] == "Origination channel"
+    # Channels ranked by balance (Broker A = 300k leads).
+    assert ch["cohorts"][0]["cohort"] == "Broker A"
+
+
+def test_dimension_unavailable_is_honest():
+    # No channel/age/ltv fields -> those dimensions are unavailable, vintage still works.
+    out = cohorts_mod.cohort_analysis(_funded_df(), dimension="channel")
+    assert out["available"] is False
+    assert "origination channel" in out["reason"].lower()
+    assert "channel" not in out["availableDimensions"]
+
+
 def test_no_fabricated_curves():
     out = cohorts_mod.cohort_analysis(_funded_df())
     for c in out["cohorts"]:
@@ -85,6 +134,27 @@ def test_unknown_vintage_bucketed_not_dropped():
     assert "Unknown" in labels
     assert labels[-1] == "Unknown"  # sinks to the end
     assert out["totalLoanCount"] == 6
+
+
+def test_mixed_iso_and_uk_dates_all_parse():
+    """Regression: an origination_date column that MIXES ISO (YYYY-MM-DD) and UK
+    (DD/MM/YYYY) rows must parse per element — previously pandas inferred a single
+    format from the first value and NaT'd the rest into a spurious 'Unknown'
+    bucket (59 of 73 loans on the live November book)."""
+    df = pd.DataFrame({
+        # 3 ISO + 3 UK, all genuine 2025 dates; UK days > 12 to prove dayfirst.
+        "origination_date": ["2025-01-15", "28/11/2025", "2025-06-30",
+                             "03/10/2025", "2025-09-01", "17/07/2025"],
+        "current_outstanding_balance": [100_000, 200_000, 150_000,
+                                       250_000, 120_000, 180_000],
+        "current_loan_to_value": [0.55, 0.60, 0.50, 0.65, 0.58, 0.62],
+    })
+    out = cohorts_mod.cohort_analysis(df)
+    labels = [c["vintage"] for c in out["cohorts"]]
+    # Every row is a valid 2025 date — nothing may leak into 'Unknown'.
+    assert labels == ["2025"]
+    assert "Unknown" not in labels
+    assert out["cohorts"][0]["loanCount"] == 6
 
 
 if __name__ == "__main__":

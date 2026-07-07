@@ -49,13 +49,8 @@ function trailingAvg(vals: (number | null)[], window = 5): number | null {
   return use.length ? round2(use.reduce((a, b) => a + b, 0) / use.length) : null;
 }
 
-function sumLast(vals: number[], window?: number): number {
-  const use = window == null ? vals : vals.slice(-window);
-  return use.reduce((a, b) => a + b, 0);
-}
-
-function conv(num: number, den: number): number | null {
-  return den ? round2((num / den) * 100) : null;
+function conv(num: number | null, den: number | null): number | null {
+  return num != null && den ? round2((num / den) * 100) : null;
 }
 
 export function mockFunnelEvolution(portfolioId: string): PipelineFunnelEvolution {
@@ -66,6 +61,12 @@ export function mockFunnelEvolution(portfolioId: string): PipelineFunnelEvolutio
 
   const kfiValues = SHAPE.KFI.map((p) => p.v);
   const kfiCounts = SHAPE.KFI.map((p) => p.c);
+  // Mock KFI→completion lag: shift the KFI denominator back ~6 weeks.
+  const MOCK_LAG_WEEKS = 6;
+  const denomIdx = Math.max(0, kfiCounts.length - 1 - MOCK_LAG_WEEKS);
+  const kfiDenomCount = kfiCounts[denomIdx];
+  const kfiDenomValue = kfiValues[denomIdx];
+  const denomWeek = WEEKS[denomIdx] ?? null;
 
   for (const stage of STAGES) {
     const pts = SHAPE[stage].map((p, i) => ({ week: WEEKS[i], value: p.v, count: p.c }));
@@ -104,13 +105,43 @@ export function mockFunnelEvolution(portfolioId: string): PipelineFunnelEvolutio
         stage === "KFI"
           ? null
           : {
-              fiveWeekCount: conv(sumLast(counts, 5), sumLast(kfiCounts, 5)),
-              fiveWeekValue: conv(sumLast(values, 5), sumLast(kfiValues, 5)),
-              sinceInceptionCount: conv(sumLast(counts), sumLast(kfiCounts)),
-              sinceInceptionValue: conv(sumLast(values), sumLast(kfiValues)),
+              basis: "avg_weekly_flow_over_lagged_kfi_stock",
+              lagWeeks: MOCK_LAG_WEEKS,
+              lagApplied: true,
+              denominatorWeek: denomWeek,
+              avgWeeklyFlowCount: trailingAvg(cFlow),
+              avgWeeklyFlowValue: trailingAvg(vFlow),
+              kfiStockCount: kfiDenomCount,
+              kfiStockValue: kfiDenomValue,
+              weeklyRateCount: conv(trailingAvg(cFlow), kfiDenomCount),
+              weeklyRateValue: conv(trailingAvg(vFlow), kfiDenomValue),
+              weeksInWindow: Math.min(5, vFlow.filter((v) => v != null).length),
+              minWeeks: 3,
+              sufficient: Math.min(5, vFlow.filter((v) => v != null).length) >= 3,
             },
     };
   }
+  // Cumulative cohort progression (canonical conversion): a nested funnel where
+  // each milestone rises to its terminal share, with progressively more lag.
+  const N = WEEKS.length;
+  const TERMINAL: Record<string, number> = { KFI: 100, APPLICATION: 84, OFFER: 58, COMPLETED: 34 };
+  const LAG_FRAC: Record<string, number> = { KFI: 0, APPLICATION: 0.1, OFFER: 0.25, COMPLETED: 0.45 };
+  const cohortSeries: Record<string, number[]> = {};
+  for (const st of STAGES) {
+    cohortSeries[st] = WEEKS.map((_, i) => {
+      const prog = Math.max(0, (i / (N - 1) - LAG_FRAC[st]) / (1 - LAG_FRAC[st]));
+      return round2(TERMINAL[st] * Math.min(1, prog));
+    });
+  }
+  // Enforce the nesting KFI ≥ Application ≥ Offer ≥ Funded at every week.
+  for (let i = 0; i < N; i++) {
+    for (let s = 1; s < STAGES.length; s++) {
+      cohortSeries[STAGES[s]][i] = Math.min(cohortSeries[STAGES[s]][i], cohortSeries[STAGES[s - 1]][i]);
+    }
+  }
+  const cohortProgression = {
+    weeks: WEEKS, stages: [...STAGES], series: cohortSeries, cohortSize: 420,
+  };
   return {
     dataset: "pipeline_funnel",
     portfolioId: client,
@@ -123,10 +154,14 @@ export function mockFunnelEvolution(portfolioId: string): PipelineFunnelEvolutio
     series,
     flowSeries,
     summary,
+    conversionLagWeeks: MOCK_LAG_WEEKS,
+    cohortProgression,
+    cumulativeCohortConversion: cohortSeries.COMPLETED[N - 1],
     lineage: {
       source: "governed weekly pipeline extracts (deduplicated)",
       metric: "weekly KFI / Application / Offer / Completion — weekly flow (default) and stock level",
       fiveWeekAverage: "trailing mean of the last 5 weeks of WEEKLY FLOW, not the average stock level",
+      conversion: "average weekly flow into a stage over the KFI stock lagWeeks earlier (KFI→completion lag)",
     },
     singlePeriod: false,
   };

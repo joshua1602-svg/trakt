@@ -12,6 +12,7 @@ function client(getRiskLimits: AgentClient["getRiskLimits"]): AgentClient {
     getPipelineEvolution: vi.fn(), getForecastEvolution: vi.fn(),
     getFunnelEvolution: vi.fn(), getForecastExtrapolation: vi.fn(), getCohortProgression: vi.fn(),
     getMe: vi.fn(), getDecks: vi.fn(), deckDownloadUrl: vi.fn(() => null), getCohorts: vi.fn(),
+    getGeoExposure: vi.fn(),
     getRiskLimits,
   };
 }

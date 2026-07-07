@@ -9,6 +9,7 @@ source notes), WITHOUT regressing existing point-in-time questions.
 """
 from __future__ import annotations
 
+import os
 import sys
 import warnings
 from pathlib import Path
@@ -212,6 +213,146 @@ def test_geographic_limits_returns_only_geographic_category():
     # A broker-scoped query, by contrast, returns broker rows.
     rb = _ask("Show broker concentration limits.")
     assert rb["answer"].lower().startswith("broker")
+
+
+# --------------------------------------------------------------------------- #
+# E. Geographic exposure (ITL3) — the new engine wired into chat
+# --------------------------------------------------------------------------- #
+def _rewrite_latest_tape_with_postcodes() -> None:
+    root = Path(os.environ["MI_AGENT_ONBOARDING_OUTPUT_ROOT"])
+    d = root / "client_001" / "mi_2025_11" / "output" / "central"
+    d.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({
+        "loan_identifier": [f"g_{i}" for i in range(6)],
+        # BS1 group dominates -> Bristol (TLK51) is the largest concentration.
+        "current_outstanding_balance": [500_000, 400_000, 300_000, 200_000, 150_000, 100_000],
+        "current_loan_to_value": [40.0] * 6,
+        "current_interest_rate": [5.0] * 6,
+        "youngest_borrower_age": [70] * 6,
+        "property_post_code": ["BS1 4DJ", "BS1 5TR", "AB10 1AB", "AB10 2CD", "EH1 1AA", "M1 1AA"],
+        "reporting_date": ["2025-11-30"] * 6,
+    }).to_csv(d / "18_central_lender_tape.csv", index=False)
+
+
+def test_geographic_exposure_routes_to_itl3_engine():
+    # A location + superlative question (no "limit") routes to the ITL3 exposure
+    # engine, NOT the risk-limit monitor.
+    _rewrite_latest_tape_with_postcodes()
+    r = _ask("What is the largest geographic area concentration?")
+    assert r["ok"] is True and r["metadata"]["route"] == "geo_exposure"
+    assert "largest geographic concentration" in r["answer"].lower()
+    assert "bristol" in r["answer"].lower()
+    tbl = next(a for a in r["artifacts"] if a["type"] == "table")
+    assert {"area", "balance", "count"} <= {c["key"] for c in tbl["columns"]}
+    assert any(a["type"] == "chart" for a in r["artifacts"])
+
+
+def test_geographic_exposure_degrades_honestly_without_itl3_or_postcode():
+    # The default fixture tape carries region NAMES only (no ITL3 code / postcode),
+    # so the ITL3 engine can't resolve areas — the route still owns the answer and
+    # explains why, rather than silently falling back.
+    r = _ask("Where is the book concentrated geographically?")
+    assert r["ok"] is True and r["metadata"]["route"] == "geo_exposure"
+    assert "geographic exposure" in r["answer"].lower()
+    assert r["artifacts"] == []
+
+
+def test_geographic_concentration_limits_still_route_to_risk():
+    # Guard: a LIMIT-framed geographic question stays on the risk monitor.
+    r = _ask("Show geographic concentration limits.")
+    assert r["ok"] is True and r["metadata"]["route"] == "risk_limits"
+
+
+# --------------------------------------------------------------------------- #
+# F. Cumulative cohort conversion — the single canonical "conversion"
+# --------------------------------------------------------------------------- #
+def test_cumulative_cohort_conversion_routes():
+    r = _ask("What is our cumulative cohort conversion?", view="pipeline")
+    assert r["ok"] is True and r["metadata"]["route"] == "cohort_conversion"
+    # The fixture has weekly pipeline snapshots -> a real cohort progression: a
+    # multi-line KFI→Application→Offer→Funded chart, not the insufficient-data path.
+    chart = next((a for a in r["artifacts"] if a["type"] == "chart"), None)
+    assert chart is not None, r["answer"]
+    labels = {s["label"] for s in chart["series"]}
+    assert {"KFI", "Funded"} <= labels
+    assert "single definition of conversion" in r["answer"]
+
+
+def test_bare_conversion_rate_uses_cohort_definition_not_forecast():
+    # A bare "conversion rate" resolves to the canonical cohort definition, not the
+    # forecast route's differently-measured KFI→completion rate.
+    r = _ask("What is our conversion rate?")
+    assert r["ok"] is True and r["metadata"]["route"] == "cohort_conversion"
+
+
+def test_conversion_with_threshold_stays_on_forecast():
+    # A projection/threshold framing ("reach £50m") is NOT a conversion answer.
+    r = _ask("What conversion do we need to reach £50m funded balance?")
+    assert r["ok"] is True and r["metadata"]["route"] == "forecast_extrapolation"
+
+
+# --------------------------------------------------------------------------- #
+# G. Filtered funded evolution (per-period filter, not refused)
+# --------------------------------------------------------------------------- #
+def _latest_value(resp: dict) -> float:
+    tbl = next(a for a in resp["artifacts"] if a["type"] == "table")
+    return tbl["rows"][-1]["value"]
+
+
+def test_filtered_funded_evolution_applies_filter_per_period():
+    # An explicit filter (drill-through / req.filters) on a funded-balance evolution
+    # question is applied WITHIN each period, not refused to the single-snapshot path.
+    unfiltered = _ask("Show funded balance evolution over time.")
+    assert unfiltered["metadata"]["route"] == "evolution"
+    r = client.post("/mi/query", json={
+        "question": "Show funded balance evolution over time.",
+        "portfolioId": "client_001/mi_2025_11",
+        "datasetContext": "funded", "asOfDate": "2025-11-30",
+        "filters": {"geographic_region_obligor": "London"},
+    }).json()
+    assert r["ok"] is True and r["metadata"]["route"] == "evolution"
+    # A per-period filter note documents the scope.
+    assert any(n.get("field") == "filter" for n in r.get("sourceNotes", []))
+    # The filtered series is a strict subset (London is a fraction of the book)
+    # -> latest filtered balance is strictly below the unfiltered one.
+    assert 0 < _latest_value(r) < _latest_value(unfiltered)
+    # Still a multi-period series (filter is applied within each period, not once).
+    tbl = next(a for a in r["artifacts"] if a["type"] == "table")
+    assert len(tbl["rows"]) == len(next(a for a in unfiltered["artifacts"]
+                                        if a["type"] == "table")["rows"])
+
+
+# --------------------------------------------------------------------------- #
+# C2. Scenario / what-if (perturb the run-rate, re-solve the milestone)
+# --------------------------------------------------------------------------- #
+def test_scenario_conversion_uplift_routes_and_compares():
+    r = _ask("If our completed conversion rate increased by 10%, what is the impact "
+             "on the time to reach £50m funded balance?")
+    assert r["ok"] is True and r["metadata"]["route"] == "scenario"
+    assert "+10%" in r["answer"]
+    chart = next(a for a in r["artifacts"] if a["type"] == "chart")
+    assert {"base", "scenario"} <= {s["key"] for s in chart["series"]}
+    # A base-vs-scenario comparison table is present when a target is named.
+    assert any(a["type"] == "table" for a in r["artifacts"])
+
+
+def test_scenario_double_run_rate_without_target():
+    r = _ask("What if our completion run-rate doubled?")
+    assert r["ok"] is True and r["metadata"]["route"] == "scenario"
+    assert "doubled" in r["answer"]
+
+
+def test_unquantified_scenario_falls_through_to_forecast():
+    # "improves" with no magnitude can't be quantified -> defer to the forecast
+    # route rather than fabricate a multiplier.
+    r = _ask("If conversion improves, when do we reach £50m funded balance?")
+    assert r["ok"] is True and r["metadata"]["route"] == "forecast_extrapolation"
+
+
+def test_plain_threshold_is_not_a_scenario():
+    # No change verb -> a normal forecast projection, not a what-if.
+    r = _ask("When do we reach £50m funded balance?")
+    assert r["ok"] is True and r["metadata"]["route"] == "forecast_extrapolation"
 
 
 def test_funded_balance_forecast_curve_returns_line_chart():

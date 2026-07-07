@@ -23,6 +23,7 @@ from __future__ import annotations
 import calendar
 import os
 import re
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -30,6 +31,7 @@ import pandas as pd
 
 from analytics_lib.numeric import coerce_numeric
 
+from . import currency as currency_mod
 from .funded_prep import prepare_funded_mi_dataset
 from .mi_dataset_contract import build_dataset_contract
 
@@ -223,19 +225,9 @@ def _to_points(value: Optional[float], scale: Optional[str]) -> Optional[float]:
 
 
 def _fmt_gbp(value: Optional[float], *, signed: bool = False) -> str:
-    if value is None:
-        return "—"
-    sign = "+" if (signed and value >= 0) else ("-" if signed and value < 0 else "")
-    v = abs(value) if signed else value
-    if abs(v) >= 1e9:
-        body = f"£{v / 1e9:.2f}BN"
-    elif abs(v) >= 1e6:
-        body = f"£{v / 1e6:.1f}MM"
-    elif abs(v) >= 1e3:
-        body = f"£{v / 1e3:.0f}K"
-    else:
-        body = f"£{v:,.0f}"
-    return f"{sign}{body}"
+    # Name kept for call-site stability; the symbol is the request's resolved
+    # currency (tape -> config -> GBP). KPI tiles use BN/MM/K suffixes.
+    return currency_mod.format_money(value, signed=signed, suffixes=("BN", "MM", "K"))
 
 
 def _fmt_pct_points(points: Optional[float], *, signed: bool = False) -> str:
@@ -327,6 +319,88 @@ def _loan_ids(df: pd.DataFrame) -> set:
     return set(df["loan_identifier"].astype(str).str.strip())
 
 
+# --------------------------------------------------------------------------- #
+# Point-in-time funded stratifications (balance / share by a dimension). Fills
+# the Funded tab's gap: Pipeline and Forecast carry breakdowns, Funded did not.
+# --------------------------------------------------------------------------- #
+_STRAT_DIMS = [
+    ("ltv", "By LTV band"),
+    ("age", "By borrower age"),
+    ("region", "By region"),
+    ("rate", "By rate band"),
+    ("product", "By product"),
+]
+_RATE_BINS = [0, 3, 4, 5, 6, 7, 8, 100]
+_RATE_LABELS = ["<3%", "3–4%", "4–5%", "5–6%", "6–7%", "7–8%", "8%+"]
+
+
+def _strat_series(df: pd.DataFrame, key: str):
+    """The per-row band/category label for a funded stratification dimension.
+    LTV and age reuse the SAME bands as the cohort composition lens (one banding,
+    no drift between the two views); region/product read categorical columns;
+    rate is banded here (scale-aware fraction→points)."""
+    from analytics_lib.numeric import coerce_numeric
+    if key in ("ltv", "age"):
+        from . import cohorts as _cohorts  # identical banding as the cohort lens
+        series, _header = _cohorts._dimension_series(df, key, "Y")
+        return series
+    if key == "region":
+        for col in ("geographic_region_collateral", "geographic_region_obligor", "region"):
+            if col in df.columns and df[col].notna().any():
+                return df[col].astype("string")
+        return None
+    if key == "product":
+        for col in ("product_type", "product", "loan_product"):
+            if col in df.columns and df[col].notna().any():
+                return df[col].astype("string")
+        return None
+    if key == "rate" and "current_interest_rate" in df.columns:
+        r = coerce_numeric(df["current_interest_rate"])
+        if r.notna().sum() == 0:
+            return None
+        points = r.where(r.abs() > 1.5, r * 100.0)  # fraction (0.05) -> points (5.0)
+        return pd.cut(points, _RATE_BINS, labels=_RATE_LABELS, right=False).astype("string")
+    return None
+
+
+def _funded_stratifications(df: pd.DataFrame) -> List[Dict[str, Any]]:
+    """Balance / loan-count / book-share (and WA LTV) per band for each dimension
+    the funded tape can support. Never raises — a bad dimension is skipped."""
+    balance_col = "current_outstanding_balance"
+    if df is None or balance_col not in getattr(df, "columns", []):
+        return []
+    from analytics_lib.stratify import stratify as _stratify
+    out: List[Dict[str, Any]] = []
+    wm = ["current_loan_to_value"] if "current_loan_to_value" in df.columns else None
+    for key, label in _STRAT_DIMS:
+        try:
+            series = _strat_series(df, key)
+            if series is None:
+                continue
+            work = df.assign(__dim=series)
+            if work["__dim"].notna().sum() == 0:
+                continue
+            tbl = _stratify(work, "__dim", balance_col=balance_col, weighted_metrics=wm)
+            if tbl.empty:
+                continue
+            bars = []
+            for _, r in tbl.iterrows():
+                bar = {
+                    "label": str(r["__dim"]),
+                    "balance": round(float(r["balance_sum"]), 2),
+                    "count": int(r["loan_count"]),
+                    "sharePct": round(float(r["balance_share"]) * 100.0, 1),
+                }
+                wl = r.get("current_loan_to_value_weighted_avg")
+                if wl is not None and pd.notna(wl):
+                    bar["waLtv"] = round(float(wl), 4)
+                bars.append(bar)
+            out.append({"key": key, "label": label, "bars": bars[:12]})
+        except Exception:  # noqa: BLE001 - a stratification must never break the snapshot
+            continue
+    return out
+
+
 def compute_funded_snapshot(
     df: pd.DataFrame,
     semantics: dict,
@@ -345,6 +419,8 @@ def compute_funded_snapshot(
     and any business-facing warnings (missing data / partial result). All numbers
     are derived from the prepared dataset and the dataset contract — never the parser.
     """
+    # Resolve the display currency from this run's tape (falls back to GBP).
+    currency_mod.resolve_and_set(df)
     contract = build_dataset_contract(df, semantics, prep_report)
     warnings: List[str] = []
     diagnostics: List[str] = []
@@ -483,6 +559,7 @@ def compute_funded_snapshot(
         "loan_count": loan_count,
         "current_outstanding_balance": round(balance, 2),
         "kpis": kpis,
+        "stratifications": _funded_stratifications(df),
         "monthly_change": monthly_change,
         "warnings": warnings,
         "diagnostics": diagnostics,
@@ -490,7 +567,45 @@ def compute_funded_snapshot(
     }
 
 
+#: Per-run prepared-frame cache, keyed by ``path:mtime_ns:size`` so a re-published
+#: tape (new mtime) is a fresh key and reloads, while an unchanged tape is served
+#: without re-reading the CSV or re-running the MI prep. Bounded so a long monthly
+#: history (evolution walks every run) cannot grow it without limit; insertion
+#: order is FIFO-evicted. Mirrors the read-only contract of ``data_source._active``
+#: (consumers must not mutate the returned frame in place — they copy first).
+_PREPARED_RUN_CACHE: "OrderedDict[str, Tuple[pd.DataFrame, Dict[str, Any]]]" = OrderedDict()
+_PREPARED_RUN_CACHE_MAX = 24  # ~2 years of monthly runs kept warm
+
+
+def _prepared_run_key(path: Path) -> Optional[str]:
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    return f"{path}:{st.st_mtime_ns}:{st.st_size}"
+
+
 def load_prepared_run(tape_path: str | os.PathLike) -> Tuple[pd.DataFrame, Dict[str, Any]]:
-    """Read a central lender tape and apply the funded MI preparation layer."""
-    raw = pd.read_csv(Path(tape_path), low_memory=False)
-    return prepare_funded_mi_dataset(raw)
+    """Read a central lender tape and apply the funded MI preparation layer.
+
+    Memoised by ``(path, mtime, size)``: the same tape (hit by ``/mi/snapshot``,
+    ``/mi/cohorts``, ``/mi/geo``, forecast and each evolution period) is read and
+    prepared once, not on every request. The cached frame is returned directly —
+    callers treat it as read-only, exactly as they already do for the active
+    ``get_dataframe()``.
+    """
+    path = Path(tape_path)
+    key = _prepared_run_key(path)
+    if key is not None:
+        hit = _PREPARED_RUN_CACHE.get(key)
+        if hit is not None:
+            _PREPARED_RUN_CACHE.move_to_end(key)  # mark recently used
+            return hit
+    raw = pd.read_csv(path, low_memory=False)
+    value = prepare_funded_mi_dataset(raw)
+    if key is not None:
+        _PREPARED_RUN_CACHE[key] = value
+        _PREPARED_RUN_CACHE.move_to_end(key)
+        while len(_PREPARED_RUN_CACHE) > _PREPARED_RUN_CACHE_MAX:
+            _PREPARED_RUN_CACHE.popitem(last=False)  # evict oldest
+    return value

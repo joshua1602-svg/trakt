@@ -46,7 +46,6 @@ export type WorkspaceView =
   | "funded"
   | "pipeline"
   | "forecast"
-  | "evolution"
   | "risk_limits";
 
 export interface AgentRequest {

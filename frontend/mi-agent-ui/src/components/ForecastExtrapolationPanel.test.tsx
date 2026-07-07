@@ -22,6 +22,7 @@ function client(getForecastExtrapolation: AgentClient["getForecastExtrapolation"
     getPipelineEvolution: vi.fn(), getForecastEvolution: vi.fn(),
     getFunnelEvolution: vi.fn(), getRiskLimits: vi.fn(), getCohortProgression: vi.fn(),
     getMe: vi.fn(), getDecks: vi.fn(), deckDownloadUrl: vi.fn(() => null), getCohorts: vi.fn(),
+    getGeoExposure: vi.fn(),
     getForecastExtrapolation,
   };
 }

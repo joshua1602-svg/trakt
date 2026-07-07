@@ -19,19 +19,24 @@ forecast/data-quality questions are completely unaffected.
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from mi_agent.llm_query_parser import _deterministic_parse
 from mi_agent.mi_agent_workflow import _detect_unsupported_concept
+from mi_agent.mi_query_executor import _apply_filters
 
 from mi_agent import portfolio_lens as _portfolio_lens
 
 from . import temporal_compare as compare_mod
+from . import currency as currency_mod
 from . import evolution as evolution_mod
 from . import forecast_extrapolation as fx_mod
+from . import geo as geo_mod
 from . import risk_limits as risk_mod
+from . import scenario as scenario_mod
 
 _PALETTE = ["#919dd1", "#36c2a8", "#e0a93b", "#c46b8f", "#3d4a82", "#6fcf97"]
 
@@ -60,16 +65,9 @@ def _now() -> str:
 
 
 def _gbp(v: Optional[float]) -> str:
-    if v is None:
-        return "—"
-    v = float(v)
-    if abs(v) >= 1e9:
-        return f"£{v / 1e9:.2f}bn"
-    if abs(v) >= 1e6:
-        return f"£{v / 1e6:.1f}m"
-    if abs(v) >= 1e3:
-        return f"£{v / 1e3:.0f}k"
-    return f"£{v:,.0f}"
+    # Name kept for call-site stability; the symbol is the request's resolved
+    # currency (tape -> config -> GBP), not a hardcoded £.
+    return currency_mod.format_money(v, suffixes=("bn", "m", "k"))
 
 
 def _disp(value: Optional[float], metric_key: str) -> str:
@@ -253,11 +251,74 @@ _FUNNEL_KEYWORDS = {"kfi": "KFI", "application": "APPLICATION", "offer": "OFFER"
                     "completion": "COMPLETED", "completed": "COMPLETED"}
 
 
+def _funded_metric_value(df, metric_key: str) -> Optional[float]:
+    """A single funded metric for one period frame — the SAME computation
+    assemble_funded_evolution uses per period, so a filtered series reconciles to
+    the unfiltered one when the filter is a no-op."""
+    if metric_key == "funded_balance":
+        return evolution_mod._bal_sum(df)
+    if metric_key == "loan_count":
+        return int(len(df))
+    if metric_key == "wa_ltv":
+        return evolution_mod._weighted_avg(df, "current_loan_to_value")
+    if metric_key == "wa_interest_rate":
+        return evolution_mod._weighted_avg(df, "current_interest_rate")
+    if metric_key == "avg_borrower_age":
+        return evolution_mod._simple_avg(df, "youngest_borrower_age")
+    return None
+
+
+def _filtered_funded_evo(output_root, client_id, run_id, spec, semantics,
+                         metric_key: str) -> Dict[str, Any]:
+    """A funded single-metric series across reporting periods with the spec's
+    filter applied WITHIN each period (via the canonical executor filter, so the
+    scope matches a point-in-time filtered answer). Raises on an invalid filter so
+    the caller can defer to the controlled point-in-time validation path."""
+    frames = evolution_mod.funded_frames(output_root, client_id, run_id)
+    periods: List[Dict[str, Any]] = []
+    sources: List[str] = []
+    for fr in frames:
+        df = fr.get("df")
+        if df is None:
+            continue
+        fdf = _apply_filters(df, spec, semantics, [])  # may raise -> caller defers
+        rd = fr.get("reporting_date") or fr.get("run_id")
+        periods.append({
+            "period": (str(rd)[:7] if rd else fr.get("run_id")),
+            "reporting_date": rd,
+            "metrics": {metric_key: _funded_metric_value(fdf, metric_key)},
+            "filteredRows": int(len(fdf)),
+        })
+        if fr.get("source"):
+            sources.append(str(fr["source"]))
+    return {"periods": periods, "sourceFiles": sources}
+
+
+def _filter_summary(spec) -> str:
+    """A short human description of the active spec filters for the answer/notes."""
+    parts: List[str] = []
+    for k, v in (getattr(spec, "filters", None) or {}).items():
+        if isinstance(v, dict):
+            op = v.get("op", "eq")
+            parts.append(f"{k} {op} {v.get('value', v.get('min', v.get('max')))}")
+        else:
+            parts.append(f"{k} = {v}")
+    return "; ".join(parts)
+
+
 def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_root,
-                     pipeline_root, view, portfolio_id, as_of) -> Optional[Dict[str, Any]]:
+                     pipeline_root, view, portfolio_id, as_of, semantics=None
+                     ) -> Optional[Dict[str, Any]]:
     q = question.lower()
     dataset = _dataset_for(question, view)
     is_count = spec.aggregation == "count"
+    filtered = bool(getattr(spec, "filters", None))
+
+    # Filtered trends are supported for the FUNDED single-metric series only
+    # (applied per period below). A filtered pipeline / funnel / stage trend defers
+    # to the point-in-time path, which handles filters within one snapshot.
+    if filtered and dataset != "funded":
+        return None
 
     # Funnel stage trend (KFI / Application / Offer / Completion by week).
     funnel_stage = next((stage for kw, stage in _FUNNEL_KEYWORDS.items() if kw in q), None)
@@ -334,12 +395,18 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
 
     # Funded / pipeline single-metric evolution.
     metric_key, label, fmt = compare_mod.resolve_metric_key(dataset, spec.metric, spec.aggregation)
+    period_field = "period"
     if dataset == "pipeline":
         evo = evolution_mod.pipeline_evolution(pipeline_root, client_id, run_id)
-        period_field = "period"
+    elif filtered:
+        # Filtered funded series: apply the filter within each period. On an invalid
+        # filter, defer to the controlled point-in-time validation path.
+        try:
+            evo = _filtered_funded_evo(output_root, client_id, run_id, spec, semantics or {}, metric_key)
+        except Exception:  # noqa: BLE001 - invalid filter -> point-in-time path
+            return None
     else:
         evo = evolution_mod.funded_evolution(output_root, client_id, run_id)
-        period_field = "period"
     periods = evo.get("periods", [])
     if not periods:
         return _envelope(ok=True, question=question,
@@ -348,15 +415,17 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
                          warnings=["insufficient-data: no governed reporting periods."])
     rows = [{"period": p.get(period_field), "value": (p.get("metrics") or {}).get(metric_key)}
             for p in periods]
+    filter_txt = _filter_summary(spec) if filtered else ""
+    scope_suffix = f" — {filter_txt}" if filter_txt else ""
     disp = _METRIC_DISPLAY.get(metric_key, ("decimal", "decimal", None))
     chart = _chart_artifact(
-        f"{label} by {'week' if dataset == 'pipeline' else 'month'}", chart_type="line",
+        f"{label} by {'week' if dataset == 'pipeline' else 'month'}{scope_suffix}", chart_type="line",
         x_key="period", rows=rows,
         series=[{"key": "value", "label": label, "color": _PALETTE[0]}],
         value_format=disp[1], spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of,
         display_hints={"value": {"format": disp[1], "scale": disp[2]}})
     table = _table_artifact(
-        f"{label} trend", columns=[
+        f"{label} trend{scope_suffix}", columns=[
             {"key": "period", "label": "Period", "align": "left", "format": "text"},
             {"key": "value", "label": label, "align": "right", "format": disp[1], "scale": disp[2]},
         ], rows=rows, spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of)
@@ -370,12 +439,19 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
     if len(vals) >= 2:
         d = vals[-1] - vals[0]
         trend_txt = f" ({'up' if d > 0 else 'down' if d < 0 else 'flat'} over the window)"
-    answer = (f"{label} over {len(rows)} period(s): latest {_disp(vals[-1] if vals else None, metric_key)}"
-              f"{trend_txt}.")
+    scope_answer = f" (scoped to {filter_txt})" if filter_txt else ""
+    answer = (f"{label} over {len(rows)} period(s){scope_answer}: latest "
+              f"{_disp(vals[-1] if vals else None, metric_key)}{trend_txt}.")
     src_files = evo.get("sourceFiles") or []
     notes = [{"field": "source_periods",
               "note": f"{len(periods)} governed period(s); source: "
                       f"{src_files[-1] if src_files else 'governed runs'}"}]
+    if filtered:
+        kept = [p.get("filteredRows") for p in periods if p.get("filteredRows") is not None]
+        notes.append({"field": "filter",
+                      "note": (f"Filter applied within each period: {filter_txt}. "
+                               f"Rows per period after filter: "
+                               f"{', '.join(str(k) for k in kept) or 'n/a'}.")})
     last_recon = (periods[-1].get("reconciliation") if periods else None) or {
         "dataset": dataset, "coverage_by_balance_pct": 100.0}
     return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
@@ -451,8 +527,19 @@ def _route_forecast(question, spec, spec_dict, *, client_id, run_id, output_root
                   f"vs a base of {_gbp(scenarios.get('base'))}. {caveat}")
     elif kind == "conversion":
         if kfi.get("available"):
-            answer = (f"The assumed KFI→completion conversion rate is "
-                      f"{kfi.get('conversionRate', 0) * 100:.1f}% with a ~{kfi.get('lagMonths')}-month lag.")
+            # This is the COHORT completion rate from the historical weekly-snapshot
+            # model — the share of KFI cases (tracked across snapshots) that have
+            # since completed — NOT the Evolution funnel's observed same-week
+            # KFI→Completion ratio. It reads lower because recent KFI cases have not
+            # yet had time to complete (right-censored), so it is a floor.
+            rate = kfi.get("conversionRate", 0) * 100
+            lag = kfi.get("lagMonths")
+            answer = (
+                f"About {rate:.1f}% of KFI cases have since completed, tracked cohort-style "
+                f"across the weekly snapshots, with a ~{lag}-month median KFI→completion lag. "
+                f"This is a floor — recent KFIs haven't had time to complete yet — and is measured "
+                f"differently from the Evolution funnel's observed same-week KFI→Completion ratio, "
+                f"which reads higher.")
         else:
             answer = ("A KFI→completion conversion rate can't be derived from the current history; "
                       f"using the completion run-rate (~{_gbp(base)}/month) instead.")
@@ -498,6 +585,136 @@ def _route_forecast(question, spec, spec_dict, *, client_id, run_id, output_root
     return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
                      artifacts=artifacts, reconciliation=recon, source_notes=notes,
                      warnings=warnings, route="forecast_extrapolation")
+
+
+# --------------------------------------------------------------------------- #
+# C2. Scenario / what-if — perturb the completion run-rate, re-solve the milestone
+# --------------------------------------------------------------------------- #
+_SCENARIO_CONDITIONALS = ("if ", "were to", "suppose", "what if", "assuming",
+                          "hypothetical", "scenario")
+_SCENARIO_CHANGES = ("increase", "increas", "rise", "rose", "grow", "grew", "improv",
+                     "higher", "up by", "boost", "double", "doubl", "fall", "fell",
+                     "drop", "lower", "declin", "reduc", "cut", "halve", "halv", "down by")
+_SCENARIO_LEVERS = ("conversion", "convert", "run rate", "run-rate", "completion")
+
+
+def _is_scenario(question: str) -> bool:
+    q = f" {question.lower()} "
+    return (any(c in q for c in _SCENARIO_CONDITIONALS)
+            and any(c in q for c in _SCENARIO_CHANGES)
+            and any(l in q for l in _SCENARIO_LEVERS))
+
+
+def _scenario_multiplier(question: str) -> Optional[Tuple[float, str]]:
+    """(run-rate multiplier, human change label) from a what-if phrasing, or None
+    when the magnitude can't be quantified (caller then defers)."""
+    q = question.lower()
+    if "double" in q or "doubl" in q:
+        return 2.0, "doubled"
+    if "halve" in q or "halv" in q:
+        return 0.5, "halved"
+    m = re.search(r"(\d+(?:\.\d+)?)\s*(?:%|percent|percentage points?|pts?|pp)\b", q)
+    if not m:
+        m = re.search(r"\bby\s+(\d+(?:\.\d+)?)\b", q)
+    if not m:
+        return None
+    pct = float(m.group(1))
+    down = any(w in q for w in ("decreas", "fall", "fell", "drop", "lower",
+                                "declin", "reduc", "cut", "down"))
+    signed = -pct if down else pct
+    return scenario_mod.multiplier_from_conversion_delta(signed), f"{'-' if down else '+'}{pct:g}%"
+
+
+def _scenario_target(spec, question: str) -> Optional[float]:
+    tv = getattr(spec, "forecast_target_value", None)
+    if tv:
+        return float(tv)
+    m = re.search(r"£?\s*(\d+(?:\.\d+)?)\s*(bn|billion|mm|m|million)\b", question.lower())
+    if not m:
+        return None
+    val = float(m.group(1))
+    return val * (1e9 if m.group(2) in ("bn", "billion") else 1e6)
+
+
+def _route_scenario(question, spec, spec_dict, *, client_id, run_id, output_root,
+                    pipeline_root, history_model, portfolio_id, as_of
+                    ) -> Optional[Dict[str, Any]]:
+    """A deterministic what-if: perturb the completion run-rate (a conversion
+    change maps proportionally) and re-solve the milestone date to a target. The
+    math lives in the pure ``scenario`` engine; here we resolve the base from the
+    forecast and shape the answer. Returns None (defer) when the change magnitude
+    can't be quantified."""
+    parsed = _scenario_multiplier(question)
+    if parsed is None:
+        return None
+    mult, change_txt = parsed
+    target = _scenario_target(spec, question)
+
+    fx = fx_mod.build_extrapolation(output_root, pipeline_root, client_id, run_id,
+                                    history_model=history_model)
+    rr = fx.get("completionRunRateForecast", {})
+    cur = fx.get("currentFundedBalance", 0.0)
+    if not rr.get("available"):
+        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
+                         answer=("I can't run a what-if on the completion run-rate yet: "
+                                 f"{rr.get('caveat', 'insufficient completion history')}."),
+                         route="scenario",
+                         warnings=["insufficient-data: no run-rate to perturb."])
+    base = rr.get("baseMonthlyRunRate")
+    proj = rr.get("projectedBalances") or []
+    period = proj[0]["month"] if proj else (as_of or "2025-01")[:7]
+    res = scenario_mod.apply_scenario(
+        current_balance=cur, base_monthly_run_rate=base, reporting_period=period,
+        run_rate_multiplier=mult, target_value=target)
+
+    caveat = ("What-if assumption: a conversion change maps proportionally to the completion "
+              "run-rate (KFI inflow held constant); dates share the base forecast's basis and "
+              "carry the same downside/base/upside uncertainty.")
+    rows = [{"month": p["month"], "base": p["base"], "scenario": p["scenario"]}
+            for p in res["projectedSeries"]]
+    chart = _chart_artifact(
+        f"Projected funded balance — base vs scenario ({change_txt} run-rate)",
+        chart_type="line", x_key="month", rows=rows,
+        series=[{"key": "base", "label": "Base", "color": _PALETTE[0]},
+                {"key": "scenario", "label": f"Scenario ({change_txt})", "color": _PALETTE[1]}],
+        value_format="gbp", spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of)
+    artifacts: List[Dict[str, Any]] = [chart]
+
+    if target is not None:
+        trows = [
+            {"metric": "Monthly run-rate", "base": _gbp(res["baseMonthlyRunRate"]),
+             "scenario": _gbp(res["scenarioMonthlyRunRate"])},
+            {"metric": f"Date to {_gbp(target)}",
+             "base": res["baseTargetDate"] or "beyond horizon",
+             "scenario": res["scenarioTargetDate"] or "beyond horizon"},
+        ]
+        artifacts.append(_table_artifact(
+            "Base vs scenario", columns=[
+                {"key": "metric", "label": "", "align": "left", "format": "text"},
+                {"key": "base", "label": "Base", "align": "right", "format": "text"},
+                {"key": "scenario", "label": f"Scenario ({change_txt})", "align": "right", "format": "text"},
+            ], rows=trows, spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of))
+
+    if target is not None and res["baseTargetDate"] == "reached":
+        answer = f"The book has already reached {_gbp(target)} (current funded balance {_gbp(cur)})."
+    elif target is not None and res["monthsSaved"] is None:
+        answer = (f"Even with a {change_txt} completion run-rate (~{_gbp(res['scenarioMonthlyRunRate'])}/mo) "
+                  f"the book doesn't reach {_gbp(target)} within the projection horizon. {caveat}")
+    elif target is not None:
+        saved = res["monthsSaved"]
+        faster = "sooner" if saved > 0 else ("later" if saved < 0 else "unchanged")
+        answer = (f"A {change_txt} completion run-rate moves the {_gbp(target)} milestone from "
+                  f"{res['baseTargetDate']} (base ~{_gbp(base)}/mo) to {res['scenarioTargetDate']} "
+                  f"(~{_gbp(res['scenarioMonthlyRunRate'])}/mo) — about {abs(saved)} month(s) {faster}. {caveat}")
+    else:
+        answer = (f"A {change_txt} completion run-rate lifts the monthly run-rate from {_gbp(base)} "
+                  f"to {_gbp(res['scenarioMonthlyRunRate'])} (annualised {_gbp(res['scenarioMonthlyRunRate'] * 12)}). "
+                  f"{caveat}")
+    notes = [{"field": "scenario", "note": caveat}]
+    return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
+                     artifacts=artifacts,
+                     reconciliation={"dataset": "forecast", "coverage_by_balance_pct": 100.0},
+                     source_notes=notes, warnings=[caveat], route="scenario")
 
 
 # --------------------------------------------------------------------------- #
@@ -831,6 +1048,173 @@ def _route_cohort_progression(question, spec, spec_dict, *, client_id, run_id,
 
 
 # --------------------------------------------------------------------------- #
+# G. Geographic exposure (ITL3) — "where is the book concentrated?"
+# --------------------------------------------------------------------------- #
+# Location words + an exposure/superlative intent route to the ITL3 exposure
+# engine. A "limit / breach / appetite" framing is a risk-monitor question and is
+# deliberately left to _route_risk (which owns concentration LIMITS).
+_GEO_TERMS = ("geograph", "region", "area", "postcode", "post code", "itl3",
+              "county", "city", "town")
+# Deliberately NARROW: a superlative / concentration / map intent — NOT generic
+# grouping words like "by region" (that is an ordinary point-in-time stratification
+# and must reach the standard executor, not the ITL3 engine).
+_GEO_MARKERS = ("concentrat", "largest", "biggest", "most exposed", "top ",
+                "hotspot", "where is", "where are", "where's",
+                "which region", "which area", "exposure")
+_RISK_LIMIT_TERMS = ("limit", "breach", "appetite", "covenant", "threshold",
+                     "rag", "amber", " red ")
+
+
+def _is_geo_exposure(question: str) -> bool:
+    q = f" {question.lower()} "
+    if any(t in q for t in _RISK_LIMIT_TERMS):
+        return False  # a limit/breach question is a risk-monitor question
+    if "bridge" in q:
+        return False  # a balance bridge by region is the bridge route
+    return any(t in q for t in _GEO_TERMS) and any(m in q for m in _GEO_MARKERS)
+
+
+def _route_geo(question, spec_dict, *, client_id, run_id, frame_resolver,
+               portfolio_id, as_of) -> Dict[str, Any]:
+    """Funded exposure by UK ITL3 area → a ranked bar + table, from the ITL3
+    exposure engine (tape ITL3 field, else postcode-derived). Answers "largest
+    geographic concentration / where is the book". Degrades honestly when the
+    tape carries no ITL3 or postcode."""
+    if frame_resolver is None or not run_id:
+        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
+                         answer="I can't resolve the funded book for a geographic view here.",
+                         route="geo_exposure",
+                         warnings=["insufficient-data: no funded frame for the run."])
+    try:
+        df = frame_resolver(client_id, run_id)
+    except Exception:  # noqa: BLE001 - a resolution hiccup degrades, never 500s
+        df = None
+    if df is None:
+        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
+                         answer="I couldn't load the funded book for this run to map exposure.",
+                         route="geo_exposure",
+                         warnings=["insufficient-data: no funded frame for the run."])
+
+    result = geo_mod.exposure_by_itl3(df)
+    if not result.get("available"):
+        reason = result.get("reason", "no ITL3 area or property postcode on the tape")
+        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
+                         answer=(f"I can't build a geographic exposure view for this book: "
+                                 f"{reason}."),
+                         route="geo_exposure",
+                         warnings=[f"insufficient-data: {reason}"])
+
+    areas = result.get("areas", [])
+    top = areas[0]
+    rows = [{"area": a["itl3_name"] or a["itl3_code"], "code": a["itl3_code"],
+             "balance": a["balance"], "count": a["count"],
+             "share": (f"{a['sharePct']:.1f}%" if a.get("sharePct") is not None else "—")}
+            for a in areas[:15]]
+    chart = _chart_artifact(
+        "Funded exposure by ITL3 area (top 15)", chart_type="bar", x_key="area",
+        rows=rows, series=[{"key": "balance", "label": "Exposure", "color": _PALETTE[0]}],
+        value_format="gbp", spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of,
+        display_hints={"balance": {"format": "gbp", "scale": None}})
+    table = _table_artifact(
+        "Funded exposure by ITL3 area", columns=[
+            {"key": "area", "label": "ITL3 area", "align": "left", "format": "text"},
+            {"key": "code", "label": "Code", "align": "left", "format": "text"},
+            {"key": "balance", "label": "Exposure", "align": "right", "format": "gbp"},
+            {"key": "count", "label": "Loans", "align": "right", "format": "number"},
+            {"key": "share", "label": "Book share", "align": "right", "format": "text"},
+        ], rows=rows, spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of)
+    top_name = top["itl3_name"] or top["itl3_code"]
+    answer = (f"Largest geographic concentration: {top_name} at {_gbp(top['balance'])} "
+              f"({top['sharePct']:.1f}% of the book) across {result.get('areaCount', len(areas))} "
+              f"ITL3 area(s). Basis: {result.get('basis', 'tape')}; "
+              f"resolved coverage {result.get('coveragePct', 0)}%.")
+    notes = [{"field": "geo_basis",
+              "note": (f"ITL3 basis {result.get('basis', 'tape')}: "
+                       f"{result.get('resolvedFromItl3Field', 0)} from the ITL3 field, "
+                       f"{result.get('resolvedFromPostcode', 0)} postcode-derived.")}]
+    recon = {"dataset": "funded",
+             "coverage_by_balance_pct": result.get("coveragePct", 100.0)}
+    return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
+                     artifacts=[chart, table], reconciliation=recon,
+                     source_notes=notes, route="geo_exposure")
+
+
+# --------------------------------------------------------------------------- #
+# H. Cumulative cohort conversion — the canonical "conversion" answer
+# --------------------------------------------------------------------------- #
+# One definition of conversion everywhere: the % of the ORIGINAL KFI cohort that
+# has reached each milestone (KFI -> Application -> Offer -> Funded) to date. A
+# forecast / threshold / scenario framing is a projection question and stays with
+# the forecast route.
+_COHORT_STAGE_LABELS = {"KFI": "KFI", "APPLICATION": "Application",
+                        "OFFER": "Offer", "COMPLETED": "Funded"}
+_CONVERSION_EXCLUDE = ("reach", "forecast", "project", "run rate", "run-rate",
+                       "increase", "increased", "scenario", "if ", "target",
+                       "milestone", "when will", "when do", "how long", "£", "$")
+
+
+def _is_conversion(question: str) -> bool:
+    q = f" {question.lower()} "
+    if any(x in q for x in _CONVERSION_EXCLUDE):
+        return False  # a projection / what-if question -> forecast route
+    if "conversion" in q or "convert" in q:
+        return True
+    return "cohort" in q and ("fund" in q or "complet" in q)
+
+
+def _route_conversion(question, spec_dict, *, history_model, portfolio_id, as_of
+                      ) -> Dict[str, Any]:
+    """Cumulative cohort conversion: the % of the original KFI cohort reaching each
+    milestone (KFI → Application → Offer → Funded) by week, plus the headline
+    latest Funded %. Matches the dashboard's canonical conversion metric."""
+    model = history_model or {}
+    prog = model.get("cohortProgression")
+    conv = model.get("cumulativeCohortConversion")
+    if not prog or not prog.get("weeks"):
+        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
+                         answer=("I can't compute cumulative cohort conversion yet — it needs the "
+                                 "weekly pipeline snapshots that track KFI cases through to funding."),
+                         route="cohort_conversion",
+                         warnings=["insufficient-data: no cohort-tracked pipeline history."])
+    weeks = prog["weeks"]
+    stages = prog.get("stages", [])
+    series = prog.get("series", {})
+    rows: List[Dict[str, Any]] = []
+    for i, w in enumerate(weeks):
+        row: Dict[str, Any] = {"week": w}
+        for st in stages:
+            vals = series.get(st) or []
+            row[st] = vals[i] if i < len(vals) else None
+        rows.append(row)
+    chart = _chart_artifact(
+        "Cumulative cohort conversion — % of the KFI cohort reaching each milestone",
+        chart_type="line", x_key="week", rows=rows,
+        series=[{"key": st, "label": _COHORT_STAGE_LABELS.get(st, st.title()),
+                 "color": _PALETTE[i % len(_PALETTE)]} for i, st in enumerate(stages)],
+        value_format="pct", spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of,
+        display_hints={st: {"format": "pct", "scale": "percent_points"} for st in stages})
+    table = _table_artifact(
+        "Cohort progression by milestone",
+        columns=[{"key": "week", "label": "Week", "align": "left", "format": "date"}]
+        + [{"key": st, "label": _COHORT_STAGE_LABELS.get(st, st.title()),
+            "align": "right", "format": "pct", "scale": "percent_points"} for st in stages],
+        rows=rows, spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of)
+    conv_txt = f"{conv:.1f}%" if isinstance(conv, (int, float)) else "n/a"
+    answer = (f"Cumulative cohort conversion is {conv_txt} — the share of the original KFI "
+              f"cohort ({prog.get('cohortSize')} case(s)) that has funded to date. The chart "
+              f"tracks that cohort through KFI → Application → Offer → Funded across "
+              f"{len(weeks)} week(s). This is the single definition of conversion used on the "
+              f"KPI card, the funnel and the forecast.")
+    notes = [{"field": "cohort_conversion",
+              "note": ("Cumulative cohort progression: of the original KFI cohort, the % reaching "
+                       "each milestone to date — case-tracked across weekly snapshots, monotonic.")}]
+    recon = {"dataset": "pipeline", "coverage_by_balance_pct": 100.0}
+    return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
+                     artifacts=[chart, table], reconciliation=recon, source_notes=notes,
+                     route="cohort_conversion")
+
+
+# --------------------------------------------------------------------------- #
 # Detection + dispatch
 # --------------------------------------------------------------------------- #
 _EVOLUTION_MARKERS = ("evolution", "over time", "trend", "by month", "monthly",
@@ -843,8 +1227,8 @@ def _is_evolution(question: str, spec) -> bool:
         return False
     if spec.x == "vintage_year":
         return False
-    if spec.filters:
-        return False  # filtered trends keep the existing within-snapshot path
+    # A filter no longer forces the within-snapshot path: _route_evolution applies
+    # the filter WITHIN each period for a funded series (and defers otherwise).
     q = question.lower()
     return any(m in q for m in _EVOLUTION_MARKERS)
 
@@ -853,7 +1237,10 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
               output_root: Optional[str], pipeline_root: Optional[str],
               semantics: Dict[str, Any], history_model: Optional[Dict[str, Any]] = None,
               as_of: Optional[str] = None,
-              source_lens: Optional[Any] = None) -> Optional[Dict[str, Any]]:
+              source_lens: Optional[Any] = None,
+              frame_resolver: Optional[Callable[[str, Optional[str]], Any]] = None,
+              extra_filters: Optional[Dict[str, Any]] = None,
+              ) -> Optional[Dict[str, Any]]:
     """Route a question to an internal analytical service, or return None to defer
     to the existing point-in-time MI Agent path. Never raises for analytics issues —
     the caller wraps this defensively and falls back on any exception."""
@@ -872,10 +1259,34 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
         # real dataframe, so only skip when the concept clearly has no field at all.
         pass
 
+    # Merge caller-supplied filters (UI drill-through / req.filters) into the spec,
+    # mirroring the point-in-time path (mi_agent_workflow), so a routed evolution
+    # answer is scoped identically to a within-snapshot one.
+    if extra_filters:
+        try:
+            spec.filters = {**(spec.filters or {}), **extra_filters}
+        except Exception:  # noqa: BLE001 - never block routing on a bad filter dict
+            pass
+
     spec_dict = spec.to_dict()
     kw = dict(client_id=client_id, run_id=run_id, output_root=output_root,
               pipeline_root=pipeline_root, portfolio_id=portfolio_id, as_of=as_of)
 
+    # What-if / scenario is checked first: it perturbs the run-rate and re-solves
+    # the milestone. If the magnitude can't be quantified it returns None and we
+    # fall through to the normal forecast / conversion routing.
+    if _is_scenario(question):
+        scen = _route_scenario(question, spec, spec_dict, history_model=history_model, **kw)
+        if scen is not None:
+            return scen
+
+    # Conversion (cohort-tracked) is the canonical "conversion" answer and is
+    # checked before forecast so a bare "conversion rate" resolves to the single
+    # cumulative-cohort definition; projection/threshold/what-if framings are
+    # excluded by _is_conversion and fall through to the forecast route.
+    if _is_conversion(question):
+        return _route_conversion(question, spec_dict, history_model=history_model,
+                                 portfolio_id=portfolio_id, as_of=as_of)
     if spec.forecast_mode == "extrapolation":
         return _route_forecast(question, spec, spec_dict, history_model=history_model, **kw)
     if getattr(spec, "bridge_query", False):
@@ -888,6 +1299,9 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
                                         client_id=client_id, run_id=run_id,
                                         output_root=output_root, portfolio_id=portfolio_id,
                                         as_of=as_of, source_lens=source_lens)
+    if _is_geo_exposure(question):
+        return _route_geo(question, spec_dict, client_id=client_id, run_id=run_id,
+                          frame_resolver=frame_resolver, portfolio_id=portfolio_id, as_of=as_of)
     if spec.temporal_mode == "compare":
         return _route_compare(question, spec, spec_dict, view=view, **kw)
     if spec.risk_limit_query:
@@ -895,5 +1309,5 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
                            client_id=client_id, run_id=run_id, output_root=output_root,
                            portfolio_id=portfolio_id, as_of=as_of)
     if _is_evolution(question, spec):
-        return _route_evolution(question, spec, spec_dict, view=view, **kw)
+        return _route_evolution(question, spec, spec_dict, view=view, semantics=semantics, **kw)
     return None

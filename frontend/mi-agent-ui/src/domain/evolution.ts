@@ -92,12 +92,28 @@ export interface FunnelFlowPoint {
   flowCount: number | null;
 }
 
-/** Conversion of a stage vs KFI on two bases, by count and by value (Task 6). */
+/**
+ * Forward conversion of a stage vs KFI: the average weekly FLOW into the stage
+ * (last 5 weeks) over the KFI STOCK as it stood `lagWeeks` earlier — the KFI
+ * book those completions actually came from. A weekly rate; `lagWeeks` is null
+ * (and `lagApplied` false) when the KFI→completion lag is unknown.
+ */
 export interface FunnelConversion {
-  fiveWeekCount: number | null;
-  fiveWeekValue: number | null;
-  sinceInceptionCount: number | null;
-  sinceInceptionValue: number | null;
+  basis: string;
+  lagWeeks: number | null;
+  lagApplied: boolean;
+  denominatorWeek: string | null;
+  avgWeeklyFlowCount: number | null;
+  avgWeeklyFlowValue: number | null;
+  kfiStockCount: number | null;
+  kfiStockValue: number | null;
+  weeklyRateCount: number | null;
+  weeklyRateValue: number | null;
+  /** Weeks feeding the trailing average, the minimum needed, and whether the
+   * rate is reliable enough to publish/forecast off (not built on 1-2 weeks). */
+  weeksInWindow: number;
+  minWeeks: number;
+  sufficient: boolean;
 }
 
 export interface FunnelStageSummary {
@@ -133,7 +149,24 @@ export interface PipelineFunnelEvolution {
   series: Record<string, FunnelPoint[]>;
   flowSeries: Record<string, FunnelFlowPoint[]>;
   summary: Record<string, FunnelStageSummary>;
+  /** Median KFI→completion lag (weeks) applied to the velocity denominator; null when unlagged. */
+  conversionLagWeeks?: number | null;
+  /** Canonical conversion: cumulative % of the original KFI cohort reaching each
+   * milestone by each week (a true cohort funnel, not a stock ratio). */
+  cohortProgression?: KfiCohortProgression | null;
+  /** Headline KPI: % of the KFI cohort funded to date (latest Funded point). */
+  cumulativeCohortConversion?: number | null;
   lineage?: Record<string, unknown>;
   singlePeriod: boolean;
   error?: string;
+}
+
+/** Cumulative KFI-cohort funnel: for each week, the % of the original KFI cohort
+ * that has reached each milestone (KFI → Application → Offer → Funded). Distinct
+ * from the vintage static-pool `CohortProgression` in domain/cohorts. */
+export interface KfiCohortProgression {
+  weeks: string[];
+  stages: string[];
+  series: Record<string, number[]>;
+  cohortSize: number;
 }

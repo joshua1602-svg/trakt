@@ -43,6 +43,7 @@ function client(over: Partial<AgentClient> = {}): AgentClient {
     deckDownloadUrl: vi.fn(() => null),
     getCohorts: vi.fn(async () => mockCohorts("client_001")),
     getCohortProgression: vi.fn(async () => mockCohortProgression("client_001")),
+    getGeoExposure: vi.fn(),
     ...over,
   };
 }
@@ -97,6 +98,22 @@ describe("EvolutionPanel", () => {
     // No fabricated redemption/performance curves are shown.
     expect(screen.queryByText(/redemption curve/i)).toBeNull();
     expect(c.getCohorts).toHaveBeenCalled();
+  });
+
+  it("switches the cohort composition dimension (vintage → borrower age)", async () => {
+    const c = client();
+    c.getCohorts = vi.fn(async (_p, _g, dim) =>
+      mockCohorts("client_001", dim ?? "vintage")) as AgentClient["getCohorts"];
+    render(<EvolutionPanel client={c} portfolioId="client_001/mi_2025_11" />);
+    await screen.findByText("Funded balance by month");
+    fireEvent.click(screen.getByRole("tab", { name: "Cohorts" }));
+    const table = await screen.findByTestId("cohorts-table");
+    expect(table.textContent).toContain("2021");                 // vintage default
+    // Pick a different cohort lens.
+    fireEvent.change(screen.getByTestId("cohort-dimension"), { target: { value: "age" } });
+    await waitFor(() =>
+      expect(screen.getByTestId("cohorts-table").textContent).toMatch(/Borrower age/));
+    expect(c.getCohorts).toHaveBeenCalledWith("client_001/mi_2025_11", "Y", "age");
   });
 
   it("renders the cohort static-pool progression with selectors (close the loop)", async () => {

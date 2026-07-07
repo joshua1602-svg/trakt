@@ -17,6 +17,7 @@ import type {
   FundedEvolution,
   FundedSnapshot,
   Intent,
+  MIQuerySpec,
   PipelineEvolution,
   PipelineFunnelEvolution,
   RiskLimitsSnapshot,
@@ -40,7 +41,9 @@ interface ApiResponse {
   metadata?: Record<string, unknown>;
 }
 
-/** Best-effort coarse intent from the interpreted spec (display only). */
+/** Best-effort coarse intent from the interpreted spec (display only).
+ * Reads the RAW wire spec (snake_case) — unchanged, so intent detection is
+ * identical whether or not the spec is later normalised. */
 function deriveIntent(spec: Record<string, unknown> | undefined): Intent {
   if (!spec) return "unknown";
   if (spec.risk_monitor || spec.risk_monitor_mode) return "risk_monitoring";
@@ -49,6 +52,40 @@ function deriveIntent(spec: Record<string, unknown> | undefined): Intent {
   if (typeof state === "string" && state.startsWith("cohort")) return "static_pools";
   if (spec.dimension || spec.chart_type) return "concentration_risk";
   return "portfolio_overview";
+}
+
+/**
+ * Present the interpreted spec in the camelCase shape the `MIQuerySpec` type
+ * declares, regardless of the wire's casing. The Python API emits snake_case
+ * (`chart_type`, `top_n`, `risk_monitor_mode`); the mock already emits camelCase.
+ * This maps snake→camel at the boundary (preferring an already-camel key when
+ * present) so every downstream reader gets one consistent shape and the type
+ * stops lying. Purely additive: it does NOT feed intent detection above, and it
+ * never touches the request/parse path — so it cannot change chatbot behaviour.
+ */
+function normalizeSpec(raw: Record<string, unknown> | undefined): Partial<MIQuerySpec> | undefined {
+  if (!raw) return undefined;
+  const pick = (...keys: string[]): unknown => {
+    for (const k of keys) {
+      const v = raw[k];
+      if (v !== undefined && v !== null) return v;
+    }
+    return undefined;
+  };
+  const out: Record<string, unknown> = {
+    intent: pick("intent"),
+    chartType: pick("chartType", "chart_type"),
+    metric: pick("metric"),
+    dimension: pick("dimension"),
+    dimensions: pick("dimensions"),
+    aggregation: pick("aggregation"),
+    state: pick("state"),
+    riskMode: pick("riskMode", "risk_monitor_mode"),
+    topN: pick("topN", "top_n"),
+    filters: pick("filters"),
+  };
+  for (const k of Object.keys(out)) if (out[k] === undefined) delete out[k];
+  return out as Partial<MIQuerySpec>;
 }
 
 export class HttpAgentClient implements AgentClient {
@@ -150,10 +187,18 @@ export class HttpAgentClient implements AgentClient {
   }
 
   getCohorts(portfolioId: string, grain?: import("@/domain").CohortGrain,
+             dimension?: import("@/domain").CohortDimension,
              signal?: AbortSignal): Promise<import("@/domain").CohortAnalysis> {
     const g = grain ? `&grain=${grain}` : "";
+    const d = dimension ? `&dimension=${dimension}` : "";
     return this.getJson<import("@/domain").CohortAnalysis>(
-      `/mi/cohorts?portfolioId=${encodeURIComponent(portfolioId)}${g}`, signal);
+      `/mi/cohorts?portfolioId=${encodeURIComponent(portfolioId)}${g}${d}`, signal);
+  }
+
+  getGeoExposure(portfolioId: string,
+                 signal?: AbortSignal): Promise<import("@/domain").GeoExposure> {
+    return this.getJson<import("@/domain").GeoExposure>(
+      `/mi/geo/exposure?portfolioId=${encodeURIComponent(portfolioId)}`, signal);
   }
 
   getCohortProgression(portfolioId: string,
@@ -226,7 +271,7 @@ export class HttpAgentClient implements AgentClient {
       artifacts,
       warnings: body.warnings ?? [],
       diagnostics: body.diagnostics ?? [],
-      spec: body.spec,
+      spec: normalizeSpec(body.spec),
       datasetContext: asString(meta.datasetContext),
       error: body.error ?? undefined,
     };

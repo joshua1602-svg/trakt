@@ -344,6 +344,11 @@ class DeckBuilder:
             return ChartResult(chart_id=cid, title=title, path=path, available=False,
                                placeholder=True, kind="suppressed", note=note)
 
+        # Forecast bridge waterfall — cross-lens, computed from resolved metrics.
+        if cspec.get("type") == "bridge":
+            return self._render_bridge(slide, cid, title, img_left, img_top,
+                                       img_w_in, img_h_in)
+
         resolver = self.chart_resolvers.get(lens)
         if resolver is None:
             note = f"{lens.title()} lens data not available for this run."
@@ -359,6 +364,30 @@ class DeckBuilder:
         if result.path and Path(result.path).exists():
             self._place(slide, result.path, img_left, img_top, img_w_in, img_h_in)
         return result
+
+    def _render_bridge(self, slide, cid, title, img_left, img_top, w_in, h_in):
+        """Funded → +weighted pipeline → forecast funded bridge waterfall."""
+        from .chart_resolver import render_bridge_waterfall
+        funded = self.metrics.resolve(self.config.metric_spec("funded_balance"))
+        forecast = self.metrics.resolve(self.config.metric_spec("forecast_funded_balance"))
+        out = Path(self._charts_out()) / f"{cid}_bridge.png"
+        if not (funded.ok and forecast.ok and forecast.value > funded.value):
+            render_placeholder_png(out, "", "Forecast bridge requires funded + "
+                                   "pipeline lenses.", theme=self.theme,
+                                   width_in=w_in, height_in=h_in)
+            self._place(slide, out, img_left, img_top, w_in, h_in)
+            return ChartResult(chart_id=cid, title=title, path=out, available=False,
+                               placeholder=True, kind="bridge",
+                               note="Forecast bridge requires funded + pipeline data.")
+        weighted = float(forecast.value) - float(funded.value)
+        steps = [("Funded", float(funded.value), "base"),
+                 ("+ Weighted Pipeline", weighted, "add"),
+                 ("Forecast Funded", float(forecast.value), "total")]
+        render_bridge_waterfall(out, steps, w_in, h_in, theme=self.theme)
+        self._place(slide, out, img_left, img_top, w_in, h_in)
+        return ChartResult(chart_id=cid, title=title, path=out, available=True,
+                           placeholder=False, kind="bridge",
+                           note="Registry forecast bridge.")
 
     def _charts_out(self) -> Path:
         for r in self.chart_resolvers.values():

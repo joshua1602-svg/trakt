@@ -14,6 +14,7 @@ import type {
   FunnelFlowPoint,
   FunnelPoint,
   CohortAnalysis,
+  CohortDimension,
   CohortGrain,
   CohortProgression,
   SourcePortfolioLens,
@@ -61,7 +62,7 @@ const EVO_SUBTITLES: Record<EvoView, string> = {
   // D: distinct from the main Forecast tab (which is the forward projection from
   // the latest run). This is the HISTORY of the forecast across reporting runs.
   forecast: "Forecast Evolution — historical movement in forecast metrics across reporting runs (how the forecast changed over time, and actual funded vs the prior run's forecast). For the forward projection from the latest run, use the main Forecast tab.",
-  cohorts: "Cohorts — funded book by origination vintage (static pool): balance, loan count, book share and balance-weighted LTV / rate / months-on-book per origination year, as of the selected reporting date.",
+  cohorts: "Cohorts — funded book by a selectable lens (vintage, borrower age, LTV band or origination channel): balance, loan count, book share and balance-weighted LTV / rate / months-on-book per cohort, as of the selected reporting date.",
 };
 
 // Sub-tab button labels (the "forecast" view reads as "Forecast Evolution").
@@ -188,17 +189,26 @@ export function funnelLineStages(stages: string[], includeKfi: boolean): string[
 }
 
 /** Conversion-vs-KFI series (COUNT based): Application/Offer/Completion only —
- * KFI is the denominator (KFI/KFI = 100% is dropped). Divide-by-zero safe. */
-export function stageConversionSeries(rows: StagePoint[]): {
+ * KFI is the denominator (KFI/KFI = 100% is dropped). Divide-by-zero safe.
+ *
+ * `lagWeeks` shifts the KFI denominator back by the KFI→completion timeline so
+ * each week's stage count is measured against the KFI book those cases came
+ * from — not the current (still-growing) book. When null the series is unlagged
+ * (same-week). The lag is in periods; the by-stage extracts are weekly, matching
+ * the funnel's `conversionLagWeeks`. */
+export function stageConversionSeries(rows: StagePoint[], lagWeeks?: number | null): {
   data: Array<Record<string, number | string>>; stages: string[];
 } {
   const { data: countPivot } = pivotStage(rows, "count");
   const present = orderStages(Array.from(new Set(rows.map((r) => r.stage))));
   const stages = present.filter((s) =>
     ["APPLICATION", "OFFER", "COMPLETED"].includes(normaliseStage(s)));
-  const data = countPivot.map((r) => {
+  const lag = Math.max(0, Math.round(lagWeeks ?? 0));
+  const data = countPivot.map((r, i) => {
     const out: Record<string, number | string> = { period: r.period };
-    const kfi = (r.KFI as number) || 0;
+    // Denominator: KFI stock `lag` periods earlier (clamped to the first week).
+    const denomRow = countPivot[Math.max(0, i - lag)];
+    const kfi = (denomRow.KFI as number) || 0;
     for (const s of stages) {
       const v = r[s] as number;
       out[s] = kfi ? Math.round((v / kfi) * 1000) / 10 : 0;
@@ -218,13 +228,20 @@ function pct1(v: number | null | undefined): string {
   return v == null ? "n/a" : `${v.toFixed(1)}%`;
 }
 
-/** Collapsed-by-default "Conversion vs KFI" disclosure. Same computed stats,
- * only hidden until expanded — keeps each card calm by default. */
-function ConversionDisclosure({ stage, conversion }: {
+/** Collapsed-by-default conversion disclosure. Leads with the CANONICAL metric —
+ * cumulative cohort conversion (% of the original KFI cohort that has reached
+ * this milestone to date) — and shows the weekly completion velocity below it as
+ * a labelled operational/forecast input, NOT as "conversion". Hidden until
+ * expanded to keep the card calm. */
+function ConversionDisclosure({ stage, conversion, cohortPct }: {
   stage: string;
   conversion: FunnelConversion;
+  cohortPct: number | null;
 }) {
   const [open, setOpen] = useState(false);
+  const lagLabel = conversion.lagApplied && conversion.lagWeeks != null
+    ? `KFI stock lagged ${conversion.lagWeeks}w`
+    : "KFI stock unlagged";
   return (
     <div className="mt-2 rounded-md border border-[var(--color-line-soft)] bg-navy-900/50 text-[10px]"
       data-testid={`funnel-conversion-${stage}`}>
@@ -232,31 +249,31 @@ function ConversionDisclosure({ stage, conversion }: {
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left font-medium uppercase tracking-wide text-ink-400 hover:text-ink-200"
+        className="flex w-full items-center justify-between gap-1.5 px-2 py-1.5 text-left font-medium uppercase tracking-wide text-ink-400 hover:text-ink-200"
       >
-        <ChevronDown size={12} className={cn("transition-transform", !open && "-rotate-90")} />
-        Conversion vs KFI
+        <span className="flex items-center gap-1.5">
+          <ChevronDown size={12} className={cn("transition-transform", !open && "-rotate-90")} />
+          Cohort conversion
+        </span>
+        {cohortPct != null && <span className="font-semibold normal-case text-mint-300">{pct1(cohortPct)}</span>}
       </button>
       {open && (
-        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 px-2 pb-2" data-testid={`funnel-conversion-body-${stage}`}>
-          <div>
-            <span className="text-ink-500">5-week</span>{" "}
-            <span className="font-semibold text-mint-300">{pct1(conversion.fiveWeekCount)}</span>
-            <span className="text-ink-500"> by count</span>
+        <div className="px-2 pb-2" data-testid={`funnel-conversion-body-${stage}`}>
+          <div className="text-[10px] leading-snug">
+            <span className="font-semibold text-mint-300">{pct1(cohortPct)}</span>
+            <span className="text-ink-500"> of the KFI cohort has reached this milestone to date (cumulative, cohort-tracked).</span>
           </div>
-          <div>
-            <span className="font-semibold text-mint-300">{pct1(conversion.fiveWeekValue)}</span>
-            <span className="text-ink-500"> by value</span>
+          <div className="mt-1.5 border-t border-[var(--color-line-soft)] pt-1.5 text-[9px] leading-snug text-ink-500">
+            <span className="uppercase tracking-wide text-ink-400">Weekly velocity</span> — forecast input, not conversion:{" "}
+            <span className="text-ink-300">{pct1(conversion.weeklyRateValue)}/wk by value · {pct1(conversion.weeklyRateCount)}/wk by count</span>{" "}
+            (avg weekly flow, last 5 wks ÷ {lagLabel}).
           </div>
-          <div>
-            <span className="text-ink-500">Since inception</span>{" "}
-            <span className="font-semibold text-peri-200">{pct1(conversion.sinceInceptionCount)}</span>
-            <span className="text-ink-500"> by count</span>
-          </div>
-          <div>
-            <span className="font-semibold text-peri-200">{pct1(conversion.sinceInceptionValue)}</span>
-            <span className="text-ink-500"> by value</span>
-          </div>
+          {!conversion.sufficient && (
+            <div className="mt-1 text-[9px] font-medium leading-snug text-amber-300"
+              data-testid={`funnel-conversion-provisional-${stage}`}>
+              Velocity provisional — {conversion.weeksInWindow} of {conversion.minWeeks}+ weeks; too few to forecast off yet.
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -268,7 +285,7 @@ function ConversionDisclosure({ stage, conversion }: {
  * (flow − prior flow), and a collapsed conversion-vs-KFI disclosure. Renders
  * compact in the 2×2 grid and larger inside the focus modal (``large``). */
 function FunnelStageCard({
-  stage, label, points, flowPoints, summary, conversion, showCumulative, large, onExpand,
+  stage, label, points, flowPoints, summary, conversion, cohortPct, showCumulative, large, onExpand,
 }: {
   stage: string;
   label: string;
@@ -276,6 +293,8 @@ function FunnelStageCard({
   flowPoints: FunnelFlowPoint[];
   summary: PipelineFunnelEvolution["summary"][string] | undefined;
   conversion: FunnelConversion | null;
+  /** Latest cumulative cohort % for this stage (the canonical conversion). */
+  cohortPct: number | null;
   showCumulative: boolean;
   /** Larger chart for the focus modal. */
   large?: boolean;
@@ -386,7 +405,7 @@ function FunnelStageCard({
           </div>
         </div>
       )}
-      {conversion && <ConversionDisclosure stage={stage} conversion={conversion} />}
+      {conversion && <ConversionDisclosure stage={stage} conversion={conversion} cohortPct={cohortPct} />}
     </div>
   );
 }
@@ -494,16 +513,19 @@ const _PROG_METRICS: { key: string; label: string; fmt: "gbp" | "pct" | "count";
 ];
 
 /** Funded cohort view: a static-pool PROGRESSION (how a cohort — a source
- * portfolio ± origination vintage — seasons across reporting periods) plus the
- * point-in-time vintage composition table at a selectable grain. Replaces the
- * old single-snapshot vintage bar (redundant with the table's balance column). */
+ * portfolio ± origination vintage — seasons across reporting periods) plus a
+ * point-in-time cohort composition table across a selectable lens (vintage,
+ * borrower age, LTV band or origination channel). Replaces the old
+ * single-snapshot vintage bar (redundant with the table's balance column). */
 function CohortView({ client, portfolioId }: { client: AgentClient; portfolioId: string }) {
   const [grain, setGrain] = useState<CohortGrain>("Y");
   const [lens, setLens] = useState("total");
   const [vintage, setVintage] = useState("");
   const [metric, setMetric] = useState("funded_balance");
+  const [dimension, setDimension] = useState<CohortDimension>("vintage");
   const [lenses, setLenses] = useState<SourcePortfolioLens[]>([]);
   const [cohorts, setCohorts] = useState<CohortAnalysis | null>(null);
+  const [composition, setComposition] = useState<CohortAnalysis | null>(null);
   const [prog, setProg] = useState<CohortProgression | null>(null);
 
   useEffect(() => {
@@ -513,12 +535,22 @@ function CohortView({ client, portfolioId }: { client: AgentClient; portfolioId:
     return () => { c = true; };
   }, [client]);
 
+  // Vintage cohorts feed the progression's vintage selector (always vintage).
   useEffect(() => {
     let c = false;
     Promise.resolve(client.getCohorts(portfolioId, grain))
       .then((r) => { if (!c) setCohorts(r); }).catch(() => {});
     return () => { c = true; };
   }, [client, portfolioId, grain]);
+
+  // The composition table follows the selected cohort dimension (deduped with
+  // the vintage fetch above when dimension === "vintage").
+  useEffect(() => {
+    let c = false;
+    Promise.resolve(client.getCohorts(portfolioId, grain, dimension))
+      .then((r) => { if (!c) setComposition(r); }).catch(() => {});
+    return () => { c = true; };
+  }, [client, portfolioId, grain, dimension]);
 
   useEffect(() => {
     let c = false;
@@ -528,9 +560,18 @@ function CohortView({ client, portfolioId }: { client: AgentClient; portfolioId:
     return () => { c = true; };
   }, [client, portfolioId, lens, vintage, grain]);
 
-  const rows = cohorts?.cohorts ?? [];
-  const cmetrics = new Set(cohorts?.metricsAvailable ?? []);
-  const vintageOpts = rows.map((r) => r.vintage).filter((v) => v && v !== "Unknown");
+  // Progression's vintage options come from the vintage fetch; the composition
+  // table follows the selected dimension.
+  const vintageOpts = (cohorts?.cohorts ?? [])
+    .map((r) => r.vintage ?? r.cohort).filter((v): v is string => !!v && v !== "Unknown");
+  const rows = composition?.cohorts ?? [];
+  const cmetrics = new Set(composition?.metricsAvailable ?? []);
+  const dimLabel = composition?.dimensionLabel ?? "Vintage";
+  const DIM_LABELS: Record<CohortDimension, string> = {
+    vintage: "Vintage", age: "Borrower age", ltv: "LTV band", channel: "Origination channel",
+  };
+  const dimOptions = (composition?.availableDimensions ?? cohorts?.availableDimensions ?? ["vintage"])
+    .map((d) => ({ value: d, label: DIM_LABELS[d] }));
   const hasNneg = (prog?.metricsAvailable ?? []).includes("nneg_headroom_pct");
   const metricOpts = _PROG_METRICS.filter((m) => !m.nneg || hasNneg);
   const pm = metricOpts.find((m) => m.key === metric) ?? metricOpts[0];
@@ -599,20 +640,31 @@ function CohortView({ client, portfolioId }: { client: AgentClient; portfolioId:
         </div>
       )}
 
-      {/* Point-in-time vintage composition at the selected grain. */}
-      <div className="text-[11px] font-semibold text-ink-300">Vintage composition (as of {cohorts?.reportingDate ?? "latest"})</div>
-      {cohorts && !cohorts.available ? (
+      {/* Point-in-time static-pool composition across the selected dimension.
+          The lens control gets its own selector row (mirroring the progression
+          selectors above) so it reads as the primary switch for the table. */}
+      <div className="pt-1 text-[11px] font-semibold text-ink-300">
+        Cohort composition — point-in-time static pool (as of {composition?.reportingDate ?? "latest"})
+      </div>
+      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-[var(--color-line)] bg-navy-900/40 px-3 py-2.5">
+        <CohortSelect label="Cohort by" value={dimension}
+          onChange={(v) => setDimension(v as CohortDimension)}
+          options={dimOptions} testId="cohort-dimension" />
+        <div className="self-end pb-1 text-[10px] text-ink-500">
+          Slice the funded book by {dimOptions.map((o) => o.label).join(" · ")}.
+        </div>
+      </div>
+      {composition && !composition.available ? (
         <div className="rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-[11px] text-amber-300/90"
           data-testid="cohorts-unavailable">
-          No computed vintage data for this run{cohorts.reason ? ` — ${cohorts.reason}` : ""}.
-          Vintage composition needs an origination date on the funded tape.
+          No {dimLabel.toLowerCase()} composition for this run{composition.reason ? ` — ${composition.reason}` : ""}.
         </div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-[var(--color-line)] bg-navy-900/40">
           <table className="w-full text-[11px]" data-testid="cohorts-table">
             <thead>
               <tr className="border-b border-[var(--color-line)] text-ink-400">
-                <th className="px-3 py-2 text-left font-medium">Vintage</th>
+                <th className="px-3 py-2 text-left font-medium">{dimLabel}</th>
                 <th className="px-3 py-2 text-right font-medium">Loans</th>
                 {cmetrics.has("balance") && <th className="px-3 py-2 text-right font-medium">Balance</th>}
                 {cmetrics.has("balance") && <th className="px-3 py-2 text-right font-medium">Book share</th>}
@@ -623,8 +675,8 @@ function CohortView({ client, portfolioId }: { client: AgentClient; portfolioId:
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.vintage} className="border-b border-[var(--color-line-soft)] last:border-0">
-                  <td className="px-3 py-1.5 text-left font-medium text-ink-100">{r.vintage}</td>
+                <tr key={r.cohort} className="border-b border-[var(--color-line-soft)] last:border-0">
+                  <td className="px-3 py-1.5 text-left font-medium text-ink-100">{r.cohort}</td>
                   <td className="px-3 py-1.5 text-right text-ink-200">{r.loanCount.toLocaleString("en-GB")}</td>
                   {cmetrics.has("balance") && <td className="px-3 py-1.5 text-right text-ink-200">{r.balance != null ? gbpCompact(r.balance) : "—"}</td>}
                   {cmetrics.has("balance") && <td className="px-3 py-1.5 text-right text-ink-400">{r.sharePct != null ? `${r.sharePct.toFixed(1)}%` : "—"}</td>}
@@ -639,7 +691,7 @@ function CohortView({ client, portfolioId }: { client: AgentClient; portfolioId:
       )}
       <p className="text-[10px] text-ink-500">
         Static-pool seasoning across governed reporting periods (balance / LTV / rate / NNEG) for the
-        selected cohort, plus point-in-time vintage composition at the chosen grain. Source: governed
+        selected cohort, plus point-in-time cohort composition across the chosen lens. Source: governed
         funded central lender tape.
       </p>
     </div>
@@ -651,13 +703,22 @@ function CohortView({ client, portfolioId }: { client: AgentClient; portfolioId:
  * governed monthly funded runs and weekly pipeline extracts via the evolution
  * endpoints; every chart carries source lineage + per-period reconciliation.
  */
+const ALL_EVO_TABS: EvoView[] = ["funded", "pipeline", "origination", "cohorts", "forecast"];
+
 export function EvolutionPanel({
-  client, portfolioId,
+  client, portfolioId, tabs, heading = true,
 }: {
   client: AgentClient;
   portfolioId: string;
+  /** Restrict to a subset of series (the IA hosts subsets under Funded /
+   * Pipeline / Forecast). Defaults to all five. */
+  tabs?: EvoView[];
+  /** Show the "Evolution" heading + series tab row. Off when a parent workspace
+   * already provides the sub-tab (single-series hosting). */
+  heading?: boolean;
 }) {
-  const [view, setView] = useState<EvoView>("funded");
+  const allowed = (tabs && tabs.length ? tabs : ALL_EVO_TABS).filter((t) => ALL_EVO_TABS.includes(t));
+  const [view, setView] = useState<EvoView>(allowed[0] ?? "funded");
   const [funded, setFunded] = useState<FundedEvolution | null>(null);
   const [pipeline, setPipeline] = useState<PipelineEvolution | null>(null);
   const [forecast, setForecast] = useState<ForecastEvolution | null>(null);
@@ -709,18 +770,36 @@ export function EvolutionPanel({
   const stageChart = useMemo(() => {
     const rows = pipeline?.byStage ?? [];
     if (stageMode === "conversion") {
-      const conv = stageConversionSeries(rows);
+      // Canonical conversion: cumulative cohort progression — % of the original
+      // KFI cohort reaching each milestone (KFI → Application → Offer → Funded)
+      // by each week. A true cohort funnel, so the lines nest and show leakage.
+      const prog = funnel?.cohortProgression;
+      if (prog?.weeks?.length) {
+        const data = prog.weeks.map((w, i) => {
+          const row: Record<string, number | string> = { period: w };
+          for (const st of prog.stages) row[st] = prog.series[st]?.[i] ?? 0;
+          return row;
+        });
+        return { data, lines: prog.stages, format: "pct" as const };
+      }
+      // Fallback only when no cohort funnel is available (single/thin history).
+      const conv = stageConversionSeries(rows, funnel?.conversionLagWeeks);
       return { data: conv.data, lines: conv.stages, format: "pct" as const };
     }
     const piv = pivotStage(rows, stageMode === "count" ? "count" : "value");
     const lines = funnelLineStages(piv.stages, includeKfi);
     return { data: piv.data, lines,
       format: (stageMode === "count" ? "count" : "gbp") as "count" | "gbp" };
-  }, [pipeline, stageMode, includeKfi]);
+  }, [pipeline, funnel, stageMode, includeKfi]);
   const hasWithdrawn = useMemo(
     () => (pipeline?.byStage ?? []).some((r) => normaliseStage(r.stage) === "WITHDRAWN"),
     [pipeline],
   );
+  // Latest cumulative cohort % for a stage — the canonical conversion figure.
+  const cohortPctFor = (stage: string): number | null => {
+    const arr = funnel?.cohortProgression?.series?.[stage];
+    return arr && arr.length ? arr[arr.length - 1] : null;
+  };
   const forecastSeries = useMemo(
     () => (forecast?.periods ?? []).map((p) => ({ period: p.period, ...p.metrics })),
     [forecast],
@@ -745,26 +824,32 @@ export function EvolutionPanel({
 
   return (
     <section className="space-y-4" data-testid="evolution-panel">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm font-semibold text-ink-100">
-          <Activity size={16} className="text-peri-300" /> Evolution
+      {(heading || allowed.length > 1) && (
+        <div className="flex items-center justify-between">
+          {heading && (
+            <div className="flex items-center gap-2 text-sm font-semibold text-ink-100">
+              <Activity size={16} className="text-peri-300" /> Evolution
+            </div>
+          )}
+          {allowed.length > 1 && (
+            <div role="tablist" aria-label="Evolution series"
+              className="inline-flex items-center gap-1 rounded-lg border border-navy-600 bg-navy-950/80 p-1 ring-1 ring-inset ring-white/5">
+              {allowed.map((v) => (
+                <button key={v} type="button" role="tab" aria-selected={view === v}
+                  onClick={() => setView(v)}
+                  className={cn(
+                    "rounded-md px-3 py-1 text-[12px] font-medium transition-all",
+                    view === v
+                      ? "bg-peri-400/20 text-ink-100 ring-1 ring-inset ring-peri-400/50"
+                      : "cursor-pointer bg-navy-800/70 text-ink-300 ring-1 ring-inset ring-white/5 hover:bg-navy-700 hover:text-ink-100",
+                  )}>
+                  {EVO_TAB_LABEL[v]}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-        <div role="tablist" aria-label="Evolution series"
-          className="inline-flex items-center gap-1 rounded-lg border border-navy-600 bg-navy-950/80 p-1 ring-1 ring-inset ring-white/5">
-          {(["funded", "pipeline", "origination", "cohorts", "forecast"] as EvoView[]).map((v) => (
-            <button key={v} type="button" role="tab" aria-selected={view === v}
-              onClick={() => setView(v)}
-              className={cn(
-                "rounded-md px-3 py-1 text-[12px] font-medium transition-all",
-                view === v
-                  ? "bg-peri-400/20 text-ink-100 ring-1 ring-inset ring-peri-400/50"
-                  : "cursor-pointer bg-navy-800/70 text-ink-300 ring-1 ring-inset ring-white/5 hover:bg-navy-700 hover:text-ink-100",
-              )}>
-              {EVO_TAB_LABEL[v]}
-            </button>
-          ))}
-        </div>
-      </div>
+      )}
 
       <p className="text-[11px] text-ink-500" data-testid="evo-subtitle">
         {EVO_SUBTITLES[view]}
@@ -853,14 +938,16 @@ export function EvolutionPanel({
             <EvoLineChart
               title={stageMode === "amount" ? "Pipeline amount by stage (£)"
                 : stageMode === "count" ? "Pipeline case count by stage"
-                : "Conversion vs KFI (Application / Offer / Completion)"}
+                : "Cumulative cohort conversion (KFI → Application → Offer → Funded)"}
               data={stageChart.data}
               lines={stageChart.lines.map((s) => ({ key: s, label: STAGE_LABEL[normaliseStage(s)] ?? s }))}
               valueFormat={stageChart.format === "pct" ? "pct_points" : stageChart.format}
               source="weekly pipeline extracts" />
             <p className="mt-1 text-[10px] text-ink-500" data-testid="stage-mode-note">
               {stageMode === "conversion"
-                ? "Conversion = each stage as a % of KFIs in the same week (count). KFI is the denominator and is not charted."
+                ? (funnel?.cohortProgression?.weeks?.length
+                    ? `Conversion = cumulative % of the original KFI cohort${funnel.cohortProgression.cohortSize ? ` (${funnel.cohortProgression.cohortSize.toLocaleString()} cases)` : ""} that has reached each milestone to date. Cohort-tracked, so the lines nest (Funded ≤ Offer ≤ Application ≤ KFI) and show where the pipeline leaks — not point-in-time stage stocks.`
+                    : "Conversion = cumulative % of the KFI cohort reaching each milestone to date. Cohort history is thin for this book, so a lagged stock-ratio approximation is shown until more weeks accrue.")
                 : `${stageMode === "amount" ? "Amount (£)" : "Case count"} for the main funnel`
                   + ` (KFI → Application → Offer → Completion).${hasWithdrawn ? " Withdrawn is tracked separately, not in the funnel." : ""}`
                   + " Toggle 'Include KFI' off to read the smaller downstream stages."}
@@ -888,6 +975,7 @@ export function EvolutionPanel({
                 flowPoints={funnel?.flowSeries?.[stage] ?? []}
                 summary={funnel?.summary?.[stage]}
                 conversion={funnel?.summary?.[stage]?.conversion ?? null}
+                cohortPct={cohortPctFor(stage)}
                 showCumulative={showCumulative}
                 onExpand={() => setExpandedStage(stage)} />
             ))}
@@ -909,6 +997,7 @@ export function EvolutionPanel({
                 flowPoints={funnel.flowSeries?.[expandedStage] ?? []}
                 summary={funnel.summary?.[expandedStage]}
                 conversion={funnel.summary?.[expandedStage]?.conversion ?? null}
+                cohortPct={cohortPctFor(expandedStage)}
                 showCumulative={showCumulative}
                 large />
             </ChartFocusModal>

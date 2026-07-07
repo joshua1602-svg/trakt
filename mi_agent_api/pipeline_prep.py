@@ -36,6 +36,7 @@ import numpy as np
 import pandas as pd
 import yaml
 
+from analytics_lib.dates import coerce_dates
 from analytics_lib.numeric import coerce_numeric
 
 from mi_agent.states import models as _states
@@ -204,8 +205,9 @@ def _to_ratio(s: pd.Series) -> pd.Series:
 def _parse_date(series: pd.Series) -> pd.Series:
     # UK day-first dates (dd/mm/yyyy) — matches funded_prep. dayfirst=False silently
     # dropped every DOB / date whose day > 12 to NaT and month/day-swapped the rest,
-    # which broke youngest-borrower age (NNEG) and all pipeline timing.
-    return pd.to_datetime(series, errors="coerce", dayfirst=True)
+    # which broke youngest-borrower age (NNEG) and all pipeline timing. coerce_dates
+    # additionally parses a MIXED ISO/UK column per element (see analytics_lib.dates).
+    return coerce_dates(series)
 
 
 def _as_of_date(df: pd.DataFrame, explicit: Optional[str],
@@ -348,7 +350,7 @@ def _derive_youngest_age(src: pd.DataFrame, out: pd.DataFrame,
         return
     ages = pd.DataFrame(index=src.index)
     for c in dob_cols:
-        dob = pd.to_datetime(src[c], errors="coerce", dayfirst=True)  # UK dd/mm/yyyy DOBs
+        dob = coerce_dates(src[c])  # UK dd/mm/yyyy DOBs (mixed ISO/UK parsed per element)
         ages[c] = (rep_ts - dob).dt.days / 365.25
     youngest = ages.min(axis=1, skipna=True)  # youngest borrower = minimum age
     if youngest.notna().any():

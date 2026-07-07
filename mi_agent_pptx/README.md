@@ -96,6 +96,18 @@ Colours/typography mirror the dashboard (navy `#232D55`, periwinkle `#919DD1`,
 `£X.XMM`/`£XK` value format). No `plotly`/`kaleido`/Chrome dependency — it runs
 headless in Azure Functions.
 
+## Pipeline canonicalisation
+
+A pipeline run may land as the raw central tape (`18a_central_pipeline_tape.csv`)
+whose columns carry source-alias headers ("Loan Amount", "Status", "Broker",
+"Property Region"…). `pipeline_prep.canonicalise_pipeline` maps these onto the
+canonical field names using the shippable `config/mi/pipeline_field_contract.yaml`
+aliases, normalises the stage vocabulary, and derives the registry forecast
+inputs (completion probability, weighted expected amount, expected completion
+date) from `config/client/pipeline_expected_funding.yaml`. So pipeline &
+forecast charts render from real data — only the Risk Monitor is a genuine v1
+placeholder.
+
 ## Lenses & deltas
 
 Every metric and slide declares a **lens** (`funded` / `pipeline` / `forecast`)

@@ -9,3 +9,4 @@ export * from "./riskLimits";
 export * from "./forecastExtrapolation";
 export * from "./decks";
 export * from "./cohorts";
+export * from "./geo";

@@ -98,8 +98,10 @@ def test_unparseable_question_returns_failure(df, semantics):
     assert res["validation"] is not None
 
 
-def test_validation_failure_surfaces_errors(df, semantics):
-    # Force an invalid spec via a mock LLM (sum on a percent metric).
+def test_invalid_llm_spec_falls_back_to_deterministic(df, semantics):
+    # An invalid LLM spec (sum on a percent metric) must NOT error the query:
+    # the MI Agent uses the deterministic parser as a fallback, so a valid
+    # deterministic parse of the same question answers instead.
     bad = json.dumps({"intent": "chart", "chart_type": "bar",
                       "metric": "current_loan_to_value",
                       "dimension": "geographic_region_obligor",
@@ -111,10 +113,14 @@ def test_validation_failure_surfaces_errors(df, semantics):
         zero_cost_first=False,  # force the LLM path so the bad spec is used
         llm_callable=lambda prompt: bad,
     )
-    assert res["ok"] is False
-    assert res["error"] and "validation" in res["error"].lower()
-    assert any("not allowed" in e for e in res["validation"]["errors"])
-    assert res["chart_result"] is None
+    # Deterministic fallback answered the question.
+    assert res["ok"] is True
+    assert res["error"] is None
+    assert res["parser_mode"] == "deterministic"
+    assert res["parser_mode_detail"] == "deterministic_fallback"
+    assert res["chart_result"] is not None
+    # The LLM was attempted (and its cost recorded) before falling back.
+    assert res["metadata"]["llm"]["calls"] >= 1
 
 
 # --------------------------------------------------------------------------- #
@@ -238,7 +244,10 @@ def test_repair_loop_fixes_invalid_then_valid(df, semantics):
     assert spec.aggregation == "weighted_avg"
 
 
-def test_repair_loop_exhausts_and_reports(df, semantics):
+def test_repair_loop_exhausts_then_deterministic_fallback(df, semantics):
+    # The LLM keeps returning an invalid spec; after the repair loop exhausts,
+    # a valid deterministic parse of the same question is used as the fallback
+    # rather than erroring. The LLM attempts are still counted/costed.
     bad = json.dumps({"intent": "chart", "chart_type": "bar",
                       "metric": "current_loan_to_value",
                       "dimension": "geographic_region_obligor",
@@ -250,9 +259,11 @@ def test_repair_loop_exhausts_and_reports(df, semantics):
         llm_enabled=True, max_attempts=1, zero_cost_first=False,
         llm_callable=lambda p: bad,
     )
-    assert meta["ok"] is False
-    assert meta["validation_errors"]
-    assert meta["parser_mode"] == "llm"
+    assert meta["ok"] is True
+    assert meta["parser_mode"] == "deterministic"
+    assert meta["parser_mode_detail"] == "deterministic_fallback"
+    # The LLM was tried (and its failed attempts recorded) before the fallback.
+    assert meta["llm"]["calls"] >= 1
 
 
 def test_deterministic_parse_with_repair_metadata(df, semantics):

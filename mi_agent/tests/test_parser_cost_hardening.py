@@ -20,6 +20,8 @@ import pytest
 
 from mi_agent.llm_query_parser import (
     _deterministic_parse,
+    _price_for_model,
+    _supports_temperature,
     build_prompt,
     compact_catalogue,
     estimate_cost,
@@ -165,6 +167,44 @@ def test_zero_cost_first_handles_known_prompt_without_llm(df, semantics):
     assert res["metadata"]["llm"]["calls"] == 0
 
 
+def test_layered_question_routes_to_llm_even_when_deterministic_parses(df, semantics):
+    # A layered/multi-faceted question ("... and ...", "vs", conditional) reads
+    # better via the LLM, so we do NOT short-circuit to deterministic for it —
+    # deterministic NLQ coverage is too narrow for these.
+    good = json.dumps({"intent": "chart", "chart_type": "bar",
+                       "metric": "current_outstanding_balance",
+                       "dimension": "geographic_region_obligor",
+                       "aggregation": "sum"})
+    calls = {"n": 0}
+
+    def mock(prompt):
+        calls["n"] += 1
+        return good
+
+    res = run_mi_agent_query(
+        "Show balance by region and by broker channel", df, semantics,
+        llm_enabled=True, parser_mode="llm", zero_cost_first=True,
+        llm_callable=mock)
+    assert res["ok"]
+    assert calls["n"] >= 1
+    assert res["metadata"]["llm"]["calls"] >= 1
+    assert res["parser_mode_detail"] != "deterministic_zero_cost"
+
+
+def test_is_layered_question_heuristic():
+    from mi_agent.llm_query_parser import _is_layered_question
+    # Simple single-variable lookups stay deterministic.
+    assert _is_layered_question("portfolio summary") is False
+    assert _is_layered_question("Show balance by region") is False
+    assert _is_layered_question("total funded balance") is False
+    # Layered: comparison, conditional, two dimensions, or joined clauses.
+    assert _is_layered_question("balance by region vs vintage year") is True
+    assert _is_layered_question("older borrowers sitting on high LTVs") is True
+    assert _is_layered_question("balance by region by vintage_year") is True
+    assert _is_layered_question("where are we most exposed to high LTV") is True
+    assert _is_layered_question("funded balance trend over time") is True
+
+
 def test_missing_column_skips_llm_repair(df_no_broker, semantics):
     calls = {"n": 0}
 
@@ -244,6 +284,38 @@ def test_estimate_cost_known_and_unknown_models():
     assert unknown["total_tokens"] == 1200  # tokens still reported
 
 
+def test_pricing_matches_published_list_prices():
+    # Opus family is $5/$25 per 1M (a prior map used a stale $15/$75), and the
+    # Fable/Mythos family is priced above Opus. Any future drift here silently
+    # mis-bills every LLM parse, so lock the ratios in.
+    assert _price_for_model("claude-opus-4-8") == (5.00, 25.00)
+    assert _price_for_model("claude-opus-4-7") == (5.00, 25.00)
+    assert _price_for_model("claude-haiku-4-5-20251001") == (1.00, 5.00)
+    assert _price_for_model("claude-sonnet-5") == (3.00, 15.00)
+    assert _price_for_model("claude-fable-5") == (10.00, 50.00)
+    # An unrecognised model has no price (status becomes 'unknown', not $0).
+    assert _price_for_model("some-future-model") is None
+
+
+def test_opus_cost_uses_current_price_not_stale():
+    usage = {"input_tokens": 1_000_000, "output_tokens": 1_000_000}
+    opus = estimate_cost("claude-opus-4-8", usage)
+    # 1M in @ $5 + 1M out @ $25 = $30.00, not the old $90.00 (15+75).
+    assert opus["estimated_total_cost"] == pytest.approx(30.0, abs=1e-6)
+
+
+def test_temperature_gated_for_models_that_reject_it():
+    # Newer reasoning models 400 on temperature/top_p/top_k; older ones accept it.
+    assert _supports_temperature("claude-haiku-4-5-20251001") is True
+    assert _supports_temperature("claude-sonnet-4-6") is True
+    assert _supports_temperature("claude-opus-4-6") is True
+    assert _supports_temperature("claude-opus-4-8") is False
+    assert _supports_temperature("claude-opus-4-7") is False
+    assert _supports_temperature("claude-sonnet-5") is False
+    assert _supports_temperature("claude-fable-5") is False
+    assert _supports_temperature("claude-mythos-5") is False
+
+
 def test_llm_metadata_includes_tokens_when_usage_returned(df, semantics):
     # Mock returns text + usage; workflow should surface token/cost metadata.
     good = json.dumps({"intent": "chart", "chart_type": "bar",
@@ -265,3 +337,87 @@ def test_llm_metadata_includes_tokens_when_usage_returned(df, semantics):
     assert llm["total_tokens"] == 920
     assert llm["estimated_total_cost"] > 0
     assert llm["cost_estimate_status"] == "estimated"
+
+
+# --------------------------------------------------------------------------- #
+# ThinkingBlock hardening — the live Claude call must not crash on a leading
+# non-text block (extended thinking) with "'ThinkingBlock' object has no
+# attribute 'text'".
+# --------------------------------------------------------------------------- #
+class _ThinkingBlock:
+    """Mimics anthropic's ThinkingBlock: has `.thinking`, no `.text`."""
+    type = "thinking"
+
+    def __init__(self, thinking: str):
+        self.thinking = thinking
+
+
+class _TextBlock:
+    type = "text"
+
+    def __init__(self, text: str):
+        self.text = text
+
+
+class _Message:
+    def __init__(self, content):
+        self.content = content
+
+
+def test_message_text_skips_leading_thinking_block():
+    from mi_agent.llm_query_parser import _message_text
+    msg = _Message([_ThinkingBlock("let me reason..."), _TextBlock('{"metric": "x"}')])
+    # Would previously crash on content[0].text; now returns the text block.
+    assert _message_text(msg) == '{"metric": "x"}'
+
+
+def test_message_text_plain_text_first():
+    from mi_agent.llm_query_parser import _message_text
+    assert _message_text(_Message([_TextBlock("hello")])) == "hello"
+
+
+def test_message_text_concatenates_multiple_text_blocks():
+    from mi_agent.llm_query_parser import _message_text
+    msg = _Message([_ThinkingBlock("..."), _TextBlock("a"), _TextBlock("b")])
+    assert _message_text(msg) == "ab"
+
+
+def test_message_text_no_text_blocks_returns_empty():
+    from mi_agent.llm_query_parser import _message_text
+    assert _message_text(_Message([_ThinkingBlock("only thinking")])) == ""
+    assert _message_text(_Message([])) == ""
+
+
+# --------------------------------------------------------------------------- #
+# Deterministic fallback — the LLM is primary for hard questions, but a broken
+# or unavailable LLM must fall back to a valid deterministic parse (never error).
+# --------------------------------------------------------------------------- #
+def test_llm_call_failure_falls_back_to_deterministic(df, semantics):
+    cols = set(df.columns)
+
+    def _boom(_prompt):
+        raise RuntimeError("'ThinkingBlock' object has no attribute 'text'")
+
+    # zero_cost_first off → LLM is attempted; it raises → deterministic safety net.
+    spec, meta = parse_with_repair(
+        "Show balance by region", semantics, available_columns=cols,
+        llm_enabled=True, zero_cost_first=False, llm_callable=_boom)
+    assert meta["ok"] is True
+    assert meta["parser_mode"] == "deterministic"
+    assert meta["parser_mode_detail"] == "deterministic_fallback"
+    assert "used the deterministic parse" in meta["status"]
+    assert spec.dimension == "geographic_region_obligor"
+
+
+def test_llm_invalid_output_falls_back_to_deterministic(df, semantics):
+    cols = set(df.columns)
+    # LLM returns unparseable output every attempt; deterministic parse is valid.
+    mock = lambda _p: "not json at all"  # noqa: E731
+    spec, meta = parse_with_repair(
+        "Show balance by region", semantics, available_columns=cols,
+        llm_enabled=True, zero_cost_first=False, max_attempts=1, llm_callable=mock)
+    assert meta["ok"] is True
+    assert meta["parser_mode_detail"] == "deterministic_fallback"
+    assert "fell back to the deterministic parse" in meta["status"]
+    # Cost accounting from the (failed) LLM attempts is preserved.
+    assert meta["llm"]["calls"] >= 1

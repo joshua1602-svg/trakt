@@ -79,6 +79,8 @@ function makeClient(ask: (req: AgentRequest) => Promise<AgentResponse>): AgentCl
     deckDownloadUrl: () => null,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     getCohorts: async () => ({ available: false, cohorts: [] }) as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    getGeoExposure: async () => ({ available: false, areas: [] }) as any,
   };
 }
 

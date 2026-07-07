@@ -14,6 +14,8 @@ from __future__ import annotations
 import logging
 import os
 import re
+from contextlib import asynccontextmanager
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, FastAPI, Request
@@ -38,6 +40,7 @@ from .data_source import (
     semantics_path,
 )
 from . import snapshots as snapshots_mod
+from . import currency as currency_mod
 from . import platform_snapshots_blob as platform_blob_mod
 from . import pipeline_contract as pipeline_mod
 from . import pipeline_history
@@ -48,14 +51,37 @@ from . import chat_routing as chat_routing_mod
 from . import pipeline_timing as timing_mod
 from . import decks as decks_mod
 from . import cohorts as cohorts_mod
+from . import geo as geo_mod
 
 logger = logging.getLogger("mi_agent_api")
+
+
+def _warm_caches() -> None:
+    """Best-effort warm so the FIRST user request isn't cold. Loads the active
+    dataset (populating the signature cache) and parses the semantics registry
+    (populating its mtime cache). Never fatal: a deploy with no data source yet
+    still starts; the first request simply pays the cold cost as before."""
+    try:
+        get_dataframe()
+    except Exception as exc:  # noqa: BLE001 - warming must never block startup
+        logger.info("startup dataset warm skipped: %s", exc)
+    try:
+        load_mi_semantics(semantics_path())
+    except Exception as exc:  # noqa: BLE001
+        logger.info("startup semantics warm skipped: %s", exc)
+
+
+@asynccontextmanager
+async def _lifespan(_app: "FastAPI"):
+    _warm_caches()
+    yield
+
 
 # Global authentication guard: every /mi/* route requires an authenticated
 # principal carrying an MI role (client|operator). Probe/index/docs routes stay
 # open. Enforcement is toggled by MI_AGENT_AUTH_ENABLED (default on); see auth.py.
 app = FastAPI(title="Trakt MI Agent API", version="1.0.0",
-              dependencies=[Depends(auth_guard)])
+              dependencies=[Depends(auth_guard)], lifespan=_lifespan)
 
 # CORS. With the SWA linked-backend deployment the UI calls the API same-origin,
 # so CORS is not relied on for security. We still restrict it: allowed origins
@@ -858,6 +884,20 @@ def _pipeline_history(client_id: str) -> Optional[Dict[str, Any]]:
     return model
 
 
+def _kfi_lag_weeks_from_model(model: Optional[Dict[str, Any]]) -> Optional[int]:
+    """Median KFI->completion lag in whole weeks from an already-built history
+    model. Returns None when no timing is available."""
+    timing = ((model or {}).get("historicalCompletionTimingByStage") or {}).get("KFI") or {}
+    median_days = timing.get("medianDays")
+    return max(1, round(float(median_days) / 7.0)) if median_days else None
+
+
+def _kfi_completion_lag_weeks(client_id: str) -> Optional[int]:
+    """Median KFI->completion lag, in whole weeks, from the historical model.
+    Convenience wrapper that builds the model; never raises."""
+    return _kfi_lag_weeks_from_model(_pipeline_history(client_id))
+
+
 @app.get("/mi/pipeline/snapshot")
 def pipeline_snapshot(portfolioId: Optional[str] = None,
                       client_id: Optional[str] = None,
@@ -1072,7 +1112,17 @@ def funnel_evolution(portfolioId: Optional[str] = None, client_id: Optional[str]
                 "stages": [], "weeks": [], "series": {}, "summary": {},
                 "singlePeriod": True, "error": "no pipeline root configured"}
     try:
-        return evolution_mod.pipeline_funnel_evolution(root, cid, pipeline_cut)
+        model = _pipeline_history(cid)  # built once: feeds both the lag and the cohort funnel
+        lag_weeks = _kfi_lag_weeks_from_model(model)
+        result = evolution_mod.pipeline_funnel_evolution(
+            root, cid, pipeline_cut, lag_weeks=lag_weeks)
+        # Canonical conversion = cumulative cohort progression (% of the KFI
+        # cohort reaching each milestone to date). The weekly-flow rate on each
+        # stage stays available as an operational velocity, not "conversion".
+        if model:
+            result["cohortProgression"] = model.get("cohortProgression")
+            result["cumulativeCohortConversion"] = model.get("cumulativeCohortConversion")
+        return result
     except Exception as exc:  # noqa: BLE001
         logger.warning("funnel evolution failed: %s", exc)
         return {"dataset": "pipeline_funnel", "portfolioId": cid, "toRunId": pipeline_cut,
@@ -1083,7 +1133,7 @@ def funnel_evolution(portfolioId: Optional[str] = None, client_id: Optional[str]
 @app.get("/mi/cohorts")
 def cohorts(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
             runId: Optional[str] = None, run_id: Optional[str] = None,
-            grain: str = "Y") -> Dict[str, Any]:
+            grain: str = "Y", dimension: str = "vintage") -> Dict[str, Any]:
     """Funded origination-vintage (static-pool) cohort analysis for a run.
 
     Balance / loan count / book share and balance-weighted LTV, rate and
@@ -1106,11 +1156,39 @@ def cohorts(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
         reporting_date = snapshots_mod.infer_reporting_date(run_id, df)
         return cohorts_mod.cohort_analysis(
             df, client_id=client_id, portfolio_id=pid, reporting_date=reporting_date,
-            grain=grain)
+            grain=grain, dimension=dimension)
     except Exception as exc:  # noqa: BLE001 - cohort analysis must never 500
         logger.warning("cohort analysis failed for %s: %s", pid, exc)
         return {"dataset": "cohorts", "portfolioId": pid, "available": False,
                 "reason": str(exc), "cohorts": [], "metricsAvailable": []}
+
+
+@app.get("/mi/geo/exposure")
+def geo_exposure(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
+                 runId: Optional[str] = None, run_id: Optional[str] = None) -> Dict[str, Any]:
+    """Funded exposure per UK ITL3 area (e.g. Bristol) for a run — the DATA layer
+    for the geographic view. ITL3 comes from the tape's ITL3 field or is derived
+    from the property postcode via the in-repo master lookup. Returns
+    ``available=false`` (with a reason) when neither is present. Never 500s."""
+    run_id = runId or run_id
+    if portfolioId and "/" in portfolioId:
+        client_id, run_id = portfolioId.split("/", 1)
+    client_id = client_id or "client_001"
+    pid = f"{client_id}/{run_id or ''}"
+    if not run_id:
+        return {"dataset": "geo_itl3", "portfolioId": pid, "available": False,
+                "reason": "portfolioId (client_id/run_id) is required", "areas": []}
+    try:
+        df, _report = _resolve_run_dataframe(client_id, run_id, _onboarding_output_root())
+        currency_mod.resolve_and_set(df)
+        result = geo_mod.exposure_by_itl3(df)
+        result.update({"dataset": "geo_itl3", "portfolioId": pid,
+                       "currencyCode": currency_mod.current_code()})
+        return result
+    except Exception as exc:  # noqa: BLE001 - geo view must never 500
+        logger.warning("geo exposure failed for %s: %s", pid, exc)
+        return {"dataset": "geo_itl3", "portfolioId": pid, "available": False,
+                "reason": str(exc), "areas": []}
 
 
 @app.get("/mi/cohorts/progression")
@@ -1407,6 +1485,62 @@ def _resolve_query_frame(view: str, portfolio_id: Optional[str]):
     return frame, None
 
 
+def _mi_llm_config() -> SimpleNamespace:
+    """LLM-parser configuration for the MI Agent query path.
+
+    Returns an object with ``enabled`` (the parser should attempt the LLM),
+    ``available`` (it can actually run — a key is present), ``model``, a
+    human-readable ``status``, and any ``warnings``. The LLM is the FALLBACK for
+    questions the deterministic parser can't resolve (``zero_cost_first`` keeps
+    easy questions free — no LLM call). It is enabled by default whenever an
+    ``ANTHROPIC_API_KEY`` is configured; with no key the parser stays
+    deterministic-only (never crashes). Operators can force it with
+    ``MI_AGENT_LLM_PARSER=on|off|auto`` and override the model with
+    ``MI_AGENT_LLM_MODEL``.
+    """
+    mode = os.environ.get("MI_AGENT_LLM_PARSER", "auto").strip().lower()
+    has_key = bool(os.environ.get("ANTHROPIC_API_KEY"))
+    if mode in ("off", "0", "false", "no"):
+        enabled = False
+    elif mode in ("on", "1", "true", "yes"):
+        enabled = True
+    else:  # auto
+        enabled = has_key
+    model = os.environ.get("MI_AGENT_LLM_MODEL") or None
+    available = bool(enabled and has_key)
+    warnings: List[str] = []
+    if enabled and not has_key:
+        status = "unavailable_no_api_key"
+        warnings.append("LLM parser requested but ANTHROPIC_API_KEY is not set; "
+                        "using the deterministic parser.")
+    elif enabled:
+        status = "enabled"
+    else:
+        status = "disabled"
+    return SimpleNamespace(enabled=enabled, model=model, available=available,
+                           status=status, warnings=warnings)
+
+
+_CLIENT_CURRENCY_CACHE: Dict[str, str] = {}
+
+
+def _apply_request_currency(cid: str, portfolio_id: Optional[str]) -> None:
+    """Set the request-scoped display currency for a client (tape -> config ->
+    GBP), cached per client. Resolved from the client's funded book, which is
+    book-level (one currency), so it covers the routed answers too. Never raises."""
+    code = _CLIENT_CURRENCY_CACHE.get(cid)
+    if code is None:
+        code = "GBP"
+        try:
+            fdf, ferr = _resolve_query_frame("funded", portfolio_id)
+            if fdf is not None and not ferr:
+                code = currency_mod.resolve_currency_code(fdf)
+        except Exception as exc:  # noqa: BLE001 - currency is presentational
+            logger.warning("currency resolution failed for %s: %s", cid, exc)
+        _CLIENT_CURRENCY_CACHE[cid] = code
+    currency_mod.set_currency(code)
+
+
 @app.post("/mi/query")
 def query(req: QueryRequest) -> Dict[str, Any]:
     portfolio_id = req.portfolioId or (req.portfolio.id if req.portfolio else None)
@@ -1430,13 +1564,25 @@ def query(req: QueryRequest) -> Dict[str, Any]:
     try:
         cid, _rid = (portfolio_id.split("/", 1) + [None])[:2] if (portfolio_id and "/" in portfolio_id) \
             else ((portfolio_id or "client_001"), None)
+        # Set the request-scoped display currency BEFORE routing so the routed
+        # evolution/forecast/compare answers format in the book's currency too
+        # (tape -> config -> GBP; cached per client). The point-in-time path
+        # below re-resolves from its own df, which is a no-op for the same book.
+        _apply_request_currency(cid, portfolio_id)
+        def _routed_frame(cli: str, rid: Optional[str]):
+            """Resolve the funded frame for a routed intent (e.g. geographic
+            exposure) using the same discovery as the dashboard endpoints."""
+            frame, _report = _resolve_run_dataframe(cli, rid, _onboarding_output_root())
+            return frame
         routed = chat_routing_mod.try_route(
             req.question, portfolio_id=portfolio_id, view=view,
             output_root=_onboarding_output_root(),
             pipeline_root=_pipeline_discovery_root(),
             semantics=load_mi_semantics(semantics_path()),
             history_model=_pipeline_history(cid), as_of=req.asOfDate,
-            source_lens=req.sourcePortfolioLens or None)
+            source_lens=req.sourcePortfolioLens or None,
+            frame_resolver=_routed_frame,
+            extra_filters=req.filters or None)
     except Exception as exc:  # noqa: BLE001 - routing must never break the chat
         logger.warning("chat routing failed; using point-in-time path: %s", exc)
         routed = None
@@ -1453,18 +1599,17 @@ def query(req: QueryRequest) -> Dict[str, Any]:
     if frame_error:
         return _error(frame_error)
 
-    # LLM parser wiring: governed by ENABLE_LLM_MI_AGENT / ANTHROPIC_API_KEY
-    # (see mi_agent_config). When unavailable (disabled, no key, no package) the
-    # deterministic parser runs alone — and the response says so.
-    llm_cfg = get_llm_config()
+    # Display currency from this request's tape (falls back to GBP).
+    currency_mod.resolve_and_set(df)
+
+    # LLM parser is the fallback for complex questions (deterministic-first via
+    # zero_cost_first; falls back to deterministic on any LLM failure).
+    llm_cfg = _mi_llm_config()
+    llm_enabled, llm_model = llm_cfg.enabled, llm_cfg.model
     workflow = run_mi_agent_query(
         req.question, df, str(semantics_path()),
-        parser_mode=("llm" if llm_cfg.available else "deterministic"),
-        llm_enabled=llm_cfg.available,
-        model=llm_cfg.model,
-        max_repair_attempts=llm_cfg.max_repair_attempts,
-        catalog_mode=llm_cfg.catalog_mode,
-        zero_cost_first=llm_cfg.zero_cost_first,
+        parser_mode="llm" if llm_enabled else "deterministic",
+        llm_enabled=llm_enabled, model=llm_model,
         extra_filters=req.filters or None,
         source_portfolio_lens=req.sourcePortfolioLens or None)
     result = adapt_workflow_result(workflow, portfolio_id=portfolio_id, as_of=req.asOfDate)

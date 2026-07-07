@@ -33,6 +33,7 @@ function client(over: Partial<AgentClient> = {}): AgentClient {
     getDecks: vi.fn(async () => ({ available: false, latest: null, decks: [], client_id: "client_001" })),
     deckDownloadUrl: vi.fn(() => null),
     getCohorts: vi.fn(async () => mockCohorts("client_001")),
+    getGeoExposure: vi.fn(),
     ...over,
   };
 }
@@ -75,7 +76,7 @@ describe("EvolutionPanel origination conversion footers", () => {
     expect(screen.getByTestId("funnel-conversion-COMPLETED")).toBeInTheDocument();
     // KFI is the denominator — no conversion footer on it.
     expect(screen.queryByTestId("funnel-conversion-KFI")).toBeNull();
-    expect(screen.getAllByText(/Conversion vs KFI/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Cohort conversion/).length).toBeGreaterThan(0);
   });
 
   it("keeps conversion stats collapsed by default and reveals them on expand", async () => {
@@ -84,15 +85,16 @@ describe("EvolutionPanel origination conversion footers", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Origination" }));
     const disclosure = await screen.findByTestId("funnel-conversion-APPLICATION");
     // Collapsed by default: the label shows but the detailed stats do not.
-    expect(disclosure.textContent).toMatch(/Conversion vs KFI/);
+    expect(disclosure.textContent).toMatch(/Cohort conversion/);
     expect(screen.queryByTestId("funnel-conversion-body-APPLICATION")).toBeNull();
-    // Expanding reveals the existing stats, labelled explicitly.
-    fireEvent.click(within(disclosure).getByRole("button", { name: /Conversion vs KFI/ }));
+    // Expanding reveals the canonical cohort figure + the demoted velocity.
+    fireEvent.click(within(disclosure).getByRole("button", { name: /Cohort conversion/ }));
     const body = screen.getByTestId("funnel-conversion-body-APPLICATION");
-    expect(body.textContent).toMatch(/5-week/);
-    expect(body.textContent).toMatch(/Since inception/);
-    expect(body.textContent).toMatch(/by count/);
-    expect(body.textContent).toMatch(/by value/);
+    // Leads with the cumulative cohort conversion, not the weekly rate.
+    expect(body.textContent).toMatch(/of the KFI cohort has reached this milestone/);
+    // Weekly velocity is present but explicitly NOT labelled "conversion".
+    expect(body.textContent).toMatch(/Weekly velocity/);
+    expect(body.textContent).toMatch(/forecast input, not conversion/);
   });
 
   it("shows weekly-flow summary, a 'Show stock line' toggle, and no stock-level text row", async () => {
@@ -232,6 +234,19 @@ describe("by-stage pivots (C)", () => {
     ];
     expect(stageConversionSeries(rows).data[0]).toMatchObject({ APPLICATION: 0, OFFER: 0 });
   });
+
+  it("lags the KFI denominator by lagWeeks (not the same week)", () => {
+    // KFI grows 10 -> 20; a stage count of 5 in w2 is 5/20=25% same-week but
+    // 5/10=50% against the KFI book one week earlier (lag=1).
+    const rows: StagePoint[] = [
+      { period: "w1", stage: "KFI", value: 0, count: 10 },
+      { period: "w1", stage: "APPLICATION", value: 0, count: 3 },
+      { period: "w2", stage: "KFI", value: 0, count: 20 },
+      { period: "w2", stage: "APPLICATION", value: 0, count: 5 },
+    ];
+    expect(stageConversionSeries(rows, 0).data[1]).toMatchObject({ APPLICATION: 25 });
+    expect(stageConversionSeries(rows, 1).data[1]).toMatchObject({ APPLICATION: 50 });
+  });
 });
 
 describe("EvolutionPanel stage mode toggle (C)", () => {
@@ -243,6 +258,8 @@ describe("EvolutionPanel stage mode toggle (C)", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Count" }));
     expect(screen.getByTestId("stage-mode-note").textContent).toMatch(/Case count/);
     fireEvent.click(screen.getByRole("tab", { name: "Conversion" }));
-    expect(screen.getByTestId("stage-mode-note").textContent).toMatch(/% of KFIs/);
+    // Conversion note describes the cumulative KFI-cohort funnel (the mock
+    // provides cohortProgression), not a stock ratio.
+    expect(screen.getByTestId("stage-mode-note").textContent).toMatch(/KFI cohort/);
   });
 });

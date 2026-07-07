@@ -9,6 +9,7 @@ import {
   Minus,
 } from "lucide-react";
 import type { FundedSnapshot, SnapshotKPI } from "@/domain";
+import { BarList, type BarDatum } from "@/components/pipeline/bits";
 import { cn, formatDate } from "@/lib/utils";
 
 function deltaColour(intent?: SnapshotKPI["deltaIntent"]) {
@@ -111,6 +112,28 @@ export function FundedSnapshotPanel({
           <KpiTile key={kpi.id} kpi={kpi} />
         ))}
       </div>
+
+      {(snapshot.stratifications?.length ?? 0) > 0 && (
+        <div className="mt-4">
+          <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-400">
+            Stratifications · balance by dimension
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {snapshot.stratifications!.map((s) => {
+              const data: BarDatum[] = s.bars.map((b) => ({
+                label: b.label, value: b.balance, count: b.count,
+              }));
+              return (
+                <div key={s.key}
+                  className="rounded-lg border border-[var(--color-line-soft)] bg-navy-900/50 p-3">
+                  <div className="mb-2 text-[11px] font-medium text-ink-300">{s.label}</div>
+                  <BarList data={data} format="gbp" />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {snapshot.warnings.length > 0 && (
         <div className="mt-3 rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-[11px] text-amber-300/90">
