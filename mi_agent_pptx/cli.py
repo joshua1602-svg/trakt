@@ -175,9 +175,11 @@ def run(argv: Optional[List[str]] = None) -> int:
     if not artifacts.has_tape:
         appendix.add("No canonical typed tape resolved — deck rendered with "
                      "branded placeholders throughout.")
-    if not artifacts.has_pipeline:
-        appendix.add("No pipeline tape in run — pipeline & forecast lenses render "
-                     "as branded placeholders (not funded data).")
+    # Key the pipeline note on whether the pipeline LENS actually resolved (via
+    # the rich source discovery), not on whether the thin 18a artifact was found.
+    if lenses.get("pipeline") is None:
+        appendix.add("No pipeline source resolved for this run — pipeline & "
+                     "forecast lenses render as branded placeholders.")
 
     # Prior-period lenses (for MoM deltas), optional.
     prior_lenses: Dict[str, Optional[ResolvedData]] = {}
