@@ -60,19 +60,52 @@ def _default_output(client_name: str) -> str:
     return f"reports/{slug or 'client'}_investor_pack.pptx"
 
 
+def _prep_funded(tape: pd.DataFrame) -> pd.DataFrame:
+    """Canonicalise a funded tape with the MI Agent's own funded prep.
+
+    Reuses ``mi_agent_api.funded_prep`` (the exact layer the dashboard uses) so
+    the deck sees the same derived fields/dimensions (original LTV, vintage,
+    youngest age, borrower type, buckets). Falls back to the raw tape if the
+    prep is unavailable, so the deck still renders.
+    """
+    try:
+        from mi_agent_api.funded_prep import prepare_funded_mi_dataset
+        out, _report = prepare_funded_mi_dataset(tape)
+        return out
+    except Exception:  # noqa: BLE001 — never block the deck on prep
+        return tape
+
+
+def _prep_pipeline(tape: pd.DataFrame, as_of: Optional[str]) -> pd.DataFrame:
+    """Canonicalise a raw pipeline tape (18a / M2L) with the MI Agent's own
+    pipeline prep (``mi_agent_api.pipeline_prep``) — the same layer the dashboard
+    uses — so pipeline/forecast charts resolve against real canonical fields.
+    Falls back to the local alias canonicaliser, then the raw tape."""
+    try:
+        from mi_agent_api.pipeline_prep import prepare_pipeline_mi_dataset
+        out, _report = prepare_pipeline_mi_dataset(tape, as_of_date=as_of)
+        if out is not None and not out.empty:
+            return out
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from .pipeline_prep import canonicalise_pipeline
+        return canonicalise_pipeline(tape, as_of=as_of)
+    except Exception:  # noqa: BLE001
+        return tape
+
+
 def _lens_bundle(artifacts: RunArtifacts, registries: RegistryLoader,
                  as_of: Optional[str]) -> Dict[str, Optional[ResolvedData]]:
     """Resolve the funded / pipeline / forecast frames for a run."""
-    from .pipeline_prep import canonicalise_pipeline
-
-    funded = resolve_data(artifacts.tape if artifacts.has_tape else pd.DataFrame(),
-                          registries, as_of_date=as_of)
+    funded_tape = (_prep_funded(artifacts.tape) if artifacts.has_tape
+                   else pd.DataFrame())
+    funded = resolve_data(funded_tape, registries, as_of_date=as_of)
     pipeline = None
     if artifacts.has_pipeline:
-        # Canonicalise raw pipeline tapes (18a / M2L source aliases) so pipeline
-        # & forecast charts resolve against real data, not placeholders.
-        pipe_df = canonicalise_pipeline(artifacts.pipeline_tape,
-                                        as_of=as_of or artifacts.run_state.get("reporting_date"))
+        pipe_df = _prep_pipeline(
+            artifacts.pipeline_tape,
+            as_of or artifacts.run_state.get("reporting_date"))
         pipeline = resolve_data(pipe_df, registries, as_of_date=as_of)
     # Forecast charts (run-rate / cumulative) draw from the pipeline frame's
     # expected-completion data; the forecast KPI uses the registry bridge.

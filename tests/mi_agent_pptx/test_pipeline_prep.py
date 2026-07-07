@@ -77,3 +77,28 @@ def test_idempotent_on_canonical_tape():
     twice = canonicalise_pipeline(out, as_of="2026-01-31")
     assert twice["current_outstanding_balance"].tolist() == \
         out["current_outstanding_balance"].tolist()
+
+
+# --------------------------------------------------------------------------- #
+# Integration with the real MI Agent prep (the layer the dashboard uses) — the
+# regression that a raw 18a/M2L pipeline tape and a funded tape without an
+# explicit original LTV both resolve to canonical fields (only Risk Monitor
+# should ever be a placeholder).
+# --------------------------------------------------------------------------- #
+def test_cli_prep_pipeline_uses_real_mi_agent_prep():
+    from mi_agent_pptx.cli import _prep_pipeline
+    out = _prep_pipeline(_raw_pipeline(), "2026-01-31")
+    for col in ("current_outstanding_balance", "pipeline_stage", "broker_channel",
+                "weighted_expected_funded_amount", "expected_completion_date"):
+        assert col in out.columns, col
+    # Real prep emits canonical UPPERCASE stage tokens.
+    assert set(out["pipeline_stage"].str.upper()) <= {
+        "KFI", "APPLICATION", "OFFER", "COMPLETED", "WITHDRAWN", "OTHER"}
+
+
+def test_cli_prep_funded_derives_original_ltv(sample_tape):
+    from mi_agent_pptx.cli import _prep_funded
+    # sample_tape carries current LTV but not an explicit original LTV column.
+    out = _prep_funded(sample_tape)
+    assert "original_loan_to_value" in out.columns
+    assert out["original_loan_to_value"].notna().any()
