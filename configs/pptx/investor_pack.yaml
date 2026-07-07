@@ -140,7 +140,7 @@ slides:
         type: barlist
         dimension: pipeline_stage
         measure: balance
-        order: ["KFI Issued", "Application", "Offer Issued", "Completed", "Withdrawn"]
+        order: ["KFI", "APPLICATION", "OFFER", "COMPLETED", "WITHDRAWN"]
       - id: pipeline_channel_mix
         title: "Channel Mix (Pipeline)"
         type: barlist
@@ -161,7 +161,7 @@ slides:
         type: barlist
         dimension: pipeline_stage
         measure: count
-        order: ["KFI Issued", "Application", "Offer Issued", "Completed", "Withdrawn"]
+        order: ["KFI", "APPLICATION", "OFFER", "COMPLETED", "WITHDRAWN"]
 
   # 5 ------------------------------------------- Pipeline Run-Rate / Forecast
   - id: pipeline_forecast
@@ -323,7 +323,7 @@ slides:
         type: barlist
         dimension: pipeline_stage
         measure_field: weighted_expected_funded_amount
-        order: ["KFI Issued", "Application", "Offer Issued", "Completed"]
+        order: ["KFI", "APPLICATION", "OFFER", "COMPLETED"]
 
   # 13 --------------------------------------------------------- Risk Monitor
   - id: risk_monitor

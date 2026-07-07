@@ -74,6 +74,13 @@ def _currency_axis(_x, _pos):
     return compact_currency(_x)
 
 
+# Canonical pipeline stage tokens -> readable labels for the deck.
+_STAGE_LABELS = {
+    "KFI": "KFI", "APPLICATION": "Application", "OFFER": "Offer",
+    "COMPLETED": "Completed", "WITHDRAWN": "Withdrawn", "OTHER": "Other",
+}
+
+
 def render_bridge_waterfall(out_path, steps, width_in, height_in, theme=THEME,
                             dpi=220):
     """Render a forecast-bridge waterfall (funded → +weighted pipeline → forecast).
@@ -306,6 +313,8 @@ class ChartResolver:
                        and self.data.balance_col is not None)
         values = (table["balance_sum"] if use_balance else table["loan_count"]).astype(float)
         labels = table["label"].astype(str).tolist()
+        if spec.get("dimension") == "pipeline_stage":
+            labels = [_STAGE_LABELS.get(str(x).upper(), str(x).title()) for x in labels]
         counts = table["loan_count"].astype(int).tolist() if "loan_count" in table else None
         fmt = compact_currency if use_balance else compact_number
 
