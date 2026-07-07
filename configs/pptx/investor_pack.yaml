@@ -81,12 +81,7 @@ slides:
     type: pipeline_evolution
     title: "Pipeline Evolution"
 
-  # 12 --------------------------------------------------- Origination Funnel
-  - id: funnel
-    type: funnel
-    title: "Origination Funnel"
-
-  # 13 ------------------------------------- Origination Flow (KFIs & Completions)
+  # 12 ------------------------------------- Origination Flow (KFIs & Completions)
   - id: origination_flow
     type: origination_flow
     title: "Origination Flow — KFIs & Completions"

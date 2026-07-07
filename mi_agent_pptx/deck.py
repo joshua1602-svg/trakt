@@ -447,10 +447,11 @@ class DeckBuilder:
              "value": compact_currency(p.get("weightedExpectedFundedAmount")),
              "hint": "probability-weighted"},
         ]
+        # Four tiles: two flush over each chart card below (0.55–6.55, 6.78–12.78).
         tw = Inches(2.92)
-        for i, tile in enumerate(tiles):
-            l = Emu(int(Inches(0.55)) + i * int(Inches(3.0)))
-            self._tile(s, l, Inches(1.6), tw, Inches(1.45), tile)
+        xs = [Inches(0.55), Inches(3.63), Inches(6.78), Inches(9.86)]
+        for x, tile in zip(xs, tiles):
+            self._tile(s, x, Inches(1.6), tw, Inches(1.45), tile)
         # two BarLists: stage + broker
         box1 = (Inches(0.55), Inches(3.28), Inches(6.0), Inches(3.35))
         box2 = (Inches(6.78), Inches(3.28), Inches(6.0), Inches(3.35))
@@ -506,21 +507,24 @@ class DeckBuilder:
                                    theme=self.theme, width_in=iw, height_in=ih)
         self._place(s, p1, il, it, iw, ih)
 
-        # Pipeline by stage over time — EXCLUDING the KFI line (dashboard view).
-        il, it, iw, ih = self._card(s, *boxes[1], "Pipeline by stage over time")
-        p2 = self.work / "pevo_stage.png"
-        by_stage = evo.get("byStage", [])
-        if not single and by_stage:
-            weeks = sorted({str(r.get("week") or r.get("period")) for r in by_stage})
-            lut = {(str(r.get("stage", "")).upper(), str(r.get("week") or r.get("period"))):
-                   r.get("value") for r in by_stage}
+        # Cumulative cohort conversion over time (KFI → Application → Offer →
+        # Completed), as a % of the weekly KFI cohort — EXCLUDING the KFI line.
+        il, it, iw, ih = self._card(s, *boxes[1],
+                                    "Conversion over time (share of KFI cohort)")
+        p2 = self.work / "pevo_conv.png"
+        fser = self.d.funnel.get("series", {}) or {}
+        kfi = {str(pt.get("week")): (pt.get("count") or 0) for pt in fser.get("KFI", [])}
+        weeks = sorted(kfi)
+        if not single and kfi and any(kfi.values()):
             series = []
-            for st in ("APPLICATION", "OFFER", "COMPLETED", "WITHDRAWN"):
-                vals = [lut.get((st, w)) for w in weeks]
+            for st in ("APPLICATION", "OFFER", "COMPLETED"):
+                by_wk = {str(pt.get("week")): (pt.get("count") or 0) for pt in fser.get(st, [])}
+                vals = [(by_wk.get(w, 0) / kfi[w]) if kfi.get(w) else None for w in weeks]
                 if any(v for v in vals):
                     series.append({"name": self._STAGE_PRETTY[st], "values": vals,
                                    "color": self._STAGE_COLOR[st]})
-            R.draw_lines(p2, weeks, series, iw, ih, theme=self.theme, currency=True)
+            R.draw_lines(p2, weeks, series, iw, ih, theme=self.theme, currency=False,
+                         percent=True)
         else:
             render_placeholder_png(p2, "", "Insufficient reporting history (needs ≥2 weeks)",
                                    theme=self.theme, width_in=iw, height_in=ih)
@@ -535,18 +539,19 @@ class DeckBuilder:
         self._header(s, spec.get("title", "Origination Flow — KFIs & Completions"),
                      "Weekly flow with cumulative build", accent=self.theme.peri)
         f = self.d.funnel or {}
-        series = f.get("series", {}) or {}
+        flows = f.get("flowSeries", {}) or {}
         summary = f.get("summary", {}) or {}
-        single = bool(f.get("singlePeriod")) or not series
+        single = bool(f.get("singlePeriod")) or not flows
         boxes = self._chart_boxes(2)
         for box, stage in zip(boxes, ("KFI", "COMPLETED")):
             label = self._STAGE_PRETTY.get(stage, stage)
             il, it, iw, ih = self._card(s, *box, f"{label}s · weekly flow")
             path = self.work / f"flow_{stage.lower()}.png"
-            pts = series.get(stage) or []
+            pts = flows.get(stage) or []
             if not single and pts:
                 weeks = [str(pt.get("week")) for pt in pts]
-                vals = [pt.get("value") for pt in pts]
+                # Bars = NEW volume each week (flow); line = cumulative build.
+                vals = [pt.get("flowValue") for pt in pts]
                 cum, run = [], 0.0
                 for v in vals:
                     run += float(v or 0)
@@ -571,12 +576,11 @@ class DeckBuilder:
         md = self.d.multidim or {}
         # Left half — bubble.
         il, it, iw, ih = self._card(s, Inches(0.55), Inches(1.62), Inches(6.4),
-                                    Inches(4.95), "Balance by LTV × Borrower Age")
-        bub = md.get("ltv_age")
+                                    Inches(4.95), "Balance by LTV × Borrower Age (per loan)")
+        loans = md.get("ltv_age_loans")
         p0 = self.work / "md_bubble.png"
-        if bub and bub.get("points"):
-            R.draw_bubble(p0, bub["points"], bub["xLabels"], bub["yLabels"], iw, ih,
-                          theme=self.theme)
+        if loans:
+            R.draw_loan_bubble(p0, loans, iw, ih, theme=self.theme)
         else:
             render_placeholder_png(p0, "", "LTV × age not available on this tape",
                                    theme=self.theme, width_in=iw, height_in=ih)

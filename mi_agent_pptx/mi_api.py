@@ -322,13 +322,20 @@ def _prior_funded(cuts: List[Tuple[str, str]], cid: str, reporting_date: Optiona
 _BALANCE = "current_outstanding_balance"
 
 
+def _titled(series):
+    """Title-case category labels (South West, Single, Joint) for readable axes."""
+    if series is None:
+        return None
+    return series.astype("string").str.strip().str.title()
+
+
 def _borrower_type_series(df: pd.DataFrame):
     if "borrower_type" in df.columns and df["borrower_type"].notna().any():
-        return df["borrower_type"].astype("string")
+        return _titled(df["borrower_type"])
     for col in ("borrower_2_DOB", "borrower_2_dob", "second_borrower_dob",
-                "borrower_2_date_of_birth"):
+                "borrower_2_date_of_birth", "borrower_2_date_of_death"):
         if col in df.columns:
-            joint = df[col].notna() & (df[col].astype(str).str.strip() != "")
+            joint = df[col].notna() & (df[col].astype(str).str.strip().isin(("", "nan", "NaT")) == False)  # noqa: E712
             return joint.map({True: "Joint", False: "Single"}).astype("string")
     return None
 
@@ -354,9 +361,15 @@ def _broker_series(df: pd.DataFrame):
 
 
 def _region_series(df: pd.DataFrame):
-    for col in ("geographic_region_collateral", "geographic_region_obligor", "region"):
+    # Prefer READABLE region names (South West, North East) over ITL3 codes.
+    for col in ("collateral_geography", "property_region", "region_name",
+                "geographic_region_collateral", "geographic_region_obligor", "region"):
         if col in df.columns and df[col].notna().any():
-            return df[col].astype("string")
+            vals = df[col].astype("string")
+            # If the column is ITL3 codes (e.g. TLI3), keep as-is; else title-case.
+            sample = vals.dropna().head(20)
+            is_code = bool(len(sample)) and sample.str.match(r"^TL[A-Z0-9]{2,3}$").mean() > 0.5
+            return vals if is_code else _titled(vals)
     return None
 
 
@@ -433,13 +446,27 @@ def _matrix(df: pd.DataFrame, x_series, y_series):
     return {"xLabels": x_labels, "yLabels": y_labels, "matrix": matrix, "points": points}
 
 
+def _loan_points(df: pd.DataFrame) -> List[Dict[str, Any]]:
+    """Per-LOAN (LTV%, youngest age, balance) points for the bubble scatter."""
+    from analytics_lib.numeric import coerce_numeric
+    if not {_BALANCE, "current_loan_to_value", "youngest_borrower_age"} <= set(df.columns):
+        return []
+    ltv = coerce_numeric(df["current_loan_to_value"])
+    ltv = ltv.where(ltv.abs() > 1.5, ltv * 100.0)  # fraction → LTV points
+    age = coerce_numeric(df["youngest_borrower_age"])
+    bal = coerce_numeric(df[_BALANCE])
+    work = pd.DataFrame({"ltv": ltv, "age": age, "bal": bal}).dropna()
+    return [{"ltv": round(float(r.ltv), 1), "age": round(float(r.age), 1),
+             "balance": round(float(r.bal), 2)} for r in work.itertuples()]
+
+
 def _multidim(df: pd.DataFrame) -> Dict[str, Any]:
-    """LTV×Age (bubble), LTV×BorrowerType (heatmap), LTV×Region (heatmap)."""
+    """LTV×Age (per-loan bubble), LTV×BorrowerType (heatmap), LTV×Region (heatmap)."""
     ltv = _ltv_series(df)
     out: Dict[str, Any] = {}
-    m = _matrix(df, ltv, _age_series(df))
-    if m:
-        out["ltv_age"] = m
+    loans = _loan_points(df)
+    if loans:
+        out["ltv_age_loans"] = loans
     m = _matrix(df, ltv, _borrower_type_series(df))
     if m:
         out["ltv_borrower_type"] = m
@@ -568,7 +595,8 @@ def build_dashboard_data(
         # -- RISK limits / FORECAST extrapolation (multi-run) ------------
         data.risk = _guard(data, "risk", lambda: _risk(out_root, cid, rid))
         data.extrapolation = _guard(data, "extrapolation",
-                                    lambda: _extrapolation(out_root, prow, cid, rid, history))
+                                    lambda: _extrapolation(out_root, prow, cid, rid, history,
+                                                           data.funded_evolution, reporting_date))
 
         pipe_snapshots = _pipeline_extract_count(prow, pipe_cid)
 
@@ -731,7 +759,27 @@ def _risk(out_root, cid, rid):
     return risk_limits.compute_risk_limits(out_root, cid, rid)
 
 
-def _extrapolation(out_root, prow, cid, rid, history):
+def _extrapolation(out_root, prow, cid, rid, history, funded_evo, reporting_date):
+    """The scale-up extrapolation. ``build_extrapolation`` reads funded completion
+    history from ``evolution.funded_evolution`` (which misses local dated platform
+    canonicals); when it comes back insufficient but our resolved funded evolution
+    has ≥2 periods, recompute the completion run-rate model from those periods with
+    the endpoint's OWN public helpers — so it renders locally exactly as the
+    dashboard renders it against a blob root."""
     from mi_agent_api import forecast_extrapolation as fx
-    return fx.build_extrapolation(out_root, prow or out_root, cid, rid,
-                                  history_model=history)
+    result = fx.build_extrapolation(out_root, prow or out_root, cid, rid,
+                                    history_model=history)
+    crf = result.get("completionRunRateForecast") or {}
+    if not crf.get("available"):
+        periods = (funded_evo or {}).get("periods", [])
+        comp = fx.completion_history(periods) if len(periods) >= 2 else []
+        if comp:
+            latest = (periods[-1].get("metrics") or {}).get("funded_balance")
+            current = float(latest if latest is not None else result.get("currentFundedBalance") or 0)
+            rp = str(reporting_date)[:7] if reporting_date else None
+            model = fx.run_rate_model(current, [c["completion_amount"] for c in comp],
+                                      reporting_period=rp)
+            model["completionHistory"] = comp
+            result["completionRunRateForecast"] = model
+            result["dataSufficiency"] = model.get("status", result.get("dataSufficiency"))
+    return result

@@ -9,8 +9,33 @@ width×height of its slide panel and onto the theme panel background.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+
+_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct",
+           "Nov", "Dec"]
+
+
+def _short_date(s: Any) -> str:
+    """``2025-08-01`` / ``2025-08`` → ``Aug '25``; leave other labels unchanged."""
+    m = re.match(r"^(\d{4})-(\d{2})(?:-\d{2})?$", str(s))
+    if m and 1 <= int(m.group(2)) <= 12:
+        return f"{_MONTHS[int(m.group(2)) - 1]} '{m.group(1)[2:]}"
+    return str(s)
+
+
+def _xticks(ax, x, x_labels):
+    """Sparse, readable x-axis: ≤7 shortened labels, every-Nth otherwise."""
+    n = len(x_labels)
+    if not n:
+        return
+    step = max(1, -(-n // 7))  # ceil(n/7)
+    idx = list(range(0, n, step))
+    if (n - 1) not in idx:
+        idx.append(n - 1)
+    ax.set_xticks([x[i] for i in idx])
+    ax.set_xticklabels([_short_date(x_labels[i]) for i in idx], fontsize=8.5)
 
 import matplotlib
 
@@ -138,49 +163,42 @@ def draw_bars_with_line(path, x_labels: Sequence[str], bars: Sequence[Optional[f
     ax2.tick_params(colors=theme.ink_500, labelsize=8.5, length=0)
     ax2.yaxis.set_major_formatter(FuncFormatter(
         lambda v, p: compact_currency(v) if bar_currency else compact_number(v)))
-    step = max(1, n // 7)
-    idx = sorted(set(list(range(0, n, step)) + [n - 1]))
-    ax.set_xticks([x[i] for i in idx])
-    ax.set_xticklabels([str(x_labels[i]) for i in idx], fontsize=8, color=theme.ink_500)
+    _xticks(ax, x, x_labels)
+    for lbl in ax.get_xticklabels():
+        lbl.set_color(theme.ink_500)
     return _save(fig, path, theme, dpi)
 
 
-def draw_bubble(path, points: Sequence[Dict[str, Any]], x_labels: Sequence[str],
-                y_labels: Sequence[str], w: float, h: float, *, theme: PptxTheme = THEME,
-                dpi: int = 220) -> Path:
-    """Balance bubble grid: x/y are ordered band labels, bubble area ∝ balance.
-    *points* = ``[{x, y, value}]`` where x/y are indices into the label lists."""
+def draw_loan_bubble(path, loans: Sequence[Dict[str, Any]], w: float, h: float, *,
+                     theme: PptxTheme = THEME, dpi: int = 220) -> Path:
+    """One bubble per LOAN: x = current LTV %, y = youngest borrower age, bubble
+    area ∝ balance. Semi-transparent so overlapping loans read as density (the
+    right view as the book grows)."""
     fig = _fig(w, h, theme, dpi)
-    ax = fig.add_axes([0.16, 0.14, 0.80, 0.80])
+    ax = fig.add_axes([0.11, 0.13, 0.85, 0.82])
     ax.set_facecolor(theme.bg_panel)
-    for s in ("top", "right"):
-        ax.spines[s].set_visible(False)
-    for s in ("bottom", "left"):
-        ax.spines[s].set_color(theme.line_soft)
+    for sp in ("top", "right"):
+        ax.spines[sp].set_visible(False)
+    for sp in ("bottom", "left"):
+        ax.spines[sp].set_color(theme.line_soft)
     ax.tick_params(colors=theme.ink_400, labelsize=9, length=0)
     ax.grid(True, color=theme.line_soft, linewidth=0.6, linestyle=(0, (2, 3)), alpha=0.7)
     ax.set_axisbelow(True)
-    pts = [p for p in points if p.get("value")]
+    pts = [p for p in loans if p.get("balance")]
     if not pts:
         ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes,
                 color=theme.ink_500, fontsize=12)
         ax.axis("off")
         return _save(fig, path, theme, dpi)
-    vmax = max(float(p["value"]) for p in pts) or 1.0
-    xs = [p["x"] for p in pts]
-    ys = [p["y"] for p in pts]
-    sizes = [80 + 2600 * (float(p["value"]) / vmax) for p in pts]
-    ax.scatter(xs, ys, s=sizes, c=theme.peri, alpha=0.62, edgecolors=theme.mint,
-               linewidths=0.8, zorder=3)
-    for p in pts:
-        ax.text(p["x"], p["y"], compact_currency(p["value"]), ha="center", va="center",
-                color=theme.ink_100, fontsize=7.2, zorder=4)
-    ax.set_xticks(range(len(x_labels)))
-    ax.set_xticklabels(list(x_labels), fontsize=8.5, color=theme.ink_400, rotation=0)
-    ax.set_yticks(range(len(y_labels)))
-    ax.set_yticklabels(list(y_labels), fontsize=8.5, color=theme.ink_400)
-    ax.set_xlim(-0.6, len(x_labels) - 0.4)
-    ax.set_ylim(-0.6, len(y_labels) - 0.4)
+    vmax = max(float(p["balance"]) for p in pts) or 1.0
+    xs = [float(p["ltv"]) for p in pts]
+    ys = [float(p["age"]) for p in pts]
+    sizes = [30 + 900 * (float(p["balance"]) / vmax) for p in pts]
+    ax.scatter(xs, ys, s=sizes, c=theme.peri, alpha=0.42, edgecolors=theme.mint,
+               linewidths=0.5, zorder=3)
+    ax.xaxis.set_major_formatter(FuncFormatter(lambda v, p: f"{v:.0f}%"))
+    ax.set_xlabel("Current LTV", color=theme.ink_400, fontsize=9)
+    ax.set_ylabel("Youngest borrower age", color=theme.ink_400, fontsize=9)
     return _save(fig, path, theme, dpi)
 
 
@@ -204,9 +222,11 @@ def draw_heatmap(path, x_labels: Sequence[str], y_labels: Sequence[str],
         "brand", [theme.bg_panel_alt, theme.peri, theme.mint])
     ax.imshow(mat, cmap=cmap, aspect="auto", vmin=0, vmax=mat.max())
     ax.set_xticks(range(len(x_labels)))
-    ax.set_xticklabels(list(x_labels), fontsize=8, color=theme.ink_400)
+    ax.set_xticklabels([_truncate(str(x), 12) for x in x_labels], fontsize=8,
+                       color=theme.ink_400)
     ax.set_yticks(range(len(y_labels)))
-    ax.set_yticklabels(list(y_labels), fontsize=8, color=theme.ink_400)
+    ax.set_yticklabels([_truncate(str(y), 16) for y in y_labels], fontsize=8,
+                       color=theme.ink_400)
     for i in range(mat.shape[0]):
         for j in range(mat.shape[1]):
             if mat[i, j]:
@@ -253,13 +273,11 @@ def draw_lines(path, x_labels: Sequence[str], series: Sequence[Dict[str, Any]],
     if currency:
         ax.yaxis.set_major_formatter(FuncFormatter(lambda v, p: compact_currency(v)))
     elif percent:
-        ax.yaxis.set_major_formatter(FuncFormatter(lambda v, p: f"{v * 100:.0f}%"
-                                                   if v <= 1.5 else f"{v:.0f}%"))
-    step = max(1, n // 7)
-    idx = sorted(set(list(range(0, n, step)) + [n - 1]))
-    ax.set_xticks([x[i] for i in idx])
-    ax.set_xticklabels([str(x_labels[i]) for i in idx], fontsize=8.5,
-                       color=theme.ink_500)
+        ax.yaxis.set_major_formatter(FuncFormatter(lambda v, p: f"{v * 100:.1f}%"
+                                                   if v <= 1.5 else f"{v:.1f}%"))
+    _xticks(ax, x, x_labels)
+    for lbl in ax.get_xticklabels():
+        lbl.set_color(theme.ink_500)
     if len(series) > 1:
         leg = ax.legend(loc="upper left", fontsize=8.5, frameon=False,
                         ncol=min(len(series), 3), handlelength=1.4)
