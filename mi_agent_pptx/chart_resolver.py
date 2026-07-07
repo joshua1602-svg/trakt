@@ -137,7 +137,8 @@ def render_bridge_waterfall(out_path, steps, width_in, height_in, theme=THEME,
     ax.set_xticks(xs)
     ax.set_xticklabels([lab for lab, _, _ in steps], fontsize=9.5,
                        color=theme.ink_300)
-    ax.set_ylim(0, max(v for _, v, k in steps if k in ("base", "total", "add")) * 1.16)
+    _ymax = max((v for _, v, k in steps if k in ("base", "total", "add")), default=0)
+    ax.set_ylim(0, (_ymax * 1.16) or 1.0)
     fig.savefig(_P(out_path), facecolor=theme.bg_panel, dpi=dpi)
     plt.close(fig)
     return _P(out_path)

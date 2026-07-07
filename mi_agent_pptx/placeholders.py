@@ -32,6 +32,7 @@ def render_placeholder_png(
     message: str = "Data artifact unavailable for this run",
     theme: PptxTheme = THEME,
     *,
+    subtitle: str = "trakt MI Agent",
     width_in: float = 9.6,
     height_in: float = 4.6,
     dpi: int = 200,
@@ -59,7 +60,7 @@ def render_placeholder_png(
             color=theme.ink_100, fontsize=17, fontweight="bold")
     ax.text(0.5, 0.44, message, ha="center", va="center",
             color=theme.ink_400, fontsize=11)
-    ax.text(0.5, 0.16, "trakt MI Agent · pending pipeline artifact",
+    ax.text(0.5, 0.16, subtitle,
             ha="center", va="center", color=theme.ink_500, fontsize=8.5,
             style="italic")
 
