@@ -102,3 +102,35 @@ def test_cli_prep_funded_derives_original_ltv(sample_tape):
     out = _prep_funded(sample_tape)
     assert "original_loan_to_value" in out.columns
     assert out["original_loan_to_value"].notna().any()
+
+
+def test_pipeline_discovery_prefers_rich_source_over_thin_18a(tmp_path):
+    """The rich governed M2L source (deep under output/pipeline/) must win over
+    the thin 18a tape — the regression where pipeline charts placeholdered."""
+    import shutil
+    from mi_agent_pptx.artifact_loader import load_run_artifacts
+    from mi_agent_pptx.cli import _resolve_pipeline_tape
+    from mi_agent_pptx.registry_loader import REPO_ROOT
+
+    run = tmp_path / "orun_disc"
+    deep = run / "portfolios" / "direct_001" / "onboarding" / "mi" / "output" / "pipeline" / "2025-11-01"
+    deep.mkdir(parents=True)
+    fixture = (REPO_ROOT / "tests" / "fixtures" / "client_001_mi_pack" / "pipeline"
+               / "2025-11-01" / "M2L_KFI_and_Pipeline_2025_11_01.csv")
+    if not fixture.exists():
+        import pytest
+        pytest.skip("M2L pipeline fixture not present")
+    shutil.copy(fixture, deep / fixture.name)
+    # A thin, near-useless 18a at the run root.
+    pd.DataFrame({"application_id": [1, 2], "expected_advance": [1, 2]}).to_csv(
+        run / "18a_central_pipeline_tape.csv", index=False)
+    (run / "run_state.json").write_text('{"run_id":"orun_disc","client_id":"ERE",'
+                                        '"reporting_date":"2025-11-01"}')
+
+    artifacts = load_run_artifacts(run)
+    out = _resolve_pipeline_tape(artifacts, "2025-11-01")
+    assert out is not None and not out.empty
+    # Rich source → canonical pipeline fields present (thin 18a could not).
+    for col in ("current_outstanding_balance", "pipeline_stage", "broker_channel"):
+        assert col in out.columns, col
+    assert out["pipeline_stage"].notna().any()
