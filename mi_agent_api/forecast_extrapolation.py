@@ -329,12 +329,42 @@ def kfi_conversion_model(current_balance: float,
 # --------------------------------------------------------------------------- #
 # Entry point — wires the governed evolution series into the three models
 # --------------------------------------------------------------------------- #
+def _withdraw_kfi_model(model_b: Dict[str, Any]) -> Dict[str, Any]:
+    """Withdraw the KFI run-rate projection from presentation.
+
+    The KFI stock-flow (``_project_kfi_flow``) has no KFI→completion ATTRITION
+    (withdrawal) term, so the self-replenishing stock ultimately funds ~100% of
+    gross KFI throughput and the projection over-states scale — it tracks gross
+    KFI origination value, not net funded growth (e.g. ~£400m vs a ~£65m
+    completion run-rate). Until a governed attrition/conversion basis is
+    calibrated the projection is withdrawn: the diagnostic inputs are retained
+    for transparency but no balance path or milestones are presented, and the UI
+    is told to use the completion run-rate model instead."""
+    if not model_b.get("available"):
+        return model_b
+    model_b["available"] = False
+    model_b["status"] = "withdrawn_pending_calibration"
+    model_b["reliability"] = "low"
+    model_b["caveat"] = (
+        "Withdrawn: this KFI run-rate projection omits KFI→completion attrition, "
+        "so it over-states scale (it tracks gross KFI origination value, not net "
+        "funded growth). Use the completion run-rate forecast until a governed "
+        "KFI attrition/conversion basis is calibrated.")
+    model_b.pop("projectedBalances", None)
+    model_b.pop("milestones", None)
+    return model_b
+
+
 def build_extrapolation(output_root, pipeline_root, client_id: str,
                         to_run_id: Optional[str], *,
                         history_model: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Compose Models A/B/C from the governed funded + pipeline + forecast series."""
     funded = evolution_mod.funded_evolution(output_root, client_id, to_run_id)
-    forecast = evolution_mod.forecast_evolution(output_root, pipeline_root, client_id, to_run_id)
+    # Weight the pipeline by the SAME governed historical stage rates as the
+    # point-in-time bridge, so Model C's 'weighted expected pipeline' matches the
+    # Forecast tab instead of silently using the config-only fallback.
+    forecast = evolution_mod.forecast_evolution(
+        output_root, pipeline_root, client_id, to_run_id, historical_model=history_model)
     try:
         pipeline = evolution_mod.pipeline_evolution(pipeline_root, client_id, to_run_id)
     except Exception:  # noqa: BLE001
@@ -387,10 +417,11 @@ def build_extrapolation(output_root, pipeline_root, client_id: str,
     weekly_conv = (weekly_rate_pct / 100.0) if weekly_rate_pct is not None else None
     rate_weeks = completed_conv.get("weeksInWindow")
     min_rate_weeks = completed_conv.get("minWeeks", 3)
-    model_b = kfi_conversion_model(current_balance, kfi_stock_now, weekly_inflow,
-                                   weekly_conv, lag_weeks=lag_weeks,
-                                   rate_weeks=rate_weeks, min_rate_weeks=min_rate_weeks,
-                                   reporting_period=reporting_period)
+    model_b = _withdraw_kfi_model(
+        kfi_conversion_model(current_balance, kfi_stock_now, weekly_inflow,
+                             weekly_conv, lag_weeks=lag_weeks,
+                             rate_weeks=rate_weeks, min_rate_weeks=min_rate_weeks,
+                             reporting_period=reporting_period))
 
     sufficiency = ("ok" if model_a.get("status") == "ok"
                    else ("limited_history" if model_a.get("available") else "insufficient_data"))

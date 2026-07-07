@@ -476,8 +476,15 @@ def funded_cohort_progression(output_root: str | os.PathLike, client_id: str, *,
 # Pipeline evolution (governed weekly extracts)
 # --------------------------------------------------------------------------- #
 def pipeline_evolution(pipeline_root: str | os.PathLike, client_id: str,
-                       to_run_id: Optional[str] = None) -> Dict[str, Any]:
-    """Pipeline time series across the governed UNIQUE weekly extracts."""
+                       to_run_id: Optional[str] = None, *,
+                       historical_model: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Pipeline time series across the governed UNIQUE weekly extracts.
+
+    When a governed ``historical_model`` is supplied the weighted-expected-funded
+    amount is weighted by the SAME empirical stage completion rates used by the
+    forecast bridge (falling back to configured rates only where history is thin),
+    so the scale-up 'weighted expected pipeline' matches the Forecast tab rather
+    than silently using the config-only fallback."""
     inv = pipeline_mod.weekly_extract_inventory(pipeline_root, client_id)
     extracts = inv.get("extracts", [])
     cut_ym = pipeline_mod._year_month(str(to_run_id)) if to_run_id else None
@@ -492,7 +499,8 @@ def pipeline_evolution(pipeline_root: str | os.PathLike, client_id: str,
         if cut_ym and edate and edate[:7] > cut_ym:
             continue
         try:
-            df, report = pipeline_mod.load_prepared_pipeline(ext)
+            df, report = pipeline_mod.load_prepared_pipeline(
+                ext, historical_model=historical_model)
         except Exception:  # noqa: BLE001
             continue
         amount = report.get("total_pipeline_amount")
@@ -821,11 +829,15 @@ def pipeline_funnel_evolution(pipeline_root: str | os.PathLike, client_id: str,
 # --------------------------------------------------------------------------- #
 def forecast_evolution(output_root: str | os.PathLike,
                        pipeline_root: str | os.PathLike, client_id: str,
-                       to_run_id: Optional[str] = None) -> Dict[str, Any]:
+                       to_run_id: Optional[str] = None, *,
+                       historical_model: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Forecast bridge over time: funded balance per run + the latest weighted
-    pipeline contribution available at/under that run's month."""
+    pipeline contribution available at/under that run's month. A governed
+    ``historical_model`` weights the pipeline by the same empirical stage rates as
+    the point-in-time bridge (one consistent 'weighted expected pipeline')."""
     funded = funded_evolution(output_root, client_id, to_run_id)
-    pipe = pipeline_evolution(pipeline_root, client_id, to_run_id)
+    pipe = pipeline_evolution(pipeline_root, client_id, to_run_id,
+                              historical_model=historical_model)
     # Index pipeline weighted-expected by year-month (latest extract per month).
     weighted_by_month: Dict[str, float] = {}
     for p in pipe["periods"]:
