@@ -95,6 +95,45 @@ def _prep_pipeline(tape: pd.DataFrame, as_of: Optional[str]) -> pd.DataFrame:
         return tape
 
 
+def _read_source(path: str):
+    """Read a governed pipeline source (CSV/XLSX), returning ``None`` on failure."""
+    p = Path(path)
+    try:
+        if p.suffix.lower() in (".xlsx", ".xls"):
+            return pd.read_excel(p)
+        return pd.read_csv(p, low_memory=False)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _resolve_pipeline_tape(artifacts: RunArtifacts, as_of: Optional[str]):
+    """Resolve the pipeline frame the way the MI dashboard does.
+
+    The thin ``18a_central_pipeline_tape.csv`` the artifact loader finds is a
+    last-resort fallback; the MI layer prefers the RICH governed weekly source
+    (``M2L*KFI*Pipeline*.csv`` materialised under ``output/pipeline/``). Discover
+    that source anywhere under the run directory (mirroring
+    ``mi_agent_api.pipeline_contract.discover_pipeline_sources``), prep it, and
+    only fall back to the thin tape when no richer source exists.
+    """
+    # 1. Rich governed source (preferred — matches the dashboard).
+    try:
+        from mi_agent_api.pipeline_contract import discover_pipeline_sources
+        sources = discover_pipeline_sources(str(artifacts.run_dir))
+        if sources:
+            newest = sources[-1]
+            raw = _read_source(newest.get("source_file", ""))
+            if raw is not None and not raw.empty:
+                return _prep_pipeline(raw, as_of or newest.get("pipeline_as_of_date"))
+    except Exception:  # noqa: BLE001 — discovery is best effort
+        pass
+    # 2. Fallback: the thin 18a tape the artifact loader already found.
+    if artifacts.has_pipeline:
+        return _prep_pipeline(
+            artifacts.pipeline_tape, as_of or artifacts.run_state.get("reporting_date"))
+    return None
+
+
 def _lens_bundle(artifacts: RunArtifacts, registries: RegistryLoader,
                  as_of: Optional[str]) -> Dict[str, Optional[ResolvedData]]:
     """Resolve the funded / pipeline / forecast frames for a run."""
@@ -102,10 +141,8 @@ def _lens_bundle(artifacts: RunArtifacts, registries: RegistryLoader,
                    else pd.DataFrame())
     funded = resolve_data(funded_tape, registries, as_of_date=as_of)
     pipeline = None
-    if artifacts.has_pipeline:
-        pipe_df = _prep_pipeline(
-            artifacts.pipeline_tape,
-            as_of or artifacts.run_state.get("reporting_date"))
+    pipe_df = _resolve_pipeline_tape(artifacts, as_of)
+    if pipe_df is not None and not pipe_df.empty:
         pipeline = resolve_data(pipe_df, registries, as_of_date=as_of)
     # Forecast charts (run-rate / cumulative) draw from the pipeline frame's
     # expected-completion data; the forecast KPI uses the registry bridge.
