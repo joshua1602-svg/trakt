@@ -171,6 +171,24 @@ class TestWorkspaceApi(unittest.TestCase):
         self.assertFalse(body["ok"])
         self.assertEqual(body["metadata"]["datasetContext"], "pipeline")
 
+    def test_pipeline_exception_returns_controlled_error_not_500(self):
+        # A crash inside the MI pipeline must be surfaced as a controlled error
+        # response (HTTP 200, ok=False, readable message) — never a raw 500 that
+        # the UI reports as "could not reach the API".
+        import unittest.mock as mock
+        from fastapi.testclient import TestClient
+        from mi_agent_api.app import app
+        with mock.patch("mi_agent_api.app.run_mi_agent_query",
+                        side_effect=RuntimeError("boom in executor")):
+            resp = TestClient(app).post("/mi/query", json={
+                "question": "balance by borrower type by region",
+                "portfolioId": "client_001/mi_2025_11", "datasetContext": "funded"})
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertFalse(body["ok"])
+        self.assertIn("boom in executor", body["error"])
+        self.assertIn("RuntimeError", body["error"])
+
     def test_separation_funded_and_pipeline_not_merged(self):
         # The forecast frame is derived in-memory; the funded tape on disk is
         # untouched and carries no pipeline columns.

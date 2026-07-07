@@ -562,11 +562,16 @@ def run_mi_agent_query(
     # ---- end-to-end query trace (parser -> executor -> invariant) ---------
     # Makes it immediately clear whether a fault is parser-, executor- or
     # renderer-side. The adapter enriches it with the emitted chart axes.
-    from .mi_query_contract import build_query_trace
-    result["query_trace"] = build_query_trace(
-        question=question, spec=spec, parse_meta=parse_meta,
-        query_result=qres, semantics=semantics, invariant=invariant,
-        filter_invariant=filter_invariant)
+    # The trace is a diagnostic aid — it must NEVER break an otherwise-good
+    # answer. Build it defensively.
+    try:
+        from .mi_query_contract import build_query_trace
+        result["query_trace"] = build_query_trace(
+            question=question, spec=spec, parse_meta=parse_meta,
+            query_result=qres, semantics=semantics, invariant=invariant,
+            filter_invariant=filter_invariant)
+    except Exception as exc:  # pragma: no cover - defensive
+        warnings.append(f"query trace unavailable: {exc}")
 
     result["ok"] = True
     # The chart factory copies the executor's warnings onto its result, so the
