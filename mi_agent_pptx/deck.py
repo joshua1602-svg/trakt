@@ -194,12 +194,12 @@ class DeckBuilder:
                 (Inches(6.78), top, Inches(6.0), h)]
 
     def _barlist_card(self, slide, box, title, rows, value_key, *, currency=True,
-                      cid="bl"):
+                      cid="bl", label_key="label"):
         il, it, iw, ih = self._card(slide, *box, title)
         path = self.work / f"{cid}.png"
         if rows:
             R.draw_barlist(path, rows, value_key, iw, ih, theme=self.theme,
-                           currency=currency)
+                           currency=currency, label_key=label_key)
         else:
             render_placeholder_png(path, "", "No data for this run",
                                    theme=self.theme, width_in=iw, height_in=ih)
@@ -328,12 +328,16 @@ class DeckBuilder:
         self._record("geography", spec.get("title"), "", placeholder=not areas)
 
     def _evolution_lines(self, s, spec, evo, chart_specs, accent=None):
-        """Render N line-chart cards from an evolution payload's periods[]."""
+        """Render N line-chart cards from an evolution payload's periods[].
+
+        A time series needs ≥2 reporting periods; the dashboard flags a single cut
+        with ``singlePeriod`` and shows an insufficient-history state rather than a
+        lone point — so do the same (a one-dot 'trend' reads as broken)."""
         periods = evo.get("periods", [])
+        single = bool(evo.get("singlePeriod")) or len(periods) < 2
         x = [str(p.get("period") or p.get("reporting_date") or p.get("run_id"))
              for p in periods]
         boxes = self._chart_boxes(len(chart_specs))
-        ph = not periods
         for cs, box in zip(chart_specs, boxes):
             il, it, iw, ih = self._card(s, *box, cs["title"])
             series = [{"name": ser.get("name", ""),
@@ -341,16 +345,17 @@ class DeckBuilder:
                        "color": ser.get("color")}
                       for ser in cs["series"]]
             path = self.work / f"{cs['id']}.png"
-            if periods:
+            if not single:
                 R.draw_lines(path, x, series, iw, ih, theme=self.theme,
                              currency=cs.get("currency", True),
                              percent=cs.get("percent", False),
                              area=cs.get("area", False))
             else:
-                render_placeholder_png(path, "", "Insufficient reporting history",
-                                       theme=self.theme, width_in=iw, height_in=ih)
+                render_placeholder_png(path, "", "Insufficient reporting history "
+                                       "(needs ≥2 periods)", theme=self.theme,
+                                       width_in=iw, height_in=ih)
             self._place(s, path, il, it, iw, ih)
-        return ph
+        return single
 
     def slide_funded_evolution(self, spec):
         s = self._slide()
@@ -433,19 +438,27 @@ class DeckBuilder:
         self._barlist_card(s, box1, "Pipeline amount by stage",
                            self._stage_rows(p.get("stageBreakdown", [])), "pipelineAmount",
                            cid="pipe_stage")
-        broker = p.get("brokerBreakdown", []) or p.get("regionBreakdown", [])
-        self._barlist_card(s, box2, "Pipeline amount by broker / channel",
-                           broker, "pipelineAmount", cid="pipe_broker")
+        # broker/region breakdown rows are keyed `key` (not `label`) and cap_breakdown
+        # appends an aggregated "Other" row last — sort by amount so the BarList reads
+        # largest-first, and bind the label to `key`.
+        broker = list(p.get("brokerBreakdown", []) or p.get("regionBreakdown", []))
+        broker.sort(key=lambda r: r.get("pipelineAmount", 0), reverse=True)
+        broker_title = ("Pipeline amount by broker / channel"
+                        if p.get("brokerBreakdown") else "Pipeline amount by region")
+        self._barlist_card(s, box2, broker_title, broker, "pipelineAmount",
+                           cid="pipe_broker", label_key="key")
         self._footer(s)
         self._record("pipeline", spec.get("title"), "", placeholder=False)
 
-    def _stage_rows(self, rows):
+    def _stage_rows(self, rows, value_key="pipelineAmount"):
         order = {"KFI": 0, "APPLICATION": 1, "OFFER": 2, "COMPLETED": 3, "WITHDRAWN": 4}
         pretty = {"KFI": "KFI", "APPLICATION": "Application", "OFFER": "Offer",
-                  "COMPLETED": "Completed", "WITHDRAWN": "Withdrawn"}
+                  "COMPLETED": "Completed", "WITHDRAWN": "Withdrawn", "UNKNOWN": "Other"}
         rows = sorted(rows, key=lambda r: order.get(str(r.get("stage", "")).upper(), 9))
-        return [{"label": pretty.get(str(r.get("stage", "")).upper(), r.get("stage")),
-                 "pipelineAmount": r.get("pipelineAmount", 0)} for r in rows]
+        return [{"label": pretty.get(str(r.get("stage", "")).upper(),
+                                     str(r.get("stage", "")).title()),
+                 "pipelineAmount": r.get("pipelineAmount", 0),
+                 "caseCount": r.get("caseCount", 0)} for r in rows]
 
     def slide_pipeline_evolution(self, spec):
         s = self._slide()
@@ -467,13 +480,22 @@ class DeckBuilder:
         summary = self.d.funnel.get("summary", {}) or {}
         stages = self.d.funnel.get("stages", []) or ["KFI", "APPLICATION", "OFFER", "COMPLETED"]
         pretty = {"KFI": "KFI", "APPLICATION": "Application", "OFFER": "Offer",
-                  "COMPLETED": "Completed"}
+                  "COMPLETED": "Completed", "WITHDRAWN": "Withdrawn"}
         rows = [{"label": pretty.get(st, st),
                  "v": (summary.get(st) or {}).get("latestFlowValue", 0)}
                 for st in stages]
         box = (Inches(0.55), Inches(1.62), Inches(12.25), Inches(4.95))
-        ok = self._barlist_card(s, box, "Latest weekly origination flow by stage",
-                                [r for r in rows if r.get("v")], "v", cid="funnel")
+        title = "Latest weekly origination flow by stage"
+        # Weekly flow needs ≥2 pipeline extracts. With a single extract, fall back to
+        # the CURRENT pipeline funnel — case counts by stage — so the slide still
+        # carries real data (matching the dashboard's single-period funnel).
+        if not any(r["v"] for r in rows):
+            stage_rows = self._stage_rows(self.d.pipeline.get("stageBreakdown", []),
+                                          value_key="caseCount")
+            rows = [{"label": r["label"], "v": r.get("caseCount", 0)} for r in stage_rows]
+            title = "Current pipeline cases by stage"
+        ok = self._barlist_card(s, box, title, [r for r in rows if r.get("v")], "v",
+                                currency=False, cid="funnel")
         self._footer(s)
         self._record("funnel", spec.get("title"), "", placeholder=not ok)
 
@@ -617,8 +639,38 @@ class DeckBuilder:
     def slide_appendix(self, spec):
         s = self._slide()
         self._header(s, spec.get("title", "Appendix — Data Coverage"), "")
-        notes = self.appendix or ["All dashboard payloads resolved; no coverage gaps."]
-        self._bullets(s, [f"•  {n}" for n in notes[:12]], size=11)
+        d = self.d.diagnostics or {}
+        ts = d.get("timeSeries", {})
+        pretty = {"funded_evolution": "Funded evolution",
+                  "pipeline_evolution": "Pipeline evolution",
+                  "funnel": "Origination funnel",
+                  "forecast_projection": "Forecast projection", "risk": "Risk limits"}
+
+        def _fmt(v, dash="not resolved"):
+            return str(v) if v not in (None, "") else dash
+
+        lines = ["RESOLVED SOURCES",
+                 f"   Funded current source:  {_fmt(d.get('fundedCurrentSource'))}",
+                 f"   Pipeline current source:  {_fmt(d.get('pipelineCurrentSource'))}",
+                 "HISTORICAL DISCOVERY",
+                 f"   Funded history root:  {_fmt(d.get('fundedHistoryRoot'))}",
+                 f"      dated funded cuts found:  {d.get('fundedCutsFound', 0)}",
+                 f"   Pipeline history root:  {_fmt(d.get('pipelineHistoryRoot'))}",
+                 f"      dated pipeline snapshots found:  {d.get('pipelineSnapshotsFound', 0)}",
+                 "TIME-SERIES SLIDE COVERAGE"]
+        for key, label in pretty.items():
+            info = ts.get(key, {})
+            if info.get("placeholder"):
+                lines.append(f"   {label}:  placeholder — {info.get('reason') or 'insufficient history'}")
+            else:
+                extra = f" ({info['periods']} periods)" if info.get("periods") else ""
+                lines.append(f"   {label}:  rendered{extra}")
+        extra_notes = [n for n in self.appendix
+                       if "placeholder" not in n.lower() and "render" not in n.lower()]
+        if extra_notes:
+            lines.append("NOTES")
+            lines += [f"   •  {n}" for n in extra_notes[:6]]
+        self._bullets(s, lines, size=10.5)
         self._footer(s)
         self._record("appendix", spec.get("title"), "")
 

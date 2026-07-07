@@ -2,32 +2,47 @@
 
 Produces the SAME payloads the React dashboard renders, by calling the exact
 compute functions behind the ``/mi/*`` endpoints in-process (no HTTP server, no
-LLM). The deck then renders those payloads verbatim, so every number in the pack
-equals the dashboard for the same ``portfolioId = "<client_id>/<run_id>"``:
+LLM, and — deliberately — no FastAPI import, so the deck runs anywhere the
+compute modules ship, including the Azure Functions PPTX stage).
 
-* ``/mi/snapshot``            → ``snapshots.compute_funded_snapshot``
-* ``/mi/forecast/snapshot``   → ``pipeline_contract`` + ``forecast_bridge`` + ``workspace``
-* ``/mi/evolution/{funded,pipeline,funnel,forecast}`` → ``evolution.*``
-* ``/mi/cohorts``             → ``cohorts.cohort_analysis``
-* ``/mi/geo/exposure``        → ``geo.exposure_by_itl3``
-* ``/mi/risk-limits``         → ``risk_limits.compute_risk_limits``
-* ``/mi/forecast/extrapolation`` → ``forecast_extrapolation.build_extrapolation``
+Resolution parity is the point: rather than a PPTX-only guesser, the deck resolves
+a run exactly as the dashboard does and then calls the identical compute functions.
 
-Every call is individually guarded: a payload that can't be computed comes back
-empty (``{}``) and its slide degrades to a branded placeholder — the deck never
-fails, and a slide is a placeholder only when the dashboard would also have no
-data for it.
+Historical (multi-period) resolution is covered for both deployments:
+
+* **Azure / blob roots** — ``MI_AGENT_ONBOARDING_OUTPUT_ROOT`` = a ``blob://``
+  platform root: funded evolution loads the dated platform canonicals
+  (``evolution.funded_frames`` blob branch); ``MI_AGENT_PIPELINE_ROOT`` = a
+  ``blob://`` pipeline root is mirrored locally (``_materialise_pipeline_root``, the
+  same mirror ``app._pipeline_discovery_root`` performs) so pipeline evolution /
+  funnel / run-rate projection discover every dated weekly snapshot.
+* **Local downloaded history** — a filesystem root carrying dated cuts
+  (``…/{YYYY-MM-DD}/platform_canonical_typed.csv`` for funded,
+  ``…/{YYYY-MM-DD}/…pipeline…`` for weekly extracts) is discovered directly; the
+  historical cuts do NOT need to live inside the current run directory.
+* **Single local run** — one funded cut / one weekly extract: the time-series
+  surfaces report ``singlePeriod`` and the deck renders an *insufficient history*
+  placeholder (not "data unavailable").
+
+Every resolution is recorded in :attr:`DashboardData.diagnostics` for the deck's
+data-coverage appendix (current sources, history roots checked, dated-cut counts,
+and the placeholder reason per time-series slide).
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
+
+_DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
+_PLATFORM_CANONICAL_NAME = "platform_canonical_typed.csv"
 
 
 @dataclass
@@ -38,7 +53,7 @@ class DashboardData:
     run_id: str
     reporting_date: Optional[str] = None
     funded: Dict[str, Any] = field(default_factory=dict)          # /mi/snapshot
-    pipeline: Dict[str, Any] = field(default_factory=dict)        # pipelineSnapshot
+    pipeline: Dict[str, Any] = field(default_factory=dict)        # /mi/pipeline/snapshot
     forecast: Dict[str, Any] = field(default_factory=dict)        # /mi/forecast/snapshot
     funded_evolution: Dict[str, Any] = field(default_factory=dict)
     pipeline_evolution: Dict[str, Any] = field(default_factory=dict)
@@ -49,6 +64,7 @@ class DashboardData:
     risk: Dict[str, Any] = field(default_factory=dict)
     extrapolation: Dict[str, Any] = field(default_factory=dict)
     source_files: List[str] = field(default_factory=list)
+    diagnostics: Dict[str, Any] = field(default_factory=dict)
     notes: List[str] = field(default_factory=list)
 
     def note(self, msg: str) -> None:
@@ -56,7 +72,8 @@ class DashboardData:
             self.notes.append(msg)
 
 
-def _guard(note_target: DashboardData, label: str, fn: Callable[[], Dict[str, Any]]) -> Dict[str, Any]:
+def _guard(note_target: DashboardData, label: str,
+           fn: Callable[[], Dict[str, Any]]) -> Dict[str, Any]:
     """Run *fn*, returning ``{}`` and recording a note on failure."""
     try:
         out = fn()
@@ -80,6 +97,221 @@ def _run_ids(run_dir: Path, client_id: Optional[str], run_id: Optional[str]):
     return str(cid), str(rid), rs
 
 
+def _funded_canonical(run_path: Path) -> Optional[str]:
+    """The run's funded platform canonical (the funded book the dashboard serves)."""
+    try:
+        from .artifact_loader import load_run_artifacts
+        art = load_run_artifacts(run_path)
+        if art.has_tape and art.tape_path is not None:
+            return str(art.tape_path)
+    except Exception:  # noqa: BLE001
+        pass
+    conventional = run_path / "out_platform" / _PLATFORM_CANONICAL_NAME
+    return str(conventional) if conventional.exists() else None
+
+
+@contextmanager
+def _api_env(overrides: Dict[str, Optional[str]]):
+    """Temporarily set the env the MI Agent API reads, then restore it — so the
+    deck resolves a run exactly as the dashboard does, without leaking config."""
+    saved = {k: os.environ.get(k) for k in overrides}
+
+    def _reset_cache():
+        try:
+            from mi_agent_api import data_source
+            data_source.reset_cache()
+        except Exception:  # noqa: BLE001
+            pass
+
+    try:
+        for k, v in overrides.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        _reset_cache()
+        yield
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        _reset_cache()
+
+
+# --------------------------------------------------------------------------- #
+# Resolution helpers — mirror the like-named private helpers in mi_agent_api.app
+# (which cannot be imported here because that module pulls in FastAPI).
+# --------------------------------------------------------------------------- #
+
+def _materialise_pipeline_root(root: Optional[str]) -> Optional[str]:
+    """Return a LOCAL discovery root for ``root`` (``app._materialise_pipeline_root``).
+
+    Filesystem roots are returned unchanged. A ``blob://`` root is mirrored to a
+    local scratch tree holding ONLY the dated ``{date}/pipeline_snapshot.csv``
+    snapshots (``latest/`` excluded) so filesystem discovery / evolution / history
+    see the same set of dated sources the dashboard does."""
+    if not root or not str(root).startswith("blob://"):
+        return root
+    try:
+        from apps.blob_trigger_app.storage import open_storage, split_blob_uri
+        storage = open_storage()
+        try:
+            uris = storage.list(root)
+        except Exception:  # noqa: BLE001
+            return root
+        dated = [u for u in uris if "/latest/" not in u
+                 and re.search(r"/\d{4}-\d{2}-\d{2}/pipeline_snapshot\.csv$", u)]
+        if not dated:
+            return root
+        scratch = os.environ.get("MI_AGENT_SCRATCH", "/tmp/trakt/mi_platform")
+        base = Path(scratch) / "pipeline_root"
+        _c, key = split_blob_uri(root)
+        prefix = key.rstrip("/")
+        for uri in dated:
+            _cc, ukey = split_blob_uri(uri)
+            rel = ukey[len(prefix):].lstrip("/") if ukey.startswith(prefix) else \
+                "/".join(uri.rstrip("/").split("/")[-2:])
+            dest = base / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            storage.download_file(uri, dest)
+        return str(base)
+    except Exception:  # noqa: BLE001 — never break discovery on a mirror error
+        return root
+
+
+def _pipeline_discovery_root(out_root: str) -> str:
+    """The pipeline discovery root (``app._pipeline_discovery_root``): the pipeline
+    root (or the onboarding output root), blob-mirrored to local where needed."""
+    root = os.environ.get("MI_AGENT_PIPELINE_ROOT") or out_root
+    return _materialise_pipeline_root(root) or root
+
+
+def _pipeline_history(root: str, client_id: str) -> Optional[Dict[str, Any]]:
+    """The multi-week historical completion model (``app._pipeline_history``):
+    None unless ≥2 weekly extracts exist (a single extract is not a history)."""
+    from mi_agent_api import pipeline_contract as pc
+    try:
+        model = pc.build_pipeline_history(root, client_id)
+    except Exception:  # noqa: BLE001
+        return None
+    if int((model or {}).get("uniqueWeeklyExtractsUsed", 0)) < 2:
+        return None
+    return model
+
+
+def _kfi_lag_weeks(model: Optional[Dict[str, Any]]) -> Optional[int]:
+    """Median KFI→completion lag in whole weeks (``app._kfi_lag_weeks_from_model``)."""
+    timing = ((model or {}).get("historicalCompletionTimingByStage") or {}).get("KFI") or {}
+    median_days = timing.get("medianDays")
+    return max(1, round(float(median_days) / 7.0)) if median_days else None
+
+
+def _funded_frame(cid: str) -> Optional[pd.DataFrame]:
+    """The prepared funded frame for the active run (the platform canonical set via
+    ``MI_AGENT_PLATFORM_CANONICAL``), scoped to the client when the canonical
+    carries multiple source portfolios — mirrors ``app._resolve_run_dataframe``."""
+    from mi_agent_api import data_source
+    df = data_source.get_dataframe()
+    if df is None or df.empty:
+        return None
+    if cid and "source_portfolio_id" in df.columns:
+        ids = df["source_portfolio_id"].astype(str).str.strip()
+        if (ids == cid).any():
+            return df[ids == cid]
+    return df
+
+
+def _pipeline_client(prow, cid: str) -> str:
+    """The client the governed pipeline sources actually live under.
+
+    Prefer the funded client (``app._resolve_pipeline_source`` passes it, and in
+    production the pipeline root carries the client in its path). When strict
+    path-inferred matching finds nothing under that client — a local run layout
+    where the pipeline tree is keyed by ``direct_001`` / the run folder rather than
+    the funded client — fall back to the client discovery infers from the tree."""
+    from mi_agent_api import pipeline_contract as pc
+    try:
+        if pc.resolve_pipeline_source(prow, cid, None):
+            return cid
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        srcs = pc.discover_pipeline_sources(prow)  # client_id=None → all, inferred
+        if srcs:
+            return srcs[-1].get("client_id") or cid
+    except Exception:  # noqa: BLE001
+        pass
+    return cid
+
+
+# --------------------------------------------------------------------------- #
+# Dated-cut discovery for the diagnostics + local (downloaded) history support.
+# --------------------------------------------------------------------------- #
+
+def _dated_funded_cuts(out_root: str, cid: str) -> List[Tuple[str, str]]:
+    """``[(date, uri_or_path)]`` for every dated funded platform canonical under
+    *out_root* — the dashboard's blob cuts, or a local downloaded history tree
+    (``…/{YYYY-MM-DD}/platform_canonical_typed.csv``). Oldest → newest."""
+    root = str(out_root)
+    if str(root).startswith("blob://"):
+        try:
+            from apps.blob_trigger_app.storage import open_storage
+            from mi_agent_api import platform_snapshots_blob as pb
+            dated = pb.list_dated_platform_canonicals(root, open_storage())
+            return [(d["date"], d["uri"]) for d in dated]
+        except Exception:  # noqa: BLE001
+            return []
+    cuts: Dict[str, str] = {}
+    base = Path(root)
+    if base.exists():
+        for p in base.glob(f"**/{_PLATFORM_CANONICAL_NAME}"):
+            date = p.parent.name if _DATE_RE.fullmatch(p.parent.name) else None
+            if not date:
+                m = _DATE_RE.search(str(p))
+                date = m.group(1) if m else None
+            if date:
+                cuts.setdefault(date, str(p))
+    return sorted(cuts.items())
+
+
+def _local_funded_frames(cuts: List[Tuple[str, str]], cid: str) -> List[Dict[str, Any]]:
+    """Prepared funded frames from LOCAL dated platform canonicals, scoped to the
+    client — the local analogue of ``platform_snapshots_blob.build_funded_evolution_frames``."""
+    from mi_agent_api.funded_prep import prepare_funded_mi_dataset
+    frames: List[Dict[str, Any]] = []
+    for date, path in cuts:
+        try:
+            raw = pd.read_csv(path, low_memory=False)
+        except Exception:  # noqa: BLE001
+            continue
+        if cid and "source_portfolio_id" in raw.columns:
+            ids = raw["source_portfolio_id"].astype(str).str.strip()
+            if (ids == cid).any():
+                raw = raw[ids == cid]
+        try:
+            df, _rep = prepare_funded_mi_dataset(raw)
+        except Exception:  # noqa: BLE001
+            continue
+        frames.append({"run_id": date, "reporting_date": date, "df": df, "source": path})
+    return frames
+
+
+def _pipeline_extract_count(root: str, cid: str) -> int:
+    """Number of dated weekly pipeline extracts discoverable under *root* for the
+    client (the dashboard's ``weekly_extract_inventory``)."""
+    from mi_agent_api import pipeline_contract as pc
+    try:
+        return int(len(pc.weekly_extract_inventory(root, cid).get("extracts", [])))
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+# --------------------------------------------------------------------------- #
+# Entry point.
+# --------------------------------------------------------------------------- #
+
 def build_dashboard_data(
     run_dir: str | Path,
     *,
@@ -88,147 +320,177 @@ def build_dashboard_data(
     as_of: Optional[str] = None,
     output_root: Optional[str] = None,
     pipeline_root: Optional[str] = None,
-    prior_run_dir: Optional[str] = None,
+    prior_run_dir: Optional[str] = None,  # accepted for CLI compatibility (unused)
 ) -> DashboardData:
     """Compute the full set of dashboard payloads for *run_dir*, headless."""
-    from mi_agent.mi_query_validator import load_mi_semantics
-    from mi_agent_api.data_source import semantics_path
-    from mi_agent_api import snapshots as snap
-
     run_path = Path(run_dir)
     cid, rid, rs = _run_ids(run_path, client_id, run_id)
     data = DashboardData(client_id=cid, run_id=rid)
+    pid = f"{cid}/{rid}"
 
-    try:
-        semantics = load_mi_semantics(semantics_path())
-    except Exception as exc:  # noqa: BLE001
-        data.note(f"semantics: {exc}")
-        semantics = {}
-
-    # -- funded frame (the prepared MI dataset the dashboard uses) --------
-    funded_df = _resolve_funded_df(run_path)
-    reporting_date = as_of or rs.get("reporting_date")
-    if funded_df is not None and not funded_df.empty:
-        try:
-            reporting_date = reporting_date or snap.infer_reporting_date(rid, funded_df)
-        except Exception:  # noqa: BLE001
-            pass
-    data.reporting_date = reporting_date
-
-    # Roots for the multi-run (evolution / risk) endpoints. Pipeline & funded
-    # history live across sibling runs, so default to the run dir's parent.
+    funded_uri = _funded_canonical(run_path)
     out_root = (output_root or os.environ.get("MI_AGENT_ONBOARDING_OUTPUT_ROOT")
                 or str(run_path.parent))
-    prow = _pipeline_root(run_path, pipeline_root)
+    pipe_root_env = pipeline_root or os.environ.get("MI_AGENT_PIPELINE_ROOT")
+    overrides: Dict[str, Optional[str]] = {
+        "MI_AGENT_ONBOARDING_OUTPUT_ROOT": out_root,
+        "MI_AGENT_PIPELINE_ROOT": pipe_root_env or str(run_path.parent),
+        "MI_AGENT_CLIENT_ID": cid,
+    }
+    if funded_uri:
+        overrides["MI_AGENT_PLATFORM_CANONICAL"] = funded_uri
 
-    # -- prior funded frame (for month-on-month KPI deltas) --------------
-    prior_df = _resolve_funded_df(Path(prior_run_dir)) if prior_run_dir else None
+    with _api_env(overrides):
+        from mi_agent.mi_query_validator import load_mi_semantics
+        from mi_agent_api.data_source import semantics_path
+        from mi_agent_api import snapshots as snap
 
-    # -- FUNDED snapshot (KPIs + stratifications) ------------------------
-    if funded_df is not None and not funded_df.empty:
-        data.funded = _guard(data, "funded_snapshot", lambda: snap.compute_funded_snapshot(
-            funded_df, semantics, client_id=cid, run_id=rid,
-            reporting_date=reporting_date, prior_df=prior_df))
-        data.cohorts = _guard(data, "cohorts", lambda: _cohorts(funded_df, cid, rid, reporting_date))
-        data.geo = _guard(data, "geo", lambda: _geo(funded_df, cid, rid))
-    else:
-        data.note("No funded dataset resolved for this run — funded slides "
-                  "render as branded placeholders.")
+        try:
+            semantics = load_mi_semantics(semantics_path())
+        except Exception as exc:  # noqa: BLE001
+            data.note(f"semantics: {exc}")
+            semantics = {}
 
-    # -- PIPELINE + FORECAST (rich weekly source across runs) ------------
-    pipe_df, pipe_report, pipe_snap, source = _pipeline(run_path, prow, cid, rid,
-                                                        semantics, data)
-    if pipe_snap:
-        data.pipeline = pipe_snap
-    data.forecast = _guard(data, "forecast", lambda: _forecast(
-        cid, rid, reporting_date, funded_df, pipe_df, pipe_report, pipe_snap, source))
+        prow = _pipeline_discovery_root(out_root)
+        pipe_cid = _pipeline_client(prow, cid)
+        history = _pipeline_history(prow, pipe_cid)
 
-    # -- EVOLUTION time series (multi-run) -------------------------------
-    data.funded_evolution = _guard(data, "funded_evolution",
-                                   lambda: _funded_evolution(out_root, cid, rid))
-    data.pipeline_evolution = _guard(data, "pipeline_evolution",
-                                     lambda: _pipeline_evolution(prow, cid, rid))
-    data.funnel = _guard(data, "funnel", lambda: _funnel(prow, cid, rid))
-    data.forecast_evolution = _guard(data, "forecast_evolution",
-                                     lambda: _forecast_evolution(out_root, prow, cid, rid))
+        funded_df = _funded_frame(cid)
+        reporting_date = as_of or rs.get("reporting_date")
+        if funded_df is not None and not funded_df.empty:
+            try:
+                reporting_date = reporting_date or snap.infer_reporting_date(rid, funded_df)
+            except Exception:  # noqa: BLE001
+                pass
+        data.reporting_date = reporting_date
 
-    # -- RISK limits (multi-run) -----------------------------------------
-    data.risk = _guard(data, "risk", lambda: _risk(out_root, cid, rid))
+        # -- FUNDED snapshot (KPIs + stratifications) --------------------
+        if funded_df is not None and not funded_df.empty:
+            data.funded = _guard(data, "funded_snapshot", lambda: snap.compute_funded_snapshot(
+                funded_df, semantics, client_id=cid, run_id=rid,
+                reporting_date=reporting_date))
+            data.cohorts = _guard(data, "cohorts",
+                                  lambda: _cohorts(funded_df, cid, pid, reporting_date))
+            data.geo = _guard(data, "geo", lambda: _geo(funded_df, cid, rid))
+        else:
+            data.note("No funded dataset resolved for this run — funded slides "
+                      "render as branded placeholders.")
 
-    # -- FORECAST extrapolation (scale-up curve) -------------------------
-    data.extrapolation = _guard(data, "extrapolation",
-                                lambda: _extrapolation(out_root, prow, cid, rid))
+        # -- PIPELINE snapshot (latest governed weekly extract) ----------
+        pipe_df, pipe_report, source = _pipeline(prow, pipe_cid, rid, semantics, history, data)
 
+        # -- FORECAST snapshot (funded + weighted pipeline bridge) -------
+        data.forecast = _guard(data, "forecast", lambda: _forecast(
+            cid, rid, reporting_date, funded_df, pipe_df, pipe_report,
+            data.pipeline, source))
+
+        # -- Multi-run EVOLUTION / FUNNEL / FORECAST ---------------------
+        funded_cuts = _dated_funded_cuts(out_root, cid)
+        data.funded_evolution = _guard(data, "funded_evolution",
+                                       lambda: _funded_evo(out_root, cid, rid, funded_cuts))
+        data.pipeline_evolution = _guard(data, "pipeline_evolution",
+                                         lambda: _pipeline_evo(prow, pipe_cid, history))
+        data.funnel = _guard(data, "funnel", lambda: _funnel(prow, pipe_cid, history))
+        data.forecast_evolution = _guard(data, "forecast_evolution",
+                                         lambda: _forecast_evo(out_root, prow, cid, rid, history))
+
+        # -- RISK limits / FORECAST extrapolation (multi-run) ------------
+        data.risk = _guard(data, "risk", lambda: _risk(out_root, cid, rid))
+        data.extrapolation = _guard(data, "extrapolation",
+                                    lambda: _extrapolation(out_root, prow, cid, rid, history))
+
+        pipe_snapshots = _pipeline_extract_count(prow, pipe_cid)
+
+    # Provenance + diagnostics ------------------------------------------
     if source and source.get("source_file"):
         data.source_files.append(Path(source["source_file"]).name)
+    data.diagnostics = _diagnostics(data, out_root, prow, funded_uri, source,
+                                    funded_cuts, pipe_snapshots)
+
+    if not data.pipeline:
+        data.note("No pipeline source resolved — pipeline & forecast slides "
+                  "render as branded placeholders.")
     return data
 
 
+def _diagnostics(data, out_root, prow, funded_uri, source, funded_cuts, pipe_snapshots):
+    """The data-coverage provenance the appendix renders (requirement #4)."""
+    def _pph(payload, min_periods=2):
+        periods = len(payload.get("periods", []))
+        single = bool(payload.get("singlePeriod")) or periods < min_periods
+        return periods, single
+
+    f_periods, f_single = _pph(data.funded_evolution)
+    p_periods, p_single = _pph(data.pipeline_evolution)
+    proj = ((data.extrapolation.get("completionRunRateForecast") or {}).get("available")
+            or (data.extrapolation.get("kfiConversionForecast") or {}).get("available"))
+    risk_ok = bool(data.risk.get("available", False)) or bool(data.risk.get("tests"))
+    pipeline_ok = bool(data.pipeline)
+    return {
+        "fundedCurrentSource": Path(funded_uri).name if funded_uri else None,
+        "pipelineCurrentSource": (Path(source["source_file"]).name
+                                  if source and source.get("source_file") else None),
+        "fundedHistoryRoot": out_root,
+        "fundedCutsFound": len(funded_cuts),
+        "pipelineHistoryRoot": prow,
+        "pipelineSnapshotsFound": pipe_snapshots,
+        "timeSeries": {
+            "funded_evolution": {
+                "placeholder": f_single,
+                "reason": (f"insufficient history — {len(funded_cuts)} funded cut(s) "
+                           f"found, need ≥2" if f_single else None),
+                "periods": f_periods},
+            "pipeline_evolution": {
+                "placeholder": p_single,
+                "reason": (f"insufficient history — {pipe_snapshots} weekly extract(s) "
+                           f"found, need ≥2" if p_single else None),
+                "periods": p_periods},
+            "funnel": {
+                "placeholder": not pipeline_ok,
+                "reason": ("current-week funnel shown (single weekly extract)"
+                           if pipeline_ok and pipe_snapshots < 2 else
+                           (None if pipeline_ok else "no pipeline source resolved"))},
+            "forecast_projection": {
+                "placeholder": not proj,
+                "reason": (None if proj else
+                           f"insufficient run-rate history — {pipe_snapshots} weekly "
+                           f"extract(s) found")},
+            "risk": {
+                "placeholder": not risk_ok,
+                "reason": (None if risk_ok else "no Schedule 8 risk-limit extract")},
+        },
+    }
+
+
 # --------------------------------------------------------------------------- #
-# Resolution helpers (mirror app.py, filesystem-only).
+# Per-endpoint compute wrappers (call the SAME functions app.py's handlers call).
 # --------------------------------------------------------------------------- #
 
-def _resolve_funded_df(run_path: Optional[Path]) -> Optional[pd.DataFrame]:
-    """Resolve + prepare the funded frame for a run dir (funded_prep)."""
-    if run_path is None or not run_path.exists():
-        return None
-    from .artifact_loader import load_run_artifacts
-    from .cli import _prep_funded
-    art = load_run_artifacts(run_path)
-    if not art.has_tape:
-        return None
-    df = _prep_funded(art.tape)
-    return df if (df is not None and not df.empty) else None
-
-
-def _pipeline_root(run_path: Path, explicit: Optional[str]) -> str:
-    if explicit:
-        return explicit
-    env = os.environ.get("MI_AGENT_PIPELINE_ROOT")
-    if env:
-        return env
-    return str(run_path.parent)
-
-
-def _pipeline(run_path, prow, cid, rid, semantics, data):
-    """(df, report, snapshot, source) for the latest weekly pipeline extract."""
+def _pipeline(prow, cid, rid, semantics, history, data: DashboardData):
+    """Resolve + snapshot the latest governed weekly pipeline extract."""
     from mi_agent_api import pipeline_contract as pc
-    from .cli import _pipeline_roots, _filter_client
-    from .artifact_loader import load_run_artifacts
-
-    art = load_run_artifacts(run_path)
-    source = None
-    for root in _pipeline_roots(art, prow):
-        try:
-            srcs = _filter_client(pc.discover_pipeline_sources(root), cid)
-        except Exception:  # noqa: BLE001
-            continue
-        if srcs:
-            source = srcs[-1]
-            break
-    if not source:
-        data.note("No pipeline source resolved — pipeline & forecast slides "
-                  "render as branded placeholders.")
-        return None, None, None, None
     try:
-        history = pc.build_pipeline_history(
-            str(Path(source["source_file"]).parent.parent), source.get("client_id", cid))
-    except Exception:  # noqa: BLE001
-        history = None
+        source = pc.resolve_pipeline_source(prow, cid, rid)
+    except Exception as exc:  # noqa: BLE001
+        data.note(f"pipeline_source: {exc}")
+        source = None
+    if not source:
+        return None, None, None
     try:
         pdf, report = pc.load_prepared_pipeline(source, historical_model=history)
-        prior_week = None
         try:
             prior_week = pc.compute_prior_week_aggregates(source, historical_model=history)
         except Exception:  # noqa: BLE001
             prior_week = None
-        snap = pc.compute_pipeline_snapshot(
+        snap_out = pc.compute_pipeline_snapshot(
             pdf, report, semantics, client_id=source.get("client_id", cid),
             run_id=rid, source=source, prior_week=prior_week)
-        return pdf, report, snap, source
+        if snap_out.get("pipelineRowCount"):
+            data.pipeline = snap_out
+        return pdf, report, source
     except Exception as exc:  # noqa: BLE001
         data.note(f"pipeline_snapshot: {exc}")
-        return None, None, None, source
+        return None, None, source
 
 
 def _forecast(cid, rid, reporting_date, funded_df, pipe_df, pipe_report, pipe_snap, source):
@@ -237,7 +499,7 @@ def _forecast(cid, rid, reporting_date, funded_df, pipe_df, pipe_report, pipe_sn
     env = fb.compute_forecast_bridge(
         client_id=cid, run_id=rid, funded_reporting_date=reporting_date,
         funded_df=funded_df, pipeline_df=pipe_df, pipeline_report=pipe_report,
-        pipeline_snapshot=pipe_snap, pipeline_source=source)
+        pipeline_snapshot=(pipe_snap or None), pipeline_source=source)
     try:
         env["forecastBreakdowns"] = workspace.forecast_breakdowns(funded_df, pipe_df)
     except Exception:  # noqa: BLE001
@@ -245,10 +507,10 @@ def _forecast(cid, rid, reporting_date, funded_df, pipe_df, pipe_report, pipe_sn
     return env
 
 
-def _cohorts(funded_df, cid, rid, reporting_date):
+def _cohorts(funded_df, cid, pid, reporting_date):
     from mi_agent_api import cohorts
     return cohorts.cohort_analysis(
-        funded_df, client_id=cid, portfolio_id=f"{cid}/{rid}",
+        funded_df, client_id=cid, portfolio_id=pid,
         reporting_date=reporting_date, grain="Y", dimension="vintage")
 
 
@@ -259,24 +521,38 @@ def _geo(funded_df, cid, rid):
     return out
 
 
-def _funded_evolution(out_root, cid, rid):
+def _funded_evo(out_root, cid, rid, funded_cuts):
+    """Funded evolution: the dashboard's resolver first (blob dated cuts / local
+    central-tape cuts); when that yields <2 periods, supplement from LOCAL dated
+    platform canonicals so downloaded history renders too (requirement #3)."""
     from mi_agent_api import evolution
-    return evolution.funded_evolution(out_root, cid, rid)
+    result = evolution.funded_evolution(out_root, cid, rid)
+    if len(result.get("periods", [])) >= 2:
+        return result
+    frames = _local_funded_frames(funded_cuts, cid)
+    if len(frames) >= 2:
+        return evolution.assemble_funded_evolution(frames, cid, rid, lineage={
+            "source": "dated platform canonicals (platform_canonical_typed.csv)",
+            "metric": "funded book actuals per reporting cut",
+            "note": "One period per dated funded cut under the onboarding output root."})
+    return result
 
 
-def _pipeline_evolution(prow, cid, rid):
+def _pipeline_evo(prow, cid, history):
     from mi_agent_api import evolution
-    return evolution.pipeline_evolution(prow, cid, rid)
+    return evolution.pipeline_evolution(prow, cid, None, historical_model=history)
 
 
-def _funnel(prow, cid, rid):
+def _funnel(prow, cid, history):
     from mi_agent_api import evolution
-    return evolution.pipeline_funnel_evolution(prow, cid, rid)
+    return evolution.pipeline_funnel_evolution(
+        prow, cid, None, lag_weeks=_kfi_lag_weeks(history))
 
 
-def _forecast_evolution(out_root, prow, cid, rid):
+def _forecast_evo(out_root, prow, cid, rid, history):
     from mi_agent_api import evolution
-    return evolution.forecast_evolution(out_root, prow, cid, rid)
+    return evolution.forecast_evolution(out_root, prow or out_root, cid, rid,
+                                        historical_model=history)
 
 
 def _risk(out_root, cid, rid):
@@ -284,6 +560,7 @@ def _risk(out_root, cid, rid):
     return risk_limits.compute_risk_limits(out_root, cid, rid)
 
 
-def _extrapolation(out_root, prow, cid, rid):
+def _extrapolation(out_root, prow, cid, rid, history):
     from mi_agent_api import forecast_extrapolation as fx
-    return fx.build_extrapolation(out_root, prow, cid, rid)
+    return fx.build_extrapolation(out_root, prow or out_root, cid, rid,
+                                  history_model=history)
