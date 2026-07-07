@@ -1067,10 +1067,17 @@ def execute_mi_query(
         data_out, result_type = _execute_ranked_loans(spec, work, semantics, warnings)
 
     elif spec.intent == "table":
-        keys = []
-        if spec.dimension:
-            keys = [spec.dimension]
+        # Honour ALL parsed grouping dimensions (never just the first), so a
+        # multi-dimension table groups by every dimension the user asked for.
+        keys = _all_group_dims(spec)
         if keys:
+            metadata["group_field_keys"] = list(keys)
+            if len(keys) > 2:
+                # 3+ dimensions cannot be charted — say so plainly (the full
+                # breakdown is preserved as a table; nothing is dropped).
+                warnings.append(
+                    f"Showing a table across {len(keys)} dimensions: a chart shows "
+                    "at most two, so the full breakdown is presented as a table.")
             data_out, result_type = _execute_grouped(
                 spec, work, semantics, warnings, balance_col, keys,
                 use_bucket=False, top_n_allowed=True, rank_priority=top_n_rank_priority,
@@ -1080,9 +1087,13 @@ def execute_mi_query(
             data_out, result_type = _execute_summary(spec, work, semantics, warnings, balance_col)
 
     elif spec.chart_type == "bar":
-        keys = [spec.dimension or spec.x]
-        if not keys[0]:
+        # ALL parsed grouping dimensions — a second dimension on a "bar" spec is
+        # grouped by too (the result becomes a multi-dimension matrix/table that
+        # the adapter renders as a grouped/pivot view), NEVER silently dropped.
+        keys = _all_group_dims(spec) or ([spec.x] if spec.x else [])
+        if not keys:
             raise MIQueryExecutionError("bar chart requires a dimension or x")
+        metadata["group_field_keys"] = list(keys)
         data_out, result_type = _execute_grouped(
             spec, work, semantics, warnings, balance_col, keys,
             use_bucket=False, top_n_allowed=True, rank_priority=top_n_rank_priority,
@@ -1103,6 +1114,15 @@ def execute_mi_query(
 
     elif spec.chart_type == "heatmap":
         keys = _two_dimension_keys(spec)
+        metadata["group_field_keys"] = list(keys)
+        # A heatmap renders two dimensions; any further parsed dimension is
+        # explicitly rejected with a reason (never silently dropped).
+        for extra in _all_group_dims(spec):
+            if extra not in keys:
+                metadata.setdefault("rejected_dimensions", []).append(
+                    {"dimension": extra,
+                     "reason": "a heatmap shows two dimensions; extra grouping "
+                               "dimensions were not applied — use a table for 3+."})
         data_out, result_type = _execute_grouped(
             spec, work, semantics, warnings, balance_col, keys,
             use_bucket=True, top_n_allowed=False, rank_priority=top_n_rank_priority,
@@ -1116,6 +1136,7 @@ def execute_mi_query(
         keys = [k for k in keys if k]
         if not keys:
             raise MIQueryExecutionError("treemap requires hierarchy/dimensions")
+        metadata["group_field_keys"] = list(keys)
         data_out, result_type = _execute_grouped(
             spec, work, semantics, warnings, balance_col, keys,
             use_bucket=True, top_n_allowed=True, rank_priority=top_n_rank_priority,
@@ -1177,6 +1198,18 @@ def execute_mi_query(
         warnings=warnings,
         metadata=metadata,
     )
+
+
+def _all_group_dims(spec: MIQuerySpec) -> List[str]:
+    """Every grouping dimension the parser attached to the spec, in order and
+    de-duplicated: ``spec.dimensions`` first, then ``spec.dimension``. This is the
+    authoritative set the executor MUST group by (or explicitly reject) so a
+    parsed second dimension is never silently dropped."""
+    out: List[str] = []
+    for k in list(spec.dimensions or []) + ([spec.dimension] if spec.dimension else []):
+        if k and k not in out:
+            out.append(k)
+    return out
 
 
 def _two_dimension_keys(spec: MIQuerySpec) -> List[str]:

@@ -442,6 +442,73 @@ def run_mi_agent_query(
     result["query_result"] = qres
     warnings.extend(qres.warnings)
 
+    # ---- fail-closed dimension invariant ----------------------------------
+    # Every grouping dimension the parser attached MUST be applied in execution
+    # or explicitly rejected with a reason. A parsed dimension that is neither is
+    # a SILENT DROP (e.g. "balance by borrower type by region" grouping only by
+    # borrower type) — refuse rather than answer with a misleading result.
+    from .mi_query_contract import check_dimension_invariant
+    invariant = check_dimension_invariant(spec, qres, semantics)
+    result["dimension_invariant"] = {
+        "ok": invariant.ok, "applied": invariant.applied,
+        "rejected": invariant.rejected, "dropped": invariant.dropped}
+    if not invariant.ok:
+        val = result.get("validation") or {"ok": True, "errors": [], "warnings": [],
+                                            "resolved_fields": {}}
+        val["ok"] = False
+        val.setdefault("errors", []).append(invariant.message())
+        val["dropped_dimensions"] = invariant.dropped
+        result["validation"] = val
+        if isinstance(result.get("interpreted"), dict):
+            result["interpreted"]["Validation"] = "Failed"
+        result["error"] = invariant.message()
+        result["warnings"] = _dedupe(warnings + [invariant.message()])
+        return result
+
+    # A dimension the parser recognised but execution could not apply (e.g. a
+    # third dimension on a two-axis heatmap) is explicitly rejected WITH a reason.
+    # Surface that reason to the user as a warning — a rejection is only
+    # fail-closed if it is visible, not merely recorded in metadata.
+    for rej in (qres.metadata or {}).get("rejected_dimensions") or []:
+        name = rej.get("dimension")
+        reason = rej.get("reason") or "not applied"
+        warnings.append(f"Grouping not applied for '{name}': {reason}")
+
+    # ---- fail-closed FILTER invariant -------------------------------------
+    # Every value filter the parser attached MUST be applied to the execution
+    # mask or explicitly surfaced (unavailable field / rejected with a reason).
+    # A parsed filter that is silently not applied would return UNFILTERED data
+    # under a filtered question — refuse rather than mislead.
+    from .mi_query_contract import check_filter_invariant
+    filter_invariant = check_filter_invariant(spec, qres, semantics)
+    result["filter_invariant"] = {
+        "ok": filter_invariant.ok,
+        "filters_applied": filter_invariant.filters_applied,
+        "parsed_filters": filter_invariant.parsed_filters,
+        "applied_filters": filter_invariant.applied_filters,
+        "rejected_filters": filter_invariant.rejected_filters,
+        "unavailable_filters": filter_invariant.unavailable_filters,
+        "dropped": filter_invariant.dropped}
+    if not filter_invariant.ok:
+        val = result.get("validation") or {"ok": True, "errors": [], "warnings": [],
+                                            "resolved_fields": {}}
+        val["ok"] = False
+        val.setdefault("errors", []).append(filter_invariant.message())
+        val["dropped_filters"] = filter_invariant.dropped
+        result["validation"] = val
+        if isinstance(result.get("interpreted"), dict):
+            result["interpreted"]["Validation"] = "Failed"
+        result["error"] = filter_invariant.message()
+        result["warnings"] = _dedupe(warnings + [filter_invariant.message()])
+        return result
+    # A filter that could not be applied (field unavailable) is surfaced plainly
+    # (the KPI branch already warns on spec.unavailable_filters; keep parity for
+    # any rejected_filters recorded by the executor).
+    for rej in (qres.metadata or {}).get("rejected_filters") or []:
+        name = rej.get("filter")
+        reason = rej.get("reason") or "not applied"
+        warnings.append(f"Filter not applied for '{name}': {reason}")
+
     # Reconciliation / coverage footer (every artifact). When some balance is
     # excluded (e.g. the operator asked to exclude missing dims), say so plainly.
     recon = (qres.metadata or {}).get("reconciliation")
@@ -491,6 +558,15 @@ def run_mi_agent_query(
             f"showing the result table only."
         )
     result["chart_result"] = chart_result
+
+    # ---- end-to-end query trace (parser -> executor -> invariant) ---------
+    # Makes it immediately clear whether a fault is parser-, executor- or
+    # renderer-side. The adapter enriches it with the emitted chart axes.
+    from .mi_query_contract import build_query_trace
+    result["query_trace"] = build_query_trace(
+        question=question, spec=spec, parse_meta=parse_meta,
+        query_result=qres, semantics=semantics, invariant=invariant,
+        filter_invariant=filter_invariant)
 
     result["ok"] = True
     # The chart factory copies the executor's warnings onto its result, so the

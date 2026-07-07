@@ -54,8 +54,18 @@ function groundedSentence(artifact: Artifact, spec?: Partial<MIQuerySpec>): stri
   }
   const measureKey = spec?.metric;
   const mLow = noun(measureKey, "the result");
-  const dimKey = spec?.dimensions?.[0] ?? spec?.dimension;
-  const dLow = dimensionLabel(dimKey) ? (cleanLabel(dimensionLabel(dimKey)) ?? "").toLowerCase() : "";
+  // Name EVERY grouping dimension, not just the first — a two-dimension result
+  // ("balance by borrower type by region") must read as grouped by both, never
+  // as if the second dimension were dropped.
+  const dimKeys = (spec?.dimensions && spec.dimensions.length
+    ? spec.dimensions
+    : [spec?.dimension]).filter(Boolean) as string[];
+  const dLows = dimKeys
+    .map((k) => (dimensionLabel(k) ? (cleanLabel(dimensionLabel(k)) ?? "").toLowerCase() : ""))
+    .filter(Boolean);
+  const dLow = dLows.length <= 1
+    ? (dLows[0] ?? "")
+    : `${dLows.slice(0, -1).join(", ")} and ${dLows[dLows.length - 1]}`;
   const byPart = dLow ? ` by ${dLow}` : "";
 
   if (insights?.statistics.topLabel) {

@@ -550,20 +550,95 @@ def _apply_agg_intent(metric_key: Optional[str], default_agg: str,
     return default_agg
 
 
+# Over-generic single tokens the registry-driven metric pass must NOT bind on
+# its own (they are handled by the curated grammar / default resolution and
+# would otherwise let a measure synonym hijack an unrelated question).
+_GENERIC_METRIC_TOKENS = {
+    "balance", "value", "amount", "rate", "count", "age", "ltv", "exposure",
+    "total", "sum", "principal", "interest", "loan", "loans", "mortgage",
+    "income", "margin", "ratio", "period", "number", "term",
+}
+
+
+def _registry_metric_terms(semantics: dict) -> Dict[str, str]:
+    """Business synonyms / names for every measure-role field, so a governed
+    metric the parser would otherwise not recognise (e.g. 'valuation', 'original
+    balance') resolves to its OWN field instead of silently falling back to the
+    default balance metric. Mirrors :func:`_registry_dimension_terms`:
+    multi-word phrases are always safe; over-generic single tokens
+    (``_GENERIC_METRIC_TOKENS``) and ambiguous phrases are dropped."""
+    out: Dict[str, str] = {}
+    ambiguous: set = set()
+    for key, entry in _fields(semantics).items():
+        if entry.get("role") not in ("metric", "measure"):
+            continue
+        phrases = list(_synonyms(entry))
+        for name in (entry.get("business_name"), entry.get("display_name")):
+            if name:
+                phrases.append(str(name))
+        phrases.append(key.replace("_", " "))
+        for phrase in phrases:
+            p = str(phrase).strip().lower()
+            if len(p) < 3:
+                continue
+            if " " not in p and p in _GENERIC_METRIC_TOKENS:
+                continue
+            existing = out.get(p)
+            if existing is not None and existing != key:
+                ambiguous.add(p)
+            else:
+                out[p] = key
+    for p in ambiguous:
+        out.pop(p, None)
+    return out
+
+
 def _detect_metric(text: str, semantics: dict) -> Tuple[Optional[str], str, List[str]]:
     """Return (metric_key, aggregation, matched_terms) from free text.
 
     An explicit aggregation qualifier ("average"/"weighted average"/"total") in the
     same phrase overrides the metric's default aggregation, so "average loan
     balance" means the mean balance, not the total.
+
+    Resolution order: the curated ``_METRIC_TERMS`` grammar governs the core
+    measures (balance / ltv / rate / age / count) and always wins for its tokens.
+    A registry-driven pass then recognises any OTHER governed measure by its
+    business synonym (longest phrase first) so a requested metric is never
+    silently substituted with the default balance.
     """
     matched: List[str] = []
     intent = _aggregation_intent(text)
+    reg_terms = _registry_metric_terms(semantics)
+
+    def _resolve_registry(term: str) -> Tuple[Optional[str], str]:
+        key = reg_terms[term]
+        entry = _fields(semantics).get(key, {})
+        default_agg = entry.get("default_aggregation") or (
+            "weighted_avg" if entry.get("format") == "percent" else "sum")
+        return key, _apply_agg_intent(key, default_agg, intent, semantics)
+
+    # 1) Registry MULTI-WORD phrases first (longest, most specific): a governed
+    #    measure named by a phrase — "original balance", "property value" — must
+    #    beat a curated single token it happens to contain (e.g. "balance").
+    multi = sorted((t for t in reg_terms if " " in t), key=len, reverse=True)
+    for term in multi:
+        if re.search(r"\b" + re.escape(term) + r"\b", text):
+            key, agg = _resolve_registry(term)
+            matched.append(term)
+            return key, agg, matched
+    # 2) Curated grammar — the core measures and their disambiguation.
     for term, token in _METRIC_TERMS:
         if re.search(r"\b" + re.escape(term) + r"\b", text):
             key, agg = _resolve_metric(token, semantics)
             if token != "count":
                 agg = _apply_agg_intent(key, agg, intent, semantics)
+            matched.append(term)
+            return key, agg, matched
+    # 3) Registry SINGLE-WORD synonyms for any remaining governed measure.
+    single = sorted((t for t in reg_terms if " " not in t), key=len, reverse=True)
+    for term in single:
+        if re.search(r"\b" + re.escape(term) + r"\b", text):
+            key, agg = _resolve_registry(term)
             matched.append(term)
             return key, agg, matched
     return None, "sum", matched
@@ -1311,9 +1386,40 @@ def _parse_filters(q: str, semantics: dict, available_columns=None) -> Dict[str,
     return filters
 
 
+def _grouped_value_filters(q: str, semantics: dict, available_columns,
+                           exclude_dims: Iterable[str] = ()) -> Tuple[Dict[str, Any], List[str]]:
+    """Value filters expressed ALONGSIDE a grouping, e.g. 'balance by region where
+    LTV above 50%' or 'balance by broker in the north'. Execution applies filters
+    to the mask BEFORE grouping, so a grouped spec may legitimately carry them.
+
+    A filter whose field is itself a grouping dimension is dropped (that is the
+    grouping, not a filter). Returns ``(filters, unavailable_notes)`` — mirrors
+    the filtered-KPI branch so a grouped filter is never silently discarded."""
+    exclude = set(exclude_dims or ())
+    filters = _parse_filters(q, semantics, available_columns)
+    unavailable: List[str] = []
+    # A borrower-structure value filter ("... for joint borrowers") resolves to a
+    # categorical filter (or an unavailable note). Skip it when the grouping IS
+    # the borrower dimension (that is the breakdown, not a filter).
+    bstruct = _borrower_structure_filter(q, semantics, available_columns)
+    if bstruct is not None:
+        bfilters, bnote = bstruct
+        bfilters = {k: v for k, v in (bfilters or {}).items() if k not in exclude}
+        if bfilters:
+            filters.update(bfilters)
+        elif bnote and not (bfilters and set(bfilters) & exclude):
+            unavailable.append(bnote)
+    for d in exclude:
+        filters.pop(d, None)
+    return filters, unavailable
+
+
 def _build_two_dim_spec(metric: Optional[str], dims: List[str], semantics: dict,
                         title: str, explicit: bool, terms: List[str],
-                        has_count: bool = False) -> Tuple[MIQuerySpec, dict]:
+                        has_count: bool = False,
+                        filters: Optional[Dict[str, Any]] = None,
+                        unavailable_filters: Optional[List[str]] = None
+                        ) -> Tuple[MIQuerySpec, dict]:
     """Build a two-dimensional grouped (heatmap / matrix) spec."""
     fields = _fields(semantics)
     if has_count or metric is None:
@@ -1325,9 +1431,40 @@ def _build_two_dim_spec(metric: Optional[str], dims: List[str], semantics: dict,
     spec = MIQuerySpec(
         intent="chart", chart_type="heatmap", metric=metric,
         dimensions=[d for d in dims if d][:2], aggregation=agg, weight_field=weight,
+        filters=filters or {}, unavailable_filters=unavailable_filters or [],
         title=title, explanation="Matrix of a metric across two dimensions.",
         output_format="chart")
     return spec, _det_meta(conf, explicit, terms)
+
+
+def _build_multi_dim_table_spec(metric: Optional[str], dims: List[str], semantics: dict,
+                                title: str, explicit: bool, terms: List[str],
+                                has_count: bool = False,
+                                filters: Optional[Dict[str, Any]] = None,
+                                unavailable_filters: Optional[List[str]] = None
+                                ) -> Tuple[MIQuerySpec, dict]:
+    """Build a TABLE/pivot spec across 3+ requested dimensions.
+
+    A chart shows at most two dimensions, so 3+ dimensions are grouped into a
+    table over EVERY requested dimension — never silently truncated at parse.
+    The executor groups by ``_all_group_dims(spec)`` and the dimension invariant
+    then sees all of them applied."""
+    fields = _fields(semantics)
+    dims = [d for d in dims if d]
+    if has_count or metric is None:
+        metric, agg, weight = (None, "count", None)
+    else:
+        agg = "weighted_avg" if fields.get(metric, {}).get("format") == "percent" else "sum"
+        weight = _default_weight(semantics, metric) if agg == "weighted_avg" else None
+    spec = MIQuerySpec(
+        intent="table", chart_type="none", metric=metric, dimensions=dims,
+        aggregation=agg, weight_field=weight,
+        filters=filters or {}, unavailable_filters=unavailable_filters or [],
+        title=title,
+        explanation=(f"Table across {len(dims)} dimensions "
+                     "(a chart shows at most two, so the full breakdown is a table)."),
+        output_format="table")
+    return spec, _det_meta("high", explicit, terms)
 
 
 def _build_ranking_spec(q: str, title: str, rank_dir: str, rank_limit: Optional[int],
@@ -1375,10 +1512,16 @@ def _build_ranking_spec(q: str, title: str, rank_dir: str, rank_limit: Optional[
 
     if dim is not None:
         weight = _default_weight(semantics, rmetric) if ragg == "weighted_avg" else None
+        # A value filter on the ranked population ("top 5 regions by balance where
+        # LTV above 50%") is applied before ranking — attach it (excluding the
+        # ranking dimension itself) so it is never silently dropped.
+        g_filters, g_unavail = _grouped_value_filters(
+            q, semantics, available_columns, exclude_dims=[dim])
         spec = MIQuerySpec(
             intent="chart", chart_type="bar", metric=rmetric, dimension=dim,
             aggregation=ragg, weight_field=weight, top_n=(rank_limit or top_n),
             sort_by=rmetric, sort_direction=rank_dir, ranking_mode="grouped",
+            filters=g_filters, unavailable_filters=g_unavail,
             title=title, explanation="Ranked bar of a metric by dimension.",
             output_format="chart")
         return spec, _det_meta("high", True, gterms or [dim])
@@ -1518,9 +1661,7 @@ def _deterministic_parse(question: str, semantics: dict,
     if len(seg_classes) >= 2 and not explicit_plot and "treemap" not in q:
         n_categorical = sum(1 for c in seg_classes if c[0] == "categorical")
         if n_categorical >= 1:
-            # Convert each of the two segments to a categorical dimension key
-            # (numeric segments are bucketed via their bucket dimension), applying
-            # the row/column convention later in the adapter.
+            # The two visual dimensions (row/column), in question order.
             dims: List[str] = []
             for c in seg_classes[:2]:
                 key = c[1] if c[0] == "categorical" else c[2]
@@ -1535,10 +1676,32 @@ def _deterministic_parse(question: str, semantics: dict,
                     if k and k not in merged:
                         merged.append(k)
                 dims = merged[:2]
+            # The FULL ordered set of requested dimensions (explicit first, in
+            # question order, then any bucketed grouping segments) — used to detect
+            # 3+ dimensions so none is ever silently truncated at parse.
+            full_dims: List[str] = []
+            for k in list(dim_keys):
+                if k and k not in full_dims:
+                    full_dims.append(k)
+            for c in seg_classes:
+                key = c[1] if c[0] == "categorical" else c[2]
+                if key and key not in full_dims:
+                    full_dims.append(key)
             metric, _agg, matched = _detect_metric(metric_part, semantics)
+            if len(full_dims) >= 3:
+                # 3+ dimensions cannot be charted -> a table/pivot over all of them.
+                g_filters, g_unavail = _grouped_value_filters(
+                    q, semantics, available_columns, exclude_dims=full_dims)
+                return _build_multi_dim_table_spec(
+                    metric, full_dims, semantics, title, True,
+                    [c[1] for c in seg_classes], has_count=("count" in matched),
+                    filters=g_filters, unavailable_filters=g_unavail)
+            g_filters, g_unavail = _grouped_value_filters(
+                q, semantics, available_columns, exclude_dims=dims)
             return _build_two_dim_spec(metric, dims, semantics, title, True,
                                        [c[1] for c in seg_classes[:2]],
-                                       has_count=("count" in matched))
+                                       has_count=("count" in matched),
+                                       filters=g_filters, unavailable_filters=g_unavail)
         # All-numeric two-segment grouping -> bubble (two numeric axes + size).
         numeric_bubble = True
 
@@ -1552,9 +1715,18 @@ def _deterministic_parse(question: str, semantics: dict,
     if (len(dim_keys) >= 2 and not explicit_plot and not is_ranking
             and "treemap" not in q):
         metric, _agg, matched = _detect_metric(remaining, semantics)
+        g_filters, g_unavail = _grouped_value_filters(
+            q, semantics, available_columns, exclude_dims=dim_keys)
+        if len(dim_keys) >= 3:
+            # 3+ dimensions -> a table/pivot over ALL of them (never truncate).
+            return _build_multi_dim_table_spec(
+                metric, list(dim_keys), semantics, title, True, dim_terms,
+                has_count=("count" in matched or _wants_count(q)),
+                filters=g_filters, unavailable_filters=g_unavail)
         return _build_two_dim_spec(metric, dim_keys[:2], semantics, title, True,
                                    dim_terms,
-                                   has_count=("count" in matched or _wants_count(q)))
+                                   has_count=("count" in matched or _wants_count(q)),
+                                   filters=g_filters, unavailable_filters=g_unavail)
 
     # ---- ranked / "largest" queries ---------------------------------------
     if is_ranking and "treemap" not in q and "heatmap" not in q:
@@ -1570,9 +1742,12 @@ def _deterministic_parse(question: str, semantics: dict,
         if metric is None:
             metric, agg = _balance_metric(semantics), "sum"
         conf = "high" if len(g_keys) >= 1 else "low"
+        g_filters, g_unavail = _grouped_value_filters(
+            q, semantics, available_columns, exclude_dims=g_keys[:3])
         return (MIQuerySpec(
             intent="chart", chart_type="treemap", metric=metric,
             hierarchy=g_keys[:3], aggregation=agg, top_n=top_n, title=title,
+            filters=g_filters, unavailable_filters=g_unavail,
             explanation="Treemap sized by metric across a dimension hierarchy.",
             output_format="chart"),
             _det_meta(conf, bool(g_keys), g_terms))
@@ -1639,6 +1814,20 @@ def _deterministic_parse(question: str, semantics: dict,
              else None)
         if "vintage_year" in dim_keys:
             x = "vintage_year"
+        # A value filter alongside a trend ("balance by month where LTV above
+        # 50%") is applied to the mask BEFORE the time-series grouping (the
+        # executor filters `work` before _execute_line), so attach it — a
+        # filtered trend is never silently returned unfiltered.
+        line_filters, line_unavail = _grouped_value_filters(
+            q, semantics, available_columns, exclude_dims=[])
+        # If a FILTER-field keyword hijacked the metric (e.g. "balance trend where
+        # LTV above 50%" -> metric=LTV, because the LTV filter term is also read as
+        # a metric) but a balance measure is explicitly named, prefer balance so
+        # the trend is a balance trend — NOT the filter field's trend. Never
+        # override a legitimately-resolved measure (e.g. forecast_funded_balance).
+        if (re.search(r"\b(balance|outstanding|exposure)\b", q) and not _wants_count(q)
+                and (metric is None or metric in line_filters)):
+            metric, agg = _balance_metric(semantics, available_columns), "sum"
         # Loan/case COUNT evolutions stay a COUNT metric (not balance/sum): "loan
         # count evolution", "number of loans by reporting month", "case count by
         # week" all resolve to a governed count time-series.
@@ -1648,8 +1837,8 @@ def _deterministic_parse(question: str, semantics: dict,
             metric, agg = _balance_metric(semantics), "sum"
         return (MIQuerySpec(
             intent="chart", chart_type="line", x=x, metric=metric,
-            aggregation=agg, title=title,
-            explanation="Line chart of a metric over time.",
+            aggregation=agg, filters=line_filters, unavailable_filters=line_unavail,
+            title=title, explanation="Line chart of a metric over time.",
             output_format="chart"),
             _det_meta("medium" if x else "low", explicit, dim_terms))
 
@@ -1730,9 +1919,15 @@ def _deterministic_parse(question: str, semantics: dict,
         metric, agg = _balance_metric(semantics, available_columns), "sum"
     weight = _default_weight(semantics, metric) if agg == "weighted_avg" else None
     conf = "high" if explicit else ("medium" if not generic else "low")
+    # A value filter expressed alongside the grouping ("balance by region where
+    # LTV above 50%") is applied to the mask before grouping — attach it so it is
+    # never silently dropped. The grouping dimension itself is excluded.
+    g_filters, g_unavail = _grouped_value_filters(
+        q, semantics, available_columns, exclude_dims=[dimension] if dimension else [])
     return (MIQuerySpec(
         intent="chart", chart_type="bar", metric=metric, dimension=dimension,
         aggregation=agg, weight_field=weight, top_n=top_n, title=title,
+        filters=g_filters, unavailable_filters=g_unavail,
         explanation=f"Bar chart of {agg} metric by dimension.",
         output_format="chart"),
         _det_meta(conf, explicit, dim_terms))
