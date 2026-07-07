@@ -98,6 +98,126 @@ def draw_barlist(path, rows: Sequence[Dict[str, Any]], value_key: str, w: float,
     return _save(fig, path, theme, dpi)
 
 
+def draw_bars_with_line(path, x_labels: Sequence[str], bars: Sequence[Optional[float]],
+                        line: Sequence[Optional[float]], w: float, h: float, *,
+                        theme: PptxTheme = THEME, bar_currency: bool = True,
+                        avg: Optional[float] = None, line_label: str = "Cumulative",
+                        dpi: int = 220) -> Path:
+    """Weekly-flow bars (periwinkle, left axis) + a cumulative line (mint, right
+    axis), with an optional dashed 5-week-average marker — the dashboard's
+    KFI/Completions weekly-flow panel."""
+    fig = _fig(w, h, theme, dpi)
+    ax = fig.add_axes([0.09, 0.16, 0.82, 0.78])
+    ax.set_facecolor(theme.bg_panel)
+    for s in ("top", "right", "left"):
+        ax.spines[s].set_visible(False)
+    ax.spines["bottom"].set_color(theme.line_soft)
+    ax.tick_params(colors=theme.ink_500, labelsize=8.5, length=0)
+    ax.grid(axis="y", color=theme.line_soft, linewidth=0.7, linestyle=(0, (3, 3)), alpha=0.9)
+    ax.set_axisbelow(True)
+    n = len(x_labels)
+    x = list(range(n))
+    if not n:
+        ax.text(0.5, 0.5, "Insufficient history", ha="center", va="center",
+                transform=ax.transAxes, color=theme.ink_500, fontsize=12)
+        ax.axis("off")
+        return _save(fig, path, theme, dpi)
+    bvals = [0.0 if v is None else float(v) for v in bars]
+    ax.bar(x, bvals, width=0.62, color=theme.peri, alpha=0.85, zorder=2)
+    if avg:
+        ax.axhline(float(avg), color=theme.rag.get("amber", "#e0a458"), linewidth=1.2,
+                   linestyle=(0, (5, 4)), zorder=3)
+    ax.yaxis.set_major_formatter(FuncFormatter(
+        lambda v, p: compact_currency(v) if bar_currency else compact_number(v)))
+    ax2 = ax.twinx()
+    for s in ("top", "left", "right"):
+        ax2.spines[s].set_visible(False)
+    lvals = [None if v is None else float(v) for v in line]
+    ax2.plot(x, lvals, color=theme.mint, linewidth=2.4, marker="o", markersize=3,
+             zorder=4, solid_capstyle="round")
+    ax2.tick_params(colors=theme.ink_500, labelsize=8.5, length=0)
+    ax2.yaxis.set_major_formatter(FuncFormatter(
+        lambda v, p: compact_currency(v) if bar_currency else compact_number(v)))
+    step = max(1, n // 7)
+    idx = sorted(set(list(range(0, n, step)) + [n - 1]))
+    ax.set_xticks([x[i] for i in idx])
+    ax.set_xticklabels([str(x_labels[i]) for i in idx], fontsize=8, color=theme.ink_500)
+    return _save(fig, path, theme, dpi)
+
+
+def draw_bubble(path, points: Sequence[Dict[str, Any]], x_labels: Sequence[str],
+                y_labels: Sequence[str], w: float, h: float, *, theme: PptxTheme = THEME,
+                dpi: int = 220) -> Path:
+    """Balance bubble grid: x/y are ordered band labels, bubble area ∝ balance.
+    *points* = ``[{x, y, value}]`` where x/y are indices into the label lists."""
+    fig = _fig(w, h, theme, dpi)
+    ax = fig.add_axes([0.16, 0.14, 0.80, 0.80])
+    ax.set_facecolor(theme.bg_panel)
+    for s in ("top", "right"):
+        ax.spines[s].set_visible(False)
+    for s in ("bottom", "left"):
+        ax.spines[s].set_color(theme.line_soft)
+    ax.tick_params(colors=theme.ink_400, labelsize=9, length=0)
+    ax.grid(True, color=theme.line_soft, linewidth=0.6, linestyle=(0, (2, 3)), alpha=0.7)
+    ax.set_axisbelow(True)
+    pts = [p for p in points if p.get("value")]
+    if not pts:
+        ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes,
+                color=theme.ink_500, fontsize=12)
+        ax.axis("off")
+        return _save(fig, path, theme, dpi)
+    vmax = max(float(p["value"]) for p in pts) or 1.0
+    xs = [p["x"] for p in pts]
+    ys = [p["y"] for p in pts]
+    sizes = [80 + 2600 * (float(p["value"]) / vmax) for p in pts]
+    ax.scatter(xs, ys, s=sizes, c=theme.peri, alpha=0.62, edgecolors=theme.mint,
+               linewidths=0.8, zorder=3)
+    for p in pts:
+        ax.text(p["x"], p["y"], compact_currency(p["value"]), ha="center", va="center",
+                color=theme.ink_100, fontsize=7.2, zorder=4)
+    ax.set_xticks(range(len(x_labels)))
+    ax.set_xticklabels(list(x_labels), fontsize=8.5, color=theme.ink_400, rotation=0)
+    ax.set_yticks(range(len(y_labels)))
+    ax.set_yticklabels(list(y_labels), fontsize=8.5, color=theme.ink_400)
+    ax.set_xlim(-0.6, len(x_labels) - 0.4)
+    ax.set_ylim(-0.6, len(y_labels) - 0.4)
+    return _save(fig, path, theme, dpi)
+
+
+def draw_heatmap(path, x_labels: Sequence[str], y_labels: Sequence[str],
+                 matrix: Sequence[Sequence[float]], w: float, h: float, *,
+                 theme: PptxTheme = THEME, dpi: int = 220) -> Path:
+    """Balance heatmap: rows=y_labels, cols=x_labels, cell shade ∝ balance, with
+    the £ value annotated. Uses the periwinkle→mint brand ramp."""
+    from matplotlib.colors import LinearSegmentedColormap
+    fig = _fig(w, h, theme, dpi)
+    ax = fig.add_axes([0.20, 0.16, 0.78, 0.78])
+    ax.set_facecolor(theme.bg_panel)
+    mat = np.array([[float(c or 0) for c in row] for row in matrix], dtype=float) \
+        if matrix else np.zeros((len(y_labels), len(x_labels)))
+    if mat.size == 0 or mat.max() == 0:
+        ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes,
+                color=theme.ink_500, fontsize=12)
+        ax.axis("off")
+        return _save(fig, path, theme, dpi)
+    cmap = LinearSegmentedColormap.from_list(
+        "brand", [theme.bg_panel_alt, theme.peri, theme.mint])
+    ax.imshow(mat, cmap=cmap, aspect="auto", vmin=0, vmax=mat.max())
+    ax.set_xticks(range(len(x_labels)))
+    ax.set_xticklabels(list(x_labels), fontsize=8, color=theme.ink_400)
+    ax.set_yticks(range(len(y_labels)))
+    ax.set_yticklabels(list(y_labels), fontsize=8, color=theme.ink_400)
+    for i in range(mat.shape[0]):
+        for j in range(mat.shape[1]):
+            if mat[i, j]:
+                ax.text(j, i, compact_currency(mat[i, j]), ha="center", va="center",
+                        color=theme.ink_100, fontsize=6.8)
+    for s in ax.spines.values():
+        s.set_visible(False)
+    ax.tick_params(length=0)
+    return _save(fig, path, theme, dpi)
+
+
 def draw_lines(path, x_labels: Sequence[str], series: Sequence[Dict[str, Any]],
                w: float, h: float, *, theme: PptxTheme = THEME,
                currency: bool = True, percent: bool = False, area: bool = False,

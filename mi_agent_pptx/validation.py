@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
 MIN_SLIDES = 12
-MAX_SLIDES = 15
+MAX_SLIDES = 20
 
 
 @dataclass
