@@ -328,12 +328,16 @@ class DeckBuilder:
         self._record("geography", spec.get("title"), "", placeholder=not areas)
 
     def _evolution_lines(self, s, spec, evo, chart_specs, accent=None):
-        """Render N line-chart cards from an evolution payload's periods[]."""
+        """Render N line-chart cards from an evolution payload's periods[].
+
+        A time series needs ≥2 reporting periods; the dashboard flags a single cut
+        with ``singlePeriod`` and shows an insufficient-history state rather than a
+        lone point — so do the same (a one-dot 'trend' reads as broken)."""
         periods = evo.get("periods", [])
+        single = bool(evo.get("singlePeriod")) or len(periods) < 2
         x = [str(p.get("period") or p.get("reporting_date") or p.get("run_id"))
              for p in periods]
         boxes = self._chart_boxes(len(chart_specs))
-        ph = not periods
         for cs, box in zip(chart_specs, boxes):
             il, it, iw, ih = self._card(s, *box, cs["title"])
             series = [{"name": ser.get("name", ""),
@@ -341,16 +345,17 @@ class DeckBuilder:
                        "color": ser.get("color")}
                       for ser in cs["series"]]
             path = self.work / f"{cs['id']}.png"
-            if periods:
+            if not single:
                 R.draw_lines(path, x, series, iw, ih, theme=self.theme,
                              currency=cs.get("currency", True),
                              percent=cs.get("percent", False),
                              area=cs.get("area", False))
             else:
-                render_placeholder_png(path, "", "Insufficient reporting history",
-                                       theme=self.theme, width_in=iw, height_in=ih)
+                render_placeholder_png(path, "", "Insufficient reporting history "
+                                       "(needs ≥2 periods)", theme=self.theme,
+                                       width_in=iw, height_in=ih)
             self._place(s, path, il, it, iw, ih)
-        return ph
+        return single
 
     def slide_funded_evolution(self, spec):
         s = self._slide()
