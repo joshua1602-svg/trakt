@@ -63,6 +63,8 @@ class DashboardData:
     geo: Dict[str, Any] = field(default_factory=dict)
     risk: Dict[str, Any] = field(default_factory=dict)
     extrapolation: Dict[str, Any] = field(default_factory=dict)
+    multidim: Dict[str, Any] = field(default_factory=dict)
+    cohort_progression: Dict[str, Any] = field(default_factory=dict)
     source_files: List[str] = field(default_factory=list)
     diagnostics: Dict[str, Any] = field(default_factory=dict)
     notes: List[str] = field(default_factory=list)
@@ -298,6 +300,162 @@ def _local_funded_frames(cuts: List[Tuple[str, str]], cid: str) -> List[Dict[str
     return frames
 
 
+def _prior_funded(cuts: List[Tuple[str, str]], cid: str, reporting_date: Optional[str]):
+    """The prepared funded frame for the reporting period BEFORE *reporting_date*
+    (the most recent dated cut strictly earlier), for month-on-month KPI deltas."""
+    if not cuts:
+        return None, None, None
+    earlier = [(d, p) for d, p in cuts if not reporting_date or d < str(reporting_date)]
+    if not earlier:
+        return None, None, None
+    frames = _local_funded_frames([earlier[-1]], cid)
+    if not frames:
+        return None, None, None
+    d, _p = earlier[-1]
+    return frames[0]["df"], d, d
+
+
+# --------------------------------------------------------------------------- #
+# Deck-specific funded enrichments (same stratify / banding engine as the API).
+# --------------------------------------------------------------------------- #
+
+_BALANCE = "current_outstanding_balance"
+
+
+def _borrower_type_series(df: pd.DataFrame):
+    if "borrower_type" in df.columns and df["borrower_type"].notna().any():
+        return df["borrower_type"].astype("string")
+    for col in ("borrower_2_DOB", "borrower_2_dob", "second_borrower_dob",
+                "borrower_2_date_of_birth"):
+        if col in df.columns:
+            joint = df[col].notna() & (df[col].astype(str).str.strip() != "")
+            return joint.map({True: "Joint", False: "Single"}).astype("string")
+    return None
+
+
+def _ticket_series(df: pd.DataFrame):
+    if "ticket_bucket" in df.columns and df["ticket_bucket"].notna().any():
+        return df["ticket_bucket"].astype("string")
+    if _BALANCE not in df.columns:
+        return None
+    from analytics_lib.numeric import coerce_numeric
+    bal = coerce_numeric(df[_BALANCE])
+    bins = [0, 100_000, 150_000, 200_000, 250_000, 300_000, 400_000, 1e12]
+    labels = ["<£100K", "£100–150K", "£150–200K", "£200–250K", "£250–300K",
+              "£300–400K", "£400K+"]
+    return pd.cut(bal, bins, labels=labels, right=False).astype("string")
+
+
+def _broker_series(df: pd.DataFrame):
+    for col in ("broker_channel", "broker_name", "broker", "origination_channel"):
+        if col in df.columns and df[col].notna().any():
+            return df[col].astype("string")
+    return None
+
+
+def _region_series(df: pd.DataFrame):
+    for col in ("geographic_region_collateral", "geographic_region_obligor", "region"):
+        if col in df.columns and df[col].notna().any():
+            return df[col].astype("string")
+    return None
+
+
+def _ltv_series(df: pd.DataFrame):
+    from mi_agent_api import cohorts as _c
+    series, _h = _c._dimension_series(df, "ltv", "Y")
+    return series
+
+
+def _age_series(df: pd.DataFrame):
+    from mi_agent_api import cohorts as _c
+    series, _h = _c._dimension_series(df, "age", "Y")
+    return series
+
+
+def _stratify_dim(df: pd.DataFrame, series, key: str, label: str):
+    """One stratification ``{key,label,bars:[{label,balance,count,sharePct}]}`` —
+    the same shape ``snapshots._funded_stratifications`` emits."""
+    if series is None or _BALANCE not in df.columns:
+        return None
+    from analytics_lib.stratify import stratify as _stratify
+    work = df.assign(__dim=series)
+    if work["__dim"].notna().sum() == 0:
+        return None
+    try:
+        tbl = _stratify(work, "__dim", balance_col=_BALANCE)
+    except Exception:  # noqa: BLE001
+        return None
+    if tbl.empty:
+        return None
+    bars = [{"label": str(r["__dim"]), "balance": round(float(r["balance_sum"]), 2),
+             "count": int(r["loan_count"]),
+             "sharePct": round(float(r["balance_share"]) * 100.0, 1)}
+            for _, r in tbl.iterrows()]
+    bars.sort(key=lambda b: b["balance"], reverse=True)
+    return {"key": key, "label": label, "bars": bars[:12]}
+
+
+def _extra_stratifications(df: pd.DataFrame) -> List[Dict[str, Any]]:
+    """Broker / borrower-type / ticket-size funded stratifications (each skipped
+    when the source column is absent)."""
+    out = []
+    for series, key, label in (
+        (_broker_series(df), "broker", "By broker / channel"),
+        (_borrower_type_series(df), "borrower_type", "By borrower type"),
+        (_ticket_series(df), "ticket", "By ticket size"),
+    ):
+        st = _stratify_dim(df, series, key, label)
+        if st:
+            out.append(st)
+    return out
+
+
+def _matrix(df: pd.DataFrame, x_series, y_series):
+    """``(x_labels, y_labels, matrix, points)`` of summed balance for two banded
+    dimensions — feeds the multi-dimension bubble / heatmap charts."""
+    from analytics_lib.numeric import coerce_numeric
+    if x_series is None or y_series is None or _BALANCE not in df.columns:
+        return None
+    work = pd.DataFrame({"x": x_series.astype("string"), "y": y_series.astype("string"),
+                         "bal": coerce_numeric(df[_BALANCE])}).dropna(subset=["x", "y"])
+    if work.empty:
+        return None
+    x_labels = [str(v) for v in sorted(work["x"].dropna().unique())]
+    y_labels = [str(v) for v in sorted(work["y"].dropna().unique())]
+    xi = {v: i for i, v in enumerate(x_labels)}
+    yi = {v: i for i, v in enumerate(y_labels)}
+    matrix = [[0.0] * len(x_labels) for _ in y_labels]
+    points = []
+    for (xv, yv), sub in work.groupby(["x", "y"]):
+        b = float(sub["bal"].sum())
+        matrix[yi[str(yv)]][xi[str(xv)]] = round(b, 2)
+        points.append({"x": xi[str(xv)], "y": yi[str(yv)], "value": round(b, 2)})
+    return {"xLabels": x_labels, "yLabels": y_labels, "matrix": matrix, "points": points}
+
+
+def _multidim(df: pd.DataFrame) -> Dict[str, Any]:
+    """LTV×Age (bubble), LTV×BorrowerType (heatmap), LTV×Region (heatmap)."""
+    ltv = _ltv_series(df)
+    out: Dict[str, Any] = {}
+    m = _matrix(df, ltv, _age_series(df))
+    if m:
+        out["ltv_age"] = m
+    m = _matrix(df, ltv, _borrower_type_series(df))
+    if m:
+        out["ltv_borrower_type"] = m
+    m = _matrix(df, ltv, _region_series(df))
+    if m:
+        out["ltv_region"] = m
+    return out
+
+
+def _cohort_progression(out_root: str, cid: str) -> Dict[str, Any]:
+    """Static-pool cohort progression across reporting periods (line curves per
+    vintage) — the dashboard's /mi/cohorts/progression."""
+    from mi_agent_api import evolution
+    return evolution.funded_cohort_progression(out_root, cid, grain="Y")
+
+
 def _pipeline_extract_count(root: str, cid: str) -> int:
     """Number of dated weekly pipeline extracts discoverable under *root* for the
     client (the dashboard's ``weekly_extract_inventory``)."""
@@ -364,13 +522,27 @@ def build_dashboard_data(
                 pass
         data.reporting_date = reporting_date
 
+        funded_cuts = _dated_funded_cuts(out_root, cid)
+        prior_df, prior_rid, prior_rd = _prior_funded(funded_cuts, cid, reporting_date)
+
         # -- FUNDED snapshot (KPIs + stratifications) --------------------
         if funded_df is not None and not funded_df.empty:
             data.funded = _guard(data, "funded_snapshot", lambda: snap.compute_funded_snapshot(
                 funded_df, semantics, client_id=cid, run_id=rid,
-                reporting_date=reporting_date))
+                reporting_date=reporting_date, prior_df=prior_df,
+                prior_run_id=prior_rid, prior_reporting_date=prior_rd))
+            # Extra funded stratifications the deck shows (broker / borrower type /
+            # ticket size) — computed with the same stratify engine as the snapshot,
+            # appended so the deck renders one consistent BarList visual.
+            extra = _extra_stratifications(funded_df)
+            if extra and isinstance(data.funded.get("stratifications"), list):
+                have = {s.get("key") for s in data.funded["stratifications"]}
+                data.funded["stratifications"] += [s for s in extra if s["key"] not in have]
+            data.multidim = _guard(data, "multidim", lambda: _multidim(funded_df))
             data.cohorts = _guard(data, "cohorts",
                                   lambda: _cohorts(funded_df, cid, pid, reporting_date))
+            data.cohort_progression = _guard(data, "cohort_progression",
+                                             lambda: _cohort_progression(out_root, cid))
             data.geo = _guard(data, "geo", lambda: _geo(funded_df, cid, rid))
         else:
             data.note("No funded dataset resolved for this run — funded slides "
@@ -385,7 +557,6 @@ def build_dashboard_data(
             data.pipeline, source))
 
         # -- Multi-run EVOLUTION / FUNNEL / FORECAST ---------------------
-        funded_cuts = _dated_funded_cuts(out_root, cid)
         data.funded_evolution = _guard(data, "funded_evolution",
                                        lambda: _funded_evo(out_root, cid, rid, funded_cuts))
         data.pipeline_evolution = _guard(data, "pipeline_evolution",

@@ -36,66 +36,82 @@ slides:
   # 3 --------------------------------------------- Funded Stratifications I
   - id: stratification_1
     type: strat_barlists
-    title: "Funded Stratifications — LTV & Rate"
-    keys: [ltv, rate]
+    title: "Funded Stratifications — LTV & Ticket Size"
+    keys: [ltv, ticket]
 
   # 4 -------------------------------------------- Funded Stratifications II
   - id: stratification_2
     type: strat_barlists
-    title: "Funded Stratifications — Borrower Age & Product"
-    keys: [age, product]
+    title: "Funded Stratifications — Borrower Age & Type"
+    keys: [age, borrower_type]
 
-  # 5 --------------------------------------------------- Geographic Exposure
+  # 5 ------------------------------------------- Funded Stratifications III
+  - id: stratification_3
+    type: strat_barlists
+    title: "Funded Stratifications — Broker & Region"
+    keys: [broker, region]
+
+  # 6 -------------------------------------- Multi-Dimensional Risk Analytics
+  - id: multidim
+    type: multidim
+    title: "Multi-Dimensional Risk Analytics"
+
+  # 7 --------------------------------------------------- Geographic Exposure
   - id: geography
     type: geo
     title: "Geographic Exposure"
 
-  # 6 ------------------------------------------------- Funded Evolution
+  # 8 ------------------------------------------------- Funded Evolution
   - id: funded_evolution
     type: funded_evolution
     title: "Funded Balance Evolution"
 
-  # 7 ------------------------------------------------------- Vintage Cohorts
+  # 9 ------------------------------------------------------- Vintage Cohorts
   - id: cohorts
     type: cohorts
     title: "Vintage Cohorts"
 
-  # 8 ------------------------------------------------------ Pipeline Overview
+  # 10 ----------------------------------------------------- Pipeline Overview
   - id: pipeline
     type: pipeline_summary
     title: "Pipeline Overview"
 
-  # 9 ----------------------------------------------------- Pipeline Evolution
+  # 11 ---------------------------------------------------- Pipeline Evolution
   - id: pipeline_evolution
     type: pipeline_evolution
     title: "Pipeline Evolution"
 
-  # 10 ---------------------------------------------------- Origination Funnel
+  # 12 --------------------------------------------------- Origination Funnel
   - id: funnel
     type: funnel
     title: "Origination Funnel"
 
-  # 11 ------------------------------------------------------- Forecast Bridge
+  # 13 ------------------------------------- Origination Flow (KFIs & Completions)
+  - id: origination_flow
+    type: origination_flow
+    title: "Origination Flow — KFIs & Completions"
+
+  # 14 ------------------------------------------------------- Forecast Bridge
   - id: forecast_bridge
     type: forecast_bridge
     title: "Forecast Bridge — Funded to Forecast"
 
-  # 12 --------------------------------------------------- Forecast Projection
+  # 15 --------------------------------------------------- Forecast Projection
   - id: forecast_projection
     type: forecast_projection
     title: "Forecast Projection — Run-Rate Scale-Up"
 
-  # 13 ----------------------------------------------------------- Risk Limits
+  # 16 ----------------------------------------------------------- Risk Limits
   - id: risk
     type: risk
     title: "Risk Limits"
 
-  # 14 ------------------------------------------------ Methodology / Notes
+  # 17 ------------------------------------------------ Methodology / Notes
   - id: methodology
     type: methodology
     title: "Methodology & Notes"
 
-  # 15 ------------------------------------------------ Appendix / Coverage
+  # 18 ------------------------------------------------ Appendix / Coverage
   - id: appendix
     type: appendix
     title: "Appendix — Data Coverage"

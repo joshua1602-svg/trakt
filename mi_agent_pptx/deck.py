@@ -215,8 +215,13 @@ class DeckBuilder:
 
     def slide_cover(self, spec):
         s = self._slide()
-        self._panel(s, Inches(-1), Inches(-2), Inches(9), Inches(6),
-                    fill="#0e1430", radius=False)
+        # Full-height left accent rail (replaces the old overlapping corner panel).
+        rail = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(0),
+                                  Inches(0.16), SLIDE_H)
+        rail.fill.solid()
+        rail.fill.fore_color.rgb = self._rgb(self.theme.peri)
+        rail.line.fill.background()
+        rail.shadow.inherit = False
         bar = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.9), Inches(3.02),
                                  Inches(2.2), Inches(0.07))
         bar.fill.solid()
@@ -372,30 +377,39 @@ class DeckBuilder:
     def slide_cohorts(self, spec):
         s = self._slide()
         self._header(s, spec.get("title", "Vintage Cohorts"),
-                     "Static-pool composition by origination vintage")
-        rows = self.d.cohorts.get("cohorts", [])
-        from .metric_resolver import compact_currency, compact_number, format_percent
-        box = (Inches(0.55), Inches(1.62), Inches(12.25), Inches(4.95))
-        il, it, iw, ih = self._card(s, *box, self.d.cohorts.get("dimensionLabel",
-                                    "By vintage"))
+                     "Static-pool profile compared across origination vintages")
+        rows = sorted(self.d.cohorts.get("cohorts", []), key=lambda r: str(r.get("cohort")))
+        x = [str(r.get("cohort")) for r in rows]
+        boxes = self._chart_boxes(2)
+        # Left: funded balance & book share by vintage. Right: WA LTV & WA rate.
+        def _rate(v):
+            if v is None:
+                return None
+            return v * 100 if v <= 1.5 else v
+        il, it, iw, ih = self._card(s, *boxes[0], "Funded balance by vintage")
+        p1 = self.work / "cohort_balance.png"
         if rows:
-            cols = ["Cohort", "Loans", "Balance", "Book share", "WA LTV", "WA rate"]
-            trows = [[str(r.get("cohort")), compact_number(r.get("loanCount")),
-                      compact_currency(r.get("balance")),
-                      f"{r.get('sharePct', 0):.1f}%",
-                      format_percent(r.get("waLtv")) if r.get("waLtv") is not None else "—",
-                      (f"{r.get('waRate') * 100:.1f}%" if (r.get("waRate") or 0) <= 1.5
-                       and r.get("waRate") is not None else
-                       (f"{r.get('waRate'):.1f}%" if r.get("waRate") is not None else "—"))]
-                     for r in rows[:14]]
-            path = self.work / "cohorts.png"
-            R.draw_table(path, cols, trows, iw, ih, theme=self.theme)
-            self._place(s, path, il, it, iw, ih)
+            R.draw_lines(p1, x, [{"name": "Funded balance",
+                                  "values": [r.get("balance") for r in rows]}],
+                         iw, ih, theme=self.theme, currency=True, area=True)
         else:
-            path = self.work / "cohorts_none.png"
-            render_placeholder_png(path, "", "No cohort composition for this run",
+            render_placeholder_png(p1, "", "No cohort composition for this run",
                                    theme=self.theme, width_in=iw, height_in=ih)
-            self._place(s, path, il, it, iw, ih)
+        self._place(s, p1, il, it, iw, ih)
+
+        il, it, iw, ih = self._card(s, *boxes[1], "WA current LTV & WA rate by vintage")
+        p2 = self.work / "cohort_metrics.png"
+        if rows:
+            R.draw_lines(p2, x, [
+                {"name": "WA current LTV", "values": [_rate(r.get("waLtv")) for r in rows],
+                 "color": "#7c9cf0"},
+                {"name": "WA rate", "values": [_rate(r.get("waRate")) for r in rows],
+                 "color": "#5ec6b8"}],
+                iw, ih, theme=self.theme, currency=False, percent=True)
+        else:
+            render_placeholder_png(p2, "", "No cohort composition for this run",
+                                   theme=self.theme, width_in=iw, height_in=ih)
+        self._place(s, p2, il, it, iw, ih)
         self._footer(s)
         self._record("cohorts", spec.get("title"), "", placeholder=not rows)
 
@@ -419,18 +433,23 @@ class DeckBuilder:
                     ("+" if diff >= 0 else "−") + compact_number(abs(diff))) + " vs prior wk", intent
         d1, i1 = delta(p.get("pipelineAmount"), pw.get("pipelineAmount"), "amt")
         d2, i2 = delta(p.get("pipelineRowCount"), pw.get("pipelineRowCount"), "cnt")
+        cases = p.get("pipelineRowCount") or 0
+        amount = p.get("pipelineAmount") or 0
+        avg_case = (amount / cases) if cases else 0
         tiles = [
-            {"label": "Pipeline cases", "value": compact_number(p.get("pipelineRowCount")),
+            {"label": "Pipeline cases", "value": compact_number(cases),
              "delta": d2, "deltaIntent": i2},
-            {"label": "Total pipeline amount", "value": compact_currency(p.get("pipelineAmount")),
+            {"label": "Total pipeline amount", "value": compact_currency(amount),
              "delta": d1, "deltaIntent": i1},
+            {"label": "Average case amount", "value": compact_currency(avg_case),
+             "hint": "total ÷ cases"},
             {"label": "Weighted expected funded",
              "value": compact_currency(p.get("weightedExpectedFundedAmount")),
              "hint": "probability-weighted"},
         ]
-        tw = Inches(3.9)
+        tw = Inches(2.92)
         for i, tile in enumerate(tiles):
-            l = Emu(int(Inches(0.55)) + i * int(Inches(4.0)))
+            l = Emu(int(Inches(0.55)) + i * int(Inches(3.0)))
             self._tile(s, l, Inches(1.6), tw, Inches(1.45), tile)
         # two BarLists: stage + broker
         box1 = (Inches(0.55), Inches(3.28), Inches(6.0), Inches(3.35))
@@ -460,18 +479,126 @@ class DeckBuilder:
                  "pipelineAmount": r.get("pipelineAmount", 0),
                  "caseCount": r.get("caseCount", 0)} for r in rows]
 
+    _STAGE_PRETTY = {"KFI": "KFI", "APPLICATION": "Application", "OFFER": "Offer",
+                     "COMPLETED": "Completed", "WITHDRAWN": "Withdrawn"}
+    _STAGE_COLOR = {"APPLICATION": "#7c9cf0", "OFFER": "#5ec6b8",
+                    "COMPLETED": "#e0a458", "WITHDRAWN": "#eb6f6f"}
+
     def slide_pipeline_evolution(self, spec):
         s = self._slide()
         self._header(s, spec.get("title", "Pipeline Evolution"),
                      "Pipeline stock over time", accent=self.theme.peri)
-        ph = self._evolution_lines(s, spec, self.d.pipeline_evolution, [
-            {"id": "pevo_amt", "title": "Pipeline amount by week",
-             "series": [{"name": "Pipeline amount", "key": "pipeline_amount"}], "currency": True},
-            {"id": "pevo_wt", "title": "Weighted expected funded by week",
-             "series": [{"name": "Weighted", "key": "weighted_expected_funded_amount"}], "currency": True},
-        ])
+        evo = self.d.pipeline_evolution or {}
+        periods = evo.get("periods", [])
+        single = bool(evo.get("singlePeriod")) or len(periods) < 2
+        boxes = self._chart_boxes(2)
+        x = [str(p.get("week") or p.get("period")) for p in periods]
+
+        il, it, iw, ih = self._card(s, *boxes[0], "Pipeline amount by week")
+        p1 = self.work / "pevo_amt.png"
+        if not single:
+            R.draw_lines(p1, x, [{"name": "Pipeline amount",
+                                  "values": [(p.get("metrics") or {}).get("pipeline_amount")
+                                             for p in periods]}],
+                         iw, ih, theme=self.theme, currency=True, area=True)
+        else:
+            render_placeholder_png(p1, "", "Insufficient reporting history (needs ≥2 weeks)",
+                                   theme=self.theme, width_in=iw, height_in=ih)
+        self._place(s, p1, il, it, iw, ih)
+
+        # Pipeline by stage over time — EXCLUDING the KFI line (dashboard view).
+        il, it, iw, ih = self._card(s, *boxes[1], "Pipeline by stage over time")
+        p2 = self.work / "pevo_stage.png"
+        by_stage = evo.get("byStage", [])
+        if not single and by_stage:
+            weeks = sorted({str(r.get("week") or r.get("period")) for r in by_stage})
+            lut = {(str(r.get("stage", "")).upper(), str(r.get("week") or r.get("period"))):
+                   r.get("value") for r in by_stage}
+            series = []
+            for st in ("APPLICATION", "OFFER", "COMPLETED", "WITHDRAWN"):
+                vals = [lut.get((st, w)) for w in weeks]
+                if any(v for v in vals):
+                    series.append({"name": self._STAGE_PRETTY[st], "values": vals,
+                                   "color": self._STAGE_COLOR[st]})
+            R.draw_lines(p2, weeks, series, iw, ih, theme=self.theme, currency=True)
+        else:
+            render_placeholder_png(p2, "", "Insufficient reporting history (needs ≥2 weeks)",
+                                   theme=self.theme, width_in=iw, height_in=ih)
+        self._place(s, p2, il, it, iw, ih)
         self._footer(s)
-        self._record("pipeline_evolution", spec.get("title"), "", placeholder=ph)
+        self._record("pipeline_evolution", spec.get("title"), "", placeholder=single)
+
+    def slide_origination_flow(self, spec):
+        """KFI and Completion weekly-flow panels (bars) with a cumulative line —
+        the dashboard's pipeline→origination flow view."""
+        s = self._slide()
+        self._header(s, spec.get("title", "Origination Flow — KFIs & Completions"),
+                     "Weekly flow with cumulative build", accent=self.theme.peri)
+        f = self.d.funnel or {}
+        series = f.get("series", {}) or {}
+        summary = f.get("summary", {}) or {}
+        single = bool(f.get("singlePeriod")) or not series
+        boxes = self._chart_boxes(2)
+        for box, stage in zip(boxes, ("KFI", "COMPLETED")):
+            label = self._STAGE_PRETTY.get(stage, stage)
+            il, it, iw, ih = self._card(s, *box, f"{label}s · weekly flow")
+            path = self.work / f"flow_{stage.lower()}.png"
+            pts = series.get(stage) or []
+            if not single and pts:
+                weeks = [str(pt.get("week")) for pt in pts]
+                vals = [pt.get("value") for pt in pts]
+                cum, run = [], 0.0
+                for v in vals:
+                    run += float(v or 0)
+                    cum.append(run)
+                avg = (summary.get(stage) or {}).get("fiveWeekAvgFlowValue")
+                R.draw_bars_with_line(path, weeks, vals, cum, iw, ih, theme=self.theme,
+                                      avg=avg, line_label="Cumulative")
+            else:
+                render_placeholder_png(path, "", "Insufficient reporting history "
+                                       "(needs ≥2 weeks)", theme=self.theme,
+                                       width_in=iw, height_in=ih)
+            self._place(s, path, il, it, iw, ih)
+        self._footer(s)
+        self._record("origination_flow", spec.get("title"), "", placeholder=single)
+
+    def slide_multidim(self, spec):
+        """Three multi-dimension funded views: LTV×Age bubble (left half) + two
+        LTV heatmaps (borrower type, region) stacked on the right half."""
+        s = self._slide()
+        self._header(s, spec.get("title", "Multi-Dimensional Risk Analytics"),
+                     "Funded balance across paired dimensions", accent=self.theme.peri)
+        md = self.d.multidim or {}
+        # Left half — bubble.
+        il, it, iw, ih = self._card(s, Inches(0.55), Inches(1.62), Inches(6.4),
+                                    Inches(4.95), "Balance by LTV × Borrower Age")
+        bub = md.get("ltv_age")
+        p0 = self.work / "md_bubble.png"
+        if bub and bub.get("points"):
+            R.draw_bubble(p0, bub["points"], bub["xLabels"], bub["yLabels"], iw, ih,
+                          theme=self.theme)
+        else:
+            render_placeholder_png(p0, "", "LTV × age not available on this tape",
+                                   theme=self.theme, width_in=iw, height_in=ih)
+        self._place(s, p0, il, it, iw, ih)
+        # Right half — two stacked heatmaps.
+        rboxes = [(Inches(7.15), Inches(1.62), Inches(5.65), Inches(2.42)),
+                  (Inches(7.15), Inches(4.15), Inches(5.65), Inches(2.42))]
+        specs = [("ltv_borrower_type", "Balance by LTV × Borrower Type"),
+                 ("ltv_region", "Balance by LTV × Region")]
+        for box, (key, title) in zip(rboxes, specs):
+            il, it, iw, ih = self._card(s, *box, title)
+            hm = md.get(key)
+            path = self.work / f"md_{key}.png"
+            if hm and hm.get("matrix"):
+                R.draw_heatmap(path, hm["xLabels"], hm["yLabels"], hm["matrix"], iw, ih,
+                               theme=self.theme)
+            else:
+                render_placeholder_png(path, "", "Not available on this tape",
+                                       theme=self.theme, width_in=iw, height_in=ih)
+            self._place(s, path, il, it, iw, ih)
+        self._footer(s)
+        self._record("multidim", spec.get("title"), "", placeholder=not md)
 
     def slide_funnel(self, spec):
         s = self._slide()
@@ -509,26 +636,36 @@ class DeckBuilder:
             self._placeholder_body(s, "Forecast bridge requires funded + pipeline data.")
             self._footer(s)
             return self._record("forecast_bridge", spec.get("title"), "", placeholder=True)
-        box1 = (Inches(0.55), Inches(1.62), Inches(6.0), Inches(4.95))
-        il, it, iw, ih = self._card(s, *box1, "Funded → Forecast bridge")
-        steps = [("Funded", float(fb.get("fundedBalance") or 0), "base"),
-                 ("+ Weighted Pipeline", float(fb.get("weightedExpectedFundedAmount") or 0), "add"),
-                 ("Forecast Funded", float(fb.get("forecastFundedBalance") or 0), "total")]
+        # Clarify the forecast is the CURRENT book's expected completions only.
+        rd = self.d.reporting_date or "the reporting date"
+        self._text(s, Inches(0.57), Inches(1.16), Inches(12.4), Inches(0.4),
+                   f"Expected completions from the current book only (pipeline as of "
+                   f"{rd}), weighted by historical stage conversion — not future new business.",
+                   size=11, color=self.theme.ink_400, italic=True)
+        # Full-width waterfall: split the weighted-pipeline block across expected
+        # completion months (byCompletionMonth), Funded → +months → Forecast.
+        funded = float(fb.get("fundedBalance") or 0)
+        brk = (self.d.forecast.get("forecastBreakdowns") or {})
+        months = [(str(m.get("month")), float(m.get("weightedExpectedFundedAmount") or 0))
+                  for m in (brk.get("byCompletionMonth") or [])
+                  if m.get("weightedExpectedFundedAmount")]
+        months.sort()
+        steps = [("Funded", funded, "base")]
+        head, tail = months[:8], months[8:]
+        for mth, val in head:
+            steps.append((f"+ {mth}", val, "add"))
+        if tail:
+            steps.append(("+ Later", sum(v for _, v in tail), "add"))
+        if len(steps) == 1:  # no monthly breakdown — single weighted block
+            steps.append(("+ Weighted Pipeline",
+                          float(fb.get("weightedExpectedFundedAmount") or 0), "add"))
+        steps.append(("Forecast Funded", float(fb.get("forecastFundedBalance") or 0), "total"))
+        box = (Inches(0.55), Inches(1.95), Inches(12.25), Inches(4.6))
+        il, it, iw, ih = self._card(s, *box,
+                                    "Funded + weighted pipeline (by expected completion month) → Forecast")
         path = self.work / "bridge.png"
         render_bridge_waterfall(path, steps, iw, ih, theme=self.theme)
         self._place(s, path, il, it, iw, ih)
-        # forecast breakdown by region (byRegion carries forecastAmount directly;
-        # the capped variant keys it as pipelineAmount).
-        brk = (self.d.forecast.get("forecastBreakdowns") or {})
-        region = brk.get("byRegion") or brk.get("byRegionCapped") or []
-        box2 = (Inches(6.78), Inches(1.62), Inches(6.0), Inches(4.95))
-        rows = [{"label": r.get("key"),
-                 "v": (r.get("forecastAmount") or r.get("pipelineAmount")
-                       or r.get("weightedPipelineAmount") or 0)}
-                for r in region]
-        rows = sorted(rows, key=lambda r: r["v"], reverse=True)[:12]
-        self._barlist_card(s, box2, "Forecast balance by region", rows, "v",
-                           cid="fc_region")
         self._footer(s)
         self._record("forecast_bridge", spec.get("title"), "", placeholder=False)
 
@@ -538,10 +675,17 @@ class DeckBuilder:
                      "Run-rate scale-up (downside / base / upside)",
                      accent=self.theme.mint)
         ex = self.d.extrapolation or {}
-        model = (ex.get("completionRunRateForecast") or ex.get("kfiConversionForecast") or {})
+        model = {}
+        for key in ("completionRunRateForecast", "kfiConversionForecast"):
+            cand = ex.get(key) or {}
+            if cand.get("available") and cand.get("projectedBalances"):
+                model = cand
+                break
         proj = model.get("projectedBalances", [])
-        box = (Inches(0.55), Inches(1.62), Inches(12.25), Inches(4.95))
-        il, it, iw, ih = self._card(s, *box, "Projected funded balance")
+        # Projection chart (top ~62%) + milestone table (bottom) when available.
+        chart_box = ((Inches(0.55), Inches(1.62), Inches(12.25), Inches(3.05)) if proj
+                     else (Inches(0.55), Inches(1.62), Inches(12.25), Inches(4.95)))
+        il, it, iw, ih = self._card(s, *chart_box, "Projected funded balance")
         path = self.work / "projection.png"
         if proj:
             x = [str(p.get("month")) for p in proj]
@@ -556,6 +700,20 @@ class DeckBuilder:
                                    "scale-up projection", theme=self.theme,
                                    width_in=iw, height_in=ih)
         self._place(s, path, il, it, iw, ih)
+        # Milestone dates to funding thresholds.
+        milestones = model.get("milestones", [])
+        if proj and milestones:
+            box2 = (Inches(0.55), Inches(4.85), Inches(12.25), Inches(1.7))
+            il, it, iw, ih = self._card(s, *box2, "Milestone dates to funding thresholds")
+            cols = ["Threshold", "Downside", "Base", "Upside"]
+            def _d(m, k):
+                v = m.get(f"{k}Date")
+                return "reached" if v == "reached" else (str(v) if v else "—")
+            trows = [[m.get("thresholdLabel", ""), _d(m, "downside"), _d(m, "base"),
+                      _d(m, "upside")] for m in milestones[:6]]
+            tpath = self.work / "milestones.png"
+            R.draw_table(tpath, cols, trows, iw, ih, theme=self.theme)
+            self._place(s, tpath, il, it, iw, ih)
         self._footer(s)
         self._record("forecast_projection", spec.get("title"), "", placeholder=not proj)
 
@@ -697,10 +855,11 @@ class DeckBuilder:
     # ------------------------------------------------------------------- build
     _DISPATCH = {
         "cover": "slide_cover", "kpi_summary": "slide_kpi_summary",
-        "strat_barlists": "slide_strat", "geo": "slide_geo",
+        "strat_barlists": "slide_strat", "multidim": "slide_multidim", "geo": "slide_geo",
         "funded_evolution": "slide_funded_evolution", "cohorts": "slide_cohorts",
         "pipeline_summary": "slide_pipeline", "pipeline_evolution": "slide_pipeline_evolution",
-        "funnel": "slide_funnel", "forecast_bridge": "slide_forecast_bridge",
+        "funnel": "slide_funnel", "origination_flow": "slide_origination_flow",
+        "forecast_bridge": "slide_forecast_bridge",
         "forecast_projection": "slide_forecast_projection",
         "forecast_evolution": "slide_forecast_evolution", "risk": "slide_risk",
         "methodology": "slide_methodology", "appendix": "slide_appendix",
