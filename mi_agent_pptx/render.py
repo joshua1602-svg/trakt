@@ -1,0 +1,185 @@
+"""mi_agent_pptx.render — draw charts from explicit dashboard payload rows/series.
+
+These are the low-level renderers the payload-driven deck uses. They take the
+data *verbatim from the MI API payloads* (BarList rows, evolution series, bridge
+steps, risk tables) — no aggregation — so the visual is a faithful export of the
+dashboard's Recharts/BarList/stat-tile components. Each renders at the exact
+width×height of its slide panel and onto the theme panel background.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.font_manager as fm  # noqa: E402
+import matplotlib.patches as mpatches  # noqa: E402
+import matplotlib.pyplot as plt  # noqa: E402
+from matplotlib.ticker import FuncFormatter  # noqa: E402
+import numpy as np  # noqa: E402
+
+from .metric_resolver import compact_currency, compact_number  # noqa: E402
+from .pptx_theme import PptxTheme, THEME  # noqa: E402
+
+_SANS = next((f for f in ("Inter", "Liberation Sans", "DejaVu Sans")
+              if f in {ff.name for ff in fm.fontManager.ttflist}), "DejaVu Sans")
+_MONO = next((f for f in ("Liberation Mono", "DejaVu Sans Mono")
+              if f in {ff.name for ff in fm.fontManager.ttflist}), "DejaVu Sans Mono")
+plt.rcParams.update({"font.family": _SANS, "font.size": 11,
+                     "axes.unicode_minus": False})
+_MONO_FP = fm.FontProperties(family=_MONO)
+
+# Dashboard evolution palette (EvolutionPanel PALETTE).
+EVO_PALETTE = ["#7c9cf0", "#5ec6b8", "#e0a458", "#c98bdb", "#6fcf97", "#eb6f6f"]
+
+
+def _fig(w, h, theme, dpi=220):
+    fig = plt.figure(figsize=(w, h), dpi=dpi)
+    fig.patch.set_facecolor(theme.bg_panel)
+    return fig
+
+
+def _save(fig, path, theme, dpi=220):
+    fig.savefig(Path(path), facecolor=theme.bg_panel, dpi=dpi)
+    plt.close(fig)
+    return Path(path)
+
+
+def _truncate(label: str, max_chars: int) -> str:
+    return label if len(label) <= max_chars else label[:max_chars - 1].rstrip() + "…"
+
+
+def draw_barlist(path, rows: Sequence[Dict[str, Any]], value_key: str, w: float,
+                 h: float, *, theme: PptxTheme = THEME, currency: bool = True,
+                 label_key: str = "label", count_key: Optional[str] = "count",
+                 dpi: int = 220) -> Path:
+    """Dashboard BarList: label left, periwinkle bar ∝ max, mono value right."""
+    rows = [r for r in rows if r is not None]
+    fig = _fig(w, h, theme, dpi)
+    ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
+    ax.set_facecolor(theme.bg_panel)
+    ax.set_xlim(0, 1)
+    ax.axis("off")
+    if not rows:
+        ax.text(0.5, 0.5, "No data", ha="center", va="center",
+                color=theme.ink_500, fontsize=12)
+        return _save(fig, path, theme, dpi)
+
+    fmt: Callable = compact_currency if currency else compact_number
+    values = [float(r.get(value_key) or 0) for r in rows]
+    labels = [str(r.get(label_key, "")) for r in rows]
+    n = len(rows)
+    vmax = max(max(values), 1.0)
+    pad_top, pad_bot = 0.10, 0.05
+    band = (1.0 - pad_top - pad_bot) / max(n, 1)
+    bar_h = min(band * 0.62, 0.135)
+    label_x, tx0, tx1 = 0.005, 0.335, 0.85
+    tw = tx1 - tx0
+    max_chars = max(10, int((tx0 - label_x) * w * 72 / (10.5 * 0.56)))
+    for i, (lab, val) in enumerate(zip(labels, values)):
+        yc = 1.0 - pad_top - (i + 0.5) * band
+        y0 = yc - bar_h / 2
+        ax.add_patch(mpatches.FancyBboxPatch(
+            (tx0, y0), tw, bar_h, boxstyle="round,pad=0,rounding_size=0.012",
+            linewidth=0, facecolor=theme.bg_panel_alt, alpha=0.7,
+            mutation_aspect=h / w, zorder=1))
+        frac = max(val / vmax, 0.012)
+        ax.add_patch(mpatches.FancyBboxPatch(
+            (tx0, y0), tw * frac, bar_h, boxstyle="round,pad=0,rounding_size=0.012",
+            linewidth=0, facecolor=theme.peri, alpha=0.9,
+            mutation_aspect=h / w, zorder=2))
+        ax.text(label_x, yc, _truncate(lab, max_chars), va="center", ha="left",
+                color=theme.ink_300, fontsize=10.5, zorder=3)
+        ax.text(0.995, yc, fmt(val), va="center", ha="right", color=theme.ink_100,
+                fontsize=10.5, fontproperties=_MONO_FP, zorder=3)
+    return _save(fig, path, theme, dpi)
+
+
+def draw_lines(path, x_labels: Sequence[str], series: Sequence[Dict[str, Any]],
+               w: float, h: float, *, theme: PptxTheme = THEME,
+               currency: bool = True, percent: bool = False, area: bool = False,
+               dpi: int = 220) -> Path:
+    """Dashboard line/area chart. *series* = [{name, values, color?}]."""
+    fig = _fig(w, h, theme, dpi)
+    ax = fig.add_axes([0.10, 0.16, 0.88, 0.74 if len(series) > 1 else 0.80])
+    ax.set_facecolor(theme.bg_panel)
+    for s in ("top", "right", "left"):
+        ax.spines[s].set_visible(False)
+    ax.spines["bottom"].set_color(theme.line_soft)
+    ax.tick_params(colors=theme.ink_500, labelsize=9, length=0)
+    ax.grid(axis="y", color=theme.line_soft, linewidth=0.7,
+            linestyle=(0, (3, 3)), alpha=0.9)
+    ax.set_axisbelow(True)
+
+    n = len(x_labels)
+    x = list(range(n))
+    if not n or not series:
+        ax.text(0.5, 0.5, "Insufficient history", ha="center", va="center",
+                transform=ax.transAxes, color=theme.ink_500, fontsize=12)
+        ax.axis("off")
+        return _save(fig, path, theme, dpi)
+
+    for i, s in enumerate(series):
+        vals = [None if v is None else float(v) for v in s.get("values", [])]
+        color = s.get("color") or EVO_PALETTE[i % len(EVO_PALETTE)]
+        ax.plot(x, vals, color=color, linewidth=2.4, marker="o", markersize=3,
+                label=s.get("name", ""), zorder=3, solid_capstyle="round")
+        if area and len(series) == 1:
+            ax.fill_between(x, [v or 0 for v in vals], color=color, alpha=0.16, zorder=2)
+
+    if currency:
+        ax.yaxis.set_major_formatter(FuncFormatter(lambda v, p: compact_currency(v)))
+    elif percent:
+        ax.yaxis.set_major_formatter(FuncFormatter(lambda v, p: f"{v * 100:.0f}%"
+                                                   if v <= 1.5 else f"{v:.0f}%"))
+    step = max(1, n // 7)
+    idx = sorted(set(list(range(0, n, step)) + [n - 1]))
+    ax.set_xticks([x[i] for i in idx])
+    ax.set_xticklabels([str(x_labels[i]) for i in idx], fontsize=8.5,
+                       color=theme.ink_500)
+    if len(series) > 1:
+        leg = ax.legend(loc="upper left", fontsize=8.5, frameon=False,
+                        ncol=min(len(series), 3), handlelength=1.4)
+        for t in leg.get_texts():
+            t.set_color(theme.ink_300)
+    return _save(fig, path, theme, dpi)
+
+
+def draw_table(path, columns: Sequence[str], rows: Sequence[Sequence[Any]],
+               w: float, h: float, *, theme: PptxTheme = THEME,
+               status_col: Optional[int] = None, dpi: int = 220) -> Path:
+    """Compact dark table (risk category tables). *rows* are pre-formatted str
+    cells; ``status_col`` colours a RAG status cell."""
+    fig = _fig(w, h, theme, dpi)
+    ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
+    ax.set_facecolor(theme.bg_panel)
+    ax.axis("off")
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ncol = len(columns)
+    rag = {"green": theme.rag["green"], "amber": theme.rag["amber"],
+           "red": theme.rag["red"], "needs_review": theme.ink_400,
+           "unavailable": theme.ink_500}
+    # column x positions: first column wide (label), rest even.
+    xs = [0.02] + list(np.linspace(0.42, 0.98, ncol - 1)) if ncol > 1 else [0.02]
+    header_y = 0.94
+    for c, col in enumerate(columns):
+        ha = "left" if c == 0 else "right"
+        ax.text(xs[c], header_y, col, ha=ha, va="center", color=theme.ink_400,
+                fontsize=9, fontweight="bold")
+    ax.plot([0.02, 0.98], [0.90, 0.90], color=theme.line, linewidth=0.8)
+    rh = 0.85 / max(len(rows), 1)
+    for r, row in enumerate(rows):
+        y = 0.86 - (r + 0.5) * rh
+        for c, cell in enumerate(row):
+            ha = "left" if c == 0 else "right"
+            color = theme.ink_200 if hasattr(theme, "ink_200") else theme.ink_300
+            fp = None if c == 0 else _MONO_FP
+            if status_col is not None and c == status_col:
+                color = rag.get(str(cell).lower(), theme.ink_300)
+            ax.text(xs[c], y, str(cell), ha=ha, va="center", color=color,
+                    fontsize=9.5, fontproperties=fp)
+    return _save(fig, path, theme, dpi)
