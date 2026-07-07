@@ -639,8 +639,38 @@ class DeckBuilder:
     def slide_appendix(self, spec):
         s = self._slide()
         self._header(s, spec.get("title", "Appendix — Data Coverage"), "")
-        notes = self.appendix or ["All dashboard payloads resolved; no coverage gaps."]
-        self._bullets(s, [f"•  {n}" for n in notes[:12]], size=11)
+        d = self.d.diagnostics or {}
+        ts = d.get("timeSeries", {})
+        pretty = {"funded_evolution": "Funded evolution",
+                  "pipeline_evolution": "Pipeline evolution",
+                  "funnel": "Origination funnel",
+                  "forecast_projection": "Forecast projection", "risk": "Risk limits"}
+
+        def _fmt(v, dash="not resolved"):
+            return str(v) if v not in (None, "") else dash
+
+        lines = ["RESOLVED SOURCES",
+                 f"   Funded current source:  {_fmt(d.get('fundedCurrentSource'))}",
+                 f"   Pipeline current source:  {_fmt(d.get('pipelineCurrentSource'))}",
+                 "HISTORICAL DISCOVERY",
+                 f"   Funded history root:  {_fmt(d.get('fundedHistoryRoot'))}",
+                 f"      dated funded cuts found:  {d.get('fundedCutsFound', 0)}",
+                 f"   Pipeline history root:  {_fmt(d.get('pipelineHistoryRoot'))}",
+                 f"      dated pipeline snapshots found:  {d.get('pipelineSnapshotsFound', 0)}",
+                 "TIME-SERIES SLIDE COVERAGE"]
+        for key, label in pretty.items():
+            info = ts.get(key, {})
+            if info.get("placeholder"):
+                lines.append(f"   {label}:  placeholder — {info.get('reason') or 'insufficient history'}")
+            else:
+                extra = f" ({info['periods']} periods)" if info.get("periods") else ""
+                lines.append(f"   {label}:  rendered{extra}")
+        extra_notes = [n for n in self.appendix
+                       if "placeholder" not in n.lower() and "render" not in n.lower()]
+        if extra_notes:
+            lines.append("NOTES")
+            lines += [f"   •  {n}" for n in extra_notes[:6]]
+        self._bullets(s, lines, size=10.5)
         self._footer(s)
         self._record("appendix", spec.get("title"), "")
 
