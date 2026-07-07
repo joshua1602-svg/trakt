@@ -194,12 +194,12 @@ class DeckBuilder:
                 (Inches(6.78), top, Inches(6.0), h)]
 
     def _barlist_card(self, slide, box, title, rows, value_key, *, currency=True,
-                      cid="bl"):
+                      cid="bl", label_key="label"):
         il, it, iw, ih = self._card(slide, *box, title)
         path = self.work / f"{cid}.png"
         if rows:
             R.draw_barlist(path, rows, value_key, iw, ih, theme=self.theme,
-                           currency=currency)
+                           currency=currency, label_key=label_key)
         else:
             render_placeholder_png(path, "", "No data for this run",
                                    theme=self.theme, width_in=iw, height_in=ih)
@@ -433,19 +433,27 @@ class DeckBuilder:
         self._barlist_card(s, box1, "Pipeline amount by stage",
                            self._stage_rows(p.get("stageBreakdown", [])), "pipelineAmount",
                            cid="pipe_stage")
-        broker = p.get("brokerBreakdown", []) or p.get("regionBreakdown", [])
-        self._barlist_card(s, box2, "Pipeline amount by broker / channel",
-                           broker, "pipelineAmount", cid="pipe_broker")
+        # broker/region breakdown rows are keyed `key` (not `label`) and cap_breakdown
+        # appends an aggregated "Other" row last — sort by amount so the BarList reads
+        # largest-first, and bind the label to `key`.
+        broker = list(p.get("brokerBreakdown", []) or p.get("regionBreakdown", []))
+        broker.sort(key=lambda r: r.get("pipelineAmount", 0), reverse=True)
+        broker_title = ("Pipeline amount by broker / channel"
+                        if p.get("brokerBreakdown") else "Pipeline amount by region")
+        self._barlist_card(s, box2, broker_title, broker, "pipelineAmount",
+                           cid="pipe_broker", label_key="key")
         self._footer(s)
         self._record("pipeline", spec.get("title"), "", placeholder=False)
 
-    def _stage_rows(self, rows):
+    def _stage_rows(self, rows, value_key="pipelineAmount"):
         order = {"KFI": 0, "APPLICATION": 1, "OFFER": 2, "COMPLETED": 3, "WITHDRAWN": 4}
         pretty = {"KFI": "KFI", "APPLICATION": "Application", "OFFER": "Offer",
-                  "COMPLETED": "Completed", "WITHDRAWN": "Withdrawn"}
+                  "COMPLETED": "Completed", "WITHDRAWN": "Withdrawn", "UNKNOWN": "Other"}
         rows = sorted(rows, key=lambda r: order.get(str(r.get("stage", "")).upper(), 9))
-        return [{"label": pretty.get(str(r.get("stage", "")).upper(), r.get("stage")),
-                 "pipelineAmount": r.get("pipelineAmount", 0)} for r in rows]
+        return [{"label": pretty.get(str(r.get("stage", "")).upper(),
+                                     str(r.get("stage", "")).title()),
+                 "pipelineAmount": r.get("pipelineAmount", 0),
+                 "caseCount": r.get("caseCount", 0)} for r in rows]
 
     def slide_pipeline_evolution(self, spec):
         s = self._slide()
@@ -467,13 +475,22 @@ class DeckBuilder:
         summary = self.d.funnel.get("summary", {}) or {}
         stages = self.d.funnel.get("stages", []) or ["KFI", "APPLICATION", "OFFER", "COMPLETED"]
         pretty = {"KFI": "KFI", "APPLICATION": "Application", "OFFER": "Offer",
-                  "COMPLETED": "Completed"}
+                  "COMPLETED": "Completed", "WITHDRAWN": "Withdrawn"}
         rows = [{"label": pretty.get(st, st),
                  "v": (summary.get(st) or {}).get("latestFlowValue", 0)}
                 for st in stages]
         box = (Inches(0.55), Inches(1.62), Inches(12.25), Inches(4.95))
-        ok = self._barlist_card(s, box, "Latest weekly origination flow by stage",
-                                [r for r in rows if r.get("v")], "v", cid="funnel")
+        title = "Latest weekly origination flow by stage"
+        # Weekly flow needs ≥2 pipeline extracts. With a single extract, fall back to
+        # the CURRENT pipeline funnel — case counts by stage — so the slide still
+        # carries real data (matching the dashboard's single-period funnel).
+        if not any(r["v"] for r in rows):
+            stage_rows = self._stage_rows(self.d.pipeline.get("stageBreakdown", []),
+                                          value_key="caseCount")
+            rows = [{"label": r["label"], "v": r.get("caseCount", 0)} for r in stage_rows]
+            title = "Current pipeline cases by stage"
+        ok = self._barlist_card(s, box, title, [r for r in rows if r.get("v")], "v",
+                                currency=False, cid="funnel")
         self._footer(s)
         self._record("funnel", spec.get("title"), "", placeholder=not ok)
 
