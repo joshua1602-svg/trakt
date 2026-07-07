@@ -134,3 +134,36 @@ def test_pipeline_discovery_prefers_rich_source_over_thin_18a(tmp_path):
     for col in ("current_outstanding_balance", "pipeline_stage", "broker_channel"):
         assert col in out.columns, col
     assert out["pipeline_stage"].notna().any()
+
+
+def test_pipeline_resolved_from_sibling_run(tmp_path):
+    """Pipeline is a client-level, cross-run source: a funded run with NO M2L
+    under it must still resolve the pipeline from a sibling run's source."""
+    import shutil
+    from mi_agent_pptx.artifact_loader import load_run_artifacts
+    from mi_agent_pptx.cli import _resolve_pipeline_tape
+    from mi_agent_pptx.registry_loader import REPO_ROOT
+
+    fixture = (REPO_ROOT / "tests" / "fixtures" / "client_001_mi_pack" / "pipeline"
+               / "2025-11-01" / "M2L_KFI_and_Pipeline_2025_11_01.csv")
+    if not fixture.exists():
+        import pytest
+        pytest.skip("M2L pipeline fixture not present")
+
+    container = tmp_path / "blob_trigger"
+    funded = container / "orun_ere_funded"
+    funded.mkdir(parents=True)
+    (funded / "run_state.json").write_text('{"run_id":"orun_ere_funded",'
+                                           '"client_id":"ERE","reporting_date":"2026-01-31"}')
+    # Sibling run carries the pipeline source; the funded run has none.
+    sib = (container / "orun_ere_pipe" / "portfolios" / "direct_001"
+           / "output" / "pipeline" / "2025-11-01")
+    sib.mkdir(parents=True)
+    shutil.copy(fixture, sib / fixture.name)
+
+    artifacts = load_run_artifacts(funded)
+    # No explicit root → falls back to the run dir's parent (sibling runs).
+    out = _resolve_pipeline_tape(artifacts, "2026-01-31")
+    assert out is not None and not out.empty
+    assert "pipeline_stage" in out.columns
+    assert "current_outstanding_balance" in out.columns

@@ -18,6 +18,7 @@ run artifacts only — never Streamlit — and resolves each lens (funded / pipe
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -46,6 +47,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--client-name", default="Client")
     p.add_argument("--as-of-date", default=None)
     p.add_argument("--output", default=None)
+    p.add_argument("--pipeline-root", default=None,
+                   help="Root to discover the governed pipeline source (M2L KFI "
+                        "extracts). Pipeline is a client-level, cross-run source "
+                        "and does NOT live in the funded run dir; point this at "
+                        "the container of the client's runs (or set "
+                        "MI_AGENT_PIPELINE_ROOT). Defaults to the run dir, then "
+                        "its parent (sibling runs).")
     p.add_argument("--prior-run-dir", default=None,
                    help="Previous reporting-period run directory (enables MoM deltas).")
     p.add_argument("--lens", default=None)
@@ -106,28 +114,91 @@ def _read_source(path: str):
         return None
 
 
-def _resolve_pipeline_tape(artifacts: RunArtifacts, as_of: Optional[str]):
+def _uri_derived_root(uri: str) -> Optional[str]:
+    """A discovery root derived from an ``MI_AGENT_PIPELINE_URI`` snapshot pointer
+    (strip the filename and a trailing ``{date}``/``latest`` folder)."""
+    p = uri.rstrip("/")
+    if p.endswith(".csv") or p.endswith(".json"):
+        p = p.rsplit("/", 1)[0]
+    tail = p.rsplit("/", 1)[-1]
+    if tail == "latest" or __import__("re").match(r"^\d{4}-\d{2}-\d{2}$", tail):
+        p = p.rsplit("/", 1)[0]
+    return p or None
+
+
+def _pipeline_roots(artifacts: RunArtifacts, explicit: Optional[str]) -> List[str]:
+    """Ordered candidate roots to discover the governed pipeline source.
+
+    Pipeline is a client-level, cross-run source — it does NOT live in the funded
+    run dir. Precedence mirrors the MI API (``mi_agent_api.app._pipeline_root``):
+    explicit flag → ``MI_AGENT_PIPELINE_ROOT`` → ``MI_AGENT_PIPELINE_URI`` root →
+    the run dir (normal runs materialise the M2L under it) → the run dir's parent
+    (the container of sibling runs, for split funded/pipeline backfills)."""
+    roots: List[str] = []
+    if explicit:
+        roots.append(explicit)
+    env = os.environ.get("MI_AGENT_PIPELINE_ROOT")
+    if env:
+        roots.append(env)
+    uri = os.environ.get("MI_AGENT_PIPELINE_URI")
+    if uri:
+        derived = _uri_derived_root(uri)
+        if derived:
+            roots.append(derived)
+    run_dir = Path(artifacts.run_dir)
+    roots.append(str(run_dir))
+    roots.append(str(run_dir.parent))
+    seen: set = set()
+    out: List[str] = []
+    for r in roots:
+        if r and r not in seen:
+            seen.add(r)
+            out.append(r)
+    return out
+
+
+def _filter_client(sources: list, client_id: Optional[str]) -> list:
+    """Keep only sources whose path carries the client token, when known — so a
+    broad parent root does not pull a different client's pipeline. If nothing
+    matches by path, don't over-filter (the tree may be single-client)."""
+    if not client_id or not sources:
+        return sources
+    tok = str(client_id).strip().lower()
+    if not tok:
+        return sources
+    matched = [s for s in sources
+               if tok in str(s.get("source_file", "")).lower()]
+    return matched or sources
+
+
+def _resolve_pipeline_tape(artifacts: RunArtifacts, as_of: Optional[str],
+                           pipeline_root: Optional[str] = None):
     """Resolve the pipeline frame the way the MI dashboard does.
 
-    The thin ``18a_central_pipeline_tape.csv`` the artifact loader finds is a
-    last-resort fallback; the MI layer prefers the RICH governed weekly source
-    (``M2L*KFI*Pipeline*.csv`` materialised under ``output/pipeline/``). Discover
-    that source anywhere under the run directory (mirroring
-    ``mi_agent_api.pipeline_contract.discover_pipeline_sources``), prep it, and
-    only fall back to the thin tape when no richer source exists.
+    Discovers the RICH governed weekly source (``M2L*KFI*Pipeline*.csv/.xlsx``)
+    across the pipeline roots (client-level, cross-run — see :func:`_pipeline_roots`),
+    preps it with the MI Agent's own prep, and only falls back to the thin
+    ``18a_central_pipeline_tape.csv`` when no richer source exists anywhere.
     """
-    # 1. Rich governed source (preferred — matches the dashboard).
+    client_id = (artifacts.run_state.get("client_id")
+                 if isinstance(artifacts.run_state, dict) else None)
     try:
         from mi_agent_api.pipeline_contract import discover_pipeline_sources
-        sources = discover_pipeline_sources(str(artifacts.run_dir))
-        if sources:
-            newest = sources[-1]
+        for root in _pipeline_roots(artifacts, pipeline_root):
+            try:
+                sources = discover_pipeline_sources(root)
+            except Exception:  # noqa: BLE001 — a bad root must not abort discovery
+                continue
+            sources = _filter_client(sources, client_id)
+            if not sources:
+                continue
+            newest = sources[-1]  # discovery returns oldest -> newest
             raw = _read_source(newest.get("source_file", ""))
             if raw is not None and not raw.empty:
                 return _prep_pipeline(raw, as_of or newest.get("pipeline_as_of_date"))
     except Exception:  # noqa: BLE001 — discovery is best effort
         pass
-    # 2. Fallback: the thin 18a tape the artifact loader already found.
+    # Fallback: the thin 18a tape the artifact loader already found.
     if artifacts.has_pipeline:
         return _prep_pipeline(
             artifacts.pipeline_tape, as_of or artifacts.run_state.get("reporting_date"))
@@ -135,13 +206,14 @@ def _resolve_pipeline_tape(artifacts: RunArtifacts, as_of: Optional[str]):
 
 
 def _lens_bundle(artifacts: RunArtifacts, registries: RegistryLoader,
-                 as_of: Optional[str]) -> Dict[str, Optional[ResolvedData]]:
+                 as_of: Optional[str],
+                 pipeline_root: Optional[str] = None) -> Dict[str, Optional[ResolvedData]]:
     """Resolve the funded / pipeline / forecast frames for a run."""
     funded_tape = (_prep_funded(artifacts.tape) if artifacts.has_tape
                    else pd.DataFrame())
     funded = resolve_data(funded_tape, registries, as_of_date=as_of)
     pipeline = None
-    pipe_df = _resolve_pipeline_tape(artifacts, as_of)
+    pipe_df = _resolve_pipeline_tape(artifacts, as_of, pipeline_root)
     if pipe_df is not None and not pipe_df.empty:
         pipeline = resolve_data(pipe_df, registries, as_of_date=as_of)
     # Forecast charts (run-rate / cumulative) draw from the pipeline frame's
@@ -168,9 +240,17 @@ def run(argv: Optional[List[str]] = None) -> int:
         print(f"[artifacts] {note}")
 
     appendix = AppendixNotes()
-    appendix.extend(artifacts.coverage_notes)
 
-    lenses = _lens_bundle(artifacts, registries, args.as_of_date)
+    lenses = _lens_bundle(artifacts, registries, args.as_of_date,
+                          pipeline_root=args.pipeline_root)
+    # Carry forward the loader's coverage notes, but drop its thin-18a "no
+    # pipeline tape" note when the pipeline lens actually resolved (via the
+    # cross-run rich-source discovery) so the appendix isn't self-contradictory.
+    for note in artifacts.coverage_notes:
+        if lenses.get("pipeline") is not None and "no pipeline tape" in note.lower():
+            continue
+        appendix.add(note)
+
     as_of = args.as_of_date or (lenses["funded"].as_of_date if lenses["funded"] else "") or ""
     if not artifacts.has_tape:
         appendix.add("No canonical typed tape resolved — deck rendered with "
@@ -186,7 +266,8 @@ def run(argv: Optional[List[str]] = None) -> int:
     prior_label = ""
     if args.prior_run_dir:
         prior_art = load_run_artifacts(args.prior_run_dir)
-        prior_lenses = _lens_bundle(prior_art, registries, None)
+        prior_lenses = _lens_bundle(prior_art, registries, None,
+                                    pipeline_root=args.pipeline_root)
         pdate = prior_lenses["funded"].as_of_date if prior_lenses["funded"] else ""
         prior_label = f"prior run {Path(args.prior_run_dir).name}" + (
             f" (as-of {pdate})" if pdate else "")
