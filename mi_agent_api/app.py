@@ -1079,7 +1079,8 @@ def pipeline_evolution(portfolioId: Optional[str] = None, client_id: Optional[st
                 "periods": [], "byStage": [], "singlePeriod": True,
                 "error": "no pipeline root configured"}
     try:
-        result = evolution_mod.pipeline_evolution(root, cid, pipeline_cut)
+        result = evolution_mod.pipeline_evolution(
+            root, cid, pipeline_cut, historical_model=_pipeline_history(cid))
         # Disclose the funded-vs-pipeline timing on the evolution response too, so
         # the pipeline evolution view can surface the non-blocking banner.
         latest = None
@@ -1283,7 +1284,11 @@ def forecast_evolution(portfolioId: Optional[str] = None, client_id: Optional[st
                 "periods": [], "singlePeriod": True,
                 "error": "no onboarding output root configured"}
     try:
-        return evolution_mod.forecast_evolution(root, proot or root, cid, trid)
+        # Weight the pipeline by the governed historical stage rates (same basis
+        # as the point-in-time bridge and the scale-up forecast) so every forecast
+        # surface shows ONE consistent 'weighted expected pipeline'.
+        return evolution_mod.forecast_evolution(
+            root, proot or root, cid, trid, historical_model=_pipeline_history(cid))
     except Exception as exc:  # noqa: BLE001
         logger.warning("forecast evolution failed: %s", exc)
         return {"dataset": "forecast", "portfolioId": cid, "toRunId": trid,

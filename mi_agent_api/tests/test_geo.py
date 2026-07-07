@@ -44,6 +44,39 @@ def test_prefers_tape_itl3_field_over_postcode():
     assert {a["itl3_code"] for a in out["areas"]} == {"TLK51", "TLM50"}
 
 
+def test_per_area_analytics_ticket_ltv_age():
+    warnings.simplefilter("ignore")
+    # Two loans in area A (LTV 40/60, ages 70/80), one in area B (LTV 50, age 75).
+    df = pd.DataFrame({
+        "current_outstanding_balance": [100_000.0, 300_000.0, 200_000.0],
+        "current_loan_to_value": [40.0, 60.0, 50.0],
+        "youngest_borrower_age": [70, 80, 75],
+        "geographic_region_collateral_itl3": ["TLK51", "TLK51", "TLM50"],
+    })
+    out = geo.exposure_by_itl3(df)
+    by = {a["itl3_code"]: a for a in out["areas"]}
+    a = by["TLK51"]
+    assert a["count"] == 2
+    assert a["avgTicket"] == 200_000.0                    # (100k+300k)/2
+    # Balance-weighted LTV = (40*100k + 60*300k)/400k = 55.0
+    assert a["avgLtv"] == 55.0
+    assert a["avgAge"] == 75.0                             # mean(70,80)
+    b = by["TLM50"]
+    assert b["avgTicket"] == 200_000.0 and b["avgLtv"] == 50.0 and b["avgAge"] == 75.0
+
+
+def test_per_area_analytics_omitted_when_columns_absent():
+    warnings.simplefilter("ignore")
+    df = pd.DataFrame({
+        "current_outstanding_balance": [100.0, 200.0],
+        "geographic_region_collateral_itl3": ["TLK51", "TLM50"],
+    })
+    out = geo.exposure_by_itl3(df)
+    area = out["areas"][0]
+    assert area["avgTicket"] is not None      # ticket is always derivable
+    assert "avgLtv" not in area and "avgAge" not in area
+
+
 def test_mixed_itl3_field_and_postcode_fallback():
     # Row 0: ITL3 field present -> used directly. Row 1: blank field -> postcode
     # fallback. Row 2: sentinel 'nan' field -> postcode fallback. Row 3: blank

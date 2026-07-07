@@ -17,7 +17,13 @@ function heat(t: number): string {
   return `rgb(${v(0)},${v(1)},${v(2)})`;
 }
 
-export interface ChoroHover {
+export interface AreaDetail {
+  avgTicket?: number | null;
+  avgLtv?: number | null;
+  avgAge?: number | null;
+}
+
+export interface ChoroHover extends AreaDetail {
   code: string;
   name: string;
   value: number;
@@ -30,12 +36,15 @@ export interface ChoroHover {
  * Presentational only — the caller supplies the atlas, values and formatting.
  */
 export function UkChoropleth({
-  atlas, valueByCode, shareByCode, formatValue, onHoverChange, className,
+  atlas, valueByCode, shareByCode, detailByCode, formatValue, formatTicket,
+  onHoverChange, className,
 }: {
   atlas: ItlAtlas;
   valueByCode: Record<string, number>;
   shareByCode?: Record<string, number | null>;
+  detailByCode?: Record<string, AreaDetail>;
   formatValue: (v: number) => string;
+  formatTicket?: (v: number) => string;
   onHoverChange?: (h: ChoroHover | null) => void;
   className?: string;
 }) {
@@ -55,9 +64,13 @@ export function UkChoropleth({
 
   function enter(code: string) {
     const value = valueByCode[code] ?? 0;
+    const d = detailByCode?.[code];
     const h: ChoroHover = {
       code, name: atlas.areas[code]?.name ?? code, value,
       sharePct: shareByCode?.[code] ?? null,
+      avgTicket: d?.avgTicket ?? null,
+      avgLtv: d?.avgLtv ?? null,
+      avgAge: d?.avgAge ?? null,
     };
     setHover(h);
     onHoverChange?.(h);
@@ -101,6 +114,30 @@ export function UkChoropleth({
             {hover.sharePct != null && <span> · {hover.sharePct.toFixed(1)}%</span>}
             <span className="text-ink-500"> · {hover.code}</span>
           </div>
+          {(hover.avgTicket != null || hover.avgLtv != null || hover.avgAge != null) && (
+            <dl className="mt-1 grid grid-cols-[auto_auto] gap-x-2 gap-y-0.5 border-t border-[var(--color-line-soft)] pt-1 text-[10.5px]">
+              {hover.avgTicket != null && (
+                <>
+                  <dt className="text-ink-500">Avg ticket</dt>
+                  <dd className="text-right font-mono text-ink-200">
+                    {(formatTicket ?? formatValue)(hover.avgTicket)}
+                  </dd>
+                </>
+              )}
+              {hover.avgLtv != null && (
+                <>
+                  <dt className="text-ink-500">Avg LTV</dt>
+                  <dd className="text-right font-mono text-ink-200">{hover.avgLtv.toFixed(1)}%</dd>
+                </>
+              )}
+              {hover.avgAge != null && (
+                <>
+                  <dt className="text-ink-500">Avg age</dt>
+                  <dd className="text-right font-mono text-ink-200">{hover.avgAge.toFixed(0)} yrs</dd>
+                </>
+              )}
+            </dl>
+          )}
         </div>
       )}
     </div>

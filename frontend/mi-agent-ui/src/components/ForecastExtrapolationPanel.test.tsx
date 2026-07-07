@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import type { AgentClient } from "@/api";
 import { ForecastExtrapolationPanel } from "./ForecastExtrapolationPanel";
 import { mockForecastExtrapolation } from "@/data/mockForecastExtrapolation";
@@ -28,30 +28,30 @@ function client(getForecastExtrapolation: AgentClient["getForecastExtrapolation"
 }
 
 describe("ForecastExtrapolationPanel", () => {
-  it("renders the scale-up curve, milestone table and assumptions for the run-rate model", async () => {
+  it("renders the single scale-up run-rate view (curve, milestones, assumptions)", async () => {
     render(<ForecastExtrapolationPanel
       client={client(async () => mockForecastExtrapolation("client_001"))}
       portfolioId="client_001/mi_2025_11" />);
-    expect(await screen.findByText(/Scale-up forecast/)).toBeInTheDocument();
-    // Default model = completion run-rate: curve + milestones + assumptions render.
+    expect(await screen.findByText(/Scale-up run-rate/)).toBeInTheDocument();
+    // The completion run-rate view: curve + milestones + assumptions render.
     expect(screen.getByText(/Projected funded balance/)).toBeInTheDocument();
     expect(screen.getByTestId("milestone-table")).toBeInTheDocument();
     expect(screen.getByTestId("assumptions-panel")).toBeInTheDocument();
-    // Milestone thresholds present.
     expect(screen.getByText("£100m")).toBeInTheDocument();
     expect(screen.getByText("£50m")).toBeInTheDocument();
-    // Scenario bands labelled, not statistical CIs.
     expect(screen.getByText(/not statistical confidence intervals/)).toBeInTheDocument();
   });
 
-  it("switches to the current weighted pipeline model and labels it clearly", async () => {
+  it("does not show a model selector or the withdrawn/duplicate models", async () => {
     render(<ForecastExtrapolationPanel
       client={client(async () => mockForecastExtrapolation("client_001"))}
       portfolioId="client_001" />);
-    await screen.findByText(/Scale-up forecast/);
-    fireEvent.click(screen.getByRole("tab", { name: "Current weighted pipeline" }));
-    expect(await screen.findByTestId("weighted-pipeline-forecast")).toBeInTheDocument();
-    expect(screen.getByText(/NOT the full scale-up forecast/)).toBeInTheDocument();
+    await screen.findByText(/Scale-up run-rate/);
+    // The point-in-time bridge is View i (shown above), not repeated here; the
+    // KFI model is withdrawn. No model tabs, no duplicate weighted-pipeline card.
+    expect(screen.queryByRole("tab", { name: "Current weighted pipeline" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "KFI run-rate × conversion" })).toBeNull();
+    expect(screen.queryByTestId("weighted-pipeline-forecast")).toBeNull();
   });
 
   it("shows a controlled insufficient-history state", async () => {

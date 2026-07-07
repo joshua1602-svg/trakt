@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { AgentClient } from "@/api/AgentClient";
 import type { GeoExposure, ItlAtlas } from "@/domain/geo";
 import atlasRaw from "@/data/geo/uk_itl3_paths.json";
-import { UkChoropleth } from "@/components/UkChoropleth";
+import { UkChoropleth, type AreaDetail } from "@/components/UkChoropleth";
 import { formatGBP } from "@/lib/utils";
 
 const atlas = atlasRaw as unknown as ItlAtlas;
@@ -49,16 +49,21 @@ export function GeographyPanel({ client, portfolioId }: {
     return () => { cancelled = true; };
   }, [client, portfolioId]);
 
-  const { valueByCode, shareByCode, ranked, total, top, top5Pct } = useMemo(() => {
+  const { valueByCode, shareByCode, detailByCode, ranked, total, top, top5Pct } = useMemo(() => {
     const areas = geo?.areas ?? [];
     const v: Record<string, number> = {};
     const s: Record<string, number | null> = {};
-    for (const a of areas) { v[a.itl3_code] = a.balance; s[a.itl3_code] = a.sharePct; }
+    const d: Record<string, AreaDetail> = {};
+    for (const a of areas) {
+      v[a.itl3_code] = a.balance;
+      s[a.itl3_code] = a.sharePct;
+      d[a.itl3_code] = { avgTicket: a.avgTicket, avgLtv: a.avgLtv, avgAge: a.avgAge };
+    }
     const t = geo?.total ?? areas.reduce((acc, a) => acc + a.balance, 0);
     const sorted = [...areas].sort((a, b) => b.balance - a.balance);
     const top5 = sorted.slice(0, 5).reduce((acc, a) => acc + a.balance, 0);
     return {
-      valueByCode: v, shareByCode: s, ranked: sorted, total: t,
+      valueByCode: v, shareByCode: s, detailByCode: d, ranked: sorted, total: t,
       top: sorted[0], top5Pct: t ? (top5 / t) * 100 : 0,
     };
   }, [geo]);
@@ -96,10 +101,12 @@ export function GeographyPanel({ client, portfolioId }: {
         <div className="rounded-xl border border-[var(--color-line)] bg-navy-900/40 p-4">
           <div className="text-[12px] font-semibold text-ink-200">Exposure map</div>
           <p className="mb-2 mt-0.5 text-[11px] text-ink-500">
-            Each ITL3 area shaded by funded exposure — brighter = higher. Hover for detail.
+            Each ITL3 area shaded by funded exposure — brighter = higher. Hover for exposure,
+            average ticket, LTV and borrower age.
           </p>
           <UkChoropleth atlas={atlas} valueByCode={valueByCode} shareByCode={shareByCode}
-            formatValue={money} className="max-w-[440px]" />
+            detailByCode={detailByCode} formatValue={money} formatTicket={money}
+            className="max-w-[440px]" />
           <Legend />
         </div>
 

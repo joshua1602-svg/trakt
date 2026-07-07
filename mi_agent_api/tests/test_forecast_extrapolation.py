@@ -98,6 +98,30 @@ def test_kfi_conversion_model():
     assert proj[-1]["base"] > proj[0]["base"]
 
 
+def test_kfi_model_is_withdrawn_from_presentation():
+    # A computed KFI projection is withdrawn at the composition layer (no
+    # attrition term -> over-states scale). Inputs retained, path/milestones
+    # dropped, and a clear caveat pointing to the completion run-rate.
+    computed = fx.kfi_conversion_model(12_500_000.0, kfi_stock_now=20_000_000.0,
+                                       weekly_inflow=1_000_000.0,
+                                       weekly_conversion_rate=0.05, lag_weeks=6,
+                                       rate_weeks=6, reporting_period="2025-11")
+    assert computed["available"] is True  # the calculator still computes
+    out = fx._withdraw_kfi_model(dict(computed))
+    assert out["available"] is False
+    assert out["status"] == "withdrawn_pending_calibration"
+    assert out["reliability"] == "low"
+    assert "attrition" in out["caveat"].lower()
+    assert "completion run-rate" in out["caveat"].lower()
+    assert "projectedBalances" not in out and "milestones" not in out
+    # Diagnostic inputs are retained for transparency.
+    assert out["kfiStockNow"] == 20_000_000.0
+    # An already-unavailable model is passed through untouched.
+    na = fx._withdraw_kfi_model({"model": "kfi_conversion", "available": False,
+                                 "status": "insufficient_data"})
+    assert na["status"] == "insufficient_data"
+
+
 def test_kfi_conversion_unavailable_without_rate():
     # No conversion rate -> unavailable.
     out = fx.kfi_conversion_model(12_500_000.0, 20_000_000.0, 1_000_000.0, None)
