@@ -35,13 +35,19 @@ export function mockGeoExposure(portfolioId: string): GeoExposure {
   });
   const total = raw.reduce((a, r) => a + r.balance, 0);
   const areas: GeoArea[] = raw
-    .map((r) => ({
-      itl3_code: r.code,
-      itl3_name: atlas.areas[r.code].name,
-      balance: Math.round(r.balance * 100) / 100,
-      count: Math.max(1, Math.round(r.balance / 320_000)),
-      sharePct: total ? Math.round((r.balance / total) * 10000) / 100 : null,
-    }))
+    .map((r) => {
+      const count = Math.max(1, Math.round(r.balance / 320_000));
+      return {
+        itl3_code: r.code,
+        itl3_name: atlas.areas[r.code].name,
+        balance: Math.round(r.balance * 100) / 100,
+        count,
+        sharePct: total ? Math.round((r.balance / total) * 10000) / 100 : null,
+        avgTicket: Math.round((r.balance / count) * 100) / 100,
+        avgLtv: Math.round((32 + 30 * hash(r.code + "ltv")) * 10) / 10,
+        avgAge: Math.round(66 + 18 * hash(r.code + "age")),
+      };
+    })
     .sort((a, b) => b.balance - a.balance);
 
   return {

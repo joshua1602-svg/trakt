@@ -10,6 +10,12 @@ export interface GeoArea {
   balance: number;
   count: number;
   sharePct: number | null;
+  /** Per-area analytics (surfaced on hover). Present when the tape carries the
+   * source column: average ticket = balance/count, balance-weighted LTV (%),
+   * average youngest-borrower age. */
+  avgTicket?: number | null;
+  avgLtv?: number | null;
+  avgAge?: number | null;
 }
 
 export interface GeoExposure {

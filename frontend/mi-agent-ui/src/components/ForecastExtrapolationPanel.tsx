@@ -5,36 +5,23 @@ import {
 } from "recharts";
 import { TrendingUp } from "lucide-react";
 import type { AgentClient } from "@/api";
-import type {
-  ForecastExtrapolation, RunRateForecast, KfiConversionForecast,
-} from "@/domain";
+import type { ForecastExtrapolation } from "@/domain";
 import { Card } from "@/components/ui";
-import { cn, formatGBP } from "@/lib/utils";
-
-type ModelKey = "weighted" | "run_rate" | "kfi";
+import { formatGBP } from "@/lib/utils";
 
 function gbpC(v: number): string {
   return formatGBP(v, { compact: true });
 }
 
-const MODELS: { key: ModelKey; label: string }[] = [
-  { key: "weighted", label: "Current weighted pipeline" },
-  { key: "run_rate", label: "Completion run-rate" },
-  { key: "kfi", label: "KFI run-rate × conversion" },
-];
-
-function activeModel(data: ForecastExtrapolation, key: ModelKey):
-  RunRateForecast | KfiConversionForecast | null {
-  if (key === "run_rate") return data.completionRunRateForecast;
-  if (key === "kfi") return data.kfiConversionForecast;
-  return null;
-}
-
 /**
- * Scale-up extrapolation: model selector, projected funded-balance curve with
- * downside/base/upside bands + threshold markers, milestone table, and an
- * assumptions panel. Distinct from (and complementary to) the point-in-time
- * weighted-pipeline bridge.
+ * View ii — Scale-up run-rate. The forward projection of the funded book based on
+ * the recent COMPLETION run-rate (net month-on-month funded growth), with
+ * downside / base / upside scenario bands and milestone dates to funding
+ * thresholds. This is deliberately the ONLY scale-up model shown:
+ *   - the "current weighted pipeline" figure is the point-in-time bridge (View i,
+ *     the Funded + Pipeline Forecast card above) — not repeated here;
+ *   - the KFI run-rate × conversion model is withdrawn (it omitted KFI→completion
+ *     attrition and over-stated scale), so it is not presented.
  */
 export function ForecastExtrapolationPanel({
   client, portfolioId,
@@ -43,7 +30,6 @@ export function ForecastExtrapolationPanel({
   portfolioId: string;
 }) {
   const [data, setData] = useState<ForecastExtrapolation | null>(null);
-  const [model, setModel] = useState<ModelKey>("run_rate");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -57,7 +43,7 @@ export function ForecastExtrapolationPanel({
     return () => { cancelled = true; };
   }, [client, portfolioId]);
 
-  const current = data ? activeModel(data, model) : null;
+  const current = data?.completionRunRateForecast ?? null;
   const curve = useMemo(
     () => (current?.projectedBalances ?? []).map((p) => ({
       month: p.month, downside: p.downside, base: p.base, upside: p.upside,
@@ -70,53 +56,29 @@ export function ForecastExtrapolationPanel({
   }
   if (!data) return null;
 
-  const weighted = data.currentWeightedPipelineForecast;
   const insufficient = !current || current.available === false;
 
   return (
     <section className="space-y-4" data-testid="forecast-extrapolation-panel">
       <div className="flex items-center gap-2 text-sm font-semibold text-ink-100">
-        <TrendingUp size={16} className="text-peri-300" /> Scale-up forecast — when does the book reach scale?
+        <TrendingUp size={16} className="text-peri-300" /> Scale-up run-rate — when does the book reach scale?
       </div>
+      <p className="-mt-2 text-[11px] text-ink-500">
+        Forward projection from the recent completion run-rate (net funded growth). The point-in-time
+        figure — if today&apos;s pipeline simply converts — is the Funded + Pipeline Forecast above.
+      </p>
 
-      {/* Model selector */}
-      <div role="tablist" aria-label="Forecast model"
-        className="inline-flex flex-wrap items-center gap-1 rounded-lg border border-[var(--color-line)] bg-navy-900/60 p-1">
-        {MODELS.map((m) => (
-          <button key={m.key} type="button" role="tab" aria-selected={model === m.key}
-            onClick={() => setModel(m.key)}
-            className={cn(
-              "rounded-md px-3 py-1 text-[12px] font-medium transition-colors",
-              model === m.key ? "bg-navy-700/80 text-ink-100" : "text-ink-400 hover:text-ink-200",
-            )}>
-            {m.label}
-          </button>
-        ))}
-      </div>
-
-      {model === "weighted" && (
-        <Card className="p-4" testId="weighted-pipeline-forecast">
-          <div className="text-[12px] font-semibold text-ink-200">{weighted.label}</div>
-          <p className="mt-1 text-[11px] text-amber-300/80">{weighted.note}</p>
-          <div className="mt-3 grid grid-cols-3 gap-3 text-[12px]">
-            <div><div className="text-ink-500">Current funded balance</div><div className="text-ink-100">{gbpC(weighted.fundedBalance)}</div></div>
-            <div><div className="text-ink-500">Weighted expected pipeline</div><div className="text-ink-100">{weighted.weightedExpectedPipeline != null ? gbpC(weighted.weightedExpectedPipeline) : "—"}</div></div>
-            <div><div className="text-ink-500">Point-in-time forecast</div><div className="text-ink-100">{weighted.forecastFundedBalance != null ? gbpC(weighted.forecastFundedBalance) : "—"}</div></div>
-          </div>
-        </Card>
-      )}
-
-      {model !== "weighted" && insufficient && (
+      {insufficient && (
         <Card className="p-4" testId="forecast-insufficient">
-          <div className="text-[13px] font-medium text-amber-300">Insufficient history for this model</div>
+          <div className="text-[13px] font-medium text-amber-300">Insufficient history for the scale-up run-rate</div>
           <p className="mt-1 text-[12px] text-ink-400">
             {(current && "caveat" in current && current.caveat) ||
-              "Not enough governed history to extrapolate. Showing the available signal only."}
+              "Not enough governed completion history to extrapolate. Showing the available signal only."}
           </p>
         </Card>
       )}
 
-      {model !== "weighted" && current && current.available && (
+      {current && current.available && (
         <>
           {/* Scale-up curve */}
           <Card className="p-4">
@@ -174,17 +136,8 @@ export function ForecastExtrapolationPanel({
               {"annualisedRunRate" in current && current.annualisedRunRate != null && (
                 <div><dt className="text-ink-500">Annualised run-rate</dt><dd className="text-ink-300">{gbpC(current.annualisedRunRate)}</dd></div>
               )}
-              {"conversionRate" in current && current.conversionRate != null && (
-                <div><dt className="text-ink-500">KFI→completion rate</dt><dd className="text-ink-300">{(current.conversionRate * 100).toFixed(1)}%</dd></div>
-              )}
-              {"lagMonths" in current && current.lagMonths != null && (
-                <div><dt className="text-ink-500">Lag (months)</dt><dd className="text-ink-300">{current.lagMonths}</dd></div>
-              )}
               {"observedMonths" in current && current.observedMonths != null && (
                 <div><dt className="text-ink-500">Observed months</dt><dd className="text-ink-300">{current.observedMonths}</dd></div>
-              )}
-              {"observedWeeks" in current && current.observedWeeks != null && (
-                <div><dt className="text-ink-500">Observed weeks</dt><dd className="text-ink-300">{current.observedWeeks}</dd></div>
               )}
               {"scenarioBasis" in current && current.scenarioBasis && (
                 <div className="col-span-2 sm:col-span-3"><dt className="text-ink-500">Scenario basis</dt><dd className="text-ink-300">{current.scenarioBasis}</dd></div>

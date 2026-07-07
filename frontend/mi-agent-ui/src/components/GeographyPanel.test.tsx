@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import type { AgentClient } from "@/api/AgentClient";
 import type { GeoExposure } from "@/domain/geo";
 import { mockGeoExposure } from "@/data/mockGeoExposure";
@@ -30,6 +30,24 @@ describe("GeographyPanel", () => {
     const rank = screen.getByTestId("geo-rank");
     expect(rank.textContent).toMatch(/Bristol/);
     expect(c.getGeoExposure).toHaveBeenCalledWith("client_001/mi_2025_11");
+  });
+
+  it("shows average ticket, LTV and borrower age on area hover", async () => {
+    const geo = mockGeoExposure("client_001/mi_2025_11");
+    render(<GeographyPanel client={client(geo)} portfolioId="client_001/mi_2025_11" />);
+    await screen.findByTestId("geography-view");
+    const svg = screen.getByTestId("uk-choropleth").querySelector("svg")!;
+    // Hover the highest-exposure area that carries per-area analytics.
+    const top = geo.areas[0];
+    const path = svg.querySelector(`path[data-code="${top.itl3_code}"]`)!;
+    fireEvent.mouseEnter(path);
+    fireEvent.mouseMove(path, { clientX: 100, clientY: 100 });
+    const tip = await screen.findByTestId("choropleth-tip");
+    expect(tip.textContent).toMatch(/Avg ticket/);
+    expect(tip.textContent).toMatch(/Avg LTV/);
+    expect(tip.textContent).toMatch(/Avg age/);
+    expect(tip.textContent).toMatch(new RegExp(`${top.avgLtv!.toFixed(1)}%`));
+    expect(tip.textContent).toMatch(/yrs/);
   });
 
   it("shows the unavailable state when the tape has no geography", async () => {
