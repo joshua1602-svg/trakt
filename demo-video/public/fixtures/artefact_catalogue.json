@@ -1,0 +1,933 @@
+{
+  "synthetic_notice": "SYNTHETIC DEMONSTRATION DATA \u2014 NOT A REAL CUSTOMER",
+  "reportingDate": "2026-06-30",
+  "canonicalTape": {
+    "available": true,
+    "kind": "consolidated_canonical_tape",
+    "title": "Consolidated canonical tape",
+    "fileName": "platform_canonical_typed.csv",
+    "format": "CSV",
+    "rows": 11035,
+    "columns": 42,
+    "sizeBytes": 5106316,
+    "totalBalance": 1964886258.21,
+    "portfolioCount": 2,
+    "compositeKey": "source_portfolio_id + loan_identifier",
+    "contentSha256": "sha256:035891d43d2ec65c7dc27b3f85fa1fa4e400468b9012eb37ce5d13b5dc616ef0",
+    "reportingDate": "2026-06-30",
+    "producedBy": "engine/platform_assembler.py"
+  },
+  "validationReport": {
+    "available": true,
+    "kind": "validation_report",
+    "title": "Validation report",
+    "format": "CSV + JSON",
+    "reportingDate": "2026-06-30",
+    "rowsValidated": 0,
+    "canonicalValidation": "Passed",
+    "businessRuleExceptions": 75,
+    "exceptionRatePct": null,
+    "rulesTriggered": [
+      {
+        "rule": "LTV001",
+        "rows": 37
+      },
+      {
+        "rule": "BAL103",
+        "rows": 35
+      },
+      {
+        "rule": "VAL101",
+        "rows": 3
+      }
+    ],
+    "perPortfolio": [
+      {
+        "portfolio": "ALP_ORIGINATION",
+        "label": "ALP Origination Book",
+        "rows": 0,
+        "canonicalErrors": 0,
+        "canonicalWarnings": 1,
+        "businessRuleExceptions": 54,
+        "businessRules": [
+          {
+            "rule": "LTV001",
+            "severity": "error",
+            "description": "Current LTV > 0 and \u2264 500%.",
+            "rows": 27
+          },
+          {
+            "rule": "BAL103",
+            "severity": "error",
+            "description": "If current balance is 0, status should be REPAID/REDEEMED/CLOSED.",
+            "rows": 26
+          },
+          {
+            "rule": "VAL101",
+            "severity": "warning",
+            "description": "Current property value should generally exceed current balance (within 10% tolerance).",
+            "rows": 1
+          }
+        ]
+      },
+      {
+        "portfolio": "ALP_ACQUIRED",
+        "label": "ALP Acquired Back Book",
+        "rows": 0,
+        "canonicalErrors": 0,
+        "canonicalWarnings": 1,
+        "businessRuleExceptions": 21,
+        "businessRules": [
+          {
+            "rule": "LTV001",
+            "severity": "error",
+            "description": "Current LTV > 0 and \u2264 500%.",
+            "rows": 10
+          },
+          {
+            "rule": "BAL103",
+            "severity": "error",
+            "description": "If current balance is 0, status should be REPAID/REDEEMED/CLOSED.",
+            "rows": 9
+          },
+          {
+            "rule": "VAL101",
+            "severity": "warning",
+            "description": "Current property value should generally exceed current balance (within 10% tolerance).",
+            "rows": 2
+          }
+        ]
+      }
+    ],
+    "producedBy": "engine/gate_3_validation/* (Gates 2, 3, 3b)"
+  },
+  "investorDeck": {
+    "available": true,
+    "kind": "investor_deck",
+    "title": "Investor pack",
+    "fileName": "investor_pack.pptx",
+    "format": "PowerPoint (PPTX)",
+    "slides": 18,
+    "sizeBytes": 1297654,
+    "contentSha256": "sha256:176edb76f55874b2ef59426643a505b3c15b94437696ece3841e68a8c675b9c2",
+    "reportingPeriod": "2026-06",
+    "path": "/home/user/trakt/demo_platform/workspace/artefacts/investor_deck/investor_pack.pptx",
+    "publishedTo": "/home/user/trakt/demo_platform/workspace/decks/alderbridge/latest/investor_pack.pptx",
+    "producedBy": "mi_agent_pptx/cli.py",
+    "slideTitles": [
+      "TRAKT \u00b7 MI AGENT",
+      "Executive Summary",
+      "Funded Stratifications \u2014 LTV & Ticket Size",
+      "Funded Stratifications \u2014 Borrower Age & Type",
+      "Funded Stratifications \u2014 Broker & Region",
+      "Multi-Dimensional Risk Analytics",
+      "Geographic Exposure",
+      "Funded Balance Evolution",
+      "Vintage Cohorts",
+      "Pipeline Overview",
+      "Pipeline Evolution",
+      "Origination Funnel",
+      "Origination Flow \u2014 KFIs & Completions",
+      "Forecast Bridge \u2014 Funded to Forecast",
+      "Forecast Projection \u2014 Run-Rate Scale-Up",
+      "Risk Limits",
+      "Methodology & Notes",
+      "Appendix \u2014 Data Coverage"
+    ]
+  },
+  "riskMonitor": {
+    "available": false,
+    "kind": "risk_monitoring",
+    "title": "Concentration risk monitor",
+    "format": "JSON",
+    "limitCount": 0,
+    "statusCounts": {},
+    "reportingDate": "2026-06-30",
+    "producedBy": "mi_agent_api/risk_limits.py (mi_agent/risk_monitor)",
+    "payload": {
+      "portfolioId": "alderbridge",
+      "toRunId": "2026-06-30",
+      "reportingDate": "2026-06-30",
+      "available": true,
+      "limitsStatus": "ok",
+      "limitsSource": "Schedule 8 document",
+      "limitsReason": null,
+      "sourceType": "schedule_8_doc",
+      "sourceFile": "/home/user/trakt/demo_platform/docs/schedule_8_concentration.txt",
+      "extractionStatus": "success",
+      "isPlaceholder": false,
+      "diagnostics": null,
+      "fundedDataAvailable": true,
+      "summary": {
+        "testsPassed": 8,
+        "warnings": 0,
+        "breaches": 1,
+        "needsReview": 0,
+        "unavailable": 3,
+        "total": 12,
+        "closestHeadroom": {
+          "label": "Borrowers aged over 85",
+          "headroom": -0.24,
+          "limitId": "age_limit_youngest_borrower_age"
+        },
+        "largestConcentration": {
+          "label": "WA current LTV",
+          "actualValue": 43.16,
+          "limitId": "ltv_limit_current_loan_to_value"
+        }
+      },
+      "testsByCategory": {
+        "geographic_concentration": [
+          {
+            "limitId": "geographic_concentration_london",
+            "category": "geographic_concentration",
+            "label": "London",
+            "region": "London",
+            "dimensionKey": "geographic_region_obligor",
+            "actualValue": 21.06,
+            "actualBasis": "funded exposure %",
+            "limitValue": 25.0,
+            "unit": "percent",
+            "direction": "max",
+            "headroom": 3.94,
+            "status": "green",
+            "movementVsPrior": -0.1,
+            "source": "Schedule 8 document",
+            "confidence": "high",
+            "notes": "",
+            "missingFields": [],
+            "sourceSnippet": "1.1 The aggregate Current Balance of Loans secured on Properties located in London (Greater London) must not exceed 25% of the Portfolio.",
+            "sourceSection": "Geographic Concentration"
+          },
+          {
+            "limitId": "geographic_concentration_south_east",
+            "category": "geographic_concentration",
+            "label": "South East",
+            "region": "South East",
+            "dimensionKey": "geographic_region_obligor",
+            "actualValue": 26.27,
+            "actualBasis": "funded exposure %",
+            "limitValue": 30.0,
+            "unit": "percent",
+            "direction": "max",
+            "headroom": 3.73,
+            "status": "green",
+            "movementVsPrior": 0.16,
+            "source": "Schedule 8 document",
+            "confidence": "high",
+            "notes": "",
+            "missingFields": [],
+            "sourceSnippet": "1.2 The aggregate Current Balance of Loans secured on Properties located in the South East must not exceed 30% of the Portfolio.",
+            "sourceSection": "Geographic Concentration"
+          },
+          {
+            "limitId": "geographic_concentration_any_single_region",
+            "category": "geographic_concentration",
+            "label": "Largest other region (South West)",
+            "region": "Any single region",
+            "dimensionKey": "geographic_region_obligor",
+            "actualValue": 12.08,
+            "actualBasis": "funded exposure %",
+            "limitValue": 15.0,
+            "unit": "percent",
+            "direction": "max",
+            "headroom": 2.92,
+            "status": "green",
+            "movementVsPrior": -0.02,
+            "source": "Schedule 8 document",
+            "confidence": "high",
+            "notes": "Largest region without a region-specific limit.",
+            "missingFields": [],
+            "sourceSnippet": "1.3 The aggregate Current Balance of Loans secured on Properties located in any other single region must not exceed 15% of the Portfolio.",
+            "sourceSection": "Geographic Concentration"
+          },
+          {
+            "limitId": "geographic_concentration_scotland",
+            "category": "geographic_concentration",
+            "label": "Scotland",
+            "region": "Scotland",
+            "dimensionKey": "geographic_region_obligor",
+            "actualValue": 3.27,
+            "actualBasis": "funded exposure %",
+            "limitValue": 8.0,
+            "unit": "percent",
+            "direction": "max",
+            "headroom": 4.73,
+            "status": "green",
+            "movementVsPrior": -0.01,
+            "source": "Schedule 8 document",
+            "confidence": "high",
+            "notes": "",
+            "missingFields": [],
+            "sourceSnippet": "1.4 The aggregate Current Balance of Loans secured on Properties located in Scotland must not exceed 8% of the Portfolio.",
+            "sourceSection": "Geographic Concentration"
+          }
+        ],
+        "large_loan_concentration": [
+          {
+            "limitId": "large_loan_concentration_loan_size_concentration",
+            "category": "large_loan_concentration",
+            "label": "Largest single loan",
+            "region": null,
+            "dimensionKey": null,
+            "actualValue": 0.04,
+            "actualBasis": "single loan funded exposure %",
+            "limitValue": 1.0,
+            "unit": "percent",
+            "direction": "max",
+            "headroom": 0.96,
+            "status": "green",
+            "movementVsPrior": null,
+            "source": "Schedule 8 document",
+            "confidence": "high",
+            "notes": "",
+            "missingFields": [],
+            "sourceSnippet": "2.1 The Current Balance of any single Loan must not exceed 1% of the Portfolio.",
+            "sourceSection": "Loan Size Concentration"
+          },
+          {
+            "limitId": "large_loan_concentration_loan_size_concentration_2",
+            "category": "large_loan_concentration",
+            "label": "Loans > \u00a31,000,000 aggregate",
+            "region": null,
+            "dimensionKey": null,
+            "actualValue": 0.0,
+            "actualBasis": "funded exposure %",
+            "limitValue": 12.0,
+            "unit": "percent",
+            "direction": "max",
+            "headroom": 12.0,
+            "status": "green",
+            "movementVsPrior": null,
+            "source": "Schedule 8 document",
+            "confidence": "high",
+            "notes": "",
+            "missingFields": [],
+            "sourceSnippet": "2.2 The aggregate Current Balance of Loans with a Current Balance greater than GBP 1,000,000 must not exceed 12% of the Portfolio.",
+            "sourceSection": "Loan Size Concentration"
+          }
+        ],
+        "ltv_limit": [
+          {
+            "limitId": "ltv_limit_current_loan_to_value",
+            "category": "ltv_limit",
+            "label": "WA current LTV",
+            "region": null,
+            "dimensionKey": "current_loan_to_value",
+            "actualValue": 43.16,
+            "actualBasis": "WA current LTV %",
+            "limitValue": 50.0,
+            "unit": "percent",
+            "direction": "max",
+            "headroom": 6.84,
+            "status": "green",
+            "movementVsPrior": 0.28,
+            "source": "Schedule 8 document",
+            "confidence": "high",
+            "notes": "",
+            "missingFields": [],
+            "sourceSnippet": "3.1 The weighted average Current Loan to Value of the Portfolio must not exceed 50%.",
+            "sourceSection": "Loan To Value"
+          },
+          {
+            "limitId": "ltv_limit_current_loan_to_value_2",
+            "category": "ltv_limit",
+            "label": "Loans above 75.0% LTV",
+            "region": null,
+            "dimensionKey": "current_loan_to_value",
+            "actualValue": 0.31,
+            "actualBasis": "% of book above 75.0% LTV",
+            "limitValue": 75.0,
+            "unit": "percent",
+            "direction": "max",
+            "headroom": 74.69,
+            "status": "green",
+            "movementVsPrior": null,
+            "source": "Schedule 8 document",
+            "confidence": "high",
+            "notes": "Eligibility test: share of balance above the per-loan LTV cap.",
+            "missingFields": [],
+            "sourceSnippet": "3.2 No Loan may have a Current Loan to Value greater than 75%.",
+            "sourceSection": "Loan To Value"
+          }
+        ],
+        "interest_rate_limit": [
+          {
+            "limitId": "interest_rate_limit_current_interest_rate",
+            "category": "interest_rate_limit",
+            "label": "current_interest_rate",
+            "region": null,
+            "dimensionKey": "current_interest_rate",
+            "actualValue": null,
+            "actualBasis": "variable-rate funded exposure %",
+            "limitValue": 5.0,
+            "unit": "percent",
+            "direction": "max",
+            "headroom": null,
+            "status": "unavailable",
+            "movementVsPrior": null,
+            "source": "Schedule 8 document",
+            "confidence": "high",
+            "notes": "No variable/fixed rate-type flag in the funded tape.",
+            "missingFields": [
+              "variable_rate_flag"
+            ],
+            "sourceSnippet": "4.1 The aggregate Current Balance of Loans bearing a variable rate of interest must not exceed 5% of the Portfolio.",
+            "sourceSection": "Interest Rate"
+          }
+        ],
+        "borrower_concentration": [
+          {
+            "limitId": "borrower_concentration_borrower_concentration",
+            "category": "borrower_concentration",
+            "label": "borrower_concentration_borrower_concentration",
+            "region": null,
+            "dimensionKey": null,
+            "actualValue": null,
+            "actualBasis": "single borrower funded exposure %",
+            "limitValue": 2.0,
+            "unit": "percent",
+            "direction": "max",
+            "headroom": null,
+            "status": "unavailable",
+            "movementVsPrior": null,
+            "source": "Schedule 8 document",
+            "confidence": "high",
+            "notes": "No borrower/obligor identifier in the funded tape.",
+            "missingFields": [
+              "borrower_identifier"
+            ],
+            "sourceSnippet": "5.1 The aggregate Current Balance attributable to any single Borrower (or group of connected Borrowers) must not exceed 2% of the Portfolio.",
+            "sourceSection": "Borrower Concentration"
+          },
+          {
+            "limitId": "borrower_concentration_borrower_concentration_2",
+            "category": "borrower_concentration",
+            "label": "borrower_concentration_borrower_concentration_2",
+            "region": null,
+            "dimensionKey": null,
+            "actualValue": null,
+            "actualBasis": "single borrower funded exposure %",
+            "limitValue": 3.0,
+            "unit": "count",
+            "direction": "max",
+            "headroom": null,
+            "status": "unavailable",
+            "movementVsPrior": null,
+            "source": "Schedule 8 document",
+            "confidence": "high",
+            "notes": "No borrower/obligor identifier in the funded tape.",
+            "missingFields": [
+              "borrower_identifier"
+            ],
+            "sourceSnippet": "5.2 No single Borrower may have more than 3 Loans in the Portfolio.",
+            "sourceSection": "Borrower Concentration"
+          }
+        ],
+        "age_limit": [
+          {
+            "limitId": "age_limit_youngest_borrower_age",
+            "category": "age_limit",
+            "label": "Borrowers aged over 85",
+            "region": null,
+            "dimensionKey": "youngest_borrower_age",
+            "actualValue": 0.99,
+            "actualBasis": "% of book aged > 85",
+            "limitValue": 0.75,
+            "unit": "percent",
+            "direction": "max",
+            "headroom": -0.24,
+            "status": "red",
+            "movementVsPrior": null,
+            "source": "Schedule 8 document",
+            "confidence": "high",
+            "notes": "",
+            "missingFields": [],
+            "sourceSnippet": "6.1 The aggregate Current Balance attributable to Borrowers aged over 85 at origination must not exceed 0.75% of the Portfolio.",
+            "sourceSection": "Borrower Age"
+          }
+        ]
+      },
+      "tests": [
+        {
+          "limitId": "geographic_concentration_london",
+          "category": "geographic_concentration",
+          "label": "London",
+          "region": "London",
+          "dimensionKey": "geographic_region_obligor",
+          "actualValue": 21.06,
+          "actualBasis": "funded exposure %",
+          "limitValue": 25.0,
+          "unit": "percent",
+          "direction": "max",
+          "headroom": 3.94,
+          "status": "green",
+          "movementVsPrior": -0.1,
+          "source": "Schedule 8 document",
+          "confidence": "high",
+          "notes": "",
+          "missingFields": [],
+          "sourceSnippet": "1.1 The aggregate Current Balance of Loans secured on Properties located in London (Greater London) must not exceed 25% of the Portfolio.",
+          "sourceSection": "Geographic Concentration"
+        },
+        {
+          "limitId": "geographic_concentration_south_east",
+          "category": "geographic_concentration",
+          "label": "South East",
+          "region": "South East",
+          "dimensionKey": "geographic_region_obligor",
+          "actualValue": 26.27,
+          "actualBasis": "funded exposure %",
+          "limitValue": 30.0,
+          "unit": "percent",
+          "direction": "max",
+          "headroom": 3.73,
+          "status": "green",
+          "movementVsPrior": 0.16,
+          "source": "Schedule 8 document",
+          "confidence": "high",
+          "notes": "",
+          "missingFields": [],
+          "sourceSnippet": "1.2 The aggregate Current Balance of Loans secured on Properties located in the South East must not exceed 30% of the Portfolio.",
+          "sourceSection": "Geographic Concentration"
+        },
+        {
+          "limitId": "geographic_concentration_any_single_region",
+          "category": "geographic_concentration",
+          "label": "Largest other region (South West)",
+          "region": "Any single region",
+          "dimensionKey": "geographic_region_obligor",
+          "actualValue": 12.08,
+          "actualBasis": "funded exposure %",
+          "limitValue": 15.0,
+          "unit": "percent",
+          "direction": "max",
+          "headroom": 2.92,
+          "status": "green",
+          "movementVsPrior": -0.02,
+          "source": "Schedule 8 document",
+          "confidence": "high",
+          "notes": "Largest region without a region-specific limit.",
+          "missingFields": [],
+          "sourceSnippet": "1.3 The aggregate Current Balance of Loans secured on Properties located in any other single region must not exceed 15% of the Portfolio.",
+          "sourceSection": "Geographic Concentration"
+        },
+        {
+          "limitId": "geographic_concentration_scotland",
+          "category": "geographic_concentration",
+          "label": "Scotland",
+          "region": "Scotland",
+          "dimensionKey": "geographic_region_obligor",
+          "actualValue": 3.27,
+          "actualBasis": "funded exposure %",
+          "limitValue": 8.0,
+          "unit": "percent",
+          "direction": "max",
+          "headroom": 4.73,
+          "status": "green",
+          "movementVsPrior": -0.01,
+          "source": "Schedule 8 document",
+          "confidence": "high",
+          "notes": "",
+          "missingFields": [],
+          "sourceSnippet": "1.4 The aggregate Current Balance of Loans secured on Properties located in Scotland must not exceed 8% of the Portfolio.",
+          "sourceSection": "Geographic Concentration"
+        },
+        {
+          "limitId": "large_loan_concentration_loan_size_concentration",
+          "category": "large_loan_concentration",
+          "label": "Largest single loan",
+          "region": null,
+          "dimensionKey": null,
+          "actualValue": 0.04,
+          "actualBasis": "single loan funded exposure %",
+          "limitValue": 1.0,
+          "unit": "percent",
+          "direction": "max",
+          "headroom": 0.96,
+          "status": "green",
+          "movementVsPrior": null,
+          "source": "Schedule 8 document",
+          "confidence": "high",
+          "notes": "",
+          "missingFields": [],
+          "sourceSnippet": "2.1 The Current Balance of any single Loan must not exceed 1% of the Portfolio.",
+          "sourceSection": "Loan Size Concentration"
+        },
+        {
+          "limitId": "large_loan_concentration_loan_size_concentration_2",
+          "category": "large_loan_concentration",
+          "label": "Loans > \u00a31,000,000 aggregate",
+          "region": null,
+          "dimensionKey": null,
+          "actualValue": 0.0,
+          "actualBasis": "funded exposure %",
+          "limitValue": 12.0,
+          "unit": "percent",
+          "direction": "max",
+          "headroom": 12.0,
+          "status": "green",
+          "movementVsPrior": null,
+          "source": "Schedule 8 document",
+          "confidence": "high",
+          "notes": "",
+          "missingFields": [],
+          "sourceSnippet": "2.2 The aggregate Current Balance of Loans with a Current Balance greater than GBP 1,000,000 must not exceed 12% of the Portfolio.",
+          "sourceSection": "Loan Size Concentration"
+        },
+        {
+          "limitId": "ltv_limit_current_loan_to_value",
+          "category": "ltv_limit",
+          "label": "WA current LTV",
+          "region": null,
+          "dimensionKey": "current_loan_to_value",
+          "actualValue": 43.16,
+          "actualBasis": "WA current LTV %",
+          "limitValue": 50.0,
+          "unit": "percent",
+          "direction": "max",
+          "headroom": 6.84,
+          "status": "green",
+          "movementVsPrior": 0.28,
+          "source": "Schedule 8 document",
+          "confidence": "high",
+          "notes": "",
+          "missingFields": [],
+          "sourceSnippet": "3.1 The weighted average Current Loan to Value of the Portfolio must not exceed 50%.",
+          "sourceSection": "Loan To Value"
+        },
+        {
+          "limitId": "ltv_limit_current_loan_to_value_2",
+          "category": "ltv_limit",
+          "label": "Loans above 75.0% LTV",
+          "region": null,
+          "dimensionKey": "current_loan_to_value",
+          "actualValue": 0.31,
+          "actualBasis": "% of book above 75.0% LTV",
+          "limitValue": 75.0,
+          "unit": "percent",
+          "direction": "max",
+          "headroom": 74.69,
+          "status": "green",
+          "movementVsPrior": null,
+          "source": "Schedule 8 document",
+          "confidence": "high",
+          "notes": "Eligibility test: share of balance above the per-loan LTV cap.",
+          "missingFields": [],
+          "sourceSnippet": "3.2 No Loan may have a Current Loan to Value greater than 75%.",
+          "sourceSection": "Loan To Value"
+        },
+        {
+          "limitId": "interest_rate_limit_current_interest_rate",
+          "category": "interest_rate_limit",
+          "label": "current_interest_rate",
+          "region": null,
+          "dimensionKey": "current_interest_rate",
+          "actualValue": null,
+          "actualBasis": "variable-rate funded exposure %",
+          "limitValue": 5.0,
+          "unit": "percent",
+          "direction": "max",
+          "headroom": null,
+          "status": "unavailable",
+          "movementVsPrior": null,
+          "source": "Schedule 8 document",
+          "confidence": "high",
+          "notes": "No variable/fixed rate-type flag in the funded tape.",
+          "missingFields": [
+            "variable_rate_flag"
+          ],
+          "sourceSnippet": "4.1 The aggregate Current Balance of Loans bearing a variable rate of interest must not exceed 5% of the Portfolio.",
+          "sourceSection": "Interest Rate"
+        },
+        {
+          "limitId": "borrower_concentration_borrower_concentration",
+          "category": "borrower_concentration",
+          "label": "borrower_concentration_borrower_concentration",
+          "region": null,
+          "dimensionKey": null,
+          "actualValue": null,
+          "actualBasis": "single borrower funded exposure %",
+          "limitValue": 2.0,
+          "unit": "percent",
+          "direction": "max",
+          "headroom": null,
+          "status": "unavailable",
+          "movementVsPrior": null,
+          "source": "Schedule 8 document",
+          "confidence": "high",
+          "notes": "No borrower/obligor identifier in the funded tape.",
+          "missingFields": [
+            "borrower_identifier"
+          ],
+          "sourceSnippet": "5.1 The aggregate Current Balance attributable to any single Borrower (or group of connected Borrowers) must not exceed 2% of the Portfolio.",
+          "sourceSection": "Borrower Concentration"
+        },
+        {
+          "limitId": "borrower_concentration_borrower_concentration_2",
+          "category": "borrower_concentration",
+          "label": "borrower_concentration_borrower_concentration_2",
+          "region": null,
+          "dimensionKey": null,
+          "actualValue": null,
+          "actualBasis": "single borrower funded exposure %",
+          "limitValue": 3.0,
+          "unit": "count",
+          "direction": "max",
+          "headroom": null,
+          "status": "unavailable",
+          "movementVsPrior": null,
+          "source": "Schedule 8 document",
+          "confidence": "high",
+          "notes": "No borrower/obligor identifier in the funded tape.",
+          "missingFields": [
+            "borrower_identifier"
+          ],
+          "sourceSnippet": "5.2 No single Borrower may have more than 3 Loans in the Portfolio.",
+          "sourceSection": "Borrower Concentration"
+        },
+        {
+          "limitId": "age_limit_youngest_borrower_age",
+          "category": "age_limit",
+          "label": "Borrowers aged over 85",
+          "region": null,
+          "dimensionKey": "youngest_borrower_age",
+          "actualValue": 0.99,
+          "actualBasis": "% of book aged > 85",
+          "limitValue": 0.75,
+          "unit": "percent",
+          "direction": "max",
+          "headroom": -0.24,
+          "status": "red",
+          "movementVsPrior": null,
+          "source": "Schedule 8 document",
+          "confidence": "high",
+          "notes": "",
+          "missingFields": [],
+          "sourceSnippet": "6.1 The aggregate Current Balance attributable to Borrowers aged over 85 at origination must not exceed 0.75% of the Portfolio.",
+          "sourceSection": "Borrower Age"
+        }
+      ],
+      "observations": [
+        "Breached: Borrowers aged over 85.",
+        "Nearest to limit: Borrowers aged over 85 (-0.24 pp headroom).",
+        "Largest exposure: WA current LTV at 43.16%.",
+        "2 test(s) worsening vs the prior run.",
+        "3 test(s) improving vs the prior run.",
+        "3 test(s) unavailable (missing fields in the funded tape)."
+      ],
+      "lineage": {
+        "limitSource": "Schedule 8 document",
+        "sourceType": "schedule_8_doc",
+        "sourceDocument": "/home/user/trakt/demo_platform/docs/schedule_8_concentration.txt",
+        "extractionStatus": "success",
+        "runConfigPath": "blob:/processed/platform/alderbridge/alderbridge/2026-06-30/output/risk/risk_limits_config.yaml",
+        "dataSource": "governed central lender tape (18_central_lender_tape.csv)",
+        "exposureBasis": "funded",
+        "reportingDate": "2026-06-30",
+        "extractionMethod": "deterministic",
+        "needsReviewCount": 0
+      }
+    },
+    "reason": "no risk limits are configured for this client"
+  },
+  "regulatoryOutput": {
+    "available": false,
+    "kind": "regulatory_output",
+    "title": "ESMA Annex 2 exposure report",
+    "reason": "ValueError: Field 'purpose' has unmapped enum values in strict Annex2 mode: ['NULL']",
+    "note": "Excluded from the film: the regime projection requires a confirmed enum-review pass that this demonstration does not run."
+  },
+  "auditManifest": {
+    "available": true,
+    "kind": "audit_manifest",
+    "title": "Audit manifest",
+    "format": "JSON",
+    "synthetic_notice": "SYNTHETIC DEMONSTRATION DATA \u2014 NOT A REAL CUSTOMER",
+    "clientId": "alderbridge",
+    "clientDisplayName": "Alderbridge Lending Platform",
+    "reportingDate": "2026-06-30",
+    "sourceFiles": [
+      {
+        "portfolio": "ALP_ORIGINATION",
+        "period": "2026-04",
+        "fileName": "ALP_ORIGINATION_20260430_SYNTHETIC.csv",
+        "sizeBytes": 1611685,
+        "contentSha256": "sha256:e1f47e9f0cbaa51152affcd9c988f964b26edcbbca9b1db825765f2d775c2321"
+      },
+      {
+        "portfolio": "ALP_ORIGINATION",
+        "period": "2026-05",
+        "fileName": "ALP_ORIGINATION_20260531_SYNTHETIC.csv",
+        "sizeBytes": 1618677,
+        "contentSha256": "sha256:2d6bf26d1f37c6104a471aeb1ec93a7ab8eb48c8b18ad57aa51ea44c1531f718"
+      },
+      {
+        "portfolio": "ALP_ORIGINATION",
+        "period": "2026-06",
+        "fileName": "ALP_ORIGINATION_20260630_SYNTHETIC.csv",
+        "sizeBytes": 1627161,
+        "contentSha256": "sha256:033e0849f99c0fa8d36843b19d1ba999d2d8f4b06a68a51ce652b9994e0e67e5"
+      },
+      {
+        "portfolio": "ALP_ACQUIRED",
+        "period": "2026-04",
+        "fileName": "ALP_ACQUIRED_20260430_SYNTHETIC.csv",
+        "sizeBytes": 893707,
+        "contentSha256": "sha256:dd85ac7c417338237e3b135239b123d990cf1cc75a02287e51f696cc40e7f55f"
+      },
+      {
+        "portfolio": "ALP_ACQUIRED",
+        "period": "2026-05",
+        "fileName": "ALP_ACQUIRED_20260531_SYNTHETIC.csv",
+        "sizeBytes": 890699,
+        "contentSha256": "sha256:e97b02bee79cb347df56692fc140a06905fd38c82fb337b4f564907332cd023e"
+      },
+      {
+        "portfolio": "ALP_ACQUIRED",
+        "period": "2026-06",
+        "fileName": "ALP_ACQUIRED_20260630_SYNTHETIC.csv",
+        "sizeBytes": 887306,
+        "contentSha256": "sha256:93eb40fee61efa903b71e78b071d8079ac235c7ead1cb5c88387bf499582dc10"
+      }
+    ],
+    "gateExecution": [
+      {
+        "portfolio": "ALP_ORIGINATION",
+        "period": "2026-04",
+        "rows": 7058,
+        "balance": 1364011072.81,
+        "gates": [
+          "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
+          "[Gate 2] Canonical validation............ OK 7,058 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
+          "[Gate 2.5] Data lineage.................. OK",
+          "[Gate 3] Business rules.................. Warn 3 rules | 48 failures",
+          "[Gate 3b] Validation aggregation.......... OK -> ALP_ORIGINATION_20260430_SYNTHETIC_field_summary.csv",
+          "[MI] Dashboard-ready canonical produced."
+        ],
+        "elapsedSeconds": 10.94
+      },
+      {
+        "portfolio": "ALP_ACQUIRED",
+        "period": "2026-04",
+        "rows": 3938,
+        "balance": 568299918.39,
+        "gates": [
+          "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
+          "[Gate 2] Canonical validation............ OK 3,938 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
+          "[Gate 2.5] Data lineage.................. OK",
+          "[Gate 3] Business rules.................. Warn 3 rules | 30 failures",
+          "[Gate 3b] Validation aggregation.......... OK -> ALP_ACQUIRED_20260430_SYNTHETIC_field_summary.csv",
+          "[MI] Dashboard-ready canonical produced."
+        ],
+        "elapsedSeconds": 9.11
+      },
+      {
+        "portfolio": "ALP_ORIGINATION",
+        "period": "2026-05",
+        "rows": 7089,
+        "balance": 1374047049.17,
+        "gates": [
+          "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
+          "[Gate 2] Canonical validation............ OK 7,089 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
+          "[Gate 2.5] Data lineage.................. OK",
+          "[Gate 3] Business rules.................. Warn 3 rules | 50 failures",
+          "[Gate 3b] Validation aggregation.......... OK -> ALP_ORIGINATION_20260531_SYNTHETIC_field_summary.csv",
+          "[MI] Dashboard-ready canonical produced."
+        ],
+        "elapsedSeconds": 11.66
+      },
+      {
+        "portfolio": "ALP_ACQUIRED",
+        "period": "2026-05",
+        "rows": 3924,
+        "balance": 572780391.43,
+        "gates": [
+          "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
+          "[Gate 2] Canonical validation............ OK 3,924 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
+          "[Gate 2.5] Data lineage.................. OK",
+          "[Gate 3] Business rules.................. Warn 3 rules | 32 failures",
+          "[Gate 3b] Validation aggregation.......... OK -> ALP_ACQUIRED_20260531_SYNTHETIC_field_summary.csv",
+          "[MI] Dashboard-ready canonical produced."
+        ],
+        "elapsedSeconds": 9.69
+      },
+      {
+        "portfolio": "ALP_ORIGINATION",
+        "period": "2026-06",
+        "rows": 7126,
+        "balance": 1385508582.98,
+        "gates": [
+          "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
+          "[Gate 2] Canonical validation............ OK 7,126 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
+          "[Gate 2.5] Data lineage.................. OK",
+          "[Gate 3] Business rules.................. Warn 3 rules | 54 failures",
+          "[Gate 3b] Validation aggregation.......... OK -> ALP_ORIGINATION_20260630_SYNTHETIC_field_summary.csv",
+          "[MI] Dashboard-ready canonical produced."
+        ],
+        "elapsedSeconds": 12.31
+      },
+      {
+        "portfolio": "ALP_ACQUIRED",
+        "period": "2026-06",
+        "rows": 3909,
+        "balance": 579377675.23,
+        "gates": [
+          "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
+          "[Gate 2] Canonical validation............ OK 3,909 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
+          "[Gate 2.5] Data lineage.................. OK",
+          "[Gate 3] Business rules.................. Warn 3 rules | 21 failures",
+          "[Gate 3b] Validation aggregation.......... OK -> ALP_ACQUIRED_20260630_SYNTHETIC_field_summary.csv",
+          "[MI] Dashboard-ready canonical produced."
+        ],
+        "elapsedSeconds": 9.79
+      }
+    ],
+    "assembledOutputs": [
+      {
+        "period": "2026-04",
+        "reportingDate": "2026-04-30",
+        "rows": 10996,
+        "balance": 1932310991.2,
+        "contentSha256": "sha256:49f84c43bb8295637ba0c5164a86e509b0f0748eeab00d025ba3cfe5d5a2ad6c",
+        "uri": "blob://processed/platform/alderbridge/2026-04-30"
+      },
+      {
+        "period": "2026-05",
+        "reportingDate": "2026-05-31",
+        "rows": 11013,
+        "balance": 1946827440.6,
+        "contentSha256": "sha256:2de7c2518a32d78dea9c68c6d6e03fc9f595b09f14b751c464e36bad9e038b89",
+        "uri": "blob://processed/platform/alderbridge/2026-05-31"
+      },
+      {
+        "period": "2026-06",
+        "reportingDate": "2026-06-30",
+        "rows": 11035,
+        "balance": 1964886258.21,
+        "contentSha256": "sha256:035891d43d2ec65c7dc27b3f85fa1fa4e400468b9012eb37ce5d13b5dc616ef0",
+        "uri": "blob://processed/platform/alderbridge/2026-06-30"
+      }
+    ],
+    "reconciliation": {
+      "current_period": "2026-06",
+      "prior_period": "2026-05",
+      "current_total_balance": 1964886258.21,
+      "prior_total_balance": 1946827440.6,
+      "consolidated_movement": 18058817.61,
+      "per_portfolio_movement": {
+        "alp_acquired": 6597283.8,
+        "alp_origination": 11461533.81
+      }
+    },
+    "provenanceFields": [
+      "source_portfolio_id",
+      "source_portfolio_type",
+      "source_portfolio_label",
+      "acquisition_date",
+      "seller_name",
+      "portfolio_cohort"
+    ],
+    "producedBy": "demo_platform/artefacts.py from the run and assembler manifests"
+  }
+}

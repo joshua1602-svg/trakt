@@ -453,6 +453,11 @@ def demo_aliases_dir() -> Path:
     return Path(__file__).resolve().parent / "aliases"
 
 
+def client_docs_dir() -> Path:
+    """The fictional client's governing documents (a synthetic Schedule 8)."""
+    return Path(__file__).resolve().parent / "docs"
+
+
 def demo_client_config() -> Path:
     """The demo client master config (isolated from production client configs)."""
     return Path(__file__).resolve().parent / "config" / "config_client_ALDERBRIDGE_DEMO.yaml"
@@ -501,6 +506,10 @@ def mi_env(*, period_role: str = "current") -> Dict[str, str]:
         "MI_AGENT_REPORTING_DATE": prd.reporting_date,
         # Investor decks, resolved locally (no signed blob URLs at render time).
         "MI_AGENT_DECK_ROOT": str(deck_root()),
+        # The client's governing documents. The Schedule 8 concentration limits
+        # here are an invented document; the production Schedule 8 extractor
+        # parses it live, so the risk-monitoring output is genuinely computed.
+        "MI_AGENT_CLIENT_DOCS_ROOT": str(client_docs_dir()),
         # Deterministic: never call an LLM parser during the demo run.
         "MI_AGENT_LLM_ENABLED": "0",
         "MI_AGENT_SCRATCH": str(demo_root() / "scratch"),

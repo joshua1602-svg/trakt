@@ -1,0 +1,72 @@
+{
+  "ok": true,
+  "synthetic_notice": "SYNTHETIC DEMONSTRATION DATA \u2014 NOT A REAL CUSTOMER",
+  "filesScanned": 18,
+  "filesCarryingSyntheticBanner": 16,
+  "prohibitedStrings": [
+    "213800ABCDE123456701N202501",
+    "ERE",
+    "ERE Funding - Equity Release Mortgages",
+    "ERE Funding Limited",
+    "ERE_Portfolio",
+    "Equity Release Europe",
+    "SYNTHETIC_ERE",
+    "ere funding",
+    "ere_funding",
+    "ere_funding_uk"
+  ],
+  "productionIdentifiersDerived": [
+    "213800ABCDE123456701N202501",
+    "ERE Funding - Equity Release Mortgages",
+    "ERE Funding Limited",
+    "ere_funding_uk"
+  ],
+  "rules": [
+    {
+      "name": "email_address",
+      "description": "A live email address must never appear in demonstration material."
+    },
+    {
+      "name": "guid_or_tenant_id",
+      "description": "A GUID may be a real tenant, subscription or application identifier."
+    },
+    {
+      "name": "azure_storage_endpoint",
+      "description": "A real Azure storage endpoint reveals a production storage account."
+    },
+    {
+      "name": "azure_web_host",
+      "description": "A real Azure hostname reveals a production deployment."
+    },
+    {
+      "name": "storage_connection_string",
+      "description": "A storage connection string or account key is a credential."
+    },
+    {
+      "name": "sas_signed_url",
+      "description": "A signed (SAS) URL is a bearer credential and expires \u2014 never show one."
+    },
+    {
+      "name": "bearer_token",
+      "description": "A bearer token is a credential."
+    },
+    {
+      "name": "jwt",
+      "description": "A JWT is a credential."
+    },
+    {
+      "name": "private_key",
+      "description": "A private key is a credential."
+    },
+    {
+      "name": "download_token",
+      "description": "A live artefact download token is a short-lived credential."
+    },
+    {
+      "name": "production_branch_ref",
+      "description": "A production branch reference is environment detail."
+    }
+  ],
+  "findings": [],
+  "findingCount": 0
+}
