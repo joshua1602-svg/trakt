@@ -21,11 +21,12 @@ connectors, no MCP.
 |---|---|
 | `mi_agent_api/copilot_auth.py` | Entra ID **bearer-token validation** (JWKS signature, issuer, audience, expiry, optional scope/role) for the Copilot routes. Default mode `entra` **fails closed** (503) until configured; `disabled` mode is local-dev/tests only. |
 | `mi_agent_api/copilot_actions.py` | The three actions as a FastAPI router (`/v1/copilot/*`) with explicit Pydantic request/response models, plus a short-lived HMAC-signed download endpoint. Contains **no business logic** — it delegates to existing components (see mapping below). |
-| `deploy/copilot-agent/manifest.json` | Teams app manifest (declarative-agent host package). |
-| `deploy/copilot-agent/declarativeAgent.json` | Declarative agent: instructions (never invent figures; use the actions; state unavailability; include reporting dates; never expose paths/secrets) and the four suggested prompts. |
-| `deploy/copilot-agent/ai-plugin.json` | API plugin manifest: exactly the three functions, OAuth (Entra) runtime auth, bound to the OpenAPI spec. |
-| `deploy/copilot-agent/trakt-copilot-openapi.yaml` | Hand-authored OpenAPI **3.0.3** contract covering exactly the three actions (the FastAPI auto-spec is 3.1 and covers the whole internal API, so it is not used for the plugin). |
-| `deploy/copilot-agent/package_agent.py` | Builds the sideloadable `trakt-copilot-agent.zip` (manifests + spec + generated placeholder icons). |
+| `deploy/copilot-agent/manifest.json` | Teams app manifest **template** (declarative-agent host package; tokens substituted per client). |
+| `deploy/copilot-agent/declarativeAgent.json` | Declarative agent (schema **v1.7**): instructions (never invent figures; use the actions; state unavailability; include reporting dates; never expose paths/secrets) and the four suggested prompts. |
+| `deploy/copilot-agent/ai-plugin.json` | API plugin manifest **template** (schema **v2.4**): exactly the three functions; Entra **SSO** runtime auth (`OAuthPluginVault` + the Trakt-created Enterprise-token-store auth-config id); bound to the OpenAPI spec. |
+| `deploy/copilot-agent/trakt-copilot-openapi.yaml` | Hand-authored OpenAPI **3.0.3** contract **template** covering exactly the three actions (the FastAPI auto-spec is 3.1 and covers the whole internal API, so it is not used for the plugin). |
+| `deploy/copilot-agent/package_agent.py` | Builds a complete **client-specific** `trakt-copilot-agent-<client>.zip` from a client configuration file; deterministic per-client app GUID (UUIDv5); **fails if any placeholder survives** substitution. |
+| `deploy/copilot-agent/client-config.sample.json` | Sample per-client packaging configuration (real configs stay out of the repo). |
 | `mi_agent_api/tests/test_copilot_actions.py` | Action tests (see Testing). |
 | `mi_agent_api/tests/test_copilot_package.py` | Package/spec structural tests + spec↔routes lock-step. |
 
@@ -142,39 +143,28 @@ curl -s localhost:8000/v1/copilot/artifacts/latest/investor-deck | jq .
 curl -s localhost:8000/v1/copilot/artifacts/latest/canonical-tape | jq .
 ```
 
-## Package and sideload the agent
+## Package the agent (Trakt-side, no manifest editing)
 
 ```bash
-# 1. Edit deploy/copilot-agent/manifest.json      → new GUID, real host
-# 2. Edit deploy/copilot-agent/trakt-copilot-openapi.yaml → servers[0].url, app id in the scope
-# 3. Edit deploy/copilot-agent/ai-plugin.json     → OAuth registration id
-python deploy/copilot-agent/package_agent.py
-# → deploy/copilot-agent/dist/trakt-copilot-agent.zip
+python deploy/copilot-agent/package_agent.py --config <client>.json
+# → deploy/copilot-agent/dist/trakt-copilot-agent-<client_id>.zip
 ```
 
-Upload via **Microsoft 365 admin center → Integrated apps → Upload custom app**,
-or Teams **Apps → Manage your apps → Upload a custom app**, and assign to test
-users.
+The build substitutes every token from the client configuration and **fails if
+any placeholder or unresolved template variable remains** in the output. The
+client administrator receives a finished zip and only uploads it, grants admin
+consent, and assigns users.
 
-## Manual Microsoft 365 / Azure administrator steps (cannot be automated from this repo)
+## Deployment model and administrator steps
 
-1. **Entra app registration** for the Trakt Copilot API (e.g. `trakt-copilot-api`):
-   - Expose an API: set the Application ID URI (`api://<app-id>`), add a scope
-     `Trakt.Copilot` (admin + user consentable).
-   - Note the tenant GUID and app id → App Service settings
-     `TRAKT_COPILOT_ENTRA_TENANT_ID` / `TRAKT_COPILOT_ENTRA_AUDIENCE`
-     (and the scope name if `TRAKT_COPILOT_REQUIRED_SCOPE` is used).
-2. **OAuth client registration for the plugin** (Teams developer portal →
-   Tools → OAuth client registration): client id/secret from the same (or a
-   companion) app registration, auth endpoint
-   `https://login.microsoftonline.com/<tenant>/oauth2/v2.0/authorize`, token
-   endpoint `…/token`, scope `api://<app-id>/Trakt.Copilot`. Put the resulting
-   **registration id** into `ai-plugin.json` (`OAuthPluginVault.reference_id`).
-   Add the redirect URI Microsoft shows you to the app registration.
-3. **Admin consent** for the scope in the target tenant.
-4. **App Service settings**: add the `TRAKT_COPILOT_*` block (see above) to
-   `trakt-mi-api` and restart.
-5. **Upload/sideload** the agent zip and **assign to test users**.
+The full private-organisational deployment model — one-time Trakt setup
+(multi-tenant Entra app + Entra SSO auth config in Trakt's Teams developer
+portal, restricted to the client's organisation), per-client Trakt packaging,
+and the exact client-administrator actions (upload custom app, grant admin
+consent, assign users — nothing else) — is documented in
+**`docs/copilot_client_deployment_runbook.md`**. The client never edits
+manifests, never touches the Teams Developer Portal, never builds a package,
+and never configures Azure.
 
 ## Testing
 
