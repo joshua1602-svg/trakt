@@ -13,5 +13,14 @@
   { "name": "MI_API_WORKERS", "value": "2" },
   { "name": "MI_API_TIMEOUT", "value": "120" },
   { "name": "MI_AGENT_SCRATCH", "value": "/tmp/trakt/mi_platform" },
-  { "name": "MI_AGENT_CORS_ORIGINS", "value": "https://<your-react-app-host>" }
+  { "name": "MI_AGENT_CORS_ORIGINS", "value": "https://<your-react-app-host>" },
+
+  { "_comment": "Microsoft 365 Copilot v1 actions (/v1/copilot/*). Default mode is 'entra' and FAILS CLOSED (503) until tenant + audience are set. See docs/copilot_v1_implementation.md.",
+    "name": "TRAKT_COPILOT_AUTH_MODE", "value": "entra" },
+  { "name": "TRAKT_COPILOT_ENTRA_TENANT_ID", "value": "<entra-directory-tenant-guid>" },
+  { "name": "TRAKT_COPILOT_ENTRA_AUDIENCE", "value": "api://<trakt-copilot-app-id>" },
+  { "name": "TRAKT_COPILOT_REQUIRED_SCOPE", "value": "Trakt.Copilot" },
+  { "name": "TRAKT_COPILOT_DOWNLOAD_SIGNING_KEY", "value": "<random-32+-char-secret>" },
+  { "name": "TRAKT_COPILOT_DOWNLOAD_TTL_SECONDS", "value": "300" },
+  { "name": "TRAKT_COPILOT_PUBLIC_BASE_URL", "value": "https://trakt-mi-api.azurewebsites.net" }
 ]

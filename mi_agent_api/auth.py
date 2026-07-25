@@ -57,6 +57,11 @@ _NAME_HEADER = "x-ms-client-principal-name"
 # index, and the OpenAPI docs). Everything else requires auth when enabled.
 OPEN_PATHS: Set[str] = {"/", "/health", "/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
 
+# The Microsoft 365 Copilot action routes authenticate with a validated Entra ID
+# bearer token (see copilot_auth.py) instead of the platform-injected Easy Auth
+# header, so this guard does not apply to them — their own guard fails closed.
+COPILOT_PATH_PREFIX = "/v1/copilot"
+
 # Claim types that carry the role in App Service Easy Auth principals.
 _ROLE_CLAIM_TYPES = {
     "roles",
@@ -201,6 +206,11 @@ async def auth_guard(request: Request) -> None:
     """
     path = request.url.path.rstrip("/") or "/"
     if path in OPEN_PATHS or request.method == "OPTIONS":
+        return
+    if path.startswith(COPILOT_PATH_PREFIX):
+        # Copilot actions are guarded by copilot_auth.copilot_auth_guard (Entra
+        # bearer-token validation, fail closed). The Easy-Auth header contract
+        # does not exist on those calls.
         return
 
     if not _auth_enabled():

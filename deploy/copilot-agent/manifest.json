@@ -1,0 +1,36 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.19/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.19",
+  "version": "1.0.0",
+  "id": "REPLACE-WITH-NEW-GUID",
+  "developer": {
+    "name": "Trakt",
+    "websiteUrl": "https://trakt-mi-api.azurewebsites.net",
+    "privacyUrl": "https://trakt-mi-api.azurewebsites.net",
+    "termsOfUseUrl": "https://trakt-mi-api.azurewebsites.net"
+  },
+  "name": {
+    "short": "Trakt",
+    "full": "Trakt Portfolio MI Agent"
+  },
+  "description": {
+    "short": "Portfolio MI answers and latest Trakt artefacts in Copilot.",
+    "full": "Ask Trakt portfolio MI questions and retrieve the latest generated investor deck or canonical loan tape. Answers come from Trakt's deterministic MI engine — never model estimation. v1 supports only these three capabilities."
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "accentColor": "#1F3A5F",
+  "copilotAgents": {
+    "declarativeAgents": [
+      {
+        "id": "traktDeclarativeAgent",
+        "file": "declarativeAgent.json"
+      }
+    ]
+  },
+  "validDomains": [
+    "trakt-mi-api.azurewebsites.net"
+  ]
+}

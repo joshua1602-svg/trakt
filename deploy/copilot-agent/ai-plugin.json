@@ -1,0 +1,68 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.2/schema.json",
+  "schema_version": "v2.2",
+  "name_for_human": "Trakt",
+  "description_for_human": "Portfolio MI answers, the latest investor deck, and the latest canonical loan tape from Trakt.",
+  "description_for_model": "Trakt is the governed source of truth for portfolio management information. Use askTraktMi for every question about portfolio data, balances, originations, LTV, regions, performance, or reporting-period comparisons — never estimate or invent portfolio figures. Use getLatestInvestorDeck when the user asks for the latest investor deck, pack, presentation, or slides. Use getLatestCanonicalTape when the user asks for the canonical loan tape or latest normalised dataset.",
+  "namespace": "trakt",
+  "functions": [
+    {
+      "name": "askTraktMi",
+      "description": "Answer a natural-language portfolio MI question using Trakt's deterministic MI engine. Returns the answer, reporting context, and the supporting values it was computed from.",
+      "capabilities": {
+        "response_semantics": {
+          "data_path": "$",
+          "properties": {
+            "title": "$.question",
+            "subtitle": "$.answer"
+          }
+        }
+      }
+    },
+    {
+      "name": "getLatestInvestorDeck",
+      "description": "Retrieve metadata and a short-lived download link for the latest generated investor deck (PPTX).",
+      "capabilities": {
+        "response_semantics": {
+          "data_path": "$",
+          "properties": {
+            "title": "$.fileName",
+            "subtitle": "$.reportingPeriod",
+            "url": "$.downloadUrl"
+          }
+        }
+      }
+    },
+    {
+      "name": "getLatestCanonicalTape",
+      "description": "Retrieve metadata and a short-lived download link for the latest canonical loan tape (CSV).",
+      "capabilities": {
+        "response_semantics": {
+          "data_path": "$",
+          "properties": {
+            "title": "$.fileName",
+            "subtitle": "$.reportingPeriod",
+            "url": "$.downloadUrl"
+          }
+        }
+      }
+    }
+  ],
+  "runtimes": [
+    {
+      "type": "OpenApi",
+      "auth": {
+        "type": "OAuthPluginVault",
+        "reference_id": "${{OAUTH2_CONFIGURATION_ID}}"
+      },
+      "spec": {
+        "url": "trakt-copilot-openapi.yaml"
+      },
+      "run_for_functions": [
+        "askTraktMi",
+        "getLatestInvestorDeck",
+        "getLatestCanonicalTape"
+      ]
+    }
+  ]
+}

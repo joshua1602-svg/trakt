@@ -4,6 +4,8 @@ fastapi>=0.110
 uvicorn[standard]>=0.27
 gunicorn>=21.2
 uvicorn-worker>=0.2          # gunicorn worker class (uvicorn_worker.UvicornWorker)
+# Entra bearer-token validation for the Copilot action routes (copilot_auth.py)
+PyJWT[crypto]>=2.8
 # httpx + pytest are needed only for the API tests
 httpx>=0.27
 pytest>=8.0

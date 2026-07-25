@@ -1,0 +1,264 @@
+# OpenAPI contract for the Trakt Microsoft 365 Copilot agent — EXACTLY the three
+# v1 actions, nothing else. Hand-authored at OpenAPI 3.0.3 (the version Copilot
+# API plugins consume; FastAPI's auto-generated spec is 3.1 and covers the whole
+# internal API, which must not be exposed to the plugin).
+#
+# Before packaging, set servers[0].url to the deployed Trakt MI API base URL.
+# tests/mi_agent_api/tests/test_copilot_package.py asserts this file stays in
+# lock-step with the implemented routes and operation ids.
+openapi: 3.0.3
+info:
+  title: Trakt Copilot Actions
+  description: >-
+    Trakt portfolio MI and artefact retrieval for Microsoft 365 Copilot.
+    Answers come from Trakt's deterministic MI engine and published pipeline
+    outputs — never from model estimation.
+  version: 1.0.0
+servers:
+  - url: https://trakt-mi-api.azurewebsites.net
+    description: Trakt MI API (set to your deployment URL before packaging)
+security:
+  - entraBearer: []
+paths:
+  /v1/copilot/mi/query:
+    post:
+      operationId: askTraktMi
+      summary: Ask the Trakt MI Agent a portfolio question
+      description: >-
+        Use for ANY question about portfolio data, performance, balances,
+        originations, LTV, regions, comparisons between reporting periods, or
+        other management-information queries. Returns the answer and the
+        supporting values it was computed from. Never compute portfolio figures
+        yourself — always call this action.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CopilotMiQueryRequest'
+      responses:
+        '200':
+          description: The MI Agent's answer (ok=false carries a controlled error).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CopilotMiAnswer'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/MalformedRequest'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/copilot/artifacts/latest/investor-deck:
+    get:
+      operationId: getLatestInvestorDeck
+      summary: Get the latest generated investor deck (PPTX)
+      description: >-
+        Use when the user asks for the latest investor deck, investor pack,
+        presentation, or slides. Returns file metadata and a short-lived
+        download link to present to the user. Do not use for data questions.
+      responses:
+        '200':
+          description: Metadata and a short-lived download link for the deck.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CopilotArtifactInfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/copilot/artifacts/latest/canonical-tape:
+    get:
+      operationId: getLatestCanonicalTape
+      summary: Get the latest canonical loan tape (CSV)
+      description: >-
+        Use when the user asks for the canonical tape, canonical loan tape,
+        loan tape, or latest normalised dataset. Returns file metadata and a
+        short-lived download link to present to the user. Do not use for data
+        questions.
+      responses:
+        '200':
+          description: Metadata and a short-lived download link for the tape.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CopilotArtifactInfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+components:
+  securitySchemes:
+    entraBearer:
+      type: oauth2
+      description: Microsoft Entra ID (OAuth 2.0 authorization code flow).
+      flows:
+        authorizationCode:
+          authorizationUrl: https://login.microsoftonline.com/common/oauth2/v2.0/authorize
+          tokenUrl: https://login.microsoftonline.com/common/oauth2/v2.0/token
+          scopes:
+            api://TRAKT-COPILOT-APP-ID/Trakt.Copilot: Call Trakt Copilot actions
+  responses:
+    Unauthorized:
+      description: Missing or invalid bearer token.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CopilotError'
+    NotFound:
+      description: The requested artefact has not been generated yet.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CopilotError'
+    Unavailable:
+      description: >-
+        The service is not ready (authentication not configured, no governed
+        live data source, or the artefact store is unreachable).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CopilotError'
+    MalformedRequest:
+      description: The request body failed validation.
+      content:
+        application/json:
+          schema:
+            type: object
+  schemas:
+    CopilotMiQueryRequest:
+      type: object
+      required: [question]
+      properties:
+        question:
+          type: string
+          minLength: 1
+          description: The portfolio MI question, in natural language. Rewrite
+            follow-up questions into standalone questions before calling.
+        portfolioId:
+          type: string
+          nullable: true
+          description: Optional portfolio/run selector '{client_id}/{run_id}'.
+            Omit to query the current active reporting dataset.
+        asOfDate:
+          type: string
+          nullable: true
+          description: Optional as-of date label (YYYY-MM-DD).
+    CopilotSupportingArtifact:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          description: kpi | table | chart
+        title:
+          type: string
+          nullable: true
+        kpis:
+          type: array
+          nullable: true
+          items:
+            type: object
+          description: 'For kind=kpi: [{label, value}] as formatted by the MI Agent.'
+        columns:
+          type: array
+          nullable: true
+          items:
+            type: string
+        rows:
+          type: array
+          nullable: true
+          items:
+            type: object
+          description: Result rows (capped; see truncated).
+        truncated:
+          type: boolean
+          default: false
+    CopilotMiAnswer:
+      type: object
+      required: [ok, question, answer, dataSourceKind, dataSourceLabel]
+      properties:
+        ok:
+          type: boolean
+        question:
+          type: string
+        answer:
+          type: string
+          description: The MI Agent's answer text. Compose any narrative ONLY
+            from this and supportingValues.
+        error:
+          type: string
+          nullable: true
+        interpreted:
+          type: string
+          nullable: true
+          description: How the deterministic parser interpreted the question.
+        reportingDate:
+          type: string
+          nullable: true
+        datasetContext:
+          type: string
+          nullable: true
+          description: funded | pipeline | forecast
+        portfolioId:
+          type: string
+          nullable: true
+        dataSourceKind:
+          type: string
+        dataSourceLabel:
+          type: string
+        supportingValues:
+          type: array
+          items:
+            $ref: '#/components/schemas/CopilotSupportingArtifact'
+        sourceNotes:
+          type: array
+          items: {}
+        warnings:
+          type: array
+          items:
+            type: string
+    CopilotArtifactInfo:
+      type: object
+      required: [ok, artifactType, fileName, contentType, clientId, downloadUrl, downloadExpiresAt]
+      properties:
+        ok:
+          type: boolean
+        artifactType:
+          type: string
+          description: investor_deck | canonical_tape
+        fileName:
+          type: string
+        contentType:
+          type: string
+        sizeBytes:
+          type: integer
+          nullable: true
+        clientId:
+          type: string
+        reportingPeriod:
+          type: string
+          nullable: true
+        generatedAt:
+          type: string
+          nullable: true
+        downloadUrl:
+          type: string
+          description: Short-lived signed URL for the file. Present this link
+            to the user.
+        downloadExpiresAt:
+          type: string
+    CopilotError:
+      type: object
+      required: [ok, error]
+      properties:
+        ok:
+          type: boolean
+          enum: [false]
+        error:
+          type: string
