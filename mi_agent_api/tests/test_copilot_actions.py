@@ -251,7 +251,7 @@ def test_tape_absent_is_404(monkeypatch, tmp_path, copilot_auth_off):
     monkeypatch.delenv("MI_AGENT_PLATFORM_CANONICAL", raising=False)
     monkeypatch.chdir(tmp_path)   # keep the out_platform/ convention from matching
     import mi_agent_api.copilot_actions as ca
-    monkeypatch.setattr(ca, "_resolve_latest_tape", lambda: None)
+    monkeypatch.setattr(ca, "_resolve_latest_tape", lambda *_a, **_k: None)
     r = client.get("/v1/copilot/artifacts/latest/canonical-tape")
     assert r.status_code == 404
     assert r.json()["ok"] is False
@@ -261,7 +261,7 @@ def test_tape_absent_is_404(monkeypatch, tmp_path, copilot_auth_off):
 def test_tape_storage_unavailable_is_503(monkeypatch, copilot_auth_off):
     import mi_agent_api.copilot_actions as ca
 
-    def _boom():
+    def _boom(*_a, **_k):
         raise RuntimeError("blob store down")
 
     monkeypatch.setattr(ca, "_resolve_latest_tape", _boom)

@@ -282,11 +282,25 @@ def _copilot_client_id() -> str:
     return from_uri or "client_001"
 
 
-def _resolve_latest_tape() -> Optional[Path]:
+def _resolve_latest_tape(client_id: Optional[str] = None) -> Optional[Path]:
     """The latest canonical loan tape via the EXISTING platform-canonical
     resolution (blob ``…/platform/{client}/latest/platform_canonical_typed.csv``
     or its explicit/local equivalents). Deliberately does NOT continue down the
-    wider data-source chain — no central-tape substitute, no demo fallback."""
+    wider data-source chain — no central-tape substitute, no demo fallback.
+
+    Client isolation: the tape follows the SAME governed client context as every
+    other Copilot action. When the configured platform URI names a client, it
+    must be the deployment's client — a mismatch is a misconfiguration and fails
+    closed rather than serving another tenant's tape.
+    """
+    if client_id:
+        from .app import _client_from_platform_uri
+        uri_client = _client_from_platform_uri()
+        if uri_client and uri_client != client_id:
+            logger.error("copilot tape client mismatch: deployment client %r vs "
+                         "platform URI client %r — refusing to serve.",
+                         client_id, uri_client)
+            return None
     from .data_source import _resolve_platform_canonical
     path = _resolve_platform_canonical()
     if path is None:
@@ -492,7 +506,7 @@ def get_latest_investor_deck(request: Request):
 def get_latest_canonical_tape(request: Request):
     client_id = _copilot_client_id()
     try:
-        path = _resolve_latest_tape()
+        path = _resolve_latest_tape(client_id)
     except Exception as exc:  # noqa: BLE001 - storage fault → explicit 503
         logger.warning("copilot tape resolution failed for %s: %s", client_id, exc)
         return _error_json(503, "The canonical-tape store is currently unavailable.")
@@ -544,7 +558,7 @@ def download_artifact(token: str):
         return FileResponse(str(path), media_type=_PPTX_MEDIA_TYPE, filename=name)
     if kind == "tape":
         try:
-            path = _resolve_latest_tape()
+            path = _resolve_latest_tape(client_id)
         except Exception:  # noqa: BLE001
             path = None
         if path is None:
