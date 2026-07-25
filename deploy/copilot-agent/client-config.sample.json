@@ -1,0 +1,10 @@
+{
+  "_comment": "SAMPLE client configuration for package_agent.py — every value here is fictitious. Copy per client, fill from Trakt's Entra app + Entra SSO auth config, and keep real configs OUT of the repository.",
+  "client_id": "sampleclient",
+  "api_base_url": "https://trakt-mi-api-sampleclient.azurewebsites.net",
+  "entra_app_id": "11111111-2222-3333-4444-555555555555",
+  "app_id_uri": "api://trakt-copilot-sampleclient",
+  "sso_auth_config_id": "SAMPLE-SSO-AUTH-CONFIG-ID",
+  "scope_name": "access_as_user",
+  "package_version": "1.0.0"
+}

@@ -3,8 +3,9 @@
 # API plugins consume; FastAPI's auto-generated spec is 3.1 and covers the whole
 # internal API, which must not be exposed to the plugin).
 #
-# Before packaging, set servers[0].url to the deployed Trakt MI API base URL.
-# tests/mi_agent_api/tests/test_copilot_package.py asserts this file stays in
+# TEMPLATE — do not edit per client. Double-brace tokens are substituted by
+# deploy/copilot-agent/package_agent.py from a client configuration file.
+# mi_agent_api/tests/test_copilot_package.py asserts this file stays in
 # lock-step with the implemented routes and operation ids.
 openapi: 3.0.3
 info:
@@ -15,8 +16,8 @@ info:
     outputs — never from model estimation.
   version: 1.0.0
 servers:
-  - url: https://trakt-mi-api.azurewebsites.net
-    description: Trakt MI API (set to your deployment URL before packaging)
+  - url: '{{API_BASE_URL}}'
+    description: Trakt MI API for this client deployment
 security:
   - entraBearer: []
 paths:
@@ -96,13 +97,14 @@ components:
   securitySchemes:
     entraBearer:
       type: oauth2
-      description: Microsoft Entra ID (OAuth 2.0 authorization code flow).
+      description: Microsoft Entra ID single sign-on (token issued by the
+        Microsoft Enterprise token store via the plugin's Entra SSO auth config).
       flows:
         authorizationCode:
           authorizationUrl: https://login.microsoftonline.com/common/oauth2/v2.0/authorize
           tokenUrl: https://login.microsoftonline.com/common/oauth2/v2.0/token
           scopes:
-            api://TRAKT-COPILOT-APP-ID/Trakt.Copilot: Call Trakt Copilot actions
+            '{{APP_ID_URI}}/{{SCOPE_NAME}}': Call Trakt Copilot actions
   responses:
     Unauthorized:
       description: Missing or invalid bearer token.

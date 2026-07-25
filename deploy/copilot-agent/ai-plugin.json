@@ -1,6 +1,6 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.2/schema.json",
-  "schema_version": "v2.2",
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.4/schema.json",
+  "schema_version": "v2.4",
   "name_for_human": "Trakt",
   "description_for_human": "Portfolio MI answers, the latest investor deck, and the latest canonical loan tape from Trakt.",
   "description_for_model": "Trakt is the governed source of truth for portfolio management information. Use askTraktMi for every question about portfolio data, balances, originations, LTV, regions, performance, or reporting-period comparisons — never estimate or invent portfolio figures. Use getLatestInvestorDeck when the user asks for the latest investor deck, pack, presentation, or slides. Use getLatestCanonicalTape when the user asks for the canonical loan tape or latest normalised dataset.",
@@ -53,7 +53,7 @@
       "type": "OpenApi",
       "auth": {
         "type": "OAuthPluginVault",
-        "reference_id": "${{OAUTH2_CONFIGURATION_ID}}"
+        "reference_id": "{{SSO_AUTH_CONFIG_ID}}"
       },
       "spec": {
         "url": "trakt-copilot-openapi.yaml"

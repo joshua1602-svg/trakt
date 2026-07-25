@@ -1,13 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.19/MicrosoftTeams.schema.json",
   "manifestVersion": "1.19",
-  "version": "1.0.0",
-  "id": "REPLACE-WITH-NEW-GUID",
+  "version": "{{PACKAGE_VERSION}}",
+  "id": "{{APP_GUID}}",
   "developer": {
     "name": "Trakt",
-    "websiteUrl": "https://trakt-mi-api.azurewebsites.net",
-    "privacyUrl": "https://trakt-mi-api.azurewebsites.net",
-    "termsOfUseUrl": "https://trakt-mi-api.azurewebsites.net"
+    "websiteUrl": "{{API_BASE_URL}}",
+    "privacyUrl": "{{API_BASE_URL}}",
+    "termsOfUseUrl": "{{API_BASE_URL}}"
   },
   "name": {
     "short": "Trakt",
@@ -31,6 +31,6 @@
     ]
   },
   "validDomains": [
-    "trakt-mi-api.azurewebsites.net"
+    "{{API_HOST}}"
   ]
 }

@@ -15,11 +15,11 @@
   { "name": "MI_AGENT_SCRATCH", "value": "/tmp/trakt/mi_platform" },
   { "name": "MI_AGENT_CORS_ORIGINS", "value": "https://<your-react-app-host>" },
 
-  { "_comment": "Microsoft 365 Copilot v1 actions (/v1/copilot/*). Default mode is 'entra' and FAILS CLOSED (503) until tenant + audience are set. See docs/copilot_v1_implementation.md.",
+  { "_comment": "Microsoft 365 Copilot v1 actions (/v1/copilot/*). Default mode is 'entra' and FAILS CLOSED (503) until tenant + audience are set. Tenant = the CLIENT's Entra tenant (tokens are issued by the user's home tenant); audience = the Entra SSO Application ID URI AND Trakt's app GUID (v1 tokens carry the URI, v2 the GUID). See docs/copilot_client_deployment_runbook.md.",
     "name": "TRAKT_COPILOT_AUTH_MODE", "value": "entra" },
-  { "name": "TRAKT_COPILOT_ENTRA_TENANT_ID", "value": "<entra-directory-tenant-guid>" },
-  { "name": "TRAKT_COPILOT_ENTRA_AUDIENCE", "value": "api://<trakt-copilot-app-id>" },
-  { "name": "TRAKT_COPILOT_REQUIRED_SCOPE", "value": "Trakt.Copilot" },
+  { "name": "TRAKT_COPILOT_ENTRA_TENANT_ID", "value": "<client-entra-tenant-guid>" },
+  { "name": "TRAKT_COPILOT_ENTRA_AUDIENCE", "value": "api://<sso-application-id-uri>,<trakt-entra-app-guid>" },
+  { "name": "TRAKT_COPILOT_REQUIRED_SCOPE", "value": "access_as_user" },
   { "name": "TRAKT_COPILOT_DOWNLOAD_SIGNING_KEY", "value": "<random-32+-char-secret>" },
   { "name": "TRAKT_COPILOT_DOWNLOAD_TTL_SECONDS", "value": "300" },
   { "name": "TRAKT_COPILOT_PUBLIC_BASE_URL", "value": "https://trakt-mi-api.azurewebsites.net" }
