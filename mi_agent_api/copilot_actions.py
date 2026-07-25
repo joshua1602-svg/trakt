@@ -4,12 +4,20 @@ A THIN action layer over the existing Trakt capabilities — no business logic,
 no calculations, no new pipeline:
 
   POST /v1/copilot/mi/query
-      askTraktMi — delegates to the EXISTING ``/mi/query`` handler
-      (``mi_agent_api.app.query``: deterministic-first parser → MIQuerySpec →
-      deterministic executor → adapter envelope) and reshapes the envelope into
-      a compact, typed answer Copilot can ground on. Fails closed (503) when the
+      askTraktMi — calls the SHARED governed MI application service
+      (``mi_agent_api.mi_service.execute_governed_mi_query``) — the exact same
+      service the React MI Agent's ``/mi/query`` route calls, in-process, with no
+      HTTP loopback — and reshapes its canonical envelope into the Copilot
+      OpenAPI schema. This module owns NO analytical behaviour: no parser, no
+      routing, no dataset choice, no metric definitions, no geography / LTV /
+      top-N / cohort / forecast / temporal logic. Fails closed (503) when the
       active data source is the synthetic demo dataset or unavailable — the
       Copilot surface never answers from demo data.
+
+      Channel-specific behaviour is limited to: Entra authentication, the
+      deployment's client context, response-size truncation (explicitly flagged),
+      and Unicode/Markdown normalisation for the Copilot renderer
+      (``copilot_text``).
 
   GET /v1/copilot/artifacts/latest/investor-deck
       getLatestInvestorDeck — resolves the CURRENT latest deck exactly as the
@@ -67,6 +75,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from .copilot_auth import copilot_auth_guard
+from .copilot_text import normalise_payload, normalise_text
 from .data_source import (
     KIND_SYNTHETIC_DEMO,
     KIND_UNAVAILABLE,
@@ -74,6 +83,7 @@ from .data_source import (
     data_source_label,
 )
 from . import decks as decks_mod
+from . import mi_service
 
 logger = logging.getLogger("mi_agent_api.copilot")
 
@@ -118,9 +128,16 @@ class CopilotSupportingArtifact(BaseModel):
     rows: Optional[List[Dict[str, Any]]] = Field(
         None, description="Result rows (capped; see truncated).")
     truncated: bool = False
+    totalRows: Optional[int] = Field(
+        None, description="Total rows the MI engine produced before any cap.")
 
 
 class CopilotMiAnswer(BaseModel):
+    """The shared MI service's governed envelope, reshaped for Copilot.
+
+    Every analytical field is passed through unchanged from the shared service —
+    the adapter only re-keys, truncates (flagged) and text-normalises."""
+
     ok: bool
     question: str
     answer: str = Field(..., description="The MI Agent's answer text. Compose any "
@@ -128,15 +145,33 @@ class CopilotMiAnswer(BaseModel):
     error: Optional[str] = None
     interpreted: Optional[str] = Field(
         None, description="How the deterministic parser interpreted the question.")
+    querySpec: Optional[Dict[str, Any]] = Field(
+        None, description="The parsed governed query specification (metric, "
+                          "aggregation, dimensions, filters, top-N, ordering).")
     reportingDate: Optional[str] = None
     datasetContext: Optional[str] = Field(None, description="funded | pipeline | forecast")
     portfolioId: Optional[str] = None
+    selectedClient: Optional[str] = Field(None, description="Governed client the answer is scoped to.")
+    selectedPortfolio: Optional[str] = None
+    selectedRun: Optional[str] = Field(
+        None, description="Set ONLY when the analytical intent genuinely required a "
+                          "specific historical run; null for point-in-time questions.")
     dataSourceKind: str = Field(..., description="Kind of the governed data source answered from.")
     dataSourceLabel: str = Field(..., description="Label of the data source (no paths).")
     supportingValues: List[CopilotSupportingArtifact] = Field(default_factory=list)
+    validation: Optional[Dict[str, Any]] = Field(
+        None, description="Deterministic validation result from the MI engine.")
+    reconciliation: Optional[Dict[str, Any]] = Field(
+        None, description="Coverage / reconciliation footer for the result.")
     sourceNotes: List[Any] = Field(default_factory=list,
                                    description="Provenance/source notes from the MI Agent.")
     warnings: List[str] = Field(default_factory=list)
+    diagnostics: List[str] = Field(default_factory=list)
+    assumptions: List[str] = Field(default_factory=list)
+    truncated: bool = Field(
+        False, description="True when supporting rows were capped for the Copilot "
+                           "response limit. The underlying totals are unaffected.")
+    truncationNote: Optional[str] = None
 
 
 class CopilotArtifactInfo(BaseModel):
@@ -280,30 +315,48 @@ def _tape_reporting_period() -> Optional[str]:
 # --------------------------------------------------------------------------- #
 # Supporting-value extraction from the existing adapter envelope
 # --------------------------------------------------------------------------- #
-def _supporting_values(artifacts: List[Dict[str, Any]]) -> List[CopilotSupportingArtifact]:
+def _supporting_values(artifacts: List[Dict[str, Any]]
+                       ) -> Tuple[List[CopilotSupportingArtifact], List[str]]:
+    """``(supporting values, truncation notes)``.
+
+    Rows are capped DETERMINISTICALLY (the first ``_MAX_SUPPORTING_ROWS`` rows in
+    the order the deterministic executor produced them — never re-ranked, never
+    re-aggregated) and every cap is reported back to the caller so the Copilot
+    response can state it explicitly. Values are passed through untouched; only
+    string labels are text-normalised for the Copilot renderer.
+    """
     out: List[CopilotSupportingArtifact] = []
+    notes: List[str] = []
     for art in artifacts or []:
         kind = art.get("type")
         if kind == "kpi":
-            kpis = [{"label": k.get("label"), "value": k.get("value")}
+            kpis = [{"label": normalise_payload(k.get("label")),
+                     "value": normalise_payload(k.get("value"))}
                     for k in (art.get("kpis") or [])]
             out.append(CopilotSupportingArtifact(
-                kind="kpi", title=art.get("title"), kpis=kpis))
+                kind="kpi", title=normalise_payload(art.get("title")), kpis=kpis))
         elif kind in ("table", "chart"):
-            rows = art.get("rows") or []
-            truncated = len(rows) > _MAX_SUPPORTING_ROWS
-            rows = rows[:_MAX_SUPPORTING_ROWS]
+            all_rows = art.get("rows") or []
+            total = len(all_rows)
+            truncated = total > _MAX_SUPPORTING_ROWS
+            rows = normalise_payload(all_rows[:_MAX_SUPPORTING_ROWS])
             columns: List[str] = []
             raw_cols = art.get("columns") or []
             for c in raw_cols:
                 columns.append(c.get("key") if isinstance(c, dict) else str(c))
             if not columns and rows and isinstance(rows[0], dict):
                 columns = list(rows[0].keys())
+            title = normalise_payload(art.get("title"))
+            if truncated:
+                notes.append(
+                    f"'{title or kind}': showing the first {_MAX_SUPPORTING_ROWS} of "
+                    f"{total} rows (Copilot response limit). Totals and percentages "
+                    f"are computed over all {total} rows.")
             out.append(CopilotSupportingArtifact(
-                kind=kind, title=art.get("title"), columns=columns or None,
-                rows=rows, truncated=truncated))
-        # validation artifacts stay internal — errors surface via answer/warnings
-    return out
+                kind=kind, title=title, columns=columns or None,
+                rows=rows, truncated=truncated, totalRows=total))
+        # validation artifacts are surfaced via the typed `validation` field
+    return out, notes
 
 
 # --------------------------------------------------------------------------- #
@@ -330,30 +383,48 @@ def ask_trakt_mi(req: CopilotMiQueryRequest):
             503, "No governed live data source is configured for this deployment; "
                  "Trakt cannot answer portfolio questions from Copilot right now.")
 
-    # Delegate to the EXISTING /mi/query handler — same parser, same deterministic
-    # executor, same metric definitions. Imported lazily (app includes this router).
-    from .app import QueryRequest, query as mi_query
-
-    envelope = mi_query(QueryRequest(
-        question=req.question, portfolioId=req.portfolioId, asOfDate=req.asOfDate))
-    if not isinstance(envelope, dict):  # defensive: handler contract is a dict
+    # THE SHARED SERVICE — the same in-process call the React /mi/query route
+    # makes. Same parser, same intent routing, same active-dataset resolution,
+    # same deterministic executor, same metric/dimension/filter definitions,
+    # same validation and provenance. No alternate route, no run-id requirement
+    # for point-in-time questions, no downgrade to a simpler path.
+    envelope = mi_service.execute_governed_mi_query(mi_service.MiQueryRequest(
+        question=req.question,
+        portfolio_id=req.portfolioId,
+        as_of_date=req.asOfDate,
+        client_id=_copilot_client_id(),
+    ))
+    if not isinstance(envelope, dict):  # defensive: service contract is a dict
         return _error_json(503, "The MI Agent returned an unexpected response.")
 
     meta = envelope.get("metadata") or {}
+    supporting, truncation_notes = _supporting_values(envelope.get("artifacts") or [])
+    # A governed analytical failure is reported AS a failure — never replaced by
+    # a generic narrative and never padded with metrics the engine did not emit.
     return CopilotMiAnswer(
         ok=bool(envelope.get("ok")),
-        question=str(envelope.get("question") or req.question),
-        answer=str(envelope.get("answer") or ""),
-        error=envelope.get("error"),
-        interpreted=envelope.get("interpreted") or None,
+        question=normalise_text(str(envelope.get("question") or req.question)),
+        answer=normalise_text(str(envelope.get("answer") or "")),
+        error=normalise_payload(envelope.get("error")),
+        interpreted=normalise_payload(envelope.get("interpreted")) or None,
+        querySpec=envelope.get("spec") or None,
         reportingDate=meta.get("asOfDate") or req.asOfDate,
         datasetContext=meta.get("datasetContext"),
         portfolioId=req.portfolioId,
+        selectedClient=meta.get("selectedClient"),
+        selectedPortfolio=meta.get("selectedPortfolio"),
+        selectedRun=meta.get("selectedRun"),
         dataSourceKind=kind,
         dataSourceLabel=data_source_label(),
-        supportingValues=_supporting_values(envelope.get("artifacts") or []),
-        sourceNotes=envelope.get("sourceNotes") or [],
-        warnings=[str(w) for w in (envelope.get("warnings") or [])],
+        supportingValues=supporting,
+        validation=envelope.get("validation") or None,
+        reconciliation=envelope.get("reconciliation") or None,
+        sourceNotes=normalise_payload(envelope.get("sourceNotes") or []),
+        warnings=[normalise_text(str(w)) for w in (envelope.get("warnings") or [])],
+        diagnostics=[normalise_text(str(d)) for d in (envelope.get("diagnostics") or [])],
+        assumptions=[normalise_text(str(a)) for a in (envelope.get("assumptions") or [])],
+        truncated=bool(truncation_notes),
+        truncationNote=" ".join(truncation_notes) or None,
     )
 
 
