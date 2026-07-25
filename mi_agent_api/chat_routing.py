@@ -1079,21 +1079,28 @@ def _route_geo(question, spec_dict, *, client_id, run_id, frame_resolver,
     """Funded exposure by UK ITL3 area → a ranked bar + table, from the ITL3
     exposure engine (tape ITL3 field, else postcode-derived). Answers "largest
     geographic concentration / where is the book". Degrades honestly when the
-    tape carries no ITL3 or postcode."""
-    if frame_resolver is None or not run_id:
+    tape carries no ITL3 or postcode.
+
+    Geographic concentration is a POINT-IN-TIME question. With no run selected it
+    answers from the ACTIVE governed dataset — the frame resolver returns exactly
+    the frame the point-in-time executor would use — so it must never demand a
+    run id. Genuinely temporal geography (evolution / comparison / cohort) is a
+    different route."""
+    if frame_resolver is None:
         return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
                          answer="I can't resolve the funded book for a geographic view here.",
                          route="geo_exposure",
-                         warnings=["insufficient-data: no funded frame for the run."])
+                         warnings=["insufficient-data: no funded frame available."])
     try:
         df = frame_resolver(client_id, run_id)
     except Exception:  # noqa: BLE001 - a resolution hiccup degrades, never 500s
         df = None
-    if df is None:
+    if df is None or not len(df):
+        scope = "this run" if run_id else "the active reporting dataset"
         return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
-                         answer="I couldn't load the funded book for this run to map exposure.",
+                         answer=f"I couldn't load the funded book for {scope} to map exposure.",
                          route="geo_exposure",
-                         warnings=["insufficient-data: no funded frame for the run."])
+                         warnings=[f"insufficient-data: no funded frame for {scope}."])
 
     result = geo_mod.exposure_by_itl3(df)
     if not result.get("available"):
