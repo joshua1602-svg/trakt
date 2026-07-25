@@ -1,0 +1,71 @@
+# Approved onboarding contract — client alias overlay
+# ---------------------------------------------------
+# Portfolio:  ALP_ORIGINATION  (alp_origination, direct)
+# Client:     Alderbridge Lending Platform  [SYNTHETIC DEMONSTRATION DATA]
+#
+# These are the client's OWN source-header vocabulary, resolved to the Trakt
+# canonical model as part of this portfolio's approved onboarding contract. They
+# are layered on top of the global alias files at Gate 1 via
+# `--extra-aliases-dir` and are scoped to this portfolio only — the global
+# mapper is deliberately left untouched.
+#
+# Each entry below corresponds to a mapping decision the Onboarding Agent
+# surfaced for review; the `note` records why the decision was made.
+
+loan_identifier:
+  aliases:
+    - Loan Reference
+  note: >-
+    The lender's primary loan key. Not a global alias because "reference" is
+    ambiguous across clients (it can mean a broker or case reference).
+
+current_valuation_amount:
+  aliases:
+    - Property Value
+  note: >-
+    OVERRIDES the global alias, which resolves "Property Value" to
+    property_portfolio_value_at_securitisation_date (a pool-level Annex field).
+    For this extract the column is the per-loan current property valuation, so
+    the client contract pins it to current_valuation_amount.
+
+original_valuation_amount:
+  aliases:
+    - Original Property Value
+  note: The valuation at completion, used for original LTV.
+
+original_principal_balance:
+  aliases:
+    - Original Advance
+  note: >-
+    Initial lump-sum advance at completion. "Advance" is client vocabulary for
+    the originated principal.
+
+origination_date:
+  aliases:
+    - Completion Date
+  note: >-
+    Lifetime-mortgage completion date = origination date. Distinct from the
+    application or offer date, which this extract does not carry.
+
+youngest_borrower_age:
+  aliases:
+    - Customer Age
+  note: >-
+    Single-column age. Confirmed at onboarding as the YOUNGEST borrower's age
+    (the NNEG-relevant life), not the primary applicant's.
+
+collateral_geography:
+  aliases:
+    - Region
+  note: >-
+    OVERRIDES the global alias, which resolves bare "Region" to
+    geographic_region_classification (the NUTS classification YEAR). This column
+    carries a readable ITL1 region label, so it belongs in the analytics display
+    field. The regulatory NUTS codes are derived from Post Code by the transform.
+
+current_interest_rate:
+  aliases:
+    - Rate
+  note: >-
+    Fixed lifetime roll-up rate, annual, percentage points. Confirmed as the
+    current contractual rate (this book has no variable-rate loans).

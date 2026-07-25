@@ -30,8 +30,19 @@ LENS_DIRECT = "direct"
 LENS_ACQUIRED = "acquired"
 LENS_COHORT = "cohort"
 
-# An exact source-cohort id, e.g. direct_001 / acquired_002.
+# An exact source-cohort id, e.g. direct_001 / acquired_002. Used for
+# NATURAL-LANGUAGE detection, where a narrow pattern is what keeps an unrelated
+# snake_case token in a question from being read as a portfolio id.
 _COHORT_ID_RE = re.compile(r"\b((?:direct|acquired)_\d+)\b", re.IGNORECASE)
+
+# Any source_portfolio_id the provenance contract allows — a lowercase slug (see
+# engine/provenance.py::_ID_RE). Used ONLY for an EXPLICIT selection (the UI
+# dropdown / API field), where the caller has named a portfolio outright and
+# there is nothing to disambiguate. Without this, a managed-service client whose
+# portfolio ids do not use the direct_/acquired_ prefix convention (e.g.
+# alp_origination) could be listed by /mi/source-portfolios yet not be selectable
+# in the chat, which is the inconsistency this pattern removes.
+_SELECTABLE_COHORT_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$")
 
 # Phrase → lens. Order matters only within a family; matching is keyword-based.
 _DIRECT_TERMS = (
@@ -219,6 +230,9 @@ def lens_from_selection(value: Any) -> PortfolioLens:
     if sel == LENS_ACQUIRED:
         return _type_lens(LENS_ACQUIRED)
     if _COHORT_ID_RE.fullmatch(sel) or _COHORT_ID_RE.search(" " + sel + " "):
+        return _cohort_lens(sel)
+    # An explicit selection may be any provenance-valid source_portfolio_id.
+    if _SELECTABLE_COHORT_ID_RE.fullmatch(sel):
         return _cohort_lens(sel)
     return total_lens()
 

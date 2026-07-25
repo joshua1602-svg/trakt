@@ -1,0 +1,110 @@
+# Approved onboarding contract — client alias overlay
+# ---------------------------------------------------
+# Portfolio:  ALP_ACQUIRED  (alp_acquired, acquired)
+# Client:     Alderbridge Lending Platform  [SYNTHETIC DEMONSTRATION DATA]
+#
+# This portfolio is an acquired back book serviced by a third-party servicer, so
+# the extract arrives in the SERVICER's vocabulary — a genuinely different
+# schema from the origination extract. The Onboarding Agent resolved both into
+# the same canonical model; this file is the acquired book's half of that
+# contract.
+#
+# Scoped to this portfolio only (`--extra-aliases-dir`); the global mapper is
+# untouched.
+
+loan_identifier:
+  aliases:
+    - Account Number
+  note: >-
+    The servicer's account number is the stable loan key for this book. Resolved
+    here rather than globally because "Account Number" means a KFI/pipeline
+    application key in the global onboarding aliases.
+
+current_principal_balance:
+  aliases:
+    - Principal Outstanding
+  note: >-
+    Capital plus capitalised roll-up interest at the reporting date. The
+    transform derives current_outstanding_balance from this (accrued interest is
+    nil on this book — interest is capitalised monthly, not accrued separately).
+
+current_valuation_amount:
+  aliases:
+    - Indexed Valuation
+  note: >-
+    Servicer-indexed property valuation at the reporting date (original
+    valuation rolled forward on a regional index). Confirmed at onboarding as
+    the current valuation basis for current LTV.
+
+original_valuation_amount:
+  aliases:
+    - Valuation At Origination
+  note: The vendor's valuation at completion, used for original LTV.
+
+original_principal_balance:
+  aliases:
+    - Initial Drawdown
+  note: >-
+    Initial advance at completion under the servicer's naming. This book has no
+    drawdown facilities, so initial drawdown equals the original principal.
+
+origination_date:
+  aliases:
+    - Origination
+  note: Bare "Origination" is the completion date in the servicer's schema.
+
+youngest_borrower_age:
+  aliases:
+    - Youngest Borrower
+  note: >-
+    The servicer reports the youngest life's age directly, matching the Trakt
+    canonical definition with no transformation required.
+
+collateral_geography:
+  aliases:
+    - Geographic Classification
+  note: >-
+    Readable ITL1 region label in the servicer's vocabulary. Mapped to the
+    analytics display field; regulatory NUTS codes are derived from the property
+    postcode by the transform, exactly as for the origination book.
+
+account_status:
+  aliases:
+    - Account State
+  note: >-
+    Servicer status vocabulary (Open / Redeemed / In Possession). Normalised to
+    the canonical account_status enum by the transform's enum layer.
+
+data_cut_off_date:
+  aliases:
+    - Reporting Cut-Off
+  note: The servicer's extract date, confirmed as the month-end reporting date.
+
+redemption_date:
+  aliases:
+    - Closure Date
+  note: >-
+    Date the account closed. Present only for redeemed accounts; confirmed at
+    onboarding as the redemption date, not the maturity date.
+
+interest_rate_type:
+  aliases:
+    - Rate Basis
+  note: >-
+    Referred for review at onboarding — "basis" can mean the rate type or the
+    day-count basis. Confirmed with the client as the rate TYPE (fixed for life).
+
+occupancy_type:
+  aliases:
+    - Occupancy
+  note: >-
+    Referred for review at onboarding (bare "Occupancy" did not resolve above the
+    confidence threshold). Confirmed as the canonical occupancy type.
+
+amortisation_type:
+  aliases:
+    - Repayment Profile
+  note: >-
+    The servicer describes the repayment mechanics rather than naming the
+    amortisation type. Confirmed as interest roll-up (no contractual repayment
+    before redemption), which is the canonical amortisation type for this product.

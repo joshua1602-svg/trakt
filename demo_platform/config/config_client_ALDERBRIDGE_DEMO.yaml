@@ -1,0 +1,83 @@
+# =====================================================================
+# SYNTHETIC DEMONSTRATION DATA — NOT A REAL CUSTOMER
+# =====================================================================
+# Master client config for the fictional "Alderbridge Lending Platform"
+# used by the Trakt product demonstration (demo_platform/).
+#
+# Alderbridge does not exist. Every value here is invented for the
+# demonstration. This config is isolated from config/client/* so it can never be
+# picked up by a real run.
+#
+# Layer 3 (master client config) — same shape as config/client/config_client_ERM_UK.yaml.
+
+client:
+  client_id: alderbridge
+  display_name: "Alderbridge Lending Platform"
+  environment: demonstration
+  synthetic: true
+  synthetic_notice: "SYNTHETIC DEMONSTRATION DATA — NOT A REAL CUSTOMER"
+
+portfolio:
+  asset_class: equity_release
+  country: GB
+  base_currency: GBP
+  # Deliberately NOT set: the reporting date must come from the source extract's
+  # own cut-off column, so each monthly file carries its own period. A static
+  # override here would collapse all three periods onto one date.
+  static_reporting_date: null
+
+# The demonstration runs the MI operating model only. ESMA delivery is a separate
+# governed capability and is not exercised by the recurring demo run (see
+# demo-video/README.md → Limitations).
+default_regime: ESMA_Annex2
+supported_regimes:
+  - ESMA_Annex2
+regime: ESMA_Annex2
+
+pipeline:
+  loan_engine_enabled: false
+  mi_enabled: true
+  esma_enabled: false
+
+pipeline_persistence:
+  enabled: false
+
+# --- DEFAULTS -------------------------------------------------------
+# Synthetic originator identity. The LEI below is a structurally valid but
+# deliberately unallocated test value; it is not issued to any legal entity.
+defaults:
+  originator_legal_entity_identifier: "SYNTHETICDEMO00000000"
+  originator_name: "Alderbridge Lending Platform (synthetic)"
+  originator_establishment_country: "GB"
+
+# --- TRANSFORMATIONS ------------------------------------------------
+# Lifetime mortgages on this platform capitalise interest monthly, so the
+# outstanding balance and the principal balance are the same figure. Copying one
+# to the other keeps both canonical fields populated and reconciling.
+transformations:
+  copy_if_missing:
+    current_principal_balance: current_outstanding_balance
+
+# --- ENRICHMENT -----------------------------------------------------
+# Postcode -> ITL3 enrichment is ON. The generator draws each loan's postcode
+# district from inside the ITL1 region the loan claims, so the derived ITL3 code
+# and the readable region label always agree.
+enrichment:
+  enable:
+    uk_nuts3: true
+  uk_nuts3:
+    nuts_csv_path: "uk_itl_master_lookup_v2.csv"
+    postcode_columns: [postcode, property_postcode, property_post_code]
+    target_field: geographic_region_collateral
+    classification_year: 2021
+    fill_only_if_blank: true
+
+nuts_classification_year: 2021
+
+# --- MI & DISPLAY ---------------------------------------------------
+mi:
+  branding:
+    app_title: "Alderbridge Portfolio MI"
+    theme:
+      primary_color: "#232D55"
+      secondary_color: "#919DD1"
