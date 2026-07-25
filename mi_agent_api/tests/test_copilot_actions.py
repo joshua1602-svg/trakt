@@ -299,3 +299,93 @@ def test_download_token_tamper_and_expiry(monkeypatch, copilot_auth_off):
     r = client.get("/v1/copilot/artifacts/download", params={"token": token})
     assert r.status_code == 403
     assert r.json()["ok"] is False
+
+
+# --------------------------------------------------------------------------- #
+# Governed artifact retrieval — client isolation + credential hygiene
+# --------------------------------------------------------------------------- #
+def test_download_token_carries_no_credentials_or_paths(deck_root):
+    """The token is an opaque, signed reference — never a path or a secret."""
+    import base64
+
+    r = client.get("/v1/copilot/artifacts/latest/investor-deck")
+    token = r.json()["downloadUrl"].split("token=", 1)[1]
+    payload = token.split(".", 1)[0]
+    decoded = base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)).decode()
+
+    assert set(json.loads(decoded)) == {"k", "c", "e"}   # kind, client, expiry
+    for secret in ("AccountKey", "DefaultEndpointsProtocol", "SharedAccessSignature",
+                   "blob.core.windows.net", str(deck_root)):
+        assert secret.lower() not in decoded.lower()
+        assert secret.lower() not in r.text.lower()
+
+
+def test_download_is_scoped_to_the_signed_client(deck_root, monkeypatch):
+    """A token signed for one client must not serve another client's deck: the
+    client travels inside the signed payload, so it cannot be swapped."""
+    from mi_agent_api.copilot_actions import make_download_token
+
+    token, _exp = make_download_token("deck", "other_client")
+    r = client.get("/v1/copilot/artifacts/download", params={"token": token})
+    # deck_root only contains client_001, so the other client resolves to nothing.
+    assert r.status_code == 404
+    assert r.json()["ok"] is False
+
+
+def test_download_token_kind_cannot_be_repurposed(deck_root, tape_dir):
+    from mi_agent_api.copilot_actions import make_download_token
+
+    token, _exp = make_download_token("something_else", "client_001")
+    r = client.get("/v1/copilot/artifacts/download", params={"token": token})
+    assert r.status_code == 403
+
+
+def test_tape_refuses_a_client_mismatch(monkeypatch, tmp_path, copilot_auth_off):
+    """Client isolation: a platform URI naming a different client than the
+    deployment's is a misconfiguration and must fail closed, not serve a tape."""
+    monkeypatch.setenv("MI_AGENT_CLIENT_ID", "ERE")
+    monkeypatch.setenv("MI_AGENT_PLATFORM_URI",
+                       "blob://processed-v2/platform/OTHER/latest/"
+                       "platform_canonical_typed.csv")
+    r = client.get("/v1/copilot/artifacts/latest/canonical-tape")
+    assert r.status_code == 404
+    assert r.json()["ok"] is False
+
+
+# --------------------------------------------------------------------------- #
+# askTraktMi — governed envelope parity fields + explicit truncation
+# --------------------------------------------------------------------------- #
+def test_mi_answer_carries_the_full_governed_envelope(live_dataset):
+    r = client.post("/v1/copilot/mi/query",
+                    json={"question": "Show balance by LTV bucket."})
+    body = r.json()
+    assert body["ok"] is True, body
+    # The analytical fields the React channel gets, not a reduced view.
+    assert body["querySpec"]["metric"]
+    assert body["querySpec"]["dimension"] == "ltv_bucket"
+    assert body["validation"] is not None
+    assert body["selectedClient"]
+    # A point-in-time question is never reported as run-scoped.
+    assert body["selectedRun"] is None
+    assert body["truncated"] is False and body["truncationNote"] is None
+
+
+def test_mi_row_truncation_is_explicit_and_deterministic(live_dataset, monkeypatch):
+    import mi_agent_api.copilot_actions as ca
+
+    monkeypatch.setattr(ca, "_MAX_SUPPORTING_ROWS", 3)
+    r = client.post("/v1/copilot/mi/query",
+                    json={"question": "Show balance by collateral region."})
+    body = r.json()
+    table = next(a for a in body["supportingValues"] if a["kind"] in ("table", "chart"))
+    assert table["truncated"] is True
+    assert len(table["rows"]) == 3
+    assert table["totalRows"] > 3
+    assert body["truncated"] is True
+    assert "first 3 of" in body["truncationNote"]
+    # Truncation is a display cap only — it never re-ranks or re-aggregates.
+    react = client.post("/mi/query",
+                        json={"question": "Show balance by collateral region."}).json()
+    react_rows = next(a for a in react["artifacts"]
+                      if a["type"] in ("table", "chart"))["rows"]
+    assert table["rows"] == react_rows[:3]
