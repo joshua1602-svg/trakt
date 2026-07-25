@@ -304,8 +304,11 @@ def _route_portfolio_summary(question, spec, spec_dict, *, client_id, run_id,
 
     regions = summary.get("topRegions") or []
     if regions:
+        # The answer names only the top few so it stays executive-length; the
+        # supporting chart carries the fuller ranking.
         named = [f"{r['region']} ({_gbp(r['balance'])}, "
-                 f"{_pct_points((r['share'] or 0) * 100)})" for r in regions]
+                 f"{_pct_points((r['share'] or 0) * 100)})"
+                 for r in regions[:movement_mod.NAMED_REGIONS]]
         parts.append(f"The largest regional exposures are {_sentence_join(named)}.")
 
     cohorts = summary.get("cohortBalances") or {}
@@ -335,7 +338,8 @@ def _route_portfolio_summary(question, spec, spec_dict, *, client_id, run_id,
     if regions:
         artifacts.append(_chart_artifact(
             "Funded balance by region", chart_type="bar", x_key="region",
-            rows=[{"region": r["region"], "value": r["balance"]} for r in regions],
+            rows=[{"region": r["region"], "value": r["balance"], "share": r["share"]}
+                  for r in regions],
             series=[{"key": "value", "label": "Funded balance", "color": _PALETTE[0]}],
             value_format="gbp", spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of,
             display_hints={"value": {"format": "gbp", "scale": None}},

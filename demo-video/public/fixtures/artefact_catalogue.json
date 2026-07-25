@@ -23,10 +23,10 @@
     "title": "Validation report",
     "format": "CSV + JSON",
     "reportingDate": "2026-06-30",
-    "rowsValidated": 0,
+    "rowsValidated": 11035,
     "canonicalValidation": "Passed",
     "businessRuleExceptions": 75,
-    "exceptionRatePct": null,
+    "exceptionRatePct": 0.68,
     "rulesTriggered": [
       {
         "rule": "LTV001",
@@ -45,7 +45,13 @@
       {
         "portfolio": "ALP_ORIGINATION",
         "label": "ALP Origination Book",
-        "rows": 0,
+        "rows": 7126,
+        "gate3bSummary": {
+          "total_fields_affected": 2,
+          "blocking_count": 1,
+          "review_count": 3,
+          "info_count": 0
+        },
         "canonicalErrors": 0,
         "canonicalWarnings": 1,
         "businessRuleExceptions": 54,
@@ -73,7 +79,13 @@
       {
         "portfolio": "ALP_ACQUIRED",
         "label": "ALP Acquired Back Book",
-        "rows": 0,
+        "rows": 3909,
+        "gate3bSummary": {
+          "total_fields_affected": 2,
+          "blocking_count": 1,
+          "review_count": 3,
+          "info_count": 0
+        },
         "canonicalErrors": 0,
         "canonicalWarnings": 1,
         "businessRuleExceptions": 21,
@@ -109,7 +121,7 @@
     "format": "PowerPoint (PPTX)",
     "slides": 18,
     "sizeBytes": 1297654,
-    "contentSha256": "sha256:176edb76f55874b2ef59426643a505b3c15b94437696ece3841e68a8c675b9c2",
+    "contentSha256": "sha256:2da9a4665150a1e8f78359ffd1f27e7bb1dc2d01f1749f740095ce16e87cf3c9",
     "reportingPeriod": "2026-06",
     "path": "/home/user/trakt/demo_platform/workspace/artefacts/investor_deck/investor_pack.pptx",
     "publishedTo": "/home/user/trakt/demo_platform/workspace/decks/alderbridge/latest/investor_pack.pptx",
@@ -136,12 +148,31 @@
     ]
   },
   "riskMonitor": {
-    "available": false,
+    "available": true,
     "kind": "risk_monitoring",
     "title": "Concentration risk monitor",
     "format": "JSON",
-    "limitCount": 0,
-    "statusCounts": {},
+    "limitCount": 12,
+    "testsPassed": 8,
+    "breaches": 1,
+    "unavailableTests": 3,
+    "fundedDataAvailable": true,
+    "limitsSource": "Schedule 8 document",
+    "largestConcentration": {
+      "label": "WA current LTV",
+      "actualValue": 43.16,
+      "limitId": "ltv_limit_current_loan_to_value"
+    },
+    "closestHeadroom": {
+      "label": "Borrowers aged over 85",
+      "headroom": -0.24,
+      "limitId": "age_limit_youngest_borrower_age"
+    },
+    "statusCounts": {
+      "green": 8,
+      "unavailable": 3,
+      "red": 1
+    },
     "reportingDate": "2026-06-30",
     "producedBy": "mi_agent_api/risk_limits.py (mi_agent/risk_monitor)",
     "payload": {
@@ -729,7 +760,7 @@
         "needsReviewCount": 0
       }
     },
-    "reason": "no risk limits are configured for this client"
+    "reason": null
   },
   "regulatoryOutput": {
     "available": false,
@@ -791,135 +822,9 @@
         "contentSha256": "sha256:93eb40fee61efa903b71e78b071d8079ac235c7ead1cb5c88387bf499582dc10"
       }
     ],
-    "gateExecution": [
-      {
-        "portfolio": "ALP_ORIGINATION",
-        "period": "2026-04",
-        "rows": 7058,
-        "balance": 1364011072.81,
-        "gates": [
-          "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
-          "[Gate 2] Canonical validation............ OK 7,058 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
-          "[Gate 2.5] Data lineage.................. OK",
-          "[Gate 3] Business rules.................. Warn 3 rules | 48 failures",
-          "[Gate 3b] Validation aggregation.......... OK -> ALP_ORIGINATION_20260430_SYNTHETIC_field_summary.csv",
-          "[MI] Dashboard-ready canonical produced."
-        ],
-        "elapsedSeconds": 10.94
-      },
-      {
-        "portfolio": "ALP_ACQUIRED",
-        "period": "2026-04",
-        "rows": 3938,
-        "balance": 568299918.39,
-        "gates": [
-          "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
-          "[Gate 2] Canonical validation............ OK 3,938 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
-          "[Gate 2.5] Data lineage.................. OK",
-          "[Gate 3] Business rules.................. Warn 3 rules | 30 failures",
-          "[Gate 3b] Validation aggregation.......... OK -> ALP_ACQUIRED_20260430_SYNTHETIC_field_summary.csv",
-          "[MI] Dashboard-ready canonical produced."
-        ],
-        "elapsedSeconds": 9.11
-      },
-      {
-        "portfolio": "ALP_ORIGINATION",
-        "period": "2026-05",
-        "rows": 7089,
-        "balance": 1374047049.17,
-        "gates": [
-          "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
-          "[Gate 2] Canonical validation............ OK 7,089 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
-          "[Gate 2.5] Data lineage.................. OK",
-          "[Gate 3] Business rules.................. Warn 3 rules | 50 failures",
-          "[Gate 3b] Validation aggregation.......... OK -> ALP_ORIGINATION_20260531_SYNTHETIC_field_summary.csv",
-          "[MI] Dashboard-ready canonical produced."
-        ],
-        "elapsedSeconds": 11.66
-      },
-      {
-        "portfolio": "ALP_ACQUIRED",
-        "period": "2026-05",
-        "rows": 3924,
-        "balance": 572780391.43,
-        "gates": [
-          "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
-          "[Gate 2] Canonical validation............ OK 3,924 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
-          "[Gate 2.5] Data lineage.................. OK",
-          "[Gate 3] Business rules.................. Warn 3 rules | 32 failures",
-          "[Gate 3b] Validation aggregation.......... OK -> ALP_ACQUIRED_20260531_SYNTHETIC_field_summary.csv",
-          "[MI] Dashboard-ready canonical produced."
-        ],
-        "elapsedSeconds": 9.69
-      },
-      {
-        "portfolio": "ALP_ORIGINATION",
-        "period": "2026-06",
-        "rows": 7126,
-        "balance": 1385508582.98,
-        "gates": [
-          "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
-          "[Gate 2] Canonical validation............ OK 7,126 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
-          "[Gate 2.5] Data lineage.................. OK",
-          "[Gate 3] Business rules.................. Warn 3 rules | 54 failures",
-          "[Gate 3b] Validation aggregation.......... OK -> ALP_ORIGINATION_20260630_SYNTHETIC_field_summary.csv",
-          "[MI] Dashboard-ready canonical produced."
-        ],
-        "elapsedSeconds": 12.31
-      },
-      {
-        "portfolio": "ALP_ACQUIRED",
-        "period": "2026-06",
-        "rows": 3909,
-        "balance": 579377675.23,
-        "gates": [
-          "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
-          "[Gate 2] Canonical validation............ OK 3,909 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
-          "[Gate 2.5] Data lineage.................. OK",
-          "[Gate 3] Business rules.................. Warn 3 rules | 21 failures",
-          "[Gate 3b] Validation aggregation.......... OK -> ALP_ACQUIRED_20260630_SYNTHETIC_field_summary.csv",
-          "[MI] Dashboard-ready canonical produced."
-        ],
-        "elapsedSeconds": 9.79
-      }
-    ],
-    "assembledOutputs": [
-      {
-        "period": "2026-04",
-        "reportingDate": "2026-04-30",
-        "rows": 10996,
-        "balance": 1932310991.2,
-        "contentSha256": "sha256:49f84c43bb8295637ba0c5164a86e509b0f0748eeab00d025ba3cfe5d5a2ad6c",
-        "uri": "blob://processed/platform/alderbridge/2026-04-30"
-      },
-      {
-        "period": "2026-05",
-        "reportingDate": "2026-05-31",
-        "rows": 11013,
-        "balance": 1946827440.6,
-        "contentSha256": "sha256:2de7c2518a32d78dea9c68c6d6e03fc9f595b09f14b751c464e36bad9e038b89",
-        "uri": "blob://processed/platform/alderbridge/2026-05-31"
-      },
-      {
-        "period": "2026-06",
-        "reportingDate": "2026-06-30",
-        "rows": 11035,
-        "balance": 1964886258.21,
-        "contentSha256": "sha256:035891d43d2ec65c7dc27b3f85fa1fa4e400468b9012eb37ce5d13b5dc616ef0",
-        "uri": "blob://processed/platform/alderbridge/2026-06-30"
-      }
-    ],
-    "reconciliation": {
-      "current_period": "2026-06",
-      "prior_period": "2026-05",
-      "current_total_balance": 1964886258.21,
-      "prior_total_balance": 1946827440.6,
-      "consolidated_movement": 18058817.61,
-      "per_portfolio_movement": {
-        "alp_acquired": 6597283.8,
-        "alp_origination": 11461533.81
-      }
-    },
+    "gateExecution": [],
+    "assembledOutputs": [],
+    "reconciliation": {},
     "provenanceFields": [
       "source_portfolio_id",
       "source_portfolio_type",

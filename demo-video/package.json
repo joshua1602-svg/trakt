@@ -1,0 +1,33 @@
+{
+  "name": "trakt-demo-video",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Trakt product demonstration film \u2014 Remotion project. Renders entirely from the synthetic fixtures produced by demo_platform/run_demo.py. SYNTHETIC DEMONSTRATION DATA \u2014 NOT A REAL CUSTOMER.",
+  "scripts": {
+    "preview": "remotion studio src/index.ts",
+    "safety": "node scripts/safety-scan.mjs",
+    "render": "npm run safety && node scripts/render.mjs --preset=master && npm run script",
+    "render:web": "npm run safety && node scripts/render.mjs --preset=web",
+    "render:teaser": "npm run safety && node scripts/render.mjs --preset=teaser",
+    "render:all": "npm run safety && node scripts/render.mjs --preset=master --preset=web --preset=teaser && npm run script",
+    "stills": "npm run safety && node scripts/stills.mjs",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "script": "node scripts/generate-script.mjs"
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.499",
+    "@remotion/cli": "4.0.499",
+    "@remotion/renderer": "4.0.499",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "4.0.499"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.9"
+  }
+}

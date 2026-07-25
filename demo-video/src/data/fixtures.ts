@@ -1,0 +1,304 @@
+/**
+ * The film's data layer.
+ *
+ * Every figure the video shows is read from the fixtures written by
+ * `python -m demo_platform.run_demo`. This module does not compute, derive or
+ * reformat any business value — it selects. If a number is not in the fixture, it
+ * does not appear on screen.
+ *
+ * The fixtures are imported (not fetched), so the bundle is self-contained and a
+ * render never touches the network or the filesystem at frame time.
+ */
+
+import metricsFixture from "../../public/fixtures/demo_metrics.json";
+import artefactFixture from "../../public/fixtures/artefact_catalogue.json";
+import assertionFixture from "../../public/fixtures/assertion_report.json";
+import safetyFixture from "../../public/fixtures/safety_report.json";
+
+// --------------------------------------------------------------------------- //
+// Shapes (only the fields the film reads are typed)
+// --------------------------------------------------------------------------- //
+export interface PortfolioNarrative {
+  key: string;
+  source_portfolio_id: string;
+  source_portfolio_type: string;
+  display_id: string;
+  label: string;
+  short_label: string;
+  description: string;
+  schema_name: string;
+  acquisition_date: string | null;
+  seller_name: string | null;
+}
+
+export interface PeriodNarrative {
+  run_id: string;
+  reporting_date: string;
+  period: string;
+  label: string;
+  short_label: string;
+  role: string;
+}
+
+export interface SourceColumn {
+  header: string;
+  canonical_field: string | null;
+  resolution: string;
+  note: string;
+}
+
+export interface SourceSchema {
+  name: string;
+  system_of_record: string;
+  description: string;
+  headers: string[];
+  columns: SourceColumn[];
+}
+
+export interface LensMetrics {
+  funded_balance: number | null;
+  loan_count: number | null;
+  wa_ltv_points: number | null;
+  wa_interest_rate: number | null;
+  avg_borrower_age: number | null;
+}
+
+export interface RegionExposure {
+  region: string;
+  balance: number;
+  share: number | null;
+}
+
+export interface RegionContribution {
+  region: string;
+  start: number;
+  end: number;
+  delta: number;
+}
+
+export interface CohortMovement {
+  id: string;
+  label: string;
+  current: number;
+  prior: number;
+  delta: number;
+}
+
+export interface MovementBlock {
+  available: boolean;
+  currentPeriod: string;
+  priorPeriod: string;
+  currentReportingDate: string;
+  priorReportingDate: string;
+  current: LensMetrics;
+  prior: LensMetrics;
+  delta: LensMetrics;
+  regionContributions: RegionContribution[];
+  primaryRegion: RegionContribution | null;
+  runnerUpRegion: RegionContribution | null;
+  primaryRegionShare: number | null;
+  primaryRegionLead: number | null;
+  completionsBalanceInMonth: number | null;
+  completionsBalanceInPrimaryRegion: number | null;
+  completionsShareOfPrimaryRegion: number | null;
+  completionsEvidenced: boolean;
+  cohortMovements: CohortMovement[];
+  topRegions: RegionExposure[];
+}
+
+export interface SummaryBlock {
+  available: boolean;
+  period: string;
+  reportingDate: string;
+  metrics: LensMetrics;
+  topRegions: RegionExposure[];
+  cohorts: { id: string; label: string }[];
+  cohortBalances: Record<string, number>;
+  periodCount: number;
+}
+
+export interface SeriesPoint {
+  period: string;
+  reportingDate: string;
+  loanCount: number | null;
+  fundedBalance: number | null;
+  waCurrentLtvPoints: number | null;
+  waInterestRate: number | null;
+  avgBorrowerAge: number | null;
+}
+
+export interface Kpi {
+  id: string;
+  label: string;
+  value: string;
+  format: string;
+  raw: number | null;
+  available: boolean;
+}
+
+export interface ChatArtifact {
+  type: string;
+  title?: string;
+  description?: string;
+  kpis?: { label: string; value: string }[];
+  chartType?: string;
+  xKey?: string;
+  rows?: Record<string, unknown>[];
+  series?: { key: string; label: string; color?: string }[];
+  columns?: { key: string; label: string; align?: string; format?: string }[];
+}
+
+export interface ChatTurn {
+  question: string;
+  answer: string;
+  artifacts: ChatArtifact[];
+  route?: string | null;
+}
+
+export interface ArtefactEntry {
+  available: boolean;
+  kind?: string;
+  title?: string;
+  fileName?: string;
+  format?: string;
+  rows?: number;
+  columns?: number;
+  slides?: number;
+  sizeBytes?: number;
+  reason?: string | null;
+  note?: string;
+  [key: string]: unknown;
+}
+
+// --------------------------------------------------------------------------- //
+// Accessors
+// --------------------------------------------------------------------------- //
+const F = metricsFixture as unknown as {
+  synthetic_notice: string;
+  narrative: {
+    synthetic_banner: string;
+    client: { client_id: string; display_name: string; short_name: string };
+    portfolios: PortfolioNarrative[];
+    periods: PeriodNarrative[];
+    primary_movement_region: string;
+  };
+  schemas: Record<string, SourceSchema>;
+  metrics: {
+    client: { id: string; displayName: string; shortName: string };
+    currentPeriod: { period: string; reportingDate: string; label: string };
+    priorPeriod: { period: string; reportingDate: string; label: string };
+    lenses: Record<
+      string,
+      { label: string; summary: SummaryBlock; movement: MovementBlock; series: SeriesPoint[] }
+    >;
+  };
+  dashboard: {
+    snapshots: { portfolios: { client_id: string; label: string; runs: { run_id: string; reporting_date: string }[] }[] };
+    sourcePortfolios: { lenses: { id: string; kind: string; label: string }[] };
+    fundedSnapshot: { kpis: Kpi[]; loan_count: number; current_outstanding_balance: number };
+    geoExposure: { areas: { itl3_name?: string; balance?: number; share?: number }[]; areaCount: number };
+    dataSource: { kind: string; name: string };
+  };
+  miAgent: { questions: string[]; turns: ChatTurn[] };
+  copilot: {
+    agentName: string;
+    actions: string[];
+    answers: { question?: string; answer: string; reportingDate?: string | null }[];
+    artefactAction: {
+      fileName: string;
+      reportingPeriod: string;
+      downloadUrl: string;
+      expiresInSeconds: number;
+    } | null;
+    artefactQuestion: string;
+  };
+};
+
+export const SYNTHETIC_NOTICE = F.synthetic_notice;
+export const CLIENT = F.metrics.client;
+export const PORTFOLIOS = F.narrative.portfolios;
+export const PERIODS = F.narrative.periods;
+export const SCHEMAS = F.schemas;
+export const CURRENT_PERIOD = F.metrics.currentPeriod;
+export const PRIOR_PERIOD = F.metrics.priorPeriod;
+export const PRIMARY_REGION = F.narrative.primary_movement_region;
+
+export const TOTAL = F.metrics.lenses.total;
+export const SUMMARY = TOTAL.summary;
+export const MOVEMENT = TOTAL.movement;
+export const SERIES = TOTAL.series;
+
+export const DASHBOARD = F.dashboard;
+export const MI_TURNS = F.miAgent.turns;
+export const COPILOT = F.copilot;
+
+export const ARTEFACTS = artefactFixture as unknown as Record<string, ArtefactEntry>;
+export const ASSERTIONS = assertionFixture as unknown as {
+  ok: boolean;
+  checksRun: number;
+  checksPassed: number;
+  metrics: Record<string, unknown>;
+};
+export const SAFETY = safetyFixture as unknown as {
+  ok: boolean;
+  filesScanned: number;
+  findingCount: number;
+};
+
+/** One portfolio's narrative record, by storyboard key ("A" | "B"). */
+export const portfolio = (key: string): PortfolioNarrative => {
+  const found = PORTFOLIOS.find((p) => p.key === key);
+  if (!found) throw new Error(`No demo portfolio with key ${key}`);
+  return found;
+};
+
+/** One portfolio's source schema. */
+export const schemaFor = (key: string): SourceSchema => {
+  const p = portfolio(key);
+  const schema = SCHEMAS[p.schema_name];
+  if (!schema) throw new Error(`No source schema ${p.schema_name}`);
+  return schema;
+};
+
+/** The per-portfolio lens block, by storyboard key. */
+export const lens = (key: string) => {
+  const p = portfolio(key);
+  const found = F.metrics.lenses[p.source_portfolio_id];
+  if (!found) throw new Error(`No lens metrics for ${p.source_portfolio_id}`);
+  return found;
+};
+
+/** The movement contribution for one portfolio. */
+export const contribution = (key: string): CohortMovement => {
+  const p = portfolio(key);
+  const found = MOVEMENT.cohortMovements.find((c) => c.id === p.source_portfolio_id);
+  if (!found) throw new Error(`No movement for ${p.source_portfolio_id}`);
+  return found;
+};
+
+/** A named MI Agent conversation turn (0-indexed). */
+export const miTurn = (index: number): ChatTurn => {
+  const turn = MI_TURNS[index];
+  if (!turn) throw new Error(`No MI Agent turn ${index}`);
+  return turn;
+};
+
+/** The artifact of a given type from a turn, if present. */
+export const turnArtifact = (
+  turn: ChatTurn,
+  type: string,
+  titleContains?: string,
+): ChatArtifact | undefined =>
+  turn.artifacts.find(
+    (a) =>
+      a.type === type &&
+      (!titleContains ||
+        (a.title ?? "").toLowerCase().includes(titleContains.toLowerCase())),
+  );
+
+/** The Copilot answer for a question index. */
+export const copilotAnswer = (index: number): string => {
+  const a = COPILOT.answers[index];
+  if (!a) throw new Error(`No Copilot answer ${index}`);
+  return a.answer;
+};

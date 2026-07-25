@@ -93,7 +93,12 @@ _PATTERN_RULES: List[Rule] = [
 ]
 
 #: Files that may legitimately contain a pattern hit because they DEFINE the rules.
-_SELF_REFERENTIAL = {"safety.py", "safety_report.json", "SAFETY.md"}
+#: (Both scanners describe the same credential shapes, so each one's source text
+#: matches the other's patterns. Excluding them is not a loophole: neither file
+#: carries data, and every file that DOES carry data is still scanned.)
+_SELF_REFERENTIAL = {
+    "safety.py", "safety_report.json", "SAFETY.md", "safety-scan.mjs",
+}
 
 #: Text extensions worth scanning. Binary artefacts are hashed, not parsed.
 _TEXT_SUFFIXES = {".json", ".csv", ".txt", ".md", ".yaml", ".yml", ".ts", ".tsx",

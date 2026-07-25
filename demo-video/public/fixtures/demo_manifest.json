@@ -1901,7 +1901,7 @@
         "canonical_output": "/home/user/trakt/demo_platform/workspace/runs/alp_origination/mi_2026_04/out/ALP_ORIGINATION_20260430_SYNTHETIC_canonical_typed.csv",
         "rows": 7058,
         "total_outstanding_balance": 1364011072.81,
-        "elapsed_seconds": 10.94,
+        "elapsed_seconds": 11.51,
         "gate_summary": [
           "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
           "[Gate 2] Canonical validation............ OK 7,058 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
@@ -1922,7 +1922,7 @@
         "canonical_output": "/home/user/trakt/demo_platform/workspace/runs/alp_acquired/mi_2026_04/out/ALP_ACQUIRED_20260430_SYNTHETIC_canonical_typed.csv",
         "rows": 3938,
         "total_outstanding_balance": 568299918.39,
-        "elapsed_seconds": 9.11,
+        "elapsed_seconds": 10.27,
         "gate_summary": [
           "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
           "[Gate 2] Canonical validation............ OK 3,938 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
@@ -1943,7 +1943,7 @@
         "canonical_output": "/home/user/trakt/demo_platform/workspace/runs/alp_origination/mi_2026_05/out/ALP_ORIGINATION_20260531_SYNTHETIC_canonical_typed.csv",
         "rows": 7089,
         "total_outstanding_balance": 1374047049.17,
-        "elapsed_seconds": 11.66,
+        "elapsed_seconds": 14.0,
         "gate_summary": [
           "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
           "[Gate 2] Canonical validation............ OK 7,089 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
@@ -1964,7 +1964,7 @@
         "canonical_output": "/home/user/trakt/demo_platform/workspace/runs/alp_acquired/mi_2026_05/out/ALP_ACQUIRED_20260531_SYNTHETIC_canonical_typed.csv",
         "rows": 3924,
         "total_outstanding_balance": 572780391.43,
-        "elapsed_seconds": 9.69,
+        "elapsed_seconds": 11.26,
         "gate_summary": [
           "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
           "[Gate 2] Canonical validation............ OK 3,924 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
@@ -1985,7 +1985,7 @@
         "canonical_output": "/home/user/trakt/demo_platform/workspace/runs/alp_origination/mi_2026_06/out/ALP_ORIGINATION_20260630_SYNTHETIC_canonical_typed.csv",
         "rows": 7126,
         "total_outstanding_balance": 1385508582.98,
-        "elapsed_seconds": 12.31,
+        "elapsed_seconds": 14.06,
         "gate_summary": [
           "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
           "[Gate 2] Canonical validation............ OK 7,126 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
@@ -2006,7 +2006,7 @@
         "canonical_output": "/home/user/trakt/demo_platform/workspace/runs/alp_acquired/mi_2026_06/out/ALP_ACQUIRED_20260630_SYNTHETIC_canonical_typed.csv",
         "rows": 3909,
         "total_outstanding_balance": 579377675.23,
-        "elapsed_seconds": 9.79,
+        "elapsed_seconds": 10.56,
         "gate_summary": [
           "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
           "[Gate 2] Canonical validation............ OK 3,909 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
@@ -2141,10 +2141,10 @@
       "title": "Validation report",
       "format": "CSV + JSON",
       "reportingDate": "2026-06-30",
-      "rowsValidated": 0,
+      "rowsValidated": 11035,
       "canonicalValidation": "Passed",
       "businessRuleExceptions": 75,
-      "exceptionRatePct": null,
+      "exceptionRatePct": 0.68,
       "rulesTriggered": [
         {
           "rule": "LTV001",
@@ -2163,7 +2163,13 @@
         {
           "portfolio": "ALP_ORIGINATION",
           "label": "ALP Origination Book",
-          "rows": 0,
+          "rows": 7126,
+          "gate3bSummary": {
+            "total_fields_affected": 2,
+            "blocking_count": 1,
+            "review_count": 3,
+            "info_count": 0
+          },
           "canonicalErrors": 0,
           "canonicalWarnings": 1,
           "businessRuleExceptions": 54,
@@ -2191,7 +2197,13 @@
         {
           "portfolio": "ALP_ACQUIRED",
           "label": "ALP Acquired Back Book",
-          "rows": 0,
+          "rows": 3909,
+          "gate3bSummary": {
+            "total_fields_affected": 2,
+            "blocking_count": 1,
+            "review_count": 3,
+            "info_count": 0
+          },
           "canonicalErrors": 0,
           "canonicalWarnings": 1,
           "businessRuleExceptions": 21,
@@ -2227,7 +2239,7 @@
       "format": "PowerPoint (PPTX)",
       "slides": 18,
       "sizeBytes": 1297654,
-      "contentSha256": "sha256:176edb76f55874b2ef59426643a505b3c15b94437696ece3841e68a8c675b9c2",
+      "contentSha256": "sha256:905339f95fff602b66a9413f3d7483e6affda57bfbde699df631db9efb533f76",
       "reportingPeriod": "2026-06",
       "path": "/home/user/trakt/demo_platform/workspace/artefacts/investor_deck/investor_pack.pptx",
       "publishedTo": "/home/user/trakt/demo_platform/workspace/decks/alderbridge/latest/investor_pack.pptx",
@@ -2338,7 +2350,7 @@
             "[Gate 3b] Validation aggregation.......... OK -> ALP_ORIGINATION_20260430_SYNTHETIC_field_summary.csv",
             "[MI] Dashboard-ready canonical produced."
           ],
-          "elapsedSeconds": 10.94
+          "elapsedSeconds": 11.51
         },
         {
           "portfolio": "ALP_ACQUIRED",
@@ -2353,7 +2365,7 @@
             "[Gate 3b] Validation aggregation.......... OK -> ALP_ACQUIRED_20260430_SYNTHETIC_field_summary.csv",
             "[MI] Dashboard-ready canonical produced."
           ],
-          "elapsedSeconds": 9.11
+          "elapsedSeconds": 10.27
         },
         {
           "portfolio": "ALP_ORIGINATION",
@@ -2368,7 +2380,7 @@
             "[Gate 3b] Validation aggregation.......... OK -> ALP_ORIGINATION_20260531_SYNTHETIC_field_summary.csv",
             "[MI] Dashboard-ready canonical produced."
           ],
-          "elapsedSeconds": 11.66
+          "elapsedSeconds": 14.0
         },
         {
           "portfolio": "ALP_ACQUIRED",
@@ -2383,7 +2395,7 @@
             "[Gate 3b] Validation aggregation.......... OK -> ALP_ACQUIRED_20260531_SYNTHETIC_field_summary.csv",
             "[MI] Dashboard-ready canonical produced."
           ],
-          "elapsedSeconds": 9.69
+          "elapsedSeconds": 11.26
         },
         {
           "portfolio": "ALP_ORIGINATION",
@@ -2398,7 +2410,7 @@
             "[Gate 3b] Validation aggregation.......... OK -> ALP_ORIGINATION_20260630_SYNTHETIC_field_summary.csv",
             "[MI] Dashboard-ready canonical produced."
           ],
-          "elapsedSeconds": 12.31
+          "elapsedSeconds": 14.06
         },
         {
           "portfolio": "ALP_ACQUIRED",
@@ -2413,7 +2425,7 @@
             "[Gate 3b] Validation aggregation.......... OK -> ALP_ACQUIRED_20260630_SYNTHETIC_field_summary.csv",
             "[MI] Dashboard-ready canonical produced."
           ],
-          "elapsedSeconds": 9.79
+          "elapsedSeconds": 10.56
         }
       ],
       "assembledOutputs": [

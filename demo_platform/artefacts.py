@@ -121,7 +121,14 @@ def validation_report() -> Dict[str, Any]:
                     })
                 business_rows.sort(key=lambda r: -r["rows"])
                 total_exceptions += int(len(bv))
-        rows = int(dashboard.get("total_rows") or 0)
+        # The Gate 3b dashboard carries the exception summary, not a row count, so
+        # take the row count from the portfolio's own canonical output — the tape
+        # that was actually validated.
+        canonical = (cfg.run_output_dir(portfolio.source_portfolio_id,
+                                        cfg.CURRENT_PERIOD.run_id)
+                     / f"{cfg.source_file(portfolio, cfg.CURRENT_PERIOD).stem}"
+                       f"_canonical_typed.csv")
+        rows = int(len(pd.read_csv(canonical, low_memory=False))) if canonical.exists() else 0
         total_rows += rows
         if canonical_errors:
             gate2_ok = False
@@ -129,6 +136,7 @@ def validation_report() -> Dict[str, Any]:
             "portfolio": portfolio.display_id,
             "label": portfolio.label,
             "rows": rows,
+            "gate3bSummary": dashboard.get("summary") or {},
             "canonicalErrors": canonical_errors,
             "canonicalWarnings": canonical_warnings,
             "businessRuleExceptions": sum(r["rows"] for r in business_rows),
@@ -280,23 +288,43 @@ def risk_monitor() -> Dict[str, Any]:
     if resp.status_code != 200:
         return {"available": False, "reason": f"/mi/risk-limits returned HTTP {resp.status_code}"}
     payload = resp.json()
-    limits = payload.get("limits") or payload.get("rows") or []
+    # The monitor returns one entry per limit TEST (`tests`), each with a RAG
+    # status and the observed concentration; the earlier `limits` key does not
+    # exist on this envelope.
+    tests = payload.get("tests") or []
+    summary = payload.get("summary") or {}
     statuses: Dict[str, int] = {}
-    for row in limits if isinstance(limits, list) else []:
-        status = str((row or {}).get("status") or (row or {}).get("rag") or "").lower()
+    for row in tests if isinstance(tests, list) else []:
+        status = str((row or {}).get("status") or "").lower()
         if status:
             statuses[status] = statuses.get(status, 0) + 1
+    available = bool(payload.get("available")) and bool(tests)
+    reason = None
+    if not available:
+        reason = (payload.get("limitsReason")
+                  or "no concentration limits are configured for this client")
+    elif not payload.get("fundedDataAvailable"):
+        # Limits extracted but no funded data to test them against: report the
+        # limits, and say plainly that the observed concentrations are absent.
+        reason = "limits extracted; observed concentrations unavailable"
     return {
-        "available": bool(payload.get("available", True)) and bool(limits),
+        "available": available,
         "kind": "risk_monitoring",
         "title": "Concentration risk monitor",
         "format": "JSON",
-        "limitCount": len(limits) if isinstance(limits, list) else None,
+        "limitCount": len(tests) if isinstance(tests, list) else None,
+        "testsPassed": summary.get("testsPassed"),
+        "breaches": summary.get("breaches"),
+        "unavailableTests": summary.get("unavailable"),
+        "fundedDataAvailable": bool(payload.get("fundedDataAvailable")),
+        "limitsSource": payload.get("limitsSource"),
+        "largestConcentration": summary.get("largestConcentration"),
+        "closestHeadroom": summary.get("closestHeadroom"),
         "statusCounts": statuses,
         "reportingDate": cfg.CURRENT_PERIOD.reporting_date,
         "producedBy": "mi_agent_api/risk_limits.py (mi_agent/risk_monitor)",
         "payload": payload,
-        "reason": None if limits else "no risk limits are configured for this client",
+        "reason": reason,
     }
 
 

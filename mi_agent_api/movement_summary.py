@@ -76,8 +76,12 @@ PRIMARY_LEAD_MULTIPLE = 1.5
 #: increase before the answer attributes the movement to completions.
 COMPLETIONS_ATTRIBUTION_SHARE = 0.5
 
-#: How many regional exposures the summary names.
-TOP_REGIONS = 3
+#: How many regional exposures :func:`_regional_exposure` returns.
+TOP_REGIONS = 8
+
+#: How many of those the ANSWER names. The answer stays executive-length while the
+#: supporting artifact carries the fuller ranking.
+NAMED_REGIONS = 3
 
 
 # --------------------------------------------------------------------------- #

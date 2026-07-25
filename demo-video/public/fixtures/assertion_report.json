@@ -299,7 +299,7 @@
     {
       "check": "no prohibited client string or credential in generated material",
       "passed": true,
-      "detail": "17 files scanned, 0 finding(s)",
+      "detail": "45 files scanned, 0 finding(s)",
       "observed": 0,
       "expected": 0
     }
@@ -339,6 +339,31 @@
         "region": "South West",
         "balance": 237410495.59,
         "share": 0.120827
+      },
+      {
+        "region": "East of England",
+        "balance": 213736192.37,
+        "share": 0.108778
+      },
+      {
+        "region": "North West",
+        "balance": 128727079.34,
+        "share": 0.065514
+      },
+      {
+        "region": "West Midlands",
+        "balance": 121848183.49,
+        "share": 0.062013
+      },
+      {
+        "region": "East Midlands",
+        "balance": 104436198.85,
+        "share": 0.053151
+      },
+      {
+        "region": "Yorkshire and The Humber",
+        "balance": 96800530.68,
+        "share": 0.049265
       }
     ]
   }
