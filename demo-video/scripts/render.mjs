@@ -118,13 +118,30 @@ const concurrency = () => {
 
 const CONCURRENCY = concurrency();
 
+/**
+ * Which GL backend Chrome uses to rasterise.
+ *
+ * Measured on this project, 90 frames at 1920x1080, four cores:
+ *   swangle  2.18 fps      Chrome default  12.86 fps
+ *
+ * Every scene is plain CSS and SVG — there is no WebGL anywhere in the film — so
+ * forcing the software rasteriser bought nothing and cost six times the render.
+ * The default is deterministic for this content: frame composition is a pure
+ * function of the frame number. Set REMOTION_GL to override (e.g. `swangle`) if a
+ * particular host needs it.
+ */
+const GL = process.env.REMOTION_GL || null;
+
 const humanSize = (bytes) =>
   bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.round(bytes / 1e3)} KB`;
 
 const main = async () => {
   const presets = parsePresets();
   mkdirSync(OUT, { recursive: true });
-  console.log(`[render] concurrency: ${CONCURRENCY} (of ${cpus().length} cores)`);
+  console.log(
+    `[render] concurrency: ${CONCURRENCY} (of ${cpus().length} cores)` +
+      `, gl: ${GL ?? "chrome default"}`,
+  );
 
   const browserExecutable = await findBrowser();
   if (browserExecutable) {
@@ -173,7 +190,7 @@ const main = async () => {
       pixelFormat: "yuv420p",
       concurrency: CONCURRENCY,
       browserExecutable,
-      chromiumOptions: { gl: "swangle" },
+      ...(GL ? { chromiumOptions: { gl: GL } } : {}),
       timeoutInMilliseconds: 120000,
       // A browser-side error must fail the render, never emit a broken frame.
       onBrowserLog: (log) => {
@@ -196,8 +213,16 @@ const main = async () => {
   console.log(`\n[render] done. Output in ${OUT}`);
 };
 
-main().catch((error) => {
-  console.error("\n[render] FAILED");
-  console.error(error);
-  process.exit(1);
-});
+// Only render when this file IS the entry point. `scripts/stills.mjs` imports
+// `findBrowser` from here, and without this guard that import would start a full
+// render as a side effect of asking where Chrome is.
+const isEntryPoint =
+  process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isEntryPoint) {
+  main().catch((error) => {
+    console.error("\n[render] FAILED");
+    console.error(error);
+    process.exit(1);
+  });
+}

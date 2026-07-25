@@ -88,8 +88,8 @@ const MappingLedger: React.FC<{ frame: number; delay: number }> = ({ frame, dela
   const pick = (schema: typeof a, resolution: string, n: number) =>
     schema.columns.filter((c) => c.canonical_field && c.resolution === resolution).slice(0, n);
   const rows = [
-    ...pick(a, "contract", 3).map((c) => ({ ...c, book: portfolio("A").short_label })),
-    ...pick(b, "contract", 3).map((c) => ({ ...c, book: portfolio("B").short_label })),
+    ...pick(a, "contract", 2).map((c) => ({ ...c, book: portfolio("A").short_label })),
+    ...pick(b, "contract", 2).map((c) => ({ ...c, book: portfolio("B").short_label })),
   ];
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>

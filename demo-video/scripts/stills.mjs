@@ -41,7 +41,7 @@ const main = async () => {
       output,
       imageFormat: "png",
       browserExecutable,
-      chromiumOptions: { gl: "swangle" },
+      ...(process.env.REMOTION_GL ? { chromiumOptions: { gl: process.env.REMOTION_GL } } : {}),
       timeoutInMilliseconds: 120000,
       onBrowserLog: (log) => {
         if (log.type === "error") console.error(`[stills][browser] ${log.text}`);

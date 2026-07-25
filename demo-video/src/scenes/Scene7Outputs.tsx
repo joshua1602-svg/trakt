@@ -255,8 +255,12 @@ export const Scene7Outputs: React.FC<{ captions: Caption[] }> = ({ captions }) =
             flex: 1,
             display: "grid",
             gridTemplateColumns: "repeat(3, 1fr)",
-            gridTemplateRows: "repeat(2, minmax(0, 1fr))",
-            gap: 16,
+            // Content-sized rows: a card that is mostly empty space reads as a
+            // layout accident, so the grid takes only the height it needs and the
+            // provenance line below absorbs the remainder.
+            gridAutoRows: "min-content",
+            alignContent: "start",
+            gap: 18,
             minHeight: 0,
           }}
         >
@@ -267,6 +271,7 @@ export const Scene7Outputs: React.FC<{ captions: Caption[] }> = ({ captions }) =
 
         <div
           style={{
+            marginTop: "auto",
             display: "flex",
             alignItems: "center",
             gap: 14,

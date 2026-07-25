@@ -46,7 +46,16 @@ const PortfolioRun: React.FC<{
   const current = l.summary.metrics;
   const perGate = s(1.05);
   return (
-    <Card style={{ flex: 1, minWidth: 0, ...enter(frame, delay, s(0.6)) }} padding={20}>
+    <Card
+      style={{
+        flex: 1,
+        minWidth: 0,
+        display: "flex",
+        flexDirection: "column",
+        ...enter(frame, delay, s(0.6)),
+      }}
+      padding={20}
+    >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
           <Eyebrow>{p.display_id}</Eyebrow>
@@ -170,7 +179,7 @@ export const Scene3Orchestrate: React.FC<{ captions: Caption[] }> = ({ captions 
           </span>
         </div>
 
-        <div style={{ display: "flex", gap: LAYOUT.gutter, flex: 1, minHeight: 0 }}>
+        <div style={{ display: "flex", gap: LAYOUT.gutter }}>
           <PortfolioRun portfolioKey="A" frame={frame} delay={s(0.7)} />
           <PortfolioRun portfolioKey="B" frame={frame} delay={s(1.1)} />
         </div>

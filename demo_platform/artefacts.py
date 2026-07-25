@@ -396,8 +396,79 @@ def regulatory_output(*, verbose: bool = True) -> Dict[str, Any]:
 # --------------------------------------------------------------------------- #
 # 6. Audit manifest
 # --------------------------------------------------------------------------- #
+def orchestration_from_disk() -> Dict[str, Any]:
+    """Reconstruct the orchestration result from the manifests already written.
+
+    A selective run (``--artefacts`` without ``--orchestrate``) has no in-process
+    orchestration result, and an audit manifest that silently recorded zero
+    assembled outputs would be worse than one that failed. The assembler and run
+    manifests are on disk, so read them.
+    """
+    result: Dict[str, Any] = {"runs": [], "assemblies": [], "reconciliation": {}}
+    for prd in cfg.PERIODS:
+        mpath = _dated_platform_dir(prd) / "platform_canonical_manifest.json"
+        if not mpath.exists():
+            continue
+        m = json.loads(mpath.read_text(encoding="utf-8"))
+        result["assemblies"].append({
+            "period": prd.period,
+            "reporting_date": prd.reporting_date,
+            "role": prd.role,
+            "total_rows": m.get("total_rows"),
+            "total_balance": m.get("output_total_balance"),
+            "content_sha256": m.get("content_sha256"),
+            "dated_uri": f"{cfg.platform_prefix()}/{prd.reporting_date}",
+            "per_portfolio_balance": {
+                p["source_portfolio_id"]: p["total_balance"]
+                for p in m.get("portfolios", [])
+            },
+        })
+    for portfolio in cfg.PORTFOLIOS:
+        for prd in cfg.PERIODS:
+            run_manifest = (cfg.run_output_dir(portfolio.source_portfolio_id, prd.run_id)
+                            / "run_manifest.json")
+            canonical = (cfg.run_output_dir(portfolio.source_portfolio_id, prd.run_id)
+                         / f"{cfg.source_file(portfolio, prd).stem}_canonical_typed.csv")
+            if not canonical.exists():
+                continue
+            df = pd.read_csv(canonical, low_memory=False)
+            result["runs"].append({
+                "portfolio": portfolio.display_id,
+                "period": prd.period,
+                "rows": int(len(df)),
+                "total_outstanding_balance": round(float(pd.to_numeric(
+                    df.get("current_outstanding_balance", pd.Series(dtype=float)),
+                    errors="coerce").fillna(0.0).sum()), 2),
+                "gate_summary": (
+                    json.loads(run_manifest.read_text(encoding="utf-8")).get("gates", [])
+                    if run_manifest.exists() else []),
+            })
+    by_period = {a["period"]: a for a in result["assemblies"]}
+    cur = by_period.get(cfg.CURRENT_PERIOD.period)
+    pri = by_period.get(cfg.PRIOR_PERIOD.period)
+    if cur and pri:
+        result["reconciliation"] = {
+            "current_period": cur["period"],
+            "prior_period": pri["period"],
+            "current_total_balance": cur["total_balance"],
+            "prior_total_balance": pri["total_balance"],
+            "consolidated_movement": round(
+                (cur["total_balance"] or 0.0) - (pri["total_balance"] or 0.0), 2),
+            "per_portfolio_movement": {
+                pid: round(cur["per_portfolio_balance"].get(pid, 0.0)
+                           - pri["per_portfolio_balance"].get(pid, 0.0), 2)
+                for pid in sorted(cur["per_portfolio_balance"])
+            },
+        }
+    return result
+
+
 def audit_manifest(orchestration_result: Dict[str, Any]) -> Dict[str, Any]:
     """A single provenance record covering the whole reporting cycle."""
+    # A caller that has no in-process orchestration result still gets a complete
+    # manifest, rather than one that quietly reports nothing was assembled.
+    if not orchestration_result.get("assemblies"):
+        orchestration_result = orchestration_from_disk()
     inputs: List[Dict[str, Any]] = []
     for portfolio in cfg.PORTFOLIOS:
         for prd in cfg.PERIODS:
@@ -485,19 +556,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # pragma: no cover - CLI
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args(argv)
     # Re-derive the orchestration result from the on-disk manifests.
-    from . import orchestration
-    stub: Dict[str, Any] = {"runs": [], "assemblies": [], "reconciliation": {}}
-    for prd in cfg.PERIODS:
-        mpath = _dated_platform_dir(prd) / "platform_canonical_manifest.json"
-        if mpath.exists():
-            m = json.loads(mpath.read_text(encoding="utf-8"))
-            stub["assemblies"].append({
-                "period": prd.period, "reporting_date": prd.reporting_date,
-                "total_rows": m.get("total_rows"),
-                "total_balance": m.get("output_total_balance"),
-                "content_sha256": m.get("content_sha256"),
-                "dated_uri": f"{cfg.platform_prefix()}/{prd.reporting_date}",
-            })
+    stub = orchestration_from_disk()
     build(stub, verbose=not args.quiet)
     return 0
 

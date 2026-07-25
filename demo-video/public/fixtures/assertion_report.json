@@ -299,7 +299,7 @@
     {
       "check": "no prohibited client string or credential in generated material",
       "passed": true,
-      "detail": "45 files scanned, 0 finding(s)",
+      "detail": "46 files scanned, 0 finding(s)",
       "observed": 0,
       "expected": 0
     }

@@ -96,8 +96,10 @@ const ExtractCard: React.FC<{
           lineHeight: 1.55,
         }}
       >
-        {headers.length} columns · the lender's own vocabulary · no shared column
-        names with the other extract
+        {headers.length} columns · {p.key === "A"
+          ? "the lender's own vocabulary"
+          : "the servicer's own vocabulary"}{" "}
+        · no column name is shared with the other extract
       </div>
     </Card>
   );
@@ -135,7 +137,7 @@ export const Scene1Problem: React.FC<{ captions: Caption[] }> = ({ captions }) =
         </div>
 
         {/* Two incoming extracts, in genuinely different shapes. */}
-        <div style={{ display: "flex", gap: LAYOUT.gutter, alignItems: "stretch", flex: 1, minHeight: 0 }}>
+        <div style={{ display: "flex", gap: LAYOUT.gutter, alignItems: "stretch" }}>
           <ExtractCard portfolioKey="A" delay={s(0.7)} frame={frame} />
           <ExtractCard portfolioKey="B" delay={s(1.1)} frame={frame} />
         </div>

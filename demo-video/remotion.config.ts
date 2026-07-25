@@ -18,6 +18,7 @@ Config.setOverwriteOutput(true);
 // The Studio/CLI default. scripts/render.mjs derives its own from the core count
 // (leaving one core for ffmpeg); override either with REMOTION_CONCURRENCY.
 Config.setConcurrency(2);
-// Fail the render on a browser-side error rather than emitting a broken frame.
-Config.setChromiumOpenGlRenderer("swangle");
+// GL backend is left at Chrome's default. Every scene is plain CSS and SVG, so
+// forcing the software rasteriser ("swangle") bought nothing and measured six
+// times slower on this project. Set REMOTION_GL if a host needs a specific one.
 Config.setDelayRenderTimeoutInMilliseconds(60000);

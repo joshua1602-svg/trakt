@@ -98,6 +98,9 @@ export interface MovementBlock {
   runnerUpRegion: RegionContribution | null;
   primaryRegionShare: number | null;
   primaryRegionLead: number | null;
+  /** True when the primary region leads the runner-up decisively enough for the
+   *  answer to say "primarily driven by" rather than naming a largest mover. */
+  primaryRegionIsDominant: boolean;
   completionsBalanceInMonth: number | null;
   completionsBalanceInPrimaryRegion: number | null;
   completionsShareOfPrimaryRegion: number | null;

@@ -1,7 +1,7 @@
 {
   "ok": true,
   "synthetic_notice": "SYNTHETIC DEMONSTRATION DATA \u2014 NOT A REAL CUSTOMER",
-  "filesScanned": 45,
+  "filesScanned": 46,
   "filesCarryingSyntheticBanner": 21,
   "prohibitedStrings": [
     "213800ABCDE123456701N202501",
