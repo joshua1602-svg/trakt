@@ -77,7 +77,9 @@ def test_generation_is_reproducible():
         "Two runs of the generator produced different source files — the "
         "demonstration is no longer reproducible."
     )
-    assert len(hashes[0]) == len(cfg.PORTFOLIOS) * len(cfg.PERIODS)
+    # ALL_PORTFOLIOS, not PORTFOLIOS: SPV1 is generated and written like the other
+    # two — it is simply not assembled into the platform canonical.
+    assert len(hashes[0]) == len(cfg.ALL_PORTFOLIOS) * len(cfg.PERIODS)
 
 
 def test_calibration_converges_on_every_target(generated):
@@ -349,7 +351,7 @@ def test_postcodes_sit_inside_the_region_they_claim(current_frames):
 
 def test_injected_exceptions_are_bounded_and_recorded(generated):
     expected = (cfg.INJECTED_EXCEPTIONS_PER_PERIOD
-                * len(cfg.PORTFOLIOS) * len(cfg.PERIODS))
+                * len(cfg.ALL_PORTFOLIOS) * len(cfg.PERIODS))
     assert len(generated.injected_exceptions) == expected
     rules = {e["rule"] for e in generated.injected_exceptions}
     assert len(rules) >= 4, rules
@@ -359,7 +361,7 @@ def test_injected_exceptions_are_bounded_and_recorded(generated):
 
 def test_every_source_file_carries_the_synthetic_marker(generated):
     written = generator.write_source_files(generated)
-    assert len(written) == len(cfg.PORTFOLIOS) * len(cfg.PERIODS)
+    assert len(written) == len(cfg.ALL_PORTFOLIOS) * len(cfg.PERIODS)
     for descriptor in written:
         path = Path(descriptor["path"])
         assert path.exists()
