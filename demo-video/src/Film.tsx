@@ -1,141 +1,117 @@
 /**
- * The film: eight scenes, cross-faded, driven entirely by `timeline.ts`.
+ * The film.
  *
- * Scene order, length and copy live in the timeline table, so adjusting the pace
- * is a one-file change and the captions, the voice-over script and the subtitle
- * file all follow automatically.
+ * `Chrome` and `Captions` sit OUTSIDE the `<Series>` deliberately: that structurally
+ * guarantees the lockup and the disclaimer cannot drift between scenes, and it means
+ * the disclaimer is present in every single frame rather than in every frame someone
+ * remembered to add it to.
+ *
+ * Scene transitions are hard cuts on `ink`. No crossfades, no wipes.
+ *
+ * The same component tree renders both deliveries. `layout` is the only difference
+ * between the 1920x1080 master and the 1080x1080 square variant — the square is the
+ * same film with a tighter safe area, not a re-edit.
  */
 
 import React from "react";
-import { AbsoluteFill, Sequence, useCurrentFrame } from "remotion";
-import { SCENES, TRANSITION_SECONDS, sceneFrames, sceneStarts, type SceneSpec } from "./timeline";
-import { s } from "./design/motion";
-import { PAGE_BACKGROUND } from "./design/tokens";
-import { Scene1Problem } from "./scenes/Scene1Problem";
-import { Scene2Onboard } from "./scenes/Scene2Onboard";
-import { Scene3Orchestrate } from "./scenes/Scene3Orchestrate";
-import { Scene4MiSummary } from "./scenes/Scene4MiSummary";
-import { Scene5MiMovement } from "./scenes/Scene5MiMovement";
-import { Scene6Copilot } from "./scenes/Scene6Copilot";
-import { Scene7Outputs } from "./scenes/Scene7Outputs";
-import { Scene8Closing } from "./scenes/Scene8Closing";
+import { AbsoluteFill, Series, useCurrentFrame } from "remotion";
 
-type SceneComponent = React.FC<{ captions: SceneSpec["captions"] }>;
+import { Chrome, LayoutProvider, useGeometry } from "./components/kit";
+import { SYNTHETIC_NOTICE } from "./data/fixtures";
+import S1Cost from "./scenes/S1Cost";
+import S2Onboard from "./scenes/S2Onboard";
+import S3Dataset from "./scenes/S3Dataset";
+import S4Omnichannel from "./scenes/S4Omnichannel";
+import S5Close from "./scenes/S5Close";
+import theme, { type Layout } from "./theme";
+import { SCENES, captions, startOf } from "./timeline";
 
-/** Scene id → component. Kept explicit so a missing scene is a type error. */
-export const SCENE_COMPONENTS: Record<string, SceneComponent> = {
-  problem: Scene1Problem,
-  onboard: Scene2Onboard,
-  orchestrate: Scene3Orchestrate,
-  "mi-summary": Scene4MiSummary,
-  "mi-movement": Scene5MiMovement,
-  copilot: Scene6Copilot,
-  outputs: Scene7Outputs,
-  closing: Scene8Closing,
+const SCENE_COMPONENTS: Record<string, React.FC> = {
+  cost: S1Cost,
+  onboard: S2Onboard,
+  dataset: S3Dataset,
+  omnichannel: S4Omnichannel,
+  close: S5Close,
 };
 
 /**
- * A cross-fade wrapper. The outgoing scene fades out over the incoming scene's
- * first frames, which reads as a considered dissolve rather than a cut, and never
- * leaves a blank frame between scenes.
+ * Burned-in captions: bottom third, `body` token, `paper` on a 70%-opacity `ink`
+ * plate, max two lines. The film is watched with the sound off, so these carry the
+ * argument unaided; the narration is the bonus track.
  */
-const CrossFade: React.FC<{
-  children: React.ReactNode;
-  durationInFrames: number;
-  isFirst: boolean;
-  isLast: boolean;
-}> = ({ children, durationInFrames, isFirst, isLast }) => {
+const Captions: React.FC = () => {
   const frame = useCurrentFrame();
-  const ramp = s(TRANSITION_SECONDS);
-  const fadeIn = isFirst ? 1 : Math.min(1, Math.max(0, frame / ramp));
-  const fadeOut = isLast
-    ? 1
-    : Math.min(1, Math.max(0, (durationInFrames - frame) / ramp));
+  const geometry = useGeometry();
+  const active = captions().find((c) => frame >= c.from && frame < c.from + c.hold);
+  if (!active) return null;
+  const fade = Math.min(
+    1,
+    (frame - active.from) / theme.motion.quick,
+    (active.from + active.hold - frame) / theme.motion.quick,
+  );
   return (
-    <AbsoluteFill style={{ opacity: Math.min(fadeIn, fadeOut) }}>{children}</AbsoluteFill>
+    <div
+      style={{
+        position: "absolute",
+        left: geometry.gutter,
+        right: geometry.gutter,
+        bottom: geometry.edge + 52,
+        display: "flex",
+        justifyContent: "center",
+        opacity: Math.max(0, fade),
+      }}
+    >
+      <div
+        style={{
+          backgroundColor: theme.color.ink,
+          opacity: theme.captionPlateOpacity,
+          position: "absolute",
+          inset: "-16px -20px",
+          borderRadius: theme.radius.plate,
+        }}
+      />
+      <div
+        style={{
+          ...theme.type.body,
+          fontSize: theme.type.body.fontSize * (geometry.width < theme.layout.wide.width ? 0.82 : 1),
+          color: theme.color.paper,
+          textAlign: "center",
+          maxWidth: "88%",
+          position: "relative",
+        }}
+      >
+        {active.text}
+      </div>
+    </div>
   );
 };
 
-export const Film: React.FC = () => {
-  const starts = sceneStarts();
+/** The one place the vendored `@font-face` rules are injected. */
+const Fonts: React.FC = () => <style dangerouslySetInnerHTML={{ __html: theme.fontFaceCss() }} />;
+
+export const Film: React.FC<{ layout?: Layout }> = ({ layout = "wide" }) => {
+  const frame = useCurrentFrame();
+  // The close is the only scene that owns the lockup, because it moves it.
+  const inClose = frame >= startOf("close");
   return (
-    <AbsoluteFill style={{ background: PAGE_BACKGROUND }}>
-      {SCENES.map((scene, i) => {
-        const Component = SCENE_COMPONENTS[scene.id];
-        if (!Component) {
-          throw new Error(`No component registered for scene "${scene.id}"`);
-        }
-        const duration = sceneFrames(scene);
-        return (
-          <Sequence
-            key={scene.id}
-            from={starts[i]}
-            durationInFrames={duration}
-            name={`${scene.number}. ${scene.title}`}
-            layout="none"
-          >
-            <CrossFade
-              durationInFrames={duration}
-              isFirst={i === 0}
-              isLast={i === SCENES.length - 1}
-            >
-              <Component captions={scene.captions} />
-            </CrossFade>
-          </Sequence>
-        );
-      })}
-    </AbsoluteFill>
+    <LayoutProvider layout={layout}>
+      <AbsoluteFill style={{ backgroundColor: theme.color.ink }}>
+        <Fonts />
+        <Series>
+          {SCENES.map((scene) => {
+            const Scene = SCENE_COMPONENTS[scene.id];
+            return (
+              <Series.Sequence key={scene.id} durationInFrames={scene.frames}>
+                <Scene />
+              </Series.Sequence>
+            );
+          })}
+        </Series>
+        <Chrome notice={SYNTHETIC_NOTICE} hideLockup={inClose} />
+        <Captions />
+      </AbsoluteFill>
+    </LayoutProvider>
   );
 };
 
-/**
- * The teaser cut: the same scenes, unmodified, re-sequenced back to back. Nothing
- * is re-authored for the teaser — it is a selection, so it cannot contradict the
- * full film.
- */
-export const Teaser: React.FC<{ sceneIds: readonly string[] }> = ({ sceneIds }) => {
-  const scenes = sceneIds
-    .map((id) => SCENES.find((sc) => sc.id === id))
-    .filter((sc): sc is SceneSpec => Boolean(sc));
-  const ramp = s(TRANSITION_SECONDS);
-  let cursor = 0;
-  return (
-    <AbsoluteFill style={{ background: PAGE_BACKGROUND }}>
-      {scenes.map((scene, i) => {
-        const Component = SCENE_COMPONENTS[scene.id];
-        const duration = sceneFrames(scene);
-        const from = cursor;
-        cursor += duration - (i < scenes.length - 1 ? ramp : 0);
-        return (
-          <Sequence
-            key={scene.id}
-            from={from}
-            durationInFrames={duration}
-            name={`${scene.number}. ${scene.title}`}
-            layout="none"
-          >
-            <CrossFade
-              durationInFrames={duration}
-              isFirst={i === 0}
-              isLast={i === scenes.length - 1}
-            >
-              <Component captions={scene.captions} />
-            </CrossFade>
-          </Sequence>
-        );
-      })}
-    </AbsoluteFill>
-  );
-};
-
-/** Total frames for a given selection of scene ids (used by the teaser composition). */
-export const framesForScenes = (sceneIds: readonly string[]): number => {
-  const ramp = s(TRANSITION_SECONDS);
-  const scenes = sceneIds
-    .map((id) => SCENES.find((sc) => sc.id === id))
-    .filter((sc): sc is SceneSpec => Boolean(sc));
-  return scenes.reduce(
-    (total, scene, i) => total + sceneFrames(scene) - (i < scenes.length - 1 ? ramp : 0),
-    0,
-  );
-};
+export default Film;

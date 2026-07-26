@@ -1,0 +1,39 @@
+{
+  "note": "Vendored from Google Fonts at build time so the render never touches the network. Regenerate with `node scripts/vendor-fonts.mjs`; check with `--verify`.",
+  "licence": "All three faces are SIL Open Font License 1.1.",
+  "fonts": [
+    {
+      "module": "Archivo",
+      "weight": "700",
+      "subset": "latin",
+      "file": "archivo-latin.woff2",
+      "licence": "OFL-1.1",
+      "family": "Archivo",
+      "url": "https://fonts.gstatic.com/s/archivo/v25/k3kPo8UDI-1M0wlSV9XAw6lQkqWY8Q82sLydOxI.woff2",
+      "sha256": "sha256:8f704806dbedeaaeca334b11ec348bc3ac3a439d6431544b3afb54f534ee4967",
+      "bytes": 34928
+    },
+    {
+      "module": "Inter",
+      "weight": "400",
+      "subset": "latin",
+      "file": "inter-latin.woff2",
+      "licence": "OFL-1.1",
+      "family": "Inter",
+      "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2",
+      "sha256": "sha256:3100e775e8616cd2611beecfa23a4263d7037586789b43f035236a2e6fbd4c62",
+      "bytes": 48256
+    },
+    {
+      "module": "IBMPlexMono",
+      "weight": "500",
+      "subset": "latin",
+      "file": "ibm-plex-mono-500-latin.woff2",
+      "licence": "OFL-1.1",
+      "family": "IBM Plex Mono",
+      "url": "https://fonts.gstatic.com/s/ibmplexmono/v20/-F6qfjptAgt5VM-kVkqdyU8n3twJwlBFgg.woff2",
+      "sha256": "sha256:01d285447409c8a588692162439a038b8cbd7871309ee20267b0d2d91c6e8e22",
+      "bytes": 14888
+    }
+  ]
+}

@@ -1,23 +1,29 @@
 /**
- * The storyboard: one place that controls every scene's length, order and copy.
+ * The storyboard, as data.
  *
- * Adjust a duration here and the composition, the captions, the voice-over script
- * and the subtitle file all move together — they are all generated from this
- * table, so they cannot drift apart.
+ * One place controls every scene's length and order, every burned-in caption and
+ * every narration line. The composition, the captions track and the generated
+ * voice-over script all read this table, so they cannot drift apart.
  *
- * Target run time 2:30–3:30. The current total is asserted by a unit test.
+ * Frames, not seconds, because the storyboard is frame-precise: 2,700 frames at
+ * 30fps, cut 420 / 720 / 600 / 600 / 360. A unit test asserts the total and the
+ * per-scene boundaries.
+ *
+ * On-screen COPY lives here. On-screen FIGURES do not — those are read from the
+ * fixtures at render time (see src/data/fixtures.ts). Nothing in this file states
+ * a number the pipeline produced.
  */
 
-import { s } from "./design/motion";
+export const FPS = 30;
+export const TOTAL_FRAMES = 2700;
 
 export interface Caption {
-  /** Seconds from the start of the SCENE. */
+  /** Frames from the start of the SCENE. */
   at: number;
-  /** Seconds the caption stays up. */
+  /** Frames the caption stays up. */
   hold: number;
+  /** Max two lines, and it must carry the argument with the sound off. */
   text: string;
-  /** A secondary line, rendered smaller beneath. */
-  sub?: string;
 }
 
 export interface SceneSpec {
@@ -25,214 +31,150 @@ export interface SceneSpec {
   /** Scene number as the storyboard names it. */
   number: number;
   title: string;
-  /** Duration in seconds. */
-  seconds: number;
-  /** On-screen captions, scene-relative. */
+  frames: number;
   captions: Caption[];
-  /** The voice-over paragraph for this scene (one per scene, UK English). */
+  /** The voice-over paragraph for this scene (UK English). */
   narration: string;
 }
 
 export const SCENES: SceneSpec[] = [
   {
-    id: "problem",
+    id: "cost",
     number: 1,
-    title: "The reporting problem",
-    seconds: 15,
+    title: "The cost",
+    frames: 420,
+    // No caption over a display claim. The claim IS burned-in copy, at the display
+    // size, and repeating it underneath in body text just competes with it.
     captions: [
-      {
-        at: 1.0,
-        hold: 5.4,
-        text: "Specialist lenders receive recurring portfolio data in different formats.",
-      },
-      {
-        at: 6.8,
-        hold: 7.8,
-        text:
-          "Management information, investor reporting and regulatory outputs must " +
-          "still reconcile to one version of the truth.",
-      },
+      { at: 6, hold: 132, text: "A back book arrives in the servicer's vocabulary, not yours." },
+      { at: 144, hold: 132, text: "Every month-end, someone rebuilds the mapping by hand." },
     ],
     narration:
-      "Specialist lenders receive recurring portfolio data in different formats — " +
-      "one extract from their own origination system, another from the servicer of " +
-      "an acquired book. Management information, investor reporting and regulatory " +
-      "outputs must still reconcile to one version of the truth.",
+      "You bought a back book. It arrived as a servicer extract that looks nothing " +
+      "like your origination system. Every month-end, someone rebuilds the mapping " +
+      "by hand.",
   },
   {
     id: "onboard",
     number: 2,
-    title: "Onboard once",
-    seconds: 24,
+    title: "Onboarded once",
+    frames: 720,
     captions: [
+      { at: 6, hold: 132, text: "Trakt onboards a portfolio once." },
       {
-        at: 0.8,
-        hold: 6.4,
-        text: "Trakt's Onboarding Agent establishes a governed data contract for each portfolio.",
+        at: 144,
+        hold: 144,
+        text: "Agents profile the source and map it to one canonical model.",
       },
       {
-        at: 15.4,
-        hold: 7.2,
-        text: "Different source schemas. One canonical operating model.",
-        sub: "Configured once at onboarding, not repeated every reporting period.",
+        at: 300,
+        hold: 144,
+        text: "Thirty-nine fields mapped. Thirty-four specific to this book.",
+      },
+      {
+        at: 456,
+        hold: 144,
+        text: "Two referred to a human — it knows what it does not know.",
       },
     ],
     narration:
-      "Trakt's Onboarding Agent establishes a governed data contract for each " +
-      "portfolio. It profiles the incoming source, maps every field to the Trakt " +
-      "canonical model, applies the client's own transformations, refers " +
-      "low-confidence decisions for review, and sets the validation and reporting " +
-      "rules. Different source schemas. One canonical operating model. This is " +
-      "configured once, at onboarding.",
+      "Trakt onboards a portfolio once. Agents profile the source, map it to a " +
+      "canonical model and apply your lending rules. Thirty-nine fields mapped, " +
+      "thirty-four decisions specific to your book — and two referred to a human, " +
+      "because the platform knows what it doesn't know. Approved once, applied " +
+      "unchanged every period after.",
   },
   {
-    id: "orchestrate",
+    id: "dataset",
     number: 3,
-    title: "Orchestrate continuously",
-    seconds: 29,
+    title: "One dataset, every output",
+    frames: 600,
     captions: [
+      { at: 12, hold: 108, text: "One governed dataset across both source portfolios." },
       {
-        at: 0.8,
-        hold: 5.4,
-        text: "Once onboarded, every reporting cycle is processed automatically.",
+        at: 132,
+        hold: 168,
+        text: "Your regulatory submission, your investor pack, your management information.",
       },
-      {
-        at: 20.0,
-        hold: 7.6,
-        text: "The Assembler consolidates every portfolio into one platform view.",
-      },
+      { at: 312, hold: 108, text: "Every row provenance-stamped." },
     ],
     narration:
-      "Once onboarded, every reporting cycle is processed automatically. A new " +
-      "month-end extract arrives, the Orchestration Agent identifies the portfolio " +
-      "and the reporting date, applies the approved contract, transforms the data " +
-      "into the canonical model, and runs canonical and business-rule validation. " +
-      "The Assembler then consolidates every portfolio into one platform view, and " +
-      "the latest approved outputs become available through the Trakt APIs.",
+      "From there, one governed dataset. One point nine six billion across eleven " +
+      "thousand and thirty-five loans, two source portfolios, every row " +
+      "provenance-stamped. Your regulatory submission, your investor pack and your " +
+      "management information are the same numbers — because they're the same dataset.",
   },
   {
-    id: "mi-summary",
+    id: "omnichannel",
     number: 4,
-    title: "Consolidated MI Agent",
-    seconds: 40,
+    title: "Three ways in",
+    frames: 600,
     captions: [
+      { at: 12, hold: 108, text: "Consume it however you already work." },
       {
-        at: 1.0,
-        hold: 5.0,
-        text: "The Trakt MI Agent answers from the governed consolidated dataset.",
+        at: 132,
+        hold: 168,
+        text: "A managed service. Copilot. Or the workspace, when you need to drill in.",
       },
+      { at: 312, hold: 108, text: "Same engine, same answer, every time." },
     ],
     narration:
-      "The Trakt MI Agent answers from that governed consolidated dataset. The " +
-      "portfolio selector covers all portfolios or either book on its own. Ask it " +
-      "to summarise the portfolio, and the answer is computed deterministically " +
-      "from the same figures the dashboard shows — loan count, funded balance, " +
-      "weighted-average LTV and interest rate, borrower age, the largest regional " +
-      "exposures, and the data cut-off date.",
+      "Consume it however you already work. Run it as a managed service and never " +
+      "log in. Ask it from Copilot, in the tools you have. Or open the workspace " +
+      "when you need to drill in. Same engine, same answer, every time.",
   },
   {
-    id: "mi-movement",
+    id: "close",
     number: 5,
-    title: "Follow-up comparison",
-    seconds: 32,
-    captions: [
-      {
-        at: 1.0,
-        hold: 5.2,
-        text: "The same conversation, the same governed metrics — now across periods.",
-      },
-    ],
-    narration:
-      "The same conversation continues across reporting periods. Every figure in " +
-      "the answer reconciles: the movement equals current less prior, the regional " +
-      "contributions sum exactly to the total, and the two portfolios account for " +
-      "the whole of the change.",
-  },
-  {
-    id: "copilot",
-    number: 6,
-    title: "Microsoft 365 Copilot",
-    seconds: 35,
-    captions: [
-      {
-        at: 1.0,
-        hold: 5.4,
-        text: "Trakt is available as an agent inside Microsoft 365 Copilot.",
-      },
-      {
-        at: 28.4,
-        hold: 6.4,
-        text: "Copilot is the experience. Trakt is the execution engine.",
-      },
-    ],
-    narration:
-      "Trakt is also available as an agent inside Microsoft 365 Copilot. Copilot " +
-      "does not compute portfolio figures: it calls controlled Trakt actions, and " +
-      "the answers are the same governed values the MI Agent returned. It can also " +
-      "retrieve the latest approved artefacts — the investor deck and the canonical " +
-      "tape — as short-lived, secure download links. Copilot is the experience. " +
-      "Trakt is the execution engine.",
-  },
-  {
-    id: "outputs",
-    number: 7,
-    title: "Outputs",
-    seconds: 23,
-    captions: [
-      { at: 1.0, hold: 6.0, text: "One governed dataset. Multiple controlled outputs." },
-    ],
-    narration:
-      "One governed dataset. Multiple controlled outputs — the consolidated " +
-      "canonical tape, the validation report, the MI dashboard, the investor pack, " +
-      "the concentration risk monitor, and a full audit manifest with " +
-      "field-level provenance and content hashes for every file.",
-  },
-  {
-    id: "closing",
-    number: 8,
-    title: "Closing",
-    seconds: 14,
-    captions: [
-      {
-        at: 0.8,
-        hold: 5.4,
-        text: "From recurring portfolio data to governed portfolio intelligence.",
-      },
-    ],
-    narration:
-      "From recurring portfolio data to governed portfolio intelligence. Trakt " +
-      "combines onboarding, orchestration, management information, investor " +
-      "reporting and controlled AI interaction in one managed operating layer.",
+    title: "Close",
+    frames: 360,
+    // The close is entirely burned-in display copy — the capability line and the ask
+    // are the on-screen text, so a caption plate under them would only compete.
+    captions: [],
+    narration: "Trakt. A data operating system for specialist lenders.",
   },
 ];
 
-/** Cross-fade between consecutive scenes, in seconds. */
-export const TRANSITION_SECONDS = 0.55;
-
-/** Frames per scene, derived from the table. */
-export const sceneFrames = (scene: SceneSpec): number => s(scene.seconds);
-
-/** Start frame of each scene, accounting for the overlap of the cross-fades. */
+/** Scene start frames, in order. */
 export const sceneStarts = (): number[] => {
-  const overlap = s(TRANSITION_SECONDS);
-  const starts: number[] = [];
-  let cursor = 0;
-  SCENES.forEach((scene, i) => {
-    starts.push(cursor);
-    cursor += sceneFrames(scene) - (i < SCENES.length - 1 ? overlap : 0);
+  let at = 0;
+  return SCENES.map((scene) => {
+    const start = at;
+    at += scene.frames;
+    return start;
   });
-  return starts;
 };
 
-/** Total composition length in frames. */
-export const totalFrames = (): number => {
+/** The absolute frame a scene starts on. */
+export const startOf = (id: string): number => {
+  const index = SCENES.findIndex((s) => s.id === id);
+  if (index < 0) throw new Error(`Unknown scene ${id}`);
+  return sceneStarts()[index];
+};
+
+export const totalFrames = (): number =>
+  SCENES.reduce((total, scene) => total + scene.frames, 0);
+
+export interface AbsoluteCaption extends Caption {
+  scene: string;
+  /** Absolute frame the caption appears on. */
+  from: number;
+}
+
+/** Every caption, resolved to absolute frames. */
+export const captions = (): AbsoluteCaption[] => {
   const starts = sceneStarts();
-  const last = SCENES.length - 1;
-  return starts[last] + sceneFrames(SCENES[last]);
+  return SCENES.flatMap((scene, i) =>
+    scene.captions.map((c) => ({ ...c, scene: scene.id, from: starts[i] + c.at })),
+  );
 };
 
-/** Total composition length in seconds. */
-export const totalSeconds = (): number => totalFrames() / 30;
+/** The still frames the outbound email body uses. */
+export const STILL_FRAMES = [1020, 1500, 2100] as const;
 
-/** The teaser cut: the scenes that carry the proposition without the detail. */
-export const TEASER_SCENE_IDS = ["problem", "mi-movement", "closing"] as const;
+export const timecode = (frame: number): string => {
+  const total = frame / FPS;
+  const mm = Math.floor(total / 60);
+  const ss = Math.floor(total % 60);
+  return `${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
+};

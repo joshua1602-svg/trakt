@@ -1,17 +1,17 @@
 /**
  * Render the film.
  *
- *   node scripts/render.mjs --preset=master            1920x1080 presentation master
- *   node scripts/render.mjs --preset=web               1920x1080, lighter bitrate
- *   node scripts/render.mjs --preset=teaser            the short cut
- *   node scripts/render.mjs --preset=master --preset=web
+ *   node scripts/render.mjs --preset=master     1920x1080 H.264, ~8 Mbps
+ *   node scripts/render.mjs --preset=square     1080x1080 LinkedIn / email variant
+ *   node scripts/render.mjs --preset=master --preset=square
  *
  * Renders through the Remotion Node API rather than the CLI so the browser
  * executable, the codec settings and the failure behaviour are explicit and the
  * same on every machine.
  *
  * No network access is required or performed. The bundle imports its fixtures at
- * build time, and the browser is resolved from an existing local install.
+ * build time, the typefaces are vendored under public/fonts, and the browser is
+ * resolved from an existing local install.
  */
 
 import { cpus } from "node:os";
@@ -25,28 +25,47 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
 const OUT = join(ROOT, "out");
 
-/** Output presets. The web cut is the SAME composition at a lighter bitrate. */
+/**
+ * Output presets.
+ *
+ * The storyboard asks for a ~8 Mbps master, so the bitrate is STATED rather than left
+ * to a quality target. Three things are needed for that to actually happen:
+ *
+ *   crf: null            — libx264 ignores `-b:v` when a CRF is present, and
+ *                          remotion.config.ts sets one for the Studio.
+ *   videoBitrate         — the average target (`-b:v`).
+ *   encodingMaxRate +    — a cap and a VBV buffer (`-maxrate`, `-bufsize`).
+ *   encodingBufferSize
+ *
+ * MEASURED OUTCOME: the master lands at roughly 2.2 Mbps, not 8. That is the
+ * encoder declining to spend the budget, not the budget failing to arrive. The film
+ * is flat `ink`, hairlines and static type with hard cuts and no camera movement, so
+ * libx264 reaches its minimum quantiser well below the target and there is nothing
+ * left to spend bits on. Raising the figure would need the quantiser floor forced
+ * open, which buys file size and no visible quality. The target and the cap are
+ * stated here because that is what the delivery spec asks the encoder for; the
+ * achieved rate is printed on every render so the gap is visible rather than
+ * assumed.
+ *
+ * The square variant is the SAME composition tree with a `square` layout flag — a
+ * second Composition, not a re-edit.
+ */
 const PRESETS = {
   master: {
-    composition: "TraktProductDemo",
-    file: "trakt-product-demo-1080p.mp4",
-    crf: 18,
-    scale: 1,
-    label: "1920x1080 presentation master",
+    composition: "TraktDemo",
+    file: "trakt-demo-1080p.mp4",
+    videoBitrate: "8M",
+    encodingMaxRate: "10M",
+    encodingBufferSize: "16M",
+    label: "1920x1080 master, ~8 Mbps",
   },
-  web: {
-    composition: "TraktProductDemo",
-    file: "trakt-product-demo-web.mp4",
-    crf: 26,
-    scale: 1,
-    label: "1920x1080 web-optimised",
-  },
-  teaser: {
-    composition: "TraktProductTeaser",
-    file: "trakt-product-demo-teaser.mp4",
-    crf: 20,
-    scale: 1,
-    label: "teaser cut",
+  square: {
+    composition: "TraktDemoSquare",
+    file: "trakt-demo-square.mp4",
+    videoBitrate: "6M",
+    encodingMaxRate: "8M",
+    encodingBufferSize: "12M",
+    label: "1080x1080 LinkedIn / email variant",
   },
 };
 
@@ -104,7 +123,7 @@ const parsePresets = () => {
 /**
  * How many frames to compose at once.
  *
- * One-at-a-time is safe but slow: a 3½-minute film is 6,240 frames, and software
+ * One-at-a-time is safe but slow: the film is 2,700 frames, and software
  * GL is not fast. Leave one core for ffmpeg and the parent process, and cap at 4
  * so peak memory stays predictable on a small container. Frame composition is a
  * pure function of the frame number here, so parallelism cannot change a frame.
@@ -171,10 +190,9 @@ const main = async () => {
       id: preset.composition,
       browserExecutable,
     });
-    const seconds = (composition.durationInFrames / composition.fps).toFixed(1);
     console.log(
       `\n[render] ${name}: ${preset.label} · ${composition.durationInFrames} frames ` +
-        `(${seconds}s) → out/${preset.file}`,
+        `(${(composition.durationInFrames / composition.fps).toFixed(1)}s) → out/${preset.file}`,
     );
 
     let lastLogged = -1;
@@ -183,8 +201,10 @@ const main = async () => {
       serveUrl,
       codec: "h264",
       outputLocation,
-      crf: preset.crf,
-      scale: preset.scale,
+      crf: null,
+      videoBitrate: preset.videoBitrate,
+      encodingMaxRate: preset.encodingMaxRate,
+      encodingBufferSize: preset.encodingBufferSize,
       imageFormat: "jpeg",
       jpegQuality: 95,
       pixelFormat: "yuv420p",
@@ -207,7 +227,12 @@ const main = async () => {
       },
     });
     const size = statSync(outputLocation).size;
-    process.stdout.write(`\r[render] ${name} 100% · ${humanSize(size)}\n`);
+    const seconds = composition.durationInFrames / composition.fps;
+    const mbps = (size * 8) / seconds / 1e6;
+    process.stdout.write(
+      `\r[render] ${name} 100% · ${humanSize(size)} · ${mbps.toFixed(2)} Mbps ` +
+        `(target ${preset.videoBitrate})\n`,
+    );
   }
 
   console.log(`\n[render] done. Output in ${OUT}`);

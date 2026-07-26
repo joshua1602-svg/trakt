@@ -14,6 +14,7 @@ import metricsFixture from "../../public/fixtures/demo_metrics.json";
 import artefactFixture from "../../public/fixtures/artefact_catalogue.json";
 import assertionFixture from "../../public/fixtures/assertion_report.json";
 import safetyFixture from "../../public/fixtures/safety_report.json";
+import manifestFixture from "../../public/fixtures/demo_manifest.json";
 
 // --------------------------------------------------------------------------- //
 // Shapes (only the fields the film reads are typed)
@@ -247,6 +248,85 @@ export const SAFETY = safetyFixture as unknown as {
   filesScanned: number;
   findingCount: number;
 };
+
+// --------------------------------------------------------------------------- //
+// Onboarding and orchestration (from the demo manifest)
+// --------------------------------------------------------------------------- //
+export interface MappingDecision {
+  source_header: string;
+  canonical_field: string | null;
+  tier: string;
+  tier_label: string;
+  confidence: number;
+  low_confidence: boolean;
+  resolved_by_client_contract: boolean;
+  note: string;
+}
+
+export interface OnboardingMapping {
+  mapped_count: number;
+  unmapped_count: number;
+  unmapped_headers: string[];
+  low_confidence_count: number;
+  client_contract_count: number;
+}
+
+export interface OrchestrationRun {
+  portfolio: string;
+  source_portfolio_id: string;
+  period: string;
+  reporting_date: string;
+  rows: number;
+  total_outstanding_balance: number;
+  elapsed_seconds: number;
+  gate_summary: string[];
+}
+
+const M = manifestFixture as unknown as {
+  onboarding: Record<
+    string,
+    { mapping: OnboardingMapping; mappingDecisions: MappingDecision[] }
+  >;
+  orchestration: { runs: OrchestrationRun[] };
+};
+
+/** One portfolio's Gate 1 mapping result, by storyboard key. */
+export const onboarding = (key: string) => {
+  const p = portfolio(key);
+  const found = M.onboarding[p.source_portfolio_id];
+  if (!found) throw new Error(`No onboarding record for ${p.source_portfolio_id}`);
+  return found;
+};
+
+/** The recorded mapping decision for one source header, by storyboard key. */
+export const mappingDecision = (key: string, header: string): MappingDecision => {
+  const found = onboarding(key).mappingDecisions.find((d) => d.source_header === header);
+  if (!found) throw new Error(`No mapping decision for ${key}:${header}`);
+  return found;
+};
+
+export const ORCHESTRATION_RUNS = M.orchestration.runs;
+
+/** The recurring run for one portfolio in the current reporting period. */
+export const currentRun = (key: string): OrchestrationRun => {
+  const p = portfolio(key);
+  const found = ORCHESTRATION_RUNS.find(
+    (r) => r.source_portfolio_id === p.source_portfolio_id && r.period === CURRENT_PERIOD.period,
+  );
+  if (!found) throw new Error(`No current-period run for ${p.source_portfolio_id}`);
+  return found;
+};
+
+/**
+ * Measured wall-clock for the current period across both portfolios: source
+ * extract received to governed canonical published. This is the only elapsed time
+ * the demonstration measures, so it is the only one the film may state.
+ */
+export const currentPeriodElapsedSeconds = (): number =>
+  ORCHESTRATION_RUNS.filter((r) => r.period === CURRENT_PERIOD.period).reduce(
+    (total, r) => total + r.elapsed_seconds,
+    0,
+  );
 
 /** One portfolio's narrative record, by storyboard key ("A" | "B"). */
 export const portfolio = (key: string): PortfolioNarrative => {

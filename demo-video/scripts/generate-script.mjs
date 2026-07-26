@@ -39,20 +39,13 @@ const bundled = await build({
 const moduleUrl =
   "data:text/javascript;base64," +
   Buffer.from(bundled.outputFiles[0].text).toString("base64");
-const { SCENES, TRANSITION_SECONDS, totalSeconds } = await import(moduleUrl);
+const { FPS, SCENES, sceneStarts, totalFrames } = await import(moduleUrl);
 
-const FPS = 30;
-
-/** Absolute scene start times in seconds, accounting for the cross-fades. */
-const sceneStartSeconds = () => {
-  const starts = [];
-  let cursor = 0;
-  SCENES.forEach((scene, i) => {
-    starts.push(cursor);
-    cursor += scene.seconds - (i < SCENES.length - 1 ? TRANSITION_SECONDS : 0);
-  });
-  return starts;
-};
+/**
+ * Absolute scene start times, in seconds. Scene transitions are hard cuts, so a
+ * scene starts exactly where the previous one ends — there is no overlap to net off.
+ */
+const sceneStartSeconds = () => sceneStarts().map((frame) => frame / FPS);
 
 const timecode = (seconds, separator = ",") => {
   const totalMs = Math.round(seconds * 1000);
@@ -71,7 +64,7 @@ const clock = (seconds) => {
 };
 
 const starts = sceneStartSeconds();
-const total = totalSeconds();
+const total = totalFrames() / FPS;
 
 // --------------------------------------------------------------------------- //
 // Voice-over script
@@ -100,10 +93,10 @@ const scriptLines = [
 
 SCENES.forEach((scene, i) => {
   const words = wordCount(scene.narration);
-  const wpm = Math.round((words / scene.seconds) * 60);
+  const wpm = Math.round((words / (scene.frames / FPS)) * 60);
   scriptLines.push(
     `| ${scene.number}. ${scene.title} | ${clock(starts[i])} | ` +
-      `${clock(starts[i] + scene.seconds)} | ${scene.seconds}s | ${words} | ${wpm} |`,
+      `${clock(starts[i] + (scene.frames / FPS))} | ${(scene.frames / FPS).toFixed(1)}s | ${words} | ${wpm} |`,
   );
 });
 
@@ -113,8 +106,8 @@ SCENES.forEach((scene, i) => {
   scriptLines.push(
     `## Scene ${scene.number} — ${scene.title}`,
     "",
-    `**${clock(starts[i])} → ${clock(starts[i] + scene.seconds)}** ` +
-      `(${scene.seconds}s, ${wordCount(scene.narration)} words)`,
+    `**${clock(starts[i])} → ${clock(starts[i] + (scene.frames / FPS))}** ` +
+      `(${(scene.frames / FPS).toFixed(1)}s, ${wordCount(scene.narration)} words)`,
     "",
     scene.narration,
     "",
@@ -123,8 +116,8 @@ SCENES.forEach((scene, i) => {
   );
   scene.captions.forEach((caption) => {
     scriptLines.push(
-      `- \`${clock(starts[i] + caption.at)}\` ${caption.text}` +
-        (caption.sub ? `\n  - ${caption.sub}` : ""),
+      `- \`${clock(starts[i] + (caption.at / FPS))}\` ${caption.text}` +
+        "",
     );
   });
   scriptLines.push("");
@@ -138,11 +131,11 @@ writeFileSync(join(OUT, "voiceover-script.md"), scriptLines.join("\n"), "utf8");
 const cues = [];
 SCENES.forEach((scene, i) => {
   scene.captions.forEach((caption) => {
-    const start = starts[i] + caption.at;
+    const start = starts[i] + caption.at / FPS;
     cues.push({
       start,
-      end: start + caption.hold,
-      text: caption.sub ? `${caption.text}\n${caption.sub}` : caption.text,
+      end: start + caption.hold / FPS,
+      text: caption.text,
     });
   });
 });
@@ -176,10 +169,10 @@ const csv = [
       scene.number,
       `"${scene.title}"`,
       starts[i].toFixed(2),
-      (starts[i] + scene.seconds).toFixed(2),
-      scene.seconds.toFixed(2),
+      (starts[i] + (scene.frames / FPS)).toFixed(2),
+      (scene.frames / FPS).toFixed(2),
       Math.round(starts[i] * FPS),
-      Math.round((starts[i] + scene.seconds) * FPS),
+      Math.round((starts[i] + (scene.frames / FPS)) * FPS),
       wordCount(scene.narration),
     ].join(","),
   ),
@@ -199,20 +192,18 @@ const music = [
   "licensed later, these are the markers to cut it to — they are the film's own",
   "structural beats, so a track edited to them will land with the picture.",
   "",
+  "The film is watched with the sound off. Nothing in the picture depends on a",
+  "musical cue, and nothing should be added that does.",
+  "",
   "| Marker | Time | Intent |",
   "|---|---|---|",
-  `| Track in | ${clock(0)} | Enter under the first caption, low. |`,
-  `| First lift | ${clock(starts[1])} | The Onboarding Agent resolves both schemas. |`,
-  `| Sustain | ${clock(starts[2])} | The recurring cycle — steady, unhurried. |`,
-  `| Drop to bed | ${clock(starts[3])} | The MI Agent scenes carry the detail; music recedes. |`,
-  `| Hold low | ${clock(starts[4])} | The month-on-month answer must be readable. |`,
-  `| Second lift | ${clock(starts[5])} | Copilot — the reach of the platform widens. |`,
-  `| Resolve | ${clock(starts[6])} | The governed outputs land together. |`,
-  `| Final statement | ${clock(starts[7])} | The brand lock-up; let the last chord ring. |`,
+  `| Track in | ${clock(0)} | Enter under the ledger grid, low. |`,
+  `| First lift | ${clock(starts[1])} | The contract resolves both schemas. |`,
+  `| Hold low | ${clock(starts[1] + 17)} | The referred-for-review beat must be read, not scored. |`,
+  `| Resolve | ${clock(starts[2])} | The governed outputs land together. |`,
+  `| Sustain | ${clock(starts[3])} | Three channels, one answer — steady, unhurried. |`,
+  `| Final statement | ${clock(starts[4])} | The lockup moves; let the last chord ring. |`,
   `| Track out | ${clock(total)} | Fade to silence with the final frame. |`,
-  "",
-  "The film must remain fully intelligible with audio muted, so nothing in the",
-  "picture depends on a musical cue.",
 ];
 writeFileSync(join(OUT, "music-markers.md"), music.join("\n"), "utf8");
 

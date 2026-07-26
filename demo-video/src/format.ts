@@ -140,3 +140,13 @@ export const share = (fraction: number | null | undefined, decimals = 0): string
  */
 export const noBreakSigns = (text: string): string =>
   text.replace(/([+\u2212-])(?=[£$€]|\d)/g, "$1\u2060");
+
+/** 00:14.1 — an elapsed wall-clock, mono, for the recurring-run stat. */
+export const elapsed = (seconds: number | null | undefined): string => {
+  if (seconds == null) return "—";
+  const whole = Math.floor(seconds);
+  const mm = Math.floor(whole / 60);
+  const ss = whole % 60;
+  const tenths = Math.floor((seconds - whole) * 10);
+  return `${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}.${tenths}`;
+};

@@ -1,82 +1,48 @@
 /**
- * Remotion composition registry.
+ * Compositions.
  *
- * Three compositions, all from the same scene components:
+ *   TraktDemo        1920x1080 master — the deliverable
+ *   TraktDemoSquare  1080x1080 LinkedIn and email variant, the SAME scene
+ *                    components with a `square` layout flag
  *
- *   TraktProductDemo   1920×1080 · the film
- *   TraktProductTeaser 1920×1080 · a short selection cut
- *   SceneStills        1920×1080 · a still-frame harness for visual review
+ * The still frames the outbound email body uses (see `STILL_FRAMES` in the timeline)
+ * are rendered out of `TraktDemo` itself by `scripts/stills.mjs`, so a still can
+ * never show something the film does not.
  *
- * The web deliverable is the same composition rendered at a lower bitrate and
- * scale, not a separate composition — a second composition could drift.
+ * The durations come from src/timeline.ts, so the composition cannot fall out of step
+ * with the storyboard.
  */
 
 import React from "react";
-import { Composition, Sequence, Still } from "remotion";
-import { Film, Teaser, framesForScenes } from "./Film";
-import { SCENES, TEASER_SCENE_IDS, totalFrames } from "./timeline";
-import { FPS } from "./design/motion";
-import { LAYOUT } from "./design/tokens";
-import { SCENE_COMPONENTS } from "./Film";
+import { Composition } from "remotion";
+
+import Film from "./Film";
+import { FPS, totalFrames } from "./timeline";
+import theme from "./theme";
+
+const DURATION = totalFrames();
 
 export const RemotionRoot: React.FC = () => (
   <>
     <Composition
-      id="TraktProductDemo"
+      id="TraktDemo"
       component={Film}
-      durationInFrames={totalFrames()}
+      durationInFrames={DURATION}
       fps={FPS}
-      width={LAYOUT.width}
-      height={LAYOUT.height}
+      width={theme.layout.wide.width}
+      height={theme.layout.wide.height}
+      defaultProps={{ layout: "wide" as const }}
     />
     <Composition
-      id="TraktProductTeaser"
-      component={Teaser}
-      durationInFrames={framesForScenes(TEASER_SCENE_IDS)}
+      id="TraktDemoSquare"
+      component={Film}
+      durationInFrames={DURATION}
       fps={FPS}
-      width={LAYOUT.width}
-      height={LAYOUT.height}
-      defaultProps={{ sceneIds: TEASER_SCENE_IDS }}
+      width={theme.layout.square.width}
+      height={theme.layout.square.height}
+      defaultProps={{ layout: "square" as const }}
     />
-    {/*
-      One Still per scene, held at the frame where that scene is fully composed.
-      These are what `npm run stills` renders for visual review — checking for
-      overflow, clipping, contrast and inconsistent figures before publishing.
-    */}
-    {SCENES.map((scene) => {
-      const Component = SCENE_COMPONENTS[scene.id];
-      const reviewFrame = Math.round(FPS * scene.seconds * 0.82);
-      return (
-        <Still
-          key={`still-${scene.id}`}
-          id={`Still-${scene.number}-${scene.id}`}
-          component={() => (
-            <StillHarness sceneId={scene.id} frame={reviewFrame}>
-              <Component captions={scene.captions} />
-            </StillHarness>
-          )}
-          width={LAYOUT.width}
-          height={LAYOUT.height}
-        />
-      );
-    })}
   </>
 );
 
-/**
- * Holds a scene at a fixed frame so a Still renders the settled composition
- * rather than frame 0, where every entrance animation is still at zero opacity.
- *
- * A Still always evaluates at frame 0; wrapping the scene in a Sequence with a
- * negative `from` shifts the scene's internal clock forward to the review frame,
- * which is the supported way to hold a composition at a chosen moment.
- */
-const StillHarness: React.FC<{
-  sceneId: string;
-  frame: number;
-  children: React.ReactNode;
-}> = ({ frame, children }) => (
-  <Sequence from={-frame} durationInFrames={frame + 2} layout="none">
-    {children}
-  </Sequence>
-);
+export default RemotionRoot;
