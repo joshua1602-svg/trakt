@@ -52,6 +52,9 @@ from . import pipeline_timing as timing_mod
 from . import decks as decks_mod
 from . import cohorts as cohorts_mod
 from . import geo as geo_mod
+# The shared governed MI application service both channels (React + Copilot)
+# call. It imports this module's data resolvers lazily, so there is no cycle.
+from . import mi_service
 
 logger = logging.getLogger("mi_agent_api")
 
@@ -1425,13 +1428,6 @@ def workspace_view(portfolioId: Optional[str] = None,
     }
 
 
-def _query_dataset_context(req: QueryRequest) -> str:
-    ctx = req.datasetContext
-    if not ctx and isinstance(req.context, dict):
-        ctx = req.context.get("activeView") or req.context.get("datasetContext")
-    return workspace_mod.resolve_active_view(req.question, ctx)
-
-
 def _resolve_query_frame(view: str, portfolio_id: Optional[str]):
     """``(df, error)`` for a tab-aware query. Funded keeps the existing active
     dataset (unchanged); pipeline / forecast resolve the governed pipeline (and,
@@ -1548,104 +1544,25 @@ def _apply_request_currency(cid: str, portfolio_id: Optional[str]) -> None:
 
 @app.post("/mi/query")
 def query(req: QueryRequest) -> Dict[str, Any]:
-    portfolio_id = req.portfolioId or (req.portfolio.id if req.portfolio else None)
-    view = _query_dataset_context(req)
+    """React MI Agent channel — a THIN adapter over the shared governed MI
+    application service (``mi_service.execute_governed_mi_query``).
 
-    def _error(msg: str) -> Dict[str, Any]:
-        return {
-            "ok": False, "error": msg, "question": req.question,
-            "answer": msg, "interpreted": "", "spec": {},
-            "validation": {"ok": False, "errors": [msg], "warnings": [], "resolved_fields": {}},
-            "artifacts": [], "warnings": [], "assumptions": [],
-            "metadata": {"engine": "mi_agent", "source": "python", "mock": False,
-                         "datasetContext": view},
-        }
-
-    # ---- governed-intent routing (compare / evolution / forecast / risk) ----
-    # The new analytical intents are served by the internal evolution /
-    # temporal-compare / forecast-extrapolation / risk-limit services and shaped
-    # into the existing artifact union. Normal point-in-time questions return
-    # None here and fall through to the unchanged MI Agent path below.
-    try:
-        cid, _rid = (portfolio_id.split("/", 1) + [None])[:2] if (portfolio_id and "/" in portfolio_id) \
-            else ((portfolio_id or "client_001"), None)
-        # Set the request-scoped display currency BEFORE routing so the routed
-        # evolution/forecast/compare answers format in the book's currency too
-        # (tape -> config -> GBP; cached per client). The point-in-time path
-        # below re-resolves from its own df, which is a no-op for the same book.
-        _apply_request_currency(cid, portfolio_id)
-        def _routed_frame(cli: str, rid: Optional[str]):
-            """Resolve the funded frame for a routed intent (e.g. geographic
-            exposure) using the same discovery as the dashboard endpoints."""
-            frame, _report = _resolve_run_dataframe(cli, rid, _onboarding_output_root())
-            return frame
-        routed = chat_routing_mod.try_route(
-            req.question, portfolio_id=portfolio_id, view=view,
-            output_root=_onboarding_output_root(),
-            pipeline_root=_pipeline_discovery_root(),
-            semantics=load_mi_semantics(semantics_path()),
-            history_model=_pipeline_history(cid), as_of=req.asOfDate,
-            source_lens=req.sourcePortfolioLens or None,
-            frame_resolver=_routed_frame,
-            extra_filters=req.filters or None)
-    except Exception as exc:  # noqa: BLE001 - routing must never break the chat
-        logger.warning("chat routing failed; using point-in-time path: %s", exc)
-        routed = None
-    if routed is not None:
-        meta = routed.setdefault("metadata", {})
-        if isinstance(meta, dict):
-            meta["datasetContext"] = view
-        return routed
-
-    try:
-        df, frame_error = _resolve_query_frame(view, portfolio_id)
-    except FileNotFoundError as exc:
-        return _error(str(exc))
-    except Exception as exc:  # noqa: BLE001 - data load/prep must not raw-500
-        logger.exception("MI /mi/query frame resolution failed for portfolio=%r view=%r",
-                         portfolio_id, view)
-        return _error(f"Could not load the data for this query: {type(exc).__name__}: {exc}")
-    if frame_error:
-        return _error(frame_error)
-
-    # Display currency from this request's tape (falls back to GBP).
-    currency_mod.resolve_and_set(df)
-
-    # LLM parser is the fallback for complex questions (deterministic-first via
-    # zero_cost_first; falls back to deterministic on any LLM failure).
-    llm_cfg = _mi_llm_config()
-    llm_enabled, llm_model = llm_cfg.enabled, llm_cfg.model
-    # A crash in the MI pipeline (parse / execute / adapt) must return a
-    # controlled error the operator can read — never a raw 500 that the UI
-    # reports as "could not reach the API". The full traceback is logged for the
-    # Azure Log stream so the exact fault is diagnosable.
-    try:
-        workflow = run_mi_agent_query(
-            req.question, df, str(semantics_path()),
-            parser_mode="llm" if llm_enabled else "deterministic",
-            llm_enabled=llm_enabled, model=llm_model,
-            extra_filters=req.filters or None,
-            source_portfolio_lens=req.sourcePortfolioLens or None)
-        result = adapt_workflow_result(workflow, portfolio_id=portfolio_id, as_of=req.asOfDate)
-    except Exception as exc:  # noqa: BLE001 - surface, don't 500
-        logger.exception("MI /mi/query failed for question=%r portfolio=%r",
-                         req.question, portfolio_id)
-        return _error(f"The MI Agent could not complete this query: {type(exc).__name__}: {exc}")
-    # Surface which dataset/view answered (funded | pipeline | forecast) and the
-    # active source-portfolio lens (total | direct | acquired | cohort).
-    meta = result.setdefault("metadata", {}) if isinstance(result, dict) else {}
-    if isinstance(meta, dict):
-        meta["datasetContext"] = view
-        meta["llm"] = {"enabled": llm_cfg.enabled, "available": llm_cfg.available,
-                       "model": llm_cfg.model if llm_cfg.available else None,
-                       "status": llm_cfg.status}
-        if workflow.get("portfolio_lens"):
-            meta["portfolioLens"] = workflow["portfolio_lens"]
-    # An LLM that was requested but is unusable (missing key / package) is a
-    # configuration fault the operator must see, not a silent downgrade.
-    if llm_cfg.enabled and not llm_cfg.available and isinstance(result, dict):
-        result.setdefault("warnings", []).extend(llm_cfg.warnings)
-    return result
+    No analytical behaviour lives here: parsing, intent routing, dataset
+    resolution, calculation, validation, reconciliation, provenance and artifact
+    creation are all owned by the shared service, so every improvement made
+    there is inherited by the Copilot channel automatically (and vice versa).
+    The envelope is returned verbatim — the existing React contract (charts,
+    tables, drill-through, workspace, follow-ups) is unchanged.
+    """
+    return mi_service.execute_governed_mi_query(mi_service.MiQueryRequest(
+        question=req.question,
+        portfolio_id=req.portfolioId or (req.portfolio.id if req.portfolio else None),
+        as_of_date=req.asOfDate,
+        filters=req.filters,
+        dataset_context=req.datasetContext,
+        context=req.context,
+        source_portfolio_lens=req.sourcePortfolioLens,
+    ))
 
 
 # Microsoft 365 Copilot v1 actions (askTraktMi / getLatestInvestorDeck /

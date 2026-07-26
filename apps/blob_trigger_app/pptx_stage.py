@@ -140,12 +140,113 @@ def _update_manifest(run_dir: Path, artifact: Dict[str, Any]) -> None:
                        manifest_path, exc)
 
 
-def _period_key(period: str) -> Optional[str]:
+def period_key(period: str) -> Optional[str]:
     """Normalise an as-of/reporting value to a ``YYYY-MM`` period key for the
     durable dated deck path, or None when no month can be parsed."""
     import re
     m = re.search(r"(\d{4})[-_/]?(\d{2})", str(period or ""))
-    return f"{m.group(1)}-{m.group(2)}" if m else None
+    if not m:
+        return None
+    month = int(m.group(2))
+    return f"{m.group(1)}-{m.group(2)}" if 1 <= month <= 12 else None
+
+
+#: Back-compat alias (the private name was used before the backfill was added).
+_period_key = period_key
+
+PPTX_CONTENT_TYPE = (
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation")
+#: A .pptx is an OOXML zip — every valid deck starts with the local file header.
+_ZIP_MAGIC = b"PK\x03\x04"
+
+
+def deck_checksum(deck_path: Path) -> str:
+    """``sha256:<hex>`` over the deck bytes, streamed so a large deck is cheap."""
+    import hashlib
+    digest = hashlib.sha256()
+    with open(deck_path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return f"sha256:{digest.hexdigest()}"
+
+
+def validate_deck_file(deck_path: Path) -> Optional[str]:
+    """``None`` when *deck_path* is a plausible investor deck, else the reason.
+
+    Deliberately cheap and structural: the file must exist, be non-empty and
+    carry the OOXML zip magic. It does NOT open the presentation — publication
+    must not depend on python-pptx being importable in the publishing process.
+    """
+    try:
+        if not deck_path.is_file():
+            return "file does not exist"
+        size = deck_path.stat().st_size
+        if size == 0:
+            return "file is empty"
+        with open(deck_path, "rb") as fh:
+            if fh.read(4) != _ZIP_MAGIC:
+                return "not a PPTX (OOXML) file"
+    except OSError as exc:
+        return f"unreadable: {exc}"
+    return None
+
+
+def _generator_version() -> str:
+    try:
+        from mi_agent_pptx import __version__ as ver
+        return str(ver)
+    except Exception:  # noqa: BLE001 — version metadata is best-effort
+        return "unknown"
+
+
+def build_deck_pointer(deck_path: Path, *, client_id: str,
+                       period: Optional[str], latest_uri: str,
+                       period_uri: Optional[str] = None,
+                       as_of_date: Optional[str] = None,
+                       orchestration_run_id: Optional[str] = None,
+                       source_run_id: Optional[str] = None) -> Dict[str, Any]:
+    """The durable ``latest_investor_pack.json`` payload.
+
+    Carries everything a consumer needs to identify and verify the deck without
+    reaching into storage: client, reporting period, generation timestamp, the
+    originating orchestration/source run, the governed relative key, checksum,
+    size, content type and generator version. No credentials, no account names.
+    """
+    return {
+        "deck_name": DECK_NAME_DEFAULT,
+        "blob_name": latest_uri,
+        "period_blob_name": period_uri,
+        "client_id": client_id,
+        # Normalised YYYY-MM period key — the same value the dated deck path uses,
+        # so a pointer and its dated copy can never disagree.
+        "reporting_period": period,
+        # The finer as-of value the run reported (e.g. a month-end date), kept
+        # for display; never used for path or ordering decisions.
+        "as_of_date": as_of_date or None,
+        "generated_at": _now_iso(),
+        "orchestration_run_id": orchestration_run_id,
+        "source_run_id": source_run_id,
+        "checksum": deck_checksum(deck_path),
+        "size_bytes": deck_path.stat().st_size,
+        "content_type": PPTX_CONTENT_TYPE,
+        "generator": GENERATOR_NAME,
+        "generator_version": _generator_version(),
+    }
+
+
+#: Kept as a module constant so the pointer builder does not need a Layout.
+DECK_NAME_DEFAULT = "investor_pack.pptx"
+
+
+def _pointer_period(storage, layout, client: str) -> Optional[str]:
+    """The reporting period recorded in the client's current latest pointer."""
+    try:
+        uri = layout.deck_latest_pointer_uri(client)
+        if not storage.exists(uri):
+            return None
+        return (json.loads(storage.read_text(uri)) or {}).get("reporting_period")
+    except Exception:  # noqa: BLE001 — an unreadable pointer is treated as absent
+        return None
 
 
 def persist_investor_deck(
@@ -153,20 +254,42 @@ def persist_investor_deck(
     *,
     client_id: str,
     period: str = "",
+    orchestration_run_id: Optional[str] = None,
+    source_run_id: Optional[str] = None,
+    force: bool = False,
     log: Optional[logging.Logger] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Upload a generated deck to durable storage so the MI API can serve it.
+    """Publish a generated deck to durable storage so the MI API can serve it.
 
-    Writes the client's ``latest`` deck (stable pointer, overwritten each run)
-    and, when a reporting month can be parsed, a dated period copy for history.
-    Fully guarded: returns ``None`` (never raises) when persistence is disabled
-    or any storage op fails — the scratch deck and the run are unaffected.
+    Publication contract:
+
+      1. the immutable run artifact (``<run_dir>/reports/investor_pack.pptx``)
+         is left untouched — this only ever reads it;
+      2. the dated copy ``decks/{client}/{YYYY-MM}/investor_pack.pptx`` is
+         write-once. An existing dated deck is NOT overwritten by a different
+         deck for the same period (the publication contract has no versioning);
+         re-publishing byte-identical content is a no-op;
+      3. ``decks/{client}/latest/investor_pack.pptx`` is replaced, EXCEPT when
+         the current latest pointer names a NEWER reporting period — a late or
+         replayed older run must never regress the client's latest deck;
+      4. ``decks/{client}/latest/latest_investor_pack.json`` is written last, so
+         a consumer never sees a pointer describing bytes that are not yet there.
+
+    The whole operation is idempotent and safe to retry. Fully guarded: returns
+    ``None`` (never raises) when persistence is disabled, the file is not a valid
+    deck, or any storage op fails — the run is unaffected.
+
+    ``force`` bypasses the ``pptx_persist_enabled()`` gate. It exists for the
+    explicit admin backfill (``deck_backfill``), whose entire purpose is
+    publication; the orchestration stage never sets it.
     """
     log = log or logger
-    if not pptx_persist_enabled():
+    if not (force or pptx_persist_enabled()):
         return None
     deck_path = Path(deck_path)
-    if not deck_path.exists():
+    invalid = validate_deck_file(deck_path)
+    if invalid is not None:
+        log.warning("Investor PPTX not published (%s): %s", invalid, deck_path)
         return None
     try:
         from .storage import open_storage
@@ -174,25 +297,46 @@ def persist_investor_deck(
         storage = open_storage()
         layout = Layout.from_env()
         client = client_id or "Client"
+        key = period_key(period)
+        published: Dict[str, Any] = {"client_id": client}
+
+        # (2) write-once dated copy.
+        period_uri: Optional[str] = None
+        if key:
+            period_uri = layout.deck_period_uri(client, key)
+            if storage.exists(period_uri):
+                published["period_skipped"] = "already published for this period"
+                log.info("Investor PPTX dated copy already exists, not "
+                         "overwriting: %s", period_uri)
+            else:
+                storage.upload_file(deck_path, period_uri)
+            published["period_uri"] = period_uri
+            published["period"] = key
+
+        # (3) latest — never regress to an older reporting period.
+        current = _pointer_period(storage, layout, client)
+        current_key = period_key(current or "")
+        if key and current_key and current_key > key:
+            published["latest_skipped"] = (
+                f"latest already holds a newer period ({current_key})")
+            log.info("Investor PPTX latest not replaced: current period %s is "
+                     "newer than %s", current_key, key)
+            return published
+
         latest_uri = layout.deck_latest_uri(client)
         storage.upload_file(deck_path, latest_uri)
-        published: Dict[str, Any] = {"latest_uri": latest_uri}
-        pointer = {
-            "deck_name": Layout.DECK_NAME,
-            "blob_name": latest_uri,
-            "client_id": client,
-            "reporting_period": period or None,
-            "generated_at": _now_iso(),
-        }
-        period_key = _period_key(period)
-        if period_key:
-            period_uri = layout.deck_period_uri(client, period_key)
-            storage.upload_file(deck_path, period_uri)
-            published["period_uri"] = period_uri
-            published["period"] = period_key
-            pointer["period_blob_name"] = period_uri
+        published["latest_uri"] = latest_uri
+
+        # (4) pointer last.
+        pointer = build_deck_pointer(
+            deck_path, client_id=client, period=key or (period or None),
+            latest_uri=latest_uri, period_uri=period_uri,
+            as_of_date=period or None,
+            orchestration_run_id=orchestration_run_id, source_run_id=source_run_id)
         storage.write_text(layout.deck_latest_pointer_uri(client),
                            json.dumps(pointer, indent=2))
+        published["checksum"] = pointer["checksum"]
+        published["size_bytes"] = pointer["size_bytes"]
         log.info("Investor PPTX published to durable storage: %s", latest_uri)
         return published
     except Exception as exc:  # noqa: BLE001 — publish is best-effort, never fatal
@@ -211,6 +355,7 @@ def generate_investor_pptx(
     as_of_date: str = "",
     deck_config: Optional[str] = None,
     mandatory: bool = False,
+    source_run_id: Optional[str] = None,
     log: Optional[logging.Logger] = None,
 ) -> Dict[str, Any]:
     """Generate the investor PPTX for a completed run and update the manifest.
@@ -250,12 +395,20 @@ def generate_investor_pptx(
             "path": OUTPUT_REL,
             "generated_at": _now_iso(),
             "generator": GENERATOR_NAME,
+            "generator_version": _generator_version(),
             "deck_config": _rel_config(deck_config),
+            # Recorded so a later backfill can resolve the reporting period from
+            # the manifest alone, without re-deriving it from the tape.
+            "reporting_period": period_key(as_of_date) or (as_of_date or None),
+            "client_id": client_name or None,
+            "source_run_id": source_run_id,
         }
         # Durable publish (guarded): upload the deck so the MI API can serve it.
         # A publish failure never fails the run — it is recorded on the artifact.
         published = persist_investor_deck(
-            output, client_id=client_name, period=as_of_date, log=log)
+            output, client_id=client_name, period=as_of_date,
+            orchestration_run_id=run_dir.name, source_run_id=source_run_id,
+            log=log)
         if published:
             artifact["published"] = published
         _update_manifest(run_dir, artifact)

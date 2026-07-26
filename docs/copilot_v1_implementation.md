@@ -1,5 +1,14 @@
 # Trakt Microsoft 365 Copilot — v1 implementation
 
+> **Superseded in part.** The MI action no longer calls the `/mi/query` HTTP
+> handler: both channels now call the shared governed MI application service
+> (`mi_agent_api.mi_service.execute_governed_mi_query`). See
+> [`mi_shared_service_architecture.md`](./mi_shared_service_architecture.md) for
+> the current architecture, the shared service contract, the geography/LTV and
+> deck-publication fixes, the Unicode normalisation, the parity statement and
+> the deployment steps. Everything below about authentication, Entra
+> configuration, packaging and the administrator steps remains current.
+
 v1 supports **only** three capabilities, exposed as a Microsoft 365 declarative
 agent backed by an API plugin:
 
@@ -43,24 +52,33 @@ code was touched. The blob folder structure is unchanged.
 
 ## How the three actions map to existing Trakt components
 
-**askTraktMi → the existing MI Agent, unchanged.**
+**askTraktMi → the shared governed MI application service.**
 `POST /v1/copilot/mi/query` first checks the active data-source kind and
 returns a structured **503** if it is `synthetic_demo` or `unavailable` — the
-Copilot surface can never answer from demo data (the repo-wide data-source
-resolution itself is unchanged, per scope). It then calls the **existing**
-`/mi/query` handler function (`mi_agent_api.app.query`) directly — the same
-deterministic-first parser (`chat_routing.try_route` → `llm_query_parser`
-zero-cost-first), the same `MIQuerySpec` → `mi_query_executor` deterministic
-execution, the same metric definitions, filters, and adapter envelope
-(`adapters.adapt_workflow_result`). The envelope is reshaped (not recomputed)
-into `CopilotMiAnswer`: answer, interpreted, reportingDate, datasetContext,
-dataSourceKind/Label, warnings, sourceNotes, and `supportingValues` — a compact
-extraction of the KPI/table/chart artifacts (rows capped at 50) so Copilot can
-compose its narrative **only from values the deterministic executor produced**.
-No narrative layer was rebuilt: Copilot itself verbalises the structured
-result, under agent instructions that forbid inventing figures. Follow-ups are
-rewritten into standalone questions by Copilot (the MI API is stateless, as it
-is for the React client, which does its own follow-up rewriting client-side).
+Copilot surface can never answer from demo data. It then calls
+`mi_agent_api.mi_service.execute_governed_mi_query` — **the same in-process
+service the React `/mi/query` route calls**, with no HTTP loopback: the same
+deterministic-first parser, the same intent routing (`chat_routing.try_route`),
+the same active-dataset resolution, the same `MIQuerySpec` →
+`mi_query_executor` deterministic execution, the same metric definitions and
+filters, and the same adapter envelope (`adapters.adapt_workflow_result`).
+
+The envelope is reshaped (never recomputed) into `CopilotMiAnswer`, which now
+carries the full governed envelope: answer, interpreted, `querySpec`,
+reportingDate, datasetContext, selectedClient/Portfolio/Run, dataSourceKind and
+Label, validation, reconciliation, warnings, diagnostics, assumptions,
+sourceNotes, and `supportingValues` — the KPI/table/chart artifacts with rows
+capped at 50 and the cap explicitly reported (`truncated`, `truncationNote`,
+`totalRows`). Copilot composes its narrative **only from values the
+deterministic executor produced**, under agent instructions that forbid
+inventing figures. Follow-ups are rewritten into standalone questions by Copilot
+(the MI API is stateless, as it is for the React client).
+
+Channel-specific behaviour is limited to Entra authentication, the deployment's
+client context, the row cap, and Unicode/Markdown normalisation for the Copilot
+renderer (`mi_agent_api/copilot_text.py`). `copilot_actions.py` contains no
+parser, routing, dataset choice, metric definition, or geography / LTV / top-N /
+cohort / forecast / temporal logic.
 
 **getLatestInvestorDeck → the existing deck store, unchanged.**
 Resolution is exactly the dashboard's: `mi_agent_api.decks.resolve_deck_local /
@@ -180,27 +198,41 @@ users.
 
 ```bash
 python -m pytest mi_agent_api/tests/test_copilot_actions.py \
-                 mi_agent_api/tests/test_copilot_package.py -q
-# 23 passed
+                 mi_agent_api/tests/test_copilot_package.py \
+                 mi_agent_api/tests/test_copilot_text.py \
+                 mi_agent_api/tests/test_mi_service.py \
+                 mi_agent_api/tests/test_channel_parity.py -q
 
 python -m pytest mi_agent_api/tests -q
-# 440 collected: 417 passed, 8 failed — the 8 failures are in
-# test_platform_discovery.py and PRE-EXIST on main (verified on a clean
-# origin/main checkout: same 8 failures). Not touched, per scope.
+# 528 collected: 520 passed, 8 failed — the 8 failures are in
+# test_platform_discovery.py / test_funded_central_tape.py /
+# test_funded_enrichment.py and PRE-EXIST on the base commit (verified by
+# stashing the change: the same 8 fail). Not touched, per scope.
+
+python -m pytest tests/test_deck_publication.py tests/test_deck_backfill.py \
+                 tests/test_pptx_orchestration_stage.py -q
 ```
 
 Covered: valid MI question through the deterministic path; governed-source
 enforcement (synthetic fallback → 503, unavailable → 503); malformed request
 (422); unauthenticated/unconfigured (401/503); deck found/absent/storage-down
 (200/404/503) + controlled download; tape found/absent/storage-down + controlled
-download; token tamper/expiry (403); manifests structurally valid; OpenAPI
-matches the implemented routes; exactly three functions exposed.
+download; token tamper/expiry (403); token client scoping and credential
+hygiene; manifests structurally valid; OpenAPI matches the implemented routes;
+exactly three functions exposed.
+
+Plus, from the shared-service refactor: React/Copilot analytical parity across
+the golden-question library; the "point-in-time question needs no run id"
+regression guard; the shared service's own unit tests; Unicode normalisation;
+and the deck publication and backfill contracts. See
+[`mi_shared_service_architecture.md`](./mi_shared_service_architecture.md).
 
 ## Known v1 limitations
 
-- "Latest" deck/tape is the current mutable `latest/` blob convention — no
-  approval state, versioning, or run-ID linkage exists on artifacts yet
-  (deliberately out of scope; see the gap-analysis document).
+- "Latest" deck/tape is the current mutable `latest/` blob convention. The deck
+  pointer now carries the originating orchestration/source run ids, a checksum,
+  size and generator version, and `latest` cannot regress to an older reporting
+  period — but there is still no approval state or artifact versioning.
 - The MI action is stateless: Copilot must restate follow-ups as standalone
   questions (its normal behaviour); no server-side conversation memory.
 - One client per deployment (existing model); `portfolioId` is not checked
@@ -213,3 +245,6 @@ matches the implemented routes; exactly three functions exposed.
 - The declarative agent surfaces only what the API returns; if the MI Agent
   returns a controlled error, Copilot reports unavailability rather than
   answering.
+- Copilot has no `filters` or `sourcePortfolioLens` input, so React
+  drill-through and source-portfolio lens selections have no Copilot equivalent.
+  The shared service supports both; exposing them is a schema change only.

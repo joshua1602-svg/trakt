@@ -25,11 +25,15 @@ paths:
       operationId: askTraktMi
       summary: Ask the Trakt MI Agent a portfolio question
       description: >-
-        Use for ANY question about portfolio data, performance, balances,
-        originations, LTV, regions, comparisons between reporting periods, or
-        other management-information queries. Returns the answer and the
-        supporting values it was computed from. Never compute portfolio figures
-        yourself — always call this action.
+        Use for ANY question about portfolio data, performance, balances, loan
+        counts, LTV and LTV distribution, regional concentration and other
+        geographic views, top-N loans, filtered metrics, originations,
+        comparisons between reporting periods, cohorts, forecasts, risk limits,
+        data quality, or other management-information queries. Returns the
+        answer and the supporting values it was computed from. Omit portfolioId
+        unless the user explicitly names a historical run — point-in-time
+        questions are answered from the current active governed dataset. Never
+        compute portfolio figures yourself — always call this action.
       requestBody:
         required: true
         content:
@@ -179,6 +183,10 @@ components:
         truncated:
           type: boolean
           default: false
+        totalRows:
+          type: integer
+          nullable: true
+          description: Total rows the MI engine produced before any cap.
     CopilotMiAnswer:
       type: object
       required: [ok, question, answer, dataSourceKind, dataSourceLabel]
@@ -198,6 +206,11 @@ components:
           type: string
           nullable: true
           description: How the deterministic parser interpreted the question.
+        querySpec:
+          type: object
+          nullable: true
+          description: The parsed governed query specification (metric,
+            aggregation, dimensions, filters, top-N, ordering).
         reportingDate:
           type: string
           nullable: true
@@ -208,6 +221,18 @@ components:
         portfolioId:
           type: string
           nullable: true
+        selectedClient:
+          type: string
+          nullable: true
+          description: Governed client the answer is scoped to.
+        selectedPortfolio:
+          type: string
+          nullable: true
+        selectedRun:
+          type: string
+          nullable: true
+          description: Set ONLY when the analytical intent genuinely required a
+            specific historical run; null for point-in-time questions.
         dataSourceKind:
           type: string
         dataSourceLabel:
@@ -216,6 +241,14 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CopilotSupportingArtifact'
+        validation:
+          type: object
+          nullable: true
+          description: Deterministic validation result from the MI engine.
+        reconciliation:
+          type: object
+          nullable: true
+          description: Coverage / reconciliation footer for the result.
         sourceNotes:
           type: array
           items: {}
@@ -223,6 +256,22 @@ components:
           type: array
           items:
             type: string
+        diagnostics:
+          type: array
+          items:
+            type: string
+        assumptions:
+          type: array
+          items:
+            type: string
+        truncated:
+          type: boolean
+          default: false
+          description: True when supporting rows were capped for the Copilot
+            response limit. The underlying totals are unaffected.
+        truncationNote:
+          type: string
+          nullable: true
     CopilotArtifactInfo:
       type: object
       required: [ok, artifactType, fileName, contentType, clientId, downloadUrl, downloadExpiresAt]

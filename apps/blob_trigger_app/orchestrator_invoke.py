@@ -332,7 +332,7 @@ def _generate_investor_pptx(state: Any, *, client_id: str,
     try:
         result[ARTIFACT_KEY] = generate_investor_pptx(
             run_dir, client_name=client_name, as_of_date=as_of_date,
-            mandatory=mandatory)
+            mandatory=mandatory, source_run_id=getattr(state, "run_id", None))
     except Exception as exc:  # mandatory failure → fail the run
         logging.exception("Investor PPTX stage failed (mandatory=%s)", mandatory)
         if mandatory:

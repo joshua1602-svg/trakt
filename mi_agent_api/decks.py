@@ -114,6 +114,25 @@ def _blob_pointer(storage, layout, client_id: str) -> Dict[str, Any]:
 # --------------------------------------------------------------------------- #
 # Public API
 # --------------------------------------------------------------------------- #
+def _latest_from_pointer(ptr: Dict[str, Any]) -> Dict[str, Any]:
+    """UI/Copilot-safe view of the durable ``latest_investor_pack.json`` pointer.
+
+    Deliberately whitelists fields: the blob/period URIs stay server-side so no
+    raw storage path is ever exposed, while the identity and integrity metadata
+    (period, generation time, originating run, checksum, size) is surfaced.
+    """
+    return {
+        "period": ptr.get("reporting_period"),
+        "asOfDate": ptr.get("as_of_date"),
+        "generatedAt": ptr.get("generated_at"),
+        "orchestrationRunId": ptr.get("orchestration_run_id"),
+        "sourceRunId": ptr.get("source_run_id"),
+        "checksum": ptr.get("checksum"),
+        "sizeBytes": ptr.get("size_bytes"),
+        "generatorVersion": ptr.get("generator_version"),
+    }
+
+
 def list_decks(client_id: str) -> Dict[str, Any]:
     """Discover the decks available for a client, UI-safe (no raw paths).
 
@@ -131,8 +150,7 @@ def list_decks(client_id: str) -> Dict[str, Any]:
         has_latest = (root / client_id / _LATEST / DECK_NAME).exists()
         ptr = _local_pointer(root, client_id)
         if has_latest:
-            latest = {"period": ptr.get("reporting_period"),
-                      "generatedAt": ptr.get("generated_at")}
+            latest = _latest_from_pointer(ptr)
     else:
         ctx = _blob_ctx()
         if ctx is not None:
@@ -144,8 +162,7 @@ def list_decks(client_id: str) -> Dict[str, Any]:
                 has_latest = False
             ptr = _blob_pointer(storage, layout, client_id)
             if has_latest:
-                latest = {"period": ptr.get("reporting_period"),
-                          "generatedAt": ptr.get("generated_at")}
+                latest = _latest_from_pointer(ptr)
 
     decks = [{"period": p} for p in sorted(periods, reverse=True)]
     available = latest is not None or bool(decks)

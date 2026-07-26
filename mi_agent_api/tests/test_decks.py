@@ -115,7 +115,13 @@ def test_persist_then_discover_roundtrip(tmp_path, monkeypatch):
 
     out = decks_mod.list_decks("ERE")
     assert out["available"] is True
-    assert out["latest"]["period"] == "2026-01-31"
+    # The pointer's reporting period is the normalised YYYY-MM key — the same
+    # value the dated deck path uses, so the two can never disagree. The finer
+    # as-of value the run reported is retained separately for display.
+    assert out["latest"]["period"] == "2026-01"
+    assert out["latest"]["asOfDate"] == "2026-01-31"
+    assert out["latest"]["checksum"].startswith("sha256:")
+    assert out["latest"]["sizeBytes"] == deck.stat().st_size
     assert [d["period"] for d in out["decks"]] == ["2026-01"]
 
     resolved = decks_mod.resolve_deck_local("ERE", None)
