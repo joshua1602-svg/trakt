@@ -1,0 +1,21 @@
+node_modules/
+.next/
+out/
+.env
+.env.local
+.env*.local
+
+# Development-adapter lead storage. Never commit captured leads.
+.leads/
+
+# Test output
+playwright-report/
+test-results/
+coverage/
+
+*.tsbuildinfo
+next-env.d.ts
+
+# Python
+__pycache__/
+*.pyc

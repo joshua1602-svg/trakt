@@ -1,0 +1,99 @@
+name: Deploy landing page (App Service)
+
+# Builds and deploys the Trakt marketing site + public synthetic demonstration
+# (`landing-page/`) to an Azure App Service (Linux, Node 22).
+#
+# Prerequisites (created once, outside this repository):
+#   • App Service on a Linux plan, runtime stack Node 22 LTS
+#   • Repository secret AZURE_LANDING_PAGE_PUBLISH_PROFILE
+#       (App Service → Get publish profile)
+#   • Repository variable AZURE_LANDING_PAGE_APP_NAME  (the App Service name)
+#   • Repository variable LANDING_PAGE_SITE_URL        (the canonical origin;
+#       NEXT_PUBLIC_* values are inlined at build time, so this must be set here)
+#
+# Manual by default, matching `deploy-mi-api.yml`. Uncomment the push trigger
+# once the app exists.
+
+on:
+  workflow_dispatch: {}
+  # push:
+  #   branches: [ main ]
+  #   paths: [ 'landing-page/**' ]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: landing-page
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: landing-page/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      # Proves the committed demo pack still matches what the Trakt engine
+      # produces from the committed synthetic dataset.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify the demo pack is reproducible
+        working-directory: .
+        run: |
+          pip install --quiet -r requirements.txt
+          python -m pytest landing-page/tests/demo_pack_reproducible_test.py -q
+
+      - name: Production build
+        env:
+          NEXT_PUBLIC_SITE_URL: ${{ vars.LANDING_PAGE_SITE_URL }}
+          NEXT_PUBLIC_DEMO_NAME: Synthetic Demo Lender
+          NEXT_PUBLIC_ANALYTICS_PROVIDER: ${{ vars.LANDING_PAGE_ANALYTICS_PROVIDER || 'none' }}
+        run: npm run build
+
+      # `output: "standalone"` produces a self-contained server; assemble the
+      # deployable tree App Service will run.
+      - name: Assemble the standalone bundle
+        run: |
+          mkdir -p deploy
+          cp -r .next/standalone/. deploy/
+          mkdir -p deploy/.next
+          cp -r .next/static deploy/.next/static
+          cp -r public deploy/public
+          # App Service starts `npm start`; point it at the standalone server.
+          node -e "require('fs').writeFileSync('deploy/package.json', JSON.stringify({name:'trakt-landing-page',private:true,scripts:{start:'node server.js'}},null,2))"
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_LANDING_PAGE_APP_NAME }}
+          publish-profile: ${{ secrets.AZURE_LANDING_PAGE_PUBLISH_PROFILE }}
+          package: landing-page/deploy
+
+      - name: Smoke-check the health endpoint
+        run: |
+          for i in 1 2 3 4 5 6; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' \
+              "https://${{ vars.AZURE_LANDING_PAGE_APP_NAME }}.azurewebsites.net/api/health" || true)
+            if [ "$code" = "200" ]; then echo "healthy"; exit 0; fi
+            echo "attempt $i: HTTP $code — waiting"; sleep 15
+          done
+          echo "health check did not return 200"; exit 1

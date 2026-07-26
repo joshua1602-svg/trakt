@@ -1,0 +1,1739 @@
+{
+  "packVersion": 1,
+  "client": {
+    "id": "synthetic_demo",
+    "name": "Synthetic Demo Lender",
+    "originator": "ERE Funding Limited",
+    "description": "A synthetic UK equity release lender used throughout the Trakt demonstration materials. Its book is a lifetime-mortgage portfolio with interest roll-up, funded through a warehouse facility and reported to ESMA Annex 2 for securitisation.",
+    "synthetic": true
+  },
+  "portfolio": {
+    "id": "SYNTHETIC_ERE_Portfolio_012026",
+    "name": "Equity Release Portfolio",
+    "assetClass": "UK equity release mortgages",
+    "currency": "GBP",
+    "country": "United Kingdom",
+    "asOfDate": "2025-11-30",
+    "asOfDisplay": "30 November 2025",
+    "loanCount": 36,
+    "totalBalance": 5382462.92,
+    "totalBalanceDisplay": "£5,382,463",
+    "regulatoryRegime": "ESMA Annex 2",
+    "deliveryPreflight": "PASS"
+  },
+  "provenance": {
+    "sourceDataset": "synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_canonical_typed.csv",
+    "engine": [
+      "mi_agent_api.funded_prep.prepare_funded_mi_dataset",
+      "mi_agent.mi_agent_workflow.run_mi_agent_query",
+      "mi_agent_api.adapters.adapt_workflow_result"
+    ],
+    "note": "Every value in this pack was produced by the Trakt deterministic MI engine from the repository's synthetic canonical dataset. The landing page performs no portfolio calculation of its own."
+  },
+  "intents": [
+    {
+      "id": "funded_balance",
+      "label": "What is the current funded portfolio balance?",
+      "category": "portfolio_kpi",
+      "phrases": [
+        "current funded portfolio balance",
+        "funded balance",
+        "portfolio balance",
+        "total balance",
+        "current balance",
+        "outstanding balance",
+        "how big is the portfolio",
+        "portfolio size",
+        "aum",
+        "book size"
+      ],
+      "answer": "The funded book stands at £5.4MM across 36 exposures as at 30 November 2025. The figure is the sum of current outstanding balance on the governed canonical dataset — the same calculation the MI workspace and Microsoft 365 Copilot return for this portfolio.",
+      "interpreted": "Chart: Summary (no chart) · Metric: Balance · Aggregation: Sum · Parser: deterministic · Validation: Passed",
+      "artifacts": [
+        {
+          "kind": "kpi",
+          "title": "Portfolio summary",
+          "kpis": [
+            {
+              "label": "Exposures",
+              "value": "36"
+            },
+            {
+              "label": "Current outstanding balance",
+              "value": "£5.4MM"
+            }
+          ],
+          "coverage": 100.0
+        }
+      ],
+      "followUps": [
+        "region_exposure",
+        "ltv_band",
+        "wa_ltv"
+      ]
+    },
+    {
+      "id": "loan_count",
+      "label": "How many loans are in the funded book?",
+      "category": "portfolio_kpi",
+      "phrases": [
+        "how many loans",
+        "number of loans",
+        "loan count",
+        "how many exposures",
+        "number of exposures",
+        "how many accounts",
+        "how many cases"
+      ],
+      "answer": "There are 36 exposures in the funded book as at 30 November 2025, carrying £5,382,463 of current outstanding balance.",
+      "interpreted": "Chart: Summary (no chart) · Aggregation: Count · Parser: deterministic · Validation: Passed",
+      "artifacts": [
+        {
+          "kind": "kpi",
+          "title": "Portfolio summary",
+          "kpis": [
+            {
+              "label": "Exposures",
+              "value": "36"
+            },
+            {
+              "label": "Current outstanding balance",
+              "value": "£5.4MM"
+            }
+          ],
+          "coverage": 100.0
+        }
+      ],
+      "followUps": [
+        "funded_balance",
+        "ticket_band",
+        "channel"
+      ]
+    },
+    {
+      "id": "wa_ltv",
+      "label": "What is the weighted average current LTV?",
+      "category": "portfolio_kpi",
+      "phrases": [
+        "weighted average current ltv",
+        "weighted average ltv",
+        "wa ltv",
+        "average ltv",
+        "what is the ltv",
+        "loan to value"
+      ],
+      "answer": "Weighted average current LTV is 43.5% as at 30 November 2025, balance-weighted across the funded book. Current LTV is derived from current outstanding balance over current valuation amount by the governed canonical transform, not restated here.",
+      "interpreted": "Chart: Summary (no chart) · Metric: Current LTV · Aggregation: Weighted average · Parser: deterministic · Validation: Passed",
+      "artifacts": [
+        {
+          "kind": "kpi",
+          "title": "Portfolio summary",
+          "kpis": [
+            {
+              "label": "Exposures",
+              "value": "36"
+            },
+            {
+              "label": "Weighted average current LTV",
+              "value": "43.5%"
+            }
+          ],
+          "coverage": 100.0
+        }
+      ],
+      "followUps": [
+        "ltv_band",
+        "funded_balance",
+        "portfolio_risks"
+      ]
+    },
+    {
+      "id": "wa_rate",
+      "label": "What is the weighted average interest rate?",
+      "category": "portfolio_kpi",
+      "phrases": [
+        "weighted average interest rate",
+        "average interest rate",
+        "wa rate",
+        "what rate",
+        "interest rate",
+        "coupon",
+        "yield"
+      ],
+      "answer": "Weighted average interest rate is 7.6% as at 30 November 2025, balance-weighted across the funded book.",
+      "interpreted": "Chart: Summary (no chart) · Metric: Interest Rate · Aggregation: Weighted average · Parser: deterministic · Validation: Passed",
+      "artifacts": [
+        {
+          "kind": "kpi",
+          "title": "Portfolio summary",
+          "kpis": [
+            {
+              "label": "Exposures",
+              "value": "36"
+            },
+            {
+              "label": "Weighted average interest rate",
+              "value": "7.6%"
+            }
+          ],
+          "coverage": 100.0
+        }
+      ],
+      "followUps": [
+        "ltv_band",
+        "funded_balance",
+        "portfolio_risks"
+      ]
+    },
+    {
+      "id": "region_exposure",
+      "label": "Which regions have the highest exposure?",
+      "category": "concentration",
+      "phrases": [
+        "which regions have the highest exposure",
+        "regional exposure",
+        "exposure by region",
+        "balance by region",
+        "geographic concentration",
+        "geographic exposure",
+        "where is the portfolio",
+        "by region",
+        "regional concentration",
+        "top regions",
+        "geography"
+      ],
+      "answer": "East Midlands is the largest regional exposure at £830,812 (15.4% of the funded book), ahead of East of England at £760,587. Regions are derived from property postcode via the ITL/NUTS lookup in the governed transform, so the split is reproducible from source.",
+      "interpreted": "Chart: Bar · Metric: Balance · Dimension: Region · Aggregation: Sum · Parser: deterministic · Validation: Passed",
+      "artifacts": [
+        {
+          "kind": "chart",
+          "title": "Current balance by region",
+          "columns": [
+            {
+              "key": "collateral_geography",
+              "label": "Collateral Geography",
+              "align": "left",
+              "format": "text",
+              "scale": null
+            },
+            {
+              "key": "current_outstanding_balance_sum",
+              "label": "Current Outstanding Balance Sum",
+              "align": "right",
+              "format": "gbp",
+              "scale": null
+            },
+            {
+              "key": "loan_count",
+              "label": "Loan Count",
+              "align": "right",
+              "format": "number",
+              "scale": null
+            },
+            {
+              "key": "concentration_pct",
+              "label": "Concentration Pct",
+              "align": "right",
+              "format": "pct",
+              "scale": "percent_points"
+            }
+          ],
+          "rows": [
+            {
+              "collateral_geography": "East Midlands",
+              "current_outstanding_balance_sum": 830811.74,
+              "loan_count": 5,
+              "concentration_pct": 15.435531
+            },
+            {
+              "collateral_geography": "East of England",
+              "current_outstanding_balance_sum": 760586.78,
+              "loan_count": 5,
+              "concentration_pct": 14.130832
+            },
+            {
+              "collateral_geography": "Yorkshire and The Humber",
+              "current_outstanding_balance_sum": 751500.54,
+              "loan_count": 5,
+              "concentration_pct": 13.96202
+            },
+            {
+              "collateral_geography": "London",
+              "current_outstanding_balance_sum": 714991.12,
+              "loan_count": 4,
+              "concentration_pct": 13.283717
+            },
+            {
+              "collateral_geography": "South East",
+              "current_outstanding_balance_sum": 627416.92,
+              "loan_count": 5,
+              "concentration_pct": 11.656688
+            },
+            {
+              "collateral_geography": "South West",
+              "current_outstanding_balance_sum": 457546.55,
+              "loan_count": 2,
+              "concentration_pct": 8.500691
+            },
+            {
+              "collateral_geography": "Scotland",
+              "current_outstanding_balance_sum": 388146.06,
+              "loan_count": 2,
+              "concentration_pct": 7.21131
+            },
+            {
+              "collateral_geography": "Wales",
+              "current_outstanding_balance_sum": 373619.52,
+              "loan_count": 3,
+              "concentration_pct": 6.941423
+            },
+            {
+              "collateral_geography": "North West",
+              "current_outstanding_balance_sum": 250073.57,
+              "loan_count": 3,
+              "concentration_pct": 4.646081
+            },
+            {
+              "collateral_geography": "West Midlands",
+              "current_outstanding_balance_sum": 227770.12,
+              "loan_count": 2,
+              "concentration_pct": 4.231708
+            }
+          ],
+          "totalRows": 10,
+          "coverage": 100.0,
+          "chartType": "bar",
+          "xKey": "collateral_geography",
+          "valueKey": "current_outstanding_balance_sum",
+          "valueFormat": "gbp"
+        }
+      ],
+      "followUps": [
+        "ltv_band",
+        "portfolio_risks",
+        "investor_report"
+      ]
+    },
+    {
+      "id": "ltv_band",
+      "label": "Show the portfolio by LTV band.",
+      "category": "stratification",
+      "phrases": [
+        "show the portfolio by ltv band",
+        "portfolio by ltv",
+        "ltv band",
+        "ltv bucket",
+        "ltv distribution",
+        "balance by ltv",
+        "ltv breakdown",
+        "stratify by ltv",
+        "ltv stratification"
+      ],
+      "answer": "The book is concentrated in the 50-60% band, which holds £1,774,558 (33.0%). LTV bands are the governed bucket definitions from the shared analytics library, so the same bands appear in the investor pack and the regulatory stratifications.",
+      "interpreted": "Chart: Bar · Metric: Balance · Dimension: LTV Bucket · Aggregation: Sum · Parser: deterministic · Validation: Passed",
+      "artifacts": [
+        {
+          "kind": "chart",
+          "title": "Current balance by LTV band",
+          "columns": [
+            {
+              "key": "ltv_bucket",
+              "label": "Ltv Bucket",
+              "align": "left",
+              "format": "text",
+              "scale": null
+            },
+            {
+              "key": "current_outstanding_balance_sum",
+              "label": "Current Outstanding Balance Sum",
+              "align": "right",
+              "format": "gbp",
+              "scale": null
+            },
+            {
+              "key": "loan_count",
+              "label": "Loan Count",
+              "align": "right",
+              "format": "number",
+              "scale": null
+            },
+            {
+              "key": "concentration_pct",
+              "label": "Concentration Pct",
+              "align": "right",
+              "format": "pct",
+              "scale": "percent_points"
+            }
+          ],
+          "rows": [
+            {
+              "ltv_bucket": "50-60%",
+              "current_outstanding_balance_sum": 1774558.49,
+              "loan_count": 10,
+              "concentration_pct": 32.969265
+            },
+            {
+              "ltv_bucket": "40-50%",
+              "current_outstanding_balance_sum": 1711953.29,
+              "loan_count": 10,
+              "concentration_pct": 31.806133
+            },
+            {
+              "ltv_bucket": "30-40%",
+              "current_outstanding_balance_sum": 1634455.43,
+              "loan_count": 13,
+              "concentration_pct": 30.366311
+            },
+            {
+              "ltv_bucket": "20-30%",
+              "current_outstanding_balance_sum": 261495.71,
+              "loan_count": 3,
+              "concentration_pct": 4.858291
+            }
+          ],
+          "totalRows": 4,
+          "coverage": 100.0,
+          "chartType": "bar",
+          "xKey": "ltv_bucket",
+          "valueKey": "current_outstanding_balance_sum",
+          "valueFormat": "gbp"
+        }
+      ],
+      "followUps": [
+        "wa_ltv",
+        "region_exposure",
+        "investor_report"
+      ]
+    },
+    {
+      "id": "age_band",
+      "label": "Show the portfolio by borrower age band.",
+      "category": "stratification",
+      "phrases": [
+        "portfolio by borrower age band",
+        "by age band",
+        "age band",
+        "borrower age",
+        "age distribution",
+        "balance by age",
+        "age bucket"
+      ],
+      "answer": "The largest age cohort is 80-85, holding £1,673,675 (31.1%) of the funded book. Borrower age drives redemption expectations on an equity release book, so it is a standing stratification in both investor and management reporting.",
+      "interpreted": "Chart: Bar · Metric: Balance · Dimension: Age Bucket · Aggregation: Sum · Parser: deterministic · Validation: Passed",
+      "artifacts": [
+        {
+          "kind": "chart",
+          "title": "Current balance by borrower age band",
+          "columns": [
+            {
+              "key": "age_bucket",
+              "label": "Age Bucket",
+              "align": "left",
+              "format": "text",
+              "scale": null
+            },
+            {
+              "key": "current_outstanding_balance_sum",
+              "label": "Current Outstanding Balance Sum",
+              "align": "right",
+              "format": "gbp",
+              "scale": null
+            },
+            {
+              "key": "loan_count",
+              "label": "Loan Count",
+              "align": "right",
+              "format": "number",
+              "scale": null
+            },
+            {
+              "key": "concentration_pct",
+              "label": "Concentration Pct",
+              "align": "right",
+              "format": "pct",
+              "scale": "percent_points"
+            }
+          ],
+          "rows": [
+            {
+              "age_bucket": "80-85",
+              "current_outstanding_balance_sum": 1673675.02,
+              "loan_count": 11,
+              "concentration_pct": 31.094966
+            },
+            {
+              "age_bucket": "75-80",
+              "current_outstanding_balance_sum": 1518782.52,
+              "loan_count": 9,
+              "concentration_pct": 28.217241
+            },
+            {
+              "age_bucket": "70-75",
+              "current_outstanding_balance_sum": 938871.99,
+              "loan_count": 7,
+              "concentration_pct": 17.443167
+            },
+            {
+              "age_bucket": "60-65",
+              "current_outstanding_balance_sum": 675502.56,
+              "loan_count": 6,
+              "concentration_pct": 12.550064
+            },
+            {
+              "age_bucket": "65-70",
+              "current_outstanding_balance_sum": 438712.38,
+              "loan_count": 2,
+              "concentration_pct": 8.150774
+            },
+            {
+              "age_bucket": "85+",
+              "current_outstanding_balance_sum": 136918.45,
+              "loan_count": 1,
+              "concentration_pct": 2.543788
+            }
+          ],
+          "totalRows": 6,
+          "coverage": 100.0,
+          "chartType": "bar",
+          "xKey": "age_bucket",
+          "valueKey": "current_outstanding_balance_sum",
+          "valueFormat": "gbp"
+        }
+      ],
+      "followUps": [
+        "ltv_band",
+        "funded_balance",
+        "management_summary"
+      ]
+    },
+    {
+      "id": "ticket_band",
+      "label": "Show the portfolio by ticket size.",
+      "category": "stratification",
+      "phrases": [
+        "portfolio by ticket size",
+        "ticket size",
+        "ticket band",
+        "loan size",
+        "by loan size",
+        "balance by ticket",
+        "size distribution"
+      ],
+      "answer": "The 150-200k band is the largest by balance at £2,362,923 (43.9%).",
+      "interpreted": "Chart: Bar · Metric: Balance · Dimension: Ticket Size · Aggregation: Sum · Parser: deterministic · Validation: Passed",
+      "artifacts": [
+        {
+          "kind": "chart",
+          "title": "Current balance by ticket size band",
+          "columns": [
+            {
+              "key": "ticket_bucket",
+              "label": "Ticket Bucket",
+              "align": "left",
+              "format": "text",
+              "scale": null
+            },
+            {
+              "key": "current_outstanding_balance_sum",
+              "label": "Current Outstanding Balance Sum",
+              "align": "right",
+              "format": "gbp",
+              "scale": null
+            },
+            {
+              "key": "loan_count",
+              "label": "Loan Count",
+              "align": "right",
+              "format": "number",
+              "scale": null
+            },
+            {
+              "key": "concentration_pct",
+              "label": "Concentration Pct",
+              "align": "right",
+              "format": "pct",
+              "scale": "percent_points"
+            }
+          ],
+          "rows": [
+            {
+              "ticket_bucket": "150-200k",
+              "current_outstanding_balance_sum": 2362922.75,
+              "loan_count": 13,
+              "concentration_pct": 43.9004
+            },
+            {
+              "ticket_bucket": "200-300k",
+              "current_outstanding_balance_sum": 1482315.02,
+              "loan_count": 6,
+              "concentration_pct": 27.539716
+            },
+            {
+              "ticket_bucket": "50-100k",
+              "current_outstanding_balance_sum": 943353.8,
+              "loan_count": 12,
+              "concentration_pct": 17.526434
+            },
+            {
+              "ticket_bucket": "100-150k",
+              "current_outstanding_balance_sum": 593871.35,
+              "loan_count": 5,
+              "concentration_pct": 11.03345
+            }
+          ],
+          "totalRows": 4,
+          "coverage": 100.0,
+          "chartType": "bar",
+          "xKey": "ticket_bucket",
+          "valueKey": "current_outstanding_balance_sum",
+          "valueFormat": "gbp"
+        }
+      ],
+      "followUps": [
+        "loan_count",
+        "ltv_band",
+        "investor_report"
+      ]
+    },
+    {
+      "id": "channel",
+      "label": "Show the portfolio by origination channel.",
+      "category": "stratification",
+      "phrases": [
+        "by origination channel",
+        "origination channel",
+        "by channel",
+        "channel mix",
+        "broker or direct",
+        "distribution channel",
+        "where did the loans come from",
+        "introducer"
+      ],
+      "answer": "IFA is the largest origination channel at £2,102,228 (39.1%) of the funded book.",
+      "interpreted": "Chart: Bar · Metric: Balance · Dimension: Origination Channel · Aggregation: Sum · Parser: deterministic · Validation: Passed",
+      "artifacts": [
+        {
+          "kind": "chart",
+          "title": "Current balance by origination channel",
+          "columns": [
+            {
+              "key": "origination_channel",
+              "label": "Origination Channel",
+              "align": "left",
+              "format": "text",
+              "scale": null
+            },
+            {
+              "key": "current_outstanding_balance_sum",
+              "label": "Current Outstanding Balance Sum",
+              "align": "right",
+              "format": "gbp",
+              "scale": null
+            },
+            {
+              "key": "loan_count",
+              "label": "Loan Count",
+              "align": "right",
+              "format": "number",
+              "scale": null
+            },
+            {
+              "key": "concentration_pct",
+              "label": "Concentration Pct",
+              "align": "right",
+              "format": "pct",
+              "scale": "percent_points"
+            }
+          ],
+          "rows": [
+            {
+              "origination_channel": "IFA",
+              "current_outstanding_balance_sum": 2102228.41,
+              "loan_count": 16,
+              "concentration_pct": 39.056998
+            },
+            {
+              "origination_channel": "Direct",
+              "current_outstanding_balance_sum": 1818101.27,
+              "loan_count": 12,
+              "concentration_pct": 33.778241
+            },
+            {
+              "origination_channel": "Broker",
+              "current_outstanding_balance_sum": 1462133.24,
+              "loan_count": 8,
+              "concentration_pct": 27.164762
+            }
+          ],
+          "totalRows": 3,
+          "coverage": 100.0,
+          "chartType": "bar",
+          "xKey": "origination_channel",
+          "valueKey": "current_outstanding_balance_sum",
+          "valueFormat": "gbp"
+        }
+      ],
+      "followUps": [
+        "ticket_band",
+        "funded_balance",
+        "management_summary"
+      ]
+    },
+    {
+      "id": "portfolio_risks",
+      "label": "What are the principal portfolio risks?",
+      "category": "risk",
+      "phrases": [
+        "principal portfolio risks",
+        "portfolio risks",
+        "what are the risks",
+        "risk",
+        "concentration risk",
+        "biggest risks",
+        "risk profile",
+        "limit breach",
+        "covenant",
+        "exposure risk"
+      ],
+      "answer": "The material concentrations as at 30 November 2025 are region (East Midlands at 15.4%); ltv band (50-60% at 33.0%); borrower age band (80-85 at 31.1%). Nothing in this synthetic book breaches a limit, because no limit set is configured for the public demonstration — in a client environment these same measures are evaluated against the portfolio's own covenant and concentration limits, and breaches raise governed alerts.",
+      "interpreted": "Concentration analysis · Region, LTV band, borrower age band",
+      "artifacts": [
+        {
+          "kind": "table",
+          "title": "Concentration by governed dimension",
+          "columns": [
+            {
+              "key": "dimension",
+              "label": "Dimension",
+              "align": "left",
+              "format": "text",
+              "scale": null
+            },
+            {
+              "key": "largest_segment",
+              "label": "Largest segment",
+              "align": "left",
+              "format": "text",
+              "scale": null
+            },
+            {
+              "key": "largest_share_pct",
+              "label": "Largest share",
+              "align": "right",
+              "format": "pct",
+              "scale": "percent_points"
+            },
+            {
+              "key": "top_3_share_pct",
+              "label": "Top 3 share",
+              "align": "right",
+              "format": "pct",
+              "scale": "percent_points"
+            },
+            {
+              "key": "segments",
+              "label": "Segments",
+              "align": "right",
+              "format": "number",
+              "scale": null
+            }
+          ],
+          "rows": [
+            {
+              "dimension": "Region",
+              "largest_segment": "East Midlands",
+              "largest_share_pct": 15.4,
+              "top_3_share_pct": 43.5,
+              "segments": 10
+            },
+            {
+              "dimension": "LTV band",
+              "largest_segment": "50-60%",
+              "largest_share_pct": 33.0,
+              "top_3_share_pct": 95.1,
+              "segments": 4
+            },
+            {
+              "dimension": "Borrower age band",
+              "largest_segment": "80-85",
+              "largest_share_pct": 31.1,
+              "top_3_share_pct": 76.8,
+              "segments": 6
+            }
+          ],
+          "totalRows": 3,
+          "coverage": 100.0
+        }
+      ],
+      "followUps": [
+        "region_exposure",
+        "ltv_band",
+        "data_quality"
+      ]
+    },
+    {
+      "id": "data_quality",
+      "label": "How do I know these numbers are right?",
+      "category": "governance",
+      "phrases": [
+        "how do i know these numbers are right",
+        "data quality",
+        "validation",
+        "provenance",
+        "lineage",
+        "audit",
+        "can i trust",
+        "how is this checked",
+        "evidence",
+        "where does the data come from",
+        "source",
+        "is this accurate",
+        "governance"
+      ],
+      "answer": "Every figure on this page traces back through the same gated pipeline. For the 30 November 2025 cut, 62 source headers were mapped to canonical fields (60 at full confidence), the typed transform recorded 0 parse failures, validation raised 2 field-level exception(s) — both enumeration mismatches, held open rather than silently corrected — and the ESMA Annex 2 delivery preflight passed with 0 issues. The exceptions are real, and Trakt reports them rather than resolving them for you.",
+      "interpreted": "Governance evidence · pipeline gate reports for this run",
+      "artifacts": [
+        {
+          "kind": "table",
+          "title": "Pipeline evidence for this reporting cut",
+          "columns": [
+            {
+              "key": "gate",
+              "label": "Pipeline gate",
+              "align": "left",
+              "format": "text",
+              "scale": null
+            },
+            {
+              "key": "measure",
+              "label": "Measure",
+              "align": "left",
+              "format": "text",
+              "scale": null
+            },
+            {
+              "key": "result",
+              "label": "Result",
+              "align": "left",
+              "format": "text",
+              "scale": null
+            }
+          ],
+          "rows": [
+            {
+              "gate": "1 · Semantic alignment",
+              "measure": "Source headers mapped to canonical fields",
+              "result": "62 mapped, 60 at full confidence"
+            },
+            {
+              "gate": "— · Transform",
+              "measure": "Typed fields with parse failures",
+              "result": "0 of 65 fields"
+            },
+            {
+              "gate": "2/3 · Validation",
+              "measure": "Field-level exceptions raised",
+              "result": "2 exception(s), 2 blocking"
+            },
+            {
+              "gate": "5 · ESMA Annex 2 delivery",
+              "measure": "Preflight on the projected regulatory output",
+              "result": "PASS — 36 rows in / 36 out, 0 issues"
+            }
+          ],
+          "totalRows": 4,
+          "coverage": null
+        }
+      ],
+      "followUps": [
+        "portfolio_risks",
+        "funded_balance",
+        "investor_report"
+      ]
+    }
+  ],
+  "reports": [
+    {
+      "id": "management_summary",
+      "label": "Prepare a management summary.",
+      "category": "report",
+      "phrases": [
+        "prepare a management summary",
+        "management summary",
+        "management report",
+        "mi pack",
+        "board report",
+        "board pack",
+        "exec summary",
+        "executive summary",
+        "summarise the portfolio",
+        "summarize the portfolio",
+        "monthly mi",
+        "management information"
+      ],
+      "documentTitle": "Portfolio Management Summary",
+      "documentSubtitle": "Synthetic Demo Lender · SYNTHETIC_ERE_Portfolio_012026 · as at 30 November 2025",
+      "answer": "The management summary for 30 November 2025 is previewed below: headline KPIs, the concentration position and the governance evidence behind the figures. In a client environment this pack runs on a schedule and reaches finance, risk and leadership through whichever channel each team already uses.",
+      "pages": [
+        {
+          "title": "Portfolio at a glance",
+          "subtitle": "Synthetic Demo Lender · SYNTHETIC_ERE_Portfolio_012026 · as at 30 November 2025",
+          "blocks": [
+            {
+              "kind": "kpi",
+              "title": null,
+              "kpis": [
+                {
+                  "label": "Exposures",
+                  "value": "36"
+                },
+                {
+                  "label": "Current outstanding balance",
+                  "value": "£5.4MM"
+                },
+                {
+                  "label": "Weighted average current LTV",
+                  "value": "43.5%"
+                },
+                {
+                  "label": "Weighted average interest rate",
+                  "value": "7.6%"
+                }
+              ],
+              "coverage": 100.0
+            }
+          ],
+          "note": null
+        },
+        {
+          "title": "Concentration position",
+          "subtitle": null,
+          "blocks": [
+            {
+              "kind": "table",
+              "title": "Concentration by governed dimension",
+              "columns": [
+                {
+                  "key": "dimension",
+                  "label": "Dimension",
+                  "align": "left",
+                  "format": "text",
+                  "scale": null
+                },
+                {
+                  "key": "largest_segment",
+                  "label": "Largest segment",
+                  "align": "left",
+                  "format": "text",
+                  "scale": null
+                },
+                {
+                  "key": "largest_share_pct",
+                  "label": "Largest share",
+                  "align": "right",
+                  "format": "pct",
+                  "scale": "percent_points"
+                },
+                {
+                  "key": "top_3_share_pct",
+                  "label": "Top 3 share",
+                  "align": "right",
+                  "format": "pct",
+                  "scale": "percent_points"
+                },
+                {
+                  "key": "segments",
+                  "label": "Segments",
+                  "align": "right",
+                  "format": "number",
+                  "scale": null
+                }
+              ],
+              "rows": [
+                {
+                  "dimension": "Region",
+                  "largest_segment": "East Midlands",
+                  "largest_share_pct": 15.4,
+                  "top_3_share_pct": 43.5,
+                  "segments": 10
+                },
+                {
+                  "dimension": "LTV band",
+                  "largest_segment": "50-60%",
+                  "largest_share_pct": 33.0,
+                  "top_3_share_pct": 95.1,
+                  "segments": 4
+                },
+                {
+                  "dimension": "Borrower age band",
+                  "largest_segment": "80-85",
+                  "largest_share_pct": 31.1,
+                  "top_3_share_pct": 76.8,
+                  "segments": 6
+                }
+              ],
+              "totalRows": 3,
+              "coverage": 100.0
+            },
+            {
+              "kind": "chart",
+              "title": "Current balance by region",
+              "columns": [
+                {
+                  "key": "collateral_geography",
+                  "label": "Collateral Geography",
+                  "align": "left",
+                  "format": "text",
+                  "scale": null
+                },
+                {
+                  "key": "current_outstanding_balance_sum",
+                  "label": "Current Outstanding Balance Sum",
+                  "align": "right",
+                  "format": "gbp",
+                  "scale": null
+                },
+                {
+                  "key": "loan_count",
+                  "label": "Loan Count",
+                  "align": "right",
+                  "format": "number",
+                  "scale": null
+                },
+                {
+                  "key": "concentration_pct",
+                  "label": "Concentration Pct",
+                  "align": "right",
+                  "format": "pct",
+                  "scale": "percent_points"
+                }
+              ],
+              "rows": [
+                {
+                  "collateral_geography": "East Midlands",
+                  "current_outstanding_balance_sum": 830811.74,
+                  "loan_count": 5,
+                  "concentration_pct": 15.435531
+                },
+                {
+                  "collateral_geography": "East of England",
+                  "current_outstanding_balance_sum": 760586.78,
+                  "loan_count": 5,
+                  "concentration_pct": 14.130832
+                },
+                {
+                  "collateral_geography": "Yorkshire and The Humber",
+                  "current_outstanding_balance_sum": 751500.54,
+                  "loan_count": 5,
+                  "concentration_pct": 13.96202
+                },
+                {
+                  "collateral_geography": "London",
+                  "current_outstanding_balance_sum": 714991.12,
+                  "loan_count": 4,
+                  "concentration_pct": 13.283717
+                },
+                {
+                  "collateral_geography": "South East",
+                  "current_outstanding_balance_sum": 627416.92,
+                  "loan_count": 5,
+                  "concentration_pct": 11.656688
+                },
+                {
+                  "collateral_geography": "South West",
+                  "current_outstanding_balance_sum": 457546.55,
+                  "loan_count": 2,
+                  "concentration_pct": 8.500691
+                },
+                {
+                  "collateral_geography": "Scotland",
+                  "current_outstanding_balance_sum": 388146.06,
+                  "loan_count": 2,
+                  "concentration_pct": 7.21131
+                },
+                {
+                  "collateral_geography": "Wales",
+                  "current_outstanding_balance_sum": 373619.52,
+                  "loan_count": 3,
+                  "concentration_pct": 6.941423
+                },
+                {
+                  "collateral_geography": "North West",
+                  "current_outstanding_balance_sum": 250073.57,
+                  "loan_count": 3,
+                  "concentration_pct": 4.646081
+                },
+                {
+                  "collateral_geography": "West Midlands",
+                  "current_outstanding_balance_sum": 227770.12,
+                  "loan_count": 2,
+                  "concentration_pct": 4.231708
+                }
+              ],
+              "totalRows": 10,
+              "coverage": 100.0,
+              "chartType": "bar",
+              "xKey": "collateral_geography",
+              "valueKey": "current_outstanding_balance_sum",
+              "valueFormat": "gbp"
+            }
+          ],
+          "note": null
+        },
+        {
+          "title": "Governance evidence",
+          "subtitle": null,
+          "blocks": [
+            {
+              "kind": "table",
+              "title": "Pipeline evidence for this reporting cut",
+              "columns": [
+                {
+                  "key": "gate",
+                  "label": "Pipeline gate",
+                  "align": "left",
+                  "format": "text",
+                  "scale": null
+                },
+                {
+                  "key": "measure",
+                  "label": "Measure",
+                  "align": "left",
+                  "format": "text",
+                  "scale": null
+                },
+                {
+                  "key": "result",
+                  "label": "Result",
+                  "align": "left",
+                  "format": "text",
+                  "scale": null
+                }
+              ],
+              "rows": [
+                {
+                  "gate": "1 · Semantic alignment",
+                  "measure": "Source headers mapped to canonical fields",
+                  "result": "62 mapped, 60 at full confidence"
+                },
+                {
+                  "gate": "— · Transform",
+                  "measure": "Typed fields with parse failures",
+                  "result": "0 of 65 fields"
+                },
+                {
+                  "gate": "2/3 · Validation",
+                  "measure": "Field-level exceptions raised",
+                  "result": "2 exception(s), 2 blocking"
+                },
+                {
+                  "gate": "5 · ESMA Annex 2 delivery",
+                  "measure": "Preflight on the projected regulatory output",
+                  "result": "PASS — 36 rows in / 36 out, 0 issues"
+                }
+              ],
+              "totalRows": 4,
+              "coverage": null
+            }
+          ],
+          "note": "Every figure above is reproducible from the governed canonical dataset for this reporting cut."
+        }
+      ],
+      "followUps": [
+        "investor_report",
+        "portfolio_risks",
+        "funded_balance"
+      ]
+    },
+    {
+      "id": "investor_report",
+      "label": "Generate the latest investor report.",
+      "category": "report",
+      "phrases": [
+        "generate the latest investor report",
+        "investor report",
+        "investor pack",
+        "investor deck",
+        "funder report",
+        "funding partner",
+        "produce the investor pack",
+        "quarterly investor"
+      ],
+      "documentTitle": "Investor & Funder MI Pack",
+      "documentSubtitle": "Synthetic Demo Lender · SYNTHETIC_ERE_Portfolio_012026 · as at 30 November 2025",
+      "answer": "The Investor & Funder MI Pack for 30 November 2025 is previewed below. In a client environment the same pack is generated as a branded PowerPoint from this identical governed dataset and delivered on schedule to each funding partner — the numbers in the deck are the numbers on this page, because both come from one calculation.",
+      "pages": [
+        {
+          "title": "Executive summary",
+          "subtitle": "Synthetic Demo Lender · SYNTHETIC_ERE_Portfolio_012026 · as at 30 November 2025",
+          "blocks": [
+            {
+              "kind": "kpi",
+              "title": null,
+              "kpis": [
+                {
+                  "label": "Exposures",
+                  "value": "36"
+                },
+                {
+                  "label": "Current outstanding balance",
+                  "value": "£5.4MM"
+                },
+                {
+                  "label": "Weighted average current LTV",
+                  "value": "43.5%"
+                },
+                {
+                  "label": "Weighted average interest rate",
+                  "value": "7.6%"
+                }
+              ],
+              "coverage": 100.0
+            }
+          ],
+          "note": null
+        },
+        {
+          "title": "Funded stratifications — LTV & ticket size",
+          "subtitle": null,
+          "blocks": [
+            {
+              "kind": "chart",
+              "title": "Current balance by LTV band",
+              "columns": [
+                {
+                  "key": "ltv_bucket",
+                  "label": "Ltv Bucket",
+                  "align": "left",
+                  "format": "text",
+                  "scale": null
+                },
+                {
+                  "key": "current_outstanding_balance_sum",
+                  "label": "Current Outstanding Balance Sum",
+                  "align": "right",
+                  "format": "gbp",
+                  "scale": null
+                },
+                {
+                  "key": "loan_count",
+                  "label": "Loan Count",
+                  "align": "right",
+                  "format": "number",
+                  "scale": null
+                },
+                {
+                  "key": "concentration_pct",
+                  "label": "Concentration Pct",
+                  "align": "right",
+                  "format": "pct",
+                  "scale": "percent_points"
+                }
+              ],
+              "rows": [
+                {
+                  "ltv_bucket": "50-60%",
+                  "current_outstanding_balance_sum": 1774558.49,
+                  "loan_count": 10,
+                  "concentration_pct": 32.969265
+                },
+                {
+                  "ltv_bucket": "40-50%",
+                  "current_outstanding_balance_sum": 1711953.29,
+                  "loan_count": 10,
+                  "concentration_pct": 31.806133
+                },
+                {
+                  "ltv_bucket": "30-40%",
+                  "current_outstanding_balance_sum": 1634455.43,
+                  "loan_count": 13,
+                  "concentration_pct": 30.366311
+                },
+                {
+                  "ltv_bucket": "20-30%",
+                  "current_outstanding_balance_sum": 261495.71,
+                  "loan_count": 3,
+                  "concentration_pct": 4.858291
+                }
+              ],
+              "totalRows": 4,
+              "coverage": 100.0,
+              "chartType": "bar",
+              "xKey": "ltv_bucket",
+              "valueKey": "current_outstanding_balance_sum",
+              "valueFormat": "gbp"
+            },
+            {
+              "kind": "chart",
+              "title": "Current balance by ticket size band",
+              "columns": [
+                {
+                  "key": "ticket_bucket",
+                  "label": "Ticket Bucket",
+                  "align": "left",
+                  "format": "text",
+                  "scale": null
+                },
+                {
+                  "key": "current_outstanding_balance_sum",
+                  "label": "Current Outstanding Balance Sum",
+                  "align": "right",
+                  "format": "gbp",
+                  "scale": null
+                },
+                {
+                  "key": "loan_count",
+                  "label": "Loan Count",
+                  "align": "right",
+                  "format": "number",
+                  "scale": null
+                },
+                {
+                  "key": "concentration_pct",
+                  "label": "Concentration Pct",
+                  "align": "right",
+                  "format": "pct",
+                  "scale": "percent_points"
+                }
+              ],
+              "rows": [
+                {
+                  "ticket_bucket": "150-200k",
+                  "current_outstanding_balance_sum": 2362922.75,
+                  "loan_count": 13,
+                  "concentration_pct": 43.9004
+                },
+                {
+                  "ticket_bucket": "200-300k",
+                  "current_outstanding_balance_sum": 1482315.02,
+                  "loan_count": 6,
+                  "concentration_pct": 27.539716
+                },
+                {
+                  "ticket_bucket": "50-100k",
+                  "current_outstanding_balance_sum": 943353.8,
+                  "loan_count": 12,
+                  "concentration_pct": 17.526434
+                },
+                {
+                  "ticket_bucket": "100-150k",
+                  "current_outstanding_balance_sum": 593871.35,
+                  "loan_count": 5,
+                  "concentration_pct": 11.03345
+                }
+              ],
+              "totalRows": 4,
+              "coverage": 100.0,
+              "chartType": "bar",
+              "xKey": "ticket_bucket",
+              "valueKey": "current_outstanding_balance_sum",
+              "valueFormat": "gbp"
+            }
+          ],
+          "note": null
+        },
+        {
+          "title": "Funded stratifications — borrower age & channel",
+          "subtitle": null,
+          "blocks": [
+            {
+              "kind": "chart",
+              "title": "Current balance by borrower age band",
+              "columns": [
+                {
+                  "key": "age_bucket",
+                  "label": "Age Bucket",
+                  "align": "left",
+                  "format": "text",
+                  "scale": null
+                },
+                {
+                  "key": "current_outstanding_balance_sum",
+                  "label": "Current Outstanding Balance Sum",
+                  "align": "right",
+                  "format": "gbp",
+                  "scale": null
+                },
+                {
+                  "key": "loan_count",
+                  "label": "Loan Count",
+                  "align": "right",
+                  "format": "number",
+                  "scale": null
+                },
+                {
+                  "key": "concentration_pct",
+                  "label": "Concentration Pct",
+                  "align": "right",
+                  "format": "pct",
+                  "scale": "percent_points"
+                }
+              ],
+              "rows": [
+                {
+                  "age_bucket": "80-85",
+                  "current_outstanding_balance_sum": 1673675.02,
+                  "loan_count": 11,
+                  "concentration_pct": 31.094966
+                },
+                {
+                  "age_bucket": "75-80",
+                  "current_outstanding_balance_sum": 1518782.52,
+                  "loan_count": 9,
+                  "concentration_pct": 28.217241
+                },
+                {
+                  "age_bucket": "70-75",
+                  "current_outstanding_balance_sum": 938871.99,
+                  "loan_count": 7,
+                  "concentration_pct": 17.443167
+                },
+                {
+                  "age_bucket": "60-65",
+                  "current_outstanding_balance_sum": 675502.56,
+                  "loan_count": 6,
+                  "concentration_pct": 12.550064
+                },
+                {
+                  "age_bucket": "65-70",
+                  "current_outstanding_balance_sum": 438712.38,
+                  "loan_count": 2,
+                  "concentration_pct": 8.150774
+                },
+                {
+                  "age_bucket": "85+",
+                  "current_outstanding_balance_sum": 136918.45,
+                  "loan_count": 1,
+                  "concentration_pct": 2.543788
+                }
+              ],
+              "totalRows": 6,
+              "coverage": 100.0,
+              "chartType": "bar",
+              "xKey": "age_bucket",
+              "valueKey": "current_outstanding_balance_sum",
+              "valueFormat": "gbp"
+            },
+            {
+              "kind": "chart",
+              "title": "Current balance by origination channel",
+              "columns": [
+                {
+                  "key": "origination_channel",
+                  "label": "Origination Channel",
+                  "align": "left",
+                  "format": "text",
+                  "scale": null
+                },
+                {
+                  "key": "current_outstanding_balance_sum",
+                  "label": "Current Outstanding Balance Sum",
+                  "align": "right",
+                  "format": "gbp",
+                  "scale": null
+                },
+                {
+                  "key": "loan_count",
+                  "label": "Loan Count",
+                  "align": "right",
+                  "format": "number",
+                  "scale": null
+                },
+                {
+                  "key": "concentration_pct",
+                  "label": "Concentration Pct",
+                  "align": "right",
+                  "format": "pct",
+                  "scale": "percent_points"
+                }
+              ],
+              "rows": [
+                {
+                  "origination_channel": "IFA",
+                  "current_outstanding_balance_sum": 2102228.41,
+                  "loan_count": 16,
+                  "concentration_pct": 39.056998
+                },
+                {
+                  "origination_channel": "Direct",
+                  "current_outstanding_balance_sum": 1818101.27,
+                  "loan_count": 12,
+                  "concentration_pct": 33.778241
+                },
+                {
+                  "origination_channel": "Broker",
+                  "current_outstanding_balance_sum": 1462133.24,
+                  "loan_count": 8,
+                  "concentration_pct": 27.164762
+                }
+              ],
+              "totalRows": 3,
+              "coverage": 100.0,
+              "chartType": "bar",
+              "xKey": "origination_channel",
+              "valueKey": "current_outstanding_balance_sum",
+              "valueFormat": "gbp"
+            }
+          ],
+          "note": null
+        },
+        {
+          "title": "Geographic exposure",
+          "subtitle": null,
+          "blocks": [
+            {
+              "kind": "chart",
+              "title": "Current balance by region",
+              "columns": [
+                {
+                  "key": "collateral_geography",
+                  "label": "Collateral Geography",
+                  "align": "left",
+                  "format": "text",
+                  "scale": null
+                },
+                {
+                  "key": "current_outstanding_balance_sum",
+                  "label": "Current Outstanding Balance Sum",
+                  "align": "right",
+                  "format": "gbp",
+                  "scale": null
+                },
+                {
+                  "key": "loan_count",
+                  "label": "Loan Count",
+                  "align": "right",
+                  "format": "number",
+                  "scale": null
+                },
+                {
+                  "key": "concentration_pct",
+                  "label": "Concentration Pct",
+                  "align": "right",
+                  "format": "pct",
+                  "scale": "percent_points"
+                }
+              ],
+              "rows": [
+                {
+                  "collateral_geography": "East Midlands",
+                  "current_outstanding_balance_sum": 830811.74,
+                  "loan_count": 5,
+                  "concentration_pct": 15.435531
+                },
+                {
+                  "collateral_geography": "East of England",
+                  "current_outstanding_balance_sum": 760586.78,
+                  "loan_count": 5,
+                  "concentration_pct": 14.130832
+                },
+                {
+                  "collateral_geography": "Yorkshire and The Humber",
+                  "current_outstanding_balance_sum": 751500.54,
+                  "loan_count": 5,
+                  "concentration_pct": 13.96202
+                },
+                {
+                  "collateral_geography": "London",
+                  "current_outstanding_balance_sum": 714991.12,
+                  "loan_count": 4,
+                  "concentration_pct": 13.283717
+                },
+                {
+                  "collateral_geography": "South East",
+                  "current_outstanding_balance_sum": 627416.92,
+                  "loan_count": 5,
+                  "concentration_pct": 11.656688
+                },
+                {
+                  "collateral_geography": "South West",
+                  "current_outstanding_balance_sum": 457546.55,
+                  "loan_count": 2,
+                  "concentration_pct": 8.500691
+                },
+                {
+                  "collateral_geography": "Scotland",
+                  "current_outstanding_balance_sum": 388146.06,
+                  "loan_count": 2,
+                  "concentration_pct": 7.21131
+                },
+                {
+                  "collateral_geography": "Wales",
+                  "current_outstanding_balance_sum": 373619.52,
+                  "loan_count": 3,
+                  "concentration_pct": 6.941423
+                },
+                {
+                  "collateral_geography": "North West",
+                  "current_outstanding_balance_sum": 250073.57,
+                  "loan_count": 3,
+                  "concentration_pct": 4.646081
+                },
+                {
+                  "collateral_geography": "West Midlands",
+                  "current_outstanding_balance_sum": 227770.12,
+                  "loan_count": 2,
+                  "concentration_pct": 4.231708
+                }
+              ],
+              "totalRows": 10,
+              "coverage": 100.0,
+              "chartType": "bar",
+              "xKey": "collateral_geography",
+              "valueKey": "current_outstanding_balance_sum",
+              "valueFormat": "gbp"
+            }
+          ],
+          "note": null
+        },
+        {
+          "title": "Methodology & data coverage",
+          "subtitle": null,
+          "blocks": [
+            {
+              "kind": "table",
+              "title": "Pipeline evidence for this reporting cut",
+              "columns": [
+                {
+                  "key": "gate",
+                  "label": "Pipeline gate",
+                  "align": "left",
+                  "format": "text",
+                  "scale": null
+                },
+                {
+                  "key": "measure",
+                  "label": "Measure",
+                  "align": "left",
+                  "format": "text",
+                  "scale": null
+                },
+                {
+                  "key": "result",
+                  "label": "Result",
+                  "align": "left",
+                  "format": "text",
+                  "scale": null
+                }
+              ],
+              "rows": [
+                {
+                  "gate": "1 · Semantic alignment",
+                  "measure": "Source headers mapped to canonical fields",
+                  "result": "62 mapped, 60 at full confidence"
+                },
+                {
+                  "gate": "— · Transform",
+                  "measure": "Typed fields with parse failures",
+                  "result": "0 of 65 fields"
+                },
+                {
+                  "gate": "2/3 · Validation",
+                  "measure": "Field-level exceptions raised",
+                  "result": "2 exception(s), 2 blocking"
+                },
+                {
+                  "gate": "5 · ESMA Annex 2 delivery",
+                  "measure": "Preflight on the projected regulatory output",
+                  "result": "PASS — 36 rows in / 36 out, 0 issues"
+                }
+              ],
+              "totalRows": 4,
+              "coverage": null
+            }
+          ],
+          "note": "Pipeline evidence for the reporting cut. The production pack also carries funded evolution, vintage cohort progression, pipeline, origination funnel, forecast bridge and risk limit pages, which need reporting history and a pipeline dataset that this public demonstration does not publish."
+        }
+      ],
+      "followUps": [
+        "management_summary",
+        "data_quality",
+        "region_exposure"
+      ]
+    }
+  ],
+  "unsupported": [
+    {
+      "id": "temporal_movement",
+      "label": "How has the portfolio changed since last month?",
+      "phrases": [
+        "changed since last month",
+        "since last month",
+        "month on month",
+        "month-on-month",
+        "movement",
+        "versus last month",
+        "vs last month",
+        "compared to last month",
+        "trend",
+        "over time",
+        "evolution",
+        "last quarter",
+        "since december",
+        "growth"
+      ],
+      "reason": "Temporal comparison needs two governed reporting periods. The public demonstration publishes a single snapshot (30 November 2025), so there is no prior period to compare against and Trakt will not estimate one.",
+      "productionNote": "In a client environment, Trakt holds a governed snapshot history and answers month-on-month, quarter-on-quarter and since-inception movement, with a reconciliation of every driver of the change."
+    },
+    {
+      "id": "pipeline",
+      "label": "Summarise the current pipeline.",
+      "phrases": [
+        "summarise the current pipeline",
+        "summarize the pipeline",
+        "pipeline",
+        "applications",
+        "new business",
+        "funnel",
+        "conversion",
+        "offers",
+        "forecast",
+        "expected completions",
+        "what will we fund"
+      ],
+      "reason": "Pipeline analytics run on an application-stage dataset. The public demonstration publishes only the funded loan tape, so there is no pipeline to summarise.",
+      "productionNote": "In a client environment, Trakt runs pipeline snapshots, the origination funnel, conversion analysis and expected-funding forecasts alongside the funded book."
+    },
+    {
+      "id": "arrears",
+      "label": "What are the arrears and default figures?",
+      "phrases": [
+        "arrears",
+        "default",
+        "delinquency",
+        "npl",
+        "non-performing",
+        "impairment",
+        "write-off",
+        "loss",
+        "recoveries",
+        "in arrears"
+      ],
+      "reason": "This synthetic equity release book carries no arrears or default balances, so an arrears answer would be meaningless rather than merely empty.",
+      "productionNote": "Arrears, default, forbearance and loss analytics are standard Trakt portfolio analytics where the portfolio's own data supports them."
+    },
+    {
+      "id": "loan_level",
+      "label": "Show me individual loan records.",
+      "phrases": [
+        "individual loan",
+        "loan level",
+        "loan-level",
+        "show me the loans",
+        "list the loans",
+        "borrower details",
+        "customer details",
+        "postcode",
+        "loan identifier",
+        "specific loan",
+        "each loan",
+        "raw data",
+        "download the tape",
+        "export the data",
+        "csv"
+      ],
+      "reason": "The public demonstration returns aggregated portfolio measures only. Exposure-level records are never exposed on this page, even for synthetic data.",
+      "productionNote": "Exposure-level drill-through exists in the Trakt workspace, governed by role-based access within the client environment."
+    }
+  ]
+}
