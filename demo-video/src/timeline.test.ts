@@ -186,6 +186,20 @@ describe("captions", () => {
       expect(scene.narration.length, scene.id).toBeGreaterThan(20);
     }
   });
+
+  it("fits every narration paragraph inside its scene at a speakable pace", () => {
+    // The film is caption-led, so narration is a script for a track added later. That
+    // only works if each paragraph fits its own scene — a paragraph written at 230 words
+    // a minute cannot be read over the beats it describes, and the recording session is
+    // where that gets discovered unless something asserts it here.
+    for (const scene of SCENES) {
+      const words = scene.narration.trim().split(/\s+/).length;
+      const wpm = (words / (scene.frames / FPS)) * 60;
+      expect(wpm, `${scene.id}: ${words} words in ${scene.frames} frames`).toBeLessThanOrEqual(
+        175,
+      );
+    }
+  });
 });
 
 // --------------------------------------------------------------------------- //

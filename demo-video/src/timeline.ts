@@ -54,10 +54,9 @@ export const SCENES: SceneSpec[] = [
       },
     ],
     narration:
-      "You bought a back book. It didn't come with your data model. It arrived as a " +
-      "servicer extract that looks nothing like your origination system, and every " +
-      "month-end someone rebuilds it by hand in a spreadsheet. Five days of month-end, " +
-      "every month, for every portfolio.",
+      "You bought a back book. It didn't come with your data model — it came as a " +
+      "servicer extract that looks nothing like your origination system. Five days of " +
+      "month-end, every month, for every portfolio.",
   },
   {
     id: "onboard",
@@ -78,10 +77,8 @@ export const SCENES: SceneSpec[] = [
     ],
     narration:
       "Trakt onboards a portfolio once, in under forty-eight hours. And it is never one " +
-      "clean file: five artefacts, from five owners, on three reporting cycles. What " +
-      "comes back is a receipt — every field accounted for, and the two decisions the " +
-      "platform referred to a human, because it knows what it doesn't know. One " +
-      "governed portfolio, loan level to sponsor level.",
+      "clean file — five artefacts, five owners, three reporting cycles. What comes " +
+      "back is a receipt, including the two decisions it referred to a human.",
   },
   {
     id: "dataset",
@@ -103,9 +100,9 @@ export const SCENES: SceneSpec[] = [
       "Three portfolios. One sold into a securitisation, two held — all governed the " +
       "same way. Together, two point eight one billion across fifteen thousand two " +
       "hundred and fifteen loans. No single system gives you that number today. Narrow " +
-      "to the warehoused book and it's one point nine six billion across eleven thousand " +
-      "and thirty-five loans — one dataset behind your regulatory submission, your " +
-      "investor pack and your management information. Every output reconciles.",
+      "to the warehoused book and it's one point nine six billion — one dataset behind " +
+      "your regulatory submission, your investor pack and your management information. " +
+      "Every output reconciles.",
   },
   {
     id: "omnichannel",
