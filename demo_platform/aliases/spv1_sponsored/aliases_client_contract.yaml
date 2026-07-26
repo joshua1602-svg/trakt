@@ -1,0 +1,252 @@
+# Approved onboarding contract — client alias overlay
+# ---------------------------------------------------
+# Portfolio:  SPV1  (spv1_sponsored, direct provenance, sold)
+# Client:     Alderbridge Lending Platform  [SYNTHETIC DEMONSTRATION DATA]
+#
+# The sponsor originated this securitisation and SOLD it. The data therefore does not
+# come from the sponsor's own systems at all — it arrives from the deal's trustee, in
+# the trustee's deal vocabulary. Almost nothing in it resolves through the global
+# mapper: nearly every column here needed a decision, which is why the contract is
+# effectively the whole schema.
+#
+# The sponsor still has to govern it. They retain servicing, risk retention and
+# investor-reporting obligations, and it is the portfolio their own ledger can no
+# longer tell them anything about, having derecognised it.
+#
+# Scoped to this portfolio only (`--extra-aliases-dir`); the global mapper is untouched.
+
+loan_identifier:
+  aliases:
+    - Deal Asset ID
+  note: >-
+    The trustee's asset key — the stable loan identifier.
+
+data_cut_off_date:
+  aliases:
+    - Pool Cut-Off
+  note: >-
+    The deal's pool cut-off date.
+
+origination_date:
+  aliases:
+    - Asset Origination Date
+  note: >-
+    Completion date under the deal's naming.
+
+original_principal_balance:
+  aliases:
+    - Original Balance
+  note: >-
+    Advance at completion.
+
+current_principal_balance:
+  aliases:
+    - Current Asset Balance
+  note: >-
+    Capital plus capitalised roll-up interest at the cut-off.
+
+original_valuation_amount:
+  aliases:
+    - Valuation At Origination Date
+  note: >-
+    Vendor valuation at completion.
+
+current_valuation_amount:
+  aliases:
+    - Latest Valuation
+  note: >-
+    Latest valuation held by the trustee.
+
+current_interest_rate:
+  aliases:
+    - Asset Interest Rate
+  note: >-
+    Fixed lifetime roll-up rate, annual percentage points.
+
+youngest_borrower_age:
+  aliases:
+    - Youngest Life Age
+  note: >-
+    Age of the youngest life at the cut-off.
+
+collateral_geography:
+  aliases:
+    - Region Of Security
+  note: >-
+    Readable ITL1 region label for the security property.
+
+property_post_code:
+  aliases:
+    - Security Post Code
+  note: >-
+    Property postcode; drives ITL3 enrichment.
+
+account_status:
+  aliases:
+    - Asset Status
+  note: >-
+    Asset status under the trustee's naming.
+
+redemption_date:
+  aliases:
+    - Repurchase Or Redemption Date
+  note: >-
+    Populated only for assets that left the pool.
+
+original_underlying_exposure_identifier:
+  aliases:
+    - Underlying Exposure ID
+  note: >-
+    The deal's exposure identifier (ESMA RREL2).
+
+original_obligor_identifier:
+  aliases:
+    - Obligor ID
+  note: >-
+    The deal's obligor identifier (ESMA RREL4).
+
+purpose:
+  aliases:
+    - Proceeds Purpose
+  note: >-
+    Use of proceeds under the trustee's naming.
+
+property_type:
+  aliases:
+    - Property Category
+  note: >-
+    Dwelling form of the security (RREC9).
+
+interest_rate_type:
+  aliases:
+    - Rate Convention
+  note: >-
+    Fixed for the life of the asset.
+
+amortisation_type:
+  aliases:
+    - Amortisation Basis
+  note: >-
+    Interest roll-up.
+
+occupancy_type:
+  aliases:
+    - Occupancy Basis
+  note: >-
+    Owner-occupied.
+
+exposure_currency_denomination:
+  aliases:
+    - Denomination
+  note: >-
+    GBP.
+
+maturity_date:
+  aliases:
+    - Maturity Long Stop
+  note: >-
+    Product long-stop for the asset (RREL24).
+
+pool_addition_date:
+  aliases:
+    - Pool Addition
+  note: >-
+    Date the asset entered the deal's pool (RREL7).
+
+total_credit_limit:
+  aliases:
+    - Facility Limit
+  note: >-
+    Approved facility at completion (RREL33).
+
+new_collateral_identifier:
+  aliases:
+    - Collateral Key
+  note: >-
+    Current collateral key. Not 'Collateral ID' — that is itself a canonical
+    field name, which Gate 1 pins before any client contract is consulted
+    (RREC4).
+
+original_collateral_identifier:
+  aliases:
+    - Collateral ID At Closing
+  note: >-
+    Collateral key as at deal closing (RREC3).
+
+collateral_type:
+  aliases:
+    - Collateral Category
+  note: >-
+    Collateral class (RREC5).
+
+current_valuation_method:
+  aliases:
+    - Valuation Approach
+  note: >-
+    How the valuation was established.
+
+origination_channel:
+  aliases:
+    - Introduction Route
+  note: >-
+    How the asset was introduced (RREL26).
+
+resident:
+  aliases:
+    - Obligor Residency
+  note: >-
+    Obligor resident in the collateral's country (RREL10).
+
+credit_impaired_obligor:
+  aliases:
+    - Impaired Flag
+  note: >-
+    Credit-impaired obligor (RREL14).
+
+litigation:
+  aliases:
+    - Proceedings Flag
+  note: >-
+    Asset subject to legal proceedings (RREL75).
+
+payment_due:
+  aliases:
+    - Amount Falling Due
+  note: >-
+    Contractually due this period — nil (RREL39).
+
+arrears_balance:
+  aliases:
+    - Arrears Position
+  note: >-
+    Arrears at the cut-off (RREL67).
+
+number_of_days_in_arrears:
+  aliases:
+    - Days Past Due
+  note: >-
+    Days past due (RREL68).
+
+default_amount:
+  aliases:
+    - Defaulted Amount
+  note: >-
+    Balance in default (RREL71).
+
+allocated_losses:
+  aliases:
+    - Loss Allocation
+  note: >-
+    Losses allocated to date (RREL73).
+
+cumulative_recoveries:
+  aliases:
+    - Recovery Total
+  note: >-
+    Recoveries to date (RREL74).
+
+prepayment_fee:
+  aliases:
+    - Early Redemption Charge
+  note: >-
+    Early-repayment charge (RREL61).

@@ -200,6 +200,43 @@ def load_aliases_from_dir(aliases_dir: Path) -> Dict[str, str]:
     logging.info(f"Loaded {len(alias_map)} alias entries from {aliases_dir}")
     return alias_map
 
+
+def apply_alias_overlay(
+    alias_map: Dict[str, str], overlay_dir: Path
+) -> Tuple[Dict[str, str], List[Dict[str, str]]]:
+    """Layer a CLIENT-SPECIFIC alias directory on top of the global alias map.
+
+    The managed service onboards portfolios whose source headers are the client's
+    own vocabulary ("Principal Outstanding", "Youngest Borrower"). Those belong to
+    that client's approved onboarding contract, not to the global mapper — adding
+    them globally would broaden every other client's matching surface.
+
+    An overlay entry **wins** over the global map for the same normalised header,
+    which is the point: a client contract may legitimately resolve a header
+    differently from the global default. Returns the merged map plus the list of
+    applied overrides so the run report can record exactly what the client
+    contract changed.
+    """
+    overlay = load_aliases_from_dir(Path(overlay_dir))
+    merged = dict(alias_map)
+    applied: List[Dict[str, str]] = []
+    for norm, canon in overlay.items():
+        previous = merged.get(norm)
+        merged[norm] = canon
+        applied.append({
+            "normalised_alias": norm,
+            "canonical_field": canon,
+            "overrode_global": previous or "",
+            "overlay_dir": str(overlay_dir),
+        })
+    if applied:
+        logging.info(
+            "Applied %d client alias overlay entries from %s (%d overrode a global alias)",
+            len(applied), overlay_dir,
+            sum(1 for a in applied if a["overrode_global"]),
+        )
+    return merged, applied
+
 # ------------------------------------------------------------------
 # MAPPER
 # ------------------------------------------------------------------
@@ -345,6 +382,15 @@ def main() -> None:
         help="Directory containing aliases_*.yaml",
     )
     parser.add_argument(
+        "--extra-aliases-dir",
+        action="append",
+        default=[],
+        help="Optional CLIENT-SPECIFIC aliases_*.yaml directory layered on top of "
+             "--aliases-dir. Repeatable; later directories win. Use this for a "
+             "client's approved onboarding contract instead of widening the "
+             "global alias files.",
+    )
+    parser.add_argument(
         "--regimes",
         nargs="*",
         default=[],
@@ -398,6 +444,24 @@ def main() -> None:
 
     df_raw = read_input_table(input_path)
     alias_map = load_aliases_from_dir(aliases_dir)
+    # Client-specific onboarding-contract aliases, layered on top (never global).
+    alias_overlay_applied: List[dict] = []
+    for extra in (args.extra_aliases_dir or []):
+        extra_dir = Path(extra)
+        if not extra_dir.is_absolute():
+            # A relative overlay path is what the operator typed, so resolve it
+            # against the working directory first; fall back to the script dir
+            # (which is how --aliases-dir resolves) only if that does not exist.
+            cwd_candidate = Path.cwd() / extra_dir
+            extra_dir = cwd_candidate if cwd_candidate.exists() else base_dir / extra_dir
+        if not extra_dir.exists():
+            raise FileNotFoundError(
+                f"--extra-aliases-dir {extra!r} does not exist (looked in "
+                f"{Path.cwd()} and {base_dir}). Refusing to run with a silently "
+                f"empty client alias contract."
+            )
+        alias_map, applied = apply_alias_overlay(alias_map, extra_dir)
+        alias_overlay_applied.extend(applied)
     mapper = HeaderMapper(canonical_fields, alias_map)
 
     header_map: Dict[str, Optional[str]] = {}
@@ -539,6 +603,10 @@ def main() -> None:
         "regimes": list(args.regimes or []),
         "registry_path": str(registry_path),
         "aliases_dir": str(aliases_dir),
+        # Client onboarding-contract alias overlay (empty on a standard run).
+        "extra_aliases_dirs": [str(d) for d in (args.extra_aliases_dir or [])],
+        "alias_overlay_applied": alias_overlay_applied,
+        "alias_overlay_entry_count": len(alias_overlay_applied),
         "thresholds": {
             "JACCARD_THRESHOLD": JACCARD_THRESHOLD,
             "FUZZ_TOKEN_SET_THRESHOLD": FUZZ_TOKEN_SET_THRESHOLD,

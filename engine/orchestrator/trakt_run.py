@@ -390,6 +390,12 @@ def run_common_gates(py: str, args, input_path: Path, out_dir: Path, val_dir: Pa
         "--output-dir", str(out_dir),
         "--aliases-dir", str(CONFIG_ROOT / "system"),
     ]
+    # Client onboarding-contract alias overlay (optional; nothing changes when
+    # unset, which is every standard run).
+    for extra in (getattr(args, "extra_aliases_dir", None) or []):
+        # Resolve against this process's working directory before handing it to the
+        # Gate 1 subprocess, which resolves relative paths against its own module dir.
+        gate1_cmd.extend(["--extra-aliases-dir", str(Path(extra).resolve())])
     # For regulatory mode, filter "full" schema to the target annex fields
     if args.mode == "regulatory" and args.regime:
         gate1_cmd.extend(["--regimes", args.regime])
@@ -1016,6 +1022,12 @@ examples:
     ap.add_argument("--portfolio-type", default="equity_release")
     ap.add_argument("--output-schema", choices=["active", "full"], default="active")
     ap.add_argument("--registry", default=str(CONFIG_ROOT / "system" / "fields_registry.yaml"))
+    ap.add_argument(
+        "--extra-aliases-dir", dest="extra_aliases_dir", action="append", default=[],
+        help="Optional client-specific aliases_*.yaml directory layered on top of "
+             "the global alias files at Gate 1 (the client's approved onboarding "
+             "contract). Repeatable; later directories win.",
+    )
     ap.add_argument("--master-config", default=str(CONFIG_ROOT / "client" / "config_client_ERM_UK.yaml"))
     ap.add_argument("--out-dir", default="out")
     ap.add_argument("--validation-out-dir", default="out_validation")

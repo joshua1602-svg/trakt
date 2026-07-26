@@ -1,0 +1,163 @@
+# Approved onboarding contract — client alias overlay
+# ---------------------------------------------------
+# Portfolio:  ALP_ORIGINATION  (alp_origination, direct)
+# Client:     Alderbridge Lending Platform  [SYNTHETIC DEMONSTRATION DATA]
+#
+# These are the client's OWN source-header vocabulary, resolved to the Trakt
+# canonical model as part of this portfolio's approved onboarding contract. They
+# are layered on top of the global alias files at Gate 1 via
+# `--extra-aliases-dir` and are scoped to this portfolio only — the global
+# mapper is deliberately left untouched.
+#
+# Each entry below corresponds to a mapping decision the Onboarding Agent
+# surfaced for review; the `note` records why the decision was made.
+
+loan_identifier:
+  aliases:
+    - Loan Reference
+  note: >-
+    The lender's primary loan key. Not a global alias because "reference" is
+    ambiguous across clients (it can mean a broker or case reference).
+
+current_valuation_amount:
+  aliases:
+    - Property Value
+  note: >-
+    OVERRIDES the global alias, which resolves "Property Value" to
+    property_portfolio_value_at_securitisation_date (a pool-level Annex field).
+    For this extract the column is the per-loan current property valuation, so
+    the client contract pins it to current_valuation_amount.
+
+original_valuation_amount:
+  aliases:
+    - Original Property Value
+  note: The valuation at completion, used for original LTV.
+
+original_principal_balance:
+  aliases:
+    - Original Advance
+  note: >-
+    Initial lump-sum advance at completion. "Advance" is client vocabulary for
+    the originated principal.
+
+origination_date:
+  aliases:
+    - Completion Date
+  note: >-
+    Lifetime-mortgage completion date = origination date. Distinct from the
+    application or offer date, which this extract does not carry.
+
+youngest_borrower_age:
+  aliases:
+    - Customer Age
+  note: >-
+    Single-column age. Confirmed at onboarding as the YOUNGEST borrower's age
+    (the NNEG-relevant life), not the primary applicant's.
+
+collateral_geography:
+  aliases:
+    - Region
+  note: >-
+    OVERRIDES the global alias, which resolves bare "Region" to
+    geographic_region_classification (the NUTS classification YEAR). This column
+    carries a readable ITL1 region label, so it belongs in the analytics display
+    field. The regulatory NUTS codes are derived from Post Code by the transform.
+
+current_interest_rate:
+  aliases:
+    - Rate
+  note: >-
+    Fixed lifetime roll-up rate, annual, percentage points. Confirmed as the
+    current contractual rate (this book has no variable-rate loans).
+
+original_underlying_exposure_identifier:
+  aliases:
+    - Exposure Reference
+  note: >-
+    The exposure identifier the lender reports to its funders, distinct from the
+    servicing loan key. Required for ESMA Annex 2 (RREL2, which back-fills the
+    mandatory RREL3 and RREC2).
+
+original_obligor_identifier:
+  aliases:
+    - Borrower Reference
+  note: >-
+    The borrower-level identifier, distinct from the loan key because one
+    borrower may hold more than one facility. Required for ESMA Annex 2 (RREL4,
+    which back-fills the mandatory RREL5).
+
+# --- Regulatory-reporting block -------------------------------------------
+# Added when this client's ESMA Annex 2 exposure-level reporting was turned on.
+# Each header below is the lender's own naming for a field the Annex 2 submission
+# requires at exposure level; none of them resolve through the global vocabulary.
+
+maturity_date:
+  aliases:
+    - Long Stop Date
+  note: >-
+    A lifetime mortgage has no contractual repayment date, so the lender reports
+    the product long-stop — the date the youngest borrower reaches 110. Confirmed
+    at onboarding as the reported maturity date (RREL24).
+
+pool_addition_date:
+  aliases:
+    - Date Added To Pool
+  note: >-
+    Date the loan entered the reported pool. On this book that is the completion
+    date, but the lender carries it as a separate column because the acquired
+    book's differs (RREL7).
+
+total_credit_limit:
+  aliases:
+    - Approved Facility
+  note: >-
+    The approved maximum release: the initial advance plus the loan's reserve
+    facility. Not the current balance, which includes capitalised interest
+    (RREL33).
+
+new_collateral_identifier:
+  aliases:
+    - Security Reference
+  note: >-
+    The lender's current key for the security property, distinct from the loan
+    key (RREC4).
+
+collateral_type:
+  aliases:
+    - Security Category
+  note: >-
+    The collateral class reported in the securitisation report. Every loan on
+    this book is secured on residential property (RREC5). Distinct from
+    property_type, which carries the dwelling form (RREC9).
+
+current_valuation_method:
+  aliases:
+    - Valuation Basis
+  note: >-
+    Referred for review at onboarding — "basis" is ambiguous — then confirmed as
+    how the current valuation was established, not the valuation date (RREC14).
+
+resident:
+  aliases:
+    - Borrower Resident
+  note: >-
+    Whether the obligor is resident in the country of the collateral (RREL10).
+
+credit_impaired_obligor:
+  aliases:
+    - Credit Impaired
+  note: >-
+    Whether the obligor was credit-impaired at origination, in the ESMA sense
+    (RREL14). Not a current arrears indicator.
+
+litigation:
+  aliases:
+    - Litigation Flag
+  note: Whether the loan is subject to legal proceedings (RREL75).
+
+original_collateral_identifier:
+  aliases:
+    - Security Reference At Completion
+  note: >-
+    The collateral key as at completion. On this book it equals the current key;
+    the lender carries both columns because the acquired book's differ (RREC3).

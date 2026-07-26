@@ -22,7 +22,7 @@ from __future__ import annotations
 import re
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from mi_agent.llm_query_parser import _deterministic_parse
 from mi_agent.mi_agent_workflow import _detect_unsupported_concept
@@ -35,6 +35,7 @@ from . import currency as currency_mod
 from . import evolution as evolution_mod
 from . import forecast_extrapolation as fx_mod
 from . import geo as geo_mod
+from . import movement_summary as movement_mod
 from . import risk_limits as risk_mod
 from . import scenario as scenario_mod
 
@@ -179,6 +180,357 @@ def _split_portfolio(portfolio_id: Optional[str]) -> Tuple[str, Optional[str]]:
 # --------------------------------------------------------------------------- #
 # A. Temporal compare
 # --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- #
+# A0. Governed composite answers: portfolio summary + period movement
+#
+# Both delegate to mi_agent_api.movement_summary, which composes the EXISTING
+# evolution / bridge services — no new metric definitions. They exist so the
+# React MI Agent and Microsoft 365 Copilot (which calls the same /mi/query
+# handler) return one governed answer to the two questions a portfolio owner
+# asks first, instead of each surface assembling its own narrative.
+# --------------------------------------------------------------------------- #
+_SUMMARY_MARKERS = (
+    "summarise the portfolio", "summarize the portfolio", "portfolio summary",
+    "summarise the book", "summarize the book", "summary of the portfolio",
+    "overview of the portfolio", "overview of the book", "portfolio overview",
+)
+
+_MOVEMENT_MARKERS = (
+    "what has changed", "what's changed", "whats changed", "what changed",
+    "what has moved", "what moved", "how has the portfolio changed",
+    "how has the book changed",
+)
+
+_PRIOR_PERIOD_MARKERS = (
+    "prior month", "previous month", "last month", "prior period",
+    "previous period", "last period", "prior reporting", "previous reporting",
+    "month on month", "month-on-month",
+)
+
+
+def _is_portfolio_summary(question: str) -> bool:
+    """A whole-book summary request, with no dimension or comparison in it."""
+    q = f" {question.lower().strip()} "
+    if not any(m in q for m in _SUMMARY_MARKERS):
+        return False
+    # "summarise the portfolio by region" is a stratification, not a summary; and
+    # "summarise what changed" is a movement question.
+    if " by " in q or any(m in q for m in _MOVEMENT_MARKERS):
+        return False
+    if any(m in q for m in _PRIOR_PERIOD_MARKERS):
+        return False
+    return True
+
+
+def _is_period_movement(question: str) -> bool:
+    """A "what has changed versus the prior month" request.
+
+    Deliberately narrow: an explicit change-marker AND an explicit prior-period
+    reference. Anything else (a named two-period comparison, a single-metric
+    trend) falls through to the existing compare / evolution routes unchanged.
+    """
+    q = f" {question.lower().strip()} "
+    return (any(m in q for m in _MOVEMENT_MARKERS)
+            and any(m in q for m in _PRIOR_PERIOD_MARKERS))
+
+
+def _resolve_lens(question: str, source_lens) -> Any:
+    default_lens = (_portfolio_lens.lens_from_selection(source_lens)
+                    if source_lens is not None else None)
+    return _portfolio_lens.resolve_lens_with_default(question, default_lens)
+
+
+def _pct_points(value: Optional[float], decimals: int = 1) -> str:
+    return "—" if value is None else f"{float(value):.{decimals}f}%"
+
+
+def _years(value: Optional[float], decimals: int = 1) -> str:
+    return "—" if value is None else f"{float(value):.{decimals}f} years"
+
+
+def _count(value: Optional[float]) -> str:
+    return "—" if value is None else f"{int(round(float(value))):,}"
+
+
+def _date_label(iso: Optional[str]) -> str:
+    """"30 June 2026" from an ISO date, falling back to the raw value."""
+    if not iso:
+        return "—"
+    try:
+        return datetime.strptime(str(iso)[:10], "%Y-%m-%d").strftime("%d %B %Y").lstrip("0")
+    except Exception:  # noqa: BLE001 - never fail an answer on a date label
+        return str(iso)
+
+
+def _summary_kpi_artifact(title: str, kpis: List[Dict[str, str]], *, spec, portfolio_id,
+                          as_of, description: str) -> Dict[str, Any]:
+    return {
+        "id": _uid(), "type": "kpi", "title": title, "description": description,
+        "source": _source("MI Agent · summary", spec, portfolio_id, as_of),
+        "createdAt": _now(), "mock": False, "kpis": kpis,
+    }
+
+
+def _route_portfolio_summary(question, spec, spec_dict, *, client_id, run_id,
+                             output_root, portfolio_id, as_of, source_lens=None
+                             ) -> Optional[Dict[str, Any]]:
+    """The current reporting period's governed headline position."""
+    lens = _resolve_lens(question, source_lens)
+    summary = movement_mod.portfolio_summary(
+        output_root, client_id, to_run_id=run_id,
+        lens_filters=lens.filters or None, lens_label=lens.label)
+    if not summary.get("available"):
+        return None  # defer to the existing point-in-time summary path
+
+    m = summary["metrics"]
+    cut_off = _date_label(summary.get("reportingDate"))
+    scope = "" if lens.name == _portfolio_lens.LENS_TOTAL else f" ({lens.label})"
+
+    parts = [
+        f"At {cut_off} the portfolio{scope} holds {_count(m['loan_count'])} loans "
+        f"with a funded balance of {_gbp(m['funded_balance'])}."
+    ]
+    detail = []
+    if m["wa_ltv_points"] is not None:
+        detail.append(f"weighted-average current LTV is {_pct_points(m['wa_ltv_points'])}")
+    if m["wa_interest_rate"] is not None:
+        detail.append(f"the weighted-average interest rate is "
+                      f"{_pct_points(m['wa_interest_rate'], 2)}")
+    if m["avg_borrower_age"] is not None:
+        detail.append(f"the average youngest-borrower age is "
+                      f"{_years(m['avg_borrower_age'])}")
+    if detail:
+        parts.append(_upper_first(_sentence_join(detail)) + ".")
+
+    regions = summary.get("topRegions") or []
+    if regions:
+        # The answer names only the top few so it stays executive-length; the
+        # supporting chart carries the fuller ranking.
+        named = [f"{r['region']} ({_gbp(r['balance'])}, "
+                 f"{_pct_points((r['share'] or 0) * 100)})"
+                 for r in regions[:movement_mod.NAMED_REGIONS]]
+        parts.append(f"The largest regional exposures are {_sentence_join(named)}.")
+
+    cohorts = summary.get("cohortBalances") or {}
+    labels = {c["id"]: c["label"] for c in (summary.get("cohorts") or [])}
+    if len(cohorts) > 1 and lens.name == _portfolio_lens.LENS_TOTAL:
+        split = [f"{labels.get(cid, cid)} {_gbp(bal)}"
+                 for cid, bal in sorted(cohorts.items(), key=lambda kv: -kv[1])]
+        parts.append(f"By source portfolio: {_sentence_join(split)}.")
+
+    answer = " ".join(parts)
+
+    kpis = [
+        {"label": "Loans funded", "value": _count(m["loan_count"])},
+        {"label": "Funded balance", "value": _gbp(m["funded_balance"])},
+        {"label": "WA current LTV", "value": _pct_points(m["wa_ltv_points"])},
+        {"label": "WA interest rate", "value": _pct_points(m["wa_interest_rate"], 2)},
+        {"label": "Avg borrower age", "value": _years(m["avg_borrower_age"])},
+        {"label": "Data cut-off", "value": cut_off},
+    ]
+    artifacts: List[Dict[str, Any]] = [
+        _summary_kpi_artifact(
+            f"Portfolio summary — {cut_off}", kpis, spec=spec_dict,
+            portfolio_id=portfolio_id, as_of=as_of,
+            description=f"Governed position at the {summary.get('period')} "
+                        f"reporting date ({lens.label}).")
+    ]
+    if regions:
+        artifacts.append(_chart_artifact(
+            "Funded balance by region", chart_type="bar", x_key="region",
+            rows=[{"region": r["region"], "value": r["balance"], "share": r["share"]}
+                  for r in regions],
+            series=[{"key": "value", "label": "Funded balance", "color": _PALETTE[0]}],
+            value_format="gbp", spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of,
+            display_hints={"value": {"format": "gbp", "scale": None}},
+            description=f"Largest regional exposures at {cut_off}."))
+    if len(cohorts) > 1:
+        artifacts.append(_table_artifact(
+            "Funded balance by source portfolio", columns=[
+                {"key": "portfolio", "label": "Source portfolio", "align": "left",
+                 "format": "text"},
+                {"key": "balance", "label": "Funded balance", "align": "right",
+                 "format": "gbp"},
+            ],
+            rows=[{"portfolio": labels.get(cid, cid), "balance": bal}
+                  for cid, bal in sorted(cohorts.items(), key=lambda kv: -kv[1])],
+            spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of))
+
+    notes = [{"field": "reporting_period",
+              "note": f"{summary.get('period')} ({summary.get('reportingDate')}); "
+                      f"{summary.get('periodCount')} governed period(s) available."}]
+    return _envelope(
+        ok=True, question=question, answer=answer, spec=spec_dict,
+        artifacts=artifacts,
+        reconciliation={"dataset": "funded", "coverage_by_balance_pct": 100.0,
+                        "missing_dimension_policy": "exclude"},
+        source_notes=notes, route="portfolio_summary")
+
+
+def _route_period_movement(question, spec, spec_dict, *, client_id, run_id,
+                           output_root, portfolio_id, as_of, source_lens=None
+                           ) -> Optional[Dict[str, Any]]:
+    """Month-on-month movement across the governed metrics, with attribution."""
+    lens = _resolve_lens(question, source_lens)
+    mv = movement_mod.period_movement(
+        output_root, client_id, to_run_id=run_id,
+        lens_filters=lens.filters or None, lens_label=lens.label)
+    if not mv.get("available"):
+        return _envelope(
+            ok=True, question=question, spec=spec_dict, artifacts=[],
+            answer=f"I can't compare against the prior month yet: "
+                   f"{mv.get('reason', 'insufficient reporting periods')}.",
+            route="period_movement",
+            warnings=["insufficient-data: a month-on-month comparison needs two "
+                      "governed reporting periods."])
+
+    cur, pri, dl = mv["current"], mv["prior"], mv["delta"]
+    cur_label = _date_label(mv.get("currentReportingDate"))
+    move = dl["funded_balance"]
+    direction = movement_mod.balance_descriptor(move)
+
+    # Sentence 1 — the movement, and its primary regional contributor. The
+    # completion wording is used only when the completions evidence supports it.
+    lead = f"Funded balances {direction} by {_gbp(abs(move))} during the month"
+    primary = mv.get("primaryRegion")
+    if primary and mv.get("primaryRegionIsDominant"):
+        if mv.get("completionsEvidenced"):
+            lead += f", primarily driven by completions in the {primary['region']}"
+        else:
+            lead += (f", with the largest contribution from the {primary['region']} "
+                     f"({'+' if primary['delta'] >= 0 else '−'}"
+                     f"{_gbp(abs(primary['delta']))})")
+    elif primary:
+        lead += (f". The largest single regional contribution came from the "
+                 f"{primary['region']} ({'+' if primary['delta'] >= 0 else '−'}"
+                 f"{_gbp(abs(primary['delta']))})")
+    parts = [lead.rstrip(".") + "."]
+
+    # Sentence 2 — LTV and borrower age, with materiality-aware wording.
+    ltv_txt = movement_mod.ltv_descriptor(dl["wa_ltv_points"])
+    age_txt = movement_mod.age_descriptor(dl["avg_borrower_age"])
+    parts.append(
+        f"Weighted-average LTV {ltv_txt} {_pct_points(cur['wa_ltv_points'])}, "
+        f"while average borrower age {age_txt} {_years(cur['avg_borrower_age'])}.")
+
+    # Sentence 3 — the source-portfolio contribution.
+    cohorts = mv.get("cohortMovements") or []
+    if len(cohorts) > 1:
+        contrib = [f"{c['label']} contributed "
+                   f"{'approximately ' if abs(c['delta']) >= 100_000 else ''}"
+                   f"{'+' if c['delta'] >= 0 else '−'}{_gbp(abs(c['delta']))}"
+                   for c in cohorts]
+        parts.append(_upper_first(_sentence_join(contrib)) + " of the movement.")
+
+    answer = " ".join(parts)
+
+    kpis = [
+        {"label": "Funded balance movement",
+         "value": f"{'+' if (move or 0) >= 0 else '−'}{_gbp(abs(move))}"},
+        {"label": f"Funded balance ({cur_label})", "value": _gbp(cur["funded_balance"])},
+        {"label": "Loans funded",
+         "value": f"{_count(cur['loan_count'])} "
+                  f"({'+' if (dl['loan_count'] or 0) >= 0 else '−'}"
+                  f"{_count(abs(dl['loan_count'] or 0))})"},
+        {"label": "WA current LTV",
+         "value": f"{_pct_points(cur['wa_ltv_points'])} "
+                  f"({'+' if (dl['wa_ltv_points'] or 0) >= 0 else '−'}"
+                  f"{_pct_points(abs(dl['wa_ltv_points'] or 0), 2)})"},
+        {"label": "Avg borrower age",
+         "value": f"{_years(cur['avg_borrower_age'])} "
+                  f"({'+' if (dl['avg_borrower_age'] or 0) >= 0 else '−'}"
+                  f"{abs(dl['avg_borrower_age'] or 0):.2f})"},
+    ]
+    artifacts: List[Dict[str, Any]] = [
+        _summary_kpi_artifact(
+            f"{mv['priorPeriod']} → {mv['currentPeriod']} movement", kpis,
+            spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of,
+            description=f"Governed month-on-month movement ({lens.label}).")
+    ]
+
+    contributions = mv.get("regionContributions") or []
+    if contributions:
+        top = contributions[:8]
+        artifacts.append(_chart_artifact(
+            f"Balance movement by region — {mv['priorPeriod']} → {mv['currentPeriod']}",
+            chart_type="bar", x_key="region",
+            rows=[{"region": c["region"], "value": c["delta"]} for c in top],
+            series=[{"key": "value", "label": "Movement", "color": _PALETTE[0]}],
+            value_format="gbp", spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of,
+            display_hints={"value": {"format": "gbp", "scale": None}},
+            description="Regional contributions sum exactly to the consolidated "
+                        "movement."))
+        artifacts.append(_table_artifact(
+            "Regional contribution to the movement", columns=[
+                {"key": "region", "label": "Region", "align": "left", "format": "text"},
+                {"key": "start", "label": mv["priorPeriod"], "align": "right",
+                 "format": "gbp"},
+                {"key": "end", "label": mv["currentPeriod"], "align": "right",
+                 "format": "gbp"},
+                {"key": "delta", "label": "Δ", "align": "right", "format": "gbp"},
+            ],
+            rows=[{"region": c["region"], "start": c["start"], "end": c["end"],
+                   "delta": c["delta"]} for c in top],
+            spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of))
+    if len(cohorts) > 1:
+        artifacts.append(_table_artifact(
+            "Source-portfolio contribution to the movement", columns=[
+                {"key": "portfolio", "label": "Source portfolio", "align": "left",
+                 "format": "text"},
+                {"key": "prior", "label": mv["priorPeriod"], "align": "right",
+                 "format": "gbp"},
+                {"key": "current", "label": mv["currentPeriod"], "align": "right",
+                 "format": "gbp"},
+                {"key": "delta", "label": "Δ", "align": "right", "format": "gbp"},
+            ],
+            rows=[{"portfolio": c["label"], "prior": c["prior"],
+                   "current": c["current"], "delta": c["delta"]} for c in cohorts],
+            spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of))
+
+    recon = mv.get("reconciliation") or {}
+    notes = [
+        {"field": "reporting_periods",
+         "note": f"{mv['priorPeriod']} ({mv.get('priorReportingDate')}) → "
+                 f"{mv['currentPeriod']} ({mv.get('currentReportingDate')})."},
+        {"field": "attribution",
+         "note": f"Regional contributions sum to "
+                 f"{_gbp(recon.get('sum_of_region_movements'))} against a "
+                 f"consolidated movement of "
+                 f"{_gbp(recon.get('consolidated_movement'))} "
+                 f"(residual {_gbp(recon.get('region_residual'))})."},
+    ]
+    if mv.get("completionsBalanceInMonth") is not None:
+        notes.append({
+            "field": "completions_in_month",
+            "note": f"Loans completed in {mv['currentPeriod']} carry "
+                    f"{_gbp(mv['completionsBalanceInMonth'])} of balance"
+                    + (f", of which {_gbp(mv.get('completionsBalanceInPrimaryRegion'))} "
+                       f"is in the {primary['region']}." if primary else "."),
+        })
+    return _envelope(
+        ok=True, question=question, answer=answer, spec=spec_dict,
+        artifacts=artifacts,
+        reconciliation={"dataset": "funded", "coverage_by_balance_pct": 100.0,
+                        "missing_dimension_policy": "exclude"},
+        source_notes=notes, route="period_movement")
+
+
+def _upper_first(text: str) -> str:
+    """Capitalise the first character only — never lowercase the remainder,
+    which would mangle acronyms and proper nouns (LTV, ALP Origination Book)."""
+    return text[:1].upper() + text[1:] if text else text
+
+
+def _sentence_join(items: Sequence[str]) -> str:
+    """"a, b and c" — UK English list punctuation."""
+    vals = [str(i) for i in items if i]
+    if not vals:
+        return ""
+    if len(vals) == 1:
+        return vals[0]
+    return f"{', '.join(vals[:-1])} and {vals[-1]}"
+
+
 def _route_compare(question, spec, spec_dict, *, client_id, run_id, output_root,
                    pipeline_root, view, portfolio_id, as_of) -> Dict[str, Any]:
     periods = list(spec.compare_periods or [])
@@ -1309,6 +1661,24 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
     if _is_geo_exposure(question):
         return _route_geo(question, spec_dict, client_id=client_id, run_id=run_id,
                           frame_resolver=frame_resolver, portfolio_id=portfolio_id, as_of=as_of)
+    # Governed composite answers. Checked before compare/evolution because both
+    # are narrower intents than a single-metric comparison; each returns None (or
+    # a controlled insufficient-data envelope) when it cannot answer, so the
+    # existing routes are unaffected.
+    if _is_period_movement(question):
+        moved = _route_period_movement(
+            question, spec, spec_dict, client_id=client_id, run_id=run_id,
+            output_root=output_root, portfolio_id=portfolio_id, as_of=as_of,
+            source_lens=source_lens)
+        if moved is not None:
+            return moved
+    if _is_portfolio_summary(question):
+        summarised = _route_portfolio_summary(
+            question, spec, spec_dict, client_id=client_id, run_id=run_id,
+            output_root=output_root, portfolio_id=portfolio_id, as_of=as_of,
+            source_lens=source_lens)
+        if summarised is not None:
+            return summarised
     if spec.temporal_mode == "compare":
         return _route_compare(question, spec, spec_dict, view=view, **kw)
     if spec.risk_limit_query:

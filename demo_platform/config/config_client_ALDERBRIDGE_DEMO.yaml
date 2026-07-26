@@ -1,0 +1,134 @@
+# =====================================================================
+# SYNTHETIC DEMONSTRATION DATA — NOT A REAL CUSTOMER
+# =====================================================================
+# Master client config for the fictional "Alderbridge Lending Platform"
+# used by the Trakt product demonstration (demo_platform/).
+#
+# Alderbridge does not exist. Every value here is invented for the
+# demonstration. This config is isolated from config/client/* so it can never be
+# picked up by a real run.
+#
+# Layer 3 (master client config) — same shape as config/client/config_client_ERM_UK.yaml.
+
+client:
+  client_id: alderbridge
+  display_name: "Alderbridge Lending Platform"
+  environment: demonstration
+  synthetic: true
+  synthetic_notice: "SYNTHETIC DEMONSTRATION DATA — NOT A REAL CUSTOMER"
+
+portfolio:
+  asset_class: equity_release
+  country: GB
+  base_currency: GBP
+  # Deliberately NOT set: the reporting date must come from the source extract's
+  # own cut-off column, so each monthly file carries its own period. A static
+  # override here would collapse all three periods onto one date.
+  static_reporting_date: null
+
+# The recurring monthly run exercises the MI operating model. The ESMA Annex 2
+# submission is produced separately, from the same assembled platform canonical,
+# by demo_platform/artefacts.py (Gate 4 projection -> Gate 4b delivery
+# normalisation -> Gate 5 XML + XSD).
+default_regime: ESMA_Annex2
+supported_regimes:
+  - ESMA_Annex2
+regime: ESMA_Annex2
+
+pipeline:
+  loan_engine_enabled: false
+  mi_enabled: true
+  esma_enabled: false
+
+pipeline_persistence:
+  enabled: false
+
+# --- DEFAULTS -------------------------------------------------------
+# Synthetic originator identity. The LEI below is a structurally valid but
+# deliberately unallocated test value; it is not issued to any legal entity.
+defaults:
+  originator_legal_entity_identifier: "SYNTHETICDEMO0000000"
+  originator_name: "Alderbridge Lending Platform (synthetic)"
+  originator_establishment_country: "GB"
+
+  # ESMA "no data" options, applied at regime projection only — never written into
+  # the canonical model. Every entry below is a field the Annex 2 template requires
+  # but this product genuinely does not have, so ND5 ("not applicable") is the
+  # correct answer rather than a fabricated value. The two ND1s are different: the
+  # field applies, but neither source system carries it.
+  nd_defaults:
+    # A lifetime mortgage capitalises interest and repays on redemption. There is
+    # no payment schedule, no grace period and no index.
+    scheduled_principal_payment_frequency: ND5
+    scheduled_interest_payment_frequency: ND5
+    principal_grace_period_end_date: ND5
+    current_interest_rate_index: ND5
+    current_interest_rate_index_tenor: ND5
+    current_interest_rate_margin: ND5
+    interest_rate_reset_interval: ND5
+    interest_rate_cap: ND5
+    interest_rate_floor: ND5
+    # Neither book has been repurchased out of the pool, and no deposit is held
+    # against any loan.
+    date_of_repurchase: ND5
+    deposit_amount: ND5
+    # Originated loans have no purchase price; the acquired book was bought as a
+    # portfolio, not loan by loan.
+    purchase_price: ND5
+    # Applicable fields that neither source extract carries.
+    employment_status: ND1
+    customer_type: ND1
+    # Where the validation gate has flagged a missing valuation, the derived LTV
+    # cannot be stated. The exception is reported, not papered over.
+    current_valuation_amount: ND1
+    current_loan_to_value: ND5
+    original_loan_to_value: ND5
+
+# --- TRANSFORMATIONS ------------------------------------------------
+# Lifetime mortgages on this platform capitalise interest monthly, so the
+# outstanding balance and the principal balance are the same figure. Copying one
+# to the other keeps both canonical fields populated and reconciling.
+transformations:
+  copy_if_missing:
+    current_principal_balance: current_outstanding_balance
+
+# --- ENRICHMENT -----------------------------------------------------
+# Postcode -> ITL3 enrichment is ON. The generator draws each loan's postcode
+# district from inside the ITL1 region the loan claims, so the derived ITL3 code
+# and the readable region label always agree.
+enrichment:
+  enable:
+    uk_nuts3: true
+  uk_nuts3:
+    nuts_csv_path: "uk_itl_master_lookup_v2.csv"
+    postcode_columns: [postcode, property_postcode, property_post_code]
+    target_field: geographic_region_collateral
+    classification_year: 2021
+    fill_only_if_blank: true
+
+nuts_classification_year: 2021
+
+# --- REGIME OVERRIDES (ESMA Annex 2) -------------------------------
+# ScrtstnIdr is a header-level (pool-level) identifier in auth.099.001.04. Two
+# workbook codes land on that same leaf — RREL1 in the loan section and RREC1 in
+# the collateral section — so both must carry the same pool-level constant. The
+# projector can derive RREL1 from the originator LEI and the reporting year; it is
+# pinned explicitly here so the two codes cannot diverge, and so the value the
+# submission carries is visible in configuration rather than implied.
+#
+# Shape: 20-character LEI, then "N", then the reporting year, then a two-digit
+# sequence for the issuer's securitisations in that year.
+regime_overrides:
+  ESMA_Annex2:
+    securitisation_sequence: 1
+    header_constants:
+      RREL1: "SYNTHETICDEMO0000000N202601"
+      RREC1: "SYNTHETICDEMO0000000N202601"
+
+# --- MI & DISPLAY ---------------------------------------------------
+mi:
+  branding:
+    app_title: "Alderbridge Portfolio MI"
+    theme:
+      primary_color: "#232D55"
+      secondary_color: "#919DD1"

@@ -1,0 +1,39 @@
+{
+  "name": "trakt-demo-video",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Trakt product demonstration film \u2014 Remotion project. Renders entirely from the synthetic fixtures produced by demo_platform/run_demo.py. SYNTHETIC DEMONSTRATION DATA \u2014 NOT A REAL CUSTOMER.",
+  "scripts": {
+    "preview": "remotion studio src/index.ts",
+    "lint": "tsc --noEmit && node scripts/lint-theme.mjs",
+    "test": "vitest run",
+    "safety": "node scripts/safety-scan.mjs",
+    "fonts": "node scripts/vendor-fonts.mjs",
+    "fonts:verify": "node scripts/vendor-fonts.mjs --verify",
+    "check": "npm run fonts:verify && npm run lint && npm run test && npm run safety",
+    "render": "npm run check && node scripts/render.mjs --preset=master && npm run script",
+    "render:square": "npm run check && node scripts/render.mjs --preset=square",
+    "render:all": "npm run check && node scripts/render.mjs --preset=master --preset=square && npm run script",
+    "stills": "npm run check && node scripts/stills.mjs",
+    "script": "node scripts/generate-script.mjs",
+    "stills:square": "npm run check && node scripts/stills.mjs --square",
+    "signal": "node scripts/audit-signal.mjs --step=15"
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.499",
+    "@remotion/cli": "4.0.499",
+    "@remotion/google-fonts": "^4.0.499",
+    "@remotion/renderer": "4.0.499",
+    "pngjs": "^7.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "4.0.499"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.9"
+  }
+}

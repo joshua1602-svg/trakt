@@ -189,10 +189,32 @@ def _normalise_ltv(series: pd.Series) -> pd.Series:
     return v
 
 
+#: Region columns in the same preference order the funded bridge and the movement
+#: services use. A concentration limit is written against a READABLE region ("the
+#: South East"), so the readable analytics label must be preferred over the
+#: regulatory NUTS/ITL3 code field — testing a "South East" limit against a
+#: column of ITL3 codes silently reports 0% against a book that is 26% South East.
+_REGION_COLUMNS = ("collateral_geography", "geographic_region_collateral",
+                   "geographic_region_obligor")
+
+
+def _region_column(df: pd.DataFrame) -> Optional[str]:
+    """The first region column present AND populated in the funded tape."""
+    for col in _REGION_COLUMNS:
+        if col in getattr(df, "columns", []) and df[col].notna().any():
+            return col
+    return None
+
+
 def _region_shares(df: pd.DataFrame) -> Optional[pd.DataFrame]:
-    if _REGION not in df.columns or _BALANCE not in df.columns:
+    col = _region_column(df)
+    if col is None or _BALANCE not in df.columns:
         return None
-    return group_shares(df, _REGION, _BALANCE)
+    shares = group_shares(df, col, _BALANCE)
+    # Downstream code keys on _REGION, so normalise the grouping column's name.
+    if shares is not None and col != _REGION:
+        shares = shares.rename(columns={col: _REGION})
+    return shares
 
 
 def _wa_ltv_pct(df: pd.DataFrame) -> Optional[float]:
@@ -540,6 +562,25 @@ def compute_risk_limits(output_root, client_id: str, to_run_id: Optional[str],
                     prior_df, _ = snap.load_prepared_run(ptape)
                 except Exception:  # noqa: BLE001
                     prior_df = None
+
+    if df is None and output_root:
+        # The on-disk walk above is keyed on the onboarding 18_ tape layout and is
+        # filesystem-only, so it enumerates nothing under a blob:// platform root —
+        # which would report every limit as "unavailable" against a book that is
+        # actually there. Fall back to the SAME governed frame resolution the
+        # evolution / bridge / compare services use, which is blob-aware. Same
+        # frames, same funded prep, so the observed concentrations reconcile to the
+        # dashboard.
+        try:
+            from . import evolution as _evolution
+            frames = _evolution.funded_frames(output_root, client_id, to_run_id)
+            if frames:
+                df = frames[-1].get("df")
+                reporting_date = frames[-1].get("reporting_date") or reporting_date
+                if len(frames) >= 2:
+                    prior_df = frames[-2].get("df")
+        except Exception:  # noqa: BLE001 - never break the monitor on discovery
+            pass
 
     limits = extracted.get("limits", [])
     if df is None:
