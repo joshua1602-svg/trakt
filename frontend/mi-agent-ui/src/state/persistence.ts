@@ -16,6 +16,40 @@ export interface PersistedState {
   artifacts: Artifact[];
 }
 
+/**
+ * Context handed in via URL query parameters — used by Copilot's "Open in
+ * Workspace" deep links to RESTORE context (client, run, question, filters)
+ * rather than land on a blank dashboard. Empty object when no params are
+ * present, so the existing localStorage flow is untouched for normal visits.
+ */
+export interface UrlContext {
+  clientId?: string;
+  runId?: string;
+  question?: string;
+  /** Opaque filter payload carried on the link (JSON string as sent). */
+  filters?: string;
+}
+
+/** Parse the Workspace-restoring params off the current URL. Safe on SSR. */
+export function readUrlContext(): UrlContext {
+  if (typeof window === "undefined" || !window.location?.search) return {};
+  try {
+    const p = new URLSearchParams(window.location.search);
+    const ctx: UrlContext = {};
+    const client = p.get("client");
+    const run = p.get("run");
+    const q = p.get("q");
+    const filters = p.get("filters");
+    if (client) ctx.clientId = client;
+    if (run) ctx.runId = run;
+    if (q) ctx.question = q;
+    if (filters) ctx.filters = filters;
+    return ctx;
+  } catch {
+    return {};
+  }
+}
+
 export function loadState(): PersistedState | null {
   if (typeof localStorage === "undefined") return null;
   try {

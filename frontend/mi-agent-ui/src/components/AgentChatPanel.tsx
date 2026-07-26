@@ -11,6 +11,7 @@ export function AgentChatPanel({
   messages,
   isWorking,
   mock,
+  initialInput,
   onSubmit,
   onOpenArtifact,
   onRetry,
@@ -22,6 +23,9 @@ export function AgentChatPanel({
   messages: ChatMessageType[];
   isWorking: boolean;
   mock: boolean;
+  /** Pre-filled composer text (e.g. a Copilot "Open in Workspace" deep-link
+   *  question). Applied once on mount; the user edits or sends it. */
+  initialInput?: string;
   onSubmit: (text: string) => void;
   onOpenArtifact: (id: string) => void;
   onRetry: () => void;
@@ -31,7 +35,7 @@ export function AgentChatPanel({
   onClearChat?: () => void;
   onTogglePin?: (id: string) => void;
 }) {
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(initialInput ?? "");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
