@@ -350,15 +350,26 @@ export const Headline: React.FC<{
  * old arrangement made `platform_canonical_typed.csv` the largest text on its own card,
  * which asked the viewer to care about a path.
  *
- * `confirm` is a check state ("XSD validated") and is the one thing on the card that
- * carries `signal`, at the soft strength — never full.
+ * `scope` says which book the artefact is an output of — SPV1, PLATFORM, or ALL. It sits
+ * above the title because "which portfolio is this about" is the first question anyone
+ * asks of a governed output, and a card that answers it cannot be misread as speaking
+ * for the whole business. The scope word itself carries `signal` at the soft strength;
+ * everything after the separator is `mute`, so the eye picks the scope out of a wall of
+ * six cards without any of them shouting.
+ *
+ * `confirm` is a check state ("XSD validated") and is the one other thing on the card
+ * that carries `signal`, at the same soft strength — never full.
  */
 export const ArtifactCard: React.FC<{
   title: string;
+  /** Which book this output covers. Omitted only where scope is unambiguous. */
+  scope?: string;
+  /** Trailing text on the scope line, after the separator. */
+  scopeNote?: string;
   meta: string[];
   confirm?: string;
   style?: React.CSSProperties;
-}> = ({ title, meta, confirm, style }) => {
+}> = ({ title, scope, scopeNote, meta, confirm, style }) => {
   const isSquare = useIsSquare();
   return (
     <Panel
@@ -373,6 +384,14 @@ export const ArtifactCard: React.FC<{
         ...style,
       }}
     >
+      {scope ? (
+        <Stamp>
+          <span style={{ color: theme.color.signal, opacity: theme.signalSoftOpacity }}>
+            {scope}
+          </span>
+          {scopeNote ? ` · ${scopeNote}` : null}
+        </Stamp>
+      ) : null}
       <Body style={{ fontSize: theme.type.body.fontSize * (isSquare ? 0.82 : 0.92) }}>
         {title}
       </Body>

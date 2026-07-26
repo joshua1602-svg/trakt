@@ -1,7 +1,7 @@
 /**
  * Export the outbound-email still frames.
  *
- * The storyboard names frames 1020, 1500 and 2100 for use in the email body itself.
+ * The storyboard names three frames for use in the email body itself.
  * They are rendered out of `TraktDemo` at those exact frames — not from separate
  * Still compositions — so a still can never show something the film does not.
  *
@@ -25,32 +25,42 @@ const OUT = join(ROOT, "out", "stills");
 const REVIEW = join(OUT, "review");
 
 /** Kept in step with STILL_FRAMES in src/timeline.ts by a unit test. */
-const EMAIL_FRAMES = [1020, 1500, 2100];
+const EMAIL_FRAMES = [800, 1500, 2100];
 
 /**
  * Review frames.
  *
- * One at the MIDPOINT of each scene — 210 / 780 / 1440 / 2040 / 2520 — which is the set
- * to scrub when checking the frame as a whole, plus the specific beats worth their own
- * look: the failed connection, the referral hold, the card fan-out and the simultaneous
- * payload.
+ * One at the MIDPOINT of each scene, plus the midpoint of every BEAT — the scenes are
+ * cut 420 / 480 / 780 / 660 / 360 and the beats inside S2 and S3 change the whole frame,
+ * so a per-scene sample would miss most of the film. These are the frames to scrub when
+ * checking legibility, overflow and contrast.
  */
 const REVIEW_FRAMES = [
   { frame: 30, name: "s1-01-opening-line" },
   { frame: 150, name: "s1-02-failed-connection" },
   { frame: 210, name: "s1-03-midpoint" },
   { frame: 300, name: "s1-04-cost-anchor" },
-  { frame: 450, name: "s2-01-clock" },
-  { frame: 600, name: "s2-02-mapping" },
-  { frame: 780, name: "s2-03-midpoint" },
-  { frame: 900, name: "s2-04-referral" },
-  { frame: 1080, name: "s2-05-claim" },
-  { frame: 1260, name: "s3-01-total" },
-  { frame: 1440, name: "s3-02-midpoint" },
-  { frame: 1620, name: "s3-03-claim" },
-  { frame: 1900, name: "s4-01-panels" },
-  { frame: 2040, name: "s4-02-midpoint" },
+  // S2 starts at 420. Beats: clock 0-120, arrivals 120-270, receipt 270-420, out 420-480.
+  { frame: 480, name: "s2-01-clock" },
+  { frame: 600, name: "s2-02-arrivals" },
+  { frame: 650, name: "s2-03-arrivals-claim" },
+  { frame: 730, name: "s2-04-receipt" },
+  { frame: 800, name: "s2-05-referral" },
+  { frame: 870, name: "s2-06-granularity" },
+  // S3 starts at 900. Beats: lanes 0-210, sponsor 198-300, platform 300-780.
+  { frame: 1000, name: "s3-01-lanes" },
+  { frame: 1140, name: "s3-02-sponsor" },
+  { frame: 1180, name: "s3-03-sponsor-claim" },
+  { frame: 1240, name: "s3-04-platform-parts" },
+  { frame: 1330, name: "s3-05-platform-total" },
+  { frame: 1500, name: "s3-06-cards" },
+  { frame: 1550, name: "s3-07-reconciliation" },
+  { frame: 1650, name: "s3-08-claim" },
+  // S4 starts at 1680. Payload 1992 onward; the claim takes over at 2190.
+  { frame: 1800, name: "s4-01-panels" },
+  { frame: 1900, name: "s4-02-silhouettes" },
   { frame: 2100, name: "s4-03-payload" },
+  { frame: 2250, name: "s4-04-claim" },
   { frame: 2520, name: "s5-01-midpoint" },
   { frame: 2640, name: "s5-02-ask" },
 ];

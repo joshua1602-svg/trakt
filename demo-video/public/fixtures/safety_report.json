@@ -1,8 +1,8 @@
 {
   "ok": true,
   "synthetic_notice": "SYNTHETIC DEMONSTRATION DATA \u2014 NOT A REAL CUSTOMER",
-  "filesScanned": 56,
-  "filesCarryingSyntheticBanner": 23,
+  "filesScanned": 59,
+  "filesCarryingSyntheticBanner": 28,
   "prohibitedStrings": [
     "213800ABCDE123456701N202501",
     "ERE",

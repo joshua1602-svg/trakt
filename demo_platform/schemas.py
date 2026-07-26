@@ -299,9 +299,119 @@ SERVICER_SCHEMA = SourceSchema(
 )
 
 
+# --------------------------------------------------------------------------- #
+# Portfolio S — trustee deal-level extract for the sold securitisation
+# --------------------------------------------------------------------------- #
+#: The sponsor no longer owns SPV1, so its data does not come from the sponsor's own
+#: systems at all. It arrives from the deal's trustee, in the trustee's deal vocabulary:
+#: everything is a "deal asset" rather than a loan, the pool cut-off replaces the
+#: reporting date, and the identifiers are the deal's, not the lender's. Three source
+#: systems, three vocabularies — which is the point.
+TRUSTEE_SCHEMA = SourceSchema(
+    name="trustee_deal_extract",
+    system_of_record="Deal trustee asset schedule (quarterly, sponsored securitisation)",
+    description=(
+        "The trustee's asset schedule for a securitisation the sponsor originated "
+        "and sold. Deal-level vocabulary throughout: pool cut-off rather than "
+        "reporting date, asset rather than loan, and the trustee's own identifiers."
+    ),
+    columns=(
+        SourceColumn("Deal Asset ID", "loan_id", "contract", "loan_identifier",
+                     "The trustee's asset key — the stable loan identifier."),
+        SourceColumn("Pool Cut-Off", "reporting_date", "contract", "data_cut_off_date",
+                     "The deal's pool cut-off date."),
+        SourceColumn("Asset Origination Date", "origination_date", "contract",
+                     "origination_date", "Completion date under the deal's naming."),
+        SourceColumn("Original Balance", "original_principal", "contract",
+                     "original_principal_balance", "Advance at completion."),
+        SourceColumn("Current Asset Balance", "current_balance", "contract",
+                     "current_principal_balance",
+                     "Capital plus capitalised roll-up interest at the cut-off."),
+        SourceColumn("Valuation At Origination Date", "original_valuation", "contract",
+                     "original_valuation_amount", "Vendor valuation at completion."),
+        SourceColumn("Latest Valuation", "current_valuation", "global",
+                     "current_valuation_amount", "Latest valuation held by the trustee."),
+        SourceColumn("Asset Interest Rate", "rate", "contract", "current_interest_rate",
+                     "Fixed lifetime roll-up rate, annual percentage points."),
+        SourceColumn("Youngest Life Age", "borrower_age", "contract",
+                     "youngest_borrower_age", "Age of the youngest life at the cut-off."),
+        SourceColumn("Region Of Security", "region", "contract", "collateral_geography",
+                     "Readable ITL1 region label for the security property."),
+        SourceColumn("Security Post Code", "postcode", "contract", "property_post_code",
+                     "Property postcode; drives ITL3 enrichment."),
+        SourceColumn("Asset Status", "status", "contract", "account_status",
+                     "Asset status under the trustee's naming."),
+        SourceColumn("Repurchase Or Redemption Date", "redemption_date", "contract",
+                     "redemption_date", "Populated only for assets that left the pool."),
+        SourceColumn("Underlying Exposure ID", "exposure_id", "global",
+                     "original_underlying_exposure_identifier",
+                     "The deal's exposure identifier (ESMA RREL2)."),
+        SourceColumn("Obligor ID", "obligor_id", "contract",
+                     "original_obligor_identifier",
+                     "The deal's obligor identifier (ESMA RREL4)."),
+        SourceColumn("Proceeds Purpose", "purpose", "contract", "purpose",
+                     "Use of proceeds under the trustee's naming."),
+        SourceColumn("Property Category", "property_type", "contract", "property_type",
+                     "Dwelling form of the security (RREC9)."),
+        SourceColumn("Rate Convention", "rate_type", "contract", "interest_rate_type",
+                     "Fixed for the life of the asset."),
+        SourceColumn("Amortisation Basis", "amortisation_type", "contract",
+                     "amortisation_type", "Interest roll-up."),
+        SourceColumn("Occupancy Basis", "occupancy_type", "contract", "occupancy_type",
+                     "Owner-occupied."),
+        SourceColumn("Denomination", "currency", "contract",
+                     "exposure_currency_denomination", "GBP."),
+        SourceColumn("Maturity Long Stop", "maturity_date", "contract", "maturity_date",
+                     "Product long-stop for the asset (RREL24)."),
+        SourceColumn("Pool Addition", "pool_addition_date", "contract",
+                     "pool_addition_date",
+                     "Date the asset entered the deal's pool (RREL7)."),
+        SourceColumn("Facility Limit", "credit_limit", "contract", "total_credit_limit",
+                     "Approved facility at completion (RREL33)."),
+        SourceColumn("Collateral Key", "collateral_id", "contract",
+                     "new_collateral_identifier",
+                     "Current collateral key. Not 'Collateral ID' — that is itself a "
+                     "canonical field name, which Gate 1 pins before any client "
+                     "contract is consulted (RREC4)."),
+        SourceColumn("Collateral ID At Closing", "collateral_id_original", "contract",
+                     "original_collateral_identifier",
+                     "Collateral key as at deal closing (RREC3)."),
+        SourceColumn("Collateral Category", "collateral_type", "contract",
+                     "collateral_type", "Collateral class (RREC5)."),
+        SourceColumn("Valuation Approach", "valuation_method", "contract",
+                     "current_valuation_method", "How the valuation was established."),
+        SourceColumn("Introduction Route", "origination_channel", "contract",
+                     "origination_channel", "How the asset was introduced (RREL26)."),
+        SourceColumn("Obligor Residency", "resident", "contract", "resident",
+                     "Obligor resident in the collateral's country (RREL10)."),
+        SourceColumn("Impaired Flag", "credit_impaired", "contract",
+                     "credit_impaired_obligor", "Credit-impaired obligor (RREL14)."),
+        SourceColumn("Proceedings Flag", "litigation", "contract", "litigation",
+                     "Asset subject to legal proceedings (RREL75)."),
+        SourceColumn("Amount Falling Due", "payment_due", "contract", "payment_due",
+                     "Contractually due this period — nil (RREL39)."),
+        SourceColumn("Arrears Position", "arrears_balance", "contract",
+                     "arrears_balance", "Arrears at the cut-off (RREL67)."),
+        SourceColumn("Days Past Due", "days_in_arrears", "global",
+                     "number_of_days_in_arrears", "Days past due (RREL68)."),
+        SourceColumn("Defaulted Amount", "default_amount", "global",
+                     "default_amount", "Balance in default (RREL71)."),
+        SourceColumn("Loss Allocation", "allocated_losses", "contract",
+                     "allocated_losses", "Losses allocated to date (RREL73)."),
+        SourceColumn("Recovery Total", "cumulative_recoveries", "contract",
+                     "cumulative_recoveries", "Recoveries to date (RREL74)."),
+        SourceColumn("Early Redemption Charge", "prepayment_fee", "contract",
+                     "prepayment_fee", "Early-repayment charge (RREL61)."),
+        SourceColumn("Synthetic Data Notice", "synthetic_notice", "global", "",
+                     "Unmapped by design — the demonstration marker."),
+    ),
+)
+
+
 SCHEMAS: Dict[str, SourceSchema] = {
     ORIGINATION_SCHEMA.name: ORIGINATION_SCHEMA,
     SERVICER_SCHEMA.name: SERVICER_SCHEMA,
+    TRUSTEE_SCHEMA.name: TRUSTEE_SCHEMA,
 }
 
 
@@ -313,14 +423,16 @@ def schema_for(name: str) -> SourceSchema:
 
 
 def shared_headers() -> List[str]:
-    """Headers present in BOTH schemas.
+    """Headers present in MORE THAN ONE schema.
 
-    Used by a test that asserts the two source schemas are genuinely different:
-    only the deliberate synthetic marker may be shared.
+    Used by a test that asserts the source schemas are genuinely different: only the
+    deliberate synthetic marker may be shared across them.
     """
-    a = set(ORIGINATION_SCHEMA.headers)
-    b = set(SERVICER_SCHEMA.headers)
-    return sorted(a & b)
+    seen: Dict[str, int] = {}
+    for schema in SCHEMAS.values():
+        for header in set(schema.headers):
+            seen[header] = seen.get(header, 0) + 1
+    return sorted(h for h, n in seen.items() if n > 1)
 
 
 def resolution_summary() -> Dict[str, Dict[str, int]]:

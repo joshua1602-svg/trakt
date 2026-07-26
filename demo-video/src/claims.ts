@@ -39,6 +39,22 @@ export const MONTH_END_COST = "Five days of month-end. Every month. For every po
 /** S1's opening line: the buyer, before any artefact is named. */
 export const OPENING_LINE = "You bought a back book. It didn't come with your data model.";
 
+/**
+ * The one arriving cut the demonstration does not itself carry.
+ *
+ * Four of the five inputs S2 shows are real: three are the source schemas the generator
+ * actually writes (`src/data/fixtures.ts` derives them from `SCHEMAS`), and the risk
+ * limit schedule is the Schedule 8 document the concentration monitor genuinely reads.
+ * A warehouse facility schedule is part of this buyer's month-end and is not in the
+ * synthetic set, so it is declared here as stated copy rather than dressed up as data.
+ */
+export const STATED_ARRIVAL = {
+  title: "Warehouse facility schedule",
+  format: "XLSX",
+  owner: "funding counterparty",
+  frequency: "monthly",
+};
+
 /** Plain-English use lines for the three channels in S4, keyed by channel label. */
 export const CHANNEL_USE: Record<string, string> = {
   "Managed service": "You never log in.",

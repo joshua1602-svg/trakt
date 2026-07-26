@@ -29,6 +29,8 @@ import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
+import pandas as pd
+
 from . import config as cfg
 
 warnings.simplefilter("ignore")
@@ -77,6 +79,35 @@ def _evolution_series(scope: str) -> List[Dict[str, Any]]:
     return out
 
 
+def _sponsored_scope() -> Dict[str, Any]:
+    """SPV1's own figures, from its own governed canonical.
+
+    Read from the portfolio's published Gate 2 output rather than the platform
+    canonical, because SPV1 is deliberately not in the platform canonical.
+    """
+    spec = cfg.PORTFOLIO_S
+    canonical = (cfg.run_output_dir(spec.source_portfolio_id, cfg.CURRENT_PERIOD.run_id)
+                 / f"{cfg.source_file(spec, cfg.CURRENT_PERIOD).stem}_canonical_typed.csv")
+    if not canonical.exists():
+        raise MetricsError(
+            f"SPV1 has no governed canonical at {canonical} — run the orchestration first."
+        )
+    df = pd.read_csv(canonical, low_memory=False)
+    balances = pd.to_numeric(df["current_outstanding_balance"], errors="coerce").fillna(0.0)
+    return {
+        "sourcePortfolioId": spec.source_portfolio_id,
+        "displayId": spec.display_id,
+        "label": spec.label,
+        "status": spec.description,
+        "fundedBalance": round(float(balances.sum()), 2),
+        "funded_balance": round(float(balances.sum()), 2),
+        "loanCount": int((balances > 0).sum()),
+        "loan_count": int((balances > 0).sum()),
+        "reportingDate": cfg.CURRENT_PERIOD.reporting_date,
+        "producedBy": "engine/gate_2_transform/canonical_transform.py (SPV1 run)",
+    }
+
+
 def governed_metrics() -> Dict[str, Any]:
     """The full governed metric set, per lens, straight from the services."""
     from mi_agent_api import movement_summary as movement_mod
@@ -110,10 +141,38 @@ def governed_metrics() -> Dict[str, Any]:
             "series": _evolution_series(scope),
         }
 
+    # --- Sponsor scope -----------------------------------------------------
+    # SPV1 is governed through the same gates but is NOT in the platform canonical, so
+    # its figures are read from its own published canonical and aggregated here — the
+    # one place in the demonstration where the two scopes are added together.
+    sponsored = _sponsored_scope()
+    platform_summary = lenses["total"]["summary"]["metrics"]
+    sponsor_balance = (platform_summary.get("funded_balance") or 0.0) + sponsored["funded_balance"]
+    sponsor_loans = (platform_summary.get("loan_count") or 0) + sponsored["loan_count"]
+
     return {
         "synthetic_notice": cfg.SYNTHETIC_BANNER,
         "client": {"id": cfg.CLIENT_ID, "displayName": cfg.CLIENT_DISPLAY_NAME,
                    "shortName": cfg.CLIENT_SHORT_NAME},
+        # Two scopes, and the film must never confuse them.
+        #   PLATFORM — the warehoused books the assembler consolidates. Every figure in
+        #              the film except the sponsor consolidation is this scope.
+        #   SPONSOR  — the platform plus the deal that was sold. Used once, in S3.
+        "scopes": {
+            "platform": {
+                "label": "Platform (warehoused)",
+                "portfolios": [p.display_id for p in cfg.PORTFOLIOS],
+                "fundedBalance": platform_summary.get("funded_balance"),
+                "loanCount": platform_summary.get("loan_count"),
+            },
+            "sponsor": {
+                "label": "Sponsor AUM",
+                "portfolios": [p.display_id for p in cfg.ALL_PORTFOLIOS],
+                "fundedBalance": round(sponsor_balance, 2),
+                "loanCount": int(sponsor_loans),
+            },
+            "sponsored": sponsored,
+        },
         "currentPeriod": {
             "period": cfg.CURRENT_PERIOD.period,
             "reportingDate": cfg.CURRENT_PERIOD.reporting_date,

@@ -25,8 +25,13 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
 const WORK = join(ROOT, "out", ".signal-audit");
 
-/** Frames where three panels legitimately show the same accented figure. */
-const S4_PAYLOAD = { from: 2040, to: 2172, why: "S4 payload — one figure, three panels" };
+/**
+ * Frames where three panels legitimately show the same accented figure.
+ *
+ * S4 starts at 1680 (420 + 480 + 780). Its payload fades in at scene frame 312 and the
+ * panels fade out over 486–510, so the exception runs 1992–2190 absolute.
+ */
+const S4_PAYLOAD = { from: 1992, to: 2190, why: "S4 payload — one figure, three panels" };
 
 const readToken = (name) => {
   const theme = readFileSync(join(ROOT, "src", "theme.ts"), "utf8");

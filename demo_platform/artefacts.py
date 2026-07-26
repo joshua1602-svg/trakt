@@ -91,6 +91,7 @@ def validation_report() -> Dict[str, Any]:
     total_exceptions = 0
     gate2_ok = True
 
+    # PLATFORM scope: the validation report covers the assembled platform canonical.
     for portfolio in cfg.PORTFOLIOS:
         val_dir = cfg.run_validation_dir(portfolio.source_portfolio_id,
                                          cfg.CURRENT_PERIOD.run_id)
@@ -605,7 +606,9 @@ def orchestration_from_disk() -> Dict[str, Any]:
                 for p in m.get("portfolios", [])
             },
         })
-    for portfolio in cfg.PORTFOLIOS:
+    # The audit trail is ALL scope: every portfolio governed through the gates, the sold
+    # deal included. That is what makes it an audit trail rather than a platform report.
+    for portfolio in cfg.ALL_PORTFOLIOS:
         for prd in cfg.PERIODS:
             run_manifest = (cfg.run_output_dir(portfolio.source_portfolio_id, prd.run_id)
                             / "run_manifest.json")
@@ -652,7 +655,7 @@ def audit_manifest(orchestration_result: Dict[str, Any]) -> Dict[str, Any]:
     if not orchestration_result.get("assemblies"):
         orchestration_result = orchestration_from_disk()
     inputs: List[Dict[str, Any]] = []
-    for portfolio in cfg.PORTFOLIOS:
+    for portfolio in cfg.ALL_PORTFOLIOS:
         for prd in cfg.PERIODS:
             path = cfg.source_file(portfolio, prd)
             if path.exists():

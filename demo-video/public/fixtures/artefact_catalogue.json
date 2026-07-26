@@ -121,7 +121,7 @@
     "format": "PowerPoint (PPTX)",
     "slides": 18,
     "sizeBytes": 1309109,
-    "contentSha256": "sha256:e6952f9616539b98c7dd5efc91f7601f11fb39efa68496ea2d14eff4c2873803",
+    "contentSha256": "sha256:53056273c6160eddb6092bcfd805c33914d9f3b42fe39512093e6f3b064e8725",
     "reportingPeriod": "2026-06",
     "path": "/home/user/trakt/demo_platform/workspace/artefacts/investor_deck/investor_pack.pptx",
     "publishedTo": "/home/user/trakt/demo_platform/workspace/decks/alderbridge/latest/investor_pack.pptx",
@@ -842,6 +842,27 @@
         "fileName": "ALP_ACQUIRED_20260630_SYNTHETIC.csv",
         "sizeBytes": 1538320,
         "contentSha256": "sha256:0fc554e748e52bb565e244e43e5d09cd5ecef12c32a69a758e4bb09d1c9c2039"
+      },
+      {
+        "portfolio": "SPV1",
+        "period": "2026-04",
+        "fileName": "SPV1_20260430_SYNTHETIC.csv",
+        "sizeBytes": 1617454,
+        "contentSha256": "sha256:f49bf9bec525bffdea4d7be5044cb88589a827ac8cd82a1c6e4954e127a470c8"
+      },
+      {
+        "portfolio": "SPV1",
+        "period": "2026-05",
+        "fileName": "SPV1_20260531_SYNTHETIC.csv",
+        "sizeBytes": 1613180,
+        "contentSha256": "sha256:1db042499df26a0a6da11b22ff5da4e2faa852304aee1926db73820711737380"
+      },
+      {
+        "portfolio": "SPV1",
+        "period": "2026-06",
+        "fileName": "SPV1_20260630_SYNTHETIC.csv",
+        "sizeBytes": 1608535,
+        "contentSha256": "sha256:6ddbf8245a0ed5247fdcdea3b459b65f2eef20d61b8c602b696381066aed3587"
       }
     ],
     "gateExecution": [
@@ -858,7 +879,7 @@
           "[Gate 3b] Validation aggregation.......... OK -> ALP_ORIGINATION_20260430_SYNTHETIC_field_summary.csv",
           "[MI] Dashboard-ready canonical produced."
         ],
-        "elapsedSeconds": 7.92
+        "elapsedSeconds": 8.09
       },
       {
         "portfolio": "ALP_ACQUIRED",
@@ -873,7 +894,22 @@
           "[Gate 3b] Validation aggregation.......... OK -> ALP_ACQUIRED_20260430_SYNTHETIC_field_summary.csv",
           "[MI] Dashboard-ready canonical produced."
         ],
-        "elapsedSeconds": 6.17
+        "elapsedSeconds": 6.8
+      },
+      {
+        "portfolio": "SPV1",
+        "period": "2026-04",
+        "rows": 4213,
+        "balance": 838057624.23,
+        "gates": [
+          "[Gate 1] Semantic alignment.............. OK 39 fields mapped | 0 HQ recommendations",
+          "[Gate 2] Canonical validation............ OK 4,213 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
+          "[Gate 2.5] Data lineage.................. OK",
+          "[Gate 3] Business rules.................. Warn 3 rules | 24 failures",
+          "[Gate 3b] Validation aggregation.......... OK -> SPV1_20260430_SYNTHETIC_field_summary.csv",
+          "[MI] Dashboard-ready canonical produced."
+        ],
+        "elapsedSeconds": 6.88
       },
       {
         "portfolio": "ALP_ORIGINATION",
@@ -888,7 +924,7 @@
           "[Gate 3b] Validation aggregation.......... OK -> ALP_ORIGINATION_20260531_SYNTHETIC_field_summary.csv",
           "[MI] Dashboard-ready canonical produced."
         ],
-        "elapsedSeconds": 7.89
+        "elapsedSeconds": 8.23
       },
       {
         "portfolio": "ALP_ACQUIRED",
@@ -903,7 +939,22 @@
           "[Gate 3b] Validation aggregation.......... OK -> ALP_ACQUIRED_20260531_SYNTHETIC_field_summary.csv",
           "[MI] Dashboard-ready canonical produced."
         ],
-        "elapsedSeconds": 6.38
+        "elapsedSeconds": 6.74
+      },
+      {
+        "portfolio": "SPV1",
+        "period": "2026-05",
+        "rows": 4202,
+        "balance": 840449817.35,
+        "gates": [
+          "[Gate 1] Semantic alignment.............. OK 39 fields mapped | 0 HQ recommendations",
+          "[Gate 2] Canonical validation............ OK 4,202 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
+          "[Gate 2.5] Data lineage.................. OK",
+          "[Gate 3] Business rules.................. Warn 3 rules | 26 failures",
+          "[Gate 3b] Validation aggregation.......... OK -> SPV1_20260531_SYNTHETIC_field_summary.csv",
+          "[MI] Dashboard-ready canonical produced."
+        ],
+        "elapsedSeconds": 7.01
       },
       {
         "portfolio": "ALP_ORIGINATION",
@@ -918,7 +969,7 @@
           "[Gate 3b] Validation aggregation.......... OK -> ALP_ORIGINATION_20260630_SYNTHETIC_field_summary.csv",
           "[MI] Dashboard-ready canonical produced."
         ],
-        "elapsedSeconds": 7.69
+        "elapsedSeconds": 8.47
       },
       {
         "portfolio": "ALP_ACQUIRED",
@@ -933,7 +984,22 @@
           "[Gate 3b] Validation aggregation.......... OK -> ALP_ACQUIRED_20260630_SYNTHETIC_field_summary.csv",
           "[MI] Dashboard-ready canonical produced."
         ],
-        "elapsedSeconds": 6.45
+        "elapsedSeconds": 6.86
+      },
+      {
+        "portfolio": "SPV1",
+        "period": "2026-06",
+        "rows": 4190,
+        "balance": 842588527.48,
+        "gates": [
+          "[Gate 1] Semantic alignment.............. OK 39 fields mapped | 0 HQ recommendations",
+          "[Gate 2] Canonical validation............ OK 4,190 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
+          "[Gate 2.5] Data lineage.................. OK",
+          "[Gate 3] Business rules.................. Warn 3 rules | 22 failures",
+          "[Gate 3b] Validation aggregation.......... OK -> SPV1_20260630_SYNTHETIC_field_summary.csv",
+          "[MI] Dashboard-ready canonical produced."
+        ],
+        "elapsedSeconds": 6.89
       }
     ],
     "assembledOutputs": [

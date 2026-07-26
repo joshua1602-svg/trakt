@@ -626,6 +626,68 @@ def _build_all(calib: Calibration) -> Tuple[Dict[str, LoanBook], Dict[str, Dict[
     return books, frames
 
 
+def _build_sponsored(valuation_scale: float) -> Tuple[LoanBook, Dict[str, pd.DataFrame]]:
+    """Build SPV1, the sold securitisation, on its own.
+
+    Deliberately outside :func:`_build_all` and outside the platform's calibration.
+    SPV1 is derecognised — it is not in the assembled platform canonical and takes no
+    part in the movement narrative — so it must not be able to perturb a single figure
+    the platform produces. Its own seed, its own solve, one scalar.
+    """
+    spec = cfg.PORTFOLIO_S
+    shape = cfg.SHAPES[spec.source_portfolio_id]
+    seed = cfg.RANDOM_SEED + (sum(ord(c) for c in spec.source_portfolio_id) * 7919)
+    rng = np.random.default_rng(seed)
+    # A neutral calibration: the platform's solved scalars are none of SPV1's business.
+    loans = _build_loans(spec, shape, Calibration(), rng)
+    loans = loans.copy()
+    # The one lever. Scaling valuations scales the advances written against them, and
+    # so the balances that rolled up from those advances, without touching the loan
+    # count, the age profile or the LTV distribution.
+    for column in ("original_valuation",):
+        loans[column] = loans[column].to_numpy(dtype=float) * valuation_scale
+    loans["original_principal"] = np.round(
+        loans["original_principal"].to_numpy(dtype=float) * valuation_scale, 2)
+    book = LoanBook(spec, shape, loans)
+    frames = {prd.period: period_frame(book, prd) for prd in cfg.PERIODS}
+    return book, frames
+
+
+def _funded(frame: pd.DataFrame) -> float:
+    """Funded balance of a period frame: live accounts only."""
+    return float(_num(frame["current_balance"]).fillna(0.0).sum())
+
+
+def generate_sponsored(*, max_iterations: int = 24, verbose: bool = True):
+    """Solve SPV1's one scalar onto its own balance target."""
+    cur = cfg.CURRENT_PERIOD.period
+    target = cfg.TARGET_BALANCE_S
+
+    x0 = 1.0
+    book, frames = _build_sponsored(x0)
+    y0 = _funded(frames[cur]) - target.target
+    x1 = 1.0 + (0.06 if y0 < 0 else -0.06)
+    iterations = 0
+    for iterations in range(1, max_iterations + 1):
+        book, frames = _build_sponsored(x1)
+        y1 = _funded(frames[cur]) - target.target
+        if verbose:
+            print(f"  [calibrate] SPV1 iter {iterations:2d} "
+                  f"balance{y1 / 1e6:+7.3f}m  scale {x1:.6f}")
+        if target.ok(target.target + y1):
+            break
+        x_next = _secant_step(x0, y0, x1, y1, lo=0.30, hi=3.0, fallback=0.02)
+        x0, y0, x1 = x1, y1, x_next
+
+    injected: List[Dict[str, Any]] = []
+    final: Dict[str, pd.DataFrame] = {}
+    for prd in cfg.PERIODS:
+        frame, inj = _inject_exceptions(frames[prd.period], prd, cfg.PORTFOLIO_S)
+        final[prd.period] = frame
+        injected.extend(inj)
+    return book, final, injected, round(x1, 8), iterations
+
+
 def _secant_step(x0: float, y0: float, x1: float, y1: float, *,
                  lo: float, hi: float, fallback: float) -> float:
     """One damped secant step toward ``y = 0``, clamped to ``[lo, hi]``."""
@@ -728,10 +790,30 @@ def generate(*, max_iterations: int = 44, verbose: bool = True) -> GeneratedBook
             final_frames[pid][prd.period] = frame
             injected.extend(inj)
 
-    metrics = model_metrics({pid: fr[cur] for pid, fr in final_frames.items()})
+    # SPV1 last, and separately: the platform is already solved and frozen by here, so
+    # nothing about the sold deal can reach back into it.
+    spv_book, spv_frames, spv_injected, spv_scale, spv_iterations = generate_sponsored(
+        verbose=verbose)
+    books[cfg.PORTFOLIO_S.source_portfolio_id] = spv_book
+    final_frames[cfg.PORTFOLIO_S.source_portfolio_id] = spv_frames
+    injected.extend(spv_injected)
+
+    # Platform metrics are computed over the PLATFORM portfolios only. SPV1 is reported
+    # beside them, never inside them.
+    platform_ids = [p.source_portfolio_id for p in cfg.PORTFOLIOS]
+    metrics = model_metrics({pid: final_frames[pid][cur] for pid in platform_ids})
     metrics["calibration_history"] = history
+    metrics["sponsored"] = {
+        "source_portfolio_id": cfg.PORTFOLIO_S.source_portfolio_id,
+        "display_id": cfg.PORTFOLIO_S.display_id,
+        "valuation_scale": spv_scale,
+        "iterations": spv_iterations,
+        "funded_balance": round(_funded(spv_frames[cur]), 2),
+        "loan_count": int(
+            (_num(spv_frames[cur]["current_balance"]).fillna(0.0) > 0).sum()),
+    }
     metrics["movement_by_portfolio"] = {
-        pid: round(_movement(fr), 2) for pid, fr in final_frames.items()
+        pid: round(_movement(final_frames[pid]), 2) for pid in platform_ids
     }
     metrics["consolidated_movement"] = round(
         sum(metrics["movement_by_portfolio"].values()), 2)
@@ -751,7 +833,7 @@ def write_source_files(generated: GeneratedBooks) -> List[Dict[str, Any]]:
     Returns one descriptor per written file for the demo manifest.
     """
     written: List[Dict[str, Any]] = []
-    for portfolio in cfg.PORTFOLIOS:
+    for portfolio in cfg.ALL_PORTFOLIOS:
         schema = schemas.schema_for(portfolio.schema_name)
         for prd in cfg.PERIODS:
             frame = generated.frames[portfolio.source_portfolio_id][prd.period]
@@ -768,8 +850,8 @@ def write_source_files(generated: GeneratedBooks) -> List[Dict[str, Any]]:
             path = cfg.source_file(portfolio, prd)
             path.parent.mkdir(parents=True, exist_ok=True)
             out.to_csv(path, index=False)
-            balance_col = "Current Balance" if "Current Balance" in out.columns \
-                else "Principal Outstanding"
+            balance_col = next(
+                c.header for c in schema.columns if c.model_field == "current_balance")
             written.append({
                 "portfolio": portfolio.display_id,
                 "source_portfolio_id": portfolio.source_portfolio_id,

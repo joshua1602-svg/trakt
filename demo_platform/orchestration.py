@@ -178,7 +178,11 @@ def run_portfolio_period(portfolio: cfg.PortfolioSpec, prd: cfg.PeriodSpec, *,
 # Assembly + publication
 # --------------------------------------------------------------------------- #
 def assemble_period(prd: cfg.PeriodSpec, *, verbose: bool = True) -> Dict[str, Any]:
-    """Assemble both portfolio canonicals for one period into the platform view.
+    """Assemble the WAREHOUSED portfolio canonicals for one period.
+
+    ``cfg.PORTFOLIOS`` deliberately, not ``cfg.ALL_PORTFOLIOS``: the platform view is
+    what the sponsor holds on balance sheet, and SPV1 has been sold. It is governed
+    through the same gates and reported beside the platform, never inside it.
 
     Publishes to the dated production layout under the demo's local blob store.
     """
@@ -276,7 +280,10 @@ def run(*, verbose: bool = True) -> Dict[str, Any]:
     for prd in cfg.PERIODS:
         if verbose:
             print(f"  [orchestrate] {prd.label} ({prd.reporting_date})")
-        for portfolio in cfg.PORTFOLIOS:
+        # Every portfolio is governed through the same gates — SPV1 included. Only the
+        # WAREHOUSED ones are then assembled into the platform canonical: SPV1 is
+        # derecognised, so consolidating it there would restate the platform's totals.
+        for portfolio in cfg.ALL_PORTFOLIOS:
             runs.append(run_portfolio_period(portfolio, prd, verbose=verbose))
 
     assemblies = [assemble_period(prd, verbose=verbose) for prd in cfg.PERIODS]

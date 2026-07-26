@@ -218,12 +218,12 @@
     {
       "check": "current period: borrower ages are within product bounds",
       "passed": true,
-      "detail": "2 row(s) below the product minimum of 55 (deliberately injected exceptions, budget 10), 0 above 110",
+      "detail": "2 row(s) below the product minimum of 55 (deliberately injected exceptions, budget 15), 0 above 110",
       "observed": {
         "below_55": 2,
         "above_110": 0
       },
-      "expected": "below_55 <= 10, above_110 == 0"
+      "expected": "below_55 <= 15, above_110 == 0"
     },
     {
       "check": "the two source schemas share no business column names",
@@ -299,7 +299,7 @@
     {
       "check": "no prohibited client string or credential in generated material",
       "passed": true,
-      "detail": "55 files scanned, 0 finding(s)",
+      "detail": "58 files scanned, 0 finding(s)",
       "observed": 0,
       "expected": 0
     }

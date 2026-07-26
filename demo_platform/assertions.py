@@ -143,7 +143,9 @@ def _row_level_checks(df: pd.DataFrame, label: str) -> List[Check]:
     if not age.empty:
         below = int((age < 55).sum())
         above = int((age > 110).sum())
-        expected_injected = cfg.INJECTED_EXCEPTIONS_PER_PERIOD * len(cfg.PORTFOLIOS)
+        # Injections happen per governed portfolio, SPV1 included, even though the
+        # platform canonical this check reads carries only the warehoused two.
+        expected_injected = cfg.INJECTED_EXCEPTIONS_PER_PERIOD * len(cfg.ALL_PORTFOLIOS)
         checks.append(Check(
             f"{label}: borrower ages are within product bounds",
             below <= expected_injected and above == 0,

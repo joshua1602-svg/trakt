@@ -61,6 +61,16 @@ class PortfolioSpec:
     schema_name: str             # which source schema this portfolio arrives in
     acquisition_date: Optional[str] = None
     seller_name: Optional[str] = None
+    #: Where the portfolio sits relative to the sponsor's balance sheet:
+    #: "warehoused" (held, destined for a future deal) or "sold" (derecognised).
+    #:
+    #: Distinct from ``source_portfolio_type``, which the production pipeline defines as
+    #: origination PROVENANCE — direct or acquired — and which says nothing about who
+    #: owns the book now. A securitisation the sponsor originated and then sold is
+    #: `direct` provenance and `sold` status, and both facts are true at once.
+    balance_sheet_status: str = "warehoused"
+    #: One-line plain-English status for the film's consolidation lanes.
+    status_detail: str = ""
     #: Target loan count in the CURRENT reporting period.
     target_current_loans: int = 0
     #: Loans that have redeemed/closed historically and remain on the tape.
@@ -76,6 +86,8 @@ PORTFOLIO_A = PortfolioSpec(
     short_label="Origination",
     description="Organically originated lifetime mortgage portfolio",
     schema_name="origination_extract",
+    balance_sheet_status="warehoused",
+    status_detail="Warehoused · destined for SPV2",
     target_current_loans=7_100,
     target_closed_loans=520,
 )
@@ -91,17 +103,58 @@ PORTFOLIO_B = PortfolioSpec(
     schema_name="servicer_account_extract",
     acquisition_date="2024-09-30",
     seller_name=ACQUIRED_SELLER_NAME,
+    balance_sheet_status="warehoused",
+    status_detail="Warehoused · destined for SPV2",
     target_current_loans=3_900,
     target_closed_loans=310,
 )
 
+#: Portfolio S — the securitisation this sponsor originated and SOLD.
+#:
+#: It is derecognised: off the sponsor's balance sheet, owned by the noteholders. The
+#: sponsor nonetheless retains servicing, risk retention and investor-reporting
+#: obligations, so it still has to be governed — and it is the portfolio their own
+#: ledger can no longer tell them about.
+#:
+#: Deliberately NOT in :data:`PORTFOLIOS`. That tuple is the WAREHOUSED platform, whose
+#: assembled canonical is the £1.96bn / 11,035-loan figure every downstream artefact and
+#: MI answer is built on. SPV1 is governed alongside it and aggregates with it only in
+#: the sponsor view; putting it in the platform set would silently restate every figure
+#: in the demonstration.
+PORTFOLIO_S = PortfolioSpec(
+    key="S",
+    # `engine.provenance` requires a lowercase slug with at least one underscore, so the
+    # stable id carries the status the display id has no room for.
+    source_portfolio_id="spv1_sponsored",
+    # The sponsor ORIGINATED these loans and later securitised them, so their
+    # provenance is direct. The production pipeline's portfolio type is about
+    # provenance only; that the book has since been sold is `balance_sheet_status`.
+    source_portfolio_type="direct",
+    display_id="SPV1",
+    label="SPV1 Sponsored Securitisation",
+    short_label="SPV1",
+    description="Sponsored securitisation, sold — servicing and reporting retained",
+    schema_name="trustee_deal_extract",
+    balance_sheet_status="sold",
+    status_detail="Servicing · risk retention · investor reporting",
+    target_current_loans=4_180,
+    target_closed_loans=260,
+)
+
+#: The WAREHOUSED platform: what the assembler consolidates, and the scope of every
+#: figure in the demonstration except the sponsor consolidation.
 PORTFOLIOS: Tuple[PortfolioSpec, ...] = (PORTFOLIO_A, PORTFOLIO_B)
+
+#: Everything the sponsor is on the hook for: the platform plus the deal they sold.
+#: Used by generation, onboarding and orchestration — every portfolio here is governed
+#: through the same gates — and by the sponsor-scope aggregate in the metrics export.
+ALL_PORTFOLIOS: Tuple[PortfolioSpec, ...] = PORTFOLIOS + (PORTFOLIO_S,)
 
 
 def portfolio(key_or_id: str) -> PortfolioSpec:
     """Look a portfolio up by storyboard key, slug or display id."""
     needle = str(key_or_id).strip().lower()
-    for p in PORTFOLIOS:
+    for p in ALL_PORTFOLIOS:
         if needle in (p.key.lower(), p.source_portfolio_id, p.display_id.lower()):
             return p
     raise KeyError(f"unknown demo portfolio: {key_or_id!r}")
@@ -222,12 +275,20 @@ BORROWER_AGE_MUST_INCREASE = True
 #: WA LTV must be "broadly stable": absolute change under this many points.
 WA_LTV_STABILITY_MAX_CHANGE_POINTS = 0.6
 
+#: SPV1's own funded balance at the current reporting date. Calibrated independently of
+#: the platform's movement targets — a sold deal has its own economics and must not
+#: perturb a single figure in the warehoused platform.
+TARGET_BALANCE_S = MetricTarget(
+    "spv1_funded_balance", 842_600_000.0, 50_000.0, "GBP",
+    "Sponsored securitisation, sold — funded balance at the reporting date.")
+
 METRIC_TARGETS: Tuple[MetricTarget, ...] = (
     TARGET_MOVEMENT_TOTAL,
     TARGET_MOVEMENT_A,
     TARGET_MOVEMENT_B,
     TARGET_WA_LTV_CURRENT,
     TARGET_BORROWER_AGE_CURRENT,
+    TARGET_BALANCE_S,
 )
 
 
@@ -380,9 +441,28 @@ SHAPE_B = PortfolioShape(
     origination_channel="Broker",
 )
 
+#: Portfolio S — the sold securitisation. Seasoned, closed to new origination, no
+#: reserve facility: a static pool being run off, which is what a sold deal is. Its
+#: month-on-month movement is pure interest roll-up less redemptions, and it takes no
+#: part in the platform's movement calibration.
+SHAPE_S = PortfolioShape(
+    origination_age_mean=66.4, origination_age_sd=5.3,
+    initial_ltv_mean=0.292, initial_ltv_sd=0.074,
+    rate_mean=6.71, rate_sd=0.61,
+    vintage_range=(2016, 2023),
+    base_valuation=352_000.0, base_valuation_sd=104_000.0,
+    monthly_hpi=0.00090,
+    monthly_completions=(0, 0, 0),
+    monthly_redemptions=(11, 12, 10),
+    monthly_drawdown_loans=(0, 0, 0),
+    drawdown_mean=0.0, drawdown_sd=0.0,
+    origination_channel="Broker",
+)
+
 SHAPES: Dict[str, PortfolioShape] = {
     PORTFOLIO_A.source_portfolio_id: SHAPE_A,
     PORTFOLIO_B.source_portfolio_id: SHAPE_B,
+    PORTFOLIO_S.source_portfolio_id: SHAPE_S,
 }
 
 #: Deterministic seed. Every run with this seed reproduces byte-identical data.
@@ -574,8 +654,11 @@ def as_dict() -> Dict[str, object]:
                 "schema_name": p.schema_name,
                 "acquisition_date": p.acquisition_date,
                 "seller_name": p.seller_name,
+                "balance_sheet_status": p.balance_sheet_status,
+                "status_detail": p.status_detail,
             }
-            for p in PORTFOLIOS
+            # ALL portfolios: the film's consolidation beat needs the sold deal too.
+            for p in ALL_PORTFOLIOS
         ],
         "periods": [
             {

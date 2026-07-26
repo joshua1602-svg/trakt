@@ -15,6 +15,7 @@ import artefactFixture from "../../public/fixtures/artefact_catalogue.json";
 import assertionFixture from "../../public/fixtures/assertion_report.json";
 import safetyFixture from "../../public/fixtures/safety_report.json";
 import manifestFixture from "../../public/fixtures/demo_manifest.json";
+import { STATED_ARRIVAL } from "../claims";
 
 // --------------------------------------------------------------------------- //
 // Shapes (only the fields the film reads are typed)
@@ -30,6 +31,41 @@ export interface PortfolioNarrative {
   schema_name: string;
   acquisition_date: string | null;
   seller_name: string | null;
+  /** "warehoused" (held) or "sold" (derecognised). Not the same as the type. */
+  balance_sheet_status: string;
+  /** One-line plain-English status for the consolidation lanes. */
+  status_detail: string;
+}
+
+/**
+ * The two scopes, and the rule that keeps them apart.
+ *
+ *   PLATFORM — the warehoused books the assembler consolidates. £1.96bn / 11,035
+ *              loans. EVERY figure in the film is this scope, without exception,
+ *              apart from the one beat below.
+ *   SPONSOR  — the platform plus the securitisation the sponsor sold. £2.81bn /
+ *              15,215 loans. Used ONCE, in S3's consolidation beat, because it is the
+ *              number no single system can produce today.
+ *
+ * Confusing the two is the main risk in the film. A unit test asserts that the sponsor
+ * figure appears in exactly one scene, and the scope stamp on S4's result band names
+ * which scope the viewer is looking at.
+ */
+export interface Scope {
+  label: string;
+  portfolios: string[];
+  fundedBalance: number;
+  loanCount: number;
+}
+
+export interface SponsoredScope {
+  sourcePortfolioId: string;
+  displayId: string;
+  label: string;
+  status: string;
+  fundedBalance: number;
+  loanCount: number;
+  reportingDate: string;
 }
 
 export interface PeriodNarrative {
@@ -189,6 +225,7 @@ const F = metricsFixture as unknown as {
   schemas: Record<string, SourceSchema>;
   metrics: {
     client: { id: string; displayName: string; shortName: string };
+    scopes: { platform: Scope; sponsor: Scope; sponsored: SponsoredScope };
     currentPeriod: { period: string; reportingDate: string; label: string };
     priorPeriod: { period: string; reportingDate: string; label: string };
     lenses: Record<
@@ -226,6 +263,15 @@ export const SCHEMAS = F.schemas;
 export const CURRENT_PERIOD = F.metrics.currentPeriod;
 export const PRIOR_PERIOD = F.metrics.priorPeriod;
 export const PRIMARY_REGION = F.narrative.primary_movement_region;
+
+/** PLATFORM scope — the default, and the scope of every figure but one. */
+export const PLATFORM_SCOPE = F.metrics.scopes.platform;
+
+/** SPONSOR scope — S3's consolidation beat only. Never propagate this. */
+export const SPONSOR_SCOPE = F.metrics.scopes.sponsor;
+
+/** The sold securitisation's own governed figures. */
+export const SPONSORED = F.metrics.scopes.sponsored;
 
 export const TOTAL = F.metrics.lenses.total;
 export const SUMMARY = TOTAL.summary;
@@ -327,6 +373,103 @@ export const currentPeriodElapsedSeconds = (): number =>
     (total, r) => total + r.elapsed_seconds,
     0,
   );
+
+/**
+ * The three lanes S3's consolidation beat draws, in the order it draws them: the deal
+ * that was sold first, because it is the one the sponsor's own ledger has lost.
+ *
+ * Every figure is read from the fixtures — the two warehoused books from their own MI
+ * lenses, SPV1 from its own governed canonical.
+ */
+export interface PortfolioLane {
+  displayId: string;
+  status: string;
+  statusDetail: string;
+  fundedBalance: number;
+  loanCount: number;
+}
+
+export const portfolioLanes = (): PortfolioLane[] => {
+  const narrative = (id: string) => {
+    const found = PORTFOLIOS.find((p) => p.display_id === id);
+    if (!found) throw new Error(`No narrative record for ${id}`);
+    return found;
+  };
+  const sponsored = narrative(SPONSORED.displayId);
+  const lanes: PortfolioLane[] = [
+    {
+      displayId: SPONSORED.displayId,
+      status: "Sponsored · sold",
+      statusDetail: sponsored.status_detail,
+      fundedBalance: SPONSORED.fundedBalance,
+      loanCount: SPONSORED.loanCount,
+    },
+  ];
+  for (const key of ["A", "B"]) {
+    const p = portfolio(key);
+    const metrics = lens(key).summary.metrics;
+    lanes.push({
+      displayId: p.display_id,
+      status: p.source_portfolio_type === "acquired" ? "Acquired back book" : "Direct origination",
+      statusDetail: p.status_detail,
+      fundedBalance: metrics.funded_balance ?? 0,
+      loanCount: metrics.loan_count ?? 0,
+    });
+  }
+  return lanes;
+};
+
+/**
+ * What arrives, before anything is done to it.
+ *
+ * Five artefact types, five owners, three reporting cycles — which is the whole point of
+ * the beat, and why it needs no caption. Four rows are read from the demonstration
+ * itself: the three source schemas the generator writes, plus the risk limit schedule
+ * the concentration monitor reads. The fifth is stated copy (see `src/claims.ts`).
+ */
+export interface Arrival {
+  title: string;
+  format: string;
+  owner: string;
+  frequency: string;
+}
+
+const ARRIVAL_META: Record<string, { title: string; owner: string; frequency: string }> = {
+  origination_extract: {
+    title: "Origination extract",
+    owner: "internal system",
+    frequency: "monthly",
+  },
+  servicer_account_extract: {
+    title: "Servicer account extract",
+    owner: "third-party servicer",
+    frequency: "monthly",
+  },
+  trustee_deal_extract: {
+    title: "SPV1 trustee asset schedule",
+    owner: "deal trustee",
+    frequency: "quarterly",
+  },
+};
+
+export const ARRIVALS: Arrival[] = [
+  ...Object.entries(ARRIVAL_META).map(([schemaName, meta]) => {
+    if (!SCHEMAS[schemaName]) {
+      throw new Error(`No source schema ${schemaName} in the fixtures`);
+    }
+    return { ...meta, format: "CSV" };
+  }),
+  {
+    title: "Risk limit schedule",
+    format: "PDF",
+    owner: String(
+      (artefactFixture as unknown as Record<string, ArtefactEntry>).riskMonitor?.limitsSource ??
+        "facility agent",
+    ).replace(/ document$/, ""),
+    frequency: "quarterly",
+  },
+  STATED_ARRIVAL,
+];
 
 /** One portfolio's narrative record, by storyboard key ("A" | "B"). */
 export const portfolio = (key: string): PortfolioNarrative => {

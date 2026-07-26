@@ -1,5 +1,5 @@
 /**
- * S4 · Three ways in — 600 frames (0:58–1:18)
+ * S4 · Three ways in — 660 frames (0:56–1:18)
  *
  * Three panels, each reduced to three elements: a scheduled artifact drop, a Copilot
  * thread calling `askTraktMi`, and the workspace with the regional bars. Recognisable
@@ -181,17 +181,17 @@ export const S4Omnichannel: React.FC = () => {
     ? geometry.edge + theme.motion.slow * 2
     : geometry.height / 2 - (PAD + TOP_BLOCK + FIGURE_HEIGHT / 2);
 
-  const panelsOpacity = interpolate(frame, [0, 24, 408, 432], [0, 1, 1, 0], {
+  const panelsOpacity = interpolate(frame, [0, 24, 486, 510], [0, 1, 1, 0], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
-  const silhouetteOpacity = interpolate(frame, [90, 114, 288, 306], [0, 1, 1, 0.4], {
+  const silhouetteOpacity = interpolate(frame, [90, 114, 300, 318], [0, 1, 1, 0.4], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
   // The payload. ONE `at`, shared by all three panels.
-  const PAYLOAD_AT = 300;
-  const MOVEMENT_AT = 342;
+  const PAYLOAD_AT = 312;
+  const MOVEMENT_AT = 360;
   const payloadOpacity = interpolate(frame, [PAYLOAD_AT, PAYLOAD_AT + 18], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
@@ -200,7 +200,7 @@ export const S4Omnichannel: React.FC = () => {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
-  const claimOpacity = interpolate(frame, [432, 456], [0, 1], {
+  const claimOpacity = interpolate(frame, [510, 534], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
@@ -274,7 +274,10 @@ export const S4Omnichannel: React.FC = () => {
         ))}
       </div>
 
-      {/* One provenance rule for all three: the same dataset, the same date.
+      {/* One provenance rule for all three, and it names the SCOPE.
+          S3 shows a sponsor-level figure for ten seconds; without a scope stamp here a
+          viewer could reasonably carry that number into this scene, where every figure
+          is the platform canonical. "PLATFORM CANONICAL" closes that off in three words.
           Wide only — under a stack of three square panels there is no room for a fourth
           block, and each panel's own movement stamp already names the period. */}
       {isSquare ? null : (
@@ -292,7 +295,7 @@ export const S4Omnichannel: React.FC = () => {
         >
           <Rule />
           <Stamp>
-            {`SAME DATASET · ${shortDate(CURRENT_PERIOD.reportingDate).toUpperCase()} · ` +
+            {`PLATFORM CANONICAL · ${shortDate(CURRENT_PERIOD.reportingDate).toUpperCase()} · ` +
               "DETERMINISTIC MI ENGINE"}
           </Stamp>
         </div>
@@ -306,7 +309,7 @@ export const S4Omnichannel: React.FC = () => {
           opacity: claimOpacity,
         }}
       >
-        <Enter at={432}>
+        <Enter at={510}>
           <Claim measure={isSquare ? 0.86 : 0.58}>Three ways in. One governed answer.</Claim>
         </Enter>
       </AbsoluteFill>

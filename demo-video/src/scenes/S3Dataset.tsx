@@ -1,14 +1,20 @@
 /**
- * S3 · One dataset, every output — 600 frames (0:38–0:58)
+ * S3 · Three portfolios, one sponsor view, every output — 780 frames (0:30–0:56)
  *
- * Two portfolio balances converge and resolve into the consolidated figure — the
- * scene's ONE `signal` element. Six artifact cards then fan out from it, ordered
- * regulatory-first, because the ESMA Annex 2 submission is the hardest claim in the
- * product to replicate. A single reconciliation check resolves across all six.
+ * Two scopes coexist in this scene and confusing them is the main risk in the film:
  *
- * Every card's metadata is read from the artefact catalogue the run wrote. A card
- * whose artefact reported itself unavailable is not rendered: the film shows what
- * the pipeline produced and nothing else.
+ *   SPONSOR  — £2.81bn / 15,215 loans. The consolidation beat ONLY. It is the pitch: a
+ *              number the sponsor cannot produce from any one system today, because
+ *              their own ledger has derecognised the deal they sold, the servicer sees
+ *              only its own population, and the investor reports are per-deal.
+ *   PLATFORM — £1.96bn / 11,035 loans. Everything after the cut, without exception:
+ *              the fan-out, every MI figure, the movement, the regional split.
+ *
+ * The scene is built so the two cannot be mixed up by accident — the sponsor figure is
+ * read from `SPONSOR_SCOPE` and the rest from `PLATFORM_SCOPE`, and a unit test asserts
+ * the sponsor figure appears in exactly one scene file.
+ *
+ * Beats: consolidation (300) · platform figure, fan-out and reconciliation (480).
  */
 
 import React from "react";
@@ -20,24 +26,38 @@ import {
   Counter,
   Enter,
   Figure,
+  Headline,
   Label,
+  Rule,
+  Stamp,
   Stat,
   useGeometry,
   useIsSquare,
 } from "../components/kit";
-import { ARTEFACTS, ASSERTIONS, CURRENT_PERIOD, PORTFOLIOS, SUMMARY, lens } from "../data/fixtures";
+import {
+  ARTEFACTS,
+  ASSERTIONS,
+  CURRENT_PERIOD,
+  PLATFORM_SCOPE,
+  SPONSOR_SCOPE,
+  portfolioLanes,
+} from "../data/fixtures";
 import { count, longDate, money, percent, periodLabel } from "../format";
 import theme from "../theme";
+
+/** Where the consolidation beat ends and the platform beat begins. */
+const PLATFORM_AT = 300;
 
 /**
  * The six governed outputs, regulatory first in reading order.
  *
- * Each card leads with what the artefact IS, in plain English; the filename and the
- * figures sit beneath it in the data face. Every value is read from the artefact
- * catalogue the run wrote — a card whose artefact reported itself unavailable is not
- * rendered, so the film cannot show an output the pipeline did not produce.
+ * Each card leads with what the artefact IS, in plain English, and carries a SCOPE
+ * prefix — which makes the per-portfolio point without a beat of its own, and is
+ * domain-correct: Annex 2 is deal-level reporting, so it belongs to SPV1, while the
+ * consolidated dataset and its checks are the platform's. The audit trail is ALL,
+ * because it covers every portfolio governed through the gates.
  */
-const cardSpecs = (): { title: string; meta: string[]; confirm?: string }[] => {
+const cardSpecs = (): { title: string; scope: string; meta: string; confirm?: string }[] => {
   const regulatory = ARTEFACTS.regulatoryOutput;
   const deck = ARTEFACTS.investorDeck;
   const tape = ARTEFACTS.canonicalTape;
@@ -45,66 +65,102 @@ const cardSpecs = (): { title: string; meta: string[]; confirm?: string }[] => {
   const risk = ARTEFACTS.riskMonitor;
   const audit = ARTEFACTS.auditManifest;
 
-  const specs: {
-    available: boolean;
-    title: string;
-    meta: string[];
-    confirm?: string;
-  }[] = [
+  const specs = [
     {
       available: Boolean(regulatory?.available),
       title: "Regulatory submission",
-      meta: [
-        `${regulatory?.fileName} · ESMA Annex 2 · ` +
-          `${count(Number(regulatory?.exposureRecords))} exposures`,
-      ],
+      scope: "SPV1",
+      meta: `${regulatory?.fileName} · ESMA Annex 2`,
       confirm: regulatory?.xsdValidated ? "XSD validated" : undefined,
     },
     {
       available: Boolean(deck?.available),
       title: "Investor pack",
-      meta: [
+      scope: "SPV1",
+      meta:
         `${deck?.fileName} · ${count(Number(deck?.slides))} slides · ` +
-          `${periodLabel(CURRENT_PERIOD.period)}`,
-      ],
+        `${periodLabel(CURRENT_PERIOD.period)}`,
     },
     {
       available: Boolean(tape?.available),
-      title: "Loan-level dataset",
-      meta: [
+      title: "Consolidated dataset",
+      scope: "PLATFORM",
+      meta:
         `${tape?.fileName} · ${count(Number(tape?.rows))} rows · ` +
-          `${count(Number(tape?.columns))} fields`,
-      ],
+        `${count(Number(tape?.columns))} fields`,
     },
     {
       available: Boolean(validation?.available),
       title: "Validation report",
-      meta: [
+      scope: "PLATFORM",
+      meta:
         `validation_report.json · ` +
-          `${count(Number(validation?.businessRuleExceptions))} exceptions · ` +
-          `${percent(Number(validation?.exceptionRatePct), 2)}`,
-      ],
+        `${count(Number(validation?.businessRuleExceptions))} exceptions · ` +
+        `${percent(Number(validation?.exceptionRatePct), 2)}`,
     },
     {
       available: Boolean(risk?.available),
       title: "Concentration monitor",
-      meta: [
-        `concentration_monitor.json · ${count(Number(risk?.limitCount))} limits tested`,
-      ],
+      scope: "PLATFORM",
+      meta: `concentration_monitor.json · ${count(Number(risk?.limitCount))} limits tested`,
     },
     {
       available: Boolean(audit?.available),
       title: "Audit trail",
-      meta: [
-        `audit_manifest.json · ` +
-          `${count((audit?.sourceFiles as unknown[] | undefined)?.length ?? 0)} files ` +
-          `hashed · SHA-256`,
-      ],
+      scope: "ALL",
+      meta: "audit_manifest.json · content-hashed · SHA-256",
     },
   ];
   return specs
     .filter((spec) => spec.available)
-    .map(({ title, meta, confirm }) => ({ title, meta, confirm }));
+    .map(({ title, scope, meta, confirm }) => ({ title, scope, meta, confirm }));
+};
+
+/** One portfolio lane in the consolidation beat. */
+const Lane: React.FC<{
+  at: number;
+  index: number;
+  displayId: string;
+  status: string;
+  statusDetail: string;
+  balance: number;
+  loans: number;
+}> = ({ at, index, displayId, status, statusDetail, balance, loans }) => {
+  const geometry = useGeometry();
+  const isSquare = useIsSquare();
+  const frame = useCurrentFrame();
+  const start = at + index * theme.motion.stagger * 6;
+  // The lanes enter from the left, which is what makes them read as inbound.
+  const slide = interpolate(frame, [start, start + theme.motion.base], [-40, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  return (
+    <Enter at={start} style={{ width: "100%" }}>
+      <div
+        style={{
+          transform: `translateX(${slide}px)`,
+          display: "flex",
+          flexDirection: "column",
+          gap: theme.motion.quick / 2,
+          width: "100%",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "baseline", gap: theme.motion.base }}>
+          <Stamp tone="paper" style={{ width: isSquare ? 230 : 330, flexShrink: 0 }}>
+            {displayId}
+          </Stamp>
+          <Stamp style={{ width: isSquare ? 210 : 300, flexShrink: 0 }}>{status}</Stamp>
+          <Figure scale={isSquare ? 0.22 : 0.3} style={{ width: isSquare ? 150 : 210 }}>
+            {money(balance)}
+          </Figure>
+          <Stamp>{`${count(loans)} loans`}</Stamp>
+        </div>
+        <Stamp>{statusDetail}</Stamp>
+        <Rule width={geometry.width * (isSquare ? 0.84 : 0.72)} />
+      </div>
+    </Enter>
+  );
 };
 
 export const S3Dataset: React.FC = () => {
@@ -112,63 +168,158 @@ export const S3Dataset: React.FC = () => {
   const geometry = useGeometry();
   const isSquare = useIsSquare();
 
-  const a = lens("A").summary.metrics.funded_balance ?? 0;
-  const b = lens("B").summary.metrics.funded_balance ?? 0;
-  const total = SUMMARY.metrics.funded_balance ?? 0;
+  const lanes = portfolioLanes();
   const cards = cardSpecs();
-  const codes = PORTFOLIOS.map((p) => p.display_id).join(" + ");
 
-  // 1140–1260: the two figures converge and resolve into the consolidated one.
-  const converge = interpolate(frame, [0, 90], [1, 0], {
+  // --- Beat 1 · consolidation (0–300) ------------------------------------
+  const lanesOpacity = interpolate(frame, [0, theme.motion.base, 186, 210], [0, 1, 1, 0], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
-  const partsOpacity = interpolate(frame, [72, 100], [1, 0], {
+  const sponsorOpacity = interpolate(frame, [198, 222, 288, PLATFORM_AT], [0, 1, 1, 0], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
-  const totalOpacity = interpolate(frame, [84, 108], [0, 1], {
+  const sponsorClaimOpacity = interpolate(frame, [240, 264, 288, PLATFORM_AT], [0, 1, 1, 0], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
-  // The consolidated figure rises out of centre to make room for the fan-out.
-  const totalLift = interpolate(frame, [108, 138], [0, isSquare ? -178 : -196], {
+
+  // --- Beat 2 · the platform figure and its outputs (300–780) -------------
+  const rel = frame - PLATFORM_AT;
+  const converge = interpolate(rel, [0, 90], [1, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const partsOpacity = interpolate(rel, [0, 18, 72, 100], [0, 1, 1, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const totalOpacity = interpolate(rel, [84, 108], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const totalLift = interpolate(rel, [108, 138], [0, isSquare ? -178 : -196], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
   const spread = isSquare ? 190 : 430;
+  const cardsOpacity = interpolate(rel, [120, 150, 372, 396], [0, 1, 1, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const checkOpacity = interpolate(rel, [264, 288, 366, 384], [0, 1, 1, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  // `signal` hand-over: the platform figure holds the accent until the reconciliation
+  // check takes it, and the check clears before the claim takes it. Never two at once.
+  const totalAccent = interpolate(rel, [252, 276], [1, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const checkAccent = interpolate(rel, [252, 276], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const statOpacity = interpolate(rel, [372, 396], [1, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const claimOpacity = interpolate(rel, [396, 420], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
 
-  const cardsOpacity = interpolate(frame, [120, 150, 408, 432], [0, 1, 1, 0], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  const checkOpacity = interpolate(frame, [300, 324, 402, 420], [0, 1, 1, 0], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  // `signal` is a scarcity resource: at most one element per frame carries it. The
-  // consolidated figure holds the accent until the reconciliation check takes it,
-  // and the hand-over is a cross-fade of the same token so they never overlap.
-  const totalAccent = interpolate(frame, [288, 312], [1, 0], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  const checkAccent = interpolate(frame, [288, 312], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  const statOpacity = interpolate(frame, [408, 432], [1, 0], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  const claimOpacity = interpolate(frame, [432, 456], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
+  const platformTotal = PLATFORM_SCOPE.fundedBalance;
+  const codes = PLATFORM_SCOPE.portfolios.join(" + ");
 
   return (
     <AbsoluteFill>
-      {/* The two source figures, converging. */}
+      {/* Beat 1 · three portfolios. One sold, two held. */}
+      <AbsoluteFill
+        style={{
+          alignItems: "center",
+          justifyContent: "center",
+          paddingBottom: geometry.captionReserve,
+          paddingLeft: geometry.gutter,
+          paddingRight: geometry.gutter,
+          opacity: lanesOpacity,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            // Two `slow` between lanes, not one. Three lanes at the tight gap occupy a
+            // third of the frame and read as a caption-sized fragment floating in it;
+            // opening them up makes the beat look like the subject of the shot.
+            gap: theme.motion.slow * 2,
+            width: geometry.width * (isSquare ? 0.84 : 0.72),
+          }}
+        >
+          {lanes.map((lane, i) => (
+            <Lane
+              key={lane.displayId}
+              at={0}
+              index={i}
+              displayId={lane.displayId}
+              status={lane.status}
+              statusDetail={lane.statusDetail}
+              balance={lane.fundedBalance}
+              loans={lane.loanCount}
+            />
+          ))}
+        </div>
+      </AbsoluteFill>
+
+      {/* The sponsor view. The ONLY place this scope appears in the film. */}
+      <AbsoluteFill
+        style={{
+          alignItems: "center",
+          justifyContent: "center",
+          paddingBottom: geometry.captionReserve + (isSquare ? 140 : 180),
+          opacity: sponsorOpacity,
+        }}
+      >
+        <Stat
+          accent
+          align="center"
+          value={money(SPONSOR_SCOPE.fundedBalance)}
+          stamp={
+            `${count(SPONSOR_SCOPE.loanCount)} LOANS · ` +
+            `${count(SPONSOR_SCOPE.portfolios.length)} PORTFOLIOS · ` +
+            longDate(CURRENT_PERIOD.reportingDate).toUpperCase()
+          }
+        />
+      </AbsoluteFill>
+
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: geometry.captionReserve + (isSquare ? 20 : 60),
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: theme.motion.base,
+          opacity: sponsorClaimOpacity,
+        }}
+      >
+        {/* HEADLINE, not display. The display size takes three lines at this measure and
+            collides with the figure's own provenance stamp; more importantly the £2.81bn
+            is the thing being proven here, so the line under it has to be the second
+            voice. */}
+        <Headline measure={isSquare ? 0.94 : 0.62}>
+          Sold, held, or on its way to the next deal. One view.
+        </Headline>
+        <Enter at={264}>
+          <Stamp>No single system gives you this number today.</Stamp>
+        </Enter>
+      </div>
+
+      {/* Beat 2 · back to PLATFORM scope for everything that follows. */}
       <AbsoluteFill
         style={{
           alignItems: "center",
@@ -178,26 +329,24 @@ export const S3Dataset: React.FC = () => {
         }}
       >
         <div style={{ display: "flex", alignItems: "flex-start" }}>
-          <div style={{ transform: `translateX(${-spread * converge}px)` }}>
-            <Stat
-              align="center"
-              scale={isSquare ? 0.5 : 0.62}
-              value={money(a)}
-              stamp={PORTFOLIOS[0].display_id}
-            />
-          </div>
-          <div style={{ transform: `translateX(${spread * converge}px)` }}>
-            <Stat
-              align="center"
-              scale={isSquare ? 0.5 : 0.62}
-              value={money(b)}
-              stamp={PORTFOLIOS[1].display_id}
-            />
-          </div>
+          {lanes
+            .filter((lane) => PLATFORM_SCOPE.portfolios.includes(lane.displayId))
+            .map((lane, i) => (
+              <div
+                key={lane.displayId}
+                style={{ transform: `translateX(${(i === 0 ? -spread : spread) * converge}px)` }}
+              >
+                <Stat
+                  align="center"
+                  scale={isSquare ? 0.5 : 0.62}
+                  value={money(lane.fundedBalance)}
+                  stamp={lane.displayId}
+                />
+              </div>
+            ))}
         </div>
       </AbsoluteFill>
 
-      {/* The consolidated figure. The scene's one signal element. */}
       <AbsoluteFill
         style={{
           alignItems: "center",
@@ -210,16 +359,15 @@ export const S3Dataset: React.FC = () => {
           <Stat
             accent={totalAccent}
             align="center"
-            value={money(total)}
+            value={money(platformTotal)}
             stamp={
-              `${count(SUMMARY.metrics.loan_count)} LOANS · ${codes} · ` +
+              `${count(PLATFORM_SCOPE.loanCount)} LOANS · ${codes} · ` +
               longDate(CURRENT_PERIOD.reportingDate).toUpperCase()
             }
           />
         </div>
       </AbsoluteFill>
 
-      {/* Six artifact cards, regulatory first. */}
       <div
         style={{
           position: "absolute",
@@ -231,8 +379,6 @@ export const S3Dataset: React.FC = () => {
           opacity: cardsOpacity,
         }}
       >
-        {/* Three per row, two rows. The width is pinned so the sixth card cannot
-            wrap onto a third row and collide with the reconciliation check. */}
         <div
           style={{
             display: "grid",
@@ -242,14 +388,18 @@ export const S3Dataset: React.FC = () => {
           }}
         >
           {cards.map((card, i) => (
-            <Enter key={card.title} at={126} index={i * 2}>
-              <ArtifactCard title={card.title} meta={card.meta} confirm={card.confirm} />
+            <Enter key={card.title} at={PLATFORM_AT + 126} index={i * 2}>
+              <ArtifactCard
+                title={card.title}
+                scope={card.scope}
+                meta={[card.meta]}
+                confirm={card.confirm}
+              />
             </Enter>
           ))}
         </div>
       </div>
 
-      {/* One check resolving across all six. */}
       <div
         style={{
           position: "absolute",
@@ -271,7 +421,7 @@ export const S3Dataset: React.FC = () => {
           <Counter
             from={0}
             to={ASSERTIONS.checksPassed}
-            at={306}
+            at={PLATFORM_AT + 270}
             format={(v) => `${count(v)}/${count(ASSERTIONS.checksRun)} checks passed`}
           />
         </Figure>
@@ -285,7 +435,7 @@ export const S3Dataset: React.FC = () => {
           opacity: claimOpacity,
         }}
       >
-        <Enter at={432}>
+        <Enter at={PLATFORM_AT + 396}>
           <Claim accent measure={isSquare ? 0.88 : 0.62}>
             One dataset. Every output reconciles.
           </Claim>

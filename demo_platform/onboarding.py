@@ -321,7 +321,8 @@ def run(*, verbose: bool = True) -> Dict[str, Any]:
     out_root = cfg.onboarding_dir()
     out_root.mkdir(parents=True, exist_ok=True)
     contracts: Dict[str, Any] = {}
-    for portfolio in cfg.PORTFOLIOS:
+    # Every portfolio the sponsor is on the hook for, including the deal they sold.
+    for portfolio in cfg.ALL_PORTFOLIOS:
         contract = build_contract(portfolio)
         pdir = out_root / portfolio.source_portfolio_id
         pdir.mkdir(parents=True, exist_ok=True)

@@ -18,7 +18,9 @@
         "description": "Organically originated lifetime mortgage portfolio",
         "schema_name": "origination_extract",
         "acquisition_date": null,
-        "seller_name": null
+        "seller_name": null,
+        "balance_sheet_status": "warehoused",
+        "status_detail": "Warehoused \u00b7 destined for SPV2"
       },
       {
         "key": "B",
@@ -30,7 +32,23 @@
         "description": "Acquired UK lifetime mortgage back book",
         "schema_name": "servicer_account_extract",
         "acquisition_date": "2024-09-30",
-        "seller_name": "Cranmere Life Assurance (synthetic)"
+        "seller_name": "Cranmere Life Assurance (synthetic)",
+        "balance_sheet_status": "warehoused",
+        "status_detail": "Warehoused \u00b7 destined for SPV2"
+      },
+      {
+        "key": "S",
+        "source_portfolio_id": "spv1_sponsored",
+        "source_portfolio_type": "direct",
+        "display_id": "SPV1",
+        "label": "SPV1 Sponsored Securitisation",
+        "short_label": "SPV1",
+        "description": "Sponsored securitisation, sold \u2014 servicing and reporting retained",
+        "schema_name": "trustee_deal_extract",
+        "acquisition_date": null,
+        "seller_name": null,
+        "balance_sheet_status": "sold",
+        "status_detail": "Servicing \u00b7 risk retention \u00b7 investor reporting"
       }
     ],
     "periods": [
@@ -94,6 +112,13 @@
         "tolerance": 0.15,
         "unit": "years",
         "description": "Average youngest-borrower age at the current reporting date."
+      },
+      {
+        "name": "spv1_funded_balance",
+        "target": 842600000.0,
+        "tolerance": 50000.0,
+        "unit": "GBP",
+        "description": "Sponsored securitisation, sold \u2014 funded balance at the reporting date."
       }
     ],
     "primary_movement_region": "South East",
@@ -688,6 +713,295 @@
           "note": "Unmapped by design \u2014 the demonstration marker."
         }
       ]
+    },
+    "trustee_deal_extract": {
+      "name": "trustee_deal_extract",
+      "system_of_record": "Deal trustee asset schedule (quarterly, sponsored securitisation)",
+      "description": "The trustee's asset schedule for a securitisation the sponsor originated and sold. Deal-level vocabulary throughout: pool cut-off rather than reporting date, asset rather than loan, and the trustee's own identifiers.",
+      "headers": [
+        "Deal Asset ID",
+        "Pool Cut-Off",
+        "Asset Origination Date",
+        "Original Balance",
+        "Current Asset Balance",
+        "Valuation At Origination Date",
+        "Latest Valuation",
+        "Asset Interest Rate",
+        "Youngest Life Age",
+        "Region Of Security",
+        "Security Post Code",
+        "Asset Status",
+        "Repurchase Or Redemption Date",
+        "Underlying Exposure ID",
+        "Obligor ID",
+        "Proceeds Purpose",
+        "Property Category",
+        "Rate Convention",
+        "Amortisation Basis",
+        "Occupancy Basis",
+        "Denomination",
+        "Maturity Long Stop",
+        "Pool Addition",
+        "Facility Limit",
+        "Collateral Key",
+        "Collateral ID At Closing",
+        "Collateral Category",
+        "Valuation Approach",
+        "Introduction Route",
+        "Obligor Residency",
+        "Impaired Flag",
+        "Proceedings Flag",
+        "Amount Falling Due",
+        "Arrears Position",
+        "Days Past Due",
+        "Defaulted Amount",
+        "Loss Allocation",
+        "Recovery Total",
+        "Early Redemption Charge",
+        "Synthetic Data Notice"
+      ],
+      "columns": [
+        {
+          "header": "Deal Asset ID",
+          "canonical_field": "loan_identifier",
+          "resolution": "contract",
+          "note": "The trustee's asset key \u2014 the stable loan identifier."
+        },
+        {
+          "header": "Pool Cut-Off",
+          "canonical_field": "data_cut_off_date",
+          "resolution": "contract",
+          "note": "The deal's pool cut-off date."
+        },
+        {
+          "header": "Asset Origination Date",
+          "canonical_field": "origination_date",
+          "resolution": "contract",
+          "note": "Completion date under the deal's naming."
+        },
+        {
+          "header": "Original Balance",
+          "canonical_field": "original_principal_balance",
+          "resolution": "contract",
+          "note": "Advance at completion."
+        },
+        {
+          "header": "Current Asset Balance",
+          "canonical_field": "current_principal_balance",
+          "resolution": "contract",
+          "note": "Capital plus capitalised roll-up interest at the cut-off."
+        },
+        {
+          "header": "Valuation At Origination Date",
+          "canonical_field": "original_valuation_amount",
+          "resolution": "contract",
+          "note": "Vendor valuation at completion."
+        },
+        {
+          "header": "Latest Valuation",
+          "canonical_field": "current_valuation_amount",
+          "resolution": "global",
+          "note": "Latest valuation held by the trustee."
+        },
+        {
+          "header": "Asset Interest Rate",
+          "canonical_field": "current_interest_rate",
+          "resolution": "contract",
+          "note": "Fixed lifetime roll-up rate, annual percentage points."
+        },
+        {
+          "header": "Youngest Life Age",
+          "canonical_field": "youngest_borrower_age",
+          "resolution": "contract",
+          "note": "Age of the youngest life at the cut-off."
+        },
+        {
+          "header": "Region Of Security",
+          "canonical_field": "collateral_geography",
+          "resolution": "contract",
+          "note": "Readable ITL1 region label for the security property."
+        },
+        {
+          "header": "Security Post Code",
+          "canonical_field": "property_post_code",
+          "resolution": "contract",
+          "note": "Property postcode; drives ITL3 enrichment."
+        },
+        {
+          "header": "Asset Status",
+          "canonical_field": "account_status",
+          "resolution": "contract",
+          "note": "Asset status under the trustee's naming."
+        },
+        {
+          "header": "Repurchase Or Redemption Date",
+          "canonical_field": "redemption_date",
+          "resolution": "contract",
+          "note": "Populated only for assets that left the pool."
+        },
+        {
+          "header": "Underlying Exposure ID",
+          "canonical_field": "original_underlying_exposure_identifier",
+          "resolution": "global",
+          "note": "The deal's exposure identifier (ESMA RREL2)."
+        },
+        {
+          "header": "Obligor ID",
+          "canonical_field": "original_obligor_identifier",
+          "resolution": "contract",
+          "note": "The deal's obligor identifier (ESMA RREL4)."
+        },
+        {
+          "header": "Proceeds Purpose",
+          "canonical_field": "purpose",
+          "resolution": "contract",
+          "note": "Use of proceeds under the trustee's naming."
+        },
+        {
+          "header": "Property Category",
+          "canonical_field": "property_type",
+          "resolution": "contract",
+          "note": "Dwelling form of the security (RREC9)."
+        },
+        {
+          "header": "Rate Convention",
+          "canonical_field": "interest_rate_type",
+          "resolution": "contract",
+          "note": "Fixed for the life of the asset."
+        },
+        {
+          "header": "Amortisation Basis",
+          "canonical_field": "amortisation_type",
+          "resolution": "contract",
+          "note": "Interest roll-up."
+        },
+        {
+          "header": "Occupancy Basis",
+          "canonical_field": "occupancy_type",
+          "resolution": "contract",
+          "note": "Owner-occupied."
+        },
+        {
+          "header": "Denomination",
+          "canonical_field": "exposure_currency_denomination",
+          "resolution": "contract",
+          "note": "GBP."
+        },
+        {
+          "header": "Maturity Long Stop",
+          "canonical_field": "maturity_date",
+          "resolution": "contract",
+          "note": "Product long-stop for the asset (RREL24)."
+        },
+        {
+          "header": "Pool Addition",
+          "canonical_field": "pool_addition_date",
+          "resolution": "contract",
+          "note": "Date the asset entered the deal's pool (RREL7)."
+        },
+        {
+          "header": "Facility Limit",
+          "canonical_field": "total_credit_limit",
+          "resolution": "contract",
+          "note": "Approved facility at completion (RREL33)."
+        },
+        {
+          "header": "Collateral Key",
+          "canonical_field": "new_collateral_identifier",
+          "resolution": "contract",
+          "note": "Current collateral key. Not 'Collateral ID' \u2014 that is itself a canonical field name, which Gate 1 pins before any client contract is consulted (RREC4)."
+        },
+        {
+          "header": "Collateral ID At Closing",
+          "canonical_field": "original_collateral_identifier",
+          "resolution": "contract",
+          "note": "Collateral key as at deal closing (RREC3)."
+        },
+        {
+          "header": "Collateral Category",
+          "canonical_field": "collateral_type",
+          "resolution": "contract",
+          "note": "Collateral class (RREC5)."
+        },
+        {
+          "header": "Valuation Approach",
+          "canonical_field": "current_valuation_method",
+          "resolution": "contract",
+          "note": "How the valuation was established."
+        },
+        {
+          "header": "Introduction Route",
+          "canonical_field": "origination_channel",
+          "resolution": "contract",
+          "note": "How the asset was introduced (RREL26)."
+        },
+        {
+          "header": "Obligor Residency",
+          "canonical_field": "resident",
+          "resolution": "contract",
+          "note": "Obligor resident in the collateral's country (RREL10)."
+        },
+        {
+          "header": "Impaired Flag",
+          "canonical_field": "credit_impaired_obligor",
+          "resolution": "contract",
+          "note": "Credit-impaired obligor (RREL14)."
+        },
+        {
+          "header": "Proceedings Flag",
+          "canonical_field": "litigation",
+          "resolution": "contract",
+          "note": "Asset subject to legal proceedings (RREL75)."
+        },
+        {
+          "header": "Amount Falling Due",
+          "canonical_field": "payment_due",
+          "resolution": "contract",
+          "note": "Contractually due this period \u2014 nil (RREL39)."
+        },
+        {
+          "header": "Arrears Position",
+          "canonical_field": "arrears_balance",
+          "resolution": "contract",
+          "note": "Arrears at the cut-off (RREL67)."
+        },
+        {
+          "header": "Days Past Due",
+          "canonical_field": "number_of_days_in_arrears",
+          "resolution": "global",
+          "note": "Days past due (RREL68)."
+        },
+        {
+          "header": "Defaulted Amount",
+          "canonical_field": "default_amount",
+          "resolution": "global",
+          "note": "Balance in default (RREL71)."
+        },
+        {
+          "header": "Loss Allocation",
+          "canonical_field": "allocated_losses",
+          "resolution": "contract",
+          "note": "Losses allocated to date (RREL73)."
+        },
+        {
+          "header": "Recovery Total",
+          "canonical_field": "cumulative_recoveries",
+          "resolution": "contract",
+          "note": "Recoveries to date (RREL74)."
+        },
+        {
+          "header": "Early Redemption Charge",
+          "canonical_field": "prepayment_fee",
+          "resolution": "contract",
+          "note": "Early-repayment charge (RREL61)."
+        },
+        {
+          "header": "Synthetic Data Notice",
+          "canonical_field": null,
+          "resolution": "global",
+          "note": "Unmapped by design \u2014 the demonstration marker."
+        }
+      ]
     }
   },
   "metrics": {
@@ -696,6 +1010,39 @@
       "id": "alderbridge",
       "displayName": "Alderbridge Lending Platform",
       "shortName": "Alderbridge"
+    },
+    "scopes": {
+      "platform": {
+        "label": "Platform (warehoused)",
+        "portfolios": [
+          "ALP_ORIGINATION",
+          "ALP_ACQUIRED"
+        ],
+        "fundedBalance": 1964886258.21,
+        "loanCount": 11035
+      },
+      "sponsor": {
+        "label": "Sponsor AUM",
+        "portfolios": [
+          "ALP_ORIGINATION",
+          "ALP_ACQUIRED",
+          "SPV1"
+        ],
+        "fundedBalance": 2807474785.69,
+        "loanCount": 15215
+      },
+      "sponsored": {
+        "sourcePortfolioId": "spv1_sponsored",
+        "displayId": "SPV1",
+        "label": "SPV1 Sponsored Securitisation",
+        "status": "Sponsored securitisation, sold \u2014 servicing and reporting retained",
+        "fundedBalance": 842588527.48,
+        "funded_balance": 842588527.48,
+        "loanCount": 4180,
+        "loan_count": 4180,
+        "reportingDate": "2026-06-30",
+        "producedBy": "engine/gate_2_transform/canonical_transform.py (SPV1 run)"
+      }
     },
     "currentPeriod": {
       "period": "2026-06",

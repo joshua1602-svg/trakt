@@ -29,16 +29,19 @@ import {
   totalFrames,
 } from "./timeline";
 import {
+  ARRIVALS,
   ARTEFACTS,
   ASSERTIONS,
   CURRENT_PERIOD,
   COPILOT,
   MOVEMENT,
+  PLATFORM_SCOPE,
   PORTFOLIOS,
   SAFETY,
+  SPONSORED,
+  SPONSOR_SCOPE,
   SUMMARY,
   lens,
-  mappingDecision,
   onboarding,
   portfolio,
   schemaFor,
@@ -49,9 +52,61 @@ import {
   ONBOARDING_CLAIM_HOURS,
   ONBOARDING_HOURS,
   OPENING_LINE,
+  STATED_ARRIVAL,
 } from "./claims";
 import { count, elapsed, hoursMinutes, money, percent, signedMoney } from "./format";
 import theme from "./theme";
+
+// --------------------------------------------------------------------------- //
+// Reading the scenes back
+// --------------------------------------------------------------------------- //
+const SCENE_FILES = [
+  "S1Cost",
+  "S2Onboard",
+  "S3Dataset",
+  "S4Omnichannel",
+  "S5Close",
+] as const;
+
+const sceneSource = (name: string): string =>
+  readFileSync(join(__dirname, "scenes", `${name}.tsx`), "utf8");
+
+/**
+ * The literal text a scene puts on screen, and nothing else.
+ *
+ * The terminology rules below count words a VIEWER reads. Three other things in a scene
+ * file contain the same words and must not be counted:
+ *
+ *   comments   — S2's header explains at length why there is no mapping animation, which
+ *                requires saying "mapping". A naive count fails on the explanation of the
+ *                rule it is enforcing.
+ *   identifiers— `mapping.mapped_count` is a fixture path, not copy.
+ *   interpolations — `${count(mapping.mapped_count)} fields mapped` puts four characters
+ *                of digits and the words " fields mapped" on screen; the expression
+ *                inside `${...}` is code.
+ *
+ * So: strip comments, keep only quoted and templated text, and strip `${...}` from what
+ * survives. What is left is the copy.
+ */
+const sceneCopy = (name: string): string => {
+  const withoutComments = sceneSource(name)
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/^\s*\/\/.*$/gm, " ");
+  const literals = [
+    ...withoutComments.matchAll(/"([^"\n]*)"/g),
+    ...withoutComments.matchAll(/`([^`]*)`/gs),
+  ].map((m) => m[1].replace(/\$\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g, " "));
+  // Plus bare JSX text: `>Some words<` between tags, which is not quoted at all.
+  const jsxText = [...withoutComments.matchAll(/>([^<>{}]*[A-Za-z][^<>{}]*)</g)].map((m) => m[1]);
+  return [...literals, ...jsxText].join("\n");
+};
+
+/** Every word the film puts in front of a viewer: burned-in copy plus the caption track. */
+const filmCopy = (): string =>
+  [
+    ...SCENE_FILES.map(sceneCopy),
+    ...SCENES.flatMap((s) => [s.narration, ...s.captions.map((c) => c.text)]),
+  ].join("\n");
 
 // --------------------------------------------------------------------------- //
 // Runtime and structure
@@ -64,7 +119,7 @@ describe("runtime", () => {
     expect(totalFrames() / FPS).toBe(90);
   });
 
-  it("cuts 420 / 720 / 600 / 600 / 360, in the storyboard's order", () => {
+  it("cuts 420 / 480 / 780 / 660 / 360, in the storyboard's order", () => {
     expect(SCENES.map((s) => s.id)).toEqual([
       "cost",
       "onboard",
@@ -72,8 +127,8 @@ describe("runtime", () => {
       "omnichannel",
       "close",
     ]);
-    expect(SCENES.map((s) => s.frames)).toEqual([420, 720, 600, 600, 360]);
-    expect(sceneStarts()).toEqual([0, 420, 1140, 1740, 2340]);
+    expect(SCENES.map((s) => s.frames)).toEqual([420, 480, 780, 660, 360]);
+    expect(sceneStarts()).toEqual([0, 420, 900, 1680, 2340]);
   });
 
   it("numbers the scenes 1..5 with no gaps", () => {
@@ -198,14 +253,21 @@ describe("delivery", () => {
   });
 
   it("exports the three still frames the outbound email uses", () => {
-    expect([...STILL_FRAMES]).toEqual([1020, 1500, 2100]);
+    expect([...STILL_FRAMES]).toEqual([800, 1500, 2100]);
     for (const frame of STILL_FRAMES) {
       expect(frame).toBeLessThan(totalFrames());
     }
+    // And the exporter renders those frames, not a stale copy of them. `stills.mjs` is
+    // a plain script with its own list, which is exactly the kind of duplicate that
+    // drifts silently after a retime.
+    const script = readFileSync(join(__dirname, "..", "scripts", "stills.mjs"), "utf8");
+    const declared = script.match(/const EMAIL_FRAMES = \[([^\]]*)\]/);
+    expect(declared, "no EMAIL_FRAMES in scripts/stills.mjs").toBeTruthy();
+    expect(declared?.[1].split(",").map((n) => Number(n.trim()))).toEqual([...STILL_FRAMES]);
   });
 
   it("lands each still inside the scene the storyboard intended", () => {
-    // 1020 is deep in S2's referred-for-review hold; 1500 is S3's card fan-out;
+    // 800 is deep in S2's referred-for-review hold; 1500 is S3's card fan-out;
     // 2100 is S4's simultaneous payload. Those are the three beats worth an email.
     expect(STILL_FRAMES[0]).toBeGreaterThan(startOf("onboard"));
     expect(STILL_FRAMES[0]).toBeLessThan(startOf("dataset"));
@@ -295,16 +357,16 @@ describe("S2 · onboarded once", () => {
     expect(referred[0].note.length).toBeGreaterThan(40);
   });
 
-  it("draws its four mapping pairs from recorded decisions", () => {
-    const pairs: [string, string, string][] = [
-      ["A", "Loan Reference", "loan_identifier"],
-      ["A", "Completion Date", "origination_date"],
-      ["B", "Account Number", "loan_identifier"],
-      ["B", "Reporting Cut-Off", "data_cut_off_date"],
-    ];
-    for (const [key, header, canonical] of pairs) {
-      expect(mappingDecision(key, header).canonical_field, `${key}:${header}`).toBe(canonical);
-    }
+  it("shows five arriving cuts, from five owners, on more than one cycle", () => {
+    // The beat's argument is heterogeneity, and it only lands if the rows genuinely
+    // differ. If they collapse to one owner or one cycle there is nothing to look at.
+    expect(ARRIVALS).toHaveLength(5);
+    expect(new Set(ARRIVALS.map((a) => a.owner)).size).toBe(5);
+    expect(new Set(ARRIVALS.map((a) => a.frequency)).size).toBeGreaterThanOrEqual(2);
+    expect(new Set(ARRIVALS.map((a) => a.format)).size).toBeGreaterThanOrEqual(2);
+    // Four of the five are the demonstration's own; only the facility schedule is stated.
+    const stated = ARRIVALS.filter((a) => a.title === STATED_ARRIVAL.title);
+    expect(stated).toHaveLength(1);
   });
 
   it("shows the onboarding clock in hours, not on a stopwatch", () => {
@@ -341,12 +403,7 @@ describe("S2 · onboarded once", () => {
       (d) => !d.canonical_field && d.source_header !== "Synthetic Data Notice",
     );
     const note = (referred?.note ?? "").toLowerCase();
-    for (const term of [
-      "reserve-facility drawdown",
-      "reporting month",
-      "principal outstanding",
-      "intentionally not mapped",
-    ]) {
+    for (const term of ["reserve-facility drawdown", "principal outstanding"]) {
       expect(note, `"${term}" is not in the recorded note`).toContain(term);
     }
   });
@@ -366,20 +423,33 @@ describe("S3 · one dataset, every output", () => {
 
   it("leads each card with a human label, not a filename", () => {
     // The title is what the artefact IS; the filename belongs in the mono meta line.
-    // These are the titles S3Dataset renders, in order.
-    const titles = [
-      "Regulatory submission",
-      "Investor pack",
-      "Loan-level dataset",
-      "Validation report",
-      "Concentration monitor",
-      "Audit trail",
-    ];
+    // Read the titles out of the scene rather than restating them here — a copy of the
+    // list in the test passes happily while the scene says something else.
+    const titles = [...sceneSource("S3Dataset").matchAll(/^ {6}title: "([^"]+)",$/gm)].map(
+      (m) => m[1],
+    );
+    expect(titles).toHaveLength(6);
     expect(titles[0]).toBe("Regulatory submission");
     for (const title of titles) {
       expect(title, title).not.toMatch(/\.(xml|pptx|csv|json)$/);
       expect(title, title).not.toMatch(/_/);
     }
+  });
+
+  it("stamps every card with the scope it speaks for", () => {
+    const scopes = [...sceneSource("S3Dataset").matchAll(/^ {6}scope: "([^"]+)",$/gm)].map(
+      (m) => m[1],
+    );
+    // One per card, and only the three scopes the film recognises.
+    expect(scopes).toHaveLength(6);
+    for (const scope of scopes) {
+      expect(["SPV1", "PLATFORM", "ALL"], scope).toContain(scope);
+    }
+    // Annex 2 is deal-level reporting: the regulatory submission is SPV1's, not the
+    // platform's, and a card that claimed otherwise would misstate what was filed.
+    expect(scopes[0]).toBe("SPV1");
+    expect(scopes).toContain("PLATFORM");
+    expect(scopes).toContain("ALL");
   });
 
   it("reports regulatory before management information", () => {
@@ -481,6 +551,126 @@ describe("S4 · three ways in", () => {
 });
 
 // --------------------------------------------------------------------------- //
+// Scope — the two figures that must never be mistaken for one another
+// --------------------------------------------------------------------------- //
+describe("scope", () => {
+  it("keeps the platform figures exactly where they were", () => {
+    // Introducing SPV1 into the synthetic set must not have moved a single number the
+    // film already showed. SPV1 is generated on its own seed and its own solve, and it
+    // is never assembled; these are the assertions that prove it stayed that way.
+    expect(PLATFORM_SCOPE.fundedBalance).toBe(1_964_886_258.21);
+    expect(PLATFORM_SCOPE.loanCount).toBe(11_035);
+    expect(money(PLATFORM_SCOPE.fundedBalance)).toBe("£1.96bn");
+    expect(PLATFORM_SCOPE.portfolios).toEqual(["ALP_ORIGINATION", "ALP_ACQUIRED"]);
+
+    // And the platform scope IS the assembled total lens — not a second sum computed
+    // beside it that could drift.
+    expect(PLATFORM_SCOPE.fundedBalance).toBe(SUMMARY.metrics.funded_balance);
+    expect(PLATFORM_SCOPE.loanCount).toBe(SUMMARY.metrics.loan_count);
+
+    expect(signedMoney(MOVEMENT.delta.funded_balance ?? 0)).toBe("+£18.1m");
+    expect(percent(SUMMARY.metrics.wa_ltv_points ?? 0, 1)).toBe("43.2%");
+    expect(SUMMARY.topRegions[0].region).toBe("South East");
+    expect(SUMMARY.topRegions[0].balance).toBe(516_214_136.58);
+    expect(MOVEMENT.primaryRegion?.delta).toBe(7_840_963.14);
+  });
+
+  it("adds SPV1 to the sponsor scope without adding it to the platform", () => {
+    expect(SPONSORED.displayId).toBe("SPV1");
+    expect(SPONSORED.fundedBalance).toBeGreaterThan(0);
+    expect(SPONSORED.loanCount).toBeGreaterThan(0);
+    expect(SPONSOR_SCOPE.portfolios).toEqual([...PLATFORM_SCOPE.portfolios, "SPV1"]);
+    // The sponsor figure is the sum of the parts, to the penny and to the loan.
+    expect(SPONSOR_SCOPE.fundedBalance).toBeCloseTo(
+      PLATFORM_SCOPE.fundedBalance + SPONSORED.fundedBalance,
+      2,
+    );
+    expect(SPONSOR_SCOPE.loanCount).toBe(PLATFORM_SCOPE.loanCount + SPONSORED.loanCount);
+    expect(money(SPONSOR_SCOPE.fundedBalance)).toBe("£2.81bn");
+    expect(count(SPONSOR_SCOPE.loanCount)).toBe("15,215");
+  });
+
+  it("shows the sponsor scope in exactly one scene", () => {
+    const users = SCENE_FILES.filter((name) => /SPONSOR_SCOPE/.test(sceneSource(name)));
+    expect(users).toEqual(["S3Dataset"]);
+  });
+
+  it("confines the sponsor scope to S3's consolidation beat", () => {
+    // Every SPONSOR_SCOPE reference must sit above the marker that opens the platform
+    // beat. After that line the scene is PLATFORM scope for the rest of the film.
+    const src = sceneSource("S3Dataset");
+    const boundary = src.indexOf("Beat 2 · back to PLATFORM scope");
+    expect(boundary).toBeGreaterThan(0);
+    const uses = [...src.matchAll(/SPONSOR_SCOPE/g)].map((m) => m.index ?? 0);
+    expect(uses.length).toBeGreaterThan(0);
+    for (const at of uses) {
+      expect(at, `SPONSOR_SCOPE used at ${at}, past the platform boundary`).toBeLessThan(
+        boundary,
+      );
+    }
+  });
+
+  it("names the scope on S4's result band, where the two could be confused", () => {
+    expect(sceneSource("S4Omnichannel")).toContain("PLATFORM CANONICAL");
+  });
+});
+
+// --------------------------------------------------------------------------- //
+// Terminology — mapping is six words in a receipt, and nothing else
+// --------------------------------------------------------------------------- //
+describe("terminology", () => {
+  it("has no mapping animation anywhere in the film", () => {
+    // The mapping-pair animation was driven by `mappingDecision(key, header)`, the only
+    // accessor that returns a source header beside the canonical field it resolved to.
+    // No scene may reach for it: with no access to a pair, there is nothing to animate.
+    for (const name of SCENE_FILES) {
+      expect(sceneSource(name), name).not.toMatch(/\bmappingDecision\b/);
+    }
+  });
+
+  it("puts the word 'mapped' in front of a viewer exactly once, in S2's receipt", () => {
+    // Burned-in copy AND the caption track AND the narration: one use, total, across the
+    // whole film. Mapping is the weakest thing the product does and the easiest to
+    // dismiss, so it gets the weight of one item in a six-item strip and no more.
+    const hits = [...filmCopy().matchAll(/\bmapp(?:ed|ing|s)\b/gi)].map((m) => m[0]);
+    expect(hits).toEqual(["mapped"]);
+    // And that one use is the receipt item.
+    expect(sceneCopy("S2Onboard")).toContain("fields mapped");
+  });
+
+  it("never rebuts the mapping objection — raising it would keep it the topic", () => {
+    const copy = filmCopy();
+    for (const phrase of [
+      /column matching/i,
+      /more than (?:just )?mapping/i,
+      /not just mapping/i,
+      /isn't mapping/i,
+      /field matching/i,
+    ]) {
+      expect(copy, String(phrase)).not.toMatch(phrase);
+    }
+  });
+
+  it("keeps the £2.81bn figure out of every caption and narration line", () => {
+    // The sponsor figure is spoken once, in S3's narration, and burned in once, in S3's
+    // consolidation beat. No caption anywhere states it, and no other scene's script
+    // may carry it forward.
+    for (const scene of SCENES) {
+      for (const caption of scene.captions) {
+        expect(caption.text, `${scene.id}: "${caption.text}"`).not.toMatch(
+          /two point eight|2\.81|15,215|fifteen thousand/i,
+        );
+      }
+      if (scene.id !== "dataset") {
+        expect(scene.narration, scene.id).not.toMatch(
+          /two point eight|2\.81|15,215|fifteen thousand/i,
+        );
+      }
+    }
+  });
+});
+
+// --------------------------------------------------------------------------- //
 // The accent — one full strength, one soft, nothing else
 // --------------------------------------------------------------------------- //
 describe("signal", () => {
@@ -511,10 +701,13 @@ describe("safety", () => {
   });
 
   it("marks every portfolio as synthetic", () => {
-    expect(PORTFOLIOS.length).toBe(2);
+    // Three now: the two warehoused books the platform assembles, plus the sold
+    // securitisation the sponsor still reports on.
+    expect(PORTFOLIOS.length).toBe(3);
     for (const key of ["A", "B"]) {
       expect(portfolio(key).display_id).toMatch(/^ALP_/);
     }
+    expect(PORTFOLIOS.map((p) => p.display_id)).toContain(SPONSORED.displayId);
   });
 });
 

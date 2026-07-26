@@ -54,8 +54,8 @@ Output lands in `demo-video/out/`:
 |---|---|
 | `trakt-demo-1080p.mp4` | 1920×1080, 30 fps, H.264 — the master |
 | `trakt-demo-square.mp4` | 1080×1080 — the LinkedIn and email variant |
-| `stills/trakt-demo-frame-{1020,1500,2100}.png` | the three frames for the outbound email body |
-| `stills/review/*.png` | seventeen frames for a human to check before publishing — one at each scene midpoint, plus the beats worth their own look |
+| `stills/trakt-demo-frame-{800,1500,2100}.png` | the three frames for the outbound email body |
+| `stills/review/*.png` | twenty-four frames for a human to check before publishing — one at the midpoint of every beat, not just every scene |
 | `voiceover-script.md` | narration script with per-scene timings and pace |
 | `captions.srt` / `captions.vtt` | subtitles matching the burned-in captions exactly |
 | `scene-timings.csv` | scene-level timing sheet (seconds and frames) |
@@ -70,10 +70,22 @@ Output lands in `demo-video/out/`:
 | # | Scene | Frames | Time | What it proves |
 |---|---|---|---|---|
 | 1 | The cost | 0–420 | 0:00–0:14 | Two source schemas that share no column names, and what month-end costs |
-| 2 | Onboarded in under 48 hours | 420–1140 | 0:14–0:38 | The approved contract, and what the platform refuses to guess |
-| 3 | One dataset, every output | 1140–1740 | 0:38–0:58 | Six governed outputs off one dataset, regulatory first |
-| 4 | Three ways in | 1740–2340 | 0:58–1:18 | The same answer in three channels, on the same frame |
+| 2 | Disparate cuts in, one governed portfolio out | 420–900 | 0:14–0:30 | What actually arrives, and what the platform refuses to guess |
+| 3 | Three portfolios, one sponsor view, every output | 900–1680 | 0:30–0:56 | A number no single system produces today, then six outputs off one dataset |
+| 4 | Three ways in | 1680–2340 | 0:56–1:18 | The same answer in three channels, on the same frame |
 | 5 | Close | 2340–2700 | 1:18–1:30 | The positioning, and the ask |
+
+S2 and S3 are cut into beats, and the beat boundaries are constants at the top of each
+scene component:
+
+| Scene | Beat | Scene frames | What is on screen |
+|---|---|---|---|
+| S2 | the clock | 0–120 | `41:20` counting up, then handing over to a corner stamp |
+| S2 | what arrives | 120–270 | five artefacts, five owners, three reporting cycles |
+| S2 | the receipt | 270–420 | six counts from the first run, and the one referred item |
+| S2 | what comes out | 420–480 | loan level, portfolio level, sponsor level |
+| S3 | consolidation | 0–300 | three portfolio lanes, then **sponsor** scope: £2.81bn / 15,215 |
+| S3 | the platform figure | 300–780 | back to **platform** scope: £1.96bn, six outputs, 33/33 |
 
 `src/timeline.ts` is the single source for scene lengths, captions and narration. The
 composition, the burned-in captions, the subtitle files and the voice-over script are
@@ -89,7 +101,9 @@ does not carry throws at bundle time rather than rendering a placeholder.
 | On screen | Fixture | Produced by |
 |---|---|---|
 | `£1.96bn`, `11,035 loans`, `+£18.1m`, the regional split | `demo_metrics.json` | `POST /mi/query` → `mi_agent_workflow` |
-| `39` / `34` / `2`, the four mapping pairs, the referred item | `demo_manifest.json` | `engine/gate_1_alignment/semantic_alignment.py` |
+| `39` / `34` / `2` and the referred item | `demo_manifest.json` | `engine/gate_1_alignment/semantic_alignment.py` |
+| the three portfolio lanes, `£2.81bn` / `15,215` | `demo_metrics.json` → `metrics.scopes` | `demo_platform/metrics.py` |
+| the five arriving cuts | `demo_metrics.json` → `schemas`, `artefact_catalogue.json` | `demo_platform/schemas.py` (four of five; the fifth is stated — see `src/claims.ts`) |
 | `41:20` | *not a fixture* | `src/claims.ts` — a **stated** claim, see below |
 | the six artifact cards | `artefact_catalogue.json` | `demo_platform/artefacts.py` |
 | `33/33 checks passed` | `assertion_report.json` | `demo_platform/assertions.py` |
@@ -110,8 +124,8 @@ third. Full strength marks the value being proven — at most one element per fr
 (`theme.signalSoftOpacity`, 40%) is for confirmations and check states only, such as
 "XSD validated" on the regulatory card. There is no second green; a test asserts that.
 
-Full strength appears on: S3's consolidated balance, S3's `33/33 checks passed`, S3's
-final claim, S4's three figures and S5's ask. Where a scene passes the accent from one
+Full strength appears on: S3's sponsor figure, S3's consolidated balance, S3's
+`33/33 checks passed`, S3's final claim, S4's three figures and S5's ask. Where a scene passes the accent from one
 element to another — S3 hands it from the balance to the reconciliation check, then to
 the claim — `<Stat>` takes a fractional `accent` and they cross-fade, so they are never
 both cyan. S4's three figures are the film's one stated exception: they are the same
@@ -127,6 +141,50 @@ IBM Plex Mono. If it is Trakt talking about itself, it is Archivo (claims) or In
 governed; the typeface says so.
 
 Six type sizes exist. The lint asserts that count and that every one of them is used.
+
+---
+
+## Two content rules
+
+These are not style rules. They are the two ways this film could mislead a viewer, and
+both are enforced by tests rather than by care.
+
+### Scope: £1.96bn is not £2.81bn
+
+The synthetic sponsor holds three portfolios, and two different totals are true of it:
+
+| Scope | Figure | Where it may appear |
+|---|---|---|
+| **PLATFORM** — the two warehoused books the assembler consolidates | £1.96bn / 11,035 loans | everywhere, without exception |
+| **SPONSOR** — the platform plus the securitisation the sponsor sold | £2.81bn / 15,215 loans | S3's consolidation beat, and nowhere else |
+
+SPV1 is a real member of the synthetic set: `demo_platform/config.PORTFOLIO_S`, its own
+source schema (`trustee_deal_extract`), its own alias contract, its own seed and its own
+calibration solve in `demo_platform/generator.generate_sponsored`. It is **not** hard-coded
+anywhere in the film, and it is **not** assembled — `cfg.PORTFOLIOS` still contains two
+portfolios, so every platform figure the film already showed is byte-identical.
+
+Four tests hold the line: the platform figures are asserted at full precision, the
+sponsor scope must equal the sum of its parts, `SPONSOR_SCOPE` must be referenced in
+exactly one scene file, and every reference must sit above S3's platform-beat boundary.
+S4's result band carries the words `PLATFORM CANONICAL` so a viewer who has just seen
+£2.81bn cannot carry it forward.
+
+### Mapping is six words in a receipt
+
+Field-header mapping is the weakest thing the product does and the easiest to dismiss —
+a prospect assumes a language model already does it, and they are not entirely wrong.
+There is no mapping animation anywhere in the film, and the film never raises the
+objection either, because a line rebutting it would keep mapping as the topic.
+
+What replaces it is what actually arrives: five artefacts, from five owners, on three
+reporting cycles. Nobody looking at a trustee's quarterly schedule beside a servicer's
+monthly CSV thinks "column matching".
+
+The word "mapped" reaches a viewer exactly once, as one item in S2's six-item receipt
+strip. A test counts it across every scene file, every caption and every narration line,
+after stripping comments, identifiers and `${...}` interpolations — so it counts copy, not
+code — and fails on two.
 
 ### Typefaces
 
@@ -153,7 +211,7 @@ construction rather than by discipline.
 | `<Figure>` | The only way to put a computed value on screen. Data face, `tabular-nums`. A `<Counter>` outside one fails the lint |
 | `<Stat>` | A `<Figure>` that **always** renders its provenance rule — there is no way to put a governed figure on screen without saying where it came from |
 | `<Claim>` | Archivo display. One per scene, maximum |
-| `<ArtifactCard>` | Fixed dimensions. The **human label** is the title, in the body face; the filename drops into the mono meta line with the figures |
+| `<ArtifactCard>` | Fixed dimensions. A `scope` stamp above the title, then the **human label** in the body face; the filename drops into the mono meta line with the figures |
 | `<Counter>` | Wraps `interpolate` + `spring`. The only count-up in the film |
 | `<Chrome>` | Lockup and disclaimer, rendered once **outside** `<Series>` |
 
