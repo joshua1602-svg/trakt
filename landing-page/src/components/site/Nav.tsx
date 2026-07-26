@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { TraktWordmark } from "@/components/site/TraktWordmark";
 import { buttonStyles, cx } from "@/components/ui";
@@ -16,6 +16,8 @@ const LINKS = [
 export function Nav() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -24,11 +26,45 @@ export function Nav() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Close the mobile menu on Escape, and whenever the viewport grows.
+  /**
+   * Mobile menu keyboard behaviour: Escape closes, Tab is trapped inside while
+   * it is open, and focus returns to the toggle on close — so a keyboard user
+   * is never dropped somewhere arbitrary in the page.
+   */
   useEffect(() => {
     if (!open) return;
+
+    // Move focus into the menu when it opens.
+    const focusables = () =>
+      Array.from(
+        menuRef.current?.querySelectorAll<HTMLElement>("a[href], button:not([disabled])") ?? [],
+      );
+    focusables()[0]?.focus();
+
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") {
+        setOpen(false);
+        toggleRef.current?.focus();
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const items = [toggleRef.current, ...focusables()].filter(
+        (node): node is HTMLElement => Boolean(node),
+      );
+      if (items.length === 0) return;
+
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (!first || !last) return;
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", onKey);
 
@@ -85,7 +121,14 @@ export function Nav() {
           type="button"
           aria-expanded={open}
           aria-controls="mobile-nav"
-          onClick={() => setOpen((value) => !value)}
+          ref={toggleRef}
+          onClick={() =>
+            setOpen((value) => {
+              // Closing by the toggle keeps focus where the user left it.
+              if (value) toggleRef.current?.focus();
+              return !value;
+            })
+          }
           className="rounded-lg border border-line px-3 py-2 text-sm text-ink-200 md:hidden"
         >
           <span className="sr-only">{open ? "Close menu" : "Open menu"}</span>
@@ -94,13 +137,20 @@ export function Nav() {
       </nav>
 
       {open ? (
-        <div id="mobile-nav" className="border-t border-line bg-navy-950/97 md:hidden">
+        <div
+          id="mobile-nav"
+          ref={menuRef}
+          className="border-t border-line bg-navy-950/97 md:hidden"
+        >
           <ul className="mx-auto max-w-6xl px-5 py-3">
             {LINKS.map((link) => (
               <li key={link.href}>
                 <a
                   href={link.href}
-                  onClick={() => setOpen(false)}
+                  onClick={() => {
+                    setOpen(false);
+                    toggleRef.current?.focus();
+                  }}
                   className="block border-b border-line-soft py-3 text-sm text-ink-200"
                 >
                   {link.label}

@@ -49,10 +49,20 @@ export function CopilotDemo({ meta }: { meta: DemoMetaResponse }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [remaining, setRemaining] = useState(meta.limits.questionsPerSession);
+  /** Announced to screen readers on every state change; visually hidden. */
+  const [announcement, setAnnouncement] = useState("");
 
   const inputId = useId();
   const logRef = useRef<HTMLDivElement>(null);
+  const openedRef = useRef(false);
   const started = turns.length > 0;
+
+  /** Fires once per visit, the first time the visitor engages with the demo. */
+  const markOpened = useCallback(() => {
+    if (openedRef.current) return;
+    openedRef.current = true;
+    track("demo_open");
+  }, []);
 
   // Keep the newest turn in view without yanking the whole page around.
   useEffect(() => {
@@ -65,6 +75,7 @@ export function CopilotDemo({ meta }: { meta: DemoMetaResponse }) {
     async (payload: { question?: string; questionId?: string }, display: string) => {
       setBusy(true);
       setError(null);
+      setAnnouncement("Working on your question.");
       const pendingId = nextTurnId();
       setTurns((current) => [
         ...current,
@@ -81,15 +92,19 @@ export function CopilotDemo({ meta }: { meta: DemoMetaResponse }) {
         ]);
 
         if (answer.status === "answered") {
-          track("answer_supported", { intentId: answer.intentId ?? undefined });
+          setAnnouncement("Answer ready.");
+          track("demo_answer_returned", { intentId: answer.intentId ?? undefined });
         } else if (answer.status === "limit_reached") {
-          track("session_limit_reached", { source: "question" });
+          setAnnouncement("Session question limit reached.");
         } else {
-          track("answer_unsupported", { intentId: answer.intentId ?? "unmatched" });
+          setAnnouncement("Trakt declined that question. An explanation follows.");
+          track("demo_refusal_returned", { intentId: answer.intentId ?? "unmatched" });
         }
       } catch (caught) {
         setTurns((current) => current.filter((t) => t.id !== pendingId));
-        setError(caught instanceof Error ? caught.message : "Something went wrong.");
+        const message = caught instanceof Error ? caught.message : "Something went wrong.";
+        setError(message);
+        setAnnouncement(message);
       } finally {
         setBusy(false);
       }
@@ -100,7 +115,9 @@ export function CopilotDemo({ meta }: { meta: DemoMetaResponse }) {
   const requestReport = useCallback(async (reportId: string, label: string) => {
     setBusy(true);
     setError(null);
-    track("report_preview_request", { reportId });
+    setAnnouncement("Preparing the report preview.");
+    markOpened();
+    track("report_preview_opened", { reportId });
     const pendingId = nextTurnId();
     setTurns((current) => [
       ...current,
@@ -114,18 +131,23 @@ export function CopilotDemo({ meta }: { meta: DemoMetaResponse }) {
         ...current.filter((t) => t.id !== pendingId),
         { kind: "report", id: nextTurnId(), payload: report },
       ]);
-      if (report.status === "limit_reached") {
-        track("session_limit_reached", { source: "report" });
-      }
+      setAnnouncement(
+        report.status === "limit_reached"
+          ? "Session report limit reached."
+          : "Report preview ready.",
+      );
     } catch (caught) {
       setTurns((current) => current.filter((t) => t.id !== pendingId));
-      setError(caught instanceof Error ? caught.message : "Something went wrong.");
+      const message = caught instanceof Error ? caught.message : "Something went wrong.";
+      setError(message);
+      setAnnouncement(message);
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [markOpened]);
 
   const onSuggested = (id: string, label: string) => {
+    markOpened();
     track("suggested_question_click", { intentId: id });
     void ask({ questionId: id }, label);
   };
@@ -134,16 +156,17 @@ export function CopilotDemo({ meta }: { meta: DemoMetaResponse }) {
     event.preventDefault();
     const question = input.trim();
     if (!question || busy) return;
+    markOpened();
     track("typed_question_submit");
     setInput("");
     void ask({ question }, question);
   };
 
   const reset = () => {
-    track("demo_reset");
     setTurns([]);
     setInput("");
     setError(null);
+    setAnnouncement("Conversation reset.");
   };
 
   const outOfQuestions = remaining <= 0;
@@ -171,6 +194,12 @@ export function CopilotDemo({ meta }: { meta: DemoMetaResponse }) {
       </div>
 
       <div className="px-5 py-5 sm:px-6">
+        {/* Status announcements. Short and polite, so a screen reader is told
+            what happened without having the whole answer read at it. */}
+        <p role="status" aria-live="polite" className="sr-only">
+          {announcement}
+        </p>
+
         {!started ? (
           <p className="mb-4 max-w-2xl text-sm leading-relaxed text-ink-300">
             {meta.scope.clientDescription} Ask a question below, or choose one of the
@@ -180,7 +209,7 @@ export function CopilotDemo({ meta }: { meta: DemoMetaResponse }) {
         ) : null}
 
         {started ? (
-          <div ref={logRef} className="mb-5 space-y-4" aria-live="polite" aria-atomic="false">
+          <div ref={logRef} className="mb-5 space-y-4" role="log">
             {turns.map((turn) => (
               <TurnView
                 key={turn.id}
@@ -377,7 +406,7 @@ function AnswerView({
 
       {payload.status !== "limit_reached" ? (
         <footer className="mt-4 border-t border-line-soft pt-3">
-          <p className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-ink-500">
+          <p className="flex flex-wrap gap-x-3 gap-y-1 break-words text-[11px] text-ink-500">
             {payload.interpreted ? <span>{payload.interpreted}</span> : null}
             <span>As at {payload.asOfDisplay}</span>
             <span>{payload.portfolioScope}</span>

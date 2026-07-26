@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { sanitiseAttribution } from "@/lib/attribution";
 import { MIN_FORM_FILL_MS, RATE_LIMITS } from "@/lib/env";
 import {
   isSameOrigin,
@@ -33,7 +34,11 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   const ip = clientIp(request.headers);
-  const limit = checkRateLimit(`lead:${ip}`, RATE_LIMITS.leadPerIp);
+  // Lead submission fails closed: if the shared counter is unreachable we
+  // refuse rather than risk an unbounded write path.
+  const limit = await checkRateLimit(`lead:${ip}`, RATE_LIMITS.leadPerIp, {
+    failureMode: "closed",
+  });
   if (!limit.allowed) {
     logRequest({ route: "leads", outcome: "rate_limited" });
     return rateLimitedResponse(limit.retryAfterSeconds);
@@ -55,18 +60,35 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ status: "invalid", errors }, { status: 400 });
   }
 
+  // Attribution is resolved server-side and attached to the notification. It
+  // is deliberately never echoed back in the response.
+  const attribution = sanitiseAttribution(
+    (body.value as { attribution?: unknown }).attribution,
+  );
+
   const lead: Lead = {
     id: newLeadId(),
     receivedAt: new Date().toISOString(),
     ...value,
     consent: true,
     source: "landing-page",
+    ...(Object.keys(attribution).length > 0 ? { attribution } : {}),
   };
 
   try {
     const outcome = await deliverLead(lead);
-    logRequest({ route: "leads", outcome: `delivered_${outcome.provider}` });
-    return NextResponse.json({ status: "received" }, { status: 201 });
+    logRequest({
+      route: "leads",
+      outcome: outcome.duplicate
+        ? "duplicate_suppressed"
+        : `delivered_${outcome.provider}`,
+    });
+    // The reference is the visitor's, so a follow-up can be matched to a
+    // notification. It carries no attribution and no provider detail.
+    return NextResponse.json(
+      { status: "received", reference: lead.id },
+      { status: outcome.duplicate ? 200 : 201 },
+    );
   } catch (error) {
     // The reason is logged for operators; the visitor sees a generic message
     // and is given a way to reach us that does not depend on this endpoint.

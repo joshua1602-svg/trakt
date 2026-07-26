@@ -52,13 +52,18 @@ Trakt service to the internet.
 ║   │  app/api/demo/query     rate limit → sanitise → resolve → answer   │     ║
 ║   │  app/api/demo/report    rate limit → allow-list id → pages         │     ║
 ║   │  app/api/leads          origin → rate limit → validate → deliver   │     ║
+║   │  app/api/analytics      allow-listed events, always 204            │     ║
 ║   │  app/api/health         liveness                                   │     ║
+║   │  app/api/ready          readiness — the configuration gate         │     ║
 ║   │                                                                    │     ║
 ║   │  lib/demo-pack.ts   the pack + allow-lists  (server-only)          │     ║
 ║   │  lib/intents.ts     deterministic phrase matcher (server-only)     │     ║
 ║   │  lib/session.ts     signed cookie, question/report counters        │     ║
-║   │  lib/rate-limit.ts  fixed-window, in-process                       │     ║
-║   │  lib/leads.ts       one delivery adapter                           │     ║
+║   │  lib/rate-limit.ts  fixed-window over a pluggable store            │     ║
+║   │  lib/leads.ts       one delivery adapter, retry + idempotency      │     ║
+║   │  lib/config.ts      production configuration validator             │     ║
+║   │  lib/attribution.ts campaign capture, sanitised server-side        │     ║
+║   │  instrumentation.ts startup validation — fails closed              │     ║
 ║   └────────────────────────────────────────────────────────────────────┘     ║
 ║                              │                                               ║
 ║                              ▼                                               ║
@@ -310,3 +315,76 @@ is a redeploy or a slot swap and loses nothing of value.
 tests → demo-pack reproducibility → build → assemble standalone → deploy →
 smoke-check `/api/health`. Manual trigger by default, matching
 `deploy-mi-api.yml`.
+
+---
+
+## 8. Additions from the production-hardening pass
+
+### 8.1 Pinned demo source (build-time trust boundary C, hardened)
+
+`DEMO_SOURCE` in the generator names one dataset and asserts its identity —
+client, portfolio, asset class, currency, reporting date, balance range,
+minimum exposure count, and a SHA-256 of the canonical file — **before any
+figure is computed**. The file fingerprint is checked before parsing, so a
+substituted dataset fails diagnosably rather than as a downstream schema error.
+
+There is no fallback: `mi_agent_api.data_source` is not imported, and a test
+parses the module's AST to assert it never will be, and that the assertions are
+unconditional (not behind a flag or a `try`).
+
+`EXPECTED_DEMO_SOURCE` in `lib/config.ts` re-checks the same identity at
+runtime against the pack's own `source` block, so a pack built from the wrong
+portfolio cannot be served even if committed. Boundary C is now enforced from
+both sides.
+
+### 8.2 Startup configuration gate
+
+`instrumentation.ts` runs once per server process, before any request. In
+production it throws on any unsafe configuration; outside production it warns.
+This converts a class of silent production defects — leads to a local file, a
+forgeable session cookie, a localhost canonical URL, unlimited effective rate
+limits — into a failed boot.
+
+### 8.3 Rate-limit store
+
+`RateLimitStore` has two adapters (in-memory, shared-over-HTTP) behind one
+interface. The failure policy is asymmetric by design: **lead submission fails
+closed**, demo queries **degrade to the stricter local limit**. The reasoning
+is in `lib/rate-limit.ts` and the README; the short version is that refusing a
+write is cheap and refusing to render the page is not.
+
+### 8.4 Analytics collector
+
+`POST /api/analytics` is an allow-list of twelve event names with a fixed
+property vocabulary, each value stripped to `[A-Za-z0-9_.-]` and capped. It
+always returns 204 — a rejected event, a rate-limited caller and a malformed
+body are indistinguishable, so the endpoint cannot be probed and analytics can
+never shape the visitor's experience.
+
+Campaign attribution is captured on arrival into `sessionStorage`, re-sanitised
+server-side, attached to the lead notification and never echoed back.
+
+### 8.5 Liveness versus readiness
+
+`/api/health` answers "alive"; `/api/ready` answers "correctly configured", and
+returns 503 with error codes when it is not. They are allowed to disagree, which
+is the point — restarting a process fixes the first and never the second.
+
+The App Service platform probe should point at `/api/health`: a probe on
+`/api/ready` would turn a configuration error into a restart loop. `/api/ready`
+belongs in deployment smoke tests, where a human can act on it.
+
+### 8.6 Build-output scan
+
+`scripts/scan-build.mjs` scans what actually ships. Two severities, because the
+risks differ:
+
+* **Secrets** — an error anywhere, server bundle included.
+* **Internal Trakt references** (blob endpoints, the MI API host,
+  `processed-v2/`, `MI_AGENT_*`, `TRAKT_COPILOT_*`) — an error anywhere, because
+  their presence would mean this deployment reaches into infrastructure it is
+  architected not to touch.
+* **Build paths and server-only provenance** — an error only in client-visible
+  artefacts. Next's standalone output records its own build directory and the
+  pack's server-only provenance names its source dataset; neither is
+  downloadable, and the client bundle is verified clean of both.

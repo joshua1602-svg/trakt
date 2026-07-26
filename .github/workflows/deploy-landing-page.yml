@@ -1,18 +1,21 @@
 name: Deploy landing page (App Service)
 
-# Builds and deploys the Trakt marketing site + public synthetic demonstration
-# (`landing-page/`) to an Azure App Service (Linux, Node 22).
+# Builds, verifies and deploys the Trakt marketing site + public synthetic
+# demonstration (`landing-page/`) to an Azure App Service (Linux, Node 22).
 #
 # Prerequisites (created once, outside this repository):
 #   • App Service on a Linux plan, runtime stack Node 22 LTS
 #   • Repository secret AZURE_LANDING_PAGE_PUBLISH_PROFILE
 #       (App Service → Get publish profile)
-#   • Repository variable AZURE_LANDING_PAGE_APP_NAME  (the App Service name)
-#   • Repository variable LANDING_PAGE_SITE_URL        (the canonical origin;
-#       NEXT_PUBLIC_* values are inlined at build time, so this must be set here)
+#   • Repository variables
+#       AZURE_LANDING_PAGE_APP_NAME     the App Service name
+#       LANDING_PAGE_SITE_URL           the canonical origin — NEXT_PUBLIC_*
+#                                       values are inlined at build time, so
+#                                       this must be the production origin
+#       LANDING_PAGE_ANALYTICS_PROVIDER optional: none | appinsights | firstparty
 #
 # Manual by default, matching `deploy-mi-api.yml`. Uncomment the push trigger
-# once the app exists.
+# once the App Service exists.
 
 on:
   workflow_dispatch: {}
@@ -23,12 +26,20 @@ on:
 permissions:
   contents: read
 
+# One production deployment at a time. `cancel-in-progress: false` so a run
+# that is already pushing bits is allowed to finish rather than leaving the
+# App Service half-updated.
+concurrency:
+  group: landing-page-production
+  cancel-in-progress: false
+
 defaults:
   run:
     working-directory: landing-page
 
 jobs:
-  build-and-deploy:
+  verify:
+    name: Verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,46 +50,89 @@ jobs:
           cache: npm
           cache-dependency-path: landing-page/package-lock.json
 
-      - name: Install
+      - name: Install (lockfile)
         run: npm ci
 
       - name: Lint
         run: npm run lint
 
-      - name: Type check
+      - name: Type check (strict)
         run: npm run typecheck
 
-      - name: Unit tests
+      - name: Unit and component tests
         run: npm test
 
-      # Proves the committed demo pack still matches what the Trakt engine
-      # produces from the committed synthetic dataset.
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Verify the demo pack is reproducible
+
+      - name: Install the Trakt engine
         working-directory: .
-        run: |
-          pip install --quiet -r requirements.txt
-          python -m pytest landing-page/tests/demo_pack_reproducible_test.py -q
+        run: pip install --quiet -r requirements.txt
+
+      # Proves the committed pack is exactly what the deterministic engine
+      # produces from the committed synthetic dataset, and that the source
+      # identity guards fail closed on every axis.
+      - name: Demo-pack reproducibility and source identity
+        working-directory: .
+        run: python -m pytest landing-page/tests/demo_pack_reproducible_test.py -q
+
+      # A pack that differs from the committed one must never be deployed:
+      # the site would publish figures nobody reviewed.
+      - name: Refuse a stale demo pack
+        run: npm run demo-pack:check
+
+      # Production configuration rules, exercised with placeholder values.
+      # No real secret is present in CI.
+      - name: Production configuration validation
+        run: npm run validate-config
 
       - name: Production build
         env:
+          APPLICATION_ENV: production
           NEXT_PUBLIC_SITE_URL: ${{ vars.LANDING_PAGE_SITE_URL }}
           NEXT_PUBLIC_DEMO_NAME: Synthetic Demo Lender
           NEXT_PUBLIC_ANALYTICS_PROVIDER: ${{ vars.LANDING_PAGE_ANALYTICS_PROVIDER || 'none' }}
         run: npm run build
 
+      - name: Secret and prohibited-reference scan
+        run: npm run scan
+
+      - name: Upload the verified build
+        uses: actions/upload-artifact@v4
+        with:
+          name: landing-page-build
+          path: |
+            landing-page/.next/standalone
+            landing-page/.next/static
+            landing-page/public
+          retention-days: 1
+          include-hidden-files: true
+
+  deploy:
+    name: Deploy
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: landing-page-build
+          path: landing-page-build
+
       # `output: "standalone"` produces a self-contained server; assemble the
-      # deployable tree App Service will run.
-      - name: Assemble the standalone bundle
+      # tree App Service will run.
+      - name: Assemble the deployable bundle
+        working-directory: .
         run: |
           mkdir -p deploy
-          cp -r .next/standalone/. deploy/
+          cp -r landing-page-build/.next/standalone/. deploy/
           mkdir -p deploy/.next
-          cp -r .next/static deploy/.next/static
-          cp -r public deploy/public
-          # App Service starts `npm start`; point it at the standalone server.
+          cp -r landing-page-build/.next/static deploy/.next/static
+          cp -r landing-page-build/public deploy/public
+          # App Service runs `npm start`; point it at the standalone server.
           node -e "require('fs').writeFileSync('deploy/package.json', JSON.stringify({name:'trakt-landing-page',private:true,scripts:{start:'node server.js'}},null,2))"
 
       - name: Deploy to Azure App Service
@@ -86,14 +140,49 @@ jobs:
         with:
           app-name: ${{ vars.AZURE_LANDING_PAGE_APP_NAME }}
           publish-profile: ${{ secrets.AZURE_LANDING_PAGE_PUBLISH_PROFILE }}
-          package: landing-page/deploy
+          package: deploy
 
-      - name: Smoke-check the health endpoint
+      - name: Smoke-check liveness
+        working-directory: .
         run: |
+          base="https://${{ vars.AZURE_LANDING_PAGE_APP_NAME }}.azurewebsites.net"
           for i in 1 2 3 4 5 6; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' \
-              "https://${{ vars.AZURE_LANDING_PAGE_APP_NAME }}.azurewebsites.net/api/health" || true)
-            if [ "$code" = "200" ]; then echo "healthy"; exit 0; fi
-            echo "attempt $i: HTTP $code — waiting"; sleep 15
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$base/api/health" || true)
+            if [ "$code" = "200" ]; then echo "health: ok"; exit 0; fi
+            echo "attempt $i: health returned $code — waiting"; sleep 15
           done
-          echo "health check did not return 200"; exit 1
+          echo "::error::/api/health did not return 200"; exit 1
+
+      # Readiness is the configuration gate: it fails when lead delivery, the
+      # session secret, the canonical origin or the rate-limit store are wrong,
+      # which liveness deliberately tolerates.
+      - name: Smoke-check readiness
+        working-directory: .
+        run: |
+          base="https://${{ vars.AZURE_LANDING_PAGE_APP_NAME }}.azurewebsites.net"
+          body=$(curl -s "$base/api/ready" || true)
+          code=$(curl -s -o /dev/null -w '%{http_code}' "$base/api/ready" || true)
+          echo "$body"
+          if [ "$code" != "200" ]; then
+            echo "::error::/api/ready returned $code — the deployment is not correctly configured"
+            exit 1
+          fi
+
+      # The deployed HTML must carry the portfolio identity this build was
+      # pinned to. Catches a deployment that somehow served a different pack.
+      - name: Verify the served portfolio identity
+        working-directory: .
+        run: |
+          base="https://${{ vars.AZURE_LANDING_PAGE_APP_NAME }}.azurewebsites.net"
+          expected_client=$(node -p "require('./landing-page/data/demo-pack.json').source.clientId")
+          expected_portfolio=$(node -p "require('./landing-page/data/demo-pack.json').source.portfolioId")
+          expected_balance=$(node -p "require('./landing-page/data/demo-pack.json').portfolio.totalBalanceDisplay")
+
+          html=$(curl -s "$base/")
+          for needle in "$expected_portfolio" "$expected_balance"; do
+            if ! printf '%s' "$html" | grep -qF -- "$needle"; then
+              echo "::error::the served page does not contain '$needle'"
+              exit 1
+            fi
+          done
+          echo "served portfolio identity confirmed: $expected_client / $expected_portfolio"

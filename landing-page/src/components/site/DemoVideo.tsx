@@ -39,7 +39,7 @@ export function DemoVideo() {
         preload="none"
         playsInline
         poster={poster || undefined}
-        onPlay={() => track("demo_video_play")}
+        onPlay={() => track("video_play")}
         onError={() => setFailed(true)}
       >
         <source src={src} />

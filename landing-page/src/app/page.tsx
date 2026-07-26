@@ -1,4 +1,5 @@
 import { CopilotDemo } from "@/components/demo/CopilotDemo";
+import { AttributionCapture } from "@/components/site/AttributionCapture";
 import {
   CapabilityStack,
   Governance,
@@ -28,6 +29,7 @@ export default function Page() {
 
   return (
     <>
+      <AttributionCapture />
       <a href="#main" className="skip-link">
         Skip to content
       </a>

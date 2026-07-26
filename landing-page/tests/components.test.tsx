@@ -286,6 +286,118 @@ describe("CopilotDemo", () => {
   });
 });
 
+describe("CopilotDemo — accessibility", () => {
+  it("announces loading and success through a polite status region", async () => {
+    const user = userEvent.setup();
+    let resolve: ((value: Response) => void) | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(() => new Promise<Response>((r) => (resolve = r))),
+    );
+
+    render(<CopilotDemo meta={META} />);
+    const status = screen.getByRole("status");
+    expect(status).toHaveClass("sr-only");
+
+    await user.click(
+      screen.getByRole("button", { name: "What is the current funded portfolio balance?" }),
+    );
+    await waitFor(() => expect(status).toHaveTextContent(/working on your question/i));
+
+    resolve?.(
+      jsonResponse({
+        status: "answered",
+        intentId: "funded_balance",
+        question: "q",
+        answer: "The funded book stands at £5.4MM.",
+        interpreted: null,
+        artifacts: [],
+        asOfDisplay: "30 November 2025",
+        portfolioScope: "scope",
+        followUps: [],
+        synthetic: true,
+        usage: { questionsUsed: 1, questionsRemaining: 11 },
+      }),
+    );
+
+    await waitFor(() => expect(status).toHaveTextContent(/answer ready/i));
+  });
+
+  it("announces a refusal without repeating the visible wording", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          status: "unsupported",
+          intentId: "temporal_movement",
+          question: "q",
+          answer: "Temporal comparison needs two governed reporting periods.",
+          productionNote: "In a production Trakt environment…",
+          asOfDisplay: "30 November 2025",
+          portfolioScope: "scope",
+          followUps: [],
+          synthetic: true,
+          usage: { questionsUsed: 1, questionsRemaining: 11 },
+        }),
+      ),
+    );
+
+    render(<CopilotDemo meta={META} />);
+    await user.click(
+      screen.getByRole("button", { name: /how has the portfolio changed since last month/i }),
+    );
+
+    const status = screen.getByRole("status");
+    await waitFor(() => expect(status).toHaveTextContent(/declined that question/i));
+    // The visible heading says something different, so nothing is read twice.
+    expect(status).not.toHaveTextContent(/not supported in this demonstration/i);
+  });
+
+  it("announces an error so a screen-reader user is not left waiting", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse({ error: "Too many requests." }, 429)),
+    );
+
+    render(<CopilotDemo meta={META} />);
+    await user.click(screen.getByRole("button", { name: /which regions have the highest exposure/i }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent(/too many requests/i),
+    );
+  });
+
+  it("keeps the transcript out of the live region", () => {
+    render(<CopilotDemo meta={META} />);
+    // Only the short status region is live; a long answer is not read wholesale.
+    const live = document.querySelectorAll("[aria-live]");
+    expect(live).toHaveLength(1);
+    expect(live[0]).toHaveClass("sr-only");
+  });
+});
+
+describe("Nav — keyboard behaviour", () => {
+  it("moves focus into the menu, traps Tab and restores focus on Escape", async () => {
+    const user = userEvent.setup();
+    render(<Nav />);
+
+    const toggle = screen.getByRole("button", { name: /open menu/i });
+    await user.click(toggle);
+
+    const menu = document.getElementById("mobile-nav");
+    expect(menu).toBeInTheDocument();
+    // Focus lands on the first item in the menu, not left on the page behind.
+    await waitFor(() => expect(menu).toContainElement(document.activeElement as HTMLElement));
+
+    await user.keyboard("{Escape}");
+    expect(document.getElementById("mobile-nav")).not.toBeInTheDocument();
+    // And returns to the control that opened it.
+    expect(screen.getByRole("button", { name: /open menu/i })).toHaveFocus();
+  });
+});
+
 describe("LeadForm", () => {
   it("labels every field and requires consent", () => {
     render(<LeadForm />);

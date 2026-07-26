@@ -1,5 +1,15 @@
 {
   "packVersion": 1,
+  "source": {
+    "clientId": "synthetic_demo",
+    "portfolioId": "SYNTHETIC_ERE_Portfolio_012026",
+    "currency": "GBP",
+    "assetClass": "equity_release",
+    "reportingDate": "2025-11-30",
+    "totalBalance": 5382462.92,
+    "exposures": 36,
+    "canonicalSha256": "2b98576cf223cc53b434330c3c73e0623a936988ac3b8458e07c622bfe61339f"
+  },
   "client": {
     "id": "synthetic_demo",
     "name": "Synthetic Demo Lender",
@@ -1672,8 +1682,8 @@
         "since december",
         "growth"
       ],
-      "reason": "Temporal comparison needs two governed reporting periods. The public demonstration publishes a single snapshot (30 November 2025), so there is no prior period to compare against and Trakt will not estimate one.",
-      "productionNote": "In a client environment, Trakt holds a governed snapshot history and answers month-on-month, quarter-on-quarter and since-inception movement, with a reconciliation of every driver of the change."
+      "reason": "This public demonstration contains a single governed reporting period — the 30 November 2025 snapshot of 36 funded exposures — so it cannot calculate movement between periods. Trakt will not estimate a prior position it does not hold.",
+      "productionNote": "In a production Trakt environment, this answer is generated from governed historical snapshots: month-on-month, quarter-on-quarter and since-inception movement, with a reconciliation of every driver of the change."
     },
     {
       "id": "pipeline",
@@ -1691,8 +1701,8 @@
         "expected completions",
         "what will we fund"
       ],
-      "reason": "Pipeline analytics run on an application-stage dataset. The public demonstration publishes only the funded loan tape, so there is no pipeline to summarise.",
-      "productionNote": "In a client environment, Trakt runs pipeline snapshots, the origination funnel, conversion analysis and expected-funding forecasts alongside the funded book."
+      "reason": "This public demonstration contains only the funded loan tape for the 30 November 2025 snapshot, so it cannot calculate pipeline volumes, conversion or expected completions — there is no application-stage data behind it.",
+      "productionNote": "In a production Trakt environment, this answer is generated from governed pipeline feeds: application-stage snapshots, the origination funnel, conversion analysis and expected-funding forecasts alongside the funded book."
     },
     {
       "id": "arrears",
@@ -1709,8 +1719,8 @@
         "recoveries",
         "in arrears"
       ],
-      "reason": "This synthetic equity release book carries no arrears or default balances, so an arrears answer would be meaningless rather than merely empty.",
-      "productionNote": "Arrears, default, forbearance and loss analytics are standard Trakt portfolio analytics where the portfolio's own data supports them."
+      "reason": "This public demonstration contains 36 performing equity release exposures with no arrears, default or loss balances recorded, so it cannot calculate delinquency measures — an answer here would be meaningless rather than merely empty.",
+      "productionNote": "In a production Trakt environment, this answer is generated from governed servicing data: arrears, default, forbearance and loss analytics, where the portfolio's own data supports them."
     },
     {
       "id": "loan_level",
@@ -1732,8 +1742,8 @@
         "export the data",
         "csv"
       ],
-      "reason": "The public demonstration returns aggregated portfolio measures only. Exposure-level records are never exposed on this page, even for synthetic data.",
-      "productionNote": "Exposure-level drill-through exists in the Trakt workspace, governed by role-based access within the client environment."
+      "reason": "This public demonstration returns aggregated portfolio measures only, so it cannot show exposure-level records. Loan-level data is never exposed on this page, even for a synthetic portfolio.",
+      "productionNote": "In a production Trakt environment, exposure-level drill-through is available in the Trakt workspace, generated from the governed canonical dataset and controlled by role-based access."
     }
   ]
 }

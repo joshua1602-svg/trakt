@@ -60,7 +60,7 @@ export function ReportPreview({
         <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
           <div>
             <p className="text-sm font-semibold text-ink-100">{payload.documentTitle}</p>
-            <p className="mt-0.5 text-[11px] text-ink-400">{payload.documentSubtitle}</p>
+            <p className="mt-0.5 break-words text-[11px] text-ink-400">{payload.documentSubtitle}</p>
           </div>
           <Badge tone="synthetic">Synthetic preview</Badge>
         </header>

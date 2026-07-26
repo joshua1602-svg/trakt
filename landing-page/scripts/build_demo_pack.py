@@ -30,9 +30,11 @@ reproducible from the committed synthetic data.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -43,6 +45,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 import pandas as pd  # noqa: E402
+import yaml  # noqa: E402
 
 from mi_agent.mi_agent_workflow import run_mi_agent_query  # noqa: E402
 from mi_agent.mi_query_validator import load_mi_semantics  # noqa: E402
@@ -284,15 +287,16 @@ CONTROLLED_UNSUPPORTED: List[Dict[str, str]] = [
             "last quarter", "since december", "growth",
         ],
         "reason": (
-            "Temporal comparison needs two governed reporting periods. The public "
-            "demonstration publishes a single snapshot (30 November 2025), so "
-            "there is no prior period to compare against and Trakt will not "
-            "estimate one."
+            "This public demonstration contains a single governed reporting "
+            "period — the 30 November 2025 snapshot of 36 funded exposures — so "
+            "it cannot calculate movement between periods. Trakt will not "
+            "estimate a prior position it does not hold."
         ),
         "productionNote": (
-            "In a client environment, Trakt holds a governed snapshot history and "
-            "answers month-on-month, quarter-on-quarter and since-inception "
-            "movement, with a reconciliation of every driver of the change."
+            "In a production Trakt environment, this answer is generated from "
+            "governed historical snapshots: month-on-month, quarter-on-quarter "
+            "and since-inception movement, with a reconciliation of every driver "
+            "of the change."
         ),
     },
     {
@@ -304,12 +308,14 @@ CONTROLLED_UNSUPPORTED: List[Dict[str, str]] = [
             "forecast", "expected completions", "what will we fund",
         ],
         "reason": (
-            "Pipeline analytics run on an application-stage dataset. The public "
-            "demonstration publishes only the funded loan tape, so there is no "
-            "pipeline to summarise."
+            "This public demonstration contains only the funded loan tape for "
+            "the 30 November 2025 snapshot, so it cannot calculate pipeline "
+            "volumes, conversion or expected completions — there is no "
+            "application-stage data behind it."
         ),
         "productionNote": (
-            "In a client environment, Trakt runs pipeline snapshots, the "
+            "In a production Trakt environment, this answer is generated from "
+            "governed pipeline feeds: application-stage snapshots, the "
             "origination funnel, conversion analysis and expected-funding "
             "forecasts alongside the funded book."
         ),
@@ -322,13 +328,15 @@ CONTROLLED_UNSUPPORTED: List[Dict[str, str]] = [
             "impairment", "write-off", "loss", "recoveries", "in arrears",
         ],
         "reason": (
-            "This synthetic equity release book carries no arrears or default "
-            "balances, so an arrears answer would be meaningless rather than "
-            "merely empty."
+            "This public demonstration contains 36 performing equity release "
+            "exposures with no arrears, default or loss balances recorded, so it "
+            "cannot calculate delinquency measures — an answer here would be "
+            "meaningless rather than merely empty."
         ),
         "productionNote": (
-            "Arrears, default, forbearance and loss analytics are standard Trakt "
-            "portfolio analytics where the portfolio's own data supports them."
+            "In a production Trakt environment, this answer is generated from "
+            "governed servicing data: arrears, default, forbearance and loss "
+            "analytics, where the portfolio's own data supports them."
         ),
     },
     {
@@ -341,13 +349,14 @@ CONTROLLED_UNSUPPORTED: List[Dict[str, str]] = [
             "download the tape", "export the data", "csv",
         ],
         "reason": (
-            "The public demonstration returns aggregated portfolio measures only. "
-            "Exposure-level records are never exposed on this page, even for "
-            "synthetic data."
+            "This public demonstration returns aggregated portfolio measures "
+            "only, so it cannot show exposure-level records. Loan-level data is "
+            "never exposed on this page, even for a synthetic portfolio."
         ),
         "productionNote": (
-            "Exposure-level drill-through exists in the Trakt workspace, governed "
-            "by role-based access within the client environment."
+            "In a production Trakt environment, exposure-level drill-through is "
+            "available in the Trakt workspace, generated from the governed "
+            "canonical dataset and controlled by role-based access."
         ),
     },
 ]
@@ -548,11 +557,167 @@ def _top_rows(publics: List[Dict[str, Any]]) -> tuple[Optional[str], Optional[st
 # --------------------------------------------------------------------------- #
 # Engine invocation
 # --------------------------------------------------------------------------- #
-class Engine:
-    """Thin holder for the prepared dataset + semantics registry."""
+class DemoSourceMismatch(RuntimeError):
+    """The resolved dataset is not the one this landing page is pinned to."""
 
-    def __init__(self) -> None:
-        raw = pd.read_csv(CANONICAL, low_memory=False)
+
+@dataclass(frozen=True)
+class DemoSource:
+    """An explicitly pinned demo dataset.
+
+    Selection is deterministic and fails closed: the generator names one file,
+    asserts its identity against the expectations below, and aborts rather than
+    publishing figures from whatever dataset happened to resolve. There is no
+    fallback path — in particular no fallback to whatever
+    ``mi_agent_api.data_source`` would resolve as ``KIND_SYNTHETIC_DEMO``,
+    because a silent substitution is exactly the failure this guards against.
+
+    To repoint the landing page at a different governed portfolio, change this
+    one object. Nothing else in the generator, and nothing at all in the
+    TypeScript, needs to know which dataset is in use.
+    """
+
+    client_id: str
+    client_name: str
+    portfolio_id: str
+    canonical_path: Path
+    config_path: Path
+    expected_currency: str
+    expected_asset_class: str
+    expected_reporting_date: str
+    expected_min_balance: float
+    expected_max_balance: float
+    expected_min_exposures: int
+    #: SHA-256 of the canonical CSV. Pins the exact bytes the pack was built
+    #: from, so a silently edited dataset is caught even if the totals still
+    #: fall inside the range above.
+    expected_sha256: str
+
+    def fingerprint(self) -> str:
+        digest = hashlib.sha256()
+        with self.canonical_path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+
+#: The portfolio this landing page publishes.
+#:
+#: NOTE ON PROVENANCE — read before changing.
+#: This is the only governed portfolio dataset that exists in the repository.
+#: A full search (every CSV with a balance column, every fixture, every mock,
+#: git history, all branches, all untracked files) found no dataset between
+#: £1.8bn and £2.0bn and no demo-video source material of any kind. The
+#: largest figures elsewhere in the repository — £842.6MM and £0.97BN in
+#: `frontend/mi-agent-ui/src/data/mockResponses.ts` — are hard-coded prose and
+#: literal arrays inside `MockAgentClient`, flagged `mock: true`, with no rows
+#: behind them; they are display copy for the workspace's offline mode, not a
+#: portfolio. See `docs/implementation-note.md` § "Demo source provenance".
+#:
+#: If a larger governed portfolio is added to the repository, repoint the
+#: landing page by editing this object and re-running the generator. The
+#: assertions below will refuse anything that does not match.
+DEMO_SOURCE = DemoSource(
+    client_id="synthetic_demo",
+    client_name="Synthetic Demo Lender",
+    portfolio_id="SYNTHETIC_ERE_Portfolio_012026",
+    canonical_path=CANONICAL,
+    config_path=CLIENT_CONFIG,
+    expected_currency="GBP",
+    expected_asset_class="equity_release",
+    expected_reporting_date="2025-11-30",
+    expected_min_balance=5_000_000.0,
+    expected_max_balance=6_000_000.0,
+    expected_min_exposures=30,
+    expected_sha256="2b98576cf223cc53b434330c3c73e0623a936988ac3b8458e07c622bfe61339f",
+)
+
+
+def _mismatch(source: DemoSource, problems: List[str]) -> DemoSourceMismatch:
+    try:
+        shown = source.canonical_path.relative_to(_REPO_ROOT)
+    except ValueError:
+        shown = source.canonical_path
+    return DemoSourceMismatch(
+        "Landing-page demo source mismatch: resolved portfolio does not "
+        "match the portfolio this landing page is pinned to.\n  - "
+        + "\n  - ".join(problems)
+        + f"\n\nPinned source: {source.client_name} / {source.portfolio_id}"
+        f"\nResolved file: {shown}"
+        "\n\nThe generator will not publish figures from an unverified "
+        "dataset. Fix the dataset, or repoint DEMO_SOURCE deliberately.")
+
+
+def _assert_source_file(source: DemoSource) -> None:
+    """Identity checks that run BEFORE the dataset is parsed.
+
+    Ordering matters: a substituted file must fail with a clear mismatch, not
+    with whatever schema error the preparation step happens to raise first.
+    """
+    if not source.canonical_path.exists():
+        raise _mismatch(source, ["the pinned canonical dataset does not exist"])
+    if not source.config_path.exists():
+        raise _mismatch(source, ["the pinned client config does not exist"])
+
+    actual_sha = source.fingerprint()
+    # A placeholder hash means "not yet pinned"; a real one is enforced.
+    if set(source.expected_sha256) != {"0"} and actual_sha != source.expected_sha256:
+        raise _mismatch(source, [
+            f"canonical fingerprint {actual_sha[:16]}… != "
+            f"{source.expected_sha256[:16]}… (the dataset was replaced or edited)"])
+
+
+def _assert_source_identity(source: DemoSource, total_balance: float,
+                            loan_count: int, as_of: str) -> None:
+    """Identity checks that need the prepared dataset.
+
+    Every check names what it expected and what it got, so a mismatch is
+    diagnosable from the error alone.
+    """
+    problems: List[str] = []
+
+    config = yaml.safe_load(source.config_path.read_text(encoding="utf-8")) or {}
+    client = config.get("client") or {}
+    portfolio = config.get("portfolio") or {}
+
+    if client.get("client_id") != source.client_id:
+        problems.append(
+            f"client id {client.get('client_id')!r} != {source.client_id!r}")
+    if client.get("display_name") != source.client_name:
+        problems.append(
+            f"client name {client.get('display_name')!r} != {source.client_name!r}")
+    if portfolio.get("asset_class") != source.expected_asset_class:
+        problems.append(
+            f"asset class {portfolio.get('asset_class')!r} != "
+            f"{source.expected_asset_class!r}")
+    if portfolio.get("base_currency") != source.expected_currency:
+        problems.append(
+            f"currency {portfolio.get('base_currency')!r} != "
+            f"{source.expected_currency!r}")
+    if as_of != source.expected_reporting_date:
+        problems.append(
+            f"reporting date {as_of!r} != {source.expected_reporting_date!r}")
+    if not (source.expected_min_balance <= total_balance <= source.expected_max_balance):
+        problems.append(
+            f"total balance {total_balance:,.2f} outside the expected range "
+            f"{source.expected_min_balance:,.0f}–{source.expected_max_balance:,.0f}")
+    if loan_count < source.expected_min_exposures:
+        problems.append(
+            f"exposure count {loan_count} below the expected minimum "
+            f"{source.expected_min_exposures}")
+
+    if problems:
+        raise _mismatch(source, problems)
+
+
+class Engine:
+    """The pinned dataset, prepared exactly as the MI API prepares it."""
+
+    def __init__(self, source: DemoSource = DEMO_SOURCE) -> None:
+        self.source = source
+        # Verified before a single row is parsed.
+        _assert_source_file(source)
+        raw = pd.read_csv(source.canonical_path, low_memory=False)
         self.frame, self.prep_report = prepare_funded_mi_dataset(raw)
         self.semantics = load_mi_semantics(SEMANTICS)
         self.total_balance = float(
@@ -561,14 +726,19 @@ class Engine:
         self.loan_count = int(len(self.frame))
         cutoff = self.frame.get("data_cut_off_date")
         values = sorted({str(v) for v in cutoff.dropna().unique()}) if cutoff is not None else []
-        self.as_of = values[-1] if values else "2025-11-30"
+        self.as_of = values[-1] if values else source.expected_reporting_date
+        self.fingerprint = source.fingerprint()
+
+        # Nothing below this line runs until the dataset is verified.
+        _assert_source_identity(source, self.total_balance, self.loan_count,
+                                self.as_of)
 
     def run(self, question: str) -> Dict[str, Any]:
         workflow = run_mi_agent_query(question, self.frame, self.semantics)
         if not workflow.get("ok"):
             raise RuntimeError(
                 f"engine refused {question!r}: {workflow.get('error')}")
-        return adapt_workflow_result(workflow, portfolio_id="synthetic_demo",
+        return adapt_workflow_result(workflow, portfolio_id=self.source.client_id,
                                      as_of=self.as_of)
 
 
@@ -957,6 +1127,19 @@ def build_pack() -> Dict[str, Any]:
 
     return {
         "packVersion": PACK_VERSION,
+        # Identity of the dataset this pack was built from. The runtime
+        # validates it against its own pinned expectations, so a pack built
+        # from the wrong portfolio cannot be served even if it is committed.
+        "source": {
+            "clientId": engine.source.client_id,
+            "portfolioId": engine.source.portfolio_id,
+            "currency": engine.source.expected_currency,
+            "assetClass": engine.source.expected_asset_class,
+            "reportingDate": engine.as_of,
+            "totalBalance": round(engine.total_balance, 2),
+            "exposures": engine.loan_count,
+            "canonicalSha256": engine.fingerprint,
+        },
         "client": {
             "id": "synthetic_demo",
             "name": "Synthetic Demo Lender",

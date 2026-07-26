@@ -58,7 +58,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   const started = Date.now();
   const ip = clientIp(request.headers);
 
-  const limit = checkRateLimit(`query:${ip}`, RATE_LIMITS.demoPerIp);
+  const limit = await checkRateLimit(`query:${ip}`, RATE_LIMITS.demoPerIp);
   if (!limit.allowed) {
     logRequest({ route: "demo/query", outcome: "rate_limited" });
     return rateLimitedResponse(limit.retryAfterSeconds);

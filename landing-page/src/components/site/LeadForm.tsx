@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 
 import { buttonStyles, cx } from "@/components/ui";
-import { track } from "@/lib/analytics";
+import { readAttribution, track } from "@/lib/analytics";
 import {
   LEAD_FIELD_LIMITS,
   validateLead,
@@ -53,6 +53,8 @@ export function LeadForm() {
       consent: form.get("consent") === "on",
       website: String(form.get("website") ?? ""),
       elapsedMs: Date.now() - mountedAt.current,
+      // Re-sanitised server-side; the browser is not trusted for this.
+      attribution: readAttribution(),
     };
 
     const local = validateLead(payload);
@@ -65,7 +67,6 @@ export function LeadForm() {
 
     setErrors({});
     setStatus("submitting");
-    track("lead_form_submit");
 
     try {
       const response = await fetch("/api/leads", {
@@ -81,7 +82,7 @@ export function LeadForm() {
 
       if (response.ok) {
         setStatus("success");
-        track("lead_form_success");
+        track("lead_submit_success");
         return;
       }
 
@@ -93,11 +94,11 @@ export function LeadForm() {
             ? "Too many requests. Please wait a moment and try again."
             : "Please check the highlighted fields and try again."),
       );
-      track("lead_form_error", { outcome: String(response.status) });
+      track("lead_submit_failure", { outcome: String(response.status) });
     } catch {
       setStatus("error");
       setMessage("We could not reach the server. Please try again.");
-      track("lead_form_error", { outcome: "network" });
+      track("lead_submit_failure", { outcome: "network" });
     }
   }
 

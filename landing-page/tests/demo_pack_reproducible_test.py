@@ -45,6 +45,127 @@ def test_committed_pack_matches_a_fresh_build():
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def _generator():
+    """Import the generator module under its own name (it uses dataclasses)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("bdp", str(_GENERATOR))
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["bdp"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_resolved_dataset_is_the_pinned_demo_source():
+    """The generator publishes from exactly one dataset, named explicitly."""
+    m = _generator()
+    engine = m.Engine(m.DEMO_SOURCE)
+    assert engine.source.client_id == "synthetic_demo"
+    assert engine.source.portfolio_id == "SYNTHETIC_ERE_Portfolio_012026"
+    assert engine.as_of == m.DEMO_SOURCE.expected_reporting_date
+    assert (m.DEMO_SOURCE.expected_min_balance
+            <= engine.total_balance
+            <= m.DEMO_SOURCE.expected_max_balance)
+
+
+@pytest.mark.parametrize("field,value,expected", [
+    ("expected_min_balance", 1_800_000_000, "outside the expected range"),
+    ("client_id", "client_001", "client id"),
+    ("expected_reporting_date", "2026-01-31", "reporting date"),
+    ("expected_currency", "EUR", "currency"),
+    ("expected_min_exposures", 1000, "below the expected minimum"),
+    ("expected_asset_class", "auto_loan", "asset class"),
+])
+def test_a_mismatched_expectation_fails_closed(field, value, expected):
+    """Every identity axis refuses rather than publishing the wrong figures.
+
+    The balance case is the one that matters most: it is exactly the scenario
+    where a landing page pinned to a large portfolio would otherwise silently
+    publish a small one.
+    """
+    import dataclasses
+    m = _generator()
+    source = dataclasses.replace(
+        m.DEMO_SOURCE,
+        **{field: value},
+        # The fingerprint would fire first; this isolates the axis under test.
+        expected_sha256="0" * 64,
+    )
+    if field == "expected_min_balance":
+        source = dataclasses.replace(source, expected_max_balance=2_000_000_000)
+
+    with pytest.raises(m.DemoSourceMismatch) as excinfo:
+        m.Engine(source)
+    assert expected in str(excinfo.value)
+    assert "does not match" in str(excinfo.value)
+
+
+def test_a_substituted_dataset_is_caught_before_it_is_parsed():
+    """A replaced or edited canonical fails on its fingerprint, not on a
+    downstream schema error — so the message is diagnosable."""
+    import dataclasses
+    import shutil
+    import tempfile
+    m = _generator()
+    other = Path(tempfile.mkdtemp()) / "substituted.csv"
+    shutil.copy(_REPO_ROOT / "canonical_snapshot_demo.csv", other)
+
+    with pytest.raises(m.DemoSourceMismatch) as excinfo:
+        m.Engine(dataclasses.replace(m.DEMO_SOURCE, canonical_path=other))
+    assert "fingerprint" in str(excinfo.value)
+
+
+def test_the_generator_has_no_silent_fallback():
+    """There is no code path from a failed source check to a published pack.
+
+    Checked against the parsed module rather than its text, so the prose that
+    *explains* the absent fallback does not itself trip the assertion.
+    """
+    import ast
+    tree = ast.parse(_GENERATOR.read_text(encoding="utf-8"))
+
+    # The data-source resolver — the thing that would silently substitute the
+    # bundled demo dataset — is never imported.
+    imported = {
+        node.module
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module
+    }
+    assert not any("data_source" in name for name in imported), imported
+
+    # The identity assertions are unconditional statements in Engine.__init__,
+    # not guarded by a flag or a try/except.
+    engine = next(
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef) and node.name == "Engine"
+    )
+    init = next(
+        node for node in engine.body
+        if isinstance(node, ast.FunctionDef) and node.name == "__init__"
+    )
+    called = {
+        node.func.id
+        for node in ast.walk(init)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    assert "_assert_source_file" in called
+    assert "_assert_source_identity" in called
+    assert not any(isinstance(node, (ast.Try, ast.If)) for node in init.body), (
+        "source verification must not be conditional")
+
+
+def test_pack_carries_its_source_identity(pack):
+    """The runtime validates the pack it is served, so the pack must say what
+    it was built from."""
+    source = pack["source"]
+    assert source["clientId"] == "synthetic_demo"
+    assert source["portfolioId"] == "SYNTHETIC_ERE_Portfolio_012026"
+    assert source["currency"] == "GBP"
+    assert source["reportingDate"] == "2025-11-30"
+    assert len(source["canonicalSha256"]) == 64
+    assert source["totalBalance"] == pack["portfolio"]["totalBalance"]
+    assert source["exposures"] == pack["portfolio"]["loanCount"]
+
+
 def test_pack_describes_the_repository_synthetic_client(pack):
     assert pack["client"]["id"] == "synthetic_demo"
     assert pack["client"]["name"] == "Synthetic Demo Lender"

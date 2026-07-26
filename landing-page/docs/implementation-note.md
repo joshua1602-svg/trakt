@@ -143,7 +143,79 @@ Next.js 16 (App Router) + TypeScript + Tailwind CSS 4 + Recharts, deployed to
 first-party server routes that hold secrets (lead delivery, rate-limit state,
 session signing). SWA's static hosting cannot do that without adding a separate
 Functions app; App Service is already an established deployment target in this
-repository (`trakt-mi-api`), so this adds no new Azure service type. Tailwind 4,
-TypeScript and Recharts are all already repository conventions
-(`frontend/mi-agent-ui/package.json`). A Dockerfile is also provided for Azure
+repository (`trakt-mi-api`), so this adds no new Azure service type. Tailwind 4 and
+TypeScript are already repository conventions
+(`frontend/mi-agent-ui/package.json`); no charting library is used (see the
+note in `src/components/demo/Artifacts.tsx`). A Dockerfile is also provided for Azure
 Container Apps.
+
+---
+
+# Addendum — demo source provenance
+
+Added during production hardening, in response to a report that the landing
+page was using the wrong synthetic portfolio: that it should use the
+**~£1.9bn portfolio from the Trakt demo video** rather than the £5.38m
+`SYNTHETIC_ERE_Portfolio_012026`.
+
+## The search
+
+The repository was searched exhaustively for that portfolio and for the demo
+video itself:
+
+| Search | Result |
+|---|---|
+| `1.9bn`, `£1.9bn`, `1.9B`, `1900000000`, `1,900,000,000` and near variants | **no match** |
+| any integer between 1.8x10^9 and 2.0x10^9, any file type | **no match** |
+| every CSV in the repository with a balance column, totalled programmatically | 12 files; **largest is £5,382,462.92 / 36 exposures** |
+| `*.xlsx`, `*.pptx`, `*.potx` | only the ESMA XSD template and the NUTS lookup — no portfolio |
+| demo-video scripts, storyboards, transcripts, voiceover, screencasts | **none exist** |
+| `.mp4` / `.webm` / `.mov`, or a hosted video URL in any config | **none exist** |
+| Copilot test fixtures (`mi_agent_api/tests/test_copilot_actions.py`) | a 1-loan, £100,000 tape |
+| declarative-agent package (`deploy/copilot-agent/*`) | no portfolio totals at all |
+| git history for deleted datasets; all branches; untracked and ignored files | **nothing** |
+
+## What the large figures elsewhere actually are
+
+`frontend/mi-agent-ui/src/data/mockResponses.ts` contains £842.6MM, £84.2MM and
+£0.97BN. These are **not** a portfolio:
+
+* they are hard-coded strings inside narrative prose;
+* the artifacts they accompany are literal arrays (`EXEC_KPIS`, `REGION_ROWS`)
+  in `mockArtifacts.ts`;
+* every artifact is stamped `mock: true`;
+* they are served by `MockAgentClient`, the React workspace's offline mode.
+
+There are no rows behind them. Using them would have meant copying displayed
+totals with no traceable data source, and fabricating the distributions the
+landing page publishes — both explicitly ruled out.
+
+## Conclusion
+
+**The ~£1.9bn video-demo portfolio does not exist in this repository, and
+neither does the demo video.** `SYNTHETIC_ERE_Portfolio_012026` is not a
+"generic small dataset" chosen by default — it is the *only* governed portfolio
+dataset present, and it is the one `mi_agent_api/data_source.py` resolves as
+the bundled demo.
+
+Rather than fabricate a replacement, the selection was made **explicit and
+fail-closed** instead. `DEMO_SOURCE` in `scripts/build_demo_pack.py` names the
+dataset, its client, its portfolio id, its reporting date, its currency, its
+asset class, its expected balance range, a minimum exposure count and a SHA-256
+of the canonical file. Any mismatch aborts the build with
+`Landing-page demo source mismatch`. There is no fallback path — `data_source`
+is not imported, and a test asserts it never will be.
+
+The practical consequence: **if the £1.9bn dataset is added to the repository,
+edit `DEMO_SOURCE` and re-run the generator.** If someone points the generator
+at the wrong dataset, it refuses. A test proves this by pinning the expected
+range to 1.8-2.0bn and asserting the generator rejects the £5.38m portfolio:
+
+```
+BLOCKED  1.8bn-2.0bn expected -> total balance 5,382,462.92 outside the
+                                 expected range 1,800,000,000-2,000,000,000
+```
+
+The runtime enforces the same identity independently: `EXPECTED_DEMO_SOURCE` in
+`src/lib/config.ts` validates the pack it is about to serve, so a pack built
+from the wrong portfolio cannot be served even if it were committed.

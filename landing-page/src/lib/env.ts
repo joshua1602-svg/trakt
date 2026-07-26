@@ -9,6 +9,12 @@ function str(name: string, fallback: string): string {
   return value && value.trim() ? value.trim() : fallback;
 }
 
+function bool(name: string, fallback: boolean): boolean {
+  const raw = process.env[name]?.trim().toLowerCase();
+  if (raw === undefined || raw === "") return fallback;
+  return raw === "true" || raw === "1" || raw === "yes";
+}
+
 function int(name: string, fallback: number, min: number, max: number): number {
   const raw = process.env[name];
   const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
@@ -55,6 +61,18 @@ export const RATE_LIMITS = {
  */
 export const RATE_LIMIT_STORE_URL = process.env.RATE_LIMIT_STORE_URL?.trim() || null;
 
+/**
+ * Deliberate acceptance of in-process rate limiting in production.
+ *
+ * Only correct on a single instance. Left false so that scaling out without a
+ * shared store fails configuration validation rather than silently multiplying
+ * every limit by the replica count.
+ */
+export const ALLOW_IN_MEMORY_RATE_LIMIT = bool("ALLOW_IN_MEMORY_RATE_LIMIT", false);
+
+/** Bounded wait for the shared store before falling back to the local policy. */
+export const RATE_LIMIT_STORE_TIMEOUT_MS = int("RATE_LIMIT_STORE_TIMEOUT_MS", 250, 25, 5000);
+
 /* ---------------------------- Lead delivery ------------------------------ */
 export type LeadProvider = "file" | "email" | "webhook" | "console";
 
@@ -63,6 +81,9 @@ export const LEAD_NOTIFICATION_EMAIL = process.env.LEAD_NOTIFICATION_EMAIL?.trim
 export const LEAD_FROM_EMAIL = process.env.LEAD_FROM_EMAIL?.trim() || null;
 export const EMAIL_API_KEY = process.env.EMAIL_API_KEY?.trim() || null;
 export const EMAIL_API_URL = str("EMAIL_API_URL", "https://api.resend.com/emails");
+/** Informational only — never logged, never returned to a caller. */
+export const EMAIL_PROVIDER = str("EMAIL_PROVIDER", "resend");
+export const LEAD_DELIVERY_TIMEOUT_MS = int("LEAD_DELIVERY_TIMEOUT_MS", 8000, 1000, 30000);
 export const CRM_WEBHOOK_URL = process.env.CRM_WEBHOOK_URL?.trim() || null;
 export const CRM_WEBHOOK_SECRET = process.env.CRM_WEBHOOK_SECRET?.trim() || null;
 export const LEAD_STORE_DIR = str("LEAD_STORE_DIR", ".leads");
@@ -75,6 +96,9 @@ export const ANALYTICS_PROVIDER = str(
 ) as AnalyticsProvider;
 export const APPINSIGHTS_CONNECTION_STRING =
   process.env.APPLICATIONINSIGHTS_CONNECTION_STRING?.trim() || null;
+
+/** Per-IP cap on analytics events. Generous — this must never shape the page. */
+export const ANALYTICS_RATE_LIMIT_PER_MINUTE = int("ANALYTICS_RATE_LIMIT_PER_MINUTE", 120, 1, 6000);
 
 /** Bot protection: a form completed faster than this is rejected. */
 export const MIN_FORM_FILL_MS = int("LEAD_MIN_FILL_MS", 2500, 0, 60_000);

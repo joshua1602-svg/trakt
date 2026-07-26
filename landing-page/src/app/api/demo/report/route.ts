@@ -44,7 +44,7 @@ function usage(used: number): DemoReportResponse["usage"] {
  */
 export async function POST(request: Request): Promise<NextResponse> {
   const ip = clientIp(request.headers);
-  const limit = checkRateLimit(`report:${ip}`, RATE_LIMITS.reportPerIp);
+  const limit = await checkRateLimit(`report:${ip}`, RATE_LIMITS.reportPerIp);
   if (!limit.allowed) {
     logRequest({ route: "demo/report", outcome: "rate_limited" });
     return rateLimitedResponse(limit.retryAfterSeconds);

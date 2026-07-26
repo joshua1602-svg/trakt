@@ -24,7 +24,10 @@ relied on.
 - [Deployment](#deployment)
 - [Domain setup](#domain-setup)
 - [Lead delivery setup](#lead-delivery-setup)
+- [Rate-limit store setup](#rate-limit-store-setup)
 - [Analytics setup](#analytics-setup)
+- [Production configuration validation](#production-configuration-validation)
+- [Liveness versus readiness](#liveness-versus-readiness)
 - [Demo safety controls](#demo-safety-controls)
 - [Known limitations](#known-limitations)
 - [Updating the synthetic portfolio values](#updating-the-synthetic-portfolio-values)
@@ -78,7 +81,9 @@ exposure-level records, and reaches no client environment.
   │   /api/demo/query   allow-listed intent match → pre-computed answer  │
   │   /api/demo/report  allow-listed report id    → preview pages        │
   │   /api/leads        validate → one configured delivery adapter       │
+  │   /api/analytics    allow-listed events only                         │
   │   /api/health       liveness                                         │
+  │   /api/ready        readiness (configuration gate)                   │
   └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -148,6 +153,39 @@ demo (`KIND_SYNTHETIC_DEMO`) — the one the production Copilot action layer
 *refuses* to answer from, which is exactly why it is the right dataset for a
 public page.
 
+### The source is pinned and fails closed
+
+`DEMO_SOURCE` in `scripts/build_demo_pack.py` names the dataset explicitly and
+asserts its identity before a single figure is published: client id, client
+name, portfolio id, asset class, currency, reporting date, a balance range, a
+minimum exposure count, and a **SHA-256 of the canonical file**. Any mismatch
+aborts the build with `Landing-page demo source mismatch`, naming what it
+expected and what it found.
+
+There is no fallback. `mi_agent_api.data_source` is not imported, so the
+generator cannot silently resolve some other dataset; a test parses the module
+and asserts it never will.
+
+`src/lib/config.ts` enforces the same identity independently at runtime
+(`EXPECTED_DEMO_SOURCE`), validating the pack it is about to serve — so a pack
+built from the wrong portfolio cannot be served even if it were committed.
+
+**To point the landing page at a different governed portfolio**, edit
+`DEMO_SOURCE` and `EXPECTED_DEMO_SOURCE` together, then regenerate. Both are
+deliberate, reviewable edits.
+
+> **On the "£1.9bn demo-video portfolio".** A report during hardening said the
+> page should use a ~£1.9bn portfolio from the Trakt demo video. An exhaustive
+> search — every CSV with a balance column totalled programmatically, every
+> fixture, every mock, all spreadsheets, git history, all branches, untracked
+> and ignored files — found **no such dataset and no demo video anywhere in the
+> repository**. The largest figures elsewhere (£842.6MM, £0.97BN in
+> `frontend/mi-agent-ui/src/data/mockResponses.ts`) are hard-coded prose and
+> literal arrays flagged `mock: true`, with no rows behind them. See
+> `docs/implementation-note.md` § "Addendum — demo source provenance" for the
+> full evidence table. Rather than fabricate a replacement, the selection was
+> made explicit and fail-closed, as above.
+
 ---
 
 ## Trakt services reused
@@ -203,7 +241,8 @@ in production:
 | `LEAD_DELIVERY_PROVIDER` | **yes** | `file` \| `email` \| `webhook` \| `console`. |
 | `LEAD_NOTIFICATION_EMAIL`, `LEAD_FROM_EMAIL`, `EMAIL_API_KEY`, `EMAIL_API_URL` | for `email` | Transactional email delivery. |
 | `CRM_WEBHOOK_URL`, `CRM_WEBHOOK_SECRET` | for `webhook` | CRM/automation delivery, optionally HMAC-signed. |
-| `RATE_LIMIT_STORE_URL` | no | Shared rate-limit store for multi-instance deployments (see limitations). |
+| `RATE_LIMIT_STORE_URL` | **in production** | Shared rate-limit counter. Required unless `ALLOW_IN_MEMORY_RATE_LIMIT=true`. |
+| `ALLOW_IN_MEMORY_RATE_LIMIT` | no | Deliberate acceptance of single-instance operation. Default `false`. |
 | `DEMO_MAX_QUESTIONS_PER_SESSION`, `DEMO_MAX_REPORTS_PER_SESSION`, `DEMO_SESSION_TTL_SECONDS`, `DEMO_MAX_QUESTION_LENGTH`, `DEMO_MAX_BODY_BYTES` | no | Demo session limits. |
 | `RATE_LIMIT_DEMO_PER_MINUTE`, `RATE_LIMIT_REPORT_PER_MINUTE`, `RATE_LIMIT_LEAD_PER_HOUR` | no | Per-IP rate limits. |
 | `NEXT_PUBLIC_ANALYTICS_PROVIDER`, `APPLICATIONINSIGHTS_CONNECTION_STRING` | no | Analytics adapter. Default `none`. |
@@ -228,6 +267,8 @@ exists so it never needs to be.
 | `npm run test:e2e` | Playwright, desktop + mobile, against a production build |
 | `npm run demo-pack` | Regenerate `data/demo-pack.json` from the Trakt engine |
 | `npm run demo-pack:check` | Fail if the committed pack is stale |
+| `npm run validate-config` | Exercise the production configuration rules |
+| `npm run scan` | Scan the build output for secrets and internal references (run after `npm run build`) |
 
 ---
 
@@ -246,6 +287,23 @@ exists so it never needs to be.
   exposure-level column, internal query spec or file path is ever published.
 - `api-leads.test.ts` — validation, consent, honeypot, minimum fill time,
   cross-origin rejection, rate limiting, oversized body.
+- `config.test.ts` — the production configuration rules: canonical-origin
+  validation (https, bare origin, no loopback, no hard-coded Trakt hostname),
+  session-secret strength, refusal of the `file`/`console` lead adapters,
+  refusal of in-memory rate limiting without the override, App Insights without
+  a connection string, and that error messages name variables but never values.
+- `api-analytics.test.ts` — the event allow-list; that raw question text,
+  answers and email addresses cannot be recorded even when sent; that no IP or
+  user agent is recorded; oversized bodies, cross-origin beacons and malformed
+  JSON; and campaign-attribution sanitisation.
+- `lead-delivery.test.ts` — production refusal of development adapters; HTML and
+  plain-text rendering with escaping; one bounded retry on a transient failure
+  and none on a permanent one; that a provider failure throws rather than
+  reporting success; idempotent resubmission; webhook signing; and that no
+  credential appears in a thrown message.
+- `api-ready.test.ts` — readiness healthy and degraded; that liveness stays 200
+  while readiness returns 503; and that neither endpoint leaks paths, addresses,
+  provider names or internal module names.
 - `components.test.tsx` — hero renders; demo suggestions load; a supported
   interaction displays the answer with metrics and provenance; an unsupported
   interaction displays a clear message; reset works; typed submission; server
@@ -365,6 +423,20 @@ hard-coded**, so any of `trakt.<your-domain>`, `www.<your-domain>` or
    redirect the others to it, so search engines see a single URL. The page emits
    a canonical link for `NEXT_PUBLIC_SITE_URL` regardless.
 
+### Recommended hostname layout
+
+| Host | Use |
+|---|---|
+| the main Trakt domain, or `www.` | **the landing page** — one canonical origin, with every alternate 301-redirecting to it |
+| a separate hostname, e.g. `app.` | future authenticated client environments |
+
+Keeping the public marketing site and authenticated client environments on
+separate hostnames matters beyond tidiness: it keeps cookie scope, CSP and
+session boundaries genuinely separate, so nothing served to the public internet
+shares an origin with a client's data. `demo.` is available if you would rather
+the demonstration sat apart from the corporate site — the code does not care,
+because the origin is environment-driven throughout.
+
 Propagation is usually minutes; allow up to 48 hours. Verify with
 `curl -sI https://trakt.<your-domain>/api/health`.
 
@@ -374,14 +446,19 @@ Propagation is usually minutes; allow up to 48 hours. Verify with
 
 `LEAD_DELIVERY_PROVIDER` selects exactly one adapter. **A submission is never
 silently discarded** — an adapter either delivers or throws, and the route
-reports a real failure to the visitor instead of a false success.
+reports a real failure to the visitor rather than a false success.
 
 | Provider | Behaviour | Use |
 |---|---|---|
-| `file` (default) | Appends JSON Lines to `LEAD_STORE_DIR/leads.jsonl` | Development, and the documented development-safe adapter when no provider credentials exist |
-| `email` | POSTs to a Resend-compatible JSON API (`EMAIL_API_URL`), `reply_to` set to the enquirer | **Preferred for production** |
-| `webhook` | POSTs `{type, lead}` to `CRM_WEBHOOK_URL`, optionally signed `x-trakt-signature` (HMAC-SHA256 over the body) | CRM / automation platform |
-| `console` | Structured log line | Test suites |
+| `email` | POSTs to a Resend-compatible JSON API, HTML + plain text, `reply_to` set to the enquirer | **Production (preferred)** |
+| `webhook` | POSTs `{type, lead}` to `CRM_WEBHOOK_URL`, optionally signed `x-trakt-signature` (HMAC-SHA256 over the body), with an idempotency-key header | Production (CRM / automation) |
+| `file` | Appends JSON Lines to `LEAD_STORE_DIR/leads.jsonl` | **Development only** |
+| `console` | Structured log line | **Development only** (test suites) |
+
+**`file` and `console` are refused in production.** Configuration validation
+fails at startup, and `deliverLead` throws `CONFIG_LEAD_PROVIDER_UNSAFE` as a
+last line of defence. A landing page that silently discards enquiries is worse
+than one that will not start.
 
 To enable email delivery:
 
@@ -393,14 +470,110 @@ LEAD_NOTIFICATION_EMAIL=sales@<your-domain>
 ```
 
 Verify the sending domain with your provider (SPF/DKIM) or messages will be
-rejected. `EMAIL_API_KEY` is read server-side only and never reaches the browser.
+rejected. `EMAIL_API_KEY` is read server-side only, travels in the
+`Authorization` header (never the body), and never appears in a log line or an
+error message — asserted by tests.
+
+**What the adapter does**
+
+* **Timeout** — `LEAD_DELIVERY_TIMEOUT_MS` (default 8 s), enforced by
+  `AbortController`.
+* **One bounded retry** on a transient failure (5xx, 408, 429, network), with a
+  300 ms pause. A 4xx is not retried: it will not succeed. Deliberately one
+  retry and not more — the visitor is waiting, and a provider that fails twice
+  inside the timeout is down, not busy.
+* **Unique submission id** (`randomUUID`) returned to the visitor as
+  `reference`, and carried to the provider as an idempotency header, so a
+  follow-up can be matched to a notification.
+* **Idempotency** — an identical submission (same email, company, role and
+  message) inside a 10-minute window is suppressed rather than delivered twice.
+  Recorded only *after* a confirmed delivery, so a failure can still be retried.
+  In-process and therefore per-instance: the cost of a miss is one duplicate
+  notification, which is not worth a shared store and a new failure path on the
+  submit route.
+* **Structured internal logging, generic public response** — the provider's
+  status is logged for an operator; the visitor sees a 502 with an alternative
+  way to reach you.
+* **Attribution** is attached server-side and never echoed back.
+
+`.leads/` is git-ignored. Do not commit captured leads.
 
 Microsoft Graph mail is deliberately **not** wired up: the repository's only
 Entra integration (`mi_agent_api/copilot_auth.py`) is bearer-token *validation*
 for the Copilot routes, not an application identity with `Mail.Send`. Adding one
 is a tenant decision, so the preferred route here is the transactional provider.
 
-`.leads/` is git-ignored. Do not commit captured leads.
+### Who owns incoming leads
+
+Enquiries go to exactly one destination — `LEAD_NOTIFICATION_EMAIL` or
+`CRM_WEBHOOK_URL`. **Whoever owns that mailbox owns the response.** The form
+tells the visitor "we use your details only to respond, and do not add you to a
+marketing list"; honouring that is a business undertaking, not something the
+code can enforce. If lead handling changes, that copy must change with it (it
+is tracked in `docs/content-map.md`).
+
+**Retention.** The app itself retains nothing: no lead is written to disk in
+production, and the idempotency record holds a hash for ten minutes. Retention
+is entirely a property of the destination you configure — set it there, and
+document it in your privacy notice.
+
+---
+
+## Rate-limit store setup
+
+Fixed-window limiting over a pluggable store (`src/lib/rate-limit.ts`).
+
+| Adapter | When |
+|---|---|
+| in-memory | Development, and single-instance production with an explicit override |
+| shared | Any deployment with more than one replica |
+
+The shared adapter speaks a deliberately minimal HTTP contract, so it needs no
+client library and adds no dependency:
+
+```
+POST {RATE_LIMIT_STORE_URL}
+  { "key": "<opaque>", "windowSeconds": 60 }
+→ 200
+  { "count": 3, "resetAt": 1730000000000 }
+```
+
+Any Redis-backed counter, Azure Function or container satisfies it. The store is
+never trusted for anything but counting: it receives an opaque key and returns
+two numbers.
+
+### Behaviour when the shared store is unavailable
+
+A decision, stated rather than left implicit:
+
+* **Lead submission fails closed.** A lead is a state change with a real cost to
+  get wrong, and it is already the tightest limit on the site. If we cannot
+  count, we refuse.
+* **Demo queries degrade to the stricter local limit.** Marketing pages are
+  read-mostly and the demo is served from a static pack; making the page
+  unusable because a counter service blinked would trade a small abuse risk for
+  a total loss of function. Each instance then enforces the full per-IP limit
+  locally, so the worst case is N× the intended ceiling for the duration of the
+  outage — bounded, and strictly better than open.
+* **Analytics never fails the request**, under any condition.
+
+### Single-instance operation
+
+If no shared store is available, you may run **one** App Service instance with:
+
+```bash
+ALLOW_IN_MEMORY_RATE_LIMIT=true
+```
+
+This is a conscious, temporary arrangement and must be treated as such:
+
+* it is correct **only** at one instance — set *Scale out* to a fixed count of 1
+  and do not enable autoscale;
+* with N replicas every limit is effectively multiplied by N, silently;
+* counters reset on restart and on deployment;
+* without the override, production **refuses to start** (`CONFIG_RATE_LIMIT_STORE_REQUIRED`),
+  which is the point: scaling out is then a deliberate decision that forces you
+  to provision a store first.
 
 ---
 
@@ -411,25 +584,133 @@ is a tenant decision, so the preferred route here is the transactional provider.
 
 | Value | Behaviour |
 |---|---|
-| `none` (default) | No-op. Records nothing, anywhere. No third-party tracker is loaded by default. |
-| `appinsights` | Calls `window.appInsights.trackEvent` **if an operator has loaded the App Insights snippet**. This module never injects a script tag, so enabling it is an explicit deployment decision. |
-| `firstparty` | `sendBeacon` to a same-origin `/api/analytics` collector. **The route is not implemented** — add it before selecting this value. |
+| `none` (default) | No-op. Records nothing, anywhere. No third-party tracker is loaded. |
+| `appinsights` | Uses `window.appInsights.trackEvent` if an operator loaded the snippet; otherwise falls back to the first-party collector so events are not silently lost. This module never injects a script tag. |
+| `firstparty` | `sendBeacon` (with a `fetch` fallback) to this origin's `POST /api/analytics`. |
 
-**Events:** `hero_demo_click`, `demo_video_play`, `suggested_question_click`,
-`typed_question_submit`, `answer_supported`, `answer_unsupported`,
-`report_preview_request`, `session_limit_reached`, `demo_reset`,
-`capability_card_open`, `book_demo_click`, `lead_form_submit`,
-`lead_form_success`, `lead_form_error`.
+**The twelve events**, and nothing else: `hero_demo_click`, `video_play`,
+`demo_open`, `suggested_question_click`, `typed_question_submit`,
+`demo_answer_returned`, `demo_refusal_returned`, `report_preview_opened`,
+`capability_interaction`, `book_demo_click`, `lead_submit_success`,
+`lead_submit_failure`.
 
-**Data captured.** Only the event name plus a fixed, low-cardinality property
-vocabulary: `intentId`, `reportId`, `capabilityId`, `section`, `source`,
-`outcome`. Explicitly **not** captured: the text a visitor types into the demo
-(intent identifiers are recorded instead), lead-form contents, any identifier
-that persists across sessions, and any third-party cookie.
+**Data captured.** The event name plus a fixed, low-cardinality property
+vocabulary: `intentId`, `reportId`, `refusalCategory`, `capabilityId`,
+`section`, `source`, `outcome`. Each is stripped to `[A-Za-z0-9_.-]` and capped
+at 64 characters — so a question string, an answer or an email address has no
+field to travel in, by construction rather than by policy.
 
-Server-side logging (`src/lib/http.ts` → `logRequest`) records route, outcome,
-resolved intent id, the ephemeral session id and duration — **never the question
-text**.
+**Never captured:** raw question text (the intent id is recorded instead),
+answer content, names, email addresses, IP addresses, user agents, any
+identifier that outlives the session, any third-party cookie.
+
+**The collector** (`/api/analytics`) is an allow-list, not an event sink:
+
+* an unrecognised event name is dropped, so it cannot be used as
+  internet-writable logging;
+* same-origin only; 1 kB body ceiling; per-IP rate limit;
+* **it always returns 204** — a rejected event, a rate-limited caller and a
+  malformed body are indistinguishable. The browser has nothing useful to do
+  with a failure, and an error would only tell an abuser what got through;
+* analytics failure can never break the visitor experience.
+
+Server-side request logging (`src/lib/http.ts` → `logRequest`) records route,
+outcome, resolved intent id, the ephemeral session id and duration — never the
+question text.
+
+### Campaign attribution
+
+`utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term`, plus the
+first-party `persona`, `use_case` and `source`.
+
+* Captured on arrival by `AttributionCapture`, mounted at the top of the page —
+  not in the lead form, so a visitor who never scrolls that far is still
+  attributed correctly.
+* Held in `sessionStorage`, **for the current browsing session only**. Not a
+  cookie and not `localStorage`: attribution should last exactly as long as the
+  visit that carried it, and must not become a cross-site identifier.
+* First write wins, so a mid-visit navigation cannot overwrite the campaign the
+  visitor actually arrived on.
+* Each value is capped at 64 characters and restricted to an allow-list of
+  characters real campaign codes use. Disallowed characters become a space, so
+  a newline injection collapses to separated words rather than running them
+  together.
+* **Re-sanitised server-side** — the browser is not trusted for this.
+* Attached to the lead notification and **never echoed back to the browser**
+  after submission.
+
+---
+
+## Production configuration validation
+
+One validator, `src/lib/config.ts`, run at startup by `src/instrumentation.ts`.
+Every unsafe production setting is an **error**, not a warning: a page that
+boots with file-based lead capture, a forgeable session cookie or a localhost
+canonical URL is worse than one that refuses to boot, because the failure is
+silent and the loss is invisible.
+
+| Code | Fires when |
+|---|---|
+| `CONFIG_SITE_URL_INVALID` | `NEXT_PUBLIC_SITE_URL` is missing, not https, carries a path/query/fragment, or is a loopback host |
+| `CONFIG_DEMO_PACK_MISSING` | the pack is absent or has no intents |
+| `CONFIG_DEMO_PACK_VERSION` | the pack's schema version is not the one this build expects |
+| `CONFIG_DEMO_SOURCE_MISMATCH` | the pack was built from a different portfolio than this build is pinned to |
+| `CONFIG_SESSION_SECRET_WEAK` | `DEMO_SESSION_SECRET` is unset, under 32 characters, or too uniform |
+| `CONFIG_LEAD_PROVIDER_UNSAFE` | the provider is `file` or `console` |
+| `CONFIG_LEAD_PROVIDER_INCOMPLETE` | the chosen provider is missing its credentials |
+| `CONFIG_RATE_LIMIT_STORE_REQUIRED` | no shared store and no explicit single-instance override |
+| `CONFIG_ANALYTICS_INVALID` | an unknown adapter, or App Insights with no connection string |
+| `CONFIG_ENV_INVALID` | `APPLICATION_ENV` is not development/test/staging/production |
+
+Messages name the **variable** and what is wrong with it — never a value.
+Outside production the same checks run but only warn, so local development is
+never blocked by the absence of a mail provider.
+
+```bash
+npm run validate-config   # exercises the rules with placeholder values
+```
+
+---
+
+## Liveness versus readiness
+
+| Endpoint | Answers | Fails when |
+|---|---|---|
+| `GET /api/health` | "is this process alive, and did it load a pack" | the pack is unusable |
+| `GET /api/ready` | "is this process correctly configured to serve" | any configuration error above |
+
+They must be able to disagree, and that is the point: a misconfigured lead
+provider is a readiness problem, not a liveness one — restarting the process
+would not fix it, so health deliberately stays 200 while readiness returns 503.
+
+**Use `/api/health` as the App Service health probe.** The platform probe
+restarts an instance that fails it, and restarting never fixes a configuration
+error — a red `/api/ready` would put the site into a restart loop instead of
+leaving it up and visibly not-ready.
+
+**Use `/api/ready` in deployment smoke tests**, which is exactly what the CI
+workflow does: it fails the deployment when configuration is wrong, at the point
+where a human can act on it.
+
+Both return coarse component states only. No file path, email address, service
+URL, provider name, credential, stack trace or internal engine name — asserted
+by tests.
+
+```json
+{
+  "status": "ready",
+  "environment": "production",
+  "components": {
+    "demoPack": "ready",
+    "siteUrl": "configured",
+    "session": "configured",
+    "leadDelivery": "configured",
+    "rateLimit": "shared",
+    "analytics": "disabled"
+  },
+  "issues": []
+}
+```
 
 ---
 
@@ -463,30 +744,37 @@ it.
 
 ## Known limitations
 
-- **Rate-limit state is in-process.** Correct for the documented single-instance
-  App Service deployment. Scale out and each instance keeps its own counters,
-  effectively multiplying every limit by the instance count.
-  `RATE_LIMIT_STORE_URL` is read and reported by `src/lib/rate-limit.ts` but no
-  shared-store backend is implemented — wire one before scaling out.
-- **The `firstparty` analytics adapter has no collector route.** Do not select it
-  until `/api/analytics` exists.
-- **No demo video asset exists in the repository.** The section renders a
-  documented placeholder; see below.
-- **The synthetic portfolio is a single snapshot** of 36 exposures. Month-on-month
-  movement, pipeline, funnel, forecast and arrears questions are therefore
-  answered as controlled refusals rather than fabricated — deliberately, and the
-  page shows this off.
+- **No ~£1.9bn demo-video portfolio exists in this repository**, and neither
+  does the demo video. The page publishes the only governed portfolio dataset
+  present (`SYNTHETIC_ERE_Portfolio_012026`, 36 exposures, £5,382,462.92). See
+  the note under [Synthetic data sources](#synthetic-data-sources) and the full
+  evidence table in `docs/implementation-note.md`.
+- **The synthetic portfolio is a single snapshot.** Month-on-month movement,
+  pipeline, funnel, forecast and arrears questions are answered as controlled
+  refusals rather than fabricated — deliberately, and the page shows this off.
+- **Rate-limit state is in-process unless `RATE_LIMIT_STORE_URL` is set.**
+  Production refuses to start without either a store or the explicit
+  single-instance override. See
+  [Single-instance operation](#single-instance-operation).
+- **Idempotency for lead submission is per-instance.** A duplicate could slip
+  through across replicas; the cost is one duplicate notification.
+- **The App Insights adapter uses the browser snippet if present, else the
+  first-party collector.** It never injects a script tag, so loading the snippet
+  is an explicit deployment decision.
 - **Two engine dimensions are deliberately not offered**: interest-rate type and
   property type resolve to raw ESMA enumeration codes (`FXRL`, `RHOS`) with no
   display mapping in the repository, and origination vintage collapses to a
-  single meaningless bucket on this dataset. Rather than relabel them here — which
-  would be the landing page inventing semantics — they are omitted.
+  single meaningless bucket on this dataset. Relabelling them here would be the
+  landing page inventing semantics.
 - **`npm audit` reports advisories** in the dev toolchain (`brace-expansion` via
   the ESLint plugin graph, `postcss` via Tailwind's build). Both are build-time
-  only and not reachable at runtime; they clear when the upstream packages
-  publish fixes.
-- **Lead delivery has no retry or dead-letter queue.** A provider outage returns
-  502 to the visitor with an alternative way to reach you; it does not queue.
+  only and not reachable at runtime.
+- **Lead delivery has no dead-letter queue.** A provider outage returns 502 to
+  the visitor with an alternative way to reach you; it retries once and does not
+  queue.
+- **No transcript is shipped with the video component.** When the final asset is
+  added, add a transcript alongside it — see
+  [Replacing the demo video](#replacing-the-demo-video).
 
 ---
 

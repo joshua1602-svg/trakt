@@ -1,46 +1,33 @@
 "use client";
 
+import {
+  type AnalyticsEvent,
+  type AnalyticsProperties,
+  MAX_ANALYTICS_BODY_BYTES,
+} from "@/lib/analytics-events";
+import {
+  ATTRIBUTION_STORAGE_KEY,
+  type Attribution,
+  attributionFromSearch,
+  hasAttribution,
+  sanitiseAttribution,
+} from "@/lib/attribution";
 import { publicConfig } from "@/lib/public-config";
 
 /**
  * Privacy-conscious analytics.
  *
- * What is captured: an event name, and a small set of low-cardinality
- * properties drawn from a fixed vocabulary (intent ids, capability ids, section
- * ids). What is never captured: the text a visitor types into the demo, their
- * lead-form contents, any identifier that persists across sessions, and any
- * third-party cookie. Demo questions are recorded as intent ids only — the
- * question string is not sent anywhere by this module.
+ * Captured: an event name from a fixed allow-list, plus a small set of
+ * low-cardinality identifiers. Never captured: the text a visitor types into
+ * the demo (intent ids are recorded instead), answer content, lead-form
+ * contents, any identifier that persists across sessions, and any third-party
+ * cookie. No third-party tracker is loaded by default.
  *
- * No third-party tracker is loaded by default. The active adapter is chosen by
- * `NEXT_PUBLIC_ANALYTICS_PROVIDER`; the default (`none`) is a no-op.
+ * The adapter is chosen by `NEXT_PUBLIC_ANALYTICS_PROVIDER`; the default
+ * (`none`) is a no-op that sends nothing at all.
  */
 
-export type AnalyticsEvent =
-  | "hero_demo_click"
-  | "demo_video_play"
-  | "suggested_question_click"
-  | "typed_question_submit"
-  | "answer_supported"
-  | "answer_unsupported"
-  | "report_preview_request"
-  | "session_limit_reached"
-  | "demo_reset"
-  | "capability_card_open"
-  | "book_demo_click"
-  | "lead_form_submit"
-  | "lead_form_success"
-  | "lead_form_error";
-
-/** Only these property keys are ever transmitted. */
-export interface AnalyticsProperties {
-  intentId?: string;
-  reportId?: string;
-  capabilityId?: string;
-  section?: string;
-  source?: string;
-  outcome?: string;
-}
+export type { AnalyticsEvent, AnalyticsProperties };
 
 interface Adapter {
   track(event: AnalyticsEvent, properties?: AnalyticsProperties): void;
@@ -54,9 +41,9 @@ const noopAdapter: Adapter = {
 };
 
 /**
- * Azure Application Insights. Uses the global the App Insights snippet defines
- * if — and only if — an operator has loaded it; this module never injects a
- * script tag, so enabling it is an explicit deployment decision.
+ * Azure Application Insights via the browser snippet, when — and only when —
+ * an operator has loaded it. This module never injects a script tag, so
+ * enabling it is an explicit deployment decision.
  */
 const appInsightsAdapter: Adapter = {
   track(event, properties) {
@@ -65,7 +52,13 @@ const appInsightsAdapter: Adapter = {
         appInsights?: { trackEvent?: (item: unknown) => void };
       }
     ).appInsights;
-    insights?.trackEvent?.({ name: `trakt.landing.${event}`, properties: properties ?? {} });
+    if (insights?.trackEvent) {
+      insights.trackEvent({ name: `trakt.landing.${event}`, properties: properties ?? {} });
+      return;
+    }
+    // No snippet present: fall back to the first-party collector so events are
+    // not silently lost when App Insights is configured server-side only.
+    firstPartyAdapter.track(event, properties);
   },
 };
 
@@ -74,10 +67,14 @@ const firstPartyAdapter: Adapter = {
   track(event, properties) {
     try {
       const body = JSON.stringify({ event, properties: properties ?? {} });
-      if (typeof navigator !== "undefined" && "sendBeacon" in navigator) {
-        navigator.sendBeacon("/api/analytics", new Blob([body], { type: "application/json" }));
-        return;
+      if (body.length > MAX_ANALYTICS_BODY_BYTES) return;
+
+      if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+        const blob = new Blob([body], { type: "application/json" });
+        if (navigator.sendBeacon("/api/analytics", blob)) return;
+        // sendBeacon refuses when the queue is full; fall through to fetch.
       }
+
       void fetch("/api/analytics", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -103,5 +100,58 @@ function adapter(): Adapter {
 
 export function track(event: AnalyticsEvent, properties?: AnalyticsProperties): void {
   if (typeof window === "undefined") return;
-  adapter().track(event, properties);
+  try {
+    adapter().track(event, properties);
+  } catch {
+    /* never let instrumentation surface to the visitor */
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Campaign attribution                                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Capture campaign parameters from the landing URL into `sessionStorage`.
+ *
+ * Session storage, not a cookie and not `localStorage`: attribution should last
+ * exactly as long as the visit that carried it, and should not be readable on a
+ * later, unrelated one. First write wins, so a mid-visit navigation cannot
+ * overwrite the campaign the visitor actually arrived on.
+ */
+export function captureAttribution(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const existing = window.sessionStorage.getItem(ATTRIBUTION_STORAGE_KEY);
+    if (existing) return;
+
+    const fromQuery = attributionFromSearch(window.location.search);
+    if (!hasAttribution(fromQuery) && document.referrer) {
+      try {
+        const referrer = new URL(document.referrer);
+        if (referrer.host !== window.location.host) {
+          fromQuery.source = referrer.hostname.slice(0, 64);
+        }
+      } catch {
+        /* an unparseable referrer is simply not recorded */
+      }
+    }
+
+    if (!hasAttribution(fromQuery)) return;
+    window.sessionStorage.setItem(ATTRIBUTION_STORAGE_KEY, JSON.stringify(fromQuery));
+  } catch {
+    /* storage disabled (private mode, or a strict policy) — carry on without */
+  }
+}
+
+/** Read the captured attribution, to attach to a lead submission. */
+export function readAttribution(): Attribution {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.sessionStorage.getItem(ATTRIBUTION_STORAGE_KEY);
+    if (!raw) return {};
+    return sanitiseAttribution(JSON.parse(raw));
+  } catch {
+    return {};
+  }
 }

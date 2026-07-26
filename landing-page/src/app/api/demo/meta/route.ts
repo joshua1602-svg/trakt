@@ -13,9 +13,9 @@ export const dynamic = "force-dynamic";
  * is asked: the synthetic scope, the suggested questions, the report actions,
  * the session limits and two examples of what the demo will decline.
  */
-export function GET(request: Request): NextResponse {
+export async function GET(request: Request): Promise<NextResponse> {
   const ip = clientIp(request.headers);
-  const limit = checkRateLimit(`meta:${ip}`, RATE_LIMITS.demoPerIp);
+  const limit = await checkRateLimit(`meta:${ip}`, RATE_LIMITS.demoPerIp);
   if (!limit.allowed) return rateLimitedResponse(limit.retryAfterSeconds);
 
   return NextResponse.json(buildMeta());

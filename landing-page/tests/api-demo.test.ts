@@ -58,18 +58,26 @@ describe("GET /api/health", () => {
     expect(response.status).toBe(200);
   });
 
-  it("exposes only pack counts, never secrets or paths", async () => {
+  it("reports coarse component states, never secrets or paths", async () => {
     const body = await healthGet().json();
-    expect(Object.keys(body).sort()).toEqual(["demoPack", "environment", "status"]);
-    expect(JSON.stringify(body)).not.toMatch(/secret|key|password|connectionstring|\//i);
+    expect(Object.keys(body).sort()).toEqual([
+      "analytics",
+      "demoPack",
+      "environment",
+      "leadDelivery",
+      "rateLimit",
+      "status",
+    ]);
+    // Component states are single words; nothing here may carry a credential,
+    // an address, a provider name or a path.
+    expect(JSON.stringify(body)).not.toMatch(/secret|key|password|connectionstring|@|\//i);
   });
 });
 
 describe("GET /api/demo/meta", () => {
   it("returns the synthetic scope, suggestions and limits", async () => {
-    const body: DemoMetaResponse = await metaGet(
-      request("http://localhost:3000/api/demo/meta"),
-    ).json();
+    const response = await metaGet(request("http://localhost:3000/api/demo/meta"));
+    const body: DemoMetaResponse = await response.json();
 
     expect(body.scope.synthetic).toBe(true);
     expect(body.scope.client).toBe("Synthetic Demo Lender");
@@ -84,7 +92,8 @@ describe("GET /api/demo/meta", () => {
   });
 
   it("never publishes the runtime phrase table", async () => {
-    const body = await metaGet(request("http://localhost:3000/api/demo/meta")).json();
+    const response = await metaGet(request("http://localhost:3000/api/demo/meta"));
+    const body = await response.json();
     expect(JSON.stringify(body)).not.toContain("phrases");
   });
 });

@@ -19,13 +19,11 @@ import { track } from "@/lib/analytics";
 const CHANNELS = [
   {
     id: "copilot",
-    name: "Microsoft 365 Copilot",
-    copy: "Ask portfolio questions, request reports and retrieve current management information directly through Copilot.",
-  },
-  {
-    id: "teams",
-    name: "Teams",
-    copy: "Access governed portfolio intelligence within existing team workflows and conversations.",
+    name: "Microsoft 365 Copilot and Teams",
+    // Trakt ships a declarative agent, packaged as a Teams app and surfaced
+    // through Microsoft 365 Copilot. There is no standalone native Teams bot,
+    // so the copy claims the surfaces, not a second product.
+    copy: "Access Trakt's declarative agent through supported Microsoft 365 Copilot and Teams surfaces — ask portfolio questions, request reports and retrieve current management information without leaving the tools you already use.",
   },
   {
     id: "workspace",
@@ -48,7 +46,7 @@ export function Omnichannel() {
         title="Intelligence delivered where your teams already work"
         intro="The Copilot demonstration above is one way into Trakt, not the whole product. The same governed answer reaches every channel."
       />
-      <ul className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <ul className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {CHANNELS.map((channel) => (
           <Card as="li" key={channel.id} className="flex flex-col">
             <h3 className="text-[15px] font-semibold text-ink-100">{channel.name}</h3>
@@ -171,7 +169,7 @@ const CAPABILITIES: Capability[] = [
     id: "omnichannel",
     name: "Omnichannel Intelligence",
     icon: "M12 3v18M3 12h18M6.5 6.5l11 11M17.5 6.5l-11 11",
-    copy: "Provide governed portfolio answers through Copilot, Teams, the Trakt workspace, APIs and scheduled reporting.",
+    copy: "Provide governed portfolio answers through the Microsoft 365 Copilot and Teams surfaces, the Trakt workspace, APIs and scheduled reporting.",
     items: [
       "Conversational access",
       "Workflow actions",
@@ -226,7 +224,7 @@ export function CapabilityStack() {
               className="mt-3.5"
               onToggle={(event) => {
                 if ((event.currentTarget as HTMLDetailsElement).open) {
-                  track("capability_card_open", { capabilityId: capability.id });
+                  track("capability_interaction", { capabilityId: capability.id });
                 }
               }}
             >

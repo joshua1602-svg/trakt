@@ -13,7 +13,9 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "demo-pack": "python3 scripts/build_demo_pack.py",
-    "demo-pack:check": "python3 scripts/build_demo_pack.py --check"
+    "demo-pack:check": "python3 scripts/build_demo_pack.py --check",
+    "scan": "node scripts/scan-build.mjs",
+    "validate-config": "vitest run tests/config.test.ts"
   },
   "dependencies": {
     "next": "16.2.12",

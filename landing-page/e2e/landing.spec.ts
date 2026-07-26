@@ -58,7 +58,9 @@ test.describe("Trakt landing page", () => {
     await demo.getByRole("button", { name: /ask trakt/i }).click();
 
     await expect(demo.getByText(/not supported in this demonstration/i)).toBeVisible();
-    await expect(demo.getByText(/two governed reporting periods/i)).toBeVisible();
+    // The refusal states the precise available scope, then what production does.
+    await expect(demo.getByText(/single governed reporting period/i)).toBeVisible();
+    await expect(demo.getByText(/governed historical snapshots/i)).toBeVisible();
   });
 
   test("the conversation can be reset", async ({ page }) => {
@@ -110,9 +112,15 @@ test.describe("Trakt landing page", () => {
   });
 
   test("the four delivery channels and the operating model are explained", async ({ page }) => {
-    for (const name of ["Microsoft 365 Copilot", "Teams", "Trakt Workspace", "Automated Delivery"]) {
+    for (const name of [
+      "Microsoft 365 Copilot and Teams",
+      "Trakt Workspace",
+      "Automated Delivery",
+    ]) {
       await expect(page.locator("#channels").getByRole("heading", { name, level: 3 })).toBeVisible();
     }
+    // The declarative agent is the Teams claim; no standalone bot is implied.
+    await expect(page.locator("#channels")).toContainText(/declarative agent/i);
 
     const model = page.locator("#how-it-works");
     await expect(model.getByText("Source data and documents")).toBeVisible();
@@ -163,6 +171,122 @@ test.describe("Trakt landing page", () => {
   test("is keyboard navigable from the skip link", async ({ page }) => {
     await page.keyboard.press("Tab");
     await expect(page.getByRole("link", { name: /skip to content/i })).toBeFocused();
+  });
+
+  test("reports the pinned portfolio identity from both probes", async ({ request }) => {
+    const health = await request.get("/api/health");
+    expect(health.status()).toBe(200);
+    const healthBody = await health.json();
+    expect(healthBody.status).toBe("ok");
+    expect(healthBody.demoPack).toBe("ready");
+
+    const ready = await request.get("/api/ready");
+    const readyBody = await ready.json();
+    expect(readyBody.components.demoPack).toBe("ready");
+
+    // Neither probe leaks configuration.
+    const serialised = JSON.stringify(healthBody) + JSON.stringify(readyBody);
+    expect(serialised).not.toMatch(/@|\.csv|\/home\/|blob\.core/);
+  });
+
+  test("the hero preview and the demo metadata agree on the portfolio", async ({
+    page,
+    request,
+  }) => {
+    const meta = await (await request.get("/api/demo/meta")).json();
+    const { totalBalanceDisplay, loanCount, asOfDisplay, client } = meta.scope;
+
+    // The figure in the hero is the same figure the demo answers with.
+    await expect(page.locator("#product").getByText(totalBalanceDisplay).first()).toBeVisible();
+    await expect(page.locator("#live-demo")).toContainText(client);
+    await expect(page.locator("#live-demo")).toContainText(`${loanCount} exposures`);
+    await expect(page.locator("#live-demo")).toContainText(asOfDisplay);
+
+    // en-GB formatting throughout: pounds, thousands separators, no dollars.
+    expect(totalBalanceDisplay).toMatch(/^£[\d,]+$/);
+    expect(asOfDisplay).toMatch(/^\d{1,2} [A-Z][a-z]+ \d{4}$/);
+    await expect(page.locator("body")).not.toContainText("$");
+  });
+
+  test("an analytics beacon carries an event id and no question text", async ({ page }) => {
+    const posted: { url: string; body: string }[] = [];
+    page.on("request", (req) => {
+      if (req.url().includes("/api/analytics") && req.method() === "POST") {
+        posted.push({ url: req.url(), body: req.postData() ?? "" });
+      }
+    });
+
+    const demo = page.locator("#live-demo");
+    await demo.scrollIntoViewIfNeeded();
+    await demo.getByLabel(/ask a question/i).fill("what is the weighted average ltv");
+    await demo.getByRole("button", { name: /ask trakt/i }).click();
+    await expect(demo.getByText(/weighted average current ltv is/i).first()).toBeVisible();
+
+    // The default provider is "none", so nothing should be sent at all. If a
+    // deployment enables the collector, the payload must still carry no text.
+    for (const { body } of posted) {
+      expect(body).not.toContain("weighted average ltv");
+      expect(body).not.toContain("what is the");
+      expect(body).toMatch(/"event"\s*:/);
+    }
+  });
+
+  test("the lead form submits and the response carries only a reference", async ({ page }) => {
+    const cta = page.locator("#book-a-demo");
+    await cta.scrollIntoViewIfNeeded();
+    await cta.getByLabel(/^name/i).fill("Jordan Vale");
+    await cta.getByLabel(/work email/i).fill("jordan@ridgeline-credit.co.uk");
+    await cta.getByLabel(/^company/i).fill("Ridgeline Credit");
+    await cta.getByLabel(/^role/i).fill("Finance Director");
+    await cta.getByRole("checkbox").check();
+    await page.waitForTimeout(3000);
+
+    // Await the response explicitly rather than racing an event handler.
+    const [response] = await Promise.all([
+      page.waitForResponse((res) => res.url().includes("/api/leads") && res.request().method() === "POST"),
+      cta.getByRole("button", { name: /book a tailored demonstration/i }).click(),
+    ]);
+
+    await expect(cta.getByRole("status")).toContainText(/thank you/i);
+    const responseBody = await response.text();
+    const body = JSON.parse(responseBody);
+    expect(Object.keys(body).sort()).toEqual(["reference", "status"]);
+    // Attribution is attached server-side and never returned.
+    expect(responseBody).not.toContain("utm_");
+  });
+
+  test("campaign attribution is captured without reaching the page", async ({ page }) => {
+    await page.goto("/?utm_source=linkedin&utm_campaign=q3-erm&persona=coo");
+
+    // Capture runs in an effect, so wait for hydration rather than assuming it.
+    await expect
+      .poll(() => page.evaluate(() => window.sessionStorage.getItem("trakt_attribution")))
+      .toContain("linkedin");
+
+    const stored = await page.evaluate(() =>
+      window.sessionStorage.getItem("trakt_attribution"),
+    );
+    expect(stored).toContain("q3-erm");
+
+    // It is never rendered.
+    await expect(page.locator("body")).not.toContainText("q3-erm");
+    await expect(page.locator("body")).not.toContainText("utm_source");
+  });
+
+  test("logs no console errors", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (error) => errors.push(String(error)));
+
+    await page.goto("/");
+    const demo = page.locator("#live-demo");
+    await demo.scrollIntoViewIfNeeded();
+    await demo.getByRole("button", { name: "Which regions have the highest exposure?" }).click();
+    await expect(demo.getByText(/is the largest regional exposure at/i)).toBeVisible();
+
+    expect(errors).toEqual([]);
   });
 });
 
