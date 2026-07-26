@@ -35,14 +35,18 @@ cd demo-video && npm install
 npm run render          # 1920x1080 master, plus the script and caption files
 npm run render:square   # 1080x1080 LinkedIn / email variant
 npm run render:all      # both
-npm run stills          # the three email frames plus ten review frames
+npm run stills          # the three email frames plus the review sweep
 npm run stills:square   # the same frames in the square crop
 npm run preview         # Remotion Studio, for interactive editing
 npm run check           # fonts + typecheck + theme lint + tests + safety gate
+npm run signal          # the accent audit, from the rendered pixels (slow)
 ```
 
 `npm run check` runs ahead of every render and every stills pass. It is the
-storyboard's pre-render checklist, mechanised.
+storyboard's pre-render checklist, mechanised. `npm run signal` is the accent audit —
+it renders a frame sweep and counts full-strength accented elements from the pixels, so
+"one `signal` element per frame" is measured rather than trusted. It is slow, so it is
+not part of `check`; run it after any change to what carries the accent.
 
 Output lands in `demo-video/out/`:
 
@@ -51,7 +55,7 @@ Output lands in `demo-video/out/`:
 | `trakt-demo-1080p.mp4` | 1920×1080, 30 fps, H.264 — the master |
 | `trakt-demo-square.mp4` | 1080×1080 — the LinkedIn and email variant |
 | `stills/trakt-demo-frame-{1020,1500,2100}.png` | the three frames for the outbound email body |
-| `stills/review/*.png` | ten frames for a human to check before publishing |
+| `stills/review/*.png` | seventeen frames for a human to check before publishing — one at each scene midpoint, plus the beats worth their own look |
 | `voiceover-script.md` | narration script with per-scene timings and pace |
 | `captions.srt` / `captions.vtt` | subtitles matching the burned-in captions exactly |
 | `scene-timings.csv` | scene-level timing sheet (seconds and frames) |
@@ -65,8 +69,8 @@ Output lands in `demo-video/out/`:
 
 | # | Scene | Frames | Time | What it proves |
 |---|---|---|---|---|
-| 1 | The cost | 0–420 | 0:00–0:14 | Two source schemas that share no column names |
-| 2 | Onboarded once | 420–1140 | 0:14–0:38 | The approved contract, and what the platform refuses to guess |
+| 1 | The cost | 0–420 | 0:00–0:14 | Two source schemas that share no column names, and what month-end costs |
+| 2 | Onboarded in under 48 hours | 420–1140 | 0:14–0:38 | The approved contract, and what the platform refuses to guess |
 | 3 | One dataset, every output | 1140–1740 | 0:38–0:58 | Six governed outputs off one dataset, regulatory first |
 | 4 | Three ways in | 1740–2340 | 0:58–1:18 | The same answer in three channels, on the same frame |
 | 5 | Close | 2340–2700 | 1:18–1:30 | The positioning, and the ask |
@@ -86,7 +90,7 @@ does not carry throws at bundle time rather than rendering a placeholder.
 |---|---|---|
 | `£1.96bn`, `11,035 loans`, `+£18.1m`, the regional split | `demo_metrics.json` | `POST /mi/query` → `mi_agent_workflow` |
 | `39` / `34` / `2`, the four mapping pairs, the referred item | `demo_manifest.json` | `engine/gate_1_alignment/semantic_alignment.py` |
-| `00:14.1` | `demo_manifest.json` | measured wall-clock of the recurring run |
+| `41:20` | *not a fixture* | `src/claims.ts` — a **stated** claim, see below |
 | the six artifact cards | `artefact_catalogue.json` | `demo_platform/artefacts.py` |
 | `33/33 checks passed` | `assertion_report.json` | `demo_platform/assertions.py` |
 | the disclaimer | every fixture | `demo_platform/config.py` |
@@ -101,10 +105,20 @@ fails the render if one appears.
 
 Two rules carry more weight than the rest.
 
-**`signal` (`#4DE0C4`) is a scarcity resource.** At most one element on screen carries
-it in any frame. Where a scene needs to pass the accent from one element to another —
-S3 hands it from the consolidated balance to the reconciliation check — `<Stat>` takes
-a fractional `accent` and the two cross-fade, so they are never both cyan.
+**`signal` (`#4DE0C4`) is a scarcity resource**, and it has exactly two strengths and no
+third. Full strength marks the value being proven — at most one element per frame. Soft
+(`theme.signalSoftOpacity`, 40%) is for confirmations and check states only, such as
+"XSD validated" on the regulatory card. There is no second green; a test asserts that.
+
+Full strength appears on: S3's consolidated balance, S3's `33/33 checks passed`, S3's
+final claim, S4's three figures and S5's ask. Where a scene passes the accent from one
+element to another — S3 hands it from the balance to the reconciliation check, then to
+the claim — `<Stat>` takes a fractional `accent` and they cross-fade, so they are never
+both cyan. S4's three figures are the film's one stated exception: they are the same
+value proven in three places, which is the argument of the scene.
+
+`flag` (amber) stays locked to S2's referred-for-review beat and S1's failed connection.
+Nowhere else, and the lint asserts the count.
 
 **The mono role is semantic.** If a figure came out of the pipeline — a balance, a
 count, an LTV, a field name, a portfolio code, a filename, a timestamp — it is set in
@@ -131,14 +145,15 @@ manifest, and it runs before every render.
 
 ## Component contract
 
-Five components. Every scene is composed from these, so consistency is enforced by
+Six components. Every scene is composed from these, so consistency is enforced by
 construction rather than by discipline.
 
 | Component | Rule |
 |---|---|
-| `<Stat>` | Mono, `tabular-nums`, and it **always** renders its provenance rule — there is no way to put a governed figure on screen without saying where it came from |
+| `<Figure>` | The only way to put a computed value on screen. Data face, `tabular-nums`. A `<Counter>` outside one fails the lint |
+| `<Stat>` | A `<Figure>` that **always** renders its provenance rule — there is no way to put a governed figure on screen without saying where it came from |
 | `<Claim>` | Archivo display. One per scene, maximum |
-| `<ArtifactCard>` | Fixed dimensions, mono filename, `mute` metadata |
+| `<ArtifactCard>` | Fixed dimensions. The **human label** is the title, in the body face; the filename drops into the mono meta line with the figures |
 | `<Counter>` | Wraps `interpolate` + `spring`. The only count-up in the film |
 | `<Chrome>` | Lockup and disclaimer, rendered once **outside** `<Series>` |
 
@@ -159,29 +174,27 @@ contradicted itself. Each is resolved in favour of what is defensible, and each 
 called out, because the alternative was to quietly ship a number nobody can stand
 behind on the call the film generates.
 
-### 1. The elapsed-time claim (S2)
+### 1. Measured figures and stated claims are kept apart
 
-The storyboard wants a `00:00 → 47:12` clock and the line "Onboarded in under 48
-hours", and flags it as an open item: *"the 48-hour figure needs to be one you'll
-defend on the call it generates. If the anchor client's real elapsed time supports it,
-make it the hero. If not, `days, not months` is weaker but safe. Don't ship a bracketed
-number."*
+The film asserts two kinds of number and they must never be confused.
 
-The demonstration measures **no onboarding elapsed time**, so neither `47:12` nor "48
-hours" is available. What it does measure is the recurring run: source extract received
-to governed canonical published, both portfolios, recorded per run as `elapsed_seconds`
-in the demo manifest. That is what the clock counts — **`00:14.1`** — and the
-provenance stamp says exactly what it is:
-`TAPE RECEIVED → GOVERNED OUTPUT · ALP_ORIGINATION + ALP_ACQUIRED · 11,035 LOANS`.
+**Measured** figures come from `public/fixtures/*.json`, which the demonstration run
+wrote. They are read through `src/data/fixtures.ts`, set in IBM Plex Mono, and always
+carry a provenance rule naming where they came from.
 
-The claim becomes **"Approved once. Applied unchanged every period."** — the
-load-bearing half of the storyboard's line, with the unverifiable half removed.
+**Stated** claims are commercial claims about the product and its market. They live in
+`src/claims.ts` — one file, so anyone auditing the film can see the complete list of
+things it asserts without a fixture behind it. Currently: the onboarding window, the
+month-end cost line, S1's opening line and S4's three use lines.
 
-For this audience the substitution is arguably stronger: a firm that spends three days
-on month-end by hand is being shown fourteen seconds, measured.
+The onboarding clock is a stated claim. It counts **`41:20`** in `HH:MM` against a
+"under 48 hours" claim, deliberately short of the threshold — a figure with visible
+headroom survives the first question about it, and one that lands exactly on its own
+limit does not. `ONBOARDING_HOURS` and `ONBOARDING_CLAIM_HOURS` are both in
+`src/claims.ts` and a test asserts the gap between them.
 
-If a real onboarding elapsed time becomes available it belongs in the fixture, and then
-in `currentPeriodElapsedSeconds()` — not in a scene file.
+A number in `claims.ts` is the business's to defend on the call the film generates. A
+number in a fixture is the pipeline's. Nothing should move between the two.
 
 ### 2. The counter values (S2)
 
@@ -217,7 +230,16 @@ three counters share one `at` value so they cannot drift apart.
   ask; leave it empty and the ask stands alone.
 - **Captions do not sit over a display claim.** A claim is already burned-in copy at
   the display size; repeating it in body text underneath competes with it. The close
-  has no captions at all for the same reason — it is entirely display copy.
+  has no captions at all for the same reason — it is entirely display copy, and neither
+  does S1's opening line, which is doing a caption's job already.
+- **No Microsoft app icon.** S4's Copilot panel carries the product name as a wordmark
+  and no mark. Microsoft's trademark guidelines state their "logos, app and product
+  icons, illustrations, photographs, videos, and designs can never be used without an
+  express license", which this project does not hold. The `label` token is set in the
+  body face, so the panel label already *is* the wordmark the fallback calls for; the
+  text rules are met (Microsoft precedes the product name, unaltered, no affiliation
+  implied, Trakt's lockup more prominent). If a licence is obtained, drop the asset into
+  `public/brand/` — `S4Omnichannel.tsx` says where.
 - **Scene beat boundaries shift by a few frames** from the storyboard's timings where a
   beat was shorter than the time needed to read its caption. The film is watched with
   the sound off, so a beat that outruns its caption is a beat the viewer does not get.
@@ -238,9 +260,9 @@ The storyboard's twelve items. Ten are mechanised; two need eyes.
 | # | Item | Enforced by |
 |---|---|---|
 | 1 | No hex, font size or duration outside `theme.ts` | `scripts/lint-theme.mjs` |
-| 2 | `signal` on exactly one element per frame | by construction — fractional `accent` hand-over; reviewed in the stills |
+| 2 | `signal` on exactly one element per frame | `scripts/audit-signal.mjs` — renders a frame sweep, counts full-strength accented elements from the pixels |
 | 3 | `flag` in exactly two places | `scripts/lint-theme.mjs` (asserts two scenes) |
-| 4 | Every computed figure mono, `tabular-nums`, with a provenance rule | `<Stat>` cannot render without a stamp; `npm test` asserts the tokens |
+| 4 | Every computed figure mono, `tabular-nums`, with a provenance rule | `<Figure>`/`<Stat>` are the only hosts for a `<Counter>`, `<Stat>` cannot render without a stamp, and `scripts/lint-theme.mjs` fails on a counter outside them |
 | 5 | No box shadows, glows or gradients | `scripts/lint-theme.mjs` |
 | 6 | Six type sizes, no more | `scripts/lint-theme.mjs` + `npm test` |
 | 7 | Logo pixel-identical in every frame | `<Chrome>` outside `<Series>`; one fixed size in `theme.lockup` |

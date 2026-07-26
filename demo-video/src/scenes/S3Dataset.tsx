@@ -19,6 +19,7 @@ import {
   Claim,
   Counter,
   Enter,
+  Figure,
   Label,
   Stat,
   useGeometry,
@@ -28,8 +29,15 @@ import { ARTEFACTS, ASSERTIONS, CURRENT_PERIOD, PORTFOLIOS, SUMMARY, lens } from
 import { count, longDate, money, percent, periodLabel } from "../format";
 import theme from "../theme";
 
-/** Regulatory first, left to right, then investor, then the governed internals. */
-const cardSpecs = (): { filename: string; meta: string[] }[] => {
+/**
+ * The six governed outputs, regulatory first in reading order.
+ *
+ * Each card leads with what the artefact IS, in plain English; the filename and the
+ * figures sit beneath it in the data face. Every value is read from the artefact
+ * catalogue the run wrote — a card whose artefact reported itself unavailable is not
+ * rendered, so the film cannot show an output the pipeline did not produce.
+ */
+const cardSpecs = (): { title: string; meta: string[]; confirm?: string }[] => {
   const regulatory = ARTEFACTS.regulatoryOutput;
   const deck = ARTEFACTS.investorDeck;
   const tape = ARTEFACTS.canonicalTape;
@@ -37,56 +45,66 @@ const cardSpecs = (): { filename: string; meta: string[] }[] => {
   const risk = ARTEFACTS.riskMonitor;
   const audit = ARTEFACTS.auditManifest;
 
-  const specs: { available: boolean; filename: string; meta: string[] }[] = [
+  const specs: {
+    available: boolean;
+    title: string;
+    meta: string[];
+    confirm?: string;
+  }[] = [
     {
       available: Boolean(regulatory?.available),
-      filename: String(regulatory?.fileName ?? ""),
+      title: "Regulatory submission",
       meta: [
-        "Regulatory · ESMA Annex 2",
-        `${count(Number(regulatory?.exposureRecords))} exposures · ${count(Number(regulatory?.fields))} fields`,
-        regulatory?.xsdValidated ? "XSD validated" : "",
-      ].filter(Boolean),
+        `${regulatory?.fileName} · ESMA Annex 2 · ` +
+          `${count(Number(regulatory?.exposureRecords))} exposures`,
+      ],
+      confirm: regulatory?.xsdValidated ? "XSD validated" : undefined,
     },
     {
       available: Boolean(deck?.available),
-      filename: String(deck?.fileName ?? ""),
+      title: "Investor pack",
       meta: [
-        "Investor pack",
-        `${count(Number(deck?.slides))} slides · ${periodLabel(CURRENT_PERIOD.period)}`,
+        `${deck?.fileName} · ${count(Number(deck?.slides))} slides · ` +
+          `${periodLabel(CURRENT_PERIOD.period)}`,
       ],
     },
     {
       available: Boolean(tape?.available),
-      filename: String(tape?.fileName ?? ""),
+      title: "Loan-level dataset",
       meta: [
-        "Canonical tape",
-        `${count(Number(tape?.rows))} rows · ${count(Number(tape?.columns))} fields`,
+        `${tape?.fileName} · ${count(Number(tape?.rows))} rows · ` +
+          `${count(Number(tape?.columns))} fields`,
       ],
     },
     {
       available: Boolean(validation?.available),
-      filename: "validation_report.json",
+      title: "Validation report",
       meta: [
-        "Validation",
-        `${count(Number(validation?.businessRuleExceptions))} exceptions · ` +
+        `validation_report.json · ` +
+          `${count(Number(validation?.businessRuleExceptions))} exceptions · ` +
           `${percent(Number(validation?.exceptionRatePct), 2)}`,
       ],
     },
     {
       available: Boolean(risk?.available),
-      filename: "concentration_monitor.json",
-      meta: ["Concentration risk", `${count(Number(risk?.limitCount))} limits tested`],
+      title: "Concentration monitor",
+      meta: [
+        `concentration_monitor.json · ${count(Number(risk?.limitCount))} limits tested`,
+      ],
     },
     {
       available: Boolean(audit?.available),
-      filename: "audit_manifest.json",
+      title: "Audit trail",
       meta: [
-        "Audit trail",
-        `${count((audit?.sourceFiles as unknown[] | undefined)?.length ?? 0)} files hashed · SHA-256`,
+        `audit_manifest.json · ` +
+          `${count((audit?.sourceFiles as unknown[] | undefined)?.length ?? 0)} files ` +
+          `hashed · SHA-256`,
       ],
     },
   ];
-  return specs.filter((s) => s.available && s.filename).map(({ filename, meta }) => ({ filename, meta }));
+  return specs
+    .filter((spec) => spec.available)
+    .map(({ title, meta, confirm }) => ({ title, meta, confirm }));
 };
 
 export const S3Dataset: React.FC = () => {
@@ -124,7 +142,7 @@ export const S3Dataset: React.FC = () => {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
-  const checkOpacity = interpolate(frame, [300, 324, 408, 432], [0, 1, 1, 0], {
+  const checkOpacity = interpolate(frame, [300, 324, 402, 420], [0, 1, 1, 0], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
@@ -224,8 +242,8 @@ export const S3Dataset: React.FC = () => {
           }}
         >
           {cards.map((card, i) => (
-            <Enter key={card.filename} at={126} index={i * 2}>
-              <ArtifactCard filename={card.filename} meta={card.meta} />
+            <Enter key={card.title} at={126} index={i * 2}>
+              <ArtifactCard title={card.title} meta={card.meta} confirm={card.confirm} />
             </Enter>
           ))}
         </div>
@@ -246,16 +264,9 @@ export const S3Dataset: React.FC = () => {
         }}
       >
         <Label>Reconciliation</Label>
-        <div
-          style={{
-            ...theme.type.stat,
-            fontSize: theme.type.stat.fontSize * (isSquare ? 0.36 : 0.44),
-            color: interpolateColors(
-              checkAccent,
-              [0, 1],
-              [theme.color.paper, theme.color.signal],
-            ),
-          }}
+        <Figure
+          scale={isSquare ? 0.36 : 0.44}
+          color={interpolateColors(checkAccent, [0, 1], [theme.color.paper, theme.color.signal])}
         >
           <Counter
             from={0}
@@ -263,7 +274,7 @@ export const S3Dataset: React.FC = () => {
             at={306}
             format={(v) => `${count(v)}/${count(ASSERTIONS.checksRun)} checks passed`}
           />
-        </div>
+        </Figure>
       </div>
 
       <AbsoluteFill
@@ -275,7 +286,9 @@ export const S3Dataset: React.FC = () => {
         }}
       >
         <Enter at={432}>
-          <Claim maxWidth={isSquare ? "88%" : "62%"}>One dataset. Every output reconciles.</Claim>
+          <Claim accent measure={isSquare ? 0.88 : 0.62}>
+            One dataset. Every output reconciles.
+          </Claim>
         </Enter>
       </AbsoluteFill>
     </AbsoluteFill>

@@ -43,21 +43,22 @@ export const SCENES: SceneSpec[] = [
     number: 1,
     title: "The cost",
     frames: 420,
-    // No caption over a display claim. The claim IS burned-in copy, at the display
-    // size, and repeating it underneath in body text just competes with it.
+    // No caption over a display claim, and none over the opening line — that line is
+    // already burned-in body copy doing the caption's job. A caption underneath either
+    // one just competes with it.
     captions: [
-      { at: 6, hold: 132, text: "A back book arrives in the servicer's vocabulary, not yours." },
-      { at: 144, hold: 132, text: "Every month-end, someone rebuilds the mapping by hand." },
+      { at: 96, hold: 132, text: "Every month-end, someone rebuilds the mapping by hand." },
     ],
     narration:
-      "You bought a back book. It arrived as a servicer extract that looks nothing " +
-      "like your origination system. Every month-end, someone rebuilds the mapping " +
-      "by hand.",
+      "You bought a back book. It didn't come with your data model. It arrived as a " +
+      "servicer extract that looks nothing like your origination system, and every " +
+      "month-end someone rebuilds the mapping by hand. Five days of month-end, every " +
+      "month, for every portfolio.",
   },
   {
     id: "onboard",
     number: 2,
-    title: "Onboarded once",
+    title: "Onboarded in under 48 hours",
     frames: 720,
     captions: [
       { at: 6, hold: 132, text: "Trakt onboards a portfolio once." },
@@ -78,10 +79,10 @@ export const SCENES: SceneSpec[] = [
       },
     ],
     narration:
-      "Trakt onboards a portfolio once. Agents profile the source, map it to a " +
-      "canonical model and apply your lending rules. Thirty-nine fields mapped, " +
-      "thirty-four decisions specific to your book — and two referred to a human, " +
-      "because the platform knows what it doesn't know. Approved once, applied " +
+      "Trakt onboards a portfolio once, in under forty-eight hours. Agents profile the " +
+      "source, map it to a canonical model and apply your lending rules. Thirty-nine " +
+      "fields mapped, thirty-four decisions specific to your book — and two referred to " +
+      "a human, because the platform knows what it doesn't know. Approved once, applied " +
       "unchanged every period after.",
   },
   {

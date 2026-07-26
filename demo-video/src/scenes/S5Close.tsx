@@ -95,7 +95,7 @@ export const S5Close: React.FC = () => {
         }}
       >
         <Enter at={120}>
-          <Headline maxWidth={isSquare ? "94%" : "70%"}>
+          <Headline measure={isSquare ? 0.94 : 0.7}>
             A data operating system for specialist lenders.
           </Headline>
         </Enter>

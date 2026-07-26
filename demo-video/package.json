@@ -17,13 +17,15 @@
     "render:all": "npm run check && node scripts/render.mjs --preset=master --preset=square && npm run script",
     "stills": "npm run check && node scripts/stills.mjs",
     "script": "node scripts/generate-script.mjs",
-    "stills:square": "npm run check && node scripts/stills.mjs --square"
+    "stills:square": "npm run check && node scripts/stills.mjs --square",
+    "signal": "node scripts/audit-signal.mjs --step=15"
   },
   "dependencies": {
     "@remotion/bundler": "4.0.499",
     "@remotion/cli": "4.0.499",
     "@remotion/google-fonts": "^4.0.499",
     "@remotion/renderer": "4.0.499",
+    "pngjs": "^7.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "remotion": "4.0.499"

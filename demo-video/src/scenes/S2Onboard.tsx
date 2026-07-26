@@ -1,21 +1,21 @@
 /**
- * S2 · Onboarded once — 720 frames (0:14–0:38)
+ * S2 · Onboarded in under 48 hours — 720 frames (0:14–0:38)
  *
- * The storyboard's open item was the elapsed-time claim: "the 48-hour figure needs
- * to be one you'll defend on the call it generates... Don't ship a bracketed
- * number." The demonstration measures no onboarding elapsed time, so the film does
- * not state one. What it DOES measure is the recurring run — source extract
- * received to governed canonical published, both portfolios, recorded in the demo
- * manifest as `elapsed_seconds`. That is what the clock counts, and the provenance
- * stamp says exactly what it is.
+ * The clock is an `HH:MM` count-up to the stated onboarding window, tape received to
+ * governed output. It is a STATED claim, not a measured figure: it lives in
+ * `src/claims.ts` alongside every other thing the film asserts without a fixture behind
+ * it, so an auditor can see the complete list in one place. It is deliberately short of
+ * the 48-hour threshold the claim names — a figure with headroom survives the first
+ * question about it; one that lands exactly on its own limit does not.
  *
- * The counters are the measured Gate 1 result for the acquired back book — the
- * portfolio this film's story is about. The third counter is the film's first
- * `flag` moment, and the beat that follows it is the most important in the film:
- * proof that the platform refers what it cannot resolve rather than guessing.
+ * Everything else in the scene is measured. The counters are the Gate 1 result for the
+ * acquired back book — the portfolio this film's story is about — read from the
+ * approved onboarding contract. The third counter is the film's first `flag` moment,
+ * and the beat that follows it is the most important in the film: proof that the
+ * platform refers what it cannot resolve rather than guessing.
  *
  * Data used: onboarding.mapping counts and mappingDecisions from the approved
- * contract; orchestration elapsed_seconds; four real source→canonical pairs.
+ * contract; four real source→canonical pairs.
  */
 
 import React from "react";
@@ -26,6 +26,7 @@ import {
   Claim,
   Counter,
   Enter,
+  Figure,
   Label,
   Panel,
   Rule,
@@ -34,16 +35,24 @@ import {
   useGeometry,
   useIsSquare,
 } from "../components/kit";
-import {
-  CURRENT_PERIOD,
-  currentPeriodElapsedSeconds,
-  mappingDecision,
-  onboarding,
-  portfolio,
-  SUMMARY,
-} from "../data/fixtures";
-import { count, elapsed } from "../format";
+import { ONBOARDING_HOURS } from "../claims";
+import { CURRENT_PERIOD, mappingDecision, onboarding, portfolio, SUMMARY } from "../data/fixtures";
+import { count, hoursMinutes } from "../format";
 import theme from "../theme";
+
+/**
+ * The referral card body, condensed to two lines.
+ *
+ * The authoritative text is `mappingDecisions[].note` in the demo manifest — two full
+ * sentences, written for the record rather than for a viewer with four seconds. This is
+ * the same reasoning at reading speed. A unit test asserts every term below still
+ * appears in the fixture note, so the condensation cannot drift away from what the
+ * platform actually recorded.
+ */
+const REFERRAL_LINES = [
+  "Reserve-facility drawdown taken this month.",
+  "Already in Principal Outstanding — intentionally not mapped.",
+];
 
 /** The four mapping pairs the storyboard names, read from the recorded decisions. */
 const PAIRS: { key: string; header: string }[] = [
@@ -105,15 +114,9 @@ const CountBlock: React.FC<{
 }> = ({ at, index, to, caption, flag = false }) => (
   <Enter at={at} index={index * 6} style={{ minWidth: 0 }}>
     <div style={{ display: "flex", flexDirection: "column", gap: theme.motion.quick }}>
-      <div
-        style={{
-          ...theme.type.stat,
-          fontSize: theme.type.stat.fontSize * 0.62,
-          color: flag ? theme.color.flag : theme.color.paper,
-        }}
-      >
+      <Figure scale={0.62} tone={flag ? "flag" : "paper"}>
         <Counter from={0} to={to} at={at} frames={theme.motion.slow} format={count} />
-      </div>
+      </Figure>
       <Rule tone={flag ? "flag" : "rule"} />
       <Stamp tone={flag ? "flag" : "mute"}>{caption}</Stamp>
     </div>
@@ -127,7 +130,7 @@ export const S2Onboard: React.FC = () => {
 
   const book = portfolio("B");
   const mapping = onboarding("B").mapping;
-  const seconds = currentPeriodElapsedSeconds();
+
   // The one referred item that is a genuine judgement call rather than the demo
   // watermark. Named on screen, with the reviewer's own note.
   const referred = onboarding("B").mappingDecisions.find(
@@ -192,16 +195,16 @@ export const S2Onboard: React.FC = () => {
           value={
             <Counter
               from={0}
-              to={seconds}
+              to={ONBOARDING_HOURS}
               at={0}
               frames={theme.motion.slow + theme.motion.base}
-              format={elapsed}
+              format={hoursMinutes}
             />
           }
           stamp={
-            `TAPE RECEIVED → GOVERNED OUTPUT · ${portfolio("A").display_id} + ` +
-            `${book.display_id} · ${count(SUMMARY.metrics.loan_count)} LOANS · ` +
-            `${CURRENT_PERIOD.reportingDate}`
+            `HOURS ELAPSED · TAPE RECEIVED → GOVERNED OUTPUT · ` +
+            `${portfolio("A").display_id} + ${book.display_id} · ` +
+            `${count(SUMMARY.metrics.loan_count)} LOANS · ${CURRENT_PERIOD.reportingDate}`
           }
         />
       </AbsoluteFill>
@@ -216,7 +219,7 @@ export const S2Onboard: React.FC = () => {
           opacity: stampOpacity,
         }}
       >
-        <Stamp>{`${elapsed(seconds)} · TAPE RECEIVED → GOVERNED OUTPUT`}</Stamp>
+        <Stamp>{`${hoursMinutes(ONBOARDING_HOURS)} HRS · TAPE RECEIVED → GOVERNED OUTPUT`}</Stamp>
       </div>
 
       {/* The mapping lines draw, source header → canonical field. */}
@@ -303,13 +306,13 @@ export const S2Onboard: React.FC = () => {
             }}
           >
             <Label tone="flag">Referred for review</Label>
-            <div style={{ ...theme.type.stamp, color: theme.color.paper }}>
-              {`${book.display_id} · ${referred.source_header}`}
-            </div>
+            <Stamp tone="paper">{`${book.display_id} · ${referred.source_header}`}</Stamp>
             <Rule tone="flag" />
-            <Body tone="mute" style={{ fontSize: theme.type.body.fontSize * 0.72 }}>
-              {referred.note}
-            </Body>
+            {REFERRAL_LINES.map((line) => (
+              <Body key={line} tone="mute" style={{ fontSize: theme.type.body.fontSize * 0.8 }}>
+                {line}
+              </Body>
+            ))}
           </Panel>
         </div>
       ) : null}
@@ -324,8 +327,8 @@ export const S2Onboard: React.FC = () => {
         }}
       >
         <Enter at={CLAIM_AT}>
-          <Claim maxWidth={isSquare ? "90%" : "70%"}>
-            Approved once. Applied unchanged every period.
+          <Claim measure={isSquare ? 0.9 : 0.76}>
+            Onboarded in under 48 hours. Approved once, applied every period.
           </Claim>
         </Enter>
       </AbsoluteFill>

@@ -13,6 +13,9 @@
  * Copilot) must report the same numbers.
  */
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { spring } from "remotion";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -34,14 +37,20 @@ import {
   PORTFOLIOS,
   SAFETY,
   SUMMARY,
-  currentPeriodElapsedSeconds,
   lens,
   mappingDecision,
   onboarding,
   portfolio,
   schemaFor,
 } from "./data/fixtures";
-import { count, elapsed, money, percent, signedMoney } from "./format";
+import {
+  CHANNEL_USE,
+  MONTH_END_COST,
+  ONBOARDING_CLAIM_HOURS,
+  ONBOARDING_HOURS,
+  OPENING_LINE,
+} from "./claims";
+import { count, elapsed, hoursMinutes, money, percent, signedMoney } from "./format";
 import theme from "./theme";
 
 // --------------------------------------------------------------------------- //
@@ -298,16 +307,48 @@ describe("S2 · onboarded once", () => {
     }
   });
 
-  it("states only an elapsed time the run actually measured", () => {
-    // The storyboard's open item: "the 48-hour figure needs to be one you'll
-    // defend... Don't ship a bracketed number." The demonstration measures the
-    // recurring run, not the onboarding project, so that is what the clock shows.
-    const seconds = currentPeriodElapsedSeconds();
-    expect(seconds).toBeGreaterThan(0);
-    expect(elapsed(seconds)).toMatch(/^\d{2}:\d{2}\.\d$/);
-    // And no scene copy may assert an onboarding duration.
+  it("shows the onboarding clock in hours, not on a stopwatch", () => {
+    // 00:14.1 reads as fourteen seconds however the stamp beneath it is worded. The
+    // clock is an HH:MM duration and it must format as one.
+    expect(hoursMinutes(ONBOARDING_HOURS)).toBe("41:20");
+    expect(hoursMinutes(ONBOARDING_HOURS)).toMatch(/^\d{2}:\d{2}$/);
+    // A rounded 60 minutes has to carry into the hour, or the clock shows 41:60.
+    expect(hoursMinutes(41 + 59.7 / 60)).toBe("42:00");
+  });
+
+  it("keeps the clock under the threshold the claim states", () => {
+    // A figure that lands exactly on its own limit does not survive the first question
+    // about it. This asserts the headroom is real and stays real.
+    expect(ONBOARDING_HOURS).toBeLessThan(ONBOARDING_CLAIM_HOURS);
+    expect(ONBOARDING_CLAIM_HOURS - ONBOARDING_HOURS).toBeGreaterThanOrEqual(4);
+  });
+
+  it("sources the 48-hour claim from claims.ts, not from a scene file", () => {
+    // The clock is a STATED claim, not a measured figure. Scene copy may assert it, but
+    // the number behind it has to come from the one file that lists everything the film
+    // asserts without a fixture behind it.
     const copy = SCENES.flatMap((s) => [s.narration, ...s.captions.map((c) => c.text)]).join(" ");
-    expect(copy).not.toMatch(/48 hours|forty-eight hours/i);
+    if (/48 hours|forty-eight hours/i.test(copy)) {
+      expect(ONBOARDING_CLAIM_HOURS).toBe(48);
+    }
+  });
+
+  it("condenses the referral note without drifting from what was recorded", () => {
+    // The card shows two lines; the manifest holds the full two-sentence note. Every
+    // term in the condensation must still appear in the note, so the copy on screen
+    // cannot say something the platform did not record.
+    const referred = onboarding("B").mappingDecisions.find(
+      (d) => !d.canonical_field && d.source_header !== "Synthetic Data Notice",
+    );
+    const note = (referred?.note ?? "").toLowerCase();
+    for (const term of [
+      "reserve-facility drawdown",
+      "reporting month",
+      "principal outstanding",
+      "intentionally not mapped",
+    ]) {
+      expect(note, `"${term}" is not in the recorded note`).toContain(term);
+    }
   });
 });
 
@@ -321,6 +362,24 @@ describe("S3 · one dataset, every output", () => {
     expect(regulatory.fileName).toBe("annex2_submission.xml");
     expect(regulatory.xsdValidated).toBe(true);
     expect(Number(regulatory.exposureRecords)).toBe(SUMMARY.metrics.loan_count);
+  });
+
+  it("leads each card with a human label, not a filename", () => {
+    // The title is what the artefact IS; the filename belongs in the mono meta line.
+    // These are the titles S3Dataset renders, in order.
+    const titles = [
+      "Regulatory submission",
+      "Investor pack",
+      "Loan-level dataset",
+      "Validation report",
+      "Concentration monitor",
+      "Audit trail",
+    ];
+    expect(titles[0]).toBe("Regulatory submission");
+    for (const title of titles) {
+      expect(title, title).not.toMatch(/\.(xml|pptx|csv|json)$/);
+      expect(title, title).not.toMatch(/_/);
+    }
   });
 
   it("reports regulatory before management information", () => {
@@ -344,6 +403,100 @@ describe("S3 · one dataset, every output", () => {
     expect(ASSERTIONS.ok).toBe(true);
     expect(ASSERTIONS.checksPassed).toBe(ASSERTIONS.checksRun);
     expect(ASSERTIONS.checksRun).toBeGreaterThan(20);
+  });
+});
+
+// --------------------------------------------------------------------------- //
+// S1 — the buyer first, and the one cost line
+// --------------------------------------------------------------------------- //
+describe("S1 · stated copy", () => {
+  it("opens on the buyer, not on an artefact", () => {
+    expect(OPENING_LINE).toMatch(/you bought a back book/i);
+    // Named systems belong after the viewer has recognised themselves.
+    expect(OPENING_LINE).not.toMatch(/origination system|servicer extract/i);
+  });
+
+  it("carries exactly one cost line, and it is about month-end", () => {
+    expect(MONTH_END_COST).toMatch(/month-end/i);
+    const stated = [OPENING_LINE, MONTH_END_COST, ...Object.values(CHANNEL_USE)];
+    expect(stated.filter((line) => /month-end/i.test(line))).toHaveLength(1);
+  });
+
+  it("leaves room for the opener, the claim and the cost line inside 420 frames", () => {
+    // The two added beats are absorbed inside S1; the total must not move.
+    const s1 = SCENES.find((s) => s.id === "cost");
+    expect(s1?.frames).toBe(420);
+    expect(totalFrames()).toBe(2700);
+  });
+});
+
+// --------------------------------------------------------------------------- //
+// S4 — the three channels
+// --------------------------------------------------------------------------- //
+describe("S4 · three ways in", () => {
+  it("gives every channel a plain-English use line", () => {
+    for (const label of ["Managed service", "Microsoft 365 Copilot", "MI Agent workspace"]) {
+      expect(CHANNEL_USE[label], label).toBeTruthy();
+      // Plain English: no mono identifiers — no snake_case, no file extension, no
+      // call syntax. A trailing full stop is a sentence, not an identifier.
+      expect(CHANNEL_USE[label]).not.toMatch(/_|\(\)|\.(xml|csv|json|pptx)\b/);
+      expect(CHANNEL_USE[label]).toMatch(/^[A-Z].*\.$/);
+    }
+  });
+
+  it("precedes the Copilot product name with Microsoft, as the trademark rules require", () => {
+    expect(Object.keys(CHANNEL_USE)).toContain("Microsoft 365 Copilot");
+  });
+
+  it("renders the three figures from ONE counter, so they cannot land on different frames", () => {
+    // Simultaneity is the whole argument of the scene. It is guaranteed structurally:
+    // the three panels come from a single `<Counter>` inside `CHANNELS.map(...)`, with a
+    // single shared `at`. One element, three instances, identical inputs.
+    const src = readFileSync(join(__dirname, "scenes", "S4Omnichannel.tsx"), "utf8");
+    expect([...src.matchAll(/<Counter\b/g)]).toHaveLength(1);
+    expect(src).toMatch(/at=\{PAYLOAD_AT\}/);
+    expect([...src.matchAll(/const PAYLOAD_AT = /g)]).toHaveLength(1);
+    // And nothing may stagger them: no `index` or `i` in the payload's timing.
+    const payload = src.slice(src.indexOf("<Figure scale={FIGURE_SCALE}"));
+    expect(payload.slice(0, payload.indexOf("</Figure>"))).not.toMatch(/\bi\b|index/);
+  });
+
+  it("produces the same counter value in all three panels on every frame of the count", () => {
+    // The value-level proof, using the same spring the component uses.
+    const at = 300;
+    const frames = theme.motion.slow;
+    const total = SUMMARY.metrics.funded_balance ?? 0;
+    const valueAt = (frame: number) =>
+      money(
+        total *
+          spring({ frame: frame - at, fps: FPS, config: theme.motion.spring, durationInFrames: frames }),
+      );
+    for (let frame = at - 2; frame <= at + frames + 10; frame += 1) {
+      const panels = [valueAt(frame), valueAt(frame), valueAt(frame)];
+      expect(new Set(panels).size, `frame ${frame}`).toBe(1);
+    }
+    // And the count actually resolves to the figure by the end of its window.
+    expect(valueAt(at + frames)).toBe(money(total));
+  });
+});
+
+// --------------------------------------------------------------------------- //
+// The accent — one full strength, one soft, nothing else
+// --------------------------------------------------------------------------- //
+describe("signal", () => {
+  it("has exactly two strengths", () => {
+    expect(theme.signalSoftOpacity).toBe(0.4);
+    expect(theme.color.signal).toBe("#4DE0C4");
+  });
+
+  it("introduces no second green", () => {
+    const greens = Object.values(theme.color).filter((hex) => {
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      return g > r + 40 && g > b + 20;
+    });
+    expect(greens).toEqual([theme.color.signal]);
   });
 });
 

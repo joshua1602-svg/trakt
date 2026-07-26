@@ -150,3 +150,20 @@ export const elapsed = (seconds: number | null | undefined): string => {
   const tenths = Math.floor((seconds - whole) * 10);
   return `${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}.${tenths}`;
 };
+
+/**
+ * 41:20 — an elapsed duration in HOURS and minutes.
+ *
+ * Distinct from `elapsed`, which is minutes and seconds. A stopwatch reading and a
+ * two-day onboarding window are different claims and must not share a format: 00:14.1
+ * reads as fourteen seconds no matter what the stamp beneath it says.
+ */
+export const hoursMinutes = (hours: number | null | undefined): string => {
+  if (hours == null) return "—";
+  const whole = Math.floor(hours);
+  const minutes = Math.round((hours - whole) * 60);
+  // A rounded 60 must carry, or the clock shows 41:60.
+  const hh = minutes === 60 ? whole + 1 : whole;
+  const mm = minutes === 60 ? 0 : minutes;
+  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+};

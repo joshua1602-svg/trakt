@@ -203,24 +203,33 @@ export const lockup = {
 } as const;
 
 export const radius = { card: 4, plate: 6 } as const;
-
 /** The only line weight in the film. Depth comes from this and nothing else. */
 export const hairline = 1;
 
 /**
- * The one exception: S1's failed connector. A 1px amber line on `ink` antialiases
- * toward grey and stops reading as `flag` at all, which defeats the point of the beat.
- * Two pixels is the minimum at which the accent survives, and it is used nowhere else.
+ * The one exception: S1's failed connector. A 1px amber line on `ink` antialiases toward
+ * grey and stops reading as `flag` at all, which defeats the point of the beat. Two
+ * pixels is the minimum at which the accent survives, and it is used nowhere else.
  */
 export const accentLine = 2;
 
 /** Caption plate opacity over `ink`, per the storyboard. */
 export const captionPlateOpacity = 0.7;
 
+/**
+ * `signal` has two strengths and no third.
+ *
+ *   full  — the value being proven. At most ONE element per frame carries it.
+ *   soft  — 40% opacity, for confirmations and check states only.
+ *
+ * This is not a second green. It is the same token at a stated opacity, so the
+ * hierarchy stays legible and the accent stays scarce.
+ */
+export const signalSoftOpacity = 0.4;
+
 export const theme = {
   color,
   lockup,
-  accentLine,
   family,
   weight,
   type,
@@ -228,7 +237,9 @@ export const theme = {
   layout,
   radius,
   hairline,
+  accentLine,
   captionPlateOpacity,
+  signalSoftOpacity,
   fontFaces,
   fontFaceCss,
 } as const;

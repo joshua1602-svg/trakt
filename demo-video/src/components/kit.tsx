@@ -173,6 +173,45 @@ export const Counter: React.FC<{
 };
 
 // --------------------------------------------------------------------------- //
+// <Figure> — the only way to put a computed value on screen
+// --------------------------------------------------------------------------- //
+/**
+ * A figure the pipeline produced, in the data face with `tabular-nums`.
+ *
+ * The mono rule is semantic, and it is the film's signature device: if a number came
+ * out of the pipeline it is set in IBM Plex Mono, and if it is Trakt talking about
+ * itself it is Archivo or Inter. Routing every computed value through one component
+ * means the rule cannot be broken by a scene reaching for a display token, and
+ * `scripts/lint-theme.mjs` fails the build if a `<Counter>` appears outside one.
+ *
+ * `scale` multiplies the `stat` token — the size still originates in theme.ts.
+ */
+export const Figure: React.FC<{
+  children: React.ReactNode;
+  /** Fraction of the `stat` token size. */
+  scale?: number;
+  tone?: keyof typeof theme.color;
+  /** Overrides `tone`; use when a scene interpolates the accent in or out. */
+  color?: string;
+  style?: React.CSSProperties;
+}> = ({ children, scale = 1, tone = "paper", color, style }) => {
+  const geometry = useGeometry();
+  return (
+    <div
+      style={{
+        ...theme.type.stat,
+        fontSize: theme.type.stat.fontSize * scale * geometry.statScale,
+        color: color ?? theme.color[tone],
+        whiteSpace: "nowrap",
+        ...style,
+      }}
+    >
+      {children}
+    </div>
+  );
+};
+
+// --------------------------------------------------------------------------- //
 // <Stat> — a computed figure with its provenance rule
 // --------------------------------------------------------------------------- //
 /**
@@ -207,7 +246,6 @@ export const Stat: React.FC<{
   style?: React.CSSProperties;
 }> = ({ value, stamp, accent = false, ruleWidth = "100%", align = "left", scale, style }) => {
   const geometry = useGeometry();
-  const size = theme.type.stat.fontSize * (scale ?? geometry.statScale);
   const accentAmount = accent === true ? 1 : accent === false ? 0 : accent;
   const valueColor = interpolateColors(
     accentAmount,
@@ -227,16 +265,9 @@ export const Stat: React.FC<{
         ...style,
       }}
     >
-      <div
-        style={{
-          ...theme.type.stat,
-          fontSize: size,
-          color: valueColor,
-          whiteSpace: "nowrap",
-        }}
-      >
+      <Figure scale={(scale ?? geometry.statScale) / geometry.statScale} color={valueColor}>
         {value}
-      </div>
+      </Figure>
       <Rule width={ruleWidth} />
       <Stamp style={{ textAlign: align === "center" ? "center" : "left" }}>{stamp}</Stamp>
     </div>
@@ -246,15 +277,23 @@ export const Stat: React.FC<{
 // --------------------------------------------------------------------------- //
 // <Claim> — the display line
 // --------------------------------------------------------------------------- //
-/** Archivo display. One per scene, maximum. */
+/**
+ * Archivo display. One per scene, maximum.
+ *
+ * `measure` is a FRACTION of the frame width, resolved to pixels here. A percentage
+ * would be resolved against the parent, which in a shrink-to-fit flex column is the
+ * claim's own content width — so a long claim ends up in a box narrower than the frame
+ * and sits off-centre. Resolving against the layout makes the measure definite.
+ */
 export const Claim: React.FC<{
   children: React.ReactNode;
   align?: "left" | "center";
-  /** The close is the film's only accented claim. */
+  /** Full-strength `signal`. Only the value being proven in that scene carries it. */
   accent?: boolean;
-  maxWidth?: number | string;
+  /** Fraction of the frame width the claim may occupy. */
+  measure?: number;
   style?: React.CSSProperties;
-}> = ({ children, align = "center", accent = false, maxWidth = "72%", style }) => {
+}> = ({ children, align = "center", accent = false, measure = 0.72, style }) => {
   const geometry = useGeometry();
   return (
     <div
@@ -263,9 +302,9 @@ export const Claim: React.FC<{
         fontSize: theme.type.display.fontSize * geometry.displayScale,
         color: accent ? theme.color.signal : theme.color.paper,
         textAlign: align,
-        maxWidth,
-        // Even line lengths rather than a one-word last line. Display type is the
-        // one place a widow is genuinely expensive.
+        width: geometry.width * measure,
+        // Even line lengths rather than a one-word last line. Display type is the one
+        // place a widow is genuinely expensive.
         textWrap: "balance",
         ...style,
       }}
@@ -279,8 +318,9 @@ export const Claim: React.FC<{
 export const Headline: React.FC<{
   children: React.ReactNode;
   align?: "left" | "center";
-  maxWidth?: number | string;
-}> = ({ children, align = "center", maxWidth = "80%" }) => {
+  /** Fraction of the frame width, as for <Claim>. */
+  measure?: number;
+}> = ({ children, align = "center", measure = 0.8 }) => {
   const geometry = useGeometry();
   return (
     <div
@@ -289,7 +329,7 @@ export const Headline: React.FC<{
         fontSize: theme.type.headline.fontSize * geometry.displayScale,
         color: theme.color.paper,
         textAlign: align,
-        maxWidth,
+        width: geometry.width * measure,
         textWrap: "balance",
       }}
     >
@@ -301,11 +341,24 @@ export const Headline: React.FC<{
 // --------------------------------------------------------------------------- //
 // <ArtifactCard> — a governed output
 // --------------------------------------------------------------------------- //
+/**
+ * A governed output.
+ *
+ * The TITLE is what the artefact is, in plain English and in the body face — that is
+ * what a COO reads. The filename drops into the mono meta line beneath, with the
+ * figures, because a filename is a source identifier and belongs in the data face. The
+ * old arrangement made `platform_canonical_typed.csv` the largest text on its own card,
+ * which asked the viewer to care about a path.
+ *
+ * `confirm` is a check state ("XSD validated") and is the one thing on the card that
+ * carries `signal`, at the soft strength — never full.
+ */
 export const ArtifactCard: React.FC<{
-  filename: string;
+  title: string;
   meta: string[];
+  confirm?: string;
   style?: React.CSSProperties;
-}> = ({ filename, meta, style }) => {
+}> = ({ title, meta, confirm, style }) => {
   const isSquare = useIsSquare();
   return (
     <Panel
@@ -320,19 +373,20 @@ export const ArtifactCard: React.FC<{
         ...style,
       }}
     >
-      <div
-        style={{
-          ...theme.type.stamp,
-          color: theme.color.paper,
-          overflowWrap: "anywhere",
-        }}
-      >
-        {filename}
-      </div>
+      <Body style={{ fontSize: theme.type.body.fontSize * (isSquare ? 0.82 : 0.92) }}>
+        {title}
+      </Body>
       <Rule />
       {meta.map((line) => (
-        <Stamp key={line}>{line}</Stamp>
+        <Stamp key={line} style={{ overflowWrap: "anywhere" }}>
+          {line}
+        </Stamp>
       ))}
+      {confirm ? (
+        <Stamp tone="signal" style={{ opacity: theme.signalSoftOpacity }}>
+          {confirm}
+        </Stamp>
+      ) : null}
     </Panel>
   );
 };

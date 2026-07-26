@@ -16,7 +16,7 @@
  */
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -75,6 +75,44 @@ for (const file of sourceFiles) {
   }
 }
 
+// --------------------------------------------------------------------------- //
+// The mono rule: a computed value is never set in a display or body face.
+// --------------------------------------------------------------------------- //
+// `<Counter>` only ever renders something the pipeline produced, so it is the reliable
+// marker for a computed value. It must sit inside `<Figure>` or `<Stat>` — the two
+// components that guarantee the data face and `tabular-nums`. A scene that wraps a
+// counter in its own styled div can silently put a governed figure in Archivo, which is
+// exactly the violation the rule exists to prevent.
+const MONO_HOSTS = ["<Figure", "<Stat", "<Counter"];
+for (const file of sourceFiles) {
+  if (!file.includes(`${sep}scenes${sep}`)) continue;
+  const text = readFileSync(file, "utf8");
+  const rel = relative(ROOT, file);
+  for (const match of text.matchAll(/<Counter\b/g)) {
+    // Walk backwards to the nearest opening component tag and check what it is.
+    const before = text.slice(0, match.index);
+    const host = MONO_HOSTS.map((tag) => ({ tag, at: before.lastIndexOf(tag) }))
+      .filter((h) => h.at >= 0)
+      .sort((a, b) => b.at - a.at)[0];
+    const line = before.split("\n").length;
+    if (!host || host.tag === "<Counter") {
+      findings.push(
+        `${rel}:${line}  a <Counter> outside <Figure>/<Stat> — a computed value must be ` +
+          "mono with tabular-nums",
+      );
+      continue;
+    }
+    // And nothing between the host and the counter may re-declare a face.
+    const between = text.slice(host.at, match.index);
+    if (/fontFamily|theme\.type\.(display|headline|body|label)\b/.test(between)) {
+      findings.push(
+        `${rel}:${line}  a display or body face is applied around a <Counter> — ` +
+          "computed values are IBM Plex Mono",
+      );
+    }
+  }
+}
+
 // Six type sizes, all of them used.
 const themeText = readFileSync(THEME, "utf8");
 const typeStart = themeText.indexOf("export const type = {");
@@ -106,7 +144,11 @@ if (findings.length) {
   process.exit(1);
 }
 
+const counters = sourceFiles
+  .filter((f) => f.includes(`${sep}scenes${sep}`))
+  .reduce((n, f) => n + [...readFileSync(f, "utf8").matchAll(/<Counter\b/g)].length, 0);
+
 console.log(
   `[lint-theme] PASS — ${sourceFiles.length} files, ${sizes.length} type sizes, ` +
-    `flag in ${flagScenes.length} scenes`,
+    `flag in ${flagScenes.length} scenes, ${counters} counters all in the data face`,
 );

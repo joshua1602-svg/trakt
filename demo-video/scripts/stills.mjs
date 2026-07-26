@@ -27,18 +27,32 @@ const REVIEW = join(OUT, "review");
 /** Kept in step with STILL_FRAMES in src/timeline.ts by a unit test. */
 const EMAIL_FRAMES = [1020, 1500, 2100];
 
-/** Mid-scene frames, for the visual review pass. */
+/**
+ * Review frames.
+ *
+ * One at the MIDPOINT of each scene — 210 / 780 / 1440 / 2040 / 2520 — which is the set
+ * to scrub when checking the frame as a whole, plus the specific beats worth their own
+ * look: the failed connection, the referral hold, the card fan-out and the simultaneous
+ * payload.
+ */
 const REVIEW_FRAMES = [
-  { frame: 210, name: "s1-cost" },
-  { frame: 470, name: "s2-onboard-clock" },
-  { frame: 700, name: "s2-onboard-mapping" },
-  { frame: 900, name: "s2-onboard-referred" },
-  { frame: 1250, name: "s3-dataset-total" },
-  { frame: 1500, name: "s3-dataset-cards" },
-  { frame: 1900, name: "s4-omnichannel-panels" },
-  { frame: 2100, name: "s4-omnichannel-payload" },
-  { frame: 2500, name: "s5-close" },
-  { frame: 2640, name: "s5-close-ask" },
+  { frame: 30, name: "s1-01-opening-line" },
+  { frame: 150, name: "s1-02-failed-connection" },
+  { frame: 210, name: "s1-03-midpoint" },
+  { frame: 300, name: "s1-04-cost-anchor" },
+  { frame: 450, name: "s2-01-clock" },
+  { frame: 600, name: "s2-02-mapping" },
+  { frame: 780, name: "s2-03-midpoint" },
+  { frame: 900, name: "s2-04-referral" },
+  { frame: 1080, name: "s2-05-claim" },
+  { frame: 1260, name: "s3-01-total" },
+  { frame: 1440, name: "s3-02-midpoint" },
+  { frame: 1620, name: "s3-03-claim" },
+  { frame: 1900, name: "s4-01-panels" },
+  { frame: 2040, name: "s4-02-midpoint" },
+  { frame: 2100, name: "s4-03-payload" },
+  { frame: 2520, name: "s5-01-midpoint" },
+  { frame: 2640, name: "s5-02-ask" },
 ];
 
 const main = async () => {
