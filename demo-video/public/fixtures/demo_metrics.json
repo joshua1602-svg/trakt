@@ -122,11 +122,32 @@
         "Post Code",
         "Loan Status",
         "Redemption Date",
+        "Exposure Reference",
+        "Borrower Reference",
+        "Loan Purpose",
         "Property Type",
         "Interest Rate Type",
         "Amortisation Type",
         "Occupancy Type",
         "Exposure Currency Denomination",
+        "Long Stop Date",
+        "Date Added To Pool",
+        "Approved Facility",
+        "Security Reference",
+        "Security Reference At Completion",
+        "Security Category",
+        "Valuation Basis",
+        "Origination Channel",
+        "Borrower Resident",
+        "Credit Impaired",
+        "Litigation Flag",
+        "Payment Due",
+        "Arrears Balance",
+        "Days In Arrears",
+        "Default Amount",
+        "Allocated Losses",
+        "Cumulative Recoveries",
+        "Prepayment Fee",
         "Synthetic Data Notice"
       ],
       "columns": [
@@ -163,7 +184,7 @@
         {
           "header": "Original Property Value",
           "canonical_field": "original_valuation_amount",
-          "resolution": "contract",
+          "resolution": "global",
           "note": "Valuation at completion."
         },
         {
@@ -209,6 +230,24 @@
           "note": "Populated only for loans that redeemed in the period."
         },
         {
+          "header": "Exposure Reference",
+          "canonical_field": "original_underlying_exposure_identifier",
+          "resolution": "contract",
+          "note": "Exposure identifier for regulatory reporting (ESMA RREL2)."
+        },
+        {
+          "header": "Borrower Reference",
+          "canonical_field": "original_obligor_identifier",
+          "resolution": "contract",
+          "note": "Obligor identifier for regulatory reporting (ESMA RREL4)."
+        },
+        {
+          "header": "Loan Purpose",
+          "canonical_field": "purpose",
+          "resolution": "global",
+          "note": "Use of proceeds. Required by the ESMA Annex 2 enum layer."
+        },
+        {
           "header": "Property Type",
           "canonical_field": "property_type",
           "resolution": "global",
@@ -239,6 +278,114 @@
           "note": "GBP."
         },
         {
+          "header": "Long Stop Date",
+          "canonical_field": "maturity_date",
+          "resolution": "contract",
+          "note": "Product long-stop: the date the youngest borrower reaches 110. A lifetime mortgage has no contractual repayment date, so this is the reported maturity (RREL24)."
+        },
+        {
+          "header": "Date Added To Pool",
+          "canonical_field": "pool_addition_date",
+          "resolution": "contract",
+          "note": "Date the loan entered the reported pool (RREL7)."
+        },
+        {
+          "header": "Approved Facility",
+          "canonical_field": "total_credit_limit",
+          "resolution": "contract",
+          "note": "Initial advance plus the loan's reserve facility (RREL33)."
+        },
+        {
+          "header": "Security Reference",
+          "canonical_field": "new_collateral_identifier",
+          "resolution": "contract",
+          "note": "Current key for the security property (RREC4)."
+        },
+        {
+          "header": "Security Reference At Completion",
+          "canonical_field": "original_collateral_identifier",
+          "resolution": "contract",
+          "note": "The key as at completion. Identical on this book \u2014 the collateral has never been re-keyed (RREC3)."
+        },
+        {
+          "header": "Security Category",
+          "canonical_field": "collateral_type",
+          "resolution": "contract",
+          "note": "Collateral class for the securitisation report (RREC5)."
+        },
+        {
+          "header": "Valuation Basis",
+          "canonical_field": "current_valuation_method",
+          "resolution": "contract",
+          "note": "How the current valuation was established (RREC14)."
+        },
+        {
+          "header": "Origination Channel",
+          "canonical_field": "origination_channel",
+          "resolution": "global",
+          "note": "Direct on this book (RREL26)."
+        },
+        {
+          "header": "Borrower Resident",
+          "canonical_field": "resident",
+          "resolution": "contract",
+          "note": "Obligor resident in the collateral's country (RREL10)."
+        },
+        {
+          "header": "Credit Impaired",
+          "canonical_field": "credit_impaired_obligor",
+          "resolution": "contract",
+          "note": "Obligor credit-impaired at origination (RREL14)."
+        },
+        {
+          "header": "Litigation Flag",
+          "canonical_field": "litigation",
+          "resolution": "contract",
+          "note": "Loan subject to legal proceedings (RREL75)."
+        },
+        {
+          "header": "Payment Due",
+          "canonical_field": "payment_due",
+          "resolution": "global",
+          "note": "Amount contractually due this period \u2014 nil on a roll-up product (RREL39)."
+        },
+        {
+          "header": "Arrears Balance",
+          "canonical_field": "arrears_balance",
+          "resolution": "global",
+          "note": "Arrears at the cut-off date (RREL67)."
+        },
+        {
+          "header": "Days In Arrears",
+          "canonical_field": "number_of_days_in_arrears",
+          "resolution": "global",
+          "note": "Days past due at the cut-off date (RREL68)."
+        },
+        {
+          "header": "Default Amount",
+          "canonical_field": "default_amount",
+          "resolution": "global",
+          "note": "Balance in default (RREL71)."
+        },
+        {
+          "header": "Allocated Losses",
+          "canonical_field": "allocated_losses",
+          "resolution": "global",
+          "note": "Losses allocated to date (RREL73)."
+        },
+        {
+          "header": "Cumulative Recoveries",
+          "canonical_field": "cumulative_recoveries",
+          "resolution": "global",
+          "note": "Recoveries to date (RREL74)."
+        },
+        {
+          "header": "Prepayment Fee",
+          "canonical_field": "prepayment_fee",
+          "resolution": "global",
+          "note": "Early-repayment charge applied in the period (RREL61)."
+        },
+        {
           "header": "Synthetic Data Notice",
           "canonical_field": null,
           "resolution": "global",
@@ -265,11 +412,32 @@
         "Account State",
         "Closure Date",
         "Further Advance This Period",
-        "Security Type",
+        "Exposure ID",
+        "Customer ID",
+        "Use Of Proceeds",
+        "Dwelling Type",
         "Rate Basis",
         "Repayment Profile",
         "Occupancy",
         "Currency",
+        "Contractual End Date",
+        "Pool Entry Date",
+        "Total Facility Limit",
+        "Collateral Reference",
+        "Vendor Collateral Reference",
+        "Collateral Class",
+        "Valuation Method",
+        "Introducer Type",
+        "Residency Status",
+        "Impaired At Origination",
+        "Legal Proceedings",
+        "Amount Due",
+        "Arrears Amount",
+        "Arrears Days",
+        "Defaulted Balance",
+        "Losses Allocated",
+        "Recoveries To Date",
+        "Exit Fee Charged",
         "Synthetic Data Notice"
       ],
       "columns": [
@@ -343,7 +511,7 @@
           "header": "Account State",
           "canonical_field": "account_status",
           "resolution": "contract",
-          "note": "Open | Redeemed."
+          "note": "Account status under the servicer's column naming."
         },
         {
           "header": "Closure Date",
@@ -358,10 +526,28 @@
           "note": "Reserve-facility drawdown taken in the reporting month. Reported for transparency; already included in Principal Outstanding, so it is intentionally not mapped to a canonical balance field."
         },
         {
-          "header": "Security Type",
-          "canonical_field": "security_type",
-          "resolution": "global",
-          "note": "Security property type under the servicer's naming."
+          "header": "Exposure ID",
+          "canonical_field": "original_underlying_exposure_identifier",
+          "resolution": "contract",
+          "note": "Servicer exposure identifier (ESMA RREL2)."
+        },
+        {
+          "header": "Customer ID",
+          "canonical_field": "original_obligor_identifier",
+          "resolution": "contract",
+          "note": "Servicer customer identifier (ESMA RREL4)."
+        },
+        {
+          "header": "Use Of Proceeds",
+          "canonical_field": "purpose",
+          "resolution": "contract",
+          "note": "Use of proceeds under the servicer's naming. Required by the ESMA Annex 2 enum layer."
+        },
+        {
+          "header": "Dwelling Type",
+          "canonical_field": "property_type",
+          "resolution": "contract",
+          "note": "The servicer's naming for the property type \u2014 resolved by the client contract, since 'dwelling' is not in the global alias vocabulary."
         },
         {
           "header": "Rate Basis",
@@ -386,6 +572,114 @@
           "canonical_field": "exposure_currency_denomination",
           "resolution": "global",
           "note": "GBP."
+        },
+        {
+          "header": "Contractual End Date",
+          "canonical_field": "maturity_date",
+          "resolution": "contract",
+          "note": "The servicer's long-stop date for the account (RREL24)."
+        },
+        {
+          "header": "Pool Entry Date",
+          "canonical_field": "pool_addition_date",
+          "resolution": "contract",
+          "note": "For this book the acquisition completion date, or origination where that is later (RREL7)."
+        },
+        {
+          "header": "Total Facility Limit",
+          "canonical_field": "total_credit_limit",
+          "resolution": "contract",
+          "note": "Initial drawdown plus the remaining reserve (RREL33)."
+        },
+        {
+          "header": "Collateral Reference",
+          "canonical_field": "new_collateral_identifier",
+          "resolution": "contract",
+          "note": "The servicer's current collateral key (RREC4)."
+        },
+        {
+          "header": "Vendor Collateral Reference",
+          "canonical_field": "original_collateral_identifier",
+          "resolution": "contract",
+          "note": "The vendor's key before the book transferred. Genuinely different from the current key, because the servicer re-keyed the collateral on acquisition (RREC3)."
+        },
+        {
+          "header": "Collateral Class",
+          "canonical_field": "collateral_type",
+          "resolution": "contract",
+          "note": "Collateral class (RREC5)."
+        },
+        {
+          "header": "Valuation Method",
+          "canonical_field": "current_valuation_method",
+          "resolution": "contract",
+          "note": "How the indexed valuation was established (RREC14)."
+        },
+        {
+          "header": "Introducer Type",
+          "canonical_field": "origination_channel",
+          "resolution": "contract",
+          "note": "This book was written through intermediaries (RREL26)."
+        },
+        {
+          "header": "Residency Status",
+          "canonical_field": "resident",
+          "resolution": "contract",
+          "note": "Obligor residency (RREL10)."
+        },
+        {
+          "header": "Impaired At Origination",
+          "canonical_field": "credit_impaired_obligor",
+          "resolution": "contract",
+          "note": "Credit-impaired obligor flag (RREL14)."
+        },
+        {
+          "header": "Legal Proceedings",
+          "canonical_field": "litigation",
+          "resolution": "contract",
+          "note": "Account subject to legal proceedings (RREL75)."
+        },
+        {
+          "header": "Amount Due",
+          "canonical_field": "payment_due",
+          "resolution": "contract",
+          "note": "Contractually due this period \u2014 nil (RREL39)."
+        },
+        {
+          "header": "Arrears Amount",
+          "canonical_field": "arrears_balance",
+          "resolution": "global",
+          "note": "Arrears at the cut-off (RREL67)."
+        },
+        {
+          "header": "Arrears Days",
+          "canonical_field": "number_of_days_in_arrears",
+          "resolution": "contract",
+          "note": "Days past due (RREL68)."
+        },
+        {
+          "header": "Defaulted Balance",
+          "canonical_field": "default_amount",
+          "resolution": "contract",
+          "note": "Balance in default (RREL71)."
+        },
+        {
+          "header": "Losses Allocated",
+          "canonical_field": "allocated_losses",
+          "resolution": "global",
+          "note": "Losses allocated to date (RREL73)."
+        },
+        {
+          "header": "Recoveries To Date",
+          "canonical_field": "cumulative_recoveries",
+          "resolution": "contract",
+          "note": "Recoveries to date (RREL74)."
+        },
+        {
+          "header": "Exit Fee Charged",
+          "canonical_field": "prepayment_fee",
+          "resolution": "contract",
+          "note": "The servicer's naming for the early-repayment charge (RREL61)."
         },
         {
           "header": "Synthetic Data Notice",
@@ -1776,6 +2070,19 @@
             "bucket_source": null
           },
           {
+            "field": "allocated_losses",
+            "semantic_type": "currency",
+            "storage_scale": null,
+            "display_format": "gbp",
+            "non_null": 11035,
+            "numeric_parse": 11035,
+            "dimension_available": false,
+            "metric_available": true,
+            "source_field": "allocated_losses",
+            "derivation_basis": null,
+            "bucket_source": null
+          },
+          {
             "field": "amortisation_type",
             "semantic_type": "string",
             "storage_scale": null,
@@ -1785,6 +2092,19 @@
             "dimension_available": true,
             "metric_available": false,
             "source_field": "amortisation_type",
+            "derivation_basis": null,
+            "bucket_source": null
+          },
+          {
+            "field": "arrears_balance",
+            "semantic_type": "currency",
+            "storage_scale": null,
+            "display_format": "gbp",
+            "non_null": 11035,
+            "numeric_parse": 11035,
+            "dimension_available": false,
+            "metric_available": true,
+            "source_field": "arrears_balance",
             "derivation_basis": null,
             "bucket_source": null
           },
@@ -1811,6 +2131,45 @@
             "dimension_available": true,
             "metric_available": false,
             "source_field": "collateral_geography",
+            "derivation_basis": null,
+            "bucket_source": null
+          },
+          {
+            "field": "collateral_type",
+            "semantic_type": "string",
+            "storage_scale": null,
+            "display_format": "text",
+            "non_null": 11035,
+            "numeric_parse": 0,
+            "dimension_available": false,
+            "metric_available": false,
+            "source_field": "collateral_type",
+            "derivation_basis": null,
+            "bucket_source": null
+          },
+          {
+            "field": "credit_impaired_obligor",
+            "semantic_type": "string",
+            "storage_scale": null,
+            "display_format": "text",
+            "non_null": 11035,
+            "numeric_parse": 0,
+            "dimension_available": false,
+            "metric_available": false,
+            "source_field": "credit_impaired_obligor",
+            "derivation_basis": null,
+            "bucket_source": null
+          },
+          {
+            "field": "cumulative_recoveries",
+            "semantic_type": "string",
+            "storage_scale": null,
+            "display_format": "text",
+            "non_null": 11035,
+            "numeric_parse": 0,
+            "dimension_available": false,
+            "metric_available": false,
+            "source_field": "cumulative_recoveries",
             "derivation_basis": null,
             "bucket_source": null
           },
@@ -1854,6 +2213,19 @@
             "bucket_source": null
           },
           {
+            "field": "current_valuation_method",
+            "semantic_type": "string",
+            "storage_scale": null,
+            "display_format": "text",
+            "non_null": 11035,
+            "numeric_parse": 0,
+            "dimension_available": false,
+            "metric_available": false,
+            "source_field": "current_valuation_method",
+            "derivation_basis": null,
+            "bucket_source": null
+          },
+          {
             "field": "data_cut_off_date",
             "semantic_type": "string",
             "storage_scale": null,
@@ -1863,6 +2235,19 @@
             "dimension_available": false,
             "metric_available": false,
             "source_field": "data_cut_off_date",
+            "derivation_basis": null,
+            "bucket_source": null
+          },
+          {
+            "field": "default_amount",
+            "semantic_type": "currency",
+            "storage_scale": null,
+            "display_format": "gbp",
+            "non_null": 11035,
+            "numeric_parse": 11035,
+            "dimension_available": false,
+            "metric_available": true,
+            "source_field": "default_amount",
             "derivation_basis": null,
             "bucket_source": null
           },
@@ -1893,6 +2278,19 @@
             "bucket_source": null
           },
           {
+            "field": "litigation",
+            "semantic_type": "string",
+            "storage_scale": null,
+            "display_format": "text",
+            "non_null": 11035,
+            "numeric_parse": 0,
+            "dimension_available": false,
+            "metric_available": false,
+            "source_field": "litigation",
+            "derivation_basis": null,
+            "bucket_source": null
+          },
+          {
             "field": "loan_identifier",
             "semantic_type": "string",
             "storage_scale": null,
@@ -1910,11 +2308,37 @@
             "semantic_type": "date",
             "storage_scale": null,
             "display_format": "date",
-            "non_null": 0,
+            "non_null": 11035,
+            "numeric_parse": 0,
+            "dimension_available": true,
+            "metric_available": false,
+            "source_field": "maturity_date",
+            "derivation_basis": null,
+            "bucket_source": null
+          },
+          {
+            "field": "new_collateral_identifier",
+            "semantic_type": "string",
+            "storage_scale": null,
+            "display_format": "text",
+            "non_null": 11035,
             "numeric_parse": 0,
             "dimension_available": false,
             "metric_available": false,
-            "source_field": "maturity_date",
+            "source_field": "new_collateral_identifier",
+            "derivation_basis": null,
+            "bucket_source": null
+          },
+          {
+            "field": "number_of_days_in_arrears",
+            "semantic_type": "integer",
+            "storage_scale": null,
+            "display_format": "number",
+            "non_null": 11035,
+            "numeric_parse": 11035,
+            "dimension_available": false,
+            "metric_available": true,
+            "source_field": "number_of_days_in_arrears",
             "derivation_basis": null,
             "bucket_source": null
           },
@@ -1932,6 +2356,32 @@
             "bucket_source": null
           },
           {
+            "field": "original_collateral_identifier",
+            "semantic_type": "string",
+            "storage_scale": null,
+            "display_format": "text",
+            "non_null": 11035,
+            "numeric_parse": 0,
+            "dimension_available": false,
+            "metric_available": false,
+            "source_field": "original_collateral_identifier",
+            "derivation_basis": null,
+            "bucket_source": null
+          },
+          {
+            "field": "original_obligor_identifier",
+            "semantic_type": "string",
+            "storage_scale": null,
+            "display_format": "text",
+            "non_null": 11035,
+            "numeric_parse": 0,
+            "dimension_available": false,
+            "metric_available": false,
+            "source_field": "original_obligor_identifier",
+            "derivation_basis": null,
+            "bucket_source": null
+          },
+          {
             "field": "original_principal_balance",
             "semantic_type": "currency",
             "storage_scale": null,
@@ -1945,6 +2395,19 @@
             "bucket_source": null
           },
           {
+            "field": "original_underlying_exposure_identifier",
+            "semantic_type": "string",
+            "storage_scale": null,
+            "display_format": "text",
+            "non_null": 11035,
+            "numeric_parse": 0,
+            "dimension_available": false,
+            "metric_available": false,
+            "source_field": "original_underlying_exposure_identifier",
+            "derivation_basis": null,
+            "bucket_source": null
+          },
+          {
             "field": "original_valuation_amount",
             "semantic_type": "currency",
             "storage_scale": null,
@@ -1954,6 +2417,19 @@
             "dimension_available": false,
             "metric_available": true,
             "source_field": "original_valuation_amount",
+            "derivation_basis": null,
+            "bucket_source": null
+          },
+          {
+            "field": "origination_channel",
+            "semantic_type": "string",
+            "storage_scale": null,
+            "display_format": "text",
+            "non_null": 11035,
+            "numeric_parse": 0,
+            "dimension_available": true,
+            "metric_available": false,
+            "source_field": "origination_channel",
             "derivation_basis": null,
             "bucket_source": null
           },
@@ -1997,6 +2473,45 @@
             "bucket_source": null
           },
           {
+            "field": "payment_due",
+            "semantic_type": "string",
+            "storage_scale": null,
+            "display_format": "text",
+            "non_null": 11035,
+            "numeric_parse": 0,
+            "dimension_available": false,
+            "metric_available": false,
+            "source_field": "payment_due",
+            "derivation_basis": null,
+            "bucket_source": null
+          },
+          {
+            "field": "pool_addition_date",
+            "semantic_type": "string",
+            "storage_scale": null,
+            "display_format": "text",
+            "non_null": 11035,
+            "numeric_parse": 0,
+            "dimension_available": false,
+            "metric_available": false,
+            "source_field": "pool_addition_date",
+            "derivation_basis": null,
+            "bucket_source": null
+          },
+          {
+            "field": "prepayment_fee",
+            "semantic_type": "string",
+            "storage_scale": null,
+            "display_format": "text",
+            "non_null": 11035,
+            "numeric_parse": 0,
+            "dimension_available": false,
+            "metric_available": false,
+            "source_field": "prepayment_fee",
+            "derivation_basis": null,
+            "bucket_source": null
+          },
+          {
             "field": "property_post_code",
             "semantic_type": "string",
             "storage_scale": null,
@@ -2006,6 +2521,32 @@
             "dimension_available": false,
             "metric_available": false,
             "source_field": "property_post_code",
+            "derivation_basis": null,
+            "bucket_source": null
+          },
+          {
+            "field": "property_type",
+            "semantic_type": "string",
+            "storage_scale": null,
+            "display_format": "text",
+            "non_null": 11035,
+            "numeric_parse": 0,
+            "dimension_available": false,
+            "metric_available": false,
+            "source_field": "property_type",
+            "derivation_basis": null,
+            "bucket_source": null
+          },
+          {
+            "field": "purpose",
+            "semantic_type": "string",
+            "storage_scale": null,
+            "display_format": "text",
+            "non_null": 11035,
+            "numeric_parse": 0,
+            "dimension_available": false,
+            "metric_available": false,
+            "source_field": "purpose",
             "derivation_basis": null,
             "bucket_source": null
           },
@@ -2023,15 +2564,28 @@
             "bucket_source": null
           },
           {
-            "field": "security_type",
+            "field": "resident",
             "semantic_type": "string",
             "storage_scale": null,
             "display_format": "text",
-            "non_null": 3909,
+            "non_null": 11035,
             "numeric_parse": 0,
             "dimension_available": false,
             "metric_available": false,
-            "source_field": "security_type",
+            "source_field": "resident",
+            "derivation_basis": null,
+            "bucket_source": null
+          },
+          {
+            "field": "total_credit_limit",
+            "semantic_type": "string",
+            "storage_scale": null,
+            "display_format": "text",
+            "non_null": 11035,
+            "numeric_parse": 0,
+            "dimension_available": false,
+            "metric_available": false,
+            "source_field": "total_credit_limit",
             "derivation_basis": null,
             "bucket_source": null
           },
@@ -2308,19 +2862,6 @@
             "bucket_source": null
           },
           {
-            "field": "property_type",
-            "semantic_type": "string",
-            "storage_scale": null,
-            "display_format": "text",
-            "non_null": 7126,
-            "numeric_parse": 0,
-            "dimension_available": false,
-            "metric_available": false,
-            "source_field": "property_type",
-            "derivation_basis": null,
-            "bucket_source": null
-          },
-          {
             "field": "vintage_year",
             "semantic_type": "string",
             "storage_scale": null,
@@ -2436,8 +2977,16 @@
             "format": "text",
             "scale": null
           },
+          "allocated_losses": {
+            "format": "gbp",
+            "scale": null
+          },
           "amortisation_type": {
             "format": "text",
+            "scale": null
+          },
+          "arrears_balance": {
+            "format": "gbp",
             "scale": null
           },
           "borrower_identifier": {
@@ -2445,6 +2994,18 @@
             "scale": null
           },
           "collateral_geography": {
+            "format": "text",
+            "scale": null
+          },
+          "collateral_type": {
+            "format": "text",
+            "scale": null
+          },
+          "credit_impaired_obligor": {
+            "format": "text",
+            "scale": null
+          },
+          "cumulative_recoveries": {
             "format": "text",
             "scale": null
           },
@@ -2460,8 +3021,16 @@
             "format": "gbp",
             "scale": null
           },
+          "current_valuation_method": {
+            "format": "text",
+            "scale": null
+          },
           "data_cut_off_date": {
             "format": "text",
+            "scale": null
+          },
+          "default_amount": {
+            "format": "gbp",
             "scale": null
           },
           "exposure_currency_denomination": {
@@ -2469,6 +3038,10 @@
             "scale": null
           },
           "interest_rate_type": {
+            "format": "text",
+            "scale": null
+          },
+          "litigation": {
             "format": "text",
             "scale": null
           },
@@ -2480,7 +3053,23 @@
             "format": "date",
             "scale": null
           },
+          "new_collateral_identifier": {
+            "format": "text",
+            "scale": null
+          },
+          "number_of_days_in_arrears": {
+            "format": "number",
+            "scale": null
+          },
           "occupancy_type": {
+            "format": "text",
+            "scale": null
+          },
+          "original_collateral_identifier": {
+            "format": "text",
+            "scale": null
+          },
+          "original_obligor_identifier": {
             "format": "text",
             "scale": null
           },
@@ -2488,8 +3077,16 @@
             "format": "gbp",
             "scale": null
           },
+          "original_underlying_exposure_identifier": {
+            "format": "text",
+            "scale": null
+          },
           "original_valuation_amount": {
             "format": "gbp",
+            "scale": null
+          },
+          "origination_channel": {
+            "format": "text",
             "scale": null
           },
           "origination_date": {
@@ -2504,7 +3101,27 @@
             "format": "text",
             "scale": null
           },
+          "payment_due": {
+            "format": "text",
+            "scale": null
+          },
+          "pool_addition_date": {
+            "format": "text",
+            "scale": null
+          },
+          "prepayment_fee": {
+            "format": "text",
+            "scale": null
+          },
           "property_post_code": {
+            "format": "text",
+            "scale": null
+          },
+          "property_type": {
+            "format": "text",
+            "scale": null
+          },
+          "purpose": {
             "format": "text",
             "scale": null
           },
@@ -2512,7 +3129,11 @@
             "format": "text",
             "scale": null
           },
-          "security_type": {
+          "resident": {
+            "format": "text",
+            "scale": null
+          },
+          "total_credit_limit": {
             "format": "text",
             "scale": null
           },
@@ -2596,10 +3217,6 @@
             "format": "text",
             "scale": null
           },
-          "property_type": {
-            "format": "text",
-            "scale": null
-          },
           "vintage_year": {
             "format": "text",
             "scale": null
@@ -2646,8 +3263,10 @@
           "interest_rate_bucket",
           "interest_rate_type",
           "ltv_bucket",
+          "maturity_date",
           "occupancy_type",
           "original_ltv_bucket",
+          "origination_channel",
           "origination_date",
           "originator_name",
           "portfolio_cohort",
@@ -2659,20 +3278,18 @@
           "time_on_book_bucket",
           "vintage_year"
         ],
-        "dimensions_missing": [
-          {
-            "dimension": "maturity_date",
-            "reason": "no_values_after_preparation",
-            "detail": "'maturity_date' present but has no non-blank values"
-          }
-        ],
+        "dimensions_missing": [],
         "metrics_available": [
+          "allocated_losses",
+          "arrears_balance",
           "current_interest_rate",
           "current_loan_to_value",
           "current_outstanding_balance",
           "current_principal_balance",
           "current_valuation_amount",
+          "default_amount",
           "months_on_book",
+          "number_of_days_in_arrears",
           "original_loan_to_value",
           "original_principal_balance",
           "original_valuation_amount",
@@ -7260,6 +7877,7 @@
         "interest_rate_bucket",
         "ltv_bucket",
         "original_ltv_bucket",
+        "origination_channel",
         "ticket_bucket"
       ]
     }

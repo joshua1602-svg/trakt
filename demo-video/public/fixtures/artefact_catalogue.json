@@ -8,12 +8,12 @@
     "fileName": "platform_canonical_typed.csv",
     "format": "CSV",
     "rows": 11035,
-    "columns": 42,
-    "sizeBytes": 5106316,
+    "columns": 61,
+    "sizeBytes": 6722678,
     "totalBalance": 1964886258.21,
     "portfolioCount": 2,
     "compositeKey": "source_portfolio_id + loan_identifier",
-    "contentSha256": "sha256:035891d43d2ec65c7dc27b3f85fa1fa4e400468b9012eb37ce5d13b5dc616ef0",
+    "contentSha256": "sha256:5ee6e8a49c80c6c6d84f53c912bf66e361d469d2ed88c74e696f33bcba4b2b9c",
     "reportingDate": "2026-06-30",
     "producedBy": "engine/platform_assembler.py"
   },
@@ -47,13 +47,13 @@
         "label": "ALP Origination Book",
         "rows": 7126,
         "gate3bSummary": {
-          "total_fields_affected": 2,
-          "blocking_count": 1,
+          "total_fields_affected": 1,
+          "blocking_count": 0,
           "review_count": 3,
           "info_count": 0
         },
         "canonicalErrors": 0,
-        "canonicalWarnings": 1,
+        "canonicalWarnings": 0,
         "businessRuleExceptions": 54,
         "businessRules": [
           {
@@ -81,13 +81,13 @@
         "label": "ALP Acquired Back Book",
         "rows": 3909,
         "gate3bSummary": {
-          "total_fields_affected": 2,
-          "blocking_count": 1,
+          "total_fields_affected": 1,
+          "blocking_count": 0,
           "review_count": 3,
           "info_count": 0
         },
         "canonicalErrors": 0,
-        "canonicalWarnings": 1,
+        "canonicalWarnings": 0,
         "businessRuleExceptions": 21,
         "businessRules": [
           {
@@ -120,8 +120,8 @@
     "fileName": "investor_pack.pptx",
     "format": "PowerPoint (PPTX)",
     "slides": 18,
-    "sizeBytes": 1297654,
-    "contentSha256": "sha256:3bd8febe27fa582fc626445c331f1ef1b82b3837bcc3c0e97aad5aae5cf4c73e",
+    "sizeBytes": 1309109,
+    "contentSha256": "sha256:e6952f9616539b98c7dd5efc91f7601f11fb39efa68496ea2d14eff4c2873803",
     "reportingPeriod": "2026-06",
     "path": "/home/user/trakt/demo_platform/workspace/artefacts/investor_deck/investor_pack.pptx",
     "publishedTo": "/home/user/trakt/demo_platform/workspace/decks/alderbridge/latest/investor_pack.pptx",
@@ -763,11 +763,33 @@
     "reason": null
   },
   "regulatoryOutput": {
-    "available": false,
+    "available": true,
     "kind": "regulatory_output",
     "title": "ESMA Annex 2 exposure report",
-    "reason": "ValueError: Field 'purpose' has unmapped enum values in strict Annex2 mode: ['NULL']",
-    "note": "Excluded from the film: the regime projection requires a confirmed enum-review pass that this demonstration does not run."
+    "fileName": "annex2_submission.xml",
+    "format": "XML (ESMA auth.099.001.04)",
+    "rows": 11035,
+    "exposureRecords": 11035,
+    "fields": 105,
+    "sizeBytes": 208822291,
+    "xsdValidated": true,
+    "contentSha256": "sha256:a21f8a4c33314cfeff42758a6fbb0c580b9dc594eae894180de600b2ec8d685d",
+    "reportingDate": "2026-06-30",
+    "stages": [
+      {
+        "stage": "gate_4b_projection",
+        "returncode": 0
+      },
+      {
+        "stage": "gate_4b_delivery_normalisation",
+        "returncode": 0
+      },
+      {
+        "stage": "gate_5_xml_and_xsd",
+        "returncode": 0
+      }
+    ],
+    "producedBy": "engine/gate_4_projection/regime_projector.py \u2192 engine/gate_4b_delivery/annex2_delivery_normalizer.py \u2192 engine/gate_5_delivery/xml_builder_annex2.py"
   },
   "auditManifest": {
     "available": true,
@@ -783,43 +805,43 @@
         "portfolio": "ALP_ORIGINATION",
         "period": "2026-04",
         "fileName": "ALP_ORIGINATION_20260430_SYNTHETIC.csv",
-        "sizeBytes": 1611685,
-        "contentSha256": "sha256:e1f47e9f0cbaa51152affcd9c988f964b26edcbbca9b1db825765f2d775c2321"
+        "sizeBytes": 2775114,
+        "contentSha256": "sha256:5ebaa5b53d42e24382674d6a7cc33c43de38c91dd476080a35fab9e4d3e689ee"
       },
       {
         "portfolio": "ALP_ORIGINATION",
         "period": "2026-05",
         "fileName": "ALP_ORIGINATION_20260531_SYNTHETIC.csv",
-        "sizeBytes": 1618677,
-        "contentSha256": "sha256:2d6bf26d1f37c6104a471aeb1ec93a7ab8eb48c8b18ad57aa51ea44c1531f718"
+        "sizeBytes": 2787198,
+        "contentSha256": "sha256:0c0c37b5c1d3e56ae2fe3a58ca880e96782bb3b8931e75c48936e3c0b4697e66"
       },
       {
         "portfolio": "ALP_ORIGINATION",
         "period": "2026-06",
         "fileName": "ALP_ORIGINATION_20260630_SYNTHETIC.csv",
-        "sizeBytes": 1627161,
-        "contentSha256": "sha256:033e0849f99c0fa8d36843b19d1ba999d2d8f4b06a68a51ce652b9994e0e67e5"
+        "sizeBytes": 2801780,
+        "contentSha256": "sha256:8c49faa37d4041081200c166ac3f62f0feba5771a9bb3b45748b5a9285fd2039"
       },
       {
         "portfolio": "ALP_ACQUIRED",
         "period": "2026-04",
         "fileName": "ALP_ACQUIRED_20260430_SYNTHETIC.csv",
-        "sizeBytes": 893707,
-        "contentSha256": "sha256:dd85ac7c417338237e3b135239b123d990cf1cc75a02287e51f696cc40e7f55f"
+        "sizeBytes": 1549510,
+        "contentSha256": "sha256:864295897dd0a8a044cdeffb9efe7645775885b4c1a8391e9d681dc0dda41ed7"
       },
       {
         "portfolio": "ALP_ACQUIRED",
         "period": "2026-05",
         "fileName": "ALP_ACQUIRED_20260531_SYNTHETIC.csv",
-        "sizeBytes": 890699,
-        "contentSha256": "sha256:e97b02bee79cb347df56692fc140a06905fd38c82fb337b4f564907332cd023e"
+        "sizeBytes": 1544175,
+        "contentSha256": "sha256:ac1c308726ee0dc9398d46449f6bf4d76cd68878870a18ffd6e3b8b891414bca"
       },
       {
         "portfolio": "ALP_ACQUIRED",
         "period": "2026-06",
         "fileName": "ALP_ACQUIRED_20260630_SYNTHETIC.csv",
-        "sizeBytes": 887306,
-        "contentSha256": "sha256:93eb40fee61efa903b71e78b071d8079ac235c7ead1cb5c88387bf499582dc10"
+        "sizeBytes": 1538320,
+        "contentSha256": "sha256:0fc554e748e52bb565e244e43e5d09cd5ecef12c32a69a758e4bb09d1c9c2039"
       }
     ],
     "gateExecution": [
@@ -828,186 +850,90 @@
         "period": "2026-04",
         "rows": 7058,
         "balance": 1364011072.81,
-        "gates": {
-          "semantic_alignment": {
-            "status": "pass",
-            "fields_mapped": 18,
-            "artifact": "/home/user/trakt/demo_platform/workspace/runs/alp_origination/mi_2026_04/out/ALP_ORIGINATION_20260430_SYNTHETIC_header_mapping_report.json"
-          },
-          "canonical_transform": {
-            "status": "pass",
-            "artifact": "/home/user/trakt/demo_platform/workspace/runs/alp_origination/mi_2026_04/out/ALP_ORIGINATION_20260430_SYNTHETIC_transform_report.json"
-          },
-          "canonical_validation": {
-            "status": "pass",
-            "warnings": 0,
-            "errors": 0,
-            "blocking": false,
-            "artifact": "/home/user/trakt/demo_platform/workspace/runs/alp_origination/mi_2026_04/out_validation/ALP_ORIGINATION_20260430_SYNTHETIC_canonical_typed_canonical_violations.csv"
-          },
-          "business_rules": {
-            "status": "review",
-            "failures": 48,
-            "rules_executed": 3,
-            "artifact": "/home/user/trakt/demo_platform/workspace/runs/alp_origination/mi_2026_04/out_validation/ALP_ORIGINATION_20260430_SYNTHETIC_canonical_business_rules_violations.csv"
-          }
-        },
-        "elapsedSeconds": null
-      },
-      {
-        "portfolio": "ALP_ORIGINATION",
-        "period": "2026-05",
-        "rows": 7089,
-        "balance": 1374047049.17,
-        "gates": {
-          "semantic_alignment": {
-            "status": "pass",
-            "fields_mapped": 18,
-            "artifact": "/home/user/trakt/demo_platform/workspace/runs/alp_origination/mi_2026_05/out/ALP_ORIGINATION_20260531_SYNTHETIC_header_mapping_report.json"
-          },
-          "canonical_transform": {
-            "status": "pass",
-            "artifact": "/home/user/trakt/demo_platform/workspace/runs/alp_origination/mi_2026_05/out/ALP_ORIGINATION_20260531_SYNTHETIC_transform_report.json"
-          },
-          "canonical_validation": {
-            "status": "pass",
-            "warnings": 0,
-            "errors": 0,
-            "blocking": false,
-            "artifact": "/home/user/trakt/demo_platform/workspace/runs/alp_origination/mi_2026_05/out_validation/ALP_ORIGINATION_20260531_SYNTHETIC_canonical_typed_canonical_violations.csv"
-          },
-          "business_rules": {
-            "status": "review",
-            "failures": 50,
-            "rules_executed": 3,
-            "artifact": "/home/user/trakt/demo_platform/workspace/runs/alp_origination/mi_2026_05/out_validation/ALP_ORIGINATION_20260531_SYNTHETIC_canonical_business_rules_violations.csv"
-          }
-        },
-        "elapsedSeconds": null
-      },
-      {
-        "portfolio": "ALP_ORIGINATION",
-        "period": "2026-06",
-        "rows": 7126,
-        "balance": 1385508582.98,
-        "gates": {
-          "semantic_alignment": {
-            "status": "pass",
-            "fields_mapped": 18,
-            "artifact": "/home/user/trakt/demo_platform/workspace/runs/alp_origination/mi_2026_06/out/ALP_ORIGINATION_20260630_SYNTHETIC_header_mapping_report.json"
-          },
-          "canonical_transform": {
-            "status": "pass",
-            "artifact": "/home/user/trakt/demo_platform/workspace/runs/alp_origination/mi_2026_06/out/ALP_ORIGINATION_20260630_SYNTHETIC_transform_report.json"
-          },
-          "canonical_validation": {
-            "status": "pass",
-            "warnings": 0,
-            "errors": 0,
-            "blocking": false,
-            "artifact": "/home/user/trakt/demo_platform/workspace/runs/alp_origination/mi_2026_06/out_validation/ALP_ORIGINATION_20260630_SYNTHETIC_canonical_typed_canonical_violations.csv"
-          },
-          "business_rules": {
-            "status": "review",
-            "failures": 54,
-            "rules_executed": 3,
-            "artifact": "/home/user/trakt/demo_platform/workspace/runs/alp_origination/mi_2026_06/out_validation/ALP_ORIGINATION_20260630_SYNTHETIC_canonical_business_rules_violations.csv"
-          }
-        },
-        "elapsedSeconds": null
+        "gates": [
+          "[Gate 1] Semantic alignment.............. OK 39 fields mapped | 0 HQ recommendations",
+          "[Gate 2] Canonical validation............ OK 7,058 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
+          "[Gate 2.5] Data lineage.................. OK",
+          "[Gate 3] Business rules.................. Warn 3 rules | 48 failures",
+          "[Gate 3b] Validation aggregation.......... OK -> ALP_ORIGINATION_20260430_SYNTHETIC_field_summary.csv",
+          "[MI] Dashboard-ready canonical produced."
+        ],
+        "elapsedSeconds": 7.92
       },
       {
         "portfolio": "ALP_ACQUIRED",
         "period": "2026-04",
         "rows": 3938,
         "balance": 568299918.39,
-        "gates": {
-          "semantic_alignment": {
-            "status": "pass",
-            "fields_mapped": 18,
-            "artifact": "/home/user/trakt/demo_platform/workspace/runs/alp_acquired/mi_2026_04/out/ALP_ACQUIRED_20260430_SYNTHETIC_header_mapping_report.json"
-          },
-          "canonical_transform": {
-            "status": "pass",
-            "artifact": "/home/user/trakt/demo_platform/workspace/runs/alp_acquired/mi_2026_04/out/ALP_ACQUIRED_20260430_SYNTHETIC_transform_report.json"
-          },
-          "canonical_validation": {
-            "status": "pass",
-            "warnings": 0,
-            "errors": 0,
-            "blocking": false,
-            "artifact": "/home/user/trakt/demo_platform/workspace/runs/alp_acquired/mi_2026_04/out_validation/ALP_ACQUIRED_20260430_SYNTHETIC_canonical_typed_canonical_violations.csv"
-          },
-          "business_rules": {
-            "status": "review",
-            "failures": 30,
-            "rules_executed": 3,
-            "artifact": "/home/user/trakt/demo_platform/workspace/runs/alp_acquired/mi_2026_04/out_validation/ALP_ACQUIRED_20260430_SYNTHETIC_canonical_business_rules_violations.csv"
-          }
-        },
-        "elapsedSeconds": null
+        "gates": [
+          "[Gate 1] Semantic alignment.............. OK 39 fields mapped | 0 HQ recommendations",
+          "[Gate 2] Canonical validation............ OK 3,938 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
+          "[Gate 2.5] Data lineage.................. OK",
+          "[Gate 3] Business rules.................. Warn 3 rules | 30 failures",
+          "[Gate 3b] Validation aggregation.......... OK -> ALP_ACQUIRED_20260430_SYNTHETIC_field_summary.csv",
+          "[MI] Dashboard-ready canonical produced."
+        ],
+        "elapsedSeconds": 6.17
+      },
+      {
+        "portfolio": "ALP_ORIGINATION",
+        "period": "2026-05",
+        "rows": 7089,
+        "balance": 1374047049.17,
+        "gates": [
+          "[Gate 1] Semantic alignment.............. OK 39 fields mapped | 0 HQ recommendations",
+          "[Gate 2] Canonical validation............ OK 7,089 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
+          "[Gate 2.5] Data lineage.................. OK",
+          "[Gate 3] Business rules.................. Warn 3 rules | 50 failures",
+          "[Gate 3b] Validation aggregation.......... OK -> ALP_ORIGINATION_20260531_SYNTHETIC_field_summary.csv",
+          "[MI] Dashboard-ready canonical produced."
+        ],
+        "elapsedSeconds": 7.89
       },
       {
         "portfolio": "ALP_ACQUIRED",
         "period": "2026-05",
         "rows": 3924,
         "balance": 572780391.43,
-        "gates": {
-          "semantic_alignment": {
-            "status": "pass",
-            "fields_mapped": 18,
-            "artifact": "/home/user/trakt/demo_platform/workspace/runs/alp_acquired/mi_2026_05/out/ALP_ACQUIRED_20260531_SYNTHETIC_header_mapping_report.json"
-          },
-          "canonical_transform": {
-            "status": "pass",
-            "artifact": "/home/user/trakt/demo_platform/workspace/runs/alp_acquired/mi_2026_05/out/ALP_ACQUIRED_20260531_SYNTHETIC_transform_report.json"
-          },
-          "canonical_validation": {
-            "status": "pass",
-            "warnings": 0,
-            "errors": 0,
-            "blocking": false,
-            "artifact": "/home/user/trakt/demo_platform/workspace/runs/alp_acquired/mi_2026_05/out_validation/ALP_ACQUIRED_20260531_SYNTHETIC_canonical_typed_canonical_violations.csv"
-          },
-          "business_rules": {
-            "status": "review",
-            "failures": 32,
-            "rules_executed": 3,
-            "artifact": "/home/user/trakt/demo_platform/workspace/runs/alp_acquired/mi_2026_05/out_validation/ALP_ACQUIRED_20260531_SYNTHETIC_canonical_business_rules_violations.csv"
-          }
-        },
-        "elapsedSeconds": null
+        "gates": [
+          "[Gate 1] Semantic alignment.............. OK 39 fields mapped | 0 HQ recommendations",
+          "[Gate 2] Canonical validation............ OK 3,924 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
+          "[Gate 2.5] Data lineage.................. OK",
+          "[Gate 3] Business rules.................. Warn 3 rules | 32 failures",
+          "[Gate 3b] Validation aggregation.......... OK -> ALP_ACQUIRED_20260531_SYNTHETIC_field_summary.csv",
+          "[MI] Dashboard-ready canonical produced."
+        ],
+        "elapsedSeconds": 6.38
+      },
+      {
+        "portfolio": "ALP_ORIGINATION",
+        "period": "2026-06",
+        "rows": 7126,
+        "balance": 1385508582.98,
+        "gates": [
+          "[Gate 1] Semantic alignment.............. OK 39 fields mapped | 0 HQ recommendations",
+          "[Gate 2] Canonical validation............ OK 7,126 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
+          "[Gate 2.5] Data lineage.................. OK",
+          "[Gate 3] Business rules.................. Warn 3 rules | 54 failures",
+          "[Gate 3b] Validation aggregation.......... OK -> ALP_ORIGINATION_20260630_SYNTHETIC_field_summary.csv",
+          "[MI] Dashboard-ready canonical produced."
+        ],
+        "elapsedSeconds": 7.69
       },
       {
         "portfolio": "ALP_ACQUIRED",
         "period": "2026-06",
         "rows": 3909,
         "balance": 579377675.23,
-        "gates": {
-          "semantic_alignment": {
-            "status": "pass",
-            "fields_mapped": 18,
-            "artifact": "/home/user/trakt/demo_platform/workspace/runs/alp_acquired/mi_2026_06/out/ALP_ACQUIRED_20260630_SYNTHETIC_header_mapping_report.json"
-          },
-          "canonical_transform": {
-            "status": "pass",
-            "artifact": "/home/user/trakt/demo_platform/workspace/runs/alp_acquired/mi_2026_06/out/ALP_ACQUIRED_20260630_SYNTHETIC_transform_report.json"
-          },
-          "canonical_validation": {
-            "status": "pass",
-            "warnings": 0,
-            "errors": 0,
-            "blocking": false,
-            "artifact": "/home/user/trakt/demo_platform/workspace/runs/alp_acquired/mi_2026_06/out_validation/ALP_ACQUIRED_20260630_SYNTHETIC_canonical_typed_canonical_violations.csv"
-          },
-          "business_rules": {
-            "status": "review",
-            "failures": 21,
-            "rules_executed": 3,
-            "artifact": "/home/user/trakt/demo_platform/workspace/runs/alp_acquired/mi_2026_06/out_validation/ALP_ACQUIRED_20260630_SYNTHETIC_canonical_business_rules_violations.csv"
-          }
-        },
-        "elapsedSeconds": null
+        "gates": [
+          "[Gate 1] Semantic alignment.............. OK 39 fields mapped | 0 HQ recommendations",
+          "[Gate 2] Canonical validation............ OK 3,909 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
+          "[Gate 2.5] Data lineage.................. OK",
+          "[Gate 3] Business rules.................. Warn 3 rules | 21 failures",
+          "[Gate 3b] Validation aggregation.......... OK -> ALP_ACQUIRED_20260630_SYNTHETIC_field_summary.csv",
+          "[MI] Dashboard-ready canonical produced."
+        ],
+        "elapsedSeconds": 6.45
       }
     ],
     "assembledOutputs": [
@@ -1016,7 +942,7 @@
         "reportingDate": "2026-04-30",
         "rows": 10996,
         "balance": 1932310991.2,
-        "contentSha256": "sha256:49f84c43bb8295637ba0c5164a86e509b0f0748eeab00d025ba3cfe5d5a2ad6c",
+        "contentSha256": "sha256:88ce77341d1f5a1c89be5908346435e24231c58ee85e9f796b93a521c8daf3e5",
         "uri": "blob://processed/platform/alderbridge/2026-04-30"
       },
       {
@@ -1024,7 +950,7 @@
         "reportingDate": "2026-05-31",
         "rows": 11013,
         "balance": 1946827440.6,
-        "contentSha256": "sha256:2de7c2518a32d78dea9c68c6d6e03fc9f595b09f14b751c464e36bad9e038b89",
+        "contentSha256": "sha256:cffd127d525f73ac1187e07b6da36cf25535d4dc709319a91299b1a268f6a6d0",
         "uri": "blob://processed/platform/alderbridge/2026-05-31"
       },
       {
@@ -1032,7 +958,7 @@
         "reportingDate": "2026-06-30",
         "rows": 11035,
         "balance": 1964886258.21,
-        "contentSha256": "sha256:035891d43d2ec65c7dc27b3f85fa1fa4e400468b9012eb37ce5d13b5dc616ef0",
+        "contentSha256": "sha256:5ee6e8a49c80c6c6d84f53c912bf66e361d469d2ed88c74e696f33bcba4b2b9c",
         "uri": "blob://processed/platform/alderbridge/2026-06-30"
       }
     ],

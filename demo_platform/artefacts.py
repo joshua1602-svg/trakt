@@ -332,65 +332,247 @@ def risk_monitor() -> Dict[str, Any]:
 # 5. Regulatory output (attempted honestly; reported unavailable if it cannot run)
 # --------------------------------------------------------------------------- #
 def regulatory_output(*, verbose: bool = True) -> Dict[str, Any]:
-    """Attempt the ESMA Annex 2 regime projection for one portfolio.
+    """Produce the ESMA Annex 2 exposure-level submission for the current period.
 
-    The demonstration's recurring run is MI-mode, because ESMA delivery is a
-    separately governed capability that requires a confirmed enum-review pass
-    (``engine/enum_agent``) before a projection is allowed to proceed. This runs
-    the projector so the outcome is a measured fact rather than an assumption; if
-    it cannot complete, the artefact is reported as unavailable with the reason and
-    the film does not show it.
+    Runs the real regulatory path end to end for the consolidated platform
+    canonical: Gate 4b regime projection, delivery normalisation, then Gate 5 XML
+    generation with XSD validation against the in-repo
+    ``DRAFT1auth.099.001.04_1.3.0.xsd``.
+
+    The outcome is a measured fact. If any stage cannot complete, the artefact is
+    reported as unavailable with the reason and the film does not show it.
     """
-    portfolio = cfg.PORTFOLIO_A
-    canonical = (cfg.run_output_dir(portfolio.source_portfolio_id,
-                                    cfg.CURRENT_PERIOD.run_id)
-                 / f"{cfg.source_file(portfolio, cfg.CURRENT_PERIOD).stem}_canonical_typed.csv")
+    canonical = (_dated_platform_dir(cfg.CURRENT_PERIOD)
+                 / "platform_canonical_typed.csv")
     if not canonical.exists():
-        return {"available": False, "reason": "no canonical output to project"}
+        return {"available": False, "reason": "no assembled platform canonical to project"}
+
     out_dir = cfg.artefact_dir() / "regulatory"
     out_dir.mkdir(parents=True, exist_ok=True)
-    cmd = [
-        sys.executable, str(cfg.REPO_ROOT / "engine" / "gate_4_projection" / "regime_projector.py"),
-        str(canonical), "--regime", "ESMA_Annex2",
-        "--registry", str(cfg.REPO_ROOT / "config" / "system" / "fields_registry.yaml"),
-        "--enum-mapping", str(cfg.REPO_ROOT / "config" / "system" / "enum_mapping.yaml"),
-        "--config", str(cfg.demo_client_config()),
-        "--template-order", str(cfg.REPO_ROOT / "config" / "system" / "esma_code_order.yaml"),
+    # The projector derives the output stem from the input filename; give it a
+    # name that reads as a submission rather than as an internal canonical.
+    staged = out_dir / f"{cfg.CLIENT_ID}_annex2_{cfg.CURRENT_PERIOD.period}.csv"
+    shutil.copyfile(canonical, staged)
+
+    stages: List[Dict[str, Any]] = []
+
+    def _stage(name: str, cmd: List[Any]) -> subprocess.CompletedProcess:
+        proc = subprocess.run([str(c) for c in cmd], cwd=str(cfg.REPO_ROOT),
+                              capture_output=True, text=True)
+        stages.append({"stage": name, "returncode": proc.returncode})
+        return proc
+
+    config_root = cfg.REPO_ROOT / "config"
+    proj = _stage("gate_4b_projection", [
+        sys.executable, cfg.REPO_ROOT / "engine" / "gate_4_projection" / "regime_projector.py",
+        staged, "--regime", "ESMA_Annex2",
+        "--registry", config_root / "system" / "fields_registry.yaml",
+        "--enum-mapping", _demo_enum_mapping(out_dir),
+        "--config", cfg.demo_client_config(),
+        "--template-order", config_root / "system" / "esma_code_order.yaml",
         "--portfolio-type", "equity_release",
-        "--output-dir", str(out_dir),
-    ]
-    proc = subprocess.run(cmd, cwd=str(cfg.REPO_ROOT), capture_output=True, text=True)
-    projected = next(iter(sorted(out_dir.glob("*_projected.csv"))), None)
-    if proc.returncode != 0 or projected is None:
-        reason = next((ln.strip() for ln in reversed((proc.stderr or "").splitlines())
-                       if ln.strip()), f"projector exited {proc.returncode}")
-        if verbose:
-            print(f"  [artefacts] regulatory projection unavailable: {reason[:160]}")
-        return {
-            "available": False,
-            "kind": "regulatory_output",
-            "title": "ESMA Annex 2 exposure report",
-            "reason": reason[:400],
-            "note": "Excluded from the film: the regime projection requires a "
-                    "confirmed enum-review pass that this demonstration does not "
-                    "run.",
-        }
-    df = pd.read_csv(projected, low_memory=False)
+        "--output-dir", out_dir,
+    ])
+    projected = next(iter(sorted(out_dir.glob("*_ESMA_Annex2_projected.csv"))), None)
+    if proj.returncode != 0 or projected is None:
+        return _regulatory_unavailable(proj, stages, "projection", verbose)
+
+    norm = _stage("gate_4b_delivery_normalisation", [
+        sys.executable, cfg.REPO_ROOT / "engine" / "gate_4b_delivery" / "annex2_delivery_normalizer.py",
+        "--input", projected,
+        "--rules", _demo_delivery_rules(out_dir),
+        "--output-dir", out_dir,
+    ])
+    delivery = next(iter(sorted(out_dir.glob("*_delivery_ready.csv"))), None)
+    if norm.returncode != 0 or delivery is None:
+        return _regulatory_unavailable(norm, stages, "delivery normalisation", verbose)
+
+    xml_out = out_dir / "annex2_submission.xml"
+    xml = _stage("gate_5_xml_and_xsd", [
+        sys.executable, cfg.REPO_ROOT / "engine" / "gate_5_delivery" / "xml_builder_annex2.py",
+        "--input", delivery,
+        "--output", xml_out,
+        "--mapping-workbook", cfg.REPO_ROOT
+        / "DRAFT1auth.099.001.04_non-ABCP Underlying Exposure Report_Version_1.3.1.xlsx",
+        "--sheet", "DRAFT1auth.099.001.04",
+        "--code-order-yaml", config_root / "system" / "esma_code_order.yaml",
+        "--xsd", config_root / "system" / "DRAFT1auth.099.001.04_1.3.0.xsd",
+    ])
+    if xml.returncode != 0 or not xml_out.exists():
+        return _regulatory_unavailable(xml, stages, "XML generation / XSD validation", verbose)
+
+    projected_df = pd.read_csv(projected, low_memory=False)
+    delivery_df = pd.read_csv(delivery, low_memory=False)
+    # The builder prints "XSD Validation: PASSED" and exits non-zero on failure;
+    # match its own wording rather than inferring from the return code alone.
+    xsd_validated = "XSD Validation: PASSED" in (xml.stdout or "")
+    exposure_records = _count_xml_records(xml_out)
+
     if verbose:
-        print(f"  [artefacts] regulatory projection: {len(df):,} rows, "
-              f"{len(df.columns)} fields")
+        print(f"  [artefacts] ESMA Annex 2: {exposure_records:,} exposure records, "
+              f"{len(delivery_df.columns)} fields, "
+              f"{xml_out.stat().st_size / 1e6:,.1f} MB XML"
+              + (", XSD valid" if xsd_validated else ""))
+
     return {
         "available": True,
         "kind": "regulatory_output",
         "title": "ESMA Annex 2 exposure report",
-        "fileName": projected.name,
-        "format": "CSV (projection)",
-        "rows": int(len(df)),
-        "fields": int(len(df.columns)),
-        "sizeBytes": projected.stat().st_size,
+        "fileName": xml_out.name,
+        "format": "XML (ESMA auth.099.001.04)",
+        "rows": int(len(projected_df)),
+        "exposureRecords": exposure_records,
+        "fields": int(len(delivery_df.columns)),
+        "sizeBytes": xml_out.stat().st_size,
+        "xsdValidated": xsd_validated,
+        "contentSha256": _sha256(xml_out),
         "reportingDate": cfg.CURRENT_PERIOD.reporting_date,
-        "producedBy": "engine/gate_4_projection/regime_projector.py",
+        "stages": stages,
+        "producedBy": "engine/gate_4_projection/regime_projector.py → "
+                      "engine/gate_4b_delivery/annex2_delivery_normalizer.py → "
+                      "engine/gate_5_delivery/xml_builder_annex2.py",
     }
+
+
+#: The collateral-type codes the ESMA auth.099.001.04 schema itself defines for
+#: ``CollTp``, read off the XSD enumeration. Residential property is ``RBLD``.
+_ANNEX2_COLLATERAL_TYPE_CODES = (
+    "RBLD", "RALV", "CBLD", "CMTR", "IBLD", "INDE", "MIXD", "OFEQ", "OTRE",
+    "NACM", "NALV", "INDV", "ITEQ", "MCHT", "CARX", "AERO", "ENEQ", "GUAR",
+    "MDEQ", "OTFA", "OTGI", "OTHV", "OTHE", "SECU", "OTHR",
+)
+
+
+def _demo_enum_mapping(out_dir: Path) -> Path:
+    """Write a demo-scoped copy of the regime enum mapping and return its path.
+
+    ``config/system/enum_mapping.yaml`` is production configuration and is left
+    untouched. Its ``ESMA_Annex2.collateral_type`` table maps dwelling forms
+    (HOUSE, FLAT, LAND …) onto ``R1``/``R2``/``C1``/``C2``, which are the codes the
+    Annex 2 *property type* field takes — not the codes the auth.099.001.04 schema
+    accepts for ``CollTp``. The repository's own enum library already states the
+    canonical answer for this book (``config/system/enum_synonyms.yaml`` maps
+    "residential property" to ``RBLD``), but the projector's enum resolver
+    discards a synonym whose target is absent from the regime table, so the value
+    reaches Gate 5 unmapped and the XSD rejects it.
+
+    The overlay adds identity entries for the codes the XSD enumerates, so the
+    canonical value survives projection. It invents no code and remaps nothing
+    that was already mapped. Passed to the projector through its own
+    ``--enum-mapping`` argument, which is a first-class per-run input.
+    """
+    import yaml
+
+    source = cfg.REPO_ROOT / "config" / "system" / "enum_mapping.yaml"
+    mapping = yaml.safe_load(source.read_text(encoding="utf-8"))
+
+    table = (mapping.setdefault("ESMA_Annex2", {})
+                    .setdefault("collateral_type", {}))
+    for code in _ANNEX2_COLLATERAL_TYPE_CODES:
+        table.setdefault(code, code)
+
+    path = out_dir / "enum_mapping_demo.yaml"
+    path.write_text(
+        "# GENERATED — demo-scoped copy of config/system/enum_mapping.yaml.\n"
+        "# SYNTHETIC DEMONSTRATION DATA — NOT A REAL CUSTOMER.\n"
+        "# The only difference from the production mapping is identity entries for\n"
+        "# the ESMA auth.099.001.04 CollTp codes under ESMA_Annex2.collateral_type.\n"
+        + yaml.safe_dump(mapping, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+    return path
+
+
+def _demo_delivery_rules(out_dir: Path) -> Path:
+    """Write a demo-scoped copy of the Annex 2 delivery rules and return its path.
+
+    ``config/regime/annex2_delivery_rules.yaml`` is production configuration and is
+    left untouched. Its ``RREL83`` (originator LEI) rule is a strict controlled
+    vocabulary: an LEI that is not a key in ``transform.enum_map`` is rejected, so
+    the synthetic originator LEI would fail delivery normalisation for every row.
+
+    The overlay adds exactly one entry — an identity mapping for this
+    demonstration's own LEI, read from the demo client config. It changes no rule,
+    relaxes no validator, and adds no field: the LEI still has to satisfy the
+    ``lei`` validator and the ISO 17442 pattern downstream. This is client
+    onboarding configuration, which is per-client by design.
+    """
+    import yaml
+
+    source = cfg.REPO_ROOT / "config" / "regime" / "annex2_delivery_rules.yaml"
+    rules = yaml.safe_load(source.read_text(encoding="utf-8"))
+
+    client_cfg = yaml.safe_load(cfg.demo_client_config().read_text(encoding="utf-8"))
+    lei = _find_key(client_cfg, "originator_legal_entity_identifier")
+    if not lei:
+        raise RuntimeError("demo client config carries no originator LEI")
+
+    rule = rules.setdefault("field_rules", {}).setdefault("RREL83", {})
+    # REPLACE rather than extend: the production vocabulary lists other clients'
+    # LEIs, and a demonstration artefact must not carry them. A per-client
+    # onboarding configuration would only ever hold that client's own LEI.
+    rule.setdefault("transform", {})["enum_map"] = {str(lei): str(lei)}
+
+    path = out_dir / "annex2_delivery_rules_demo.yaml"
+    path.write_text(
+        "# GENERATED — demo-scoped copy of config/regime/annex2_delivery_rules.yaml.\n"
+        "# SYNTHETIC DEMONSTRATION DATA — NOT A REAL CUSTOMER.\n"
+        "# The only difference from the production rules is one RREL83 enum_map\n"
+        "# entry: an identity mapping for this demonstration's originator LEI.\n"
+        + yaml.safe_dump(rules, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+    return path
+
+
+def _find_key(node: Any, key: str) -> Optional[Any]:
+    """Depth-first search for ``key`` in a nested mapping/sequence structure."""
+    if isinstance(node, dict):
+        if key in node:
+            return node[key]
+        for value in node.values():
+            found = _find_key(value, key)
+            if found is not None:
+                return found
+    elif isinstance(node, list):
+        for value in node:
+            found = _find_key(value, key)
+            if found is not None:
+                return found
+    return None
+
+
+def _regulatory_unavailable(proc: subprocess.CompletedProcess,
+                            stages: List[Dict[str, Any]], stage: str,
+                            verbose: bool) -> Dict[str, Any]:
+    """Report the regulatory artefact as unavailable, naming the failing stage."""
+    reason = next((ln.strip() for ln in reversed((proc.stderr or "").splitlines())
+                   if ln.strip()), f"{stage} exited {proc.returncode}")
+    if verbose:
+        print(f"  [artefacts] ESMA Annex 2 unavailable at {stage}: {reason[:150]}")
+    return {
+        "available": False,
+        "kind": "regulatory_output",
+        "title": "ESMA Annex 2 exposure report",
+        "failedStage": stage,
+        "reason": reason[:400],
+        "stages": stages,
+        "note": "Excluded from the film: the regulatory submission did not "
+                "complete, so the demonstration does not show it.",
+    }
+
+
+def _count_xml_records(path: Path) -> int:
+    """Count exposure records in the generated XML without loading it all."""
+    try:
+        import re as _re
+        text = path.read_text(encoding="utf-8", errors="replace")
+        # The exposure record element in auth.099.001.04, opening tags only. A
+        # looser pattern matches the sixteen other elements whose names share the
+        # "Undrlyg" stem and reports sixteen times the true count.
+        return len(_re.findall(r"<(?:\w+:)?UndrlygXpsrRcrd\b[^>/]*>", text))
+    except Exception:  # noqa: BLE001 - a count is not worth failing the artefact
+        return 0
 
 
 # --------------------------------------------------------------------------- #

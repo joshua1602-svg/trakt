@@ -340,6 +340,10 @@ class PortfolioShape:
     #: Average drawdown tranche (GBP) when a loan draws.
     drawdown_mean: float
     drawdown_sd: float
+    #: Origination channel reported for every loan in the book. Drawn from the
+    #: values the delivery rules already recognise, so the ESMA Annex 2 code
+    #: (RREL26) resolves without touching production configuration.
+    origination_channel: str = "Direct"
 
 
 #: Portfolio A — organically originated, recent vintages, currently writing new
@@ -355,6 +359,7 @@ SHAPE_A = PortfolioShape(
     monthly_redemptions=(23, 24, 26),
     monthly_drawdown_loans=(0, 0, 0),
     drawdown_mean=0.0, drawdown_sd=0.0,
+    origination_channel="Direct",
 )
 
 #: Portfolio B — the acquired back book: closed to new origination, seasoned,
@@ -371,6 +376,8 @@ SHAPE_B = PortfolioShape(
     monthly_redemptions=(14, 15, 9),
     monthly_drawdown_loans=(96, 101, 107),
     drawdown_mean=41_300.0, drawdown_sd=11_400.0,
+    # The acquired book was written through intermediaries.
+    origination_channel="Broker",
 )
 
 SHAPES: Dict[str, PortfolioShape] = {

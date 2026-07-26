@@ -69,3 +69,95 @@ current_interest_rate:
   note: >-
     Fixed lifetime roll-up rate, annual, percentage points. Confirmed as the
     current contractual rate (this book has no variable-rate loans).
+
+original_underlying_exposure_identifier:
+  aliases:
+    - Exposure Reference
+  note: >-
+    The exposure identifier the lender reports to its funders, distinct from the
+    servicing loan key. Required for ESMA Annex 2 (RREL2, which back-fills the
+    mandatory RREL3 and RREC2).
+
+original_obligor_identifier:
+  aliases:
+    - Borrower Reference
+  note: >-
+    The borrower-level identifier, distinct from the loan key because one
+    borrower may hold more than one facility. Required for ESMA Annex 2 (RREL4,
+    which back-fills the mandatory RREL5).
+
+# --- Regulatory-reporting block -------------------------------------------
+# Added when this client's ESMA Annex 2 exposure-level reporting was turned on.
+# Each header below is the lender's own naming for a field the Annex 2 submission
+# requires at exposure level; none of them resolve through the global vocabulary.
+
+maturity_date:
+  aliases:
+    - Long Stop Date
+  note: >-
+    A lifetime mortgage has no contractual repayment date, so the lender reports
+    the product long-stop — the date the youngest borrower reaches 110. Confirmed
+    at onboarding as the reported maturity date (RREL24).
+
+pool_addition_date:
+  aliases:
+    - Date Added To Pool
+  note: >-
+    Date the loan entered the reported pool. On this book that is the completion
+    date, but the lender carries it as a separate column because the acquired
+    book's differs (RREL7).
+
+total_credit_limit:
+  aliases:
+    - Approved Facility
+  note: >-
+    The approved maximum release: the initial advance plus the loan's reserve
+    facility. Not the current balance, which includes capitalised interest
+    (RREL33).
+
+new_collateral_identifier:
+  aliases:
+    - Security Reference
+  note: >-
+    The lender's current key for the security property, distinct from the loan
+    key (RREC4).
+
+collateral_type:
+  aliases:
+    - Security Category
+  note: >-
+    The collateral class reported in the securitisation report. Every loan on
+    this book is secured on residential property (RREC5). Distinct from
+    property_type, which carries the dwelling form (RREC9).
+
+current_valuation_method:
+  aliases:
+    - Valuation Basis
+  note: >-
+    Referred for review at onboarding — "basis" is ambiguous — then confirmed as
+    how the current valuation was established, not the valuation date (RREC14).
+
+resident:
+  aliases:
+    - Borrower Resident
+  note: >-
+    Whether the obligor is resident in the country of the collateral (RREL10).
+
+credit_impaired_obligor:
+  aliases:
+    - Credit Impaired
+  note: >-
+    Whether the obligor was credit-impaired at origination, in the ESMA sense
+    (RREL14). Not a current arrears indicator.
+
+litigation:
+  aliases:
+    - Litigation Flag
+  note: Whether the loan is subject to legal proceedings (RREL75).
+
+original_collateral_identifier:
+  aliases:
+    - Security Reference At Completion
+  note: >-
+    The collateral key as at completion. On this book it equals the current key;
+    the lender carries both columns because the acquired book's differ (RREC3).

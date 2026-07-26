@@ -154,6 +154,84 @@ def test_each_schema_covers_the_fields_the_mi_layer_needs():
         assert not missing, f"{name} does not supply {sorted(missing)}"
 
 
+def test_each_schema_covers_the_annex2_exposure_level_fields():
+    """Both schemas must supply what the ESMA Annex 2 submission needs per loan.
+
+    Every field below is mandatory at exposure level in auth.099.001.04 and has to
+    arrive from the source extract — it cannot be derived, defaulted or ND-ed. A
+    schema change that drops one of them breaks the regulatory artefact, and the
+    demonstration would then be showing an output it cannot produce.
+    """
+    required = {
+        "original_underlying_exposure_identifier",   # RREL2 -> RREL3, RREC2
+        "original_obligor_identifier",               # RREL4 -> RREL5
+        "purpose",                                   # RREL30
+        "maturity_date",                             # RREL24
+        "pool_addition_date",                        # RREL7
+        "total_credit_limit",                        # RREL33
+        "new_collateral_identifier",                 # RREC4
+        "original_collateral_identifier",            # RREC3
+        "collateral_type",                           # RREC5
+        "property_type",                             # RREC9
+        "current_valuation_method",                  # RREC14
+        "origination_channel",                       # RREL26
+        "resident",                                  # RREL10
+        "credit_impaired_obligor",                   # RREL14
+        "litigation",                                # RREL75
+        "payment_due",                               # RREL39
+        "arrears_balance",                           # RREL67
+        "number_of_days_in_arrears",                 # RREL68
+        "default_amount",                            # RREL71
+        "allocated_losses",                          # RREL73
+        "cumulative_recoveries",                     # RREL74
+        "prepayment_fee",                            # RREL61
+        "occupancy_type",                            # RREC7
+    }
+    for name, schema in schemas.SCHEMAS.items():
+        provided = {c.canonical_field for c in schema.columns if c.canonical_field}
+        missing = required - provided
+        assert not missing, f"{name} does not supply {sorted(missing)}"
+
+
+def test_declared_resolutions_match_what_gate_1_actually_does():
+    """The film states which mappings needed the client contract; prove it.
+
+    Runs the production header mapper both with and without each portfolio's
+    contract overlay. A header the global vocabulary already resolves must be
+    declared ``global``; one that only resolves with the overlay must be declared
+    ``contract``. Otherwise the onboarding scene overstates (or understates) what
+    the client contract did.
+    """
+    from demo_platform.onboarding import _GLOBAL_ALIASES, _REGISTRY, _mapper_for
+    from engine.gate_1_alignment.semantic_alignment import (
+        HeaderMapper, load_aliases_from_dir, load_field_registry,
+        select_registry_fields,
+    )
+
+    registry = load_field_registry(_REGISTRY)
+    canonical = select_registry_fields(registry, "equity_release")
+    bare = HeaderMapper(canonical, load_aliases_from_dir(_GLOBAL_ALIASES))
+
+    wrong = []
+    for portfolio in cfg.PORTFOLIOS:
+        overlaid, _ = _mapper_for(portfolio)
+        for column in schemas.schema_for(portfolio.schema_name).columns:
+            want = column.canonical_field or None
+            achieved, _tier, _conf = overlaid.map_one(column.header)
+            if achieved != want:
+                wrong.append((portfolio.display_id, column.header,
+                              f"resolves to {achieved!r}, declared {want!r}"))
+                continue
+            if want is None:
+                continue
+            without, _t, _c = bare.map_one(column.header)
+            expected = "global" if without == want else "contract"
+            if expected != column.resolution:
+                wrong.append((portfolio.display_id, column.header,
+                              f"declared {column.resolution!r}, measured {expected!r}"))
+    assert not wrong, wrong
+
+
 # --------------------------------------------------------------------------- #
 # Reporting periods
 # --------------------------------------------------------------------------- #
@@ -235,6 +313,12 @@ def test_borrower_age_moves_directionally_across_periods(generated):
     cur = generated.frames[pid][cfg.CURRENT_PERIOD.period].set_index("loan_id")
     pri = generated.frames[pid][cfg.PRIOR_PERIOD.period].set_index("loan_id")
     common = cur.index.intersection(pri.index)
+    # One row per period carries a deliberately injected below-minimum age, and
+    # the injection lands on a different loan each period. Those rows are the
+    # validation gate's subject matter, not the age model's, so exclude them.
+    injected = {e["loan_id"] for e in generated.injected_exceptions
+                if e["rule"] == "borrower_age_below_product_minimum"}
+    common = common.difference(pd.Index(sorted(injected)))
     delta = _num(cur.loc[common, "borrower_age"]) - _num(pri.loc[common, "borrower_age"])
     assert delta.dropna().min() >= 0, "a borrower got younger"
     assert delta.dropna().max() <= 1, "a borrower aged more than a year in a month"

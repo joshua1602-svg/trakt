@@ -26,9 +26,10 @@ portfolio:
   # override here would collapse all three periods onto one date.
   static_reporting_date: null
 
-# The demonstration runs the MI operating model only. ESMA delivery is a separate
-# governed capability and is not exercised by the recurring demo run (see
-# demo-video/README.md → Limitations).
+# The recurring monthly run exercises the MI operating model. The ESMA Annex 2
+# submission is produced separately, from the same assembled platform canonical,
+# by demo_platform/artefacts.py (Gate 4 projection -> Gate 4b delivery
+# normalisation -> Gate 5 XML + XSD).
 default_regime: ESMA_Annex2
 supported_regimes:
   - ESMA_Annex2
@@ -46,9 +47,42 @@ pipeline_persistence:
 # Synthetic originator identity. The LEI below is a structurally valid but
 # deliberately unallocated test value; it is not issued to any legal entity.
 defaults:
-  originator_legal_entity_identifier: "SYNTHETICDEMO00000000"
+  originator_legal_entity_identifier: "SYNTHETICDEMO0000000"
   originator_name: "Alderbridge Lending Platform (synthetic)"
   originator_establishment_country: "GB"
+
+  # ESMA "no data" options, applied at regime projection only — never written into
+  # the canonical model. Every entry below is a field the Annex 2 template requires
+  # but this product genuinely does not have, so ND5 ("not applicable") is the
+  # correct answer rather than a fabricated value. The two ND1s are different: the
+  # field applies, but neither source system carries it.
+  nd_defaults:
+    # A lifetime mortgage capitalises interest and repays on redemption. There is
+    # no payment schedule, no grace period and no index.
+    scheduled_principal_payment_frequency: ND5
+    scheduled_interest_payment_frequency: ND5
+    principal_grace_period_end_date: ND5
+    current_interest_rate_index: ND5
+    current_interest_rate_index_tenor: ND5
+    current_interest_rate_margin: ND5
+    interest_rate_reset_interval: ND5
+    interest_rate_cap: ND5
+    interest_rate_floor: ND5
+    # Neither book has been repurchased out of the pool, and no deposit is held
+    # against any loan.
+    date_of_repurchase: ND5
+    deposit_amount: ND5
+    # Originated loans have no purchase price; the acquired book was bought as a
+    # portfolio, not loan by loan.
+    purchase_price: ND5
+    # Applicable fields that neither source extract carries.
+    employment_status: ND1
+    customer_type: ND1
+    # Where the validation gate has flagged a missing valuation, the derived LTV
+    # cannot be stated. The exception is reported, not papered over.
+    current_valuation_amount: ND1
+    current_loan_to_value: ND5
+    original_loan_to_value: ND5
 
 # --- TRANSFORMATIONS ------------------------------------------------
 # Lifetime mortgages on this platform capitalise interest monthly, so the
@@ -73,6 +107,23 @@ enrichment:
     fill_only_if_blank: true
 
 nuts_classification_year: 2021
+
+# --- REGIME OVERRIDES (ESMA Annex 2) -------------------------------
+# ScrtstnIdr is a header-level (pool-level) identifier in auth.099.001.04. Two
+# workbook codes land on that same leaf — RREL1 in the loan section and RREC1 in
+# the collateral section — so both must carry the same pool-level constant. The
+# projector can derive RREL1 from the originator LEI and the reporting year; it is
+# pinned explicitly here so the two codes cannot diverge, and so the value the
+# submission carries is visible in configuration rather than implied.
+#
+# Shape: 20-character LEI, then "N", then the reporting year, then a two-digit
+# sequence for the issuer's securitisations in that year.
+regime_overrides:
+  ESMA_Annex2:
+    securitisation_sequence: 1
+    header_constants:
+      RREL1: "SYNTHETICDEMO0000000N202601"
+      RREC1: "SYNTHETICDEMO0000000N202601"
 
 # --- MI & DISPLAY ---------------------------------------------------
 mi:

@@ -123,11 +123,32 @@
         "Post Code",
         "Loan Status",
         "Redemption Date",
+        "Exposure Reference",
+        "Borrower Reference",
+        "Loan Purpose",
         "Property Type",
         "Interest Rate Type",
         "Amortisation Type",
         "Occupancy Type",
         "Exposure Currency Denomination",
+        "Long Stop Date",
+        "Date Added To Pool",
+        "Approved Facility",
+        "Security Reference",
+        "Security Reference At Completion",
+        "Security Category",
+        "Valuation Basis",
+        "Origination Channel",
+        "Borrower Resident",
+        "Credit Impaired",
+        "Litigation Flag",
+        "Payment Due",
+        "Arrears Balance",
+        "Days In Arrears",
+        "Default Amount",
+        "Allocated Losses",
+        "Cumulative Recoveries",
+        "Prepayment Fee",
         "Synthetic Data Notice"
       ],
       "columns": [
@@ -164,7 +185,7 @@
         {
           "header": "Original Property Value",
           "canonical_field": "original_valuation_amount",
-          "resolution": "contract",
+          "resolution": "global",
           "note": "Valuation at completion."
         },
         {
@@ -210,6 +231,24 @@
           "note": "Populated only for loans that redeemed in the period."
         },
         {
+          "header": "Exposure Reference",
+          "canonical_field": "original_underlying_exposure_identifier",
+          "resolution": "contract",
+          "note": "Exposure identifier for regulatory reporting (ESMA RREL2)."
+        },
+        {
+          "header": "Borrower Reference",
+          "canonical_field": "original_obligor_identifier",
+          "resolution": "contract",
+          "note": "Obligor identifier for regulatory reporting (ESMA RREL4)."
+        },
+        {
+          "header": "Loan Purpose",
+          "canonical_field": "purpose",
+          "resolution": "global",
+          "note": "Use of proceeds. Required by the ESMA Annex 2 enum layer."
+        },
+        {
           "header": "Property Type",
           "canonical_field": "property_type",
           "resolution": "global",
@@ -240,6 +279,114 @@
           "note": "GBP."
         },
         {
+          "header": "Long Stop Date",
+          "canonical_field": "maturity_date",
+          "resolution": "contract",
+          "note": "Product long-stop: the date the youngest borrower reaches 110. A lifetime mortgage has no contractual repayment date, so this is the reported maturity (RREL24)."
+        },
+        {
+          "header": "Date Added To Pool",
+          "canonical_field": "pool_addition_date",
+          "resolution": "contract",
+          "note": "Date the loan entered the reported pool (RREL7)."
+        },
+        {
+          "header": "Approved Facility",
+          "canonical_field": "total_credit_limit",
+          "resolution": "contract",
+          "note": "Initial advance plus the loan's reserve facility (RREL33)."
+        },
+        {
+          "header": "Security Reference",
+          "canonical_field": "new_collateral_identifier",
+          "resolution": "contract",
+          "note": "Current key for the security property (RREC4)."
+        },
+        {
+          "header": "Security Reference At Completion",
+          "canonical_field": "original_collateral_identifier",
+          "resolution": "contract",
+          "note": "The key as at completion. Identical on this book \u2014 the collateral has never been re-keyed (RREC3)."
+        },
+        {
+          "header": "Security Category",
+          "canonical_field": "collateral_type",
+          "resolution": "contract",
+          "note": "Collateral class for the securitisation report (RREC5)."
+        },
+        {
+          "header": "Valuation Basis",
+          "canonical_field": "current_valuation_method",
+          "resolution": "contract",
+          "note": "How the current valuation was established (RREC14)."
+        },
+        {
+          "header": "Origination Channel",
+          "canonical_field": "origination_channel",
+          "resolution": "global",
+          "note": "Direct on this book (RREL26)."
+        },
+        {
+          "header": "Borrower Resident",
+          "canonical_field": "resident",
+          "resolution": "contract",
+          "note": "Obligor resident in the collateral's country (RREL10)."
+        },
+        {
+          "header": "Credit Impaired",
+          "canonical_field": "credit_impaired_obligor",
+          "resolution": "contract",
+          "note": "Obligor credit-impaired at origination (RREL14)."
+        },
+        {
+          "header": "Litigation Flag",
+          "canonical_field": "litigation",
+          "resolution": "contract",
+          "note": "Loan subject to legal proceedings (RREL75)."
+        },
+        {
+          "header": "Payment Due",
+          "canonical_field": "payment_due",
+          "resolution": "global",
+          "note": "Amount contractually due this period \u2014 nil on a roll-up product (RREL39)."
+        },
+        {
+          "header": "Arrears Balance",
+          "canonical_field": "arrears_balance",
+          "resolution": "global",
+          "note": "Arrears at the cut-off date (RREL67)."
+        },
+        {
+          "header": "Days In Arrears",
+          "canonical_field": "number_of_days_in_arrears",
+          "resolution": "global",
+          "note": "Days past due at the cut-off date (RREL68)."
+        },
+        {
+          "header": "Default Amount",
+          "canonical_field": "default_amount",
+          "resolution": "global",
+          "note": "Balance in default (RREL71)."
+        },
+        {
+          "header": "Allocated Losses",
+          "canonical_field": "allocated_losses",
+          "resolution": "global",
+          "note": "Losses allocated to date (RREL73)."
+        },
+        {
+          "header": "Cumulative Recoveries",
+          "canonical_field": "cumulative_recoveries",
+          "resolution": "global",
+          "note": "Recoveries to date (RREL74)."
+        },
+        {
+          "header": "Prepayment Fee",
+          "canonical_field": "prepayment_fee",
+          "resolution": "global",
+          "note": "Early-repayment charge applied in the period (RREL61)."
+        },
+        {
           "header": "Synthetic Data Notice",
           "canonical_field": null,
           "resolution": "global",
@@ -266,11 +413,32 @@
         "Account State",
         "Closure Date",
         "Further Advance This Period",
-        "Security Type",
+        "Exposure ID",
+        "Customer ID",
+        "Use Of Proceeds",
+        "Dwelling Type",
         "Rate Basis",
         "Repayment Profile",
         "Occupancy",
         "Currency",
+        "Contractual End Date",
+        "Pool Entry Date",
+        "Total Facility Limit",
+        "Collateral Reference",
+        "Vendor Collateral Reference",
+        "Collateral Class",
+        "Valuation Method",
+        "Introducer Type",
+        "Residency Status",
+        "Impaired At Origination",
+        "Legal Proceedings",
+        "Amount Due",
+        "Arrears Amount",
+        "Arrears Days",
+        "Defaulted Balance",
+        "Losses Allocated",
+        "Recoveries To Date",
+        "Exit Fee Charged",
         "Synthetic Data Notice"
       ],
       "columns": [
@@ -344,7 +512,7 @@
           "header": "Account State",
           "canonical_field": "account_status",
           "resolution": "contract",
-          "note": "Open | Redeemed."
+          "note": "Account status under the servicer's column naming."
         },
         {
           "header": "Closure Date",
@@ -359,10 +527,28 @@
           "note": "Reserve-facility drawdown taken in the reporting month. Reported for transparency; already included in Principal Outstanding, so it is intentionally not mapped to a canonical balance field."
         },
         {
-          "header": "Security Type",
-          "canonical_field": "security_type",
-          "resolution": "global",
-          "note": "Security property type under the servicer's naming."
+          "header": "Exposure ID",
+          "canonical_field": "original_underlying_exposure_identifier",
+          "resolution": "contract",
+          "note": "Servicer exposure identifier (ESMA RREL2)."
+        },
+        {
+          "header": "Customer ID",
+          "canonical_field": "original_obligor_identifier",
+          "resolution": "contract",
+          "note": "Servicer customer identifier (ESMA RREL4)."
+        },
+        {
+          "header": "Use Of Proceeds",
+          "canonical_field": "purpose",
+          "resolution": "contract",
+          "note": "Use of proceeds under the servicer's naming. Required by the ESMA Annex 2 enum layer."
+        },
+        {
+          "header": "Dwelling Type",
+          "canonical_field": "property_type",
+          "resolution": "contract",
+          "note": "The servicer's naming for the property type \u2014 resolved by the client contract, since 'dwelling' is not in the global alias vocabulary."
         },
         {
           "header": "Rate Basis",
@@ -389,6 +575,114 @@
           "note": "GBP."
         },
         {
+          "header": "Contractual End Date",
+          "canonical_field": "maturity_date",
+          "resolution": "contract",
+          "note": "The servicer's long-stop date for the account (RREL24)."
+        },
+        {
+          "header": "Pool Entry Date",
+          "canonical_field": "pool_addition_date",
+          "resolution": "contract",
+          "note": "For this book the acquisition completion date, or origination where that is later (RREL7)."
+        },
+        {
+          "header": "Total Facility Limit",
+          "canonical_field": "total_credit_limit",
+          "resolution": "contract",
+          "note": "Initial drawdown plus the remaining reserve (RREL33)."
+        },
+        {
+          "header": "Collateral Reference",
+          "canonical_field": "new_collateral_identifier",
+          "resolution": "contract",
+          "note": "The servicer's current collateral key (RREC4)."
+        },
+        {
+          "header": "Vendor Collateral Reference",
+          "canonical_field": "original_collateral_identifier",
+          "resolution": "contract",
+          "note": "The vendor's key before the book transferred. Genuinely different from the current key, because the servicer re-keyed the collateral on acquisition (RREC3)."
+        },
+        {
+          "header": "Collateral Class",
+          "canonical_field": "collateral_type",
+          "resolution": "contract",
+          "note": "Collateral class (RREC5)."
+        },
+        {
+          "header": "Valuation Method",
+          "canonical_field": "current_valuation_method",
+          "resolution": "contract",
+          "note": "How the indexed valuation was established (RREC14)."
+        },
+        {
+          "header": "Introducer Type",
+          "canonical_field": "origination_channel",
+          "resolution": "contract",
+          "note": "This book was written through intermediaries (RREL26)."
+        },
+        {
+          "header": "Residency Status",
+          "canonical_field": "resident",
+          "resolution": "contract",
+          "note": "Obligor residency (RREL10)."
+        },
+        {
+          "header": "Impaired At Origination",
+          "canonical_field": "credit_impaired_obligor",
+          "resolution": "contract",
+          "note": "Credit-impaired obligor flag (RREL14)."
+        },
+        {
+          "header": "Legal Proceedings",
+          "canonical_field": "litigation",
+          "resolution": "contract",
+          "note": "Account subject to legal proceedings (RREL75)."
+        },
+        {
+          "header": "Amount Due",
+          "canonical_field": "payment_due",
+          "resolution": "contract",
+          "note": "Contractually due this period \u2014 nil (RREL39)."
+        },
+        {
+          "header": "Arrears Amount",
+          "canonical_field": "arrears_balance",
+          "resolution": "global",
+          "note": "Arrears at the cut-off (RREL67)."
+        },
+        {
+          "header": "Arrears Days",
+          "canonical_field": "number_of_days_in_arrears",
+          "resolution": "contract",
+          "note": "Days past due (RREL68)."
+        },
+        {
+          "header": "Defaulted Balance",
+          "canonical_field": "default_amount",
+          "resolution": "contract",
+          "note": "Balance in default (RREL71)."
+        },
+        {
+          "header": "Losses Allocated",
+          "canonical_field": "allocated_losses",
+          "resolution": "global",
+          "note": "Losses allocated to date (RREL73)."
+        },
+        {
+          "header": "Recoveries To Date",
+          "canonical_field": "cumulative_recoveries",
+          "resolution": "contract",
+          "note": "Recoveries to date (RREL74)."
+        },
+        {
+          "header": "Exit Fee Charged",
+          "canonical_field": "prepayment_fee",
+          "resolution": "contract",
+          "note": "The servicer's naming for the early-repayment charge (RREL61)."
+        },
+        {
           "header": "Synthetic Data Notice",
           "canonical_field": null,
           "resolution": "global",
@@ -399,14 +693,14 @@
   },
   "schemaResolution": {
     "origination_extract": {
-      "columns": 19,
-      "global": 11,
-      "contract": 8
+      "columns": 40,
+      "global": 21,
+      "contract": 19
     },
     "servicer_account_extract": {
-      "columns": 20,
-      "global": 6,
-      "contract": 14
+      "columns": 41,
+      "global": 7,
+      "contract": 34
     }
   },
   "generation": {
@@ -930,11 +1224,32 @@
           "Post Code",
           "Loan Status",
           "Redemption Date",
+          "Exposure Reference",
+          "Borrower Reference",
+          "Loan Purpose",
           "Property Type",
           "Interest Rate Type",
           "Amortisation Type",
           "Occupancy Type",
           "Exposure Currency Denomination",
+          "Long Stop Date",
+          "Date Added To Pool",
+          "Approved Facility",
+          "Security Reference",
+          "Security Reference At Completion",
+          "Security Category",
+          "Valuation Basis",
+          "Origination Channel",
+          "Borrower Resident",
+          "Credit Impaired",
+          "Litigation Flag",
+          "Payment Due",
+          "Arrears Balance",
+          "Days In Arrears",
+          "Default Amount",
+          "Allocated Losses",
+          "Cumulative Recoveries",
+          "Prepayment Fee",
           "Synthetic Data Notice"
         ],
         "total_balance": 1364011072.81,
@@ -963,11 +1278,32 @@
           "Post Code",
           "Loan Status",
           "Redemption Date",
+          "Exposure Reference",
+          "Borrower Reference",
+          "Loan Purpose",
           "Property Type",
           "Interest Rate Type",
           "Amortisation Type",
           "Occupancy Type",
           "Exposure Currency Denomination",
+          "Long Stop Date",
+          "Date Added To Pool",
+          "Approved Facility",
+          "Security Reference",
+          "Security Reference At Completion",
+          "Security Category",
+          "Valuation Basis",
+          "Origination Channel",
+          "Borrower Resident",
+          "Credit Impaired",
+          "Litigation Flag",
+          "Payment Due",
+          "Arrears Balance",
+          "Days In Arrears",
+          "Default Amount",
+          "Allocated Losses",
+          "Cumulative Recoveries",
+          "Prepayment Fee",
           "Synthetic Data Notice"
         ],
         "total_balance": 1374047049.17,
@@ -996,11 +1332,32 @@
           "Post Code",
           "Loan Status",
           "Redemption Date",
+          "Exposure Reference",
+          "Borrower Reference",
+          "Loan Purpose",
           "Property Type",
           "Interest Rate Type",
           "Amortisation Type",
           "Occupancy Type",
           "Exposure Currency Denomination",
+          "Long Stop Date",
+          "Date Added To Pool",
+          "Approved Facility",
+          "Security Reference",
+          "Security Reference At Completion",
+          "Security Category",
+          "Valuation Basis",
+          "Origination Channel",
+          "Borrower Resident",
+          "Credit Impaired",
+          "Litigation Flag",
+          "Payment Due",
+          "Arrears Balance",
+          "Days In Arrears",
+          "Default Amount",
+          "Allocated Losses",
+          "Cumulative Recoveries",
+          "Prepayment Fee",
           "Synthetic Data Notice"
         ],
         "total_balance": 1385508582.98,
@@ -1030,11 +1387,32 @@
           "Account State",
           "Closure Date",
           "Further Advance This Period",
-          "Security Type",
+          "Exposure ID",
+          "Customer ID",
+          "Use Of Proceeds",
+          "Dwelling Type",
           "Rate Basis",
           "Repayment Profile",
           "Occupancy",
           "Currency",
+          "Contractual End Date",
+          "Pool Entry Date",
+          "Total Facility Limit",
+          "Collateral Reference",
+          "Vendor Collateral Reference",
+          "Collateral Class",
+          "Valuation Method",
+          "Introducer Type",
+          "Residency Status",
+          "Impaired At Origination",
+          "Legal Proceedings",
+          "Amount Due",
+          "Arrears Amount",
+          "Arrears Days",
+          "Defaulted Balance",
+          "Losses Allocated",
+          "Recoveries To Date",
+          "Exit Fee Charged",
           "Synthetic Data Notice"
         ],
         "total_balance": 568299918.39,
@@ -1064,11 +1442,32 @@
           "Account State",
           "Closure Date",
           "Further Advance This Period",
-          "Security Type",
+          "Exposure ID",
+          "Customer ID",
+          "Use Of Proceeds",
+          "Dwelling Type",
           "Rate Basis",
           "Repayment Profile",
           "Occupancy",
           "Currency",
+          "Contractual End Date",
+          "Pool Entry Date",
+          "Total Facility Limit",
+          "Collateral Reference",
+          "Vendor Collateral Reference",
+          "Collateral Class",
+          "Valuation Method",
+          "Introducer Type",
+          "Residency Status",
+          "Impaired At Origination",
+          "Legal Proceedings",
+          "Amount Due",
+          "Arrears Amount",
+          "Arrears Days",
+          "Defaulted Balance",
+          "Losses Allocated",
+          "Recoveries To Date",
+          "Exit Fee Charged",
           "Synthetic Data Notice"
         ],
         "total_balance": 572780391.43,
@@ -1098,11 +1497,32 @@
           "Account State",
           "Closure Date",
           "Further Advance This Period",
-          "Security Type",
+          "Exposure ID",
+          "Customer ID",
+          "Use Of Proceeds",
+          "Dwelling Type",
           "Rate Basis",
           "Repayment Profile",
           "Occupancy",
           "Currency",
+          "Contractual End Date",
+          "Pool Entry Date",
+          "Total Facility Limit",
+          "Collateral Reference",
+          "Vendor Collateral Reference",
+          "Collateral Class",
+          "Valuation Method",
+          "Introducer Type",
+          "Residency Status",
+          "Impaired At Origination",
+          "Legal Proceedings",
+          "Amount Due",
+          "Arrears Amount",
+          "Arrears Days",
+          "Defaulted Balance",
+          "Losses Allocated",
+          "Recoveries To Date",
+          "Exit Fee Charged",
           "Synthetic Data Notice"
         ],
         "total_balance": 579377675.23,
@@ -1127,24 +1547,28 @@
         "system_of_record": "Alderbridge origination system (monthly month-end extract)",
         "description": "The lender's own origination and servicing system. Short, business-vocabulary headers; balances are capital plus capitalised roll-up interest; one row per loan on book at the reporting date.",
         "example_file": "ALP_ORIGINATION_20260430_SYNTHETIC.csv",
-        "column_count": 19,
+        "column_count": 40,
         "row_count_profiled": 5000,
         "detected_reporting_date_columns": [
           "Data Cut-Off Date"
         ],
         "detected_identifier_columns": [
           "Loan Reference",
-          "Post Code"
+          "Post Code",
+          "Exposure Reference",
+          "Borrower Reference",
+          "Security Reference",
+          "Security Reference At Completion"
         ]
       },
       "mapping": {
-        "mapped_count": 18,
+        "mapped_count": 39,
         "unmapped_count": 1,
         "unmapped_headers": [
           "Synthetic Data Notice"
         ],
         "low_confidence_count": 0,
-        "client_contract_count": 8,
+        "client_contract_count": 19,
         "alias_overlay_applied": [
           {
             "normalised_alias": "reference",
@@ -1193,11 +1617,83 @@
             "canonical_field": "current_interest_rate",
             "overrode_global": "",
             "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_origination"
+          },
+          {
+            "normalised_alias": "exposurereference",
+            "canonical_field": "original_underlying_exposure_identifier",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_origination"
+          },
+          {
+            "normalised_alias": "borrowerreference",
+            "canonical_field": "original_obligor_identifier",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_origination"
+          },
+          {
+            "normalised_alias": "datelongstop",
+            "canonical_field": "maturity_date",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_origination"
+          },
+          {
+            "normalised_alias": "addeddatepoolto",
+            "canonical_field": "pool_addition_date",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_origination"
+          },
+          {
+            "normalised_alias": "approvedfacility",
+            "canonical_field": "total_credit_limit",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_origination"
+          },
+          {
+            "normalised_alias": "referencesecurity",
+            "canonical_field": "new_collateral_identifier",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_origination"
+          },
+          {
+            "normalised_alias": "categorysecurity",
+            "canonical_field": "collateral_type",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_origination"
+          },
+          {
+            "normalised_alias": "basisuationvaluation",
+            "canonical_field": "current_valuation_method",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_origination"
+          },
+          {
+            "normalised_alias": "borrowerresident",
+            "canonical_field": "resident",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_origination"
+          },
+          {
+            "normalised_alias": "creditimpaired",
+            "canonical_field": "credit_impaired_obligor",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_origination"
+          },
+          {
+            "normalised_alias": "flaglitigation",
+            "canonical_field": "litigation",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_origination"
+          },
+          {
+            "normalised_alias": "atcompletionreferencesecurity",
+            "canonical_field": "original_collateral_identifier",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_origination"
           }
         ],
         "tier_breakdown": {
-          "Normalised name match": 8,
-          "Alias / client contract": 10,
+          "Normalised name match": 16,
+          "Alias / client contract": 23,
           "Referred for review": 1
         }
       },
@@ -1264,7 +1760,7 @@
           "tier_label": "Alias / client contract",
           "confidence": 1.0,
           "low_confidence": false,
-          "resolved_by_client_contract": true,
+          "resolved_by_client_contract": false,
           "declared_canonical_field": "original_valuation_amount",
           "note": "Valuation at completion."
         },
@@ -1346,6 +1842,39 @@
           "note": "Populated only for loans that redeemed in the period."
         },
         {
+          "source_header": "Exposure Reference",
+          "canonical_field": "original_underlying_exposure_identifier",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "original_underlying_exposure_identifier",
+          "note": "Exposure identifier for regulatory reporting (ESMA RREL2)."
+        },
+        {
+          "source_header": "Borrower Reference",
+          "canonical_field": "original_obligor_identifier",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "original_obligor_identifier",
+          "note": "Obligor identifier for regulatory reporting (ESMA RREL4)."
+        },
+        {
+          "source_header": "Loan Purpose",
+          "canonical_field": "purpose",
+          "tier": "normalized",
+          "tier_label": "Normalised name match",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": false,
+          "declared_canonical_field": "purpose",
+          "note": "Use of proceeds. Required by the ESMA Annex 2 enum layer."
+        },
+        {
           "source_header": "Property Type",
           "canonical_field": "property_type",
           "tier": "normalized",
@@ -1399,6 +1928,204 @@
           "resolved_by_client_contract": false,
           "declared_canonical_field": "exposure_currency_denomination",
           "note": "GBP."
+        },
+        {
+          "source_header": "Long Stop Date",
+          "canonical_field": "maturity_date",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "maturity_date",
+          "note": "Product long-stop: the date the youngest borrower reaches 110. A lifetime mortgage has no contractual repayment date, so this is the reported maturity (RREL24)."
+        },
+        {
+          "source_header": "Date Added To Pool",
+          "canonical_field": "pool_addition_date",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "pool_addition_date",
+          "note": "Date the loan entered the reported pool (RREL7)."
+        },
+        {
+          "source_header": "Approved Facility",
+          "canonical_field": "total_credit_limit",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "total_credit_limit",
+          "note": "Initial advance plus the loan's reserve facility (RREL33)."
+        },
+        {
+          "source_header": "Security Reference",
+          "canonical_field": "new_collateral_identifier",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "new_collateral_identifier",
+          "note": "Current key for the security property (RREC4)."
+        },
+        {
+          "source_header": "Security Reference At Completion",
+          "canonical_field": "original_collateral_identifier",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "original_collateral_identifier",
+          "note": "The key as at completion. Identical on this book \u2014 the collateral has never been re-keyed (RREC3)."
+        },
+        {
+          "source_header": "Security Category",
+          "canonical_field": "collateral_type",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "collateral_type",
+          "note": "Collateral class for the securitisation report (RREC5)."
+        },
+        {
+          "source_header": "Valuation Basis",
+          "canonical_field": "current_valuation_method",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "current_valuation_method",
+          "note": "How the current valuation was established (RREC14)."
+        },
+        {
+          "source_header": "Origination Channel",
+          "canonical_field": "origination_channel",
+          "tier": "normalized",
+          "tier_label": "Normalised name match",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": false,
+          "declared_canonical_field": "origination_channel",
+          "note": "Direct on this book (RREL26)."
+        },
+        {
+          "source_header": "Borrower Resident",
+          "canonical_field": "resident",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "resident",
+          "note": "Obligor resident in the collateral's country (RREL10)."
+        },
+        {
+          "source_header": "Credit Impaired",
+          "canonical_field": "credit_impaired_obligor",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "credit_impaired_obligor",
+          "note": "Obligor credit-impaired at origination (RREL14)."
+        },
+        {
+          "source_header": "Litigation Flag",
+          "canonical_field": "litigation",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "litigation",
+          "note": "Loan subject to legal proceedings (RREL75)."
+        },
+        {
+          "source_header": "Payment Due",
+          "canonical_field": "payment_due",
+          "tier": "normalized",
+          "tier_label": "Normalised name match",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": false,
+          "declared_canonical_field": "payment_due",
+          "note": "Amount contractually due this period \u2014 nil on a roll-up product (RREL39)."
+        },
+        {
+          "source_header": "Arrears Balance",
+          "canonical_field": "arrears_balance",
+          "tier": "normalized",
+          "tier_label": "Normalised name match",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": false,
+          "declared_canonical_field": "arrears_balance",
+          "note": "Arrears at the cut-off date (RREL67)."
+        },
+        {
+          "source_header": "Days In Arrears",
+          "canonical_field": "number_of_days_in_arrears",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": false,
+          "declared_canonical_field": "number_of_days_in_arrears",
+          "note": "Days past due at the cut-off date (RREL68)."
+        },
+        {
+          "source_header": "Default Amount",
+          "canonical_field": "default_amount",
+          "tier": "normalized",
+          "tier_label": "Normalised name match",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": false,
+          "declared_canonical_field": "default_amount",
+          "note": "Balance in default (RREL71)."
+        },
+        {
+          "source_header": "Allocated Losses",
+          "canonical_field": "allocated_losses",
+          "tier": "normalized",
+          "tier_label": "Normalised name match",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": false,
+          "declared_canonical_field": "allocated_losses",
+          "note": "Losses allocated to date (RREL73)."
+        },
+        {
+          "source_header": "Cumulative Recoveries",
+          "canonical_field": "cumulative_recoveries",
+          "tier": "normalized",
+          "tier_label": "Normalised name match",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": false,
+          "declared_canonical_field": "cumulative_recoveries",
+          "note": "Recoveries to date (RREL74)."
+        },
+        {
+          "source_header": "Prepayment Fee",
+          "canonical_field": "prepayment_fee",
+          "tier": "normalized",
+          "tier_label": "Normalised name match",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": false,
+          "declared_canonical_field": "prepayment_fee",
+          "note": "Early-repayment charge applied in the period (RREL61)."
         },
         {
           "source_header": "Synthetic Data Notice",
@@ -1488,7 +2215,7 @@
         "system_of_record": "Third-party servicer account extract (monthly, acquired book)",
         "description": "The servicer's own account vocabulary for the acquired back book: account-centric headers, an indexed valuation basis, a different status enumeration, and a separate further-advance (reserve drawdown) column.",
         "example_file": "ALP_ACQUIRED_20260430_SYNTHETIC.csv",
-        "column_count": 20,
+        "column_count": 41,
         "row_count_profiled": 3938,
         "detected_reporting_date_columns": [
           "Reporting Cut-Off"
@@ -1496,18 +2223,22 @@
         "detected_identifier_columns": [
           "Account Number",
           "Property Post Code",
-          "Account State"
+          "Account State",
+          "Exposure ID",
+          "Customer ID",
+          "Collateral Reference",
+          "Vendor Collateral Reference"
         ]
       },
       "mapping": {
-        "mapped_count": 18,
+        "mapped_count": 39,
         "unmapped_count": 2,
         "unmapped_headers": [
           "Further Advance This Period",
           "Synthetic Data Notice"
         ],
         "low_confidence_count": 0,
-        "client_contract_count": 14,
+        "client_contract_count": 34,
         "alias_overlay_applied": [
           {
             "normalised_alias": "number",
@@ -1592,11 +2323,131 @@
             "canonical_field": "amortisation_type",
             "overrode_global": "",
             "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_acquired"
+          },
+          {
+            "normalised_alias": "exposureid",
+            "canonical_field": "original_underlying_exposure_identifier",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_acquired"
+          },
+          {
+            "normalised_alias": "customerid",
+            "canonical_field": "original_obligor_identifier",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_acquired"
+          },
+          {
+            "normalised_alias": "ofproceedsuse",
+            "canonical_field": "purpose",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_acquired"
+          },
+          {
+            "normalised_alias": "dwellingtype",
+            "canonical_field": "property_type",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_acquired"
+          },
+          {
+            "normalised_alias": "contractualdateend",
+            "canonical_field": "maturity_date",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_acquired"
+          },
+          {
+            "normalised_alias": "dateentrypool",
+            "canonical_field": "pool_addition_date",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_acquired"
+          },
+          {
+            "normalised_alias": "facilitylimittotal",
+            "canonical_field": "total_credit_limit",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_acquired"
+          },
+          {
+            "normalised_alias": "collateralreference",
+            "canonical_field": "new_collateral_identifier",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_acquired"
+          },
+          {
+            "normalised_alias": "classcollateral",
+            "canonical_field": "collateral_type",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_acquired"
+          },
+          {
+            "normalised_alias": "introducertype",
+            "canonical_field": "origination_channel",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_acquired"
+          },
+          {
+            "normalised_alias": "residencystatus",
+            "canonical_field": "resident",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_acquired"
+          },
+          {
+            "normalised_alias": "atimpairedinationoriginal",
+            "canonical_field": "credit_impaired_obligor",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_acquired"
+          },
+          {
+            "normalised_alias": "legalproceedings",
+            "canonical_field": "litigation",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_acquired"
+          },
+          {
+            "normalised_alias": "amountdue",
+            "canonical_field": "payment_due",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_acquired"
+          },
+          {
+            "normalised_alias": "arrearsdays",
+            "canonical_field": "number_of_days_in_arrears",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_acquired"
+          },
+          {
+            "normalised_alias": "ancebalancedefaulted",
+            "canonical_field": "default_amount",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_acquired"
+          },
+          {
+            "normalised_alias": "daterecoveriesto",
+            "canonical_field": "cumulative_recoveries",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_acquired"
+          },
+          {
+            "normalised_alias": "chargedexitfee",
+            "canonical_field": "prepayment_fee",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_acquired"
+          },
+          {
+            "normalised_alias": "methoduationvaluation",
+            "canonical_field": "current_valuation_method",
+            "overrode_global": "valuation_type",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_acquired"
+          },
+          {
+            "normalised_alias": "collateralreferencevendor",
+            "canonical_field": "original_collateral_identifier",
+            "overrode_global": "",
+            "overlay_dir": "/home/user/trakt/demo_platform/aliases/alp_acquired"
           }
         ],
         "tier_breakdown": {
           "Normalised name match": 3,
-          "Alias / client contract": 15,
+          "Alias / client contract": 36,
           "Referred for review": 2
         }
       },
@@ -1731,7 +2582,7 @@
           "low_confidence": false,
           "resolved_by_client_contract": true,
           "declared_canonical_field": "account_status",
-          "note": "Open | Redeemed."
+          "note": "Account status under the servicer's column naming."
         },
         {
           "source_header": "Closure Date",
@@ -1756,15 +2607,48 @@
           "note": "Reserve-facility drawdown taken in the reporting month. Reported for transparency; already included in Principal Outstanding, so it is intentionally not mapped to a canonical balance field."
         },
         {
-          "source_header": "Security Type",
-          "canonical_field": "security_type",
-          "tier": "normalized",
-          "tier_label": "Normalised name match",
+          "source_header": "Exposure ID",
+          "canonical_field": "original_underlying_exposure_identifier",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
           "confidence": 1.0,
           "low_confidence": false,
-          "resolved_by_client_contract": false,
-          "declared_canonical_field": "security_type",
-          "note": "Security property type under the servicer's naming."
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "original_underlying_exposure_identifier",
+          "note": "Servicer exposure identifier (ESMA RREL2)."
+        },
+        {
+          "source_header": "Customer ID",
+          "canonical_field": "original_obligor_identifier",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "original_obligor_identifier",
+          "note": "Servicer customer identifier (ESMA RREL4)."
+        },
+        {
+          "source_header": "Use Of Proceeds",
+          "canonical_field": "purpose",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "purpose",
+          "note": "Use of proceeds under the servicer's naming. Required by the ESMA Annex 2 enum layer."
+        },
+        {
+          "source_header": "Dwelling Type",
+          "canonical_field": "property_type",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "property_type",
+          "note": "The servicer's naming for the property type \u2014 resolved by the client contract, since 'dwelling' is not in the global alias vocabulary."
         },
         {
           "source_header": "Rate Basis",
@@ -1809,6 +2693,204 @@
           "resolved_by_client_contract": false,
           "declared_canonical_field": "exposure_currency_denomination",
           "note": "GBP."
+        },
+        {
+          "source_header": "Contractual End Date",
+          "canonical_field": "maturity_date",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "maturity_date",
+          "note": "The servicer's long-stop date for the account (RREL24)."
+        },
+        {
+          "source_header": "Pool Entry Date",
+          "canonical_field": "pool_addition_date",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "pool_addition_date",
+          "note": "For this book the acquisition completion date, or origination where that is later (RREL7)."
+        },
+        {
+          "source_header": "Total Facility Limit",
+          "canonical_field": "total_credit_limit",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "total_credit_limit",
+          "note": "Initial drawdown plus the remaining reserve (RREL33)."
+        },
+        {
+          "source_header": "Collateral Reference",
+          "canonical_field": "new_collateral_identifier",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "new_collateral_identifier",
+          "note": "The servicer's current collateral key (RREC4)."
+        },
+        {
+          "source_header": "Vendor Collateral Reference",
+          "canonical_field": "original_collateral_identifier",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "original_collateral_identifier",
+          "note": "The vendor's key before the book transferred. Genuinely different from the current key, because the servicer re-keyed the collateral on acquisition (RREC3)."
+        },
+        {
+          "source_header": "Collateral Class",
+          "canonical_field": "collateral_type",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "collateral_type",
+          "note": "Collateral class (RREC5)."
+        },
+        {
+          "source_header": "Valuation Method",
+          "canonical_field": "current_valuation_method",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "current_valuation_method",
+          "note": "How the indexed valuation was established (RREC14)."
+        },
+        {
+          "source_header": "Introducer Type",
+          "canonical_field": "origination_channel",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "origination_channel",
+          "note": "This book was written through intermediaries (RREL26)."
+        },
+        {
+          "source_header": "Residency Status",
+          "canonical_field": "resident",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "resident",
+          "note": "Obligor residency (RREL10)."
+        },
+        {
+          "source_header": "Impaired At Origination",
+          "canonical_field": "credit_impaired_obligor",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "credit_impaired_obligor",
+          "note": "Credit-impaired obligor flag (RREL14)."
+        },
+        {
+          "source_header": "Legal Proceedings",
+          "canonical_field": "litigation",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "litigation",
+          "note": "Account subject to legal proceedings (RREL75)."
+        },
+        {
+          "source_header": "Amount Due",
+          "canonical_field": "payment_due",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "payment_due",
+          "note": "Contractually due this period \u2014 nil (RREL39)."
+        },
+        {
+          "source_header": "Arrears Amount",
+          "canonical_field": "arrears_balance",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": false,
+          "declared_canonical_field": "arrears_balance",
+          "note": "Arrears at the cut-off (RREL67)."
+        },
+        {
+          "source_header": "Arrears Days",
+          "canonical_field": "number_of_days_in_arrears",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "number_of_days_in_arrears",
+          "note": "Days past due (RREL68)."
+        },
+        {
+          "source_header": "Defaulted Balance",
+          "canonical_field": "default_amount",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "default_amount",
+          "note": "Balance in default (RREL71)."
+        },
+        {
+          "source_header": "Losses Allocated",
+          "canonical_field": "allocated_losses",
+          "tier": "normalized",
+          "tier_label": "Normalised name match",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": false,
+          "declared_canonical_field": "allocated_losses",
+          "note": "Losses allocated to date (RREL73)."
+        },
+        {
+          "source_header": "Recoveries To Date",
+          "canonical_field": "cumulative_recoveries",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "cumulative_recoveries",
+          "note": "Recoveries to date (RREL74)."
+        },
+        {
+          "source_header": "Exit Fee Charged",
+          "canonical_field": "prepayment_fee",
+          "tier": "alias",
+          "tier_label": "Alias / client contract",
+          "confidence": 1.0,
+          "low_confidence": false,
+          "resolved_by_client_contract": true,
+          "declared_canonical_field": "prepayment_fee",
+          "note": "The servicer's naming for the early-repayment charge (RREL61)."
         },
         {
           "source_header": "Synthetic Data Notice",
@@ -1901,9 +2983,9 @@
         "canonical_output": "/home/user/trakt/demo_platform/workspace/runs/alp_origination/mi_2026_04/out/ALP_ORIGINATION_20260430_SYNTHETIC_canonical_typed.csv",
         "rows": 7058,
         "total_outstanding_balance": 1364011072.81,
-        "elapsed_seconds": 11.51,
+        "elapsed_seconds": 7.92,
         "gate_summary": [
-          "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
+          "[Gate 1] Semantic alignment.............. OK 39 fields mapped | 0 HQ recommendations",
           "[Gate 2] Canonical validation............ OK 7,058 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
           "[Gate 2.5] Data lineage.................. OK",
           "[Gate 3] Business rules.................. Warn 3 rules | 48 failures",
@@ -1922,9 +3004,9 @@
         "canonical_output": "/home/user/trakt/demo_platform/workspace/runs/alp_acquired/mi_2026_04/out/ALP_ACQUIRED_20260430_SYNTHETIC_canonical_typed.csv",
         "rows": 3938,
         "total_outstanding_balance": 568299918.39,
-        "elapsed_seconds": 10.27,
+        "elapsed_seconds": 6.17,
         "gate_summary": [
-          "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
+          "[Gate 1] Semantic alignment.............. OK 39 fields mapped | 0 HQ recommendations",
           "[Gate 2] Canonical validation............ OK 3,938 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
           "[Gate 2.5] Data lineage.................. OK",
           "[Gate 3] Business rules.................. Warn 3 rules | 30 failures",
@@ -1943,9 +3025,9 @@
         "canonical_output": "/home/user/trakt/demo_platform/workspace/runs/alp_origination/mi_2026_05/out/ALP_ORIGINATION_20260531_SYNTHETIC_canonical_typed.csv",
         "rows": 7089,
         "total_outstanding_balance": 1374047049.17,
-        "elapsed_seconds": 14.0,
+        "elapsed_seconds": 7.89,
         "gate_summary": [
-          "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
+          "[Gate 1] Semantic alignment.............. OK 39 fields mapped | 0 HQ recommendations",
           "[Gate 2] Canonical validation............ OK 7,089 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
           "[Gate 2.5] Data lineage.................. OK",
           "[Gate 3] Business rules.................. Warn 3 rules | 50 failures",
@@ -1964,9 +3046,9 @@
         "canonical_output": "/home/user/trakt/demo_platform/workspace/runs/alp_acquired/mi_2026_05/out/ALP_ACQUIRED_20260531_SYNTHETIC_canonical_typed.csv",
         "rows": 3924,
         "total_outstanding_balance": 572780391.43,
-        "elapsed_seconds": 11.26,
+        "elapsed_seconds": 6.38,
         "gate_summary": [
-          "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
+          "[Gate 1] Semantic alignment.............. OK 39 fields mapped | 0 HQ recommendations",
           "[Gate 2] Canonical validation............ OK 3,924 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
           "[Gate 2.5] Data lineage.................. OK",
           "[Gate 3] Business rules.................. Warn 3 rules | 32 failures",
@@ -1985,9 +3067,9 @@
         "canonical_output": "/home/user/trakt/demo_platform/workspace/runs/alp_origination/mi_2026_06/out/ALP_ORIGINATION_20260630_SYNTHETIC_canonical_typed.csv",
         "rows": 7126,
         "total_outstanding_balance": 1385508582.98,
-        "elapsed_seconds": 14.06,
+        "elapsed_seconds": 7.69,
         "gate_summary": [
-          "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
+          "[Gate 1] Semantic alignment.............. OK 39 fields mapped | 0 HQ recommendations",
           "[Gate 2] Canonical validation............ OK 7,126 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
           "[Gate 2.5] Data lineage.................. OK",
           "[Gate 3] Business rules.................. Warn 3 rules | 54 failures",
@@ -2006,9 +3088,9 @@
         "canonical_output": "/home/user/trakt/demo_platform/workspace/runs/alp_acquired/mi_2026_06/out/ALP_ACQUIRED_20260630_SYNTHETIC_canonical_typed.csv",
         "rows": 3909,
         "total_outstanding_balance": 579377675.23,
-        "elapsed_seconds": 10.56,
+        "elapsed_seconds": 6.45,
         "gate_summary": [
-          "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
+          "[Gate 1] Semantic alignment.............. OK 39 fields mapped | 0 HQ recommendations",
           "[Gate 2] Canonical validation............ OK 3,909 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
           "[Gate 2.5] Data lineage.................. OK",
           "[Gate 3] Business rules.................. Warn 3 rules | 21 failures",
@@ -2033,7 +3115,7 @@
           "alp_origination": 1364011072.81
         },
         "composite_key": "source_portfolio_id + loan_identifier",
-        "content_sha256": "sha256:49f84c43bb8295637ba0c5164a86e509b0f0748eeab00d025ba3cfe5d5a2ad6c",
+        "content_sha256": "sha256:88ce77341d1f5a1c89be5908346435e24231c58ee85e9f796b93a521c8daf3e5",
         "assembler_stdout": [
           "================================================================",
           "Platform canonical assembled",
@@ -2059,7 +3141,7 @@
           "alp_origination": 1374047049.17
         },
         "composite_key": "source_portfolio_id + loan_identifier",
-        "content_sha256": "sha256:2de7c2518a32d78dea9c68c6d6e03fc9f595b09f14b751c464e36bad9e038b89",
+        "content_sha256": "sha256:cffd127d525f73ac1187e07b6da36cf25535d4dc709319a91299b1a268f6a6d0",
         "assembler_stdout": [
           "================================================================",
           "Platform canonical assembled",
@@ -2085,7 +3167,7 @@
           "alp_origination": 1385508582.98
         },
         "composite_key": "source_portfolio_id + loan_identifier",
-        "content_sha256": "sha256:035891d43d2ec65c7dc27b3f85fa1fa4e400468b9012eb37ce5d13b5dc616ef0",
+        "content_sha256": "sha256:5ee6e8a49c80c6c6d84f53c912bf66e361d469d2ed88c74e696f33bcba4b2b9c",
         "assembler_stdout": [
           "================================================================",
           "Platform canonical assembled",
@@ -2126,12 +3208,12 @@
       "fileName": "platform_canonical_typed.csv",
       "format": "CSV",
       "rows": 11035,
-      "columns": 42,
-      "sizeBytes": 5106316,
+      "columns": 61,
+      "sizeBytes": 6722678,
       "totalBalance": 1964886258.21,
       "portfolioCount": 2,
       "compositeKey": "source_portfolio_id + loan_identifier",
-      "contentSha256": "sha256:035891d43d2ec65c7dc27b3f85fa1fa4e400468b9012eb37ce5d13b5dc616ef0",
+      "contentSha256": "sha256:5ee6e8a49c80c6c6d84f53c912bf66e361d469d2ed88c74e696f33bcba4b2b9c",
       "reportingDate": "2026-06-30",
       "producedBy": "engine/platform_assembler.py"
     },
@@ -2165,13 +3247,13 @@
           "label": "ALP Origination Book",
           "rows": 7126,
           "gate3bSummary": {
-            "total_fields_affected": 2,
-            "blocking_count": 1,
+            "total_fields_affected": 1,
+            "blocking_count": 0,
             "review_count": 3,
             "info_count": 0
           },
           "canonicalErrors": 0,
-          "canonicalWarnings": 1,
+          "canonicalWarnings": 0,
           "businessRuleExceptions": 54,
           "businessRules": [
             {
@@ -2199,13 +3281,13 @@
           "label": "ALP Acquired Back Book",
           "rows": 3909,
           "gate3bSummary": {
-            "total_fields_affected": 2,
-            "blocking_count": 1,
+            "total_fields_affected": 1,
+            "blocking_count": 0,
             "review_count": 3,
             "info_count": 0
           },
           "canonicalErrors": 0,
-          "canonicalWarnings": 1,
+          "canonicalWarnings": 0,
           "businessRuleExceptions": 21,
           "businessRules": [
             {
@@ -2238,8 +3320,8 @@
       "fileName": "investor_pack.pptx",
       "format": "PowerPoint (PPTX)",
       "slides": 18,
-      "sizeBytes": 1297654,
-      "contentSha256": "sha256:905339f95fff602b66a9413f3d7483e6affda57bfbde699df631db9efb533f76",
+      "sizeBytes": 1309109,
+      "contentSha256": "sha256:e6952f9616539b98c7dd5efc91f7601f11fb39efa68496ea2d14eff4c2873803",
       "reportingPeriod": "2026-06",
       "path": "/home/user/trakt/demo_platform/workspace/artefacts/investor_deck/investor_pack.pptx",
       "publishedTo": "/home/user/trakt/demo_platform/workspace/decks/alderbridge/latest/investor_pack.pptx",
@@ -2266,22 +3348,63 @@
       ]
     },
     "riskMonitor": {
-      "available": false,
+      "available": true,
       "kind": "risk_monitoring",
       "title": "Concentration risk monitor",
       "format": "JSON",
-      "limitCount": 0,
-      "statusCounts": {},
+      "limitCount": 12,
+      "testsPassed": 8,
+      "breaches": 1,
+      "unavailableTests": 3,
+      "fundedDataAvailable": true,
+      "limitsSource": "Schedule 8 document",
+      "largestConcentration": {
+        "label": "WA current LTV",
+        "actualValue": 43.16,
+        "limitId": "ltv_limit_current_loan_to_value"
+      },
+      "closestHeadroom": {
+        "label": "Borrowers aged over 85",
+        "headroom": -0.24,
+        "limitId": "age_limit_youngest_borrower_age"
+      },
+      "statusCounts": {
+        "green": 8,
+        "unavailable": 3,
+        "red": 1
+      },
       "reportingDate": "2026-06-30",
       "producedBy": "mi_agent_api/risk_limits.py (mi_agent/risk_monitor)",
-      "reason": "no risk limits are configured for this client"
+      "reason": null
     },
     "regulatoryOutput": {
-      "available": false,
+      "available": true,
       "kind": "regulatory_output",
       "title": "ESMA Annex 2 exposure report",
-      "reason": "ValueError: Field 'purpose' has unmapped enum values in strict Annex2 mode: ['NULL']",
-      "note": "Excluded from the film: the regime projection requires a confirmed enum-review pass that this demonstration does not run."
+      "fileName": "annex2_submission.xml",
+      "format": "XML (ESMA auth.099.001.04)",
+      "rows": 11035,
+      "exposureRecords": 11035,
+      "fields": 105,
+      "sizeBytes": 208822291,
+      "xsdValidated": true,
+      "contentSha256": "sha256:a21f8a4c33314cfeff42758a6fbb0c580b9dc594eae894180de600b2ec8d685d",
+      "reportingDate": "2026-06-30",
+      "stages": [
+        {
+          "stage": "gate_4b_projection",
+          "returncode": 0
+        },
+        {
+          "stage": "gate_4b_delivery_normalisation",
+          "returncode": 0
+        },
+        {
+          "stage": "gate_5_xml_and_xsd",
+          "returncode": 0
+        }
+      ],
+      "producedBy": "engine/gate_4_projection/regime_projector.py \u2192 engine/gate_4b_delivery/annex2_delivery_normalizer.py \u2192 engine/gate_5_delivery/xml_builder_annex2.py"
     },
     "auditManifest": {
       "available": true,
@@ -2297,43 +3420,43 @@
           "portfolio": "ALP_ORIGINATION",
           "period": "2026-04",
           "fileName": "ALP_ORIGINATION_20260430_SYNTHETIC.csv",
-          "sizeBytes": 1611685,
-          "contentSha256": "sha256:e1f47e9f0cbaa51152affcd9c988f964b26edcbbca9b1db825765f2d775c2321"
+          "sizeBytes": 2775114,
+          "contentSha256": "sha256:5ebaa5b53d42e24382674d6a7cc33c43de38c91dd476080a35fab9e4d3e689ee"
         },
         {
           "portfolio": "ALP_ORIGINATION",
           "period": "2026-05",
           "fileName": "ALP_ORIGINATION_20260531_SYNTHETIC.csv",
-          "sizeBytes": 1618677,
-          "contentSha256": "sha256:2d6bf26d1f37c6104a471aeb1ec93a7ab8eb48c8b18ad57aa51ea44c1531f718"
+          "sizeBytes": 2787198,
+          "contentSha256": "sha256:0c0c37b5c1d3e56ae2fe3a58ca880e96782bb3b8931e75c48936e3c0b4697e66"
         },
         {
           "portfolio": "ALP_ORIGINATION",
           "period": "2026-06",
           "fileName": "ALP_ORIGINATION_20260630_SYNTHETIC.csv",
-          "sizeBytes": 1627161,
-          "contentSha256": "sha256:033e0849f99c0fa8d36843b19d1ba999d2d8f4b06a68a51ce652b9994e0e67e5"
+          "sizeBytes": 2801780,
+          "contentSha256": "sha256:8c49faa37d4041081200c166ac3f62f0feba5771a9bb3b45748b5a9285fd2039"
         },
         {
           "portfolio": "ALP_ACQUIRED",
           "period": "2026-04",
           "fileName": "ALP_ACQUIRED_20260430_SYNTHETIC.csv",
-          "sizeBytes": 893707,
-          "contentSha256": "sha256:dd85ac7c417338237e3b135239b123d990cf1cc75a02287e51f696cc40e7f55f"
+          "sizeBytes": 1549510,
+          "contentSha256": "sha256:864295897dd0a8a044cdeffb9efe7645775885b4c1a8391e9d681dc0dda41ed7"
         },
         {
           "portfolio": "ALP_ACQUIRED",
           "period": "2026-05",
           "fileName": "ALP_ACQUIRED_20260531_SYNTHETIC.csv",
-          "sizeBytes": 890699,
-          "contentSha256": "sha256:e97b02bee79cb347df56692fc140a06905fd38c82fb337b4f564907332cd023e"
+          "sizeBytes": 1544175,
+          "contentSha256": "sha256:ac1c308726ee0dc9398d46449f6bf4d76cd68878870a18ffd6e3b8b891414bca"
         },
         {
           "portfolio": "ALP_ACQUIRED",
           "period": "2026-06",
           "fileName": "ALP_ACQUIRED_20260630_SYNTHETIC.csv",
-          "sizeBytes": 887306,
-          "contentSha256": "sha256:93eb40fee61efa903b71e78b071d8079ac235c7ead1cb5c88387bf499582dc10"
+          "sizeBytes": 1538320,
+          "contentSha256": "sha256:0fc554e748e52bb565e244e43e5d09cd5ecef12c32a69a758e4bb09d1c9c2039"
         }
       ],
       "gateExecution": [
@@ -2343,14 +3466,14 @@
           "rows": 7058,
           "balance": 1364011072.81,
           "gates": [
-            "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
+            "[Gate 1] Semantic alignment.............. OK 39 fields mapped | 0 HQ recommendations",
             "[Gate 2] Canonical validation............ OK 7,058 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
             "[Gate 2.5] Data lineage.................. OK",
             "[Gate 3] Business rules.................. Warn 3 rules | 48 failures",
             "[Gate 3b] Validation aggregation.......... OK -> ALP_ORIGINATION_20260430_SYNTHETIC_field_summary.csv",
             "[MI] Dashboard-ready canonical produced."
           ],
-          "elapsedSeconds": 11.51
+          "elapsedSeconds": 7.92
         },
         {
           "portfolio": "ALP_ACQUIRED",
@@ -2358,14 +3481,14 @@
           "rows": 3938,
           "balance": 568299918.39,
           "gates": [
-            "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
+            "[Gate 1] Semantic alignment.............. OK 39 fields mapped | 0 HQ recommendations",
             "[Gate 2] Canonical validation............ OK 3,938 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
             "[Gate 2.5] Data lineage.................. OK",
             "[Gate 3] Business rules.................. Warn 3 rules | 30 failures",
             "[Gate 3b] Validation aggregation.......... OK -> ALP_ACQUIRED_20260430_SYNTHETIC_field_summary.csv",
             "[MI] Dashboard-ready canonical produced."
           ],
-          "elapsedSeconds": 10.27
+          "elapsedSeconds": 6.17
         },
         {
           "portfolio": "ALP_ORIGINATION",
@@ -2373,14 +3496,14 @@
           "rows": 7089,
           "balance": 1374047049.17,
           "gates": [
-            "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
+            "[Gate 1] Semantic alignment.............. OK 39 fields mapped | 0 HQ recommendations",
             "[Gate 2] Canonical validation............ OK 7,089 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
             "[Gate 2.5] Data lineage.................. OK",
             "[Gate 3] Business rules.................. Warn 3 rules | 50 failures",
             "[Gate 3b] Validation aggregation.......... OK -> ALP_ORIGINATION_20260531_SYNTHETIC_field_summary.csv",
             "[MI] Dashboard-ready canonical produced."
           ],
-          "elapsedSeconds": 14.0
+          "elapsedSeconds": 7.89
         },
         {
           "portfolio": "ALP_ACQUIRED",
@@ -2388,14 +3511,14 @@
           "rows": 3924,
           "balance": 572780391.43,
           "gates": [
-            "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
+            "[Gate 1] Semantic alignment.............. OK 39 fields mapped | 0 HQ recommendations",
             "[Gate 2] Canonical validation............ OK 3,924 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
             "[Gate 2.5] Data lineage.................. OK",
             "[Gate 3] Business rules.................. Warn 3 rules | 32 failures",
             "[Gate 3b] Validation aggregation.......... OK -> ALP_ACQUIRED_20260531_SYNTHETIC_field_summary.csv",
             "[MI] Dashboard-ready canonical produced."
           ],
-          "elapsedSeconds": 11.26
+          "elapsedSeconds": 6.38
         },
         {
           "portfolio": "ALP_ORIGINATION",
@@ -2403,14 +3526,14 @@
           "rows": 7126,
           "balance": 1385508582.98,
           "gates": [
-            "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
+            "[Gate 1] Semantic alignment.............. OK 39 fields mapped | 0 HQ recommendations",
             "[Gate 2] Canonical validation............ OK 7,126 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
             "[Gate 2.5] Data lineage.................. OK",
             "[Gate 3] Business rules.................. Warn 3 rules | 54 failures",
             "[Gate 3b] Validation aggregation.......... OK -> ALP_ORIGINATION_20260630_SYNTHETIC_field_summary.csv",
             "[MI] Dashboard-ready canonical produced."
           ],
-          "elapsedSeconds": 14.06
+          "elapsedSeconds": 7.69
         },
         {
           "portfolio": "ALP_ACQUIRED",
@@ -2418,14 +3541,14 @@
           "rows": 3909,
           "balance": 579377675.23,
           "gates": [
-            "[Gate 1] Semantic alignment.............. OK 18 fields mapped | 0 HQ recommendations",
+            "[Gate 1] Semantic alignment.............. OK 39 fields mapped | 0 HQ recommendations",
             "[Gate 2] Canonical validation............ OK 3,909 loans | 0 warnings (0 fields) | 0 errors (0 fields)",
             "[Gate 2.5] Data lineage.................. OK",
             "[Gate 3] Business rules.................. Warn 3 rules | 21 failures",
             "[Gate 3b] Validation aggregation.......... OK -> ALP_ACQUIRED_20260630_SYNTHETIC_field_summary.csv",
             "[MI] Dashboard-ready canonical produced."
           ],
-          "elapsedSeconds": 10.56
+          "elapsedSeconds": 6.45
         }
       ],
       "assembledOutputs": [
@@ -2434,7 +3557,7 @@
           "reportingDate": "2026-04-30",
           "rows": 10996,
           "balance": 1932310991.2,
-          "contentSha256": "sha256:49f84c43bb8295637ba0c5164a86e509b0f0748eeab00d025ba3cfe5d5a2ad6c",
+          "contentSha256": "sha256:88ce77341d1f5a1c89be5908346435e24231c58ee85e9f796b93a521c8daf3e5",
           "uri": "blob://processed/platform/alderbridge/2026-04-30"
         },
         {
@@ -2442,7 +3565,7 @@
           "reportingDate": "2026-05-31",
           "rows": 11013,
           "balance": 1946827440.6,
-          "contentSha256": "sha256:2de7c2518a32d78dea9c68c6d6e03fc9f595b09f14b751c464e36bad9e038b89",
+          "contentSha256": "sha256:cffd127d525f73ac1187e07b6da36cf25535d4dc709319a91299b1a268f6a6d0",
           "uri": "blob://processed/platform/alderbridge/2026-05-31"
         },
         {
@@ -2450,7 +3573,7 @@
           "reportingDate": "2026-06-30",
           "rows": 11035,
           "balance": 1964886258.21,
-          "contentSha256": "sha256:035891d43d2ec65c7dc27b3f85fa1fa4e400468b9012eb37ce5d13b5dc616ef0",
+          "contentSha256": "sha256:5ee6e8a49c80c6c6d84f53c912bf66e361d469d2ed88c74e696f33bcba4b2b9c",
           "uri": "blob://processed/platform/alderbridge/2026-06-30"
         }
       ],

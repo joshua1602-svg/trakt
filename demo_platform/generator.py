@@ -375,8 +375,59 @@ def period_frame(book: LoanBook, prd: cfg.PeriodSpec) -> pd.DataFrame:
 
     redeemed_now = np.array([r is not None and str(r) == prd.period
                              for r in sub["redeem_period"]])
+
+    loan_ids = sub["loan_id"].to_numpy()
+    book_prefix = book.portfolio.display_id
+    # Use of proceeds, deterministic per loan (no RNG here — period_frame must be
+    # a pure projection of the universe, so two runs agree row for row).
+    _PURPOSES = ("Equity Release", "Home improvement", "Refinance")
+    purposes = [_PURPOSES[int(str(x)[-4:]) % len(_PURPOSES)] for x in loan_ids]
+
+    # --- Regulatory-reporting attributes -----------------------------------
+    # A lender that reports under ESMA Annex 2 carries these on its own tape;
+    # without them the exposure-level submission cannot be produced. They are
+    # modelled from the same loan economics as everything else, so the
+    # submission reconciles to the MI.
+    #
+    # Lifetime mortgages have no contractual repayment date: they redeem on the
+    # last life's death or move into long-term care. The reported maturity is
+    # therefore the product long-stop — the date the youngest borrower reaches
+    # 110, which is how the book's own duration model bounds each loan.
+    ages_at_origination = sub["age_at_origination"].to_numpy(dtype=int)
+    maturity_dates = [
+        _month_end(o.year + int(110 - a), o.month).isoformat()
+        for o, a in zip(sub["origination_date"], ages_at_origination)
+    ]
+    # The date the loan entered the reported pool. For the origination book that
+    # is completion; for the acquired book it is the later of completion and the
+    # date the acquisition itself completed.
+    acquired_on = book.portfolio.acquisition_date
+    pool_addition_dates = [
+        o.isoformat() if acquired_on is None or o.isoformat() >= acquired_on
+        else acquired_on
+        for o in sub["origination_date"]
+    ]
+    # Approved facility: the initial advance plus the loan's reserve facility.
+    # The reserve is the larger of the drawdowns the loan actually took and a
+    # 10% headroom, rounded up to the nearest £100, so the reported limit is
+    # never below what was drawn.
+    original_principal = sub["original_principal"].to_numpy(dtype=float)
+    reserve = np.maximum(dd_amount, original_principal * 0.10)
+    credit_limit = np.ceil((original_principal + reserve) / 100.0) * 100.0
+    # ESMA Annex 2 asks for the collateral identifier as it stood at
+    # securitisation (RREC3) as well as the current one (RREC4). The origination
+    # book has never re-keyed its collateral, so the two agree. The acquired book
+    # was re-keyed onto the servicer's numbering when it transferred, so it
+    # carries the vendor's original key alongside the current one.
+    collateral_ids = [str(x).replace(book_prefix, "COL", 1) for x in loan_ids]
+    if book.portfolio.source_portfolio_type == "acquired":
+        collateral_ids_original = [str(x).replace(book_prefix, "VND", 1)
+                                   for x in loan_ids]
+    else:
+        collateral_ids_original = collateral_ids
+
     out = pd.DataFrame({
-        "loan_id": sub["loan_id"].to_numpy(),
+        "loan_id": loan_ids,
         "reporting_date": prd.reporting_date,
         "origination_date": [o.isoformat() for o in sub["origination_date"]],
         "original_principal": np.round(sub["original_principal"].to_numpy(dtype=float), 2),
@@ -398,10 +449,42 @@ def period_frame(book: LoanBook, prd: cfg.PeriodSpec) -> pd.DataFrame:
             np.where([p is not None and str(p) == prd.period for p in sub["drawdown_period"]],
                      dd_amount, 0.0), 2),
         # Enum values the repository's enum library already recognises.
+        # ESMA Annex 2 requires an exposure and an obligor identifier distinct
+        # from the servicing loan key (RREL2/RREL4, which back-fill the mandatory
+        # RREL3/RREL5/RREC2). A lender preparing for regulatory reporting carries
+        # these on its tape, so the generator supplies them.
+        "exposure_id": [str(x).replace(book_prefix, "EXP", 1) for x in loan_ids],
+        "obligor_id": [str(x).replace(book_prefix, "OBL", 1) for x in loan_ids],
+        # Use of proceeds. Drawn from the values the repository's own enum library
+        # already recognises (config/system/enum_synonyms.yaml -> purpose), so the
+        # Annex 2 enum layer resolves them without touching production config.
+        "purpose": purposes,
         "rate_type": "Fixed",
         "amortisation_type": "Interest roll-up",
-        "occupancy_type": "Owner-occupied",
+        "occupancy_type": "Owner Occupied",
         "currency": "GBP",
+        # Regulatory-reporting attributes (see above).
+        "maturity_date": maturity_dates,
+        "pool_addition_date": pool_addition_dates,
+        "credit_limit": np.round(credit_limit, 2),
+        "collateral_id": collateral_ids,
+        "collateral_id_original": collateral_ids_original,
+        "collateral_type": "Residential property",
+        "valuation_method": "Full survey",
+        "origination_channel": shape.origination_channel,
+        "resident": "Yes",
+        "credit_impaired": "No",
+        "litigation": "No",
+        # This book is performing: nothing is due, nothing is in arrears, nothing
+        # has defaulted, and no loss has been allocated. Reported as measured
+        # zeroes rather than as "no data", because zero is the fact.
+        "payment_due": 0.0,
+        "arrears_balance": 0.0,
+        "days_in_arrears": 0,
+        "default_amount": 0.0,
+        "allocated_losses": 0.0,
+        "cumulative_recoveries": 0.0,
+        "prepayment_fee": 0.0,
         "synthetic_notice": cfg.SYNTHETIC_BANNER,
     })
     # Redeemed accounts carry no live valuation-based exposure; keep the last
@@ -675,10 +758,13 @@ def write_source_files(generated: GeneratedBooks) -> List[Dict[str, Any]]:
             out = pd.DataFrame({
                 col.header: frame[col.model_field] for col in schema.columns
             })
-            # Portfolio B's status vocabulary is the servicer's, not the lender's —
-            # part of what makes the two source schemas genuinely different.
-            if portfolio.source_portfolio_id == cfg.PORTFOLIO_B.source_portfolio_id:
-                out["Account State"] = out["Account State"].replace({"Active": "Open"})
+            # Portfolio B's status column is the servicer's ("Account State", not
+            # "Loan Status") but its VALUES stay on the canonical enumeration. The
+            # repository's enum library carries no account_status synonyms, so an
+            # invented "Open" would reach the ESMA Annex 2 delivery rules unmapped
+            # and block the regulatory submission. The schema difference the
+            # onboarding scene shows is the header, which is genuine; inventing a
+            # value vocabulary nothing maps would be a demonstration artefact.
             path = cfg.source_file(portfolio, prd)
             path.parent.mkdir(parents=True, exist_ok=True)
             out.to_csv(path, index=False)
