@@ -119,37 +119,49 @@ export function withCache(
     getSnapshots: (signal) => resource("snapshots", () => client.getSnapshots(signal)),
     getSourcePortfolios: (signal) =>
       resource("sourcePortfolios", () => client.getSourcePortfolios(signal)),
+    getPortfolioContext: (signal) =>
+      resource("portfolioContext", () => client.getPortfolioContext(signal)),
     getMe: (signal) => resource("me", () => client.getMe(signal)),
 
     // Portfolio-scoped resources — keyed by endpoint + portfolioId (which encodes
     // client + run/reporting date; the pipeline extract is always the latest).
-    getSnapshot: (portfolioId, signal) =>
-      resource(`snapshot|${portfolioId}`, () => client.getSnapshot(portfolioId, signal)),
-    getForecastSnapshot: (portfolioId, signal) =>
-      resource(`forecastSnapshot|${portfolioId}`, () => client.getForecastSnapshot(portfolioId, signal)),
-    getFundedEvolution: (portfolioId, signal) =>
-      resource(`fundedEvolution|${portfolioId}`, () => client.getFundedEvolution(portfolioId, signal)),
-    getPipelineEvolution: (portfolioId, signal) =>
-      resource(`pipelineEvolution|${portfolioId}`, () => client.getPipelineEvolution(portfolioId, signal)),
-    getForecastEvolution: (portfolioId, signal) =>
-      resource(`forecastEvolution|${portfolioId}`, () => client.getForecastEvolution(portfolioId, signal)),
-    getFunnelEvolution: (portfolioId, signal) =>
-      resource(`funnelEvolution|${portfolioId}`, () => client.getFunnelEvolution(portfolioId, signal)),
-    getRiskLimits: (portfolioId, signal) =>
-      resource(`riskLimits|${portfolioId}`, () => client.getRiskLimits(portfolioId, signal)),
-    getForecastExtrapolation: (portfolioId, signal) =>
-      resource(`forecastExtrapolation|${portfolioId}`, () => client.getForecastExtrapolation(portfolioId, signal)),
+    getSnapshot: (portfolioId, portfolioContext, signal) =>
+      resource(`snapshot|${portfolioId}|${portfolioContext ?? ""}`,
+        () => client.getSnapshot(portfolioId, portfolioContext, signal)),
+    getForecastSnapshot: (portfolioId, portfolioContext, signal) =>
+      resource(`forecastSnapshot|${portfolioId}|${portfolioContext ?? ""}`,
+        () => client.getForecastSnapshot(portfolioId, portfolioContext, signal)),
+    getFundedEvolution: (portfolioId, portfolioContext, signal) =>
+      resource(`fundedEvolution|${portfolioId}|${portfolioContext ?? ""}`,
+        () => client.getFundedEvolution(portfolioId, portfolioContext, signal)),
+    getPipelineEvolution: (portfolioId, portfolioContext, signal) =>
+      resource(`pipelineEvolution|${portfolioId}|${portfolioContext ?? ""}`,
+        () => client.getPipelineEvolution(portfolioId, portfolioContext, signal)),
+    getForecastEvolution: (portfolioId, portfolioContext, signal) =>
+      resource(`forecastEvolution|${portfolioId}|${portfolioContext ?? ""}`,
+        () => client.getForecastEvolution(portfolioId, portfolioContext, signal)),
+    getFunnelEvolution: (portfolioId, portfolioContext, signal) =>
+      resource(`funnelEvolution|${portfolioId}|${portfolioContext ?? ""}`,
+        () => client.getFunnelEvolution(portfolioId, portfolioContext, signal)),
+    getRiskLimits: (portfolioId, portfolioContext, signal) =>
+      resource(`riskLimits|${portfolioId}|${portfolioContext ?? ""}`,
+        () => client.getRiskLimits(portfolioId, portfolioContext, signal)),
+    getForecastExtrapolation: (portfolioId, portfolioContext, signal) =>
+      resource(`forecastExtrapolation|${portfolioId}|${portfolioContext ?? ""}`,
+        () => client.getForecastExtrapolation(portfolioId, portfolioContext, signal)),
     getDecks: (portfolioId, signal) =>
       resource(`decks|${portfolioId}`, () => client.getDecks(portfolioId, signal)),
-    getCohorts: (portfolioId, grain, dimension, signal) =>
-      resource(`cohorts|${portfolioId}|${grain ?? "Y"}|${dimension ?? "vintage"}`,
-        () => client.getCohorts(portfolioId, grain, dimension, signal)),
+    getCohorts: (portfolioId, grain, dimension, portfolioContext, signal) =>
+      resource(
+        `cohorts|${portfolioId}|${grain ?? "Y"}|${dimension ?? "vintage"}|${portfolioContext ?? ""}`,
+        () => client.getCohorts(portfolioId, grain, dimension, portfolioContext, signal)),
     getCohortProgression: (portfolioId, query, signal) =>
       resource(
         `cohortProg|${portfolioId}|${query?.lens ?? "total"}|${query?.vintage ?? ""}|${query?.grain ?? "Y"}`,
         () => client.getCohortProgression(portfolioId, query, signal)),
-    getGeoExposure: (portfolioId, signal) =>
-      resource(`geoExposure|${portfolioId}`, () => client.getGeoExposure(portfolioId, signal)),
+    getGeoExposure: (portfolioId, portfolioContext, signal) =>
+      resource(`geoExposure|${portfolioId}|${portfolioContext ?? ""}`,
+        () => client.getGeoExposure(portfolioId, portfolioContext, signal)),
     deckDownloadUrl: (portfolioId, period) => client.deckDownloadUrl(portfolioId, period),
   };
 }

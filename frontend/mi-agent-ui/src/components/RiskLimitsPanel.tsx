@@ -166,10 +166,13 @@ function CategoryTable({ title, tests }: { title: string; tests: RiskLimitTest[]
  * unavailable / needs-review states are surfaced, never hidden.
  */
 export function RiskLimitsPanel({
-  client, portfolioId,
+  client, portfolioId, portfolioContext,
 }: {
   client: AgentClient;
   portfolioId: string;
+  /** The governed workspace portfolio scope; concentration is measured
+   *  backend-side over exactly these portfolios. */
+  portfolioContext?: string;
 }) {
   const [data, setData] = useState<RiskLimitsSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
@@ -178,12 +181,12 @@ export function RiskLimitsPanel({
     let cancelled = false;
     setLoading(true);
     client
-      .getRiskLimits(portfolioId)
+      .getRiskLimits(portfolioId, portfolioContext)
       .then((d) => { if (!cancelled) setData(d); })
       .catch(() => { /* keep prior */ })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [client, portfolioId]);
+  }, [client, portfolioId, portfolioContext]);
 
   return (
     <section className="space-y-4" data-testid="risk-limits-panel">

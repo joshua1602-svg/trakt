@@ -1,3 +1,5 @@
+import type { PortfolioCoverage } from "./portfolio";
+
 /**
  * Agent request/response envelope — mirrors `mi_agent.mi_agent_workflow
  * .run_mi_agent_query` so a future HTTP client is a drop-in for the mock.
@@ -108,6 +110,11 @@ export interface AgentResponse {
   datasetContext?: string;
   /** True when served from the client-side result cache (display-only flag). */
   cacheHit?: boolean;
+  /** Governed portfolio scope + coverage for this answer. Produced entirely by
+   * the backend: which portfolios were in scope, which actually answered, which
+   * were excluded and why, and whether the answer is fully consolidated. The UI
+   * renders these facts — it never derives them. */
+  portfolioCoverage?: PortfolioCoverage;
   error?: string;
 }
 
@@ -162,6 +169,8 @@ export interface ChatMessage {
   cacheHit?: boolean;
   /** Grounded follow-up suggestions for this result. */
   suggestions?: SuggestedAction[];
+  /** Backend-authored portfolio coverage disclosure for this answer. */
+  portfolioCoverage?: PortfolioCoverage;
   /** The result artifacts, embedded inline in the conversation (in-memory; not
    * persisted — re-derivable from artifactRefs + the canvas). */
   artifacts?: Artifact[];

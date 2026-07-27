@@ -181,7 +181,8 @@ def assemble_funded_evolution(frames: List[Dict[str, Any]], client_id: str,
 
 
 def funded_frames(output_root: str | os.PathLike, client_id: str,
-                  to_run_id: Optional[str] = None) -> List[Dict[str, Any]]:
+                  to_run_id: Optional[str] = None,
+                  scope=None) -> List[Dict[str, Any]]:
     """Ordered prepared funded run frames ``[{run_id, reporting_date, df, source}]``
     (oldest → newest), up to ``to_run_id`` inclusive.
 
@@ -197,9 +198,9 @@ def funded_frames(output_root: str | os.PathLike, client_id: str,
         try:
             from apps.blob_trigger_app.storage import open_storage
             from .funded_prep import prepare_funded_mi_dataset
-            return _blob.build_funded_evolution_frames(
+            return _apply_scope_to_frames(_blob.build_funded_evolution_frames(
                 str(output_root), open_storage(), client_id, to_run_id,
-                prepare_funded_mi_dataset)
+                prepare_funded_mi_dataset), scope)
         except Exception:  # noqa: BLE001 - never break the series on a blob error
             pass
     frames: List[Dict[str, Any]] = []
@@ -218,15 +219,30 @@ def funded_frames(output_root: str | os.PathLike, client_id: str,
             "df": df,
             "source": str(tape),
         })
-    return frames
+    return _apply_scope_to_frames(frames, scope)
+
+
+def _apply_scope_to_frames(frames: List[Dict[str, Any]], scope) -> List[Dict[str, Any]]:
+    """Narrow every period frame to the governed portfolio scope.
+
+    Applied at the SERIES level so every downstream evolution / bridge / cohort
+    surface sees exactly the portfolios the workspace selected — one filter, not
+    one per view. ``scope=None`` (or Total) is a no-op, which keeps the existing
+    consolidated behaviour byte-identical."""
+    if scope is None or getattr(scope, "is_total", False):
+        return frames
+    from mi_agent.portfolio_scope import apply_scope
+    return [{**fr, "df": apply_scope(fr.get("df"), scope)} for fr in frames]
 
 
 def funded_evolution(output_root: str | os.PathLike, client_id: str,
                      to_run_id: Optional[str] = None,
-                     breakdowns: Optional[List[str]] = None) -> Dict[str, Any]:
-    """Funded time series across monthly runs up to ``to_run_id`` (inclusive)."""
+                     breakdowns: Optional[List[str]] = None,
+                     scope=None) -> Dict[str, Any]:
+    """Funded time series across monthly runs up to ``to_run_id`` (inclusive),
+    narrowed to the governed portfolio ``scope``."""
     return assemble_funded_evolution(
-        funded_frames(output_root, client_id, to_run_id),
+        funded_frames(output_root, client_id, to_run_id, scope=scope),
         client_id, to_run_id, breakdowns)
 
 
@@ -238,17 +254,25 @@ def _period_label(fr: Dict[str, Any]) -> str:
     return str(rd)[:7] if rd else str(fr.get("run_id"))
 
 
-def _scope_frame_lens(df, lens_filters: Optional[Dict[str, str]]):
-    """Narrow a funded frame to a source-portfolio lens (consolidated = no
-    filter; a cohort/type lens filters ``source_portfolio_id``/``_type``).
-    Case/whitespace-insensitive; a filter on an absent column is a no-op."""
+def _scope_frame_lens(df, lens_filters):
+    """Narrow a funded frame to a source-portfolio scope.
+
+    A governed scope resolves to a LIST of portfolio ids (a group is the sum of
+    its current members), so list values are matched with membership; a single
+    value still matches by equality. Case/whitespace-insensitive; a filter on an
+    absent column is a no-op."""
     if not lens_filters or df is None:
         return df
     work = df
     for col, val in lens_filters.items():
-        if col in work.columns:
-            work = work[work[col].astype(str).str.strip().str.casefold()
-                        == str(val).strip().casefold()]
+        if col not in work.columns:
+            continue
+        norm = work[col].astype(str).str.strip().str.casefold()
+        if isinstance(val, (list, tuple, set)):
+            wanted = {str(v).strip().casefold() for v in val}
+            work = work[norm.isin(wanted)]
+        else:
+            work = work[norm == str(val).strip().casefold()]
     return work
 
 
@@ -830,14 +854,22 @@ def pipeline_funnel_evolution(pipeline_root: str | os.PathLike, client_id: str,
 def forecast_evolution(output_root: str | os.PathLike,
                        pipeline_root: str | os.PathLike, client_id: str,
                        to_run_id: Optional[str] = None, *,
-                       historical_model: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                       historical_model: Optional[Dict[str, Any]] = None,
+                       scope=None,
+                       include_pipeline: bool = True) -> Dict[str, Any]:
     """Forecast bridge over time: funded balance per run + the latest weighted
     pipeline contribution available at/under that run's month. A governed
     ``historical_model`` weights the pipeline by the same empirical stage rates as
-    the point-in-time bridge (one consistent 'weighted expected pipeline')."""
-    funded = funded_evolution(output_root, client_id, to_run_id)
-    pipe = pipeline_evolution(pipeline_root, client_id, to_run_id,
-                              historical_model=historical_model)
+    the point-in-time bridge (one consistent 'weighted expected pipeline').
+
+    ``scope`` narrows the funded side to the selected portfolios.
+    ``include_pipeline=False`` is used when the governed capability resolver says
+    no portfolio in scope originates — the funded series is still returned, with
+    no fabricated pipeline contribution."""
+    funded = funded_evolution(output_root, client_id, to_run_id, scope=scope)
+    pipe = (pipeline_evolution(pipeline_root, client_id, to_run_id,
+                               historical_model=historical_model)
+            if include_pipeline else {"periods": []})
     # Index pipeline weighted-expected by year-month (latest extract per month).
     weighted_by_month: Dict[str, float] = {}
     for p in pipe["periods"]:

@@ -1,3 +1,5 @@
+import type { ChartAvailability } from "./portfolio";
+
 /**
  * Funded-portfolio snapshot + reporting-run discovery — mirrors
  * `mi_agent_api/snapshots.py`. These shapes drive the data-driven portfolio /
@@ -83,9 +85,19 @@ export interface FundedStratBar {
   waLtv?: number;
 }
 
-/** A funded stratification by one dimension (LTV band / age / region / …). */
+/** A funded stratification by one dimension (LTV band / age / region / …).
+ *
+ * `availability` and `reason` are decided by the governed backend, so a chart
+ * that cannot be drawn explains itself in business terms instead of rendering an
+ * unexplained blank. `contributingPortfolios` / `missingPortfolios` disclose,
+ * for a grouped scope, which books supplied the dimension. */
 export interface FundedStratification {
   key: string;
   label: string;
   bars: FundedStratBar[];
+  availability?: ChartAvailability;
+  /** Backend-authored explanation when the chart is not fully available. */
+  reason?: string;
+  contributingPortfolios?: string[];
+  missingPortfolios?: string[];
 }

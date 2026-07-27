@@ -24,10 +24,12 @@ function gbpC(v: number): string {
  *     attrition and over-stated scale), so it is not presented.
  */
 export function ForecastExtrapolationPanel({
-  client, portfolioId,
+  client, portfolioId, portfolioContext,
 }: {
   client: AgentClient;
   portfolioId: string;
+  /** The governed workspace portfolio scope. */
+  portfolioContext?: string;
 }) {
   const [data, setData] = useState<ForecastExtrapolation | null>(null);
   const [loading, setLoading] = useState(false);
@@ -36,12 +38,12 @@ export function ForecastExtrapolationPanel({
     let cancelled = false;
     setLoading(true);
     client
-      .getForecastExtrapolation(portfolioId)
+      .getForecastExtrapolation(portfolioId, portfolioContext)
       .then((d) => { if (!cancelled) setData(d); })
       .catch(() => { /* keep prior */ })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [client, portfolioId]);
+  }, [client, portfolioId, portfolioContext]);
 
   const current = data?.completionRunRateForecast ?? null;
   const curve = useMemo(

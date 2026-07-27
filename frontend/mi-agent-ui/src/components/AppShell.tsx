@@ -13,7 +13,8 @@ import { RiskLimitsPanel } from "@/components/RiskLimitsPanel";
 import { GeographyPanel } from "@/components/GeographyPanel";
 import { ViewToggle } from "@/components/ViewToggle";
 import { SubTabs } from "@/components/SubTabs";
-import { SourcePortfolioSelector } from "@/components/SourcePortfolioSelector";
+import { PortfolioContextSelector } from "@/components/PortfolioContextSelector";
+import { PortfolioScopeBanner } from "@/components/PortfolioScopeBanner";
 import { LineagePanel } from "@/components/LineagePanel";
 import type { ViewLineage } from "@/domain";
 import { createAgentClient, resolveAgentClientConfig } from "@/api";
@@ -52,6 +53,13 @@ function pipelineLineage(forecast: ReturnType<typeof useWorkspace>["forecast"]):
 
 // Tab semantics (A3 / A10): what each top-level view represents. Each of
 // Funded / Pipeline / Forecast hosts sub-tabs (see the workspace render below).
+const VIEW_CAPABILITY: Record<string, string> = {
+  funded: "funded",
+  pipeline: "pipeline",
+  forecast: "consolidated_forecast",
+  risk_limits: "risk",
+};
+
 const VIEW_SUBTITLES: Record<string, string> = {
   funded: "Funded book — the funded-loan book as of the selected reporting date: stratifications, geographic exposure, time-series evolution and static-pool cohorts.",
   pipeline: "Pipeline — the open origination pipeline: current stratifications, and its evolution (stock levels over time and the weekly origination funnel flow).",
@@ -170,15 +178,19 @@ export function AppShell() {
                   active={ws.activeView}
                   onChange={ws.setActiveView}
                   disabledViews={ws.disabledViews}
+                  disabledReasons={ws.disabledViewReasons}
                   className="min-w-0 flex-1"
                 />
-                {ws.sourceLenses.length > 1 && (
+                {/* ONE portfolio control for the whole workspace. There is no
+                    second scope toggle anywhere in the app — this selection is
+                    sent to every backend call, including chat and exports. */}
+                {ws.portfolioContexts.length > 1 && (
                   <>
                     <div className="h-6 w-px shrink-0 bg-[var(--surface-dashboard-line)]" />
-                    <SourcePortfolioSelector
-                      lenses={ws.sourceLenses}
-                      value={ws.selectedLens}
-                      onChange={ws.setSelectedLens}
+                    <PortfolioContextSelector
+                      contexts={ws.portfolioContexts}
+                      value={ws.selectedContextId}
+                      onChange={ws.setSelectedContextId}
                     />
                   </>
                 )}
@@ -195,6 +207,12 @@ export function AppShell() {
               </p>
             ) : (
               <div className="space-y-4 p-4">
+                {/* Governed disclosure for the active view: which portfolios
+                    contribute, which are excluded and why. Backend prose only. */}
+                <PortfolioScopeBanner
+                  context={ws.activeContext}
+                  capability={ws.capabilities[VIEW_CAPABILITY[ws.activeView]]}
+                />
                 {/* FUNDED — stratifications · geography · evolution · cohorts */}
                 {ws.activeView === "funded" && (
                   <div className="space-y-4">
@@ -213,22 +231,28 @@ export function AppShell() {
                       </>
                     )}
                     {fundedTab === "geo" && (
-                      <GeographyPanel key={`geo-${ws.dataVersion}`}
-                        client={client} portfolioId={workspacePortfolioId} />
+                      <GeographyPanel key={`geo-${ws.dataVersion}-${ws.selectedContextId}`}
+                        client={client} portfolioId={workspacePortfolioId}
+                        portfolioContext={ws.selectedContextId} />
                     )}
                     {fundedTab === "evo" && (
-                      <EvolutionPanel key={`evo-funded-${ws.dataVersion}`} heading={false}
-                        tabs={["funded"]} client={client} portfolioId={workspacePortfolioId} />
+                      <EvolutionPanel key={`evo-funded-${ws.dataVersion}-${ws.selectedContextId}`} heading={false}
+                        tabs={["funded"]} client={client} portfolioId={workspacePortfolioId}
+                        portfolioContext={ws.selectedContextId} />
                     )}
                     {fundedTab === "cohorts" && (
-                      <EvolutionPanel key={`evo-cohorts-${ws.dataVersion}`} heading={false}
-                        tabs={["cohorts"]} client={client} portfolioId={workspacePortfolioId} />
+                      <EvolutionPanel key={`evo-cohorts-${ws.dataVersion}-${ws.selectedContextId}`} heading={false}
+                        tabs={["cohorts"]} client={client} portfolioId={workspacePortfolioId}
+                        portfolioContext={ws.selectedContextId} />
                     )}
                   </div>
                 )}
 
-                {/* PIPELINE — stratifications · evolution (stock + origination flow) */}
-                {ws.activeView === "pipeline" && (
+                {/* PIPELINE — stratifications · evolution (stock + origination flow).
+                    Rendered only where the governed capability allows it; when it
+                    does not, the banner above carries the business explanation and
+                    no empty analysis is drawn. */}
+                {ws.activeView === "pipeline" && ws.capabilityEnabled("pipeline") && (
                   <div className="space-y-4">
                     <SubTabs ariaLabel="Pipeline sub-view" testId="pipeline-subtabs"
                       active={pipelineTab} onChange={setPipelineTab}
@@ -247,14 +271,15 @@ export function AppShell() {
                       </>
                     )}
                     {pipelineTab === "evo" && (
-                      <EvolutionPanel key={`evo-pipeline-${ws.dataVersion}`} heading={false}
-                        tabs={["pipeline", "origination"]} client={client} portfolioId={workspacePortfolioId} />
+                      <EvolutionPanel key={`evo-pipeline-${ws.dataVersion}-${ws.selectedContextId}`} heading={false}
+                        tabs={["pipeline", "origination"]} client={client} portfolioId={workspacePortfolioId}
+                        portfolioContext={ws.selectedContextId} />
                     )}
                   </div>
                 )}
 
                 {/* FORECAST — projection · forecast evolution */}
-                {ws.activeView === "forecast" && (
+                {ws.activeView === "forecast" && ws.capabilityEnabled("consolidated_forecast") && (
                   <div className="space-y-4">
                     <SubTabs ariaLabel="Forecast sub-view" testId="forecast-subtabs"
                       active={forecastTab} onChange={setForecastTab}
@@ -265,20 +290,23 @@ export function AppShell() {
                     {forecastTab === "projection" && (
                       <>
                         <ForecastView forecast={ws.forecast} loading={ws.forecastLoading} />
-                        <ForecastExtrapolationPanel key={`fx-${ws.dataVersion}`}
-                          client={client} portfolioId={workspacePortfolioId} />
+                        <ForecastExtrapolationPanel key={`fx-${ws.dataVersion}-${ws.selectedContextId}`}
+                          client={client} portfolioId={workspacePortfolioId}
+                          portfolioContext={ws.selectedContextId} />
                       </>
                     )}
                     {forecastTab === "evolution" && (
-                      <EvolutionPanel key={`evo-forecast-${ws.dataVersion}`} heading={false}
-                        tabs={["forecast"]} client={client} portfolioId={workspacePortfolioId} />
+                      <EvolutionPanel key={`evo-forecast-${ws.dataVersion}-${ws.selectedContextId}`} heading={false}
+                        tabs={["forecast"]} client={client} portfolioId={workspacePortfolioId}
+                        portfolioContext={ws.selectedContextId} />
                     )}
                   </div>
                 )}
 
-                {ws.activeView === "risk_limits" && (
-                  <RiskLimitsPanel key={`risk-${ws.dataVersion}`}
-                    client={client} portfolioId={workspacePortfolioId} />
+                {ws.activeView === "risk_limits" && ws.capabilityEnabled("risk") && (
+                  <RiskLimitsPanel key={`risk-${ws.dataVersion}-${ws.selectedContextId}`}
+                    client={client} portfolioId={workspacePortfolioId}
+                    portfolioContext={ws.selectedContextId} />
                 )}
               </div>
             )}

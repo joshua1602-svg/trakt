@@ -323,13 +323,25 @@ def _loan_ids(df: pd.DataFrame) -> set:
 # Point-in-time funded stratifications (balance / share by a dimension). Fills
 # the Funded tab's gap: Pipeline and Forecast carry breakdowns, Funded did not.
 # --------------------------------------------------------------------------- #
+# The funded stratification catalogue. Deliberately CONCISE: each dimension is a
+# distinct asset-relevant cut a lender/investor actually asks for, drawn from a
+# canonical field with an existing governed derivation. Charts are not added to
+# fill space, and a dimension a portfolio does not report is reported as
+# unavailable (with the reason) rather than rendered blank — see
+# ``_funded_stratifications``. The set is the same for every portfolio type:
+# an acquired back book gets the same funded depth as a direct one.
 _STRAT_DIMS = [
     ("ltv", "By LTV band"),
     ("age", "By borrower age"),
     ("region", "By region"),
     ("rate", "By rate band"),
     ("product", "By product"),
+    ("vintage", "By origination vintage"),
+    ("status", "By account status"),
+    ("equity", "By protected equity"),
 ]
+_EQUITY_BINS = [0, 5, 10, 20, 30, 50, 101]
+_EQUITY_LABELS = ["<5%", "5–10%", "10–20%", "20–30%", "30–50%", "50%+"]
 _RATE_BINS = [0, 3, 4, 5, 6, 7, 8, 100]
 _RATE_LABELS = ["<3%", "3–4%", "4–5%", "5–6%", "6–7%", "7–8%", "8%+"]
 
@@ -354,6 +366,26 @@ def _strat_series(df: pd.DataFrame, key: str):
             if col in df.columns and df[col].notna().any():
                 return df[col].astype("string")
         return None
+    if key == "vintage":
+        from . import cohorts as _cohorts  # same vintage derivation as cohorts
+        return _cohorts._vintage_series(df, "Y")
+    if key == "status":
+        for col in ("account_status", "loan_status", "performance_status"):
+            if col in df.columns and df[col].notna().any():
+                return df[col].astype("string")
+        return None
+    if key == "equity":
+        # Protected equity: the banded percentage where reported, else the flag.
+        if "protected_equity_percentage" in df.columns:
+            pct = coerce_numeric(df["protected_equity_percentage"])
+            if pct.notna().sum():
+                # Scale-aware: a fraction (0.15) is read in points (15).
+                points = pct.where(pct.abs() > 1.0, pct * 100.0)
+                return pd.cut(points, _EQUITY_BINS, labels=_EQUITY_LABELS,
+                              right=False).astype("string")
+        if "protected_equity_flag" in df.columns and df["protected_equity_flag"].notna().any():
+            return df["protected_equity_flag"].astype("string")
+        return None
     if key == "rate" and "current_interest_rate" in df.columns:
         r = coerce_numeric(df["current_interest_rate"])
         if r.notna().sum() == 0:
@@ -363,9 +395,71 @@ def _strat_series(df: pd.DataFrame, key: str):
     return None
 
 
-def _funded_stratifications(df: pd.DataFrame) -> List[Dict[str, Any]]:
+#: Chart availability states. A blank chart area is never acceptable — every
+#: dimension reports WHY it has no bars, so the UI can render a distinct,
+#: explained state instead of an empty frame.
+CHART_AVAILABLE = "available"              # populated and applicable
+CHART_ALL_NULL = "present_but_all_null"    # column exists, no values in scope
+CHART_NOT_SUPPLIED = "not_supplied"        # not provided for these portfolios
+CHART_PARTIAL = "partially_available"      # only some portfolios in scope have it
+
+
+#: Source columns each stratification dimension can be built from. Used ONLY to
+#: tell "column absent" apart from "column present but empty" — the values still
+#: come from :func:`_strat_series`.
+_STRAT_SOURCE_COLUMNS: Dict[str, tuple] = {
+    "ltv": ("current_loan_to_value", "ltv_bucket", "original_loan_to_value",
+            "original_ltv_bucket"),
+    "age": ("borrower_age", "borrower_age_bucket", "youngest_borrower_age",
+            "youngest_borrower_age_bucket"),
+    "region": ("geographic_region_collateral", "geographic_region_obligor", "region"),
+    "product": ("product_type", "product", "loan_product"),
+    "rate": ("current_interest_rate",),
+    "vintage": ("origination_date", "vintage_year"),
+    "status": ("account_status", "loan_status", "performance_status"),
+    "equity": ("protected_equity_percentage", "protected_equity_flag"),
+}
+
+
+def _strat_columns_present(df: pd.DataFrame, key: str) -> bool:
+    """True when the tape carries a source column for this dimension at all."""
+    cols = set(getattr(df, "columns", []))
+    return any(c in cols for c in _STRAT_SOURCE_COLUMNS.get(key, ()))
+
+
+def _strat_coverage(df: pd.DataFrame, key: str, scope) -> Dict[str, Any]:
+    """Per-portfolio contribution for one stratification dimension.
+
+    For a grouped context (Total / Direct / Acquired) this states which
+    portfolios could supply the dimension and which could not — the difference
+    between "this book does not report borrower age" and "the chart is broken".
+    """
+    if scope is None or len(getattr(scope, "portfolio_ids", ()) or ()) <= 1:
+        return {}
+    contributing, missing = [], []
+    for pid in scope.portfolio_ids:
+        try:
+            part = df[df["source_portfolio_id"].astype(str).str.strip().str.casefold()
+                      == pid.strip().casefold()] if "source_portfolio_id" in df.columns else df
+            series = _strat_series(part, key)
+            if series is not None and series.notna().sum() > 0:
+                contributing.append(pid)
+            else:
+                missing.append(pid)
+        except Exception:  # noqa: BLE001 - coverage must never break the chart
+            missing.append(pid)
+    return {"contributingPortfolios": contributing, "missingPortfolios": missing}
+
+
+def _funded_stratifications(df: pd.DataFrame, scope=None) -> List[Dict[str, Any]]:
     """Balance / loan-count / book-share (and WA LTV) per band for each dimension
-    the funded tape can support. Never raises — a bad dimension is skipped."""
+    the funded tape can support. Never raises — a bad dimension is skipped.
+
+    Every dimension in the catalogue is REPORTED, with an explicit availability
+    state, rather than silently omitted: a chart that cannot be drawn must say
+    why (not supplied for these portfolios / present but entirely null / only
+    some portfolios in scope carry it) so the workspace never shows an
+    unexplained blank."""
     balance_col = "current_outstanding_balance"
     if df is None or balance_col not in getattr(df, "columns", []):
         return []
@@ -373,15 +467,35 @@ def _funded_stratifications(df: pd.DataFrame) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     wm = ["current_loan_to_value"] if "current_loan_to_value" in df.columns else None
     for key, label in _STRAT_DIMS:
+        entry: Dict[str, Any] = {"key": key, "label": label, "bars": []}
         try:
             series = _strat_series(df, key)
             if series is None:
+                # Distinguish "the tape does not carry this at all" from "the
+                # column is there but empty for these portfolios" — the two mean
+                # very different things to a reader, and neither is a blank box.
+                present = _strat_columns_present(df, key)
+                entry["availability"] = CHART_ALL_NULL if present else CHART_NOT_SUPPLIED
+                dimension = label[3:] if label.startswith("By ") else label
+                entry["reason"] = (
+                    f"{dimension} is present in the tape but has no values for the "
+                    "selected portfolios." if present else
+                    f"{dimension} is not supplied for the selected portfolios.")
+                out.append(entry)
                 continue
             work = df.assign(__dim=series)
             if work["__dim"].notna().sum() == 0:
+                entry["availability"] = CHART_ALL_NULL
+                entry["reason"] = (f"{label[3:] if label.startswith('By ') else label} "
+                                   "is present in the tape but has no values for "
+                                   "the selected portfolios.")
+                out.append(entry)
                 continue
             tbl = _stratify(work, "__dim", balance_col=balance_col, weighted_metrics=wm)
             if tbl.empty:
+                entry["availability"] = CHART_ALL_NULL
+                entry["reason"] = "No rows contributed to this stratification."
+                out.append(entry)
                 continue
             bars = []
             for _, r in tbl.iterrows():
@@ -395,7 +509,17 @@ def _funded_stratifications(df: pd.DataFrame) -> List[Dict[str, Any]]:
                 if wl is not None and pd.notna(wl):
                     bar["waLtv"] = round(float(wl), 4)
                 bars.append(bar)
-            out.append({"key": key, "label": label, "bars": bars[:12]})
+            entry["bars"] = bars[:12]
+            coverage = _strat_coverage(df, key, scope)
+            entry.update(coverage)
+            if coverage.get("missingPortfolios"):
+                entry["availability"] = CHART_PARTIAL
+                entry["reason"] = (
+                    "Covers " + ", ".join(coverage["contributingPortfolios"])
+                    + "; not supplied for " + ", ".join(coverage["missingPortfolios"]) + ".")
+            else:
+                entry["availability"] = CHART_AVAILABLE
+            out.append(entry)
         except Exception:  # noqa: BLE001 - a stratification must never break the snapshot
             continue
     return out
@@ -412,12 +536,17 @@ def compute_funded_snapshot(
     prior_df: Optional[pd.DataFrame] = None,
     prior_run_id: Optional[str] = None,
     prior_reporting_date: Optional[str] = None,
+    scope=None,
 ) -> Dict[str, Any]:
     """Deterministic funded-book snapshot for one reporting run.
 
     Returns KPI tiles, the month-on-month change versus ``prior_df`` (if any),
     and any business-facing warnings (missing data / partial result). All numbers
     are derived from the prepared dataset and the dataset contract — never the parser.
+
+    ``df`` is expected to be ALREADY narrowed to the governed portfolio scope by
+    the caller; ``scope`` is passed alongside so the per-dimension chart coverage
+    can disclose which portfolios supplied each stratification.
     """
     # Resolve the display currency from this run's tape (falls back to GBP).
     currency_mod.resolve_and_set(df)
@@ -559,7 +688,7 @@ def compute_funded_snapshot(
         "loan_count": loan_count,
         "current_outstanding_balance": round(balance, 2),
         "kpis": kpis,
-        "stratifications": _funded_stratifications(df),
+        "stratifications": _funded_stratifications(df, scope),
         "monthly_change": monthly_change,
         "warnings": warnings,
         "diagnostics": diagnostics,

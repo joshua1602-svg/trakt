@@ -52,6 +52,7 @@ from . import pipeline_timing as timing_mod
 from . import decks as decks_mod
 from . import cohorts as cohorts_mod
 from . import geo as geo_mod
+from . import portfolio_context as portfolio_ctx_mod
 # The shared governed MI application service both channels (React + Copilot)
 # call. It imports this module's data resolvers lazily, so there is no cycle.
 from . import mi_service
@@ -62,6 +63,13 @@ from . import mi_service
 # so the routes below — and existing callers/tests that reference
 # ``mi_agent_api.app._<helper>`` — are unchanged.
 from trakt_core.context import CHANNEL_REACT
+from trakt_core.portfolio import (
+    CAP_CONSOLIDATED_FORECAST,
+    CAP_ORIGINATION_FORECAST,
+    CAP_PIPELINE,
+    CAP_RUNOFF_FORECAST,
+    REASON_NON_ORIGINATING,
+)
 from trakt_core.errors import TraktError
 from trakt_core.runtime import runtime_mode, validate_runtime_mode
 
@@ -303,6 +311,128 @@ def catalogue() -> Dict[str, Any]:
     return build_catalogue()
 
 
+def _resolve_portfolio_context(portfolio_context: Optional[str],
+                               client_id: Optional[str] = None, df=None):
+    """The governed portfolio context for a request. Never raises.
+
+    Every portfolio-scoped route resolves through THIS — one registry, one scope
+    resolver, one capability resolver — so a route can never invent its own idea
+    of what "Direct" contains or what an acquired book may do."""
+    try:
+        return portfolio_ctx_mod.resolve_context(
+            portfolio_context, df=df, client_id=client_id)
+    except Exception as exc:  # noqa: BLE001 - scope resolution must never 500
+        logger.warning("portfolio context resolution failed (%r): %s",
+                       portfolio_context, exc)
+        return None
+
+
+def _scoped_frame(df, resolved):
+    """Narrow a frame to a resolved context's scope (no-op for Total / None)."""
+    if df is None or resolved is None:
+        return df
+    from mi_agent.portfolio_scope import apply_scope
+    try:
+        return apply_scope(df, resolved.scope)
+    except Exception as exc:  # noqa: BLE001 - filtering must never 500
+        logger.warning("portfolio scope filtering failed: %s", exc)
+        return df
+
+
+def _scope_block(df, resolved, *, fields: Optional[List[str]] = None
+                 ) -> Optional[Dict[str, Any]]:
+    """The governed scope + coverage block a portfolio-scoped response carries.
+
+    ``df`` is the UNSCOPED frame, so the block can state which portfolios in
+    scope had no rows rather than silently omitting them."""
+    if resolved is None:
+        return None
+    try:
+        return portfolio_ctx_mod.scope_metadata(
+            df, resolved.scope, capabilities=resolved.capabilities, fields=fields)
+    except Exception as exc:  # noqa: BLE001 - disclosure must never 500
+        logger.warning("portfolio scope disclosure failed: %s", exc)
+        return None
+
+
+def _pipeline_scope_gate(portfolio_context: Optional[str], client_id: Optional[str],
+                         dataset: str, **extra) -> tuple:
+    """``(resolved, refusal)`` for a pipeline-family route.
+
+    The governed capability resolver decides whether an origination pipeline
+    APPLIES to an explicitly selected portfolio scope. When it does not, the
+    route returns a controlled NOT-APPLICABLE response carrying the business
+    reason — never an empty pipeline that reads as "no cases this week".
+
+    Two deliberate limits keep this additive:
+
+    * With no ``portfolioContext`` the route behaves exactly as before. A caller
+      that never asked for a scope must not be refused by one.
+    * Only a BUSINESS refusal gates the route: a scope where nothing originates.
+      "No extract published yet" is a data-availability condition the route
+      already reports through its own no-source path, and gating on it here
+      would turn a transient gap into a hard refusal.
+    """
+    if not portfolio_context:
+        return None, None
+    resolved = _resolve_portfolio_context(portfolio_context, client_id)
+    if resolved is None or not resolved.registry:
+        # No governed registry (e.g. a dataset with no source provenance) —
+        # there is no portfolio applicability question to answer.
+        return resolved, None
+    state = resolved.capability(CAP_PIPELINE)
+    if (state is not None and not state.enabled
+            and state.reason_code == REASON_NON_ORIGINATING):
+        refusal = {
+            "ok": False, "dataset": dataset, "applicable": False,
+            "reason": state.detail or "Pipeline does not apply to this portfolio scope.",
+            "reasonCode": state.reason_code,
+            "portfolioScope": resolved.scope.to_dict(),
+            "pipelineCapability": state.to_dict(),
+        }
+        refusal.update(extra)
+        return resolved, refusal
+    return resolved, None
+
+
+def _originates(resolved, portfolio_context: Optional[str]) -> bool:
+    """Should the pipeline contribute to this request?
+
+    Only an EXPLICIT scope whose governed capability says nothing in it
+    originates suppresses the pipeline. An unscoped request, an unknown
+    registry, or a merely-undiscovered extract all keep the existing behaviour.
+    """
+    if not portfolio_context or resolved is None or not resolved.registry:
+        return True
+    state = resolved.capability(CAP_ORIGINATION_FORECAST)
+    return not (state is not None and not state.enabled
+                and state.reason_code == REASON_NON_ORIGINATING)
+
+
+@app.get("/mi/portfolio-context")
+def portfolio_context() -> Dict[str, Any]:
+    """THE governed portfolio contract for the workspace.
+
+    The dynamic hierarchy (Total → type groups → every source portfolio), each
+    portfolio's governed metadata (type, origination capability, forecast
+    treatment, runoff profile, reporting-date coverage), and the resolved
+    capability set for every selectable context.
+
+    This is the single source every client-facing channel gates on. A channel
+    renders what it finds here; it never infers applicability from a portfolio
+    name, a type string or the presence of a field. Adding ``direct_002`` to the
+    platform changes this response — and therefore the whole workspace — with no
+    code or configuration change in any channel.
+    """
+    try:
+        return portfolio_ctx_mod.context_index()
+    except Exception as exc:  # noqa: BLE001 - the selector must never 500
+        logger.warning("portfolio context index failed: %s", exc)
+        return {"available": False, "contexts": [], "portfolios": [],
+                "portfolio_types": [], "default_context_id": None,
+                "pipeline_portfolios": None, "error": str(exc)}
+
+
 @app.get("/mi/source-portfolios")
 def source_portfolios() -> Dict[str, Any]:
     """Discover the source-portfolio lenses present in the active dataset.
@@ -382,11 +512,16 @@ def snapshots() -> Dict[str, Any]:
 @app.get("/mi/snapshot")
 def snapshot(portfolioId: Optional[str] = None,
              client_id: Optional[str] = None,
-             run_id: Optional[str] = None) -> Dict[str, Any]:
+             run_id: Optional[str] = None,
+             portfolioContext: Optional[str] = None) -> Dict[str, Any]:
     """Deterministic funded-book snapshot (KPIs + month-on-month change) for a run.
 
     ``portfolioId`` is ``"<client_id>/<run_id>"`` (matching the /mi/query contract);
     ``client_id`` + ``run_id`` may be passed separately instead.
+    ``portfolioContext`` is the governed workspace scope (``total`` / a type group
+    / a ``source_portfolio_id``); the KPIs, stratifications and the prior-period
+    comparison are all computed over the SAME scoped rows, so the figures can
+    never disagree with the context the workspace is displaying.
     """
     if portfolioId and "/" in portfolioId:
         client_id, run_id = portfolioId.split("/", 1)
@@ -404,6 +539,12 @@ def snapshot(portfolioId: Optional[str] = None,
                 "diagnostics": []}
 
     semantics = load_mi_semantics(semantics_path())
+
+    # Governed portfolio scope. Resolved once, applied to BOTH the current and
+    # the prior frame so the month-on-month change compares like with like.
+    resolved = _resolve_portfolio_context(portfolioContext, client_id, df)
+    unscoped_df = df
+    df = _scoped_frame(df, resolved)
 
     # Resolve the prior available run for month-on-month change.
     prior_df = prior_run_id = prior_reporting_date = None
@@ -434,9 +575,13 @@ def snapshot(portfolioId: Optional[str] = None,
     result = snapshots_mod.compute_funded_snapshot(
         df, semantics, client_id=client_id, run_id=run_id,
         reporting_date=reporting_date, prep_report=prep_report,
-        prior_df=prior_df, prior_run_id=prior_run_id,
+        prior_df=_scoped_frame(prior_df, resolved), prior_run_id=prior_run_id,
         prior_reporting_date=prior_reporting_date,
+        scope=resolved.scope if resolved else None,
     )
+    block = _scope_block(unscoped_df, resolved)
+    if block is not None:
+        result["portfolioScope"] = block
     for d in result.get("diagnostics", []):
         logger.info("snapshot diagnostic [%s/%s]: %s", client_id, run_id, d)
     return result
@@ -463,7 +608,8 @@ def pipeline_snapshots(portfolioId: Optional[str] = None) -> Dict[str, Any]:
 def pipeline_snapshot(portfolioId: Optional[str] = None,
                       client_id: Optional[str] = None,
                       runId: Optional[str] = None,
-                      run_id: Optional[str] = None) -> Dict[str, Any]:
+                      run_id: Optional[str] = None,
+                      portfolioContext: Optional[str] = None) -> Dict[str, Any]:
     """Deterministic pipeline single-source snapshot for the latest weekly cut.
 
     ``portfolioId`` is ``"<client_id>/<run_id>"`` (matching the funded contract);
@@ -474,6 +620,14 @@ def pipeline_snapshot(portfolioId: Optional[str] = None,
     if portfolioId and "/" in portfolioId:
         client_id, run_id = portfolioId.split("/", 1)
     client_id = client_id or "client_001"
+
+    resolved, refusal = _pipeline_scope_gate(
+        portfolioContext, client_id, "pipeline",
+        recordType="pipeline", portfolioId=f"{client_id}/{run_id or ''}",
+        pipelineRowCount=0, stageBreakdown=[], availableMetrics=[],
+        availableDimensions=[], dataQuality=[])
+    if refusal is not None:
+        return refusal
 
     source = _resolve_pipeline_source(client_id, run_id)
     if source is None:
@@ -494,6 +648,13 @@ def pipeline_snapshot(portfolioId: Optional[str] = None,
     # selected run's reporting date; pipeline anchor = the latest weekly extract.
     result["pipelineTiming"] = timing_mod.timing_disclosure(
         _funded_date_from_run(run_id), result.get("pipelineAsOfDate"))
+    if resolved is not None:
+        # Total stays Total: the workspace context is preserved and the response
+        # states which portfolios the pipeline is actually sourced from.
+        result["portfolioScope"] = resolved.scope.to_dict()
+        state = resolved.capability(CAP_PIPELINE)
+        if state is not None:
+            result["pipelineCapability"] = state.to_dict()
     return result
 
 
@@ -501,7 +662,8 @@ def pipeline_snapshot(portfolioId: Optional[str] = None,
 def forecast_snapshot(portfolioId: Optional[str] = None,
                       client_id: Optional[str] = None,
                       runId: Optional[str] = None,
-                      run_id: Optional[str] = None) -> Dict[str, Any]:
+                      run_id: Optional[str] = None,
+                      portfolioContext: Optional[str] = None) -> Dict[str, Any]:
     """Deterministic funded + pipeline forecast bridge for a selected run.
 
     Composes the funded snapshot balance/count, the Phase 1 pipeline snapshot, and
@@ -524,10 +686,20 @@ def forecast_snapshot(portfolioId: Optional[str] = None,
     funded_df, _funded_report = _resolve_run_dataframe(client_id, run_id, root)
     funded_reporting_date = snapshots_mod.infer_reporting_date(run_id, funded_df)
 
+    # Governed portfolio scope: the funded side is narrowed to the selected
+    # context, and the pipeline side is included ONLY where the capability
+    # resolver says a portfolio in scope originates. An acquired-only scope
+    # therefore contributes funded actuals with zero new originations — it never
+    # silently inherits another book's pipeline.
+    resolved = _resolve_portfolio_context(portfolioContext, client_id, funded_df)
+    unscoped_funded = funded_df
+    funded_df = _scoped_frame(funded_df, resolved)
+    pipeline_applies = _originates(resolved, portfolioContext)
+
     # Pipeline side (Phase 1 prep + contract): the LATEST weekly extract for the
     # run's source scope. Its as-of/extract dates stay distinct from the funded date.
     pipeline_df = pipeline_report = pipeline_snap = None
-    source = _resolve_pipeline_source(client_id, run_id)
+    source = _resolve_pipeline_source(client_id, run_id) if pipeline_applies else None
     if source is not None:
         try:
             history = _pipeline_history(source.get("client_id", client_id))
@@ -572,25 +744,54 @@ def forecast_snapshot(portfolioId: Optional[str] = None,
                       or _latest_pipeline_extract_date(client_id))
     envelope["pipelineTiming"] = timing_mod.timing_disclosure(
         funded_reporting_date or _funded_date_from_run(run_id), pipeline_as_of)
+
+    # Portfolio-aware consolidated projection: every portfolio in scope under its
+    # OWN governed forecast treatment, with per-portfolio runoff disclosure.
+    if resolved is not None:
+        envelope["portfolioScope"] = _scope_block(unscoped_funded, resolved) \
+            or resolved.scope.to_dict()
+        for cap in (CAP_PIPELINE, CAP_ORIGINATION_FORECAST, CAP_RUNOFF_FORECAST,
+                    CAP_CONSOLIDATED_FORECAST):
+            state = resolved.capability(cap)
+            if state is not None:
+                envelope.setdefault("capabilities", {})[cap] = state.to_dict()
+        try:
+            weighted = float((envelope.get("forecastBridge") or {})
+                             .get("weightedExpectedFundedAmount") or 0.0)
+            envelope["portfolioProjections"] = forecast_mod.portfolio_projections(
+                funded_df, resolved.registry, resolved.scope,
+                weighted_pipeline=weighted if pipeline_applies else 0.0,
+                pipeline_portfolios=resolved.pipeline_portfolios)
+        except Exception as exc:  # noqa: BLE001 - projection must never 500
+            logger.warning("portfolio projections failed for %s/%s: %s",
+                           client_id, run_id, exc)
     return envelope
 
 
 @app.get("/mi/evolution/funded")
 def funded_evolution(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
-                     toRunId: Optional[str] = None, to_run_id: Optional[str] = None
+                     toRunId: Optional[str] = None, to_run_id: Optional[str] = None,
+                     portfolioContext: Optional[str] = None
                      ) -> Dict[str, Any]:
     """Funded time series across monthly runs up to ``toRunId`` (per-period
-    reconciliation + lineage). Never 500s — returns an empty series on no data."""
+    reconciliation + lineage), narrowed to the governed ``portfolioContext``.
+    Never 500s — returns an empty series on no data."""
     cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
     root = _onboarding_output_root()
     if not root:
         return {"dataset": "funded", "portfolioId": cid, "toRunId": trid,
                 "periods": [], "breakdowns": {}, "singlePeriod": True,
                 "error": "no onboarding output root configured"}
+    resolved = _resolve_portfolio_context(portfolioContext, cid)
+    scope = resolved.scope if resolved else None
     try:
         if platform_blob_mod.is_blob_root(root):
-            return _blob_funded_evolution(root, cid, trid)
-        return evolution_mod.funded_evolution(root, cid, trid)
+            result = _blob_funded_evolution(root, cid, trid, scope=scope)
+        else:
+            result = evolution_mod.funded_evolution(root, cid, trid, scope=scope)
+        if scope is not None:
+            result["portfolioScope"] = scope.to_dict()
+        return result
     except Exception as exc:  # noqa: BLE001 - evolution must never 500
         logger.warning("funded evolution failed: %s", exc)
         return {"dataset": "funded", "portfolioId": cid, "toRunId": trid,
@@ -599,7 +800,8 @@ def funded_evolution(portfolioId: Optional[str] = None, client_id: Optional[str]
 
 @app.get("/mi/evolution/pipeline")
 def pipeline_evolution(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
-                       toRunId: Optional[str] = None, to_run_id: Optional[str] = None
+                       toRunId: Optional[str] = None, to_run_id: Optional[str] = None,
+                       portfolioContext: Optional[str] = None
                        ) -> Dict[str, Any]:
     """Pipeline time series across governed weekly extracts (amount / cases / by
     stage over time), with per-period reconciliation + lineage."""
@@ -608,6 +810,11 @@ def pipeline_evolution(portfolioId: Optional[str] = None, client_id: Optional[st
     # reporting date (carried in portfolioId) must NOT truncate it. Only an EXPLICIT
     # pipeline toRunId query param caps it (rare; no UI toggle needed by default).
     pipeline_cut = toRunId or to_run_id
+    resolved, refusal = _pipeline_scope_gate(
+        portfolioContext, cid, "pipeline", portfolioId=cid, toRunId=pipeline_cut,
+        periods=[], byStage=[], singlePeriod=True)
+    if refusal is not None:
+        return refusal
     root = _pipeline_discovery_root()
     if not root:
         return {"dataset": "pipeline", "portfolioId": cid, "toRunId": pipeline_cut,
@@ -625,6 +832,11 @@ def pipeline_evolution(portfolioId: Optional[str] = None, client_id: Optional[st
             latest = max(dates)
         result["pipelineTiming"] = timing_mod.timing_disclosure(
             _funded_date_from_run(_funded_trid), latest)
+        if resolved is not None:
+            result["portfolioScope"] = resolved.scope.to_dict()
+            state = resolved.capability(CAP_PIPELINE)
+            if state is not None:
+                result["pipelineCapability"] = state.to_dict()
         return result
     except Exception as exc:  # noqa: BLE001
         logger.warning("pipeline evolution failed: %s", exc)
@@ -634,7 +846,8 @@ def pipeline_evolution(portfolioId: Optional[str] = None, client_id: Optional[st
 
 @app.get("/mi/evolution/funnel")
 def funnel_evolution(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
-                     toRunId: Optional[str] = None, to_run_id: Optional[str] = None
+                     toRunId: Optional[str] = None, to_run_id: Optional[str] = None,
+                     portfolioContext: Optional[str] = None
                      ) -> Dict[str, Any]:
     """Weekly origination funnel trends (KFI / Application / Offer / Completion
     value + count, 5-week average, latest week, delta vs prior week). Never 500s."""
@@ -642,6 +855,12 @@ def funnel_evolution(portfolioId: Optional[str] = None, client_id: Optional[str]
     # Origination funnel is weekly-pipeline data — the funded reporting date must
     # NOT truncate it; only an explicit pipeline toRunId caps it.
     pipeline_cut = toRunId or to_run_id
+    resolved, refusal = _pipeline_scope_gate(
+        portfolioContext, cid, "pipeline_funnel", portfolioId=cid,
+        toRunId=pipeline_cut, stages=[], weeks=[], series={}, summary={},
+        singlePeriod=True)
+    if refusal is not None:
+        return refusal
     root = _pipeline_discovery_root()
     if not root:
         return {"dataset": "pipeline_funnel", "portfolioId": cid, "toRunId": pipeline_cut,
@@ -658,6 +877,11 @@ def funnel_evolution(portfolioId: Optional[str] = None, client_id: Optional[str]
         if model:
             result["cohortProgression"] = model.get("cohortProgression")
             result["cumulativeCohortConversion"] = model.get("cumulativeCohortConversion")
+        if resolved is not None:
+            result["portfolioScope"] = resolved.scope.to_dict()
+            state = resolved.capability(CAP_PIPELINE)
+            if state is not None:
+                result["pipelineCapability"] = state.to_dict()
         return result
     except Exception as exc:  # noqa: BLE001
         logger.warning("funnel evolution failed: %s", exc)
@@ -669,7 +893,8 @@ def funnel_evolution(portfolioId: Optional[str] = None, client_id: Optional[str]
 @app.get("/mi/cohorts")
 def cohorts(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
             runId: Optional[str] = None, run_id: Optional[str] = None,
-            grain: str = "Y", dimension: str = "vintage") -> Dict[str, Any]:
+            grain: str = "Y", dimension: str = "vintage",
+            portfolioContext: Optional[str] = None) -> Dict[str, Any]:
     """Funded origination-vintage (static-pool) cohort analysis for a run.
 
     Balance / loan count / book share and balance-weighted LTV, rate and
@@ -690,9 +915,14 @@ def cohorts(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
         root = _onboarding_output_root()
         df, _report = _resolve_run_dataframe(client_id, run_id, root)
         reporting_date = snapshots_mod.infer_reporting_date(run_id, df)
-        return cohorts_mod.cohort_analysis(
-            df, client_id=client_id, portfolio_id=pid, reporting_date=reporting_date,
-            grain=grain, dimension=dimension)
+        resolved = _resolve_portfolio_context(portfolioContext, client_id, df)
+        result = cohorts_mod.cohort_analysis(
+            _scoped_frame(df, resolved), client_id=client_id, portfolio_id=pid,
+            reporting_date=reporting_date, grain=grain, dimension=dimension)
+        block = _scope_block(df, resolved)
+        if block is not None:
+            result["portfolioScope"] = block
+        return result
     except Exception as exc:  # noqa: BLE001 - cohort analysis must never 500
         logger.warning("cohort analysis failed for %s: %s", pid, exc)
         return {"dataset": "cohorts", "portfolioId": pid, "available": False,
@@ -701,7 +931,8 @@ def cohorts(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
 
 @app.get("/mi/geo/exposure")
 def geo_exposure(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
-                 runId: Optional[str] = None, run_id: Optional[str] = None) -> Dict[str, Any]:
+                 runId: Optional[str] = None, run_id: Optional[str] = None,
+                 portfolioContext: Optional[str] = None) -> Dict[str, Any]:
     """Funded exposure per UK ITL3 area (e.g. Bristol) for a run — the DATA layer
     for the geographic view. ITL3 comes from the tape's ITL3 field or is derived
     from the property postcode via the in-repo master lookup. Returns
@@ -717,9 +948,13 @@ def geo_exposure(portfolioId: Optional[str] = None, client_id: Optional[str] = N
     try:
         df, _report = _resolve_run_dataframe(client_id, run_id, _onboarding_output_root())
         currency_mod.resolve_and_set(df)
-        result = geo_mod.exposure_by_itl3(df)
+        resolved = _resolve_portfolio_context(portfolioContext, client_id, df)
+        result = geo_mod.exposure_by_itl3(_scoped_frame(df, resolved))
         result.update({"dataset": "geo_itl3", "portfolioId": pid,
                        "currencyCode": currency_mod.current_code()})
+        block = _scope_block(df, resolved)
+        if block is not None:
+            result["portfolioScope"] = block
         return result
     except Exception as exc:  # noqa: BLE001 - geo view must never 500
         logger.warning("geo exposure failed for %s: %s", pid, exc)
@@ -731,6 +966,7 @@ def geo_exposure(portfolioId: Optional[str] = None, client_id: Optional[str] = N
 def cohort_progression(portfolioId: Optional[str] = None,
                        client_id: Optional[str] = None,
                        lens: Optional[str] = None,
+                       portfolioContext: Optional[str] = None,
                        vintage: Optional[str] = None,
                        grain: str = "Y") -> Dict[str, Any]:
     """Static-pool cohort PROGRESSION: how a cohort's funded metrics (balance,
@@ -747,12 +983,20 @@ def cohort_progression(portfolioId: Optional[str] = None,
         cid = portfolioId
     cid = client_id or cid
     try:
-        from mi_agent import portfolio_lens as plens
-        lens_obj = plens.lens_from_selection(lens) if lens else plens.total_lens()
-        return evolution_mod.funded_cohort_progression(
+        # ``portfolioContext`` is the governed workspace scope; ``lens`` is the
+        # pre-existing parameter name and is accepted as its alias so existing
+        # callers keep working. Either way the scope is RESOLVED through the
+        # registry, so a group cohort spans every current member.
+        resolved = _resolve_portfolio_context(portfolioContext or lens, cid)
+        scope = resolved.scope if resolved else None
+        result = evolution_mod.funded_cohort_progression(
             _onboarding_output_root(), cid,
-            lens_filters=lens_obj.filters or None, lens_label=lens_obj.label,
+            lens_filters=(scope.filters or None) if scope else None,
+            lens_label=scope.label if scope else "Total",
             vintage=vintage, grain=grain)
+        if scope is not None:
+            result["portfolioScope"] = scope.to_dict()
+        return result
     except Exception as exc:  # noqa: BLE001 - progression must never 500
         logger.warning("cohort progression failed for %s: %s", cid, exc)
         return {"dataset": "cohort_progression", "portfolioId": cid,
@@ -813,9 +1057,13 @@ def download_deck(request: Request, portfolioId: Optional[str] = None,
 
 @app.get("/mi/evolution/forecast")
 def forecast_evolution(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
-                       toRunId: Optional[str] = None, to_run_id: Optional[str] = None
+                       toRunId: Optional[str] = None, to_run_id: Optional[str] = None,
+                       portfolioContext: Optional[str] = None
                        ) -> Dict[str, Any]:
-    """Forecast bridge over time (funded balance + weighted pipeline per run)."""
+    """Forecast bridge over time (funded balance + weighted pipeline per run),
+    narrowed to the governed ``portfolioContext``. The pipeline contribution is
+    included only where the capability resolver says a portfolio in scope
+    originates — a non-originating book contributes funded actuals alone."""
     cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
     root = _onboarding_output_root()
     proot = _pipeline_discovery_root()
@@ -827,8 +1075,15 @@ def forecast_evolution(portfolioId: Optional[str] = None, client_id: Optional[st
         # Weight the pipeline by the governed historical stage rates (same basis
         # as the point-in-time bridge and the scale-up forecast) so every forecast
         # surface shows ONE consistent 'weighted expected pipeline'.
-        return evolution_mod.forecast_evolution(
-            root, proot or root, cid, trid, historical_model=_pipeline_history(cid))
+        resolved = _resolve_portfolio_context(portfolioContext, cid)
+        scope = resolved.scope if resolved else None
+        result = evolution_mod.forecast_evolution(
+            root, proot or root, cid, trid, historical_model=_pipeline_history(cid),
+            scope=scope,
+            include_pipeline=_originates(resolved, portfolioContext))
+        if resolved is not None:
+            result["portfolioScope"] = _scope_block(None, resolved) or scope.to_dict()
+        return result
     except Exception as exc:  # noqa: BLE001
         logger.warning("forecast evolution failed: %s", exc)
         return {"dataset": "forecast", "portfolioId": cid, "toRunId": trid,
@@ -837,7 +1092,8 @@ def forecast_evolution(portfolioId: Optional[str] = None, client_id: Optional[st
 
 @app.get("/mi/forecast/extrapolation")
 def forecast_extrapolation(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
-                           toRunId: Optional[str] = None, to_run_id: Optional[str] = None
+                           toRunId: Optional[str] = None, to_run_id: Optional[str] = None,
+                           portfolioContext: Optional[str] = None
                            ) -> Dict[str, Any]:
     """Securitisation scale-up forecast: completion run-rate + KFI-conversion
     extrapolation with downside/base/upside bands and milestone dates to funding
@@ -855,8 +1111,13 @@ def forecast_extrapolation(portfolioId: Optional[str] = None, client_id: Optiona
                 "dataSufficiency": "insufficient_data"}
     try:
         history = _pipeline_history(cid)
-        return fx_mod.build_extrapolation(root, proot or root, cid, trid,
-                                          history_model=history)
+        resolved = _resolve_portfolio_context(portfolioContext, cid)
+        result = fx_mod.build_extrapolation(root, proot or root, cid, trid,
+                                            history_model=history,
+                                            scope=resolved.scope if resolved else None)
+        if resolved is not None:
+            result["portfolioScope"] = resolved.scope.to_dict()
+        return result
     except Exception as exc:  # noqa: BLE001 - forecast must never 500
         logger.warning("forecast extrapolation failed: %s", exc)
         return {"portfolioId": cid, "toRunId": trid, "currentFundedBalance": 0.0,
@@ -868,7 +1129,8 @@ def forecast_extrapolation(portfolioId: Optional[str] = None, client_id: Optiona
 
 @app.get("/mi/risk-limits")
 def risk_limits(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
-                toRunId: Optional[str] = None, to_run_id: Optional[str] = None
+                toRunId: Optional[str] = None, to_run_id: Optional[str] = None,
+                portfolioContext: Optional[str] = None
                 ) -> Dict[str, Any]:
     """Governed risk-limit / concentration monitor: Schedule 8 extracted limits
     vs funded actual exposure, headroom, pass/warn/fail status, source, confidence
@@ -878,7 +1140,12 @@ def risk_limits(portfolioId: Optional[str] = None, client_id: Optional[str] = No
     cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
     root = _onboarding_output_root()
     try:
-        return risk_mod.compute_risk_limits(root, cid, trid)
+        resolved = _resolve_portfolio_context(portfolioContext, cid)
+        result = risk_mod.compute_risk_limits(
+            root, cid, trid, scope=resolved.scope if resolved else None)
+        if resolved is not None:
+            result["portfolioScope"] = resolved.scope.to_dict()
+        return result
     except Exception as exc:  # noqa: BLE001 - risk monitor must never 500
         logger.warning("risk-limits failed: %s", exc)
         return {"portfolioId": cid, "toRunId": trid, "available": False,
@@ -895,7 +1162,8 @@ def evolution_compare(portfolioId: Optional[str] = None, client_id: Optional[str
                       toRunId: Optional[str] = None, to_run_id: Optional[str] = None,
                       dataset: str = "funded", metric: Optional[str] = None,
                       aggregation: str = "sum", periodA: str = "prior",
-                      periodB: str = "latest") -> Dict[str, Any]:
+                      periodB: str = "latest",
+                      portfolioContext: Optional[str] = None) -> Dict[str, Any]:
     """Governed cross-period comparison (period A vs period B) over the evolution
     series: value A/B, absolute + % delta, source periods, reconciliation, and a
     controlled insufficient-data response. Never 500s."""
@@ -904,9 +1172,14 @@ def evolution_compare(portfolioId: Optional[str] = None, client_id: Optional[str
     root = _onboarding_output_root()
     proot = _pipeline_discovery_root()
     try:
-        return compare_mod.run_temporal_compare(
+        resolved = _resolve_portfolio_context(portfolioContext, cid)
+        result = compare_mod.run_temporal_compare(
             root, proot or root, cid, trid, dataset=dataset, metric=metric,
-            aggregation=aggregation, period_a=periodA, period_b=periodB)
+            aggregation=aggregation, period_a=periodA, period_b=periodB,
+            scope=resolved.scope if resolved else None)
+        if resolved is not None:
+            result["portfolioScope"] = resolved.scope.to_dict()
+        return result
     except Exception as exc:  # noqa: BLE001 - comparison must never 500
         logger.warning("evolution compare failed: %s", exc)
         return {"available": False, "status": "insufficient_data", "dataset": dataset,
@@ -918,7 +1191,8 @@ def workspace_view(portfolioId: Optional[str] = None,
                    client_id: Optional[str] = None,
                    runId: Optional[str] = None,
                    run_id: Optional[str] = None,
-                   view: Optional[str] = None) -> Dict[str, Any]:
+                   view: Optional[str] = None,
+                   portfolioContext: Optional[str] = None) -> Dict[str, Any]:
     """Unified workspace view-model composing the funded snapshot + pipeline
     snapshot + forecast bridge for one portfolio/run. ``view`` (optional) marks the
     active/foregrounded view; all three blocks are returned so the UI can switch
@@ -933,10 +1207,11 @@ def workspace_view(portfolioId: Optional[str] = None,
         active = workspace_mod.DEFAULT_VIEW
     pid = f"{client_id}/{run_id}" if run_id else client_id
 
-    funded = snapshot(portfolioId=pid)
-    pipeline = pipeline_snapshot(portfolioId=pid)
-    forecast = forecast_snapshot(portfolioId=pid)
+    funded = snapshot(portfolioId=pid, portfolioContext=portfolioContext)
+    pipeline = pipeline_snapshot(portfolioId=pid, portfolioContext=portfolioContext)
+    forecast = forecast_snapshot(portfolioId=pid, portfolioContext=portfolioContext)
 
+    resolved = _resolve_portfolio_context(portfolioContext, client_id)
     pipe_ok = bool(pipeline.get("ok"))
     return {
         "ok": True,
@@ -945,6 +1220,10 @@ def workspace_view(portfolioId: Optional[str] = None,
         "runId": run_id,
         "activeView": active,
         "views": list(workspace_mod.VIEWS),
+        # One governed context for the whole workspace view-model.
+        "portfolioScope": resolved.scope.to_dict() if resolved else None,
+        "capabilities": (portfolio_ctx_mod.capabilities_to_dict(resolved.capabilities)
+                         if resolved else None),
         "funded": funded,
         "pipeline": pipeline,
         "forecast": forecast,

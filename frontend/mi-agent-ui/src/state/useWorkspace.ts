@@ -17,12 +17,17 @@ import type {
   ForecastSnapshot,
   FundedSnapshot,
   PortfolioContext,
+  PortfolioCapability,
+  PortfolioCapabilityId,
+  PortfolioContextIndex,
+  PortfolioContextOption,
   ReportingContext,
   SnapshotPortfolio,
   SnapshotRun,
   SourcePortfolioLens,
   WorkspaceView,
 } from "@/domain";
+import { EMPTY_PORTFOLIO_CONTEXT } from "@/domain";
 import type { AgentClient } from "@/api";
 import type { UserIdentity } from "@/lib/identity";
 import { uid } from "@/lib/utils";
@@ -72,11 +77,29 @@ export interface Workspace {
   /** Active workspace view (funded | pipeline | forecast). */
   activeView: WorkspaceView;
   setActiveView: (view: WorkspaceView) => void;
+  /** @deprecated Superseded by `portfolioContexts`; kept so any existing
+   *  consumer of the flat lens list keeps compiling. */
   sourceLenses: SourcePortfolioLens[];
-  selectedLens: string;
-  setSelectedLens: (id: string) => void;
-  lensFundedOnly: boolean;
+  /** THE governed portfolio contract for this workspace (hierarchy + per-context
+   *  capabilities), exactly as the backend resolved it. */
+  portfolioContextIndex: PortfolioContextIndex;
+  /** The hierarchical selector options (Total → type groups → portfolios). */
+  portfolioContexts: PortfolioContextOption[];
+  /** The single selected portfolio context id controlling the whole workspace. */
+  selectedContextId: string;
+  setSelectedContextId: (contextId: string) => void;
+  /** The selected context's node in the hierarchy (null before it loads). */
+  activeContext: PortfolioContextOption | null;
+  /** Backend-resolved capabilities for the selected context. */
+  capabilities: Record<string, PortfolioCapability>;
+  /** Is one governed capability enabled for the current context? */
+  capabilityEnabled: (id: PortfolioCapabilityId) => boolean;
+  /** The backend's business explanation for a capability, for the UI to show. */
+  capabilityReason: (id: PortfolioCapabilityId) => string | null;
+  /** Views the backend says do not apply to the selected context. */
   disabledViews: WorkspaceView[];
+  /** Why each disabled view is unavailable, keyed by view. */
+  disabledViewReasons: Record<string, string>;
   messages: ChatMessage[];
   artifacts: Artifact[];
   isWorking: boolean;
@@ -137,15 +160,21 @@ export function useWorkspace(client: AgentClient): Workspace {
     setActiveViewState(view);
   }, []);
 
-  // ---- Source-portfolio lens (Total / Direct / Acquired / cohort) ----------
-  // Independent axis from the dataset view. Options are data-driven; a ref
-  // mirrors the selection so runQuery reads the latest value.
-  const [sourceLenses, setSourceLenses] = useState<SourcePortfolioLens[]>([]);
-  const [selectedLens, setSelectedLensState] = useState<string>("total");
-  const selectedLensRef = useRef<string>("total");
-  const setSelectedLens = useCallback((id: string) => {
-    selectedLensRef.current = id;
-    setSelectedLensState(id);
+  // ---- THE governed portfolio context --------------------------------------
+  // ONE selection controls the entire workspace: KPI cards, funded charts, risk,
+  // evolution, cohorts, pipeline, forecast, drill-through, chat and exports all
+  // send this same id to the backend. There is deliberately no second portfolio
+  // control and no client-side filtering — the backend resolves what the context
+  // means and what it may do.
+  const [portfolioContextIndex, setPortfolioContextIndex] =
+    useState<PortfolioContextIndex>(EMPTY_PORTFOLIO_CONTEXT);
+  const [selectedContextId, setSelectedContextIdState] = useState<string>("total");
+  // A ref mirrors the selection so runQuery/drill read the latest value without
+  // being re-created on every change.
+  const selectedContextRef = useRef<string>("total");
+  const setSelectedContextId = useCallback((contextId: string) => {
+    selectedContextRef.current = contextId;
+    setSelectedContextIdState(contextId);
   }, []);
 
   // Resolve the signed-in caller once (drives the header identity + role gating).
@@ -159,39 +188,84 @@ export function useWorkspace(client: AgentClient): Workspace {
     return () => { cancelled = true; };
   }, [client]);
 
+  // The governed hierarchy + capability matrix. Everything the selector offers
+  // and everything the navigation gates on comes from this one response.
   useEffect(() => {
     let cancelled = false;
     client
-      .getSourcePortfolios()
+      .getPortfolioContext()
       .then((idx) => {
-        if (!cancelled) setSourceLenses(idx.lenses ?? []);
+        if (cancelled) return;
+        setPortfolioContextIndex(idx ?? EMPTY_PORTFOLIO_CONTEXT);
       })
       .catch(() => {
-        if (!cancelled) setSourceLenses([]);
+        if (!cancelled) setPortfolioContextIndex(EMPTY_PORTFOLIO_CONTEXT);
       });
     return () => {
       cancelled = true;
     };
   }, [client]);
 
-  const activeLens = useMemo(
-    () => sourceLenses.find((l) => l.id === selectedLens) ?? null,
-    [sourceLenses, selectedLens],
-  );
-  // Acquired back books have no origination pipeline → only the Funded view.
-  const lensFundedOnly = !!activeLens?.funded_only;
-  const disabledViews = useMemo<WorkspaceView[]>(
-    () => (lensFundedOnly ? ["pipeline", "forecast"] : []),
-    [lensFundedOnly],
+  const portfolioContexts = portfolioContextIndex.contexts ?? [];
+
+  // The flat lens list stays available for backward compatibility only; it is
+  // derived from the governed hierarchy rather than fetched separately, so there
+  // is exactly one source of portfolio truth in the app.
+  const sourceLenses = useMemo<SourcePortfolioLens[]>(
+    () => portfolioContexts.map((c) => ({
+      id: c.context_id,
+      kind: c.context_kind === "portfolio" ? "cohort" : c.context_kind,
+      label: c.label,
+      filters: {},
+      funded_only: !(c.capabilities?.pipeline?.enabled ?? true),
+      source_portfolio_type: c.portfolio_types[0] ?? null,
+    })),
+    [portfolioContexts],
   );
 
-  // If an acquired-only scope is selected while on Pipeline/Forecast, snap back
-  // to Funded (those views are not applicable for an acquired book).
-  useEffect(() => {
-    if (lensFundedOnly && (activeView === "pipeline" || activeView === "forecast")) {
-      setActiveView("funded");
-    }
-  }, [lensFundedOnly, activeView, setActiveView]);
+  const activeContext = useMemo(
+    () => portfolioContexts.find((c) => c.context_id === selectedContextId) ?? null,
+    [portfolioContexts, selectedContextId],
+  );
+  const capabilities = useMemo(
+    () => (activeContext?.capabilities ?? {}) as Record<string, PortfolioCapability>,
+    [activeContext],
+  );
+  // A capability with no backend entry is treated as ENABLED so a deployment
+  // whose backend predates the contract keeps its existing navigation; a
+  // capability the backend explicitly reports is always obeyed.
+  const capabilityEnabled = useCallback(
+    (id: PortfolioCapabilityId) => capabilities[id]?.enabled ?? true,
+    [capabilities],
+  );
+  const capabilityReason = useCallback(
+    (id: PortfolioCapabilityId) => capabilities[id]?.detail ?? null,
+    [capabilities],
+  );
+
+  // Navigation follows the backend's capability decision — the UI never decides
+  // that "acquired means no pipeline"; it renders what the resolver returned.
+  const { disabledViews, disabledViewReasons } = useMemo(() => {
+    const off: WorkspaceView[] = [];
+    const reasons: Record<string, string> = {};
+    const gate = (view: WorkspaceView, id: PortfolioCapabilityId) => {
+      const state = capabilities[id];
+      if (state && !state.enabled) {
+        off.push(view);
+        reasons[view] = state.detail
+          ?? "This analysis does not apply to the selected portfolio scope.";
+      }
+    };
+    gate("pipeline", "pipeline");
+    gate("forecast", "consolidated_forecast");
+    gate("risk_limits", "risk");
+    return { disabledViews: off, disabledViewReasons: reasons };
+  }, [capabilities]);
+
+  // A disabled view is NOT silently swapped for another: switching the workspace
+  // out from under the user would hide the fact that the analysis is unavailable
+  // for the scope they chose. The tab is disabled with a reason, the selected
+  // context is preserved, and the panel area explains why.
 
   // Discover available portfolios / runs once; default to the latest run.
   useEffect(() => {
@@ -274,7 +348,7 @@ export function useWorkspace(client: AgentClient): Workspace {
     let cancelled = false;
     setSnapshotLoading(true);
     client
-      .getSnapshot(portfolioId)
+      .getSnapshot(portfolioId, selectedContextId)
       .then((snap) => {
         if (!cancelled) setSnapshot(snap);
       })
@@ -287,7 +361,7 @@ export function useWorkspace(client: AgentClient): Workspace {
     return () => {
       cancelled = true;
     };
-  }, [client, portfolioId, dataVersion]);
+  }, [client, portfolioId, selectedContextId, dataVersion]);
 
   // Fetch the deterministic forecast (funded + pipeline) for the same run, so the
   // pipeline + forecast + watchlist sections move with the funded selection.
@@ -296,7 +370,7 @@ export function useWorkspace(client: AgentClient): Workspace {
     let cancelled = false;
     setForecastLoading(true);
     client
-      .getForecastSnapshot(portfolioId)
+      .getForecastSnapshot(portfolioId, selectedContextId)
       .then((fc) => {
         if (!cancelled) setForecast(fc);
       })
@@ -309,7 +383,7 @@ export function useWorkspace(client: AgentClient): Workspace {
     return () => {
       cancelled = true;
     };
-  }, [client, portfolioId, dataVersion]);
+  }, [client, portfolioId, selectedContextId, dataVersion]);
 
   // Manual refresh: clear the client cache (if it exposes one) and bump the
   // data version so the snapshot/forecast effects and the keyed panels reload.
@@ -359,7 +433,7 @@ export function useWorkspace(client: AgentClient): Workspace {
   // Switching portfolio / reporting run invalidates the prior analysis context.
   useEffect(() => {
     setContext(null);
-  }, [portfolioId, setContext]);
+  }, [portfolioId, selectedContextId, setContext]);
 
   useEffect(() => {
     saveState({
@@ -399,7 +473,7 @@ export function useWorkspace(client: AgentClient): Workspace {
         filters: params.filters,
         // Source-portfolio scope (the dropdown default); a portfolio named in
         // the question overrides it backend-side.
-        sourceLens: selectedLensRef.current,
+        sourceLens: selectedContextRef.current,
       };
       const controller = new AbortController();
       abortRef.current = controller;
@@ -458,6 +532,8 @@ export function useWorkspace(client: AgentClient): Workspace {
                     usedContext: params.usedContext,
                     contextNote: params.usedContext ? params.contextNote : undefined,
                     cacheHit: res.cacheHit,
+                    // Backend-authored coverage disclosure — rendered as-is.
+                    portfolioCoverage: res.portfolioCoverage,
                     suggestions,
                     artifactRefs: res.artifacts.map((a) => ({ id: a.id, title: a.title, type: a.type })),
                   }
@@ -506,7 +582,7 @@ export function useWorkspace(client: AgentClient): Workspace {
         options: { parserMode: "deterministic" },
         datasetContext: activeViewRef.current,
         filters,
-        sourceLens: selectedLensRef.current,
+        sourceLens: selectedContextRef.current,
       };
       const controller = new AbortController();
       abortRef.current = controller;
@@ -625,10 +701,16 @@ export function useWorkspace(client: AgentClient): Workspace {
     activeView,
     setActiveView,
     sourceLenses,
-    selectedLens,
-    setSelectedLens,
-    lensFundedOnly,
+    portfolioContextIndex,
+    portfolioContexts,
+    selectedContextId,
+    setSelectedContextId,
+    activeContext,
+    capabilities,
+    capabilityEnabled,
+    capabilityReason,
     disabledViews,
+    disabledViewReasons,
     messages,
     artifacts,
     isWorking,

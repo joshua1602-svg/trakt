@@ -33,8 +33,11 @@ function Kpi({ label, value, detail }: { label: string; value: React.ReactNode; 
 
 /** Core Dashboard → Geography: funded exposure concentration across UK ITL3
  * areas as a choropleth + ranked list, from GET /mi/geo/exposure. */
-export function GeographyPanel({ client, portfolioId }: {
+export function GeographyPanel({ client, portfolioId, portfolioContext }: {
   client: AgentClient; portfolioId: string;
+  /** The governed workspace portfolio scope. Sent to the backend, which does
+   *  the filtering — this panel never narrows rows itself. */
+  portfolioContext?: string;
 }) {
   const [geo, setGeo] = useState<GeoExposure | null>(null);
   const [loading, setLoading] = useState(true);
@@ -42,12 +45,12 @@ export function GeographyPanel({ client, portfolioId }: {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Promise.resolve(client.getGeoExposure(portfolioId))
+    Promise.resolve(client.getGeoExposure(portfolioId, portfolioContext))
       .then((r) => { if (!cancelled) setGeo(r); })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [client, portfolioId]);
+  }, [client, portfolioId, portfolioContext]);
 
   const { valueByCode, shareByCode, detailByCode, ranked, total, top, top5Pct } = useMemo(() => {
     const areas = geo?.areas ?? [];

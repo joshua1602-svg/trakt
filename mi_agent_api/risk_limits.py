@@ -517,8 +517,13 @@ def _observations(tests: List[Dict[str, Any]], summary: Dict[str, Any]) -> List[
 # Entry point
 # --------------------------------------------------------------------------- #
 def compute_risk_limits(output_root, client_id: str, to_run_id: Optional[str],
-                        *, search_roots: Optional[List[str]] = None) -> Dict[str, Any]:
-    """Full risk-limit monitor envelope for a client/run."""
+                        *, search_roots: Optional[List[str]] = None,
+                        scope=None) -> Dict[str, Any]:
+    """Full risk-limit monitor envelope for a client/run.
+
+    ``scope`` is the governed portfolio context: concentration is measured
+    against the SAME rows the workspace is showing, so a limit test can never be
+    run over a wider book than the one selected."""
     # Resolve funded df for the run (and the prior run for movement), reusing the
     # governed snapshot loaders. Never 500s — returns observed concentrations even
     # when limits are unavailable.
@@ -573,7 +578,8 @@ def compute_risk_limits(output_root, client_id: str, to_run_id: Optional[str],
         # dashboard.
         try:
             from . import evolution as _evolution
-            frames = _evolution.funded_frames(output_root, client_id, to_run_id)
+            frames = _evolution.funded_frames(output_root, client_id, to_run_id,
+                                              scope=scope)
             if frames:
                 df = frames[-1].get("df")
                 reporting_date = frames[-1].get("reporting_date") or reporting_date
@@ -581,6 +587,13 @@ def compute_risk_limits(output_root, client_id: str, to_run_id: Optional[str],
                     prior_df = frames[-2].get("df")
         except Exception:  # noqa: BLE001 - never break the monitor on discovery
             pass
+
+    # The on-disk tape walk above resolves the CONSOLIDATED frame, so narrow it
+    # to the governed scope before any concentration is measured.
+    if scope is not None:
+        from mi_agent.portfolio_scope import apply_scope
+        df = apply_scope(df, scope)
+        prior_df = apply_scope(prior_df, scope)
 
     limits = extracted.get("limits", [])
     if df is None:

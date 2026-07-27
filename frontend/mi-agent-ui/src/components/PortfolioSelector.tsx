@@ -4,8 +4,14 @@ import type { SnapshotPortfolio } from "@/domain";
 import { cn } from "@/lib/utils";
 
 /**
- * Data-driven funded-portfolio selector. Only portfolios discovered from real
- * onboarding output (`GET /mi/snapshots`) are offered — no prototype options.
+ * Data-driven CLIENT selector — which onboarded client's platform the workspace
+ * is reading (`GET /mi/snapshots`). Only clients discovered from real onboarding
+ * output are offered; there are no prototype options.
+ *
+ * This is NOT a portfolio-scope control. Portfolio scope (Total / Direct /
+ * Acquired / an individual source portfolio) has exactly one owner —
+ * `PortfolioContextSelector`, driven by the governed portfolio contract. The two
+ * are different axes and must never both filter the book.
  */
 export function PortfolioSelector({
   portfolios,
@@ -39,8 +45,8 @@ export function PortfolioSelector({
       >
         <Layers size={15} className="text-peri-300" />
         <div className="leading-tight">
-          <div className="text-[10px] uppercase tracking-wider text-ink-500">Funded Portfolio</div>
-          <div className="text-[13px] font-medium text-ink-100">{active?.label ?? "No portfolio"}</div>
+          <div className="text-[10px] uppercase tracking-wider text-ink-500">Client</div>
+          <div className="text-[13px] font-medium text-ink-100">{active?.label ?? "No client"}</div>
         </div>
         {!single && (
           <ChevronDown size={14} className={cn("text-ink-400 transition-transform", open && "rotate-180")} />

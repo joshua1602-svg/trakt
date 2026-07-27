@@ -92,6 +92,21 @@ export class MockAgentClient implements AgentClient {
     });
   }
 
+  /** The mock has no governed backend, so it advertises no portfolio hierarchy
+   * and no capabilities: the workspace then shows a single Total scope rather
+   * than inventing a Direct/Acquired split that no data supports. */
+  getPortfolioContext() {
+    return Promise.resolve({
+      available: false,
+      client_id: null,
+      default_context_id: "total",
+      contexts: [],
+      portfolios: [],
+      portfolio_types: [],
+      pipeline_portfolios: null,
+    } as import("@/domain").PortfolioContextIndex);
+  }
+
   getSnapshot(portfolioId: string): Promise<FundedSnapshot> {
     return Promise.resolve(mockSnapshot(portfolioId));
   }

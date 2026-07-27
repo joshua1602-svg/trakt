@@ -33,6 +33,9 @@ function makeClient(): AgentClient {
     mock: false,
     ask: any,
     getSnapshots: async () => INDEX as unknown as Awaited<ReturnType<AgentClient["getSnapshots"]>>,
+    getPortfolioContext: async () => ({ available: false, client_id: null,
+      default_context_id: "total", contexts: [], portfolios: [],
+      portfolio_types: [], pipeline_portfolios: null }),
     getSourcePortfolios: async () => ({
       available: true,
       lenses: [{ id: "direct_001", kind: "cohort", label: "direct_001", filters: {}, funded_only: false }],

@@ -27,7 +27,7 @@ T = TypeVar("T")
 
 #: Envelope schema version. Bump the minor when adding a field; bump the major
 #: only for a breaking change (and then version the route).
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"  # 1.1: additive ScopeRef (portfolio scope + coverage)
 
 STATUS_SUCCESS = "success"
 STATUS_PARTIAL_SUCCESS = "partial_success"
@@ -60,6 +60,63 @@ class SnapshotRef:
             "row_count": self.row_count,
             "approval_state": self.approval_state,
             "source_portfolios": list(self.source_portfolios),
+        }
+
+
+@dataclass(frozen=True)
+class ScopeRef:
+    """Which portfolios the answer covers, and which of them actually answered.
+
+    Produced by the governed backend from
+    :class:`trakt_core.portfolio.ScopeCoverage`; every channel renders the same
+    facts from it. A channel must never derive consolidation status, exclusions
+    or field availability for itself — that is precisely the divergence this
+    reference exists to prevent.
+    """
+
+    context_id: Optional[str] = None
+    context_kind: Optional[str] = None
+    label: Optional[str] = None
+    portfolios_in_scope: Tuple[str, ...] = ()
+    portfolios_used: Tuple[str, ...] = ()
+    portfolios_excluded: Dict[str, Dict[str, str]] = field(default_factory=dict)
+    is_fully_consolidated: bool = True
+    field_coverage: Dict[str, Dict[str, List[str]]] = field(default_factory=dict)
+    disclosure: Optional[str] = None
+
+    @classmethod
+    def from_coverage(cls, coverage: Any) -> "ScopeRef":
+        """Build from a :class:`trakt_core.portfolio.ScopeCoverage` instance."""
+        return cls.from_dict(coverage.to_dict())
+
+    @classmethod
+    def from_dict(cls, data: Optional[Dict[str, Any]]) -> Optional["ScopeRef"]:
+        """Build from the serialised coverage block the MI engine produces."""
+        if not data:
+            return None
+        requested = data.get("scope_requested") or {}
+        return cls(
+            context_id=requested.get("context_id"),
+            context_kind=requested.get("context_kind"),
+            label=requested.get("label"),
+            portfolios_in_scope=tuple(data.get("portfolios_in_scope") or ()),
+            portfolios_used=tuple(data.get("portfolios_used") or ()),
+            portfolios_excluded=dict(data.get("portfolios_excluded") or {}),
+            is_fully_consolidated=bool(data.get("is_fully_consolidated")),
+            field_coverage=dict(data.get("field_coverage") or {}),
+            disclosure=data.get("disclosure"))
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "scope_requested": {"context_id": self.context_id,
+                                "context_kind": self.context_kind,
+                                "label": self.label},
+            "portfolios_in_scope": list(self.portfolios_in_scope),
+            "portfolios_used": list(self.portfolios_used),
+            "portfolios_excluded": {k: dict(v) for k, v in self.portfolios_excluded.items()},
+            "is_fully_consolidated": self.is_fully_consolidated,
+            "field_coverage": {k: dict(v) for k, v in self.field_coverage.items()},
+            "disclosure": self.disclosure,
         }
 
 
@@ -157,6 +214,9 @@ class GovernedResult(Generic[T]):
     result: Optional[T] = None
     warnings: Tuple[str, ...] = ()
     policy: PolicyState = field(default_factory=PolicyState)
+    #: Portfolio scope + coverage for this answer (``None`` when the capability
+    #: is not portfolio-scoped). Additive: existing consumers ignore it.
+    scope: Optional[ScopeRef] = None
     provenance: Optional[ProvenanceRef] = None
     audit: Optional[AuditMetadata] = None
     error: Optional[TraktError] = None
@@ -194,6 +254,7 @@ class GovernedResult(Generic[T]):
             "portfolioId": self.portfolio_id,
             "snapshot": self.snapshot.to_dict() if self.snapshot else None,
             "policy": self.policy.to_dict(),
+            "scope": self.scope.to_dict() if self.scope else None,
             "error": self.error.to_dict() if self.error else None,
         }
 
@@ -211,6 +272,7 @@ class GovernedResult(Generic[T]):
             "result": self.result,
             "warnings": list(self.warnings),
             "policy": self.policy.to_dict(),
+            "scope": self.scope.to_dict() if self.scope else None,
             "provenance": self.provenance.to_dict() if self.provenance else None,
             "audit": self.audit.to_dict() if self.audit else None,
             "error": self.error.to_dict() if self.error else None,

@@ -19,6 +19,8 @@ forecast/data-quality questions are completely unaffected.
 
 from __future__ import annotations
 
+import logging as _logging
+
 import re
 import uuid
 from datetime import datetime, timezone
@@ -29,6 +31,8 @@ from mi_agent.mi_agent_workflow import _detect_unsupported_concept
 from mi_agent.mi_query_executor import _apply_filters
 
 from mi_agent import portfolio_lens as _portfolio_lens
+
+_logger = _logging.getLogger("mi_agent_api.chat_routing")
 
 from . import temporal_compare as compare_mod
 from . import currency as currency_mod
@@ -235,9 +239,29 @@ def _is_period_movement(question: str) -> bool:
 
 
 def _resolve_lens(question: str, source_lens) -> Any:
+    """The portfolio lens for a routed intent, RESOLVED through the registry.
+
+    The lens layer recognises the scope a caller named; the governed registry
+    decides what that scope contains. Resolving here means a routed answer
+    (evolution, bridge, cohort progression, forecast) narrows to the same
+    explicit portfolio-id list the point-in-time path uses — so a group route
+    picks up a newly onboarded member with no change here, and the scope a
+    response DISCLOSES is always the scope it actually filtered on.
+    """
     default_lens = (_portfolio_lens.lens_from_selection(source_lens)
                     if source_lens is not None else None)
-    return _portfolio_lens.resolve_lens_with_default(question, default_lens)
+    lens = _portfolio_lens.resolve_lens_with_default(question, default_lens)
+    try:
+        from . import portfolio_context as _ctx
+
+        scope = _ctx.resolve_context(_portfolio_lens.context_id(lens),
+                                     discover_pipeline=False).scope
+        return _portfolio_lens.PortfolioLens(
+            name=lens.name, label=lens.label, filters=dict(scope.filters),
+            cohort_id=lens.cohort_id)
+    except Exception as exc:  # noqa: BLE001 - routing must never break on scope
+        _logger.info("routed lens scope resolution unavailable: %s", exc)
+        return lens
 
 
 def _pct_points(value: Optional[float], decimals: int = 1) -> str:

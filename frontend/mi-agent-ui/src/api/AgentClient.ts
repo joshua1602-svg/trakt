@@ -23,6 +23,7 @@ import type {
   GeoExposure,
   PipelineEvolution,
   PipelineFunnelEvolution,
+  PortfolioContextIndex,
   RiskLimitsSnapshot,
   SnapshotIndex,
   SourcePortfolioIndex,
@@ -42,36 +43,59 @@ export interface AgentClient {
   getSnapshots(signal?: AbortSignal): Promise<SnapshotIndex>;
 
   /** Discover the source-portfolio lenses (Total / Direct / Acquired / cohorts)
-   * present in the active dataset, for the portfolio-scope dropdown. */
+   * present in the active dataset, for the portfolio-scope dropdown.
+   * @deprecated Superseded by `getPortfolioContext()`, which carries the full
+   * governed hierarchy AND the capability set per context. Retained so existing
+   * API consumers keep working. */
   getSourcePortfolios(signal?: AbortSignal): Promise<SourcePortfolioIndex>;
 
-  /** Deterministic funded-book snapshot for a `"<client_id>/<run_id>"` portfolio. */
-  getSnapshot(portfolioId: string, signal?: AbortSignal): Promise<FundedSnapshot>;
+  /**
+   * THE governed portfolio contract: the dynamic hierarchy (Total → type groups
+   * → every source portfolio), each portfolio's governed metadata, and the
+   * resolved capability set for every selectable context.
+   *
+   * This is the single thing the workspace gates on. The UI never infers what a
+   * group contains or whether an analysis applies — it reads it from here.
+   */
+  getPortfolioContext(signal?: AbortSignal): Promise<PortfolioContextIndex>;
+
+  /** Deterministic funded-book snapshot for a `"<client_id>/<run_id>"` portfolio,
+   * scoped to the governed `portfolioContext` (Total / a type group / one source
+   * portfolio). The backend computes every figure over those rows. */
+  getSnapshot(portfolioId: string, portfolioContext?: string,
+              signal?: AbortSignal): Promise<FundedSnapshot>;
 
   /**
    * Deterministic funded + pipeline forecast bridge (pipeline snapshot, forecast
    * bridge and watchlist) for a `"<client_id>/<run_id>"` portfolio. The forecast
    * is backend-derived — the UI only renders it.
    */
-  getForecastSnapshot(portfolioId: string, signal?: AbortSignal): Promise<ForecastSnapshot>;
+  getForecastSnapshot(portfolioId: string, portfolioContext?: string,
+                      signal?: AbortSignal): Promise<ForecastSnapshot>;
 
   /** Funded time series (per-month metrics + breakdowns) up to the selected run. */
-  getFundedEvolution(portfolioId: string, signal?: AbortSignal): Promise<FundedEvolution>;
+  getFundedEvolution(portfolioId: string, portfolioContext?: string,
+                    signal?: AbortSignal): Promise<FundedEvolution>;
 
   /** Pipeline time series (weekly amount/cases + by-stage over time). */
-  getPipelineEvolution(portfolioId: string, signal?: AbortSignal): Promise<PipelineEvolution>;
+  getPipelineEvolution(portfolioId: string, portfolioContext?: string,
+                      signal?: AbortSignal): Promise<PipelineEvolution>;
 
   /** Forecast bridge over time (funded balance + weighted pipeline per run). */
-  getForecastEvolution(portfolioId: string, signal?: AbortSignal): Promise<ForecastEvolution>;
+  getForecastEvolution(portfolioId: string, portfolioContext?: string,
+                      signal?: AbortSignal): Promise<ForecastEvolution>;
 
   /** Weekly origination funnel trends (KFI / Application / Offer / Completion). */
-  getFunnelEvolution(portfolioId: string, signal?: AbortSignal): Promise<PipelineFunnelEvolution>;
+  getFunnelEvolution(portfolioId: string, portfolioContext?: string,
+                    signal?: AbortSignal): Promise<PipelineFunnelEvolution>;
 
   /** Governed risk-limit / concentration monitor (Schedule 8 vs funded actuals). */
-  getRiskLimits(portfolioId: string, signal?: AbortSignal): Promise<RiskLimitsSnapshot>;
+  getRiskLimits(portfolioId: string, portfolioContext?: string,
+               signal?: AbortSignal): Promise<RiskLimitsSnapshot>;
 
   /** Securitisation scale-up forecast (run-rate / KFI extrapolation + milestones). */
-  getForecastExtrapolation(portfolioId: string, signal?: AbortSignal): Promise<ForecastExtrapolation>;
+  getForecastExtrapolation(portfolioId: string, portfolioContext?: string,
+                          signal?: AbortSignal): Promise<ForecastExtrapolation>;
 
   /** The authenticated caller (Entra principal echoed by the API), for the
    * header identity + role-based control visibility. */
@@ -88,7 +112,7 @@ export interface AgentClient {
    *  ``dimension`` (vintage | age | ltv | channel; default vintage). ``grain``
    *  (Y|Q|M) sets the vintage grain (vintage dimension only). */
   getCohorts(portfolioId: string, grain?: CohortGrain, dimension?: CohortDimension,
-             signal?: AbortSignal): Promise<CohortAnalysis>;
+             portfolioContext?: string, signal?: AbortSignal): Promise<CohortAnalysis>;
 
   /** Static-pool cohort PROGRESSION across reporting periods for a cohort — a
    *  source-portfolio ``lens`` optionally narrowed to an origination ``vintage``
@@ -97,7 +121,8 @@ export interface AgentClient {
                        signal?: AbortSignal): Promise<CohortProgression>;
 
   /** Funded exposure per UK ITL3 area — the Geography tab's choropleth feed. */
-  getGeoExposure(portfolioId: string, signal?: AbortSignal): Promise<GeoExposure>;
+  getGeoExposure(portfolioId: string, portfolioContext?: string,
+                signal?: AbortSignal): Promise<GeoExposure>;
 }
 
 /** Error thrown by clients for transport/agent failures. */
