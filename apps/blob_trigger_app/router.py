@@ -552,7 +552,11 @@ def handle_blob_event(
         if parsed.dataset == "funded":
             _refresh_platform_canonical(
                 manifest, parsed, result, sel_target, sel_run_regime,
-                assembler_refresher, out_dir, accepted_root, platform_out_dir)
+                assembler_refresher, out_dir, accepted_root, platform_out_dir,
+                # The durable accepted store + registry, so the assembler sees
+                # every ACTIVE accepted portfolio for this client rather than
+                # only the one this run produced.
+                persistence=persistence, registry=registry)
             # 6) Durable persistence — upload accepted + platform canonicals (and
             # regime outputs) to the persistent store (Azure Blob / filesystem).
             if persistence is not None:
@@ -638,9 +642,29 @@ def _auto_approve_repin(registry, rec, parsed, schema_info, materiality,
 # Assembler refresh
 # --------------------------------------------------------------------------- #
 
+def _supported_kwargs(func, **candidates) -> Dict[str, Any]:
+    """The subset of ``candidates`` that ``func`` actually accepts.
+
+    The assembler-refresher seam is injectable, and existing test doubles are
+    written to the older signature. Passing new arguments only when the callable
+    declares them (or takes ``**kwargs``) keeps those doubles working.
+    """
+    import inspect
+
+    try:
+        signature = inspect.signature(func)
+    except (TypeError, ValueError):  # pragma: no cover — builtins / C callables
+        return {}
+    params = signature.parameters
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()):
+        return dict(candidates)
+    return {k: v for k, v in candidates.items() if k in params}
+
+
 def _refresh_platform_canonical(manifest, parsed, result, target, run_regime,
                                 assembler_refresher, out_dir, accepted_root,
-                                platform_out_dir) -> None:
+                                platform_out_dir, *, persistence=None,
+                                registry=None) -> None:
     accepted_root = accepted_root or str(Path(out_dir) / "_accepted")
     platform_out_dir = platform_out_dir or str(Path(out_dir) / "_platform")
     try:
@@ -650,7 +674,11 @@ def _refresh_platform_canonical(manifest, parsed, result, target, run_regime,
             canonical_path=(result or {}).get("central_canonical_path"),
             accepted_root=accepted_root, platform_out_dir=platform_out_dir,
             target=target, run_regime=run_regime,
-            regime=("ESMA_Annex2" if run_regime else None))
+            regime=("ESMA_Annex2" if run_regime else None),
+            # Injected refreshers in tests keep the older signature, so these are
+            # passed only when the callable accepts them.
+            **_supported_kwargs(assembler_refresher,
+                                persistence=persistence, registry=registry))
         manifest["assembler_refresh"] = refresh
         if refresh and refresh.get("central_canonical_path"):
             manifest["central_canonical_path"] = refresh["central_canonical_path"]
