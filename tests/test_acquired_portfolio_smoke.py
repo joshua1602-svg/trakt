@@ -458,7 +458,7 @@ class TestSourceValuePlaceholderDecision(unittest.TestCase):
       5. the NEXT pack from the same source reuses the decision — no second ask.
     """
 
-    PLACEHOLDER_ROWS = 6
+    PLACEHOLDER_ROWS = 2
 
     @classmethod
     def setUpClass(cls):
@@ -626,31 +626,27 @@ def _approve_placeholder_and_rerun(case):
     if cached is not None:
         return cached
 
-    # 1. The operator edits the exported template: status approved + the action.
-    template = case.first_run_dir / "34_target_first_decisions.yaml"
-    doc = yaml.safe_load(template.read_text(encoding="utf-8"))
-    approved_any = False
-    for entry in doc.get("decisions", []) or []:
-        if (entry.get("decision_type") == "source_value_normalisation"
-                and entry.get("source_value") == AP.DOB_PLACEHOLDER):
-            entry["status"] = "approved"
-            entry["selected_action"] = "treat_source_value_as_null"
-            entry["approved_by"] = "ops"
-            approved_any = True
-    assert approved_any, "no TBC decision found in the exported template"
+    # 1. The operator approves the detected value through the real CLI path,
+    #    pinning the scope so the command fails rather than approving something
+    #    other than what they intend.
+    summary = OPS.approve_source_value(
+        case.persistence, AP.PACK_KEY,
+        canonical_field="borrower_1_DOB",
+        source_column="Borrower 1 DOB",
+        source_value=AP.DOB_PLACEHOLDER,
+        action="treat_source_value_as_null",
+        approved_by="ops",
+        scope={"target_contract_id": "mi_semantics_field_registry",
+               "client_id": AP.CLIENT_ID,
+               "source_portfolio_id": AP.SOURCE_PORTFOLIO_ID})
+    assert summary["decision"]["affected_row_count"] == case.PLACEHOLDER_ROWS
 
-    # 2. Persisted where a scoped rerun looks for approved decisions.
-    case.storage.write_text(
-        case.layout.run_onboarding_uri(
-            AP.PACK_KEY, "34_target_first_decisions_approved.yaml"),
-        yaml.safe_dump(doc, sort_keys=False))
-
-    # 3. Rerun the pack; backfill localises and applies the approved decisions.
+    # 2. Rerun the pack; backfill localises and applies the approved decisions.
     case._backfill(selector=BF.PackSelector(pack_key=AP.PACK_KEY), force=True,
                    require_approved_decisions=True)
     case.__class__._approved_run_dir = case._latest_portfolio_dir()
 
-    # 4. PROMOTE the approved decisions onto the SOURCE registry entry. Approval
+    # 3. PROMOTE the approved decisions onto the SOURCE registry entry. Approval
     #    alone is pack-scoped; promotion is what makes the decision the source's
     #    standing mapping, so every later pack applies it without being asked
     #    again. This is the documented approve → rerun → promote loop.

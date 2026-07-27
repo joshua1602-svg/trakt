@@ -41,7 +41,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
+
+from engine.onboarding_agent import source_value_rules as _SVR
 
 from . import approvals as APP
 from . import run_records as RR
@@ -281,6 +284,68 @@ def approve_recommendations(persistence: ProductionPersistence, pack_key: str, *
     return summary
 
 
+#: Short operator-facing labels for target contracts, so an approval line reads
+#: "MI only" rather than repeating the registry id.
+_CONTRACT_LABELS = {
+    "mi_semantics_field_registry": "MI only",
+    "esma_annex_2": "ESMA Annex 2 only",
+}
+
+
+def _contract_label(target_contract_id: str) -> str:
+    return _CONTRACT_LABELS.get(str(target_contract_id or "").strip(),
+                                f"{target_contract_id} only"
+                                if target_contract_id else "all contracts")
+
+
+def approve_source_value(
+    persistence: ProductionPersistence, ref: str, *,
+    canonical_field: str, source_column: str, source_value: str,
+    action: str = "", approved_by: str = "",
+    scope: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    """Approve one detected SOURCE-VALUE normalisation (e.g. ``TBC`` -> null).
+
+    Distinct from ``approve``, which approves a source MAPPING and needs a
+    mapping id. A source-value treatment is a statement about what one value
+    means for one column of one source under one target contract — it has no
+    mapping id, and fabricating one would put a bogus mapping in the registry
+    when the pack is promoted.
+
+    Accepts a pack_key or a run_id. Records the approval on the run record so
+    the decision is visible from ``ops show`` without opening the artefact.
+    """
+    pack_key = _pack_key_of(persistence.storage, persistence.layout, ref)
+    summary = persistence.approve_source_value(
+        pack_key, canonical_field=canonical_field, source_column=source_column,
+        source_value=source_value, action=action, approved_by=approved_by,
+        now=datetime.now(timezone.utc).isoformat(), scope=scope)
+
+    rec = persistence.load_run_record(pack_key)
+    if rec is not None:
+        rec["approved_decisions_uri"] = summary.get("approved_decisions_uri")
+        accepted = list(rec.get("source_value_decisions") or [])
+        decision = summary["decision"]
+        signature = (decision["canonical_field"], decision["source_column"],
+                     decision["source_value"])
+        accepted = [a for a in accepted
+                    if (a.get("canonical_field"), a.get("source_column"),
+                        a.get("source_value")) != signature]
+        accepted.append({
+            "canonical_field": decision["canonical_field"],
+            "source_column": decision["source_column"],
+            "source_value": decision["source_value"],
+            "action": decision["selected_action"],
+            "target_contract_id": decision["target_contract_id"],
+            "affected_row_count": decision.get("affected_row_count", 0),
+            "approved_by": decision.get("approved_by", ""),
+            "approved_at": decision.get("approved_at", ""),
+        })
+        rec["source_value_decisions"] = accepted
+        RR.write_run_record(persistence.storage, persistence.layout, rec)
+    return summary
+
+
 def promote_pack(persistence: ProductionPersistence, registry: SourceRegistry,
                  pack_key: str) -> "SourceRecord":
     """Promote a pack's accepted decisions into an ACTIVE registry mapping, so
@@ -457,6 +522,35 @@ def main(argv: Optional[List[str]] = None) -> int:
     sp.add_argument("pack_key")
     sp.add_argument("--min-confidence", type=float, default=0.0)
     sp.add_argument("--by", default=None)
+    sp = sub.add_parser(
+        "approve-source-value",
+        help="Approve a detected SOURCE-VALUE normalisation (e.g. a date column's "
+             "'TBC' means null) for this pack. No mapping id — this is not a "
+             "source mapping.")
+    sp.add_argument("ref", help="pack_key or run_id")
+    sp.add_argument("--canonical-field", required=True,
+                    help="Canonical field the column feeds, e.g. borrower_1_DOB.")
+    sp.add_argument("--source-column", required=True,
+                    help="Source column as it appears in the file, e.g. 'Borrower 1 DOB'.")
+    sp.add_argument("--source-value", required=True,
+                    help="The exact source value being decided, e.g. TBC.")
+    sp.add_argument("--action", default=_SVR.ACTION_TREAT_AS_NULL,
+                    help=f"Treatment to apply (default: {_SVR.ACTION_TREAT_AS_NULL}).")
+    sp.add_argument("--by", default=None, help="Operator recording the decision.")
+    # Optional scope pins. Supplying one asserts it — the command fails rather
+    # than approving a candidate whose scope differs from what you believed.
+    sp.add_argument("--target-contract", default=None,
+                    help="Assert the target contract, e.g. mi_semantics_field_registry.")
+    sp.add_argument("--client-id", default=None, help="Assert the client.")
+    sp.add_argument("--source-portfolio-id", default=None,
+                    help="Assert the source portfolio.")
+    sp.add_argument("--source-schema-fingerprint", default=None,
+                    help="Assert the source schema fingerprint.")
+    sp.add_argument("--source-file", default=None,
+                    help="Narrow to one source file (needed when a value appears "
+                         "in the same column of more than one file).")
+    sp.add_argument("--source-sheet", default=None, help="Narrow to one sheet.")
+
     sp = sub.add_parser("promote", help="Promote an approved mapping to active "
                                         "(<approval_id>, or <pack_key> for accepted decisions).")
     sp.add_argument("ref")
@@ -553,6 +647,39 @@ def main(argv: Optional[List[str]] = None) -> int:
               f"{summary.get('approved_decisions_uri')}")
         print(f"next: python -m apps.blob_trigger_app.ops rerun {args.pack_key}")
         print(f"then: python -m apps.blob_trigger_app.ops promote {args.pack_key}")
+        return 0
+
+    if args.cmd == "approve-source-value":
+        try:
+            summary = approve_source_value(
+                persistence, args.ref,
+                canonical_field=args.canonical_field,
+                source_column=args.source_column,
+                source_value=args.source_value,
+                action=args.action, approved_by=args.by or "",
+                scope={
+                    "target_contract_id": args.target_contract,
+                    "client_id": args.client_id,
+                    "source_portfolio_id": args.source_portfolio_id,
+                    "source_schema_fingerprint": args.source_schema_fingerprint,
+                    "source_file": args.source_file,
+                    "source_sheet": args.source_sheet,
+                })
+        except _SVR.CandidateMatchError as exc:
+            print(f"approve-source-value: {exc}")
+            return 2
+        d = summary["decision"]
+        print(f"Approved: {d['source_column']} value {d['source_value']!r} -> null "
+              f"({d.get('affected_row_count', 0)} rows, "
+              f"{_contract_label(d['target_contract_id'])})")
+        print(f"  scope: client={d['client_id'] or '(any)'} "
+              f"portfolio={d['source_portfolio_id'] or '(any)'} "
+              f"field={d['canonical_field']}")
+        print(f"  written: {summary['approved_decisions_uri']}")
+        pack_key = summary["pack_key"]
+        print(f"next: python -m apps.blob_trigger_app.backfill --force "
+              f"--pack-key {pack_key}")
+        print(f"then: python -m apps.blob_trigger_app.ops promote {pack_key}")
         return 0
 
     if args.cmd == "promote":

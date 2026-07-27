@@ -448,6 +448,153 @@ def mapping_rows_from(
     return out
 
 
+class CandidateMatchError(ValueError):
+    """No candidate matched, or the request was ambiguous / out of scope."""
+
+
+#: Scope dimensions an operator may pin on the command line. Each is optional;
+#: supplying one means "and it must be exactly this", so a request can never
+#: approve a candidate whose scope differs from what the operator believed.
+_REQUESTABLE_SCOPE = (
+    "target_contract_id", "client_id", "source_portfolio_id",
+    "source_schema_fingerprint", "source_file", "source_sheet",
+)
+
+
+def match_candidate(
+    candidates: Sequence[Dict[str, Any]],
+    *,
+    canonical_field: str,
+    source_column: str,
+    source_value: str,
+    action: str = ACTION_TREAT_AS_NULL,
+    scope: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    """Find the ONE pending candidate an approval request identifies.
+
+    Fails closed, and says which of the four ways it failed:
+
+      * the action is not one this module implements;
+      * nothing matches — approving a value that was never detected would create
+        a rule for a value the pipeline has no evidence of;
+      * more than one matches — approving "whichever" is never right;
+      * a scope dimension the operator pinned differs from the candidate's.
+
+    Matching is exact on canonical field, source column and source value (the
+    value case-insensitively, since case is rendering), plus every scope
+    dimension the request pins.
+    """
+    if str(action or "").strip() != ACTION_TREAT_AS_NULL:
+        raise CandidateMatchError(
+            f"unsupported action {action!r}; supported: {ACTION_TREAT_AS_NULL}")
+
+    scope = {k: str(v).strip() for k, v in (scope or {}).items()
+             if v not in (None, "")}
+    unknown = sorted(set(scope) - set(_REQUESTABLE_SCOPE))
+    if unknown:
+        raise CandidateMatchError(
+            f"unknown scope dimension(s): {unknown}; "
+            f"supported: {sorted(_REQUESTABLE_SCOPE)}")
+
+    want_field = str(canonical_field or "").strip().lower()
+    want_column = str(source_column or "").strip().lower()
+    want_value = _norm_value(source_value)
+    if not (want_field and want_column and want_value):
+        raise CandidateMatchError(
+            "canonical_field, source_column and source_value are all required")
+
+    identified = [
+        c for c in (candidates or [])
+        if str(c.get("canonical_field", "")).strip().lower() == want_field
+        and str(c.get("source_column", "")).strip().lower() == want_column
+        and _norm_value(c.get("source_value")) == want_value
+    ]
+    if not identified:
+        raise CandidateMatchError(
+            f"no pending candidate for {source_value!r} in "
+            f"{source_column!r} -> {canonical_field!r}")
+
+    # Scope is checked AFTER identification so a mismatch reports what actually
+    # differs, rather than a bare "no match".
+    in_scope: List[Dict[str, Any]] = []
+    scope_conflicts: List[str] = []
+    for c in identified:
+        differences = [
+            f"{k}: candidate={c.get(k, '') or '(none)'!r} requested={v!r}"
+            for k, v in scope.items()
+            if str(c.get(k, "") or "").strip().lower() != v.lower()
+        ]
+        if differences:
+            scope_conflicts.extend(differences)
+        else:
+            in_scope.append(c)
+
+    if not in_scope:
+        raise CandidateMatchError(
+            "candidate scope differs from the requested scope — "
+            + "; ".join(sorted(set(scope_conflicts))))
+    if len(in_scope) > 1:
+        where = "; ".join(
+            f"{c.get('source_file', '')}::{c.get('source_sheet', '') or '-'}"
+            for c in in_scope)
+        raise CandidateMatchError(
+            f"{len(in_scope)} candidates match — narrow the request with "
+            f"--source-file / --source-sheet (matched: {where})")
+    return in_scope[0]
+
+
+def decision_from_candidate(
+    candidate: Dict[str, Any], *, decision_id: str = "",
+    approved_by: str = "", approved_at: str = "",
+) -> Dict[str, Any]:
+    """The APPROVED 34_ decision entry for a matched candidate.
+
+    Carries the candidate's scope VERBATIM — it is not re-derived here and must
+    not be re-derived downstream, so the rule that runs is provably the rule the
+    operator approved.
+    """
+    return {
+        "decision_id": (decision_id or candidate.get("decision_id", "")
+                        or f"SV-{candidate.get('canonical_field', '')}-"
+                           f"{_norm_value(candidate.get('source_value'))}"),
+        "decision_type": DECISION_TYPE,
+        "status": "approved",
+        "selected_action": ACTION_TREAT_AS_NULL,
+        "target_field": candidate.get("target_field", "")
+        or candidate.get("canonical_field", ""),
+        "canonical_field": candidate.get("canonical_field", ""),
+        "source_column": candidate.get("source_column", ""),
+        "source_file": candidate.get("source_file", ""),
+        "source_sheet": candidate.get("source_sheet", ""),
+        "source_value": candidate.get("source_value", ""),
+        "affected_row_count": candidate.get("affected_row_count", 0),
+        "target_contract_id": candidate.get("target_contract_id", ""),
+        "client_id": candidate.get("client_id", ""),
+        "source_portfolio_id": candidate.get("source_portfolio_id", ""),
+        "source_schema_fingerprint": candidate.get("source_schema_fingerprint", ""),
+        "approved_by": approved_by or "operator",
+        "approved_at": approved_at,
+    }
+
+
+def scope_of_rules(rules: Sequence[Dict[str, Any]]) -> Dict[str, str]:
+    """The scope shared by a set of approved rule rows, for the handoff block.
+
+    Taken from the rules themselves so the scope Transformation matches against
+    is the one that was approved, never one re-derived from the current run.
+    Dimensions the rules disagree on are left blank (a wildcard) rather than
+    picking one arbitrarily.
+    """
+    dims = ("client_id", "source_portfolio_id", "target_contract_id",
+            "source_schema_fingerprint")
+    out: Dict[str, str] = {}
+    for dim in dims:
+        values = {str(r.get(dim, "") or "").strip() for r in (rules or [])}
+        values.discard("")
+        out[dim] = values.pop() if len(values) == 1 else ""
+    return out
+
+
 def detect_candidates(
     tables: Sequence[Tuple[str, str, Any]],
     mapping_rows: Sequence[Dict[str, Any]],

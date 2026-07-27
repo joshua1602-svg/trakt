@@ -30,6 +30,8 @@ _DECISIONS_NAME = "34_target_first_decisions.yaml"
 _RECS_NAME = "36_target_first_llm_recommendations.json"
 _COVERAGE_JSON = "28a_target_coverage_matrix.json"
 _APPROVED_NAME = "34_target_first_decisions_approved.yaml"
+#: Source-value normalisation candidates + approved rules for the pack.
+_SOURCE_VALUE_RULES_NAME = "28d_source_value_rules.json"
 _INPUT_NAMES = (_DECISIONS_NAME, _RECS_NAME, _COVERAGE_JSON)
 # Additionally captured so the RESOLVED source→canonical mapping (from the LLM
 # mapping resolver) is durably preserved alongside the target-first decisions —
@@ -40,6 +42,10 @@ _RESOLVER_NAMES = (
     "31_llm_mapping_review.json",
     "31_llm_mapping_review.csv",
     "28a_target_coverage_matrix.csv",
+    # Pending source-value normalisation candidates + the rules already in force.
+    # Persisted so `ops approve-source-value` can read them after the ephemeral
+    # run scratch is reclaimed.
+    _SOURCE_VALUE_RULES_NAME,
 )
 _PERSIST_NAMES = tuple(dict.fromkeys(_INPUT_NAMES + _RESOLVER_NAMES))
 
@@ -121,6 +127,117 @@ def approve_recommendations(storage: Storage, layout: Layout, pack_key: str, *,
     storage.upload_file(str(tmp / _APPROVED_NAME), approved_uri)
     summary["approved_decisions_uri"] = approved_uri
     return summary
+
+
+def source_value_rules_uri(layout: Layout, pack_key: str) -> str:
+    return layout.run_onboarding_uri(pack_key, _SOURCE_VALUE_RULES_NAME)
+
+
+def load_source_value_rules(storage: Storage, layout: Layout,
+                            pack_key: str) -> Dict[str, Any]:
+    """The pack's persisted 28d document (candidates + rules already in force)."""
+    import json
+
+    uri = source_value_rules_uri(layout, pack_key)
+    if not storage.exists(uri):
+        return {}
+    try:
+        return json.loads(storage.read_text(uri)) or {}
+    except Exception:  # noqa: BLE001 — a malformed artefact is "no candidates"
+        return {}
+
+
+def approve_source_value(
+    storage: Storage, layout: Layout, pack_key: str, *,
+    canonical_field: str, source_column: str, source_value: str,
+    action: str = "", approved_by: str = "", now: Optional[str] = None,
+    scope: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    """Approve ONE detected source-value normalisation for this pack.
+
+    Reads the pack's pending candidates, matches exactly one (failing closed
+    otherwise — see :func:`source_value_rules.match_candidate`), and merges the
+    approved decision into the pack-scoped
+    ``34_target_first_decisions_approved.yaml`` using the existing generic
+    ``treat_source_value_as_null`` action.
+
+    No mapping id is involved: a source-value treatment is not a source mapping,
+    and inventing one would put a fabricated mapping into the registry on
+    promotion.
+
+    Returns the approval summary; raises
+    :class:`source_value_rules.CandidateMatchError` when the request does not
+    identify exactly one in-scope candidate.
+    """
+    import yaml as _yaml
+
+    from engine.onboarding_agent import source_value_rules as _svr
+
+    doc = load_source_value_rules(storage, layout, pack_key)
+    if not doc:
+        raise _svr.CandidateMatchError(
+            f"no source-value candidates recorded for {pack_key} at "
+            f"{source_value_rules_uri(layout, pack_key)} — run onboarding for "
+            f"this pack first")
+
+    candidate = _svr.match_candidate(
+        doc.get("candidates_pending", []) or [],
+        canonical_field=canonical_field, source_column=source_column,
+        source_value=source_value, action=(action or _svr.ACTION_TREAT_AS_NULL),
+        scope=scope)
+    decision = _svr.decision_from_candidate(
+        candidate, approved_by=approved_by, approved_at=(now or ""))
+
+    # Merge into the pack's approved decisions, preserving anything already
+    # accepted there (mapping recommendations included — this must not disturb
+    # the existing approval path).
+    uri = approved_decisions_uri(layout, pack_key)
+    approved_doc: Dict[str, Any] = {}
+    if storage.exists(uri):
+        try:
+            approved_doc = _yaml.safe_load(storage.read_text(uri)) or {}
+        except Exception:  # noqa: BLE001
+            approved_doc = {}
+    if not isinstance(approved_doc, dict):
+        approved_doc = {}
+    approved_doc.setdefault("version", 1)
+    approved_doc.setdefault("client_id", candidate.get("client_id", ""))
+    approved_doc.setdefault("mode", doc.get("mode", ""))
+    approved_doc.setdefault("supported_actions", list(_SUPPORTED_ACTIONS()))
+    decisions = list(approved_doc.get("decisions", []) or [])
+
+    replaced = False
+    for i, existing in enumerate(decisions):
+        if not isinstance(existing, dict):
+            continue
+        if (existing.get("decision_type") == _svr.DECISION_TYPE
+                and str(existing.get("canonical_field", "")).strip().lower()
+                == str(decision["canonical_field"]).strip().lower()
+                and str(existing.get("source_column", "")).strip().lower()
+                == str(decision["source_column"]).strip().lower()
+                and str(existing.get("source_value", "")).strip().lower()
+                == str(decision["source_value"]).strip().lower()):
+            decisions[i] = decision       # re-approving is idempotent
+            replaced = True
+            break
+    if not replaced:
+        decisions.append(decision)
+    approved_doc["decisions"] = decisions
+
+    storage.write_text(uri, _yaml.safe_dump(approved_doc, sort_keys=False))
+    return {
+        "pack_key": pack_key,
+        "approved_decisions_uri": uri,
+        "decision": decision,
+        "candidate": candidate,
+        "already_approved": replaced,
+        "decision_count": len(decisions),
+    }
+
+
+def _SUPPORTED_ACTIONS():
+    from engine.onboarding_agent import target_first_decisions as _tfd
+    return _tfd.SUPPORTED_ACTIONS
 
 
 def approved_decisions_uri(layout: Layout, pack_key: str) -> str:
