@@ -34,6 +34,13 @@ def _platform_env(blobroot: Path, scratch: Path) -> dict:
         "MI_AGENT_PLATFORM_URI":
             "blob://processed-v2/platform/ERE/latest/platform_canonical_typed.csv",
         "MI_AGENT_SCRATCH": str(scratch),
+        # The env is cleared wholesale above to isolate MI_AGENT_* resolution.
+        # These two must be restored explicitly or every request 401s before it
+        # reaches the route (the API fails closed when MI_AGENT_AUTH_ENABLED is
+        # unset), and the governed capability refuses a non-approved source when
+        # TRAKT_RUNTIME_MODE is unset. Without them these tests asserted nothing.
+        "MI_AGENT_AUTH_ENABLED": "false",
+        "TRAKT_RUNTIME_MODE": "test",
     })
     return env
 

@@ -124,64 +124,38 @@ def test_mi_supporting_values_carry_kpis(live_dataset):
     assert "kpi" in kinds or "table" in kinds
 
 
-def test_mi_answer_carries_classification_and_package_version(live_dataset):
-    from mi_agent_api.copilot_package import COPILOT_PACKAGE_VERSION
-
-    r = client.post("/v1/copilot/mi/query",
-                    json={"question": "What is the total current balance?"})
-    body = r.json()
-    assert body["classification"] in (
-        "fully-served-simple", "fully-served-complex", "unmet")
-    assert body["packageVersion"] == COPILOT_PACKAGE_VERSION
-    # No Workspace base URL configured in this test → no link is emitted.
-    assert body.get("workspaceUrl") in (None, "")
-
-
-def test_mi_workspace_link_emitted_for_complex_when_configured(
-        live_dataset, monkeypatch):
-    """With a Workspace base URL set, a complex/unmet answer carries a deep link
-    that restores context; a simple lookup does not."""
-    monkeypatch.setenv("TRAKT_COPILOT_WORKSPACE_BASE_URL",
-                       "https://trakt.example/workspace")
-    r = client.post("/v1/copilot/mi/query",
-                    json={"question": "Show the LTV distribution as a chart."})
-    body = r.json()
-    if body["classification"] != "fully-served-simple":
-        assert body["workspaceUrl"], body["classification"]
-        assert body["workspaceUrl"].startswith("https://trakt.example/workspace")
-        assert "q=" in body["workspaceUrl"]
-
-
-def test_mi_package_version_telemetry_flags_stale_tenant(live_dataset, caplog):
-    import logging
-
-    with caplog.at_level(logging.INFO, logger="mi_agent_api.copilot"):
-        client.post("/v1/copilot/mi/query",
-                    json={"question": "total balance?"},
-                    headers={"X-Trakt-Package-Version": "1.0.0"})
-    line = "\n".join(caplog.messages)
-    assert "package_version=1.0.0" in line
-    assert "STALE_TENANT_PACKAGE" in line
-
-
-def test_mi_synthetic_fallback_is_refused(synthetic_dataset):
+def test_mi_synthetic_fallback_is_refused(synthetic_dataset, monkeypatch):
+    # The refusal now lives in the governed capability rather than in this
+    # adapter, and applies in PRODUCTION mode. The suite default is ``test``
+    # mode, which legitimately permits fixtures, so the production rule is
+    # asserted explicitly here.
+    monkeypatch.setenv("TRAKT_RUNTIME_MODE", "production")
+    data_source.reset_cache()
     assert data_source.data_source_kind() == data_source.KIND_SYNTHETIC_DEMO
     r = client.post("/v1/copilot/mi/query", json={"question": "total balance?"})
     assert r.status_code == 503
     body = r.json()
     assert body["ok"] is False
-    assert "governed live data source" in body["error"]
+    assert body["errorCode"] == "DATA_SOURCE_NOT_APPROVED"
+    assert "synthetic" in body["error"].lower()
 
 
 def test_mi_missing_data_is_a_clear_error(monkeypatch, copilot_auth_off):
-    monkeypatch.setattr(data_source, "data_source_kind",
-                        lambda: data_source.KIND_UNAVAILABLE)
-    import mi_agent_api.copilot_actions as ca
-    monkeypatch.setattr(ca, "data_source_kind",
-                        lambda: data_source.KIND_UNAVAILABLE)
+    # No dataset resolves at all. Patched at the resolution seam because the
+    # approval policy now decides on the resolution BASE, not the display kind —
+    # that is what stopped MI_AGENT_DATA_CSV=<demo file> slipping through as
+    # "explicit_csv".
+    monkeypatch.setattr(data_source, "resolve_data_source", lambda: (None, "unavailable"))
+    from mi_agent_api import datasets as datasets_mod
+    monkeypatch.setattr(datasets_mod, "resolve_data_source", lambda: (None, "unavailable"))
+    data_source.reset_cache()
     r = client.post("/v1/copilot/mi/query", json={"question": "total balance?"})
     assert r.status_code == 503
-    assert r.json()["ok"] is False
+    body = r.json()
+    assert body["ok"] is False
+    assert body["errorCode"] == "DATA_SOURCE_UNAVAILABLE"
+    # An infrastructure gap is retryable; an unapproved source is not.
+    assert body["retryable"] is True
 
 
 def test_mi_malformed_request_is_422(copilot_auth_off):

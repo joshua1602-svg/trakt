@@ -114,8 +114,16 @@ def _funded_canonical(run_path: Path) -> Optional[str]:
 
 @contextmanager
 def _api_env(overrides: Dict[str, Optional[str]]):
-    """Temporarily set the env the MI Agent API reads, then restore it — so the
-    deck resolves a run exactly as the dashboard does, without leaking config."""
+    """Temporarily set the env the MI Agent data layer reads, then restore it — so
+    the deck resolves a run exactly as the dashboard does, without leaking config.
+
+    Scope note: this is a BATCH stage (one deck per pipeline run), not a
+    per-request path. The governed MI capability never mutates the environment to
+    select a dataset. Removing this last use requires threading an explicit
+    dataset selector through ``mi_agent_api.data_source``, which is tracked as
+    follow-up work rather than done here because it would change resolution for
+    every caller at once.
+    """
     saved = {k: os.environ.get(k) for k in overrides}
 
     def _reset_cache():
@@ -143,56 +151,34 @@ def _api_env(overrides: Dict[str, Optional[str]]):
 
 
 # --------------------------------------------------------------------------- #
-# Resolution helpers — mirror the like-named private helpers in mi_agent_api.app
-# (which cannot be imported here because that module pulls in FastAPI).
+# Resolution helpers.
+#
+# These used to be hand-copied from the like-named private helpers in
+# mi_agent_api.app, because that module pulls in FastAPI and could not be
+# imported here. Dataset resolution now lives in the interface-neutral
+# mi_agent_api.datasets, so the deck calls the SAME implementation the API does
+# instead of a drifting copy.
 # --------------------------------------------------------------------------- #
 
 def _materialise_pipeline_root(root: Optional[str]) -> Optional[str]:
-    """Return a LOCAL discovery root for ``root`` (``app._materialise_pipeline_root``).
-
-    Filesystem roots are returned unchanged. A ``blob://`` root is mirrored to a
-    local scratch tree holding ONLY the dated ``{date}/pipeline_snapshot.csv``
-    snapshots (``latest/`` excluded) so filesystem discovery / evolution / history
-    see the same set of dated sources the dashboard does."""
-    if not root or not str(root).startswith("blob://"):
-        return root
-    try:
-        from apps.blob_trigger_app.storage import open_storage, split_blob_uri
-        storage = open_storage()
-        try:
-            uris = storage.list(root)
-        except Exception:  # noqa: BLE001
-            return root
-        dated = [u for u in uris if "/latest/" not in u
-                 and re.search(r"/\d{4}-\d{2}-\d{2}/pipeline_snapshot\.csv$", u)]
-        if not dated:
-            return root
-        scratch = os.environ.get("MI_AGENT_SCRATCH", "/tmp/trakt/mi_platform")
-        base = Path(scratch) / "pipeline_root"
-        _c, key = split_blob_uri(root)
-        prefix = key.rstrip("/")
-        for uri in dated:
-            _cc, ukey = split_blob_uri(uri)
-            rel = ukey[len(prefix):].lstrip("/") if ukey.startswith(prefix) else \
-                "/".join(uri.rstrip("/").split("/")[-2:])
-            dest = base / rel
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            storage.download_file(uri, dest)
-        return str(base)
-    except Exception:  # noqa: BLE001 — never break discovery on a mirror error
-        return root
+    """A LOCAL discovery root for ``root`` (blob roots are mirrored to scratch)."""
+    from mi_agent_api import datasets as _ds
+    return _ds._materialise_pipeline_root(root)
 
 
 def _pipeline_discovery_root(out_root: str) -> str:
-    """The pipeline discovery root (``app._pipeline_discovery_root``): the pipeline
-    root (or the onboarding output root), blob-mirrored to local where needed."""
+    """The pipeline discovery root, blob-mirrored to local where needed.
+
+    Falls back to the deck's own run root when no pipeline root is configured —
+    the one behavioural difference from the API helper, which has no run root.
+    """
     root = os.environ.get("MI_AGENT_PIPELINE_ROOT") or out_root
     return _materialise_pipeline_root(root) or root
 
 
 def _pipeline_history(root: str, client_id: str) -> Optional[Dict[str, Any]]:
-    """The multi-week historical completion model (``app._pipeline_history``):
-    None unless ≥2 weekly extracts exist (a single extract is not a history)."""
+    """The multi-week historical completion model: None unless ≥2 weekly
+    extracts exist (a single extract is not a history)."""
     from mi_agent_api import pipeline_contract as pc
     try:
         model = pc.build_pipeline_history(root, client_id)
