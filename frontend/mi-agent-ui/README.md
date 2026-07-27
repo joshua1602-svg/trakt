@@ -69,15 +69,29 @@ A FastAPI backend that wraps the real MI Agent lives at
 `HttpAgentClient` (same `AgentClient` interface as the mock).
 
 ```bash
-# 1. start the backend (from repo root)
+# 1. start the backend (from repo root), pointing it at the governed datasets
 pip install -r requirements.txt -r mi_agent_api/requirements.txt
+
+export MI_AGENT_CLIENT_ID=ERE                                  # the TENANT
+export MI_AGENT_PLATFORM_CANONICAL=platform/ERE/latest/platform_canonical_typed.csv
+export MI_AGENT_PIPELINE_ROOT=pipeline                         # funded + pipeline
 uvicorn mi_agent_api.app:app --reload --port 8000
 
-# 2. point the UI at it
+# 2. start the UI — it proxies to the API same-origin (see vite.config.ts)
 cd frontend/mi-agent-ui
-echo "VITE_AGENT_API_URL=http://localhost:8000" > .env.local
 npm run dev
 ```
+
+`.env.development` already sets `VITE_AGENT_API_URL=/`, so `npm run dev` is live
+against the backend with no extra configuration.
+
+> **Do not set an absolute `VITE_AGENT_API_URL` in Codespaces or behind any
+> forwarded port.** `http://localhost:8000` resolves in the *browser*, which is
+> not on the API host, so the request never reaches uvicorn and the forwarding
+> proxy answers instead — surfacing as `MI Agent API returned 404`. Keep the
+> relative `/` base and let the dev-server proxy forward. Point the proxy
+> somewhere else with `VITE_PROXY_TARGET=http://host:port` if the API is not on
+> `:8000`.
 
 Client selection (`src/api/index.ts`):
 

@@ -270,6 +270,39 @@ describe("useWorkspace — governed portfolio context", () => {
     expect(coverage.disclosure).toContain("NOT a fully consolidated");
   });
 
+  it("keeps the CLIENT axis free of source portfolios", async () => {
+    // The client index is the tenant axis. A source portfolio appearing there is
+    // the defect that made "Client = direct_001, Portfolio = Total" reachable.
+    const client = makeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+    await waitFor(() => expect(result.current.portfolios.length).toBeGreaterThan(0));
+    const clientIds = result.current.portfolios.map((p) => p.client_id);
+    expect(clientIds).toEqual(["ERE"]);
+    const portfolioIds = CONTEXT_INDEX.contexts
+      .filter((c) => c.context_kind === "portfolio")
+      .map((c) => c.context_id);
+    expect(portfolioIds.length).toBeGreaterThan(0);
+    for (const id of portfolioIds) expect(clientIds).not.toContain(id);
+  });
+
+  it("changing the client does not change the portfolio context", async () => {
+    const client = makeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+    await waitFor(() => expect(result.current.portfolioContexts.length).toBe(7));
+    act(() => result.current.setSelectedContextId("acquired_001"));
+    act(() => result.current.setPortfolio("ERE"));
+    expect(result.current.selectedContextId).toBe("acquired_001");
+  });
+
+  it("changing the reporting run does not change the portfolio context", async () => {
+    const client = makeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+    await waitFor(() => expect(result.current.portfolioContexts.length).toBe(7));
+    act(() => result.current.setSelectedContextId("direct"));
+    act(() => result.current.setRun("mi_2025_12"));
+    expect(result.current.selectedContextId).toBe("direct");
+  });
+
   it("falls back to a single Total scope when no governed hierarchy exists", async () => {
     const client = makeClient({
       getPortfolioContext: vi.fn(async () => ({

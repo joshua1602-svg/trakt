@@ -82,21 +82,37 @@ class TestPlatformDiscovery(unittest.TestCase):
         if getattr(self, "_ctx", None):
             self._ctx.stop()
 
-    def test_snapshots_derived_from_source_portfolio_id(self):
-        # Portfolio entries come from source_portfolio_id → direct_001 selectable.
+    def test_snapshots_are_the_client_axis_not_source_portfolios(self):
+        """``/mi/snapshots`` is the TENANT axis.
+
+        It used to emit one entry per ``source_portfolio_id``, which put
+        ``direct_001`` into the top-level Client selector alongside the governed
+        Portfolio selector. Two controls then described the same thing, and
+        "Client = direct_001, Portfolio = Total" was a reachable, contradictory
+        state. The client is deployment configuration; source portfolios are
+        served by ``/mi/portfolio-context``.
+        """
         with tempfile.TemporaryDirectory() as td:
             c = self._client(Path(td))
             idx = c.get("/mi/snapshots").json()
             self.assertEqual(len(idx["portfolios"]), 1)
             pf = idx["portfolios"][0]
-            self.assertEqual(pf["client_id"], "direct_001")   # not "ERE"
-            self.assertEqual(pf.get("source_portfolio_id"), "direct_001")
-            self.assertEqual(pf["label"], "Direct Book 001")
+            self.assertEqual(pf["client_id"], "ERE")          # the tenant
+            self.assertNotEqual(pf["client_id"], "direct_001")
+            self.assertEqual(pf["label"], "ERE")
             self.assertEqual(len(pf["runs"]), 1)
-            self.assertEqual(pf["runs"][0]["run_id"], "latest")
             self.assertEqual(pf["runs"][0]["reporting_date"], "2026-01-31")
             self.assertGreater(pf["runs"][0]["loan_count"], 0)
             self.assertNotEqual(idx["source"], "unavailable")
+
+    def test_the_client_axis_never_contains_a_source_portfolio(self):
+        with tempfile.TemporaryDirectory() as td:
+            c = self._client(Path(td))
+            clients = {pf["client_id"] for pf in c.get("/mi/snapshots").json()["portfolios"]}
+            portfolios = {p["portfolio_id"]
+                          for p in c.get("/mi/portfolio-context").json()["portfolios"]}
+            self.assertIn("direct_001", portfolios)   # it IS a portfolio
+            self.assertEqual(clients & portfolios, set())  # and never a client
 
     def test_reporting_date_from_data_cut_off_date(self):
         # Live-shaped: no reporting_date column, only data_cut_off_date populated.
@@ -107,13 +123,25 @@ class TestPlatformDiscovery(unittest.TestCase):
             self.assertEqual(run["reporting_date"], "2026-01-31")   # NOT null
             self.assertIsNotNone(run["reporting_date"])
 
-    def test_snapshot_loads_direct_001_latest(self):
+    def test_snapshot_loads_for_the_client_run(self):
         with tempfile.TemporaryDirectory() as td:
             c = self._client(Path(td), date_col="data_cut_off_date")
-            snap = c.get("/mi/snapshot?portfolioId=direct_001/latest").json()
+            snap = c.get("/mi/snapshot?portfolioId=ERE/latest").json()
             self.assertTrue(snap.get("ok"))
             self.assertTrue(snap.get("kpis"))
             self.assertEqual((snap.get("portfolio") or {}).get("reporting_date"), "2026-01-31")
+
+    def test_a_portfolio_context_scopes_the_snapshot(self):
+        """Scope comes from the governed portfolio context — never from the
+        client selector accidentally naming a source portfolio."""
+        with tempfile.TemporaryDirectory() as td:
+            c = self._client(Path(td), date_col="data_cut_off_date")
+            whole = c.get("/mi/snapshot?portfolioId=ERE/latest").json()
+            scoped = c.get("/mi/snapshot?portfolioId=ERE/latest"
+                           "&portfolioContext=direct_001").json()
+            self.assertEqual(scoped["loan_count"], whole["loan_count"])  # sole book
+            self.assertEqual(
+                scoped["portfolioScope"]["scope"]["portfolio_ids"], ["direct_001"])
 
     def test_source_portfolios_lenses_from_platform_canonical(self):
         with tempfile.TemporaryDirectory() as td:

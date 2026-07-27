@@ -346,7 +346,7 @@ _RATE_BINS = [0, 3, 4, 5, 6, 7, 8, 100]
 _RATE_LABELS = ["<3%", "3–4%", "4–5%", "5–6%", "6–7%", "7–8%", "8%+"]
 
 
-def _strat_series(df: pd.DataFrame, key: str):
+def _strat_series(df: pd.DataFrame, key: str, scope=None):
     """The per-row band/category label for a funded stratification dimension.
     LTV and age reuse the SAME bands as the cohort composition lens (one banding,
     no drift between the two views); region/product read categorical columns;
@@ -357,10 +357,7 @@ def _strat_series(df: pd.DataFrame, key: str):
         series, _header = _cohorts._dimension_series(df, key, "Y")
         return series
     if key == "region":
-        for col in ("geographic_region_collateral", "geographic_region_obligor", "region"):
-            if col in df.columns and df[col].notna().any():
-                return df[col].astype("string")
-        return None
+        return region_series(df, scope)
     if key == "product":
         for col in ("product_type", "product", "loan_product"):
             if col in df.columns and df[col].notna().any():
@@ -412,7 +409,8 @@ _STRAT_SOURCE_COLUMNS: Dict[str, tuple] = {
             "original_ltv_bucket"),
     "age": ("borrower_age", "borrower_age_bucket", "youngest_borrower_age",
             "youngest_borrower_age_bucket"),
-    "region": ("geographic_region_collateral", "geographic_region_obligor", "region"),
+    "region": ("canonical_region_detail", "canonical_region_reporting",
+               "geographic_region_collateral", "geographic_region_obligor", "region"),
     "product": ("product_type", "product", "loan_product"),
     "rate": ("current_interest_rate",),
     "vintage": ("origination_date", "vintage_year"),
@@ -425,6 +423,32 @@ def _strat_columns_present(df: pd.DataFrame, key: str) -> bool:
     """True when the tape carries a source column for this dimension at all."""
     cols = set(getattr(df, "columns", []))
     return any(c in cols for c in _STRAT_SOURCE_COLUMNS.get(key, ()))
+
+
+def region_series(df: pd.DataFrame, scope=None):
+    """The governed region label per row, at the granularity the scope calls for.
+
+    A single source portfolio renders its most granular governed value
+    (``canonical_region_detail``) — London stays London. A GROUPED scope (Total /
+    Direct / Acquired) renders the consolidated reporting taxonomy
+    (``canonical_region_reporting``), because that is the only vocabulary in which
+    separately-sourced books can be added together honestly.
+
+    Falls back to the raw canonical fields when no taxonomy is configured, so a
+    deployment without region harmonisation behaves exactly as before. Nothing
+    here cases, renames or merges a region: the values were resolved once, at the
+    canonical layer, and are read back as-is.
+    """
+    from engine import region_taxonomy as _region
+
+    grouped = scope is not None and len(getattr(scope, "portfolio_ids", ()) or ()) > 1
+    preferred = ([_region.FIELD_REPORTING, _region.FIELD_DETAIL] if grouped
+                 else [_region.FIELD_DETAIL, _region.FIELD_REPORTING])
+    for col in preferred + ["geographic_region_collateral",
+                            "geographic_region_obligor", "region"]:
+        if col in df.columns and df[col].notna().any():
+            return df[col].astype("string")
+    return None
 
 
 def _strat_coverage(df: pd.DataFrame, key: str, scope) -> Dict[str, Any]:
@@ -441,7 +465,7 @@ def _strat_coverage(df: pd.DataFrame, key: str, scope) -> Dict[str, Any]:
         try:
             part = df[df["source_portfolio_id"].astype(str).str.strip().str.casefold()
                       == pid.strip().casefold()] if "source_portfolio_id" in df.columns else df
-            series = _strat_series(part, key)
+            series = _strat_series(part, key, scope)
             if series is not None and series.notna().sum() > 0:
                 contributing.append(pid)
             else:
@@ -469,7 +493,7 @@ def _funded_stratifications(df: pd.DataFrame, scope=None) -> List[Dict[str, Any]
     for key, label in _STRAT_DIMS:
         entry: Dict[str, Any] = {"key": key, "label": label, "bars": []}
         try:
-            series = _strat_series(df, key)
+            series = _strat_series(df, key, scope)
             if series is None:
                 # Distinguish "the tape does not carry this at all" from "the
                 # column is there but empty for these portfolios" — the two mean

@@ -97,6 +97,28 @@ export class HttpAgentClient implements AgentClient {
     this.baseUrl = baseUrl.replace(/\/$/, "");
   }
 
+  /**
+   * A 404 from the MI Agent API almost always means the BASE URL is wrong, not
+   * that the route is missing — most often an absolute `http://localhost:8000`
+   * base in an environment (Codespaces, any forwarded port) where the browser
+   * cannot reach the API host directly, so the forwarding proxy answers instead.
+   * Saying so turns a mystifying "404" into a one-line fix.
+   */
+  private describeStatus(res: Response, path: string): string {
+    const where = this.baseUrl || "(same origin)";
+    if (res.status === 404) {
+      const absolute = /^https?:\/\//i.test(this.baseUrl);
+      const hint = absolute
+        ? ` The base URL ${this.baseUrl} is absolute — if the app is served from `
+          + "another host (Codespaces / a forwarded port) the browser cannot reach "
+          + "it. Use VITE_AGENT_API_URL=/ so the dev-server proxy forwards to the API."
+        : " Check that the MI Agent API is running and that the dev-server proxy "
+          + "forwards this path.";
+      return `MI Agent API returned 404 for ${path} (base ${where}).${hint}`;
+    }
+    return `MI Agent API returned ${res.status} ${res.statusText} for ${path}`;
+  }
+
   private async getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
     let res: Response;
     try {
@@ -105,7 +127,7 @@ export class HttpAgentClient implements AgentClient {
       if ((err as Error)?.name === "AbortError") throw new AgentError("Request aborted", err);
       throw new AgentError(`Could not reach the MI Agent API at ${this.baseUrl}.`, err);
     }
-    if (!res.ok) throw new AgentError(`MI Agent API returned ${res.status} ${res.statusText}`);
+    if (!res.ok) throw new AgentError(this.describeStatus(res, path));
     try {
       return (await res.json()) as T;
     } catch (err) {
@@ -269,7 +291,7 @@ export class HttpAgentClient implements AgentClient {
     }
 
     if (!res.ok) {
-      throw new AgentError(`MI Agent API returned ${res.status} ${res.statusText}`);
+      throw new AgentError(this.describeStatus(res, "/mi/query"));
     }
 
     let body: ApiResponse;

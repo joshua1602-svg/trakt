@@ -38,6 +38,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Tuple
 
+import pandas as pd
+
 from mi_agent.mi_query_validator import load_mi_semantics
 
 from . import currency as currency_mod
@@ -183,16 +185,21 @@ def _pid_label(sub, pid: str) -> str:
 
 
 def _platform_snapshot_index() -> Optional[Dict[str, Any]]:
-    """Portfolio/run index derived from the loaded **platform canonical**.
+    """CLIENT / reporting-run index derived from the loaded **platform canonical**.
 
-    When ``MI_AGENT_PLATFORM_URI`` is configured the active dataset is the combined
-    platform canonical (no on-disk onboarding runs), so the portfolio /
-    reporting-date dropdowns are built from the loaded dataframe. Portfolios are
-    derived from ``source_portfolio_id`` (so ``direct_001`` is the selectable
-    funded portfolio), each with one run at that portfolio's latest reporting
-    date. Falls back to a single client entry when the canonical has no
-    provenance. Returns ``None`` when the platform canonical is not the active
-    source.
+    This is the TENANT axis, and only the tenant axis. It previously emitted one
+    entry per ``source_portfolio_id``, which put ``direct_001`` / ``acquired_001``
+    into the top-level Client selector — two controls then described the same
+    thing, and a client of ``direct_001`` with a portfolio of ``Total`` was a
+    reachable, self-contradictory state.
+
+    The client is deployment configuration (``dependencies.default_tenant_id``),
+    never a row value from the tape. Source portfolios are the PORTFOLIO axis and
+    are served by ``/mi/portfolio-context``; they must not appear here.
+
+    Runs are the reporting dates the platform canonical actually carries, so the
+    reporting-date control stays data-driven — and selecting one changes only the
+    date, never the portfolio.
     """
     if data_source_kind() != KIND_PLATFORM_CANONICAL:
         return None
@@ -201,39 +208,53 @@ def _platform_snapshot_index() -> Optional[Dict[str, Any]]:
     except Exception as exc:  # noqa: BLE001 - discovery must never 500
         logger.warning("platform snapshot index: dataframe load failed: %s", exc)
         return None
-    run_id = os.environ.get("MI_AGENT_RUN_ID") or "latest"
 
-    portfolios: List[Dict[str, Any]] = []
-    if "source_portfolio_id" in df.columns:
-        ids = df["source_portfolio_id"].dropna().astype(str).str.strip()
-        distinct = sorted({p for p in ids.unique() if p and p.lower() != "nan"})
-        for pid in distinct:
-            sub = df[ids == pid]
-            portfolios.append({
-                "client_id": pid,                    # React selects on client_id
-                "label": _pid_label(sub, pid),
-                "source_portfolio_id": pid,
-                "runs": [{
-                    "run_id": run_id,
-                    "reporting_date": _platform_reporting_date(sub, run_id),
-                    "loan_count": int(len(sub)),
-                    "current_outstanding_balance": round(snapshots_mod._balance_sum(sub), 2),
-                }],
-            })
-
-    if not portfolios:  # no provenance → single client entry (prior behaviour)
+    from .dependencies import default_tenant_id
+    try:
+        client_id = default_tenant_id()
+    except Exception:  # noqa: BLE001 - fall back to the dataset's own hint
         client_id = _platform_client_id(df)
-        portfolios = [{
-            "client_id": client_id, "label": str(client_id).upper(),
-            "runs": [{
-                "run_id": run_id,
-                "reporting_date": _platform_reporting_date(df, run_id),
-                "loan_count": int(len(df)),
-                "current_outstanding_balance": round(snapshots_mod._balance_sum(df), 2),
-            }],
-        }]
 
-    return {"portfolios": portfolios, "source": data_source_label()}
+    default_run = os.environ.get("MI_AGENT_RUN_ID") or "latest"
+    runs = _platform_runs(df, default_run)
+    return {
+        "portfolios": [{
+            "client_id": client_id,
+            "label": str(client_id).upper(),
+            "runs": runs,
+        }],
+        "source": data_source_label(),
+    }
+
+
+def _platform_runs(df, default_run: str) -> List[Dict[str, Any]]:
+    """One run per reporting date present in the platform canonical (oldest first).
+
+    A combined tape may carry several cut-off dates (books cut on different
+    dates), so the reporting-date control lists what the data actually holds. The
+    counts here are the WHOLE client at that date — portfolio scoping is applied
+    downstream from the governed portfolio context, never by this index.
+    """
+    date_col = next((c for c in ("reporting_date", "data_cut_off_date", "cut_off_date")
+                     if c in getattr(df, "columns", [])), None)
+    if date_col is not None:
+        dates = pd.to_datetime(df[date_col], errors="coerce")
+        as_iso = dates.dt.date.astype("string")
+        distinct = sorted(as_iso.dropna().unique().tolist())
+        if distinct:
+            return [{
+                "run_id": value,
+                "reporting_date": value,
+                "loan_count": int((as_iso == value).sum()),
+                "current_outstanding_balance": round(
+                    snapshots_mod._balance_sum(df[as_iso == value]), 2),
+            } for value in distinct]
+    return [{
+        "run_id": default_run,
+        "reporting_date": _platform_reporting_date(df, default_run),
+        "loan_count": int(len(df)),
+        "current_outstanding_balance": round(snapshots_mod._balance_sum(df), 2),
+    }]
 
 
 def _blob_platform_index(root: str) -> Optional[Dict[str, Any]]:
@@ -301,17 +322,36 @@ def _resolve_run_dataframe(client_id: str, run_id: str, root: Optional[str]):
     info = data_source_info()
     if info.get("client_id") == client_id and info.get("run_id") == run_id:
         return get_dataframe(), info
-    # Platform canonical: the combined dataset IS the run. Serve it for the
-    # synthesized portfolio/run from _platform_snapshot_index(); when the requested
-    # id is a source_portfolio_id present in the canonical, scope to that book.
+    # Platform canonical: the combined dataset IS the run for the client.
+    #
+    # This deliberately does NOT narrow by treating ``client_id`` as a
+    # source_portfolio_id. That legacy shortcut was how a Client selection could
+    # silently narrow the book to one portfolio while the Portfolio selector
+    # still read "Total". Portfolio scope has exactly one owner — the governed
+    # portfolio context — and it is applied by the routes, above this resolver.
+    #
+    # The run is honoured where the tape carries reporting dates, so choosing a
+    # reporting date changes the date and nothing else.
     if data_source_kind() == KIND_PLATFORM_CANONICAL:
-        df = get_dataframe()
-        if client_id and "source_portfolio_id" in df.columns:
-            ids = df["source_portfolio_id"].astype(str).str.strip()
-            if (ids == client_id).any():
-                df = df[ids == client_id]
-        return df, info
+        return _platform_run_frame(get_dataframe(), run_id), info
     return None, None
+
+
+def _platform_run_frame(df, run_id: Optional[str]):
+    """The platform canonical narrowed to one reporting date, when it is dated.
+
+    ``latest`` (or an unrecognised run) returns the whole tape, which is the
+    prior behaviour for a single-cut platform.
+    """
+    if df is None or not run_id or str(run_id).lower() == "latest":
+        return df
+    date_col = next((c for c in ("reporting_date", "data_cut_off_date", "cut_off_date")
+                     if c in getattr(df, "columns", [])), None)
+    if date_col is None:
+        return df
+    dates = pd.to_datetime(df[date_col], errors="coerce")
+    match = dates.dt.date.astype(str) == str(run_id)
+    return df[match] if match.any() else df
 
 
 #: A trailing dated (or ``latest``) folder in a pipeline snapshot pointer.

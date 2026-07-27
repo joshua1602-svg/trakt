@@ -28,12 +28,18 @@ Dimensions that need a source the funded tape lacks are reported in
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List, Optional, Tuple
 
+import numpy as np
 import pandas as pd
 
 from analytics_lib.dates import coerce_dates
 from analytics_lib.numeric import coerce_numeric
+
+from engine import region_taxonomy as _region
+
+logger = logging.getLogger("mi_agent_api.funded_prep")
 
 # Percent-vs-fraction detector (mirrors analytics_lib.buckets median heuristic):
 # an LTV column whose median exceeds this is treated as a percentage (÷100).
@@ -174,26 +180,133 @@ def _reporting_date(out: pd.DataFrame) -> Optional[pd.Series]:
 
 
 def _derive_youngest_age(out: pd.DataFrame, derived: List[str]) -> None:
-    """Derive ``youngest_borrower_age`` from borrower DOBs as of the reporting
-    date when no explicit, populated age field exists. The youngest borrower is
-    the one with the latest DOB, i.e. the MINIMUM age across borrowers."""
-    if "youngest_borrower_age" in out.columns and _to_num(out["youngest_borrower_age"]).notna().any():
-        return
+    """Derive ``youngest_borrower_age`` from borrower DOBs as of the reporting date.
+
+        borrower age        = completed years between DOB and the reporting date
+        youngest borrower   = MINIMUM valid age across all borrower DOB fields
+                              (the youngest borrower has the latest DOB)
+
+    Applied ROW-WISE, filling only the rows that have no explicit age. That
+    matters on a combined platform canonical: the frame carries every source
+    portfolio at once, so a column-level "already populated?" test is answered by
+    whichever book happens to supply an age, and every other book is then skipped.
+    That is precisely why an acquired book delivering ``Borrower 1/2 DOB`` showed
+    a null borrower age while the direct book — which supplies an explicit age —
+    rendered fine.
+
+    One derivation serves every funded portfolio. Nothing here reads
+    ``source_portfolio_type``: a book gets an age because it supplied a DOB and a
+    reporting date, not because of what kind of book it is. Rows with no valid
+    DOB keep NULL — a missing date of birth is never age zero.
+    """
     dob_cols = [c for c in _DOB_FIELDS if c in out.columns]
     rd = _reporting_date(out)
     if not dob_cols or rd is None:
         return
+
     ages = pd.DataFrame(index=out.index)
     for c in dob_cols:
         dob = coerce_dates(out[c])
-        ages[c] = (rd - dob).dt.days / 365.25
+        # Age is undefined for a DOB at/after the reporting date (a bad parse or
+        # a placeholder); leave those rows null rather than emitting a negative.
+        years = (rd - dob).dt.days / 365.25
+        ages[c] = years.where(years >= 0)
     youngest = ages.min(axis=1, skipna=True)  # youngest borrower => minimum age
-    if youngest.notna().any():
-        # Completed years (floor) — 77.8 years of age is 77, not 78.
-        import numpy as np
-        out["youngest_borrower_age"] = np.floor(youngest).astype("Int64")
+    if not youngest.notna().any():
+        return
+    # Completed years (floor) — 77.8 years of age is 77, not 78.
+    computed = np.floor(youngest).astype("Int64")
+
+    existing = (_to_num(out["youngest_borrower_age"]).astype("Int64")
+                if "youngest_borrower_age" in out.columns
+                else pd.Series(pd.NA, index=out.index, dtype="Int64"))
+    filled = existing.where(existing.notna(), computed)
+    if filled.notna().sum() > existing.notna().sum():
+        out["youngest_borrower_age"] = filled
         if "youngest_borrower_age" not in derived:
             derived.append("youngest_borrower_age")
+
+
+def _coalesce_group_dimensions(out: pd.DataFrame) -> List[str]:
+    """Fill each group dimension's catalogue primary from its alternatives, ROW-WISE.
+
+    A ``group`` dimension is satisfied by any of several interchangeable source
+    fields — region may arrive as obligor / collateral / collateral_geography,
+    channel as origination_channel / broker_channel. Which one a book supplies is
+    a delivery detail, so the first populated alternative is coalesced onto the
+    catalogue primary and MI queries ("by region") resolve either way.
+
+    Row-wise, not column-wise. On a combined platform canonical the primary
+    column exists as soon as ONE portfolio supplies it, and a column-level "is
+    the primary already here?" test then skips every other book — which is why an
+    acquired tape carrying a region under a different canonical name reported
+    "region not supplied" while the direct book rendered.
+
+    Returns the alias notes for the preparation report, so the coalescing is
+    visible in provenance rather than silent.
+    """
+    notes: List[str] = []
+    for spec in _DIM_SPEC.values():
+        if spec.get("kind") != "group":
+            continue
+        primary = spec["primary"]
+        sources = [s for s in spec["sources"] if s in out.columns]
+        if not sources:
+            continue
+        filled = (out[primary].copy() if primary in out.columns
+                  else pd.Series(pd.NA, index=out.index, dtype="object"))
+        blank = _blank_mask(filled)
+        # Per-dimension, so one dimension's coalescing never decides whether
+        # another's result is written back.
+        changed = False
+        for alt in sources:
+            if alt == primary or not blank.any():
+                continue
+            take = blank & ~_blank_mask(out[alt])
+            if not take.any():
+                continue
+            filled = filled.mask(take, out[alt])
+            blank = _blank_mask(filled)
+            changed = True
+            notes.append(f"{primary}<-{alt} ({int(take.sum())} rows)")
+        if changed:
+            out[primary] = filled
+    return notes
+
+
+def _apply_region_taxonomy(out: pd.DataFrame, client_id: Optional[str] = None
+                           ) -> Dict[str, Any]:
+    """Stamp the governed region detail / reporting columns onto a prepared frame.
+
+    Harmonisation happens HERE, in the canonical preparation layer, so every
+    channel — charts, MI queries, geography, exports — reads one already-resolved
+    vocabulary. Nothing downstream renames, cases or consolidates a region, and
+    the runtime never asks an LLM to classify one. A deployment with no taxonomy
+    configured gets a no-op and behaves exactly as before.
+    """
+    try:
+        taxonomy = _region.resolve_taxonomy(client_id or _client_hint(out))
+        return _region.apply(out, taxonomy)
+    except Exception as exc:  # noqa: BLE001 - harmonisation must never break prep
+        logger.warning("region harmonisation skipped: %s", exc)
+        return {}
+
+
+def _client_hint(out: pd.DataFrame) -> Optional[str]:
+    """The client this frame belongs to, for per-client taxonomy selection."""
+    import os
+    for col in ("client_id", "trakt_client_id"):
+        if col in out.columns:
+            values = [v for v in out[col].dropna().astype(str).unique() if v.strip()]
+            if len(values) == 1:
+                return values[0]
+    return os.environ.get("MI_AGENT_CLIENT_ID") or None
+
+
+def _blank_mask(series: pd.Series) -> pd.Series:
+    """True where a categorical value is absent (null, empty or a null token)."""
+    text = series.astype(str).str.strip().str.lower()
+    return series.isna() | text.isin(["", "nan", "none", "nat", "<na>", "null"])
 
 
 def _derive_borrower_type(out: pd.DataFrame, derived: List[str]) -> None:
@@ -203,17 +316,24 @@ def _derive_borrower_type(out: pd.DataFrame, derived: List[str]) -> None:
     and stratifications (e.g. LTV by borrower_type). NNEG exposure is joint-life,
     so the split matters for lifetime-mortgage risk. No second-applicant column
     present ⇒ not derivable (skipped)."""
-    if "borrower_type" in out.columns and out["borrower_type"].astype(str).str.strip().ne("").any():
-        return
     cols = [c for c in _SECOND_BORROWER_FIELDS if c in out.columns]
     if not cols:
         return
-    import numpy as np
     present = pd.Series(False, index=out.index)
     for c in cols:
-        v = out[c].astype(str).str.strip().str.lower()
-        present = present | (out[c].notna() & ~v.isin(["", "nan", "none"]))
-    out["borrower_type"] = np.where(present.to_numpy(), "joint", "single")
+        present = present | ~_blank_mask(out[c])
+    computed = pd.Series(np.where(present.to_numpy(), "joint", "single"),
+                         index=out.index, dtype="object")
+
+    # Row-wise, for the same reason as the age derivation: on a combined
+    # platform canonical one book supplying borrower_type must not suppress the
+    # derivation for every other book.
+    existing = (out["borrower_type"] if "borrower_type" in out.columns
+                else pd.Series(pd.NA, index=out.index, dtype="object"))
+    gaps = _blank_mask(existing)
+    if not gaps.any():
+        return
+    out["borrower_type"] = existing.mask(gaps, computed)
     if "borrower_type" not in derived:
         derived.append("borrower_type")
 
@@ -248,14 +368,30 @@ def augment_platform_canonical_dimensions(df: pd.DataFrame) -> Tuple[pd.DataFram
     an already-typed platform canonical, WITHOUT the full funded-tape prep (no LTV
     re-derivation, no dedup, no numeric coercion of existing columns).
 
-    Purely additive and idempotent: each field is added only when its source
-    columns exist and it is not already populated. Used by the MI API's platform
-    canonical path so the MI Agent sees these dimensions without an onboarding
-    re-run — the derivation happens at read time, not at onboarding time."""
+    Purely additive and idempotent, and gap-filling ROW-WISE — the platform
+    canonical is the combined tape for every source portfolio, so a field one
+    book already supplies must not suppress the derivation for the others. Used
+    by the MI API's platform canonical path so the MI Agent sees these dimensions
+    without an onboarding re-run — the derivation happens at read time, not at
+    onboarding time."""
     out = df.copy()
     derived: List[str] = []
     _derive_youngest_age(out, derived)   # DOBs → youngest_borrower_age (age_bucket)
     _derive_borrower_type(out, derived)  # second-applicant presence → single/joint
+    # Region / channel arrive under different canonical names per book; coalesce
+    # them onto the catalogue primary so a query for "region" resolves for EVERY
+    # portfolio in the combined tape, not only the one that named it the primary.
+    for note in _coalesce_group_dimensions(out):
+        primary = note.split("<-", 1)[0]
+        if primary not in derived:
+            derived.append(primary)
+    # Governed region harmonisation: one shared vocabulary across books, with the
+    # source granularity retained alongside it. Deterministic and persisted — no
+    # LLM is consulted on this path.
+    if _apply_region_taxonomy(out).get("applied"):
+        for f in (_region.FIELD_DETAIL, _region.FIELD_REPORTING):
+            if f not in derived:
+                derived.append(f)
     return out, derived
 
 
@@ -308,14 +444,7 @@ def prepare_funded_mi_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str,
     # Group dimensions: alias the first present interchangeable source onto the
     # catalogue primary so MI queries (e.g. "by region") resolve regardless of
     # which region/channel field the source supplied (obligor vs collateral, etc.).
-    group_aliases: List[str] = []
-    for dim, spec in _DIM_SPEC.items():
-        if spec.get("kind") != "group" or spec["primary"] in out.columns:
-            continue
-        alt = next((s for s in spec["sources"] if s in out.columns), None)
-        if alt:
-            out[spec["primary"]] = out[alt]
-            group_aliases.append(f"{spec['primary']}<-{alt}")
+    group_aliases = _coalesce_group_dimensions(out)
 
     cols = set(out.columns)
     available: List[str] = []

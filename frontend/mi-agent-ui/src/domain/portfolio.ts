@@ -46,6 +46,10 @@ export interface PortfolioCapability {
   excluded_portfolios: string[];
   /** True when only some portfolios in scope contribute to this analysis. */
   partial: boolean;
+  /** False when the underlying data is reported for the contributing GROUP
+   * rather than attributed to each portfolio — an extract with no
+   * source-portfolio provenance. The backend's `detail` says so in words. */
+  attributed?: boolean;
 }
 
 export type PortfolioCapabilities = Partial<
@@ -90,6 +94,8 @@ export interface PortfolioContextIndex {
   portfolio_types: string[];
   /** Portfolios with governed pipeline data; `null` when not discoverable. */
   pipeline_portfolios: string[] | null;
+  /** False when the pipeline extract carries no per-portfolio provenance. */
+  pipeline_attributed?: boolean;
   error?: string;
 }
 
