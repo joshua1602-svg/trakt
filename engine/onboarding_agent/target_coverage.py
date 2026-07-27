@@ -47,6 +47,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
+from . import source_value_rules
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Modes whose target contract is the MI semantics registry (vs an ESMA annex).
@@ -114,6 +116,11 @@ D_PARSE = "parse_or_header_blocker"
 # ND code outside nd_allowed). Surfaced as a non-blocking confirmation when a
 # valid regime fallback exists; never silently applied.
 D_INVALID_DEFAULT = "invalid_default_value"
+# A specific SOURCE VALUE in a mapped column that the deterministic parser
+# rejects (e.g. a date column containing "TBC"). Non-blocking: the operator
+# decides what that value means for this source and contract, and the decision is
+# reapplied to later packs. See source_value_rules.
+D_SOURCE_VALUE = "source_value_normalisation"
 
 # Default asset-class config layer for ESMA Annex 2 (UK Equity Release).
 _ASSET_CONFIG_DEFAULT = _REPO_ROOT / "config" / "asset" / "product_defaults_ERM.yaml"
@@ -2338,6 +2345,19 @@ def _apply_funded_role_guardrail(
     return [], note, "", pipe_disp
 
 
+def _load_registry_fields(registry_path: Optional[str | Path]) -> Dict[str, Any]:
+    """The canonical field registry's ``fields`` map (empty on any failure)."""
+    path = Path(registry_path) if registry_path else (
+        _REPO_ROOT / "config" / "system" / "fields_registry.yaml")
+    if not path.is_absolute() and not path.exists():
+        path = _REPO_ROOT / path
+    try:
+        data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+    except Exception:  # noqa: BLE001
+        return {}
+    return data.get("fields", {}) or {}
+
+
 def _apply_derived_source_guard(
     tf: Dict[str, Any],
     cands: List[Dict[str, Any]],
@@ -2594,19 +2614,25 @@ def build_human_decision_queue(
     mode: str,
     coverage_rows: List[Dict[str, Any]],
     residual_rows: List[Dict[str, Any]],
+    source_value_candidates: Optional[List[Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
     """Compact, target-decision-led queue.
 
     Built from target coverage gaps/conflicts (28a) and *blocking* residuals
     (28b) only — never from every source column. Residual rows are not included
     unless they are genuinely blocking.
+
+    ``source_value_candidates`` are proposed source-value normalisations (a
+    mapped column carrying a value the deterministic parser rejects, e.g. a date
+    column containing ``TBC``). They are non-blocking: until an operator decides,
+    the value keeps failing as an ordinary parse error.
     """
     decisions: List[Dict[str, Any]] = []
     seq = 0
 
     def _add(decision_type, priority, target_field, source_file, source_column,
              issue, recommendation, options, blocking, operator_question,
-             evidence_summary, esma_code=""):
+             evidence_summary, esma_code="", extra=None):
         nonlocal seq
         seq += 1
         decisions.append({
@@ -2625,6 +2651,7 @@ def build_human_decision_queue(
             "blocking": blocking,
             "operator_question": operator_question,
             "evidence_summary": evidence_summary,
+            **(extra or {}),
         })
 
     for cov in coverage_rows:
@@ -2693,6 +2720,38 @@ def build_human_decision_queue(
             _add(D_EXTENSION, "low", "", r["source_file"], r["source_column"],
                  r["residual_reason"], "Decide whether to extend the target contract.",
                  ["propose_extension", "ignore"], False, "", r["residual_reason"])
+
+    # Source-value normalisations: one decision per (mapped column, rejected
+    # value). Non-blocking by construction — an undecided value simply keeps
+    # failing deterministic parsing downstream, which is the safe default.
+    for c in (source_value_candidates or []):
+        value = c.get("source_value", "")
+        rows = c.get("affected_row_count", 0)
+        _add(D_SOURCE_VALUE, "medium", c.get("target_field", ""),
+             c.get("source_file", ""), c.get("source_column", ""),
+             f"source value {value!r} in '{c.get('source_column','')}' cannot be "
+             f"parsed as {c.get('canonical_format','')} for "
+             f"'{c.get('canonical_field','')}' ({rows} row(s))",
+             f"Decide what {value!r} means for this source. Approving "
+             f"'treat_source_value_as_null' records it as absent for this client, "
+             f"source portfolio, column and target contract only.",
+             [source_value_rules.ACTION_TREAT_AS_NULL, "defer"],
+             False,
+             f"Is {value!r} in '{c.get('source_column','')}' a placeholder for "
+             f"'no value', or a data error to correct at source?",
+             f"affected_rows={rows}; canonical_field={c.get('canonical_field','')}; "
+             f"format={c.get('canonical_format','')}",
+             extra={
+                 # Scope carried through to the 34 template so the approved
+                 # decision is self-describing and reapplicable.
+                 "target_contract_id": c.get("target_contract_id", ""),
+                 "canonical_field": c.get("canonical_field", ""),
+                 "source_value": value,
+                 "affected_row_count": rows,
+                 "client_id": c.get("client_id", ""),
+                 "source_portfolio_id": c.get("source_portfolio_id", ""),
+                 "source_schema_fingerprint": c.get("source_schema_fingerprint", ""),
+             })
 
     order = {"high": 0, "medium": 1, "low": 2}
     decisions.sort(key=lambda d: (order.get(d["priority"], 9), d["decision_type"],
@@ -2920,6 +2979,10 @@ def run_target_first_coverage(
     run_id: str = "",
     decisions_path: Optional[str | Path] = None,
     artefact_roles: Optional[Dict[str, str]] = None,
+    source_tables: Optional[List[Tuple[str, str, Any]]] = None,
+    scope_client_id: str = "",
+    source_portfolio_id: str = "",
+    source_schema_fingerprint: str = "",
 ) -> Dict[str, Any]:
     """Build + write the target-first coverage artefacts (28a/28b/28c).
 
@@ -2982,7 +3045,6 @@ def run_target_first_coverage(
     proxy_changes = apply_profile_proxy_derivations(
         coverage_rows, resolved_profile, run_id=run_id, context=context)
     residual_rows = build_source_residual_register(mode, evidence_rows, matched_by_key)
-    decision_rows = build_human_decision_queue(mode, coverage_rows, residual_rows)
 
     # --- Gate 4 decision application (deterministic, auditable) ---
     out = Path(output_dir)
@@ -2995,9 +3057,40 @@ def run_target_first_coverage(
     if decisions_file is None and template_path.exists():
         decisions_file = template_path  # auto-discover an in-project approved file
 
+    # --- Source-value normalisation candidates (proposed, never applied here) ---
+    # A mapped column carrying a value the deterministic parser rejects (e.g. a
+    # date column containing "TBC") becomes a non-blocking operator decision.
+    # Values an ALREADY-APPROVED rule covers are not re-asked, which is what makes
+    # a recurring pack quiet after the decision is settled once.
+    svr_context = source_value_rules.NormalisationContext(
+        client_id=(scope_client_id or client_id),
+        source_portfolio_id=(source_portfolio_id or client_id),
+        target_contract_id=cid, source_schema_fingerprint=source_schema_fingerprint)
+    approved_doc = tfd.load_decisions(decisions_file) if decisions_file else None
+    settled_rules = source_value_rules.rules_from_decisions(
+        tfd.approved_decisions(approved_doc), svr_context)
+    source_value_candidates: List[Dict[str, Any]] = []
+    if source_tables:
+        try:
+            registry_fields = _load_registry_fields(registry_path)
+            # Driven by the resolved source→canonical mappings, not the coverage
+            # matrix: a column can feed the canonical tape without being a field
+            # of the target contract, and a placeholder in it still needs a
+            # decision.
+            mapping_rows = source_value_rules.mapping_rows_from(
+                resolved_rows, coverage_rows)
+            source_value_candidates = source_value_rules.detect_candidates(
+                source_tables, mapping_rows, registry_fields, svr_context,
+                existing_rules=settled_rules)
+        except Exception:  # noqa: BLE001 — detection is advisory; never fail the run
+            source_value_candidates = []
+
+    decision_rows = build_human_decision_queue(
+        mode, coverage_rows, residual_rows, source_value_candidates)
+
     decision_application: Optional[Dict[str, Any]] = None
     if decisions_file is not None:
-        doc = tfd.load_decisions(decisions_file)
+        doc = approved_doc
         approved = tfd.approved_decisions(doc)
         coverage_rows, decision_rows, app_log = tfd.apply_decisions(
             coverage_rows, decision_rows, approved)
@@ -3011,6 +3104,21 @@ def run_target_first_coverage(
 
     paths = write_artifacts(output_dir, coverage_rows, residual_rows, decision_rows,
                             cid, csrc, mode)
+
+    # 28d — the operator-approved source-value normalisation rules in force.
+    # A first-class artefact rather than an annotation on 28a, because a rule is
+    # about a SOURCE COLUMN feeding a canonical field and that column need not be
+    # a target-contract row. Transformation consumes it through the handoff.
+    svr_path = out / "28d_source_value_rules.json"
+    svr_path.write_text(json.dumps({
+        "target_contract_id": cid,
+        "client_id": svr_context.client_id,
+        "source_portfolio_id": svr_context.source_portfolio_id,
+        "source_schema_fingerprint": svr_context.source_schema_fingerprint,
+        "rules": [r.as_row() for r in settled_rules],
+        "candidates_pending": source_value_candidates,
+    }, indent=2, default=str), encoding="utf-8")
+    paths["source_value_rules_json"] = str(svr_path)
 
     # 42 — Annex 2 regime/asset config validation (config-driven, source
     # independent). Written only for the Annex 2 target contract.

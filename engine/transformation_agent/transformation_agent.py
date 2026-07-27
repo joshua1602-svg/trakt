@@ -94,6 +94,9 @@ IT_OPERATOR_PENDING = "operator_decision_pending"
 IT_PENDING_PROJECTION = "pending_projection_rule"
 IT_SOURCE_ABSENT = "source_absent"
 IT_DERIVATION_FAILED = "derivation_failed"
+#: Values an operator approved as meaning "no value" for this source. Reported so
+#: the nulling is visible and counted — never silently applied.
+IT_SOURCE_VALUE_NORMALISED = "source_value_normalised"
 
 # Downstream owners (mirror the onboarding handoff vocabulary).
 OWN_TRANSFORMATION = "transformation_validation"
@@ -414,6 +417,12 @@ def build_transformation_package(
     #     a stale/unparseable raw source column that the resolved value supersedes.
     run_context_results = _materialise_run_context_fields(df, contract_rows, issues, handoff)
 
+    # 6a-pre2. Apply operator-approved SOURCE-VALUE normalisations BEFORE typing,
+    #     so an approved placeholder (e.g. "TBC" in a date column) is already NULL
+    #     when the parser runs and never becomes a parse failure. Unapproved bad
+    #     values are untouched and still fail deterministically.
+    normalisation_results = _apply_source_value_rules(df, contract_rows, issues, handoff)
+
     # 6a. Type-normalise the source columns already present in the tape. Gate 2
     #     treats ND codes as missing here; ND defaults are (re)materialised below.
     type_report = g2.normalize_types(df, registry_fields, dayfirst=dayfirst)
@@ -485,6 +494,7 @@ def build_transformation_package(
         type_report=type_report,
         enum_report=enum_report,
         derivation_results=derivation_results,
+        normalisation_results=normalisation_results,
         config_paths={
             "asset_config_path": asset_config_path,
             "regime_config_path": regime_config_path,
@@ -795,6 +805,71 @@ def _materialise_fields(
             df.loc[blank_mask, canonical] = value
         results[tf] = {"value_source": source, "materialised": True, "value": value}
     return results
+
+
+# --------------------------------------------------------------------------- #
+# Operator-approved source-value normalisation
+# --------------------------------------------------------------------------- #
+
+def _apply_source_value_rules(
+    df: pd.DataFrame, contract_rows: List[Dict[str, Any]], issues: _IssueLog,
+    handoff: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Dict[str, Any]]:
+    """Null the source values an operator approved as meaning "no value".
+
+    Runs BEFORE type normalisation: the parser never sees the placeholder, so an
+    approved value produces a null rather than a ``date_parse_failed``. Anything
+    NOT approved is left exactly as it is and still fails deterministically.
+
+    Every application is counted and reported as a non-blocking ``info`` issue
+    naming the original source value and the approved treatment, so nulling is
+    always visible in the issues artefact rather than silent.
+    """
+    from engine.onboarding_agent import source_value_rules as svr
+
+    handoff = handoff or {}
+    rules = svr.rules_from_rows(handoff.get("source_value_rules", []) or [])
+    # Fall back to the per-field rules on the contract when the manifest does not
+    # carry the roll-up (older handoff packages remain consumable).
+    if not rules:
+        rules = svr.rules_from_rows(
+            [r for row in contract_rows
+             for r in (row.get("source_value_rules", []) or [])])
+    if not rules:
+        return {}
+
+    # Scope comes from the handoff's explicit source_value_scope, recorded when
+    # the rules were approved. The manifest's own ``client_id`` holds the SOURCE
+    # PORTFOLIO at the onboarding layer, so deriving the scope from it would
+    # mismatch every rule.
+    scope = handoff.get("source_value_scope") or {}
+    context = svr.NormalisationContext(
+        client_id=str(scope.get("client_id", "") or ""),
+        source_portfolio_id=str(scope.get("source_portfolio_id", "") or ""),
+        target_contract_id=str(scope.get("target_contract_id", "")
+                               or handoff.get("target_contract_id", "") or ""),
+        source_schema_fingerprint=str(scope.get("source_schema_fingerprint", "") or ""))
+
+    reports = svr.apply_rules(df, rules, contract_rows, context)
+    for canonical, report in reports.items():
+        for rule in report.get("rules", []):
+            count = int(rule.get("normalised_row_count", 0) or 0)
+            if count <= 0:
+                continue
+            issues.add(
+                severity="info", field=canonical, canonical_field=canonical,
+                esma_code="", issue_type=IT_SOURCE_VALUE_NORMALISED,
+                source_value_sample=str(rule.get("source_value", "")),
+                transformed_value_sample="",
+                description=(
+                    f"{count} row(s) of {rule.get('source_column', '')} carried "
+                    f"{rule.get('source_value', '')!r}, normalised to null under "
+                    f"operator decision {rule.get('decision_id', '') or '(unrecorded)'} "
+                    f"for target contract {rule.get('target_contract_id', '')}"),
+                blocking_for_validation=False, blocking_for_projection=False,
+                recommended_action="none — operator-approved source-value treatment",
+                downstream_owner=OWN_VALIDATION)
+    return reports
 
 
 # --------------------------------------------------------------------------- #
@@ -1283,6 +1358,7 @@ def _write_artefacts(
     type_report: Dict[str, Any], enum_report: Dict[str, Any],
     config_paths: Dict[str, str],
     derivation_results: Optional[Dict[str, Dict[str, Any]]] = None,
+    normalisation_results: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
 
     # 31 — transformed canonical tape (csv + json)
@@ -1380,6 +1456,13 @@ def _write_artefacts(
         "onboarding_lineage_source": "27_onboarding_handoff_lineage.json",
         "transformation_lineage": tx_rows,
         "source_date_precision": date_precision,
+        # Operator-approved source-value treatments actually applied, with the
+        # ORIGINAL source value and the row count each one nulled.
+        "source_value_normalisations": [
+            {k: v for k, v in rule.items() if k != "action"}
+            for report in (normalisation_results or {}).values()
+            for rule in report.get("rules", [])
+        ],
         "canonical_derivations": {
             t: {"derived_from": r.get("derived_from"), "rule": r.get("rule"),
                 "applied": r.get("applied"), "value_counts": r.get("value_counts")}
@@ -1404,6 +1487,12 @@ def _write_artefacts(
         "issue_count": len(issues),
         "blocking_for_validation_count": sum(1 for r in issues if r["blocking_for_validation"]),
         "blocking_for_projection_count": sum(1 for r in issues if r["blocking_for_projection"]),
+        # Non-blocking: rows an operator-approved source-value treatment nulled.
+        # Surfaced as a count so the nulling is visible without being a gate.
+        "source_value_normalised_row_count": sum(
+            int(r.get("normalised_row_count", 0) or 0)
+            for r in (normalisation_results or {}).values()),
+        "source_value_normalised_field_count": len(normalisation_results or {}),
         "next_agent": NEXT_AGENT,
         **readiness,
     }
@@ -1457,6 +1546,12 @@ def _write_artefacts(
         "transformation_status_counts": status_counts,
         "issue_count": len(issues),
         "issue_type_counts": issue_type_counts,
+
+        # Operator-approved source-value normalisations applied before parsing.
+        "source_value_normalised_row_count": sum(
+            int(r.get("normalised_row_count", 0) or 0)
+            for r in (normalisation_results or {}).values()),
+        "source_value_normalised_fields": sorted(normalisation_results or {}),
 
         # Deterministic canonical derivations applied (rule + parent field).
         "canonical_derivations": {

@@ -95,6 +95,10 @@ _FIELD_CONTRACT_COLUMNS = [
     "field_disposition", "disposition_source", "requires_client_input",
     "requires_operator_review", "requires_config", "requires_projection_rule",
     "requires_derivation", "blocking_for_validation", "blocking_for_projection",
+    # Operator-approved source-value normalisations for this field, scoped to
+    # this client / source / column / contract. Transformation applies them
+    # BEFORE type normalisation. See engine.onboarding_agent.source_value_rules.
+    "source_value_rules",
     "notes",
 ]
 
@@ -367,6 +371,9 @@ def build_field_contract(
             "handoff_classification": cls["handoff_classification"],
             "next_agent_action": cls["next_agent_action"],
             "downstream_owner": cls["downstream_owner"],
+            # Operator-approved source-value normalisations carried to
+            # Transformation, which applies them before any parsing.
+            "source_value_rules": list(row.get("source_value_rules", []) or []),
             "notes": row.get("decision_reason", "") or row.get("default_reason", ""),
         })
     return contract
@@ -823,6 +830,49 @@ def build_handoff_package(
     context_conflict, context_rows = _apply_run_context_to_contract(
         contract, lineage, run_context)
 
+    # Operator-approved source-value normalisations in force for this run, from
+    # the 28d artefact. Read there rather than off the field contract because a
+    # rule can apply to a mapped column that is not a target-contract field.
+    # Recorded on the manifest and in lineage so the treatment of a specific
+    # source value is auditable without opening the decisions file.
+    svr_doc = _read_json(project_dir / "28d_source_value_rules.json") or {}
+    source_value_rule_rows = list(svr_doc.get("rules", []) or [])
+    contract_by_canonical: Dict[str, Dict[str, Any]] = {}
+    for c in contract:
+        canonical = str(c.get("canonical_field") or "").strip()
+        if canonical:
+            contract_by_canonical.setdefault(canonical, c)
+    for rule in source_value_rule_rows:
+        # Annotate the field contract where the rule's field IS a contract row,
+        # so per-field visibility is preserved for those that are.
+        row = contract_by_canonical.get(str(rule.get("canonical_field") or ""))
+        if row is not None:
+            row.setdefault("source_value_rules", [])
+            if rule not in row["source_value_rules"]:
+                row["source_value_rules"].append(rule)
+            rule.setdefault("target_field", row.get("target_field", ""))
+        rule.setdefault("target_field", rule.get("canonical_field", ""))
+    for rule in source_value_rule_rows:
+        lineage.append({
+            "target_field": rule.get("target_field", ""),
+            "esma_code": "",
+            "canonical_field": rule.get("canonical_field", ""),
+            "source_file": rule.get("source_file", ""),
+            "source_column": rule.get("source_column", ""),
+            "mapping_confidence": "",
+            "classification": HC_SOURCE_MAPPED,
+            "downstream_owner": OWN_TRANSFORMATION,
+            "operator_decision_id": rule.get("decision_id", ""),
+            "operator_decision_status": "applied",
+            "llm_recommendation_id": "",
+            "lineage_note": (
+                f"source_value_normalisation source_value="
+                f"{rule.get('source_value', '')!r} treatment="
+                f"{rule.get('treatment', '')} "
+                f"contract={rule.get('target_contract_id', '')} "
+                f"approved_by={rule.get('approved_by', '') or 'operator'}"),
+        })
+
     counts = _counts(contract)
 
     # Blocking count is derived from the FINAL, post-application contract — not
@@ -899,6 +949,21 @@ def build_handoff_package(
         # for provenance and never replaces a date a source row already carries.
         "reporting_period_context": run_context.get("folder_period", ""),
         "reporting_period_context_date": run_context.get("folder_period_date", ""),
+
+        # Operator-approved source-value normalisations in force (scoped to this
+        # client / source portfolio / column / canonical field / target contract).
+        "source_value_rules": source_value_rule_rows,
+        "source_value_rule_count": len(source_value_rule_rows),
+        # The scope those rules were recorded under, carried verbatim from 28d.
+        # Downstream must match against THIS, not the manifest's ``client_id`` —
+        # at the onboarding layer that field holds the source portfolio, so
+        # re-deriving the scope here would silently mismatch every rule.
+        "source_value_scope": {
+            "client_id": svr_doc.get("client_id", ""),
+            "source_portfolio_id": svr_doc.get("source_portfolio_id", ""),
+            "target_contract_id": svr_doc.get("target_contract_id", "") or contract_id,
+            "source_schema_fingerprint": svr_doc.get("source_schema_fingerprint", ""),
+        },
 
         # Onboarding artefact references the next agent should read.
         "target_coverage_matrix_path": _p(project_dir, "28a_target_coverage_matrix.csv"),
@@ -983,11 +1048,16 @@ def build_handoff_package(
          "summary": {"classification_counts": counts["classification_counts"],
                      "owner_counts": counts["owner_counts"]},
          "rows": contract}, indent=2, default=str), encoding="utf-8")
+    def _cell(value: Any) -> Any:
+        # Structured columns (source_value_rules) render as JSON in the CSV so
+        # the artefact stays readable and machine-parseable, not a Python repr.
+        return json.dumps(value, default=str) if isinstance(value, (list, dict)) else value
+
     with open(contract_csv, "w", newline="", encoding="utf-8") as fh:
         w = csv.DictWriter(fh, fieldnames=_FIELD_CONTRACT_COLUMNS)
         w.writeheader()
         for c in contract:
-            w.writerow({k: c.get(k, "") for k in _FIELD_CONTRACT_COLUMNS})
+            w.writerow({k: _cell(c.get(k, "")) for k in _FIELD_CONTRACT_COLUMNS})
 
     lineage_path.write_text(json.dumps(
         {"target_contract_id": contract_id, "rows": lineage},

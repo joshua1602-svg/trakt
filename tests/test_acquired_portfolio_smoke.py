@@ -33,6 +33,7 @@ import unittest
 from pathlib import Path
 
 import pandas as pd
+import yaml
 
 _REPO = Path(__file__).resolve().parents[1]
 if str(_REPO) not in sys.path:
@@ -40,6 +41,7 @@ if str(_REPO) not in sys.path:
 
 from apps.blob_trigger_app import approvals as APPROVALS
 from apps.blob_trigger_app import backfill as BF
+from apps.blob_trigger_app import ops as OPS
 from apps.blob_trigger_app.layout import Layout
 from apps.blob_trigger_app.persistence import ProductionPersistence
 from apps.blob_trigger_app.source_registry import SourceRegistry
@@ -439,6 +441,224 @@ class TestAcquiredPackRecurrence(_AcquiredRunBase):
             selector=BF.PackSelector(pack_key=AP.pack_key_for_period(drifted)))
         self.assertEqual(len(held), 1)
         self.assertNotEqual(held[0]["status"], "processed")
+
+
+class TestSourceValuePlaceholderDecision(unittest.TestCase):
+    """The full operator loop for a placeholder value in the acquired tape.
+
+    The delivery carries ``TBC`` in ``Borrower 1 DOB``. End to end:
+
+      1. it fails deterministic parsing and holds the transformation gate — an
+         undecided placeholder is a data question, not something to guess at;
+      2. onboarding surfaces it as a NON-BLOCKING operator decision naming the
+         exact value, column and row count;
+      3. the operator approves ``treat_source_value_as_null``;
+      4. the rerun nulls it before parsing, the gate passes, and the nulling is
+         reported and counted rather than silent;
+      5. the NEXT pack from the same source reuses the decision — no second ask.
+    """
+
+    PLACEHOLDER_ROWS = 6
+
+    @classmethod
+    def setUpClass(cls):
+        cls._td = tempfile.TemporaryDirectory(prefix="acquired_tbc_")
+        cls.root = Path(cls._td.name)
+        AP.write_blob_tree(cls.root, dob_placeholder_rows=cls.PLACEHOLDER_ROWS)
+        cls.storage = Storage(cls.root)
+        cls.layout = Layout()
+        cls.persistence = ProductionPersistence(cls.storage, cls.layout)
+        cls.registry = SourceRegistry(
+            "blob://trakt-state/registry/source_registry.yaml", storage=cls.storage)
+        cls.out_dir = cls.root / "out"
+
+        # First sight of the source: one-click review, then promote, so later
+        # packs route deterministically and the placeholder decision is the only
+        # thing left to settle.
+        cls.first_pass = cls._backfill(
+            selector=BF.PackSelector(pack_key=AP.PACK_KEY))
+        cls.first_run_dir = cls._latest_portfolio_dir()
+        _AcquiredRunBase._approve_and_promote.__func__(cls, AP.SOURCE_PORTFOLIO_ID)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._td.cleanup()
+
+    @classmethod
+    def _backfill(cls, **kw):
+        return BF.run_backfill(
+            cls.storage, cls.persistence, cls.registry, container="raw-v2",
+            out_dir=str(cls.out_dir), **kw)
+
+    @classmethod
+    def _latest_portfolio_dir(cls):
+        runs = sorted(cls.out_dir.glob("orun_*"), key=lambda p: p.name)
+        return runs[-1] / "portfolios" / AP.SOURCE_PORTFOLIO_ID
+
+    def _queue(self, run_dir=None):
+        path = (run_dir or self.first_run_dir) / "28c_human_decision_queue.json"
+        return json.loads(path.read_text(encoding="utf-8")).get("rows", [])
+
+    def _placeholder_decisions(self, run_dir=None):
+        return [d for d in self._queue(run_dir)
+                if d.get("decision_type") == "source_value_normalisation"]
+
+    # -- 1 + 2: surfaced, non-blocking, undecided value still fails ---------- #
+
+    def test_placeholder_is_surfaced_as_an_operator_decision(self):
+        found = self._placeholder_decisions()
+        self.assertTrue(found, "TBC was not surfaced as a decision")
+        decision = next(d for d in found
+                        if d.get("canonical_field") == "borrower_1_DOB")
+        self.assertEqual(decision["source_value"], AP.DOB_PLACEHOLDER)
+        self.assertEqual(decision["source_column"], "Borrower 1 DOB")
+        self.assertEqual(decision["affected_row_count"], self.PLACEHOLDER_ROWS)
+
+    def test_the_decision_is_not_blocking(self):
+        decision = self._placeholder_decisions()[0]
+        self.assertFalse(decision["blocking"])
+        self.assertIn("treat_source_value_as_null", decision["options"])
+
+    def test_the_decision_carries_its_full_scope(self):
+        decision = self._placeholder_decisions()[0]
+        self.assertEqual(decision["client_id"], AP.CLIENT_ID)
+        self.assertEqual(decision["source_portfolio_id"], AP.SOURCE_PORTFOLIO_ID)
+        self.assertEqual(decision["target_contract_id"], "mi_semantics_field_registry")
+
+    def test_an_undecided_placeholder_still_fails_parsing(self):
+        issues = json.loads(
+            (self.first_run_dir / "output" / "transformation"
+             / "35_transformation_issues.json").read_text(encoding="utf-8"))
+        date_failures = [r for r in issues["rows"]
+                         if r["issue_type"] == "date_parse_failed"
+                         and r["canonical_field"] == "borrower_1_DOB"]
+        self.assertTrue(date_failures, "undecided TBC should still fail")
+        self.assertIn(AP.DOB_PLACEHOLDER, date_failures[0]["source_value_sample"])
+        self.assertTrue(date_failures[0]["blocking_for_validation"])
+
+    # -- 3 + 4: approve, rerun, gate passes, nulling is reported ------------- #
+
+    def test_approved_decision_clears_the_gate_and_is_reported(self):
+        run_dir = _approve_placeholder_and_rerun(self)
+
+        readiness = json.loads(
+            (run_dir / "output" / "transformation"
+             / "33_transformation_readiness.json").read_text(encoding="utf-8"))
+        self.assertTrue(readiness["ready_for_validation"])
+        self.assertEqual(readiness["blocking_for_validation_count"], 0)
+        # Non-blocking, but counted — not silent.
+        self.assertEqual(readiness["source_value_normalised_row_count"],
+                         self.PLACEHOLDER_ROWS)
+
+        issues = json.loads(
+            (run_dir / "output" / "transformation"
+             / "35_transformation_issues.json").read_text(encoding="utf-8"))
+        self.assertEqual(issues["issue_type_counts"].get("date_parse_failed", 0), 0)
+        warned = [r for r in issues["rows"]
+                  if r["issue_type"] == "source_value_normalised"]
+        self.assertEqual(len(warned), 1)
+        self.assertFalse(warned[0]["blocking_for_validation"])
+        self.assertEqual(warned[0]["source_value_sample"], AP.DOB_PLACEHOLDER)
+
+        tape = pd.read_csv(
+            run_dir / "output" / "transformation" / "31_transformed_canonical_tape.csv",
+            dtype=str)
+        self.assertEqual(len(tape), AP.ROW_COUNT)
+        self.assertEqual(int(tape["borrower_1_DOB"].isna().sum()),
+                         self.PLACEHOLDER_ROWS)
+        # Every surviving value is still a canonical ISO date.
+        self.assertTrue(tape["borrower_1_DOB"].dropna()
+                        .str.match(r"^\d{4}-\d{2}-\d{2}$").all())
+
+    def test_lineage_records_the_original_value_and_treatment(self):
+        run_dir = _approve_placeholder_and_rerun(self)
+        lineage = json.loads(
+            (run_dir / "output" / "transformation"
+             / "34_transformation_lineage.json").read_text(encoding="utf-8"))
+        applied = lineage["source_value_normalisations"]
+        self.assertEqual(len(applied), 1)
+        self.assertEqual(applied[0]["source_value"], AP.DOB_PLACEHOLDER)
+        self.assertEqual(applied[0]["treatment"], "null")
+        self.assertEqual(applied[0]["canonical_field"], "borrower_1_DOB")
+        self.assertEqual(applied[0]["source_column"], "Borrower 1 DOB")
+        self.assertEqual(applied[0]["normalised_row_count"], self.PLACEHOLDER_ROWS)
+        self.assertEqual(applied[0]["target_contract_id"],
+                         "mi_semantics_field_registry")
+
+        onboarding = json.loads(
+            (run_dir / "output" / "handoff"
+             / "27_onboarding_handoff_lineage.json").read_text(encoding="utf-8"))
+        notes = [r["lineage_note"] for r in onboarding["rows"]]
+        self.assertTrue(any("source_value_normalisation" in n and
+                            AP.DOB_PLACEHOLDER in n for n in notes))
+
+    # -- 5: reapplied to the next pack, no second ask ------------------------ #
+
+    def test_the_decision_is_reapplied_to_the_next_pack(self):
+        _approve_placeholder_and_rerun(self)
+        later = "2027-03-31"
+        AP.write_blob_tree(self.root, period=later,
+                           dob_placeholder_rows=self.PLACEHOLDER_ROWS)
+        results = self._backfill(
+            selector=BF.PackSelector(pack_key=AP.pack_key_for_period(later)))
+        self.assertEqual(results[0]["status"], "processed")
+
+        run_dir = self._latest_portfolio_dir()
+        readiness = json.loads(
+            (run_dir / "output" / "transformation"
+             / "33_transformation_readiness.json").read_text(encoding="utf-8"))
+        self.assertTrue(readiness["ready_for_validation"])
+        self.assertEqual(readiness["source_value_normalised_row_count"],
+                         self.PLACEHOLDER_ROWS)
+        # The settled value is not queued again.
+        self.assertEqual(
+            [d for d in self._placeholder_decisions(run_dir)
+             if d.get("source_value") == AP.DOB_PLACEHOLDER], [])
+
+
+def _approve_placeholder_and_rerun(case):
+    """Approve the TBC decision as an operator would, then rerun the pack.
+
+    Cached per class so the several assertions about the approved run share one
+    execution rather than repeating the whole pipeline.
+    """
+    cached = getattr(case.__class__, "_approved_run_dir", None)
+    if cached is not None:
+        return cached
+
+    # 1. The operator edits the exported template: status approved + the action.
+    template = case.first_run_dir / "34_target_first_decisions.yaml"
+    doc = yaml.safe_load(template.read_text(encoding="utf-8"))
+    approved_any = False
+    for entry in doc.get("decisions", []) or []:
+        if (entry.get("decision_type") == "source_value_normalisation"
+                and entry.get("source_value") == AP.DOB_PLACEHOLDER):
+            entry["status"] = "approved"
+            entry["selected_action"] = "treat_source_value_as_null"
+            entry["approved_by"] = "ops"
+            approved_any = True
+    assert approved_any, "no TBC decision found in the exported template"
+
+    # 2. Persisted where a scoped rerun looks for approved decisions.
+    case.storage.write_text(
+        case.layout.run_onboarding_uri(
+            AP.PACK_KEY, "34_target_first_decisions_approved.yaml"),
+        yaml.safe_dump(doc, sort_keys=False))
+
+    # 3. Rerun the pack; backfill localises and applies the approved decisions.
+    case._backfill(selector=BF.PackSelector(pack_key=AP.PACK_KEY), force=True,
+                   require_approved_decisions=True)
+    case.__class__._approved_run_dir = case._latest_portfolio_dir()
+
+    # 4. PROMOTE the approved decisions onto the SOURCE registry entry. Approval
+    #    alone is pack-scoped; promotion is what makes the decision the source's
+    #    standing mapping, so every later pack applies it without being asked
+    #    again. This is the documented approve → rerun → promote loop.
+    OPS.promote_pack(case.persistence, case.registry, AP.PACK_KEY)
+    case.registry = SourceRegistry(
+        "blob://trakt-state/registry/source_registry.yaml", storage=case.storage)
+    return case.__class__._approved_run_dir
+
 
 
 if __name__ == "__main__":  # pragma: no cover

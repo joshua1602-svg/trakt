@@ -171,8 +171,25 @@ def _strip_nd(series: pd.Series) -> pd.Series:
 _BLANK_TOKENS = {"", "nan", "nat", "none", "null", "<na>"}
 
 
+def is_blank_token(value: Any) -> bool:
+    """True when a cell carries no value (blank / whitespace / null rendering).
+
+    The single definition of "absent" shared by typing and by anything that needs
+    to agree with typing about which cells hold a real value — e.g. source-value
+    normalisation, which must not offer an operator a decision about a blank.
+    """
+    if value is None:
+        return True
+    try:
+        if pd.isna(value):
+            return True
+    except (TypeError, ValueError):
+        pass
+    return str(value).strip().lower() in _BLANK_TOKENS
+
+
 def _blank_token_mask(series: pd.Series) -> pd.Series:
-    """Boolean mask of cells that carry no value (blank / null rendering)."""
+    """Boolean mask of cells that carry no value (see :func:`is_blank_token`)."""
     if series.dtype == object or str(series.dtype) == "string":
         s = series.astype("string").str.strip().str.lower()
         return s.isna() | s.isin(_BLANK_TOKENS)
