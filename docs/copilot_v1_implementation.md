@@ -1,5 +1,13 @@
 # Trakt Microsoft 365 Copilot — v1 implementation
 
+> **Superseded in part by v2.** The two per-artifact actions
+> (`getLatestInvestorDeck`, `getLatestCanonicalTape`) are replaced by one generic
+> `getArtifact(artifactType)` over a server-side registry; answers now carry a
+> Workspace deep link and requests carry package-version telemetry. See
+> [`copilot_v2_release.md`](./copilot_v2_release.md). The v1 material below on
+> authentication, Entra configuration and administrator packaging remains
+> current (the package is now version 2.0.0).
+
 > **Superseded in part.** The MI action no longer calls the `/mi/query` HTTP
 > handler: both channels now call the shared governed MI application service
 > (`mi_agent_api.mi_service.execute_governed_mi_query`). See

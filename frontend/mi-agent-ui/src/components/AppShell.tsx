@@ -127,6 +127,7 @@ export function AppShell() {
           messages={ws.messages}
           isWorking={ws.isWorking}
           mock={client.mock}
+          initialInput={ws.initialQuestion}
           onSubmit={ws.ask}
           onOpenArtifact={openArtifact}
           onRetry={ws.retryLast}

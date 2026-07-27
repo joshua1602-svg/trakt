@@ -701,8 +701,17 @@ class TestMiUnchanged(unittest.TestCase):
                          "mi_semantics_field_registry")
 
     def test_mi_field_count_unchanged(self):
+        # The MI run covers the MI semantics registry and nothing else — asserted
+        # against the registry's own size rather than a hard-coded count, so
+        # curating an MI field in or out is not a spurious failure here. What this
+        # guards is that an Annex 2 run has not leaked extra target fields in.
+        import yaml
+        registry = yaml.safe_load(
+            (Path(__file__).resolve().parents[1] / "mi_agent"
+             / "mi_semantics_field_registry.yaml").read_text(encoding="utf-8")) or {}
         cov = json.loads((self.out / "28a_target_coverage_matrix.json").read_text())
-        self.assertEqual(cov["summary"]["target_fields_total"], 72)
+        self.assertEqual(cov["summary"]["target_fields_total"],
+                         len(registry.get("fields", {}) or {}))
 
 
 # --------------------------------------------------------------------------- #

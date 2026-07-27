@@ -177,7 +177,10 @@ def classify_field(row: Dict[str, Any], *, decision_applied: bool = False) -> Di
                    rule["next_agent_action"], "needs_semantic_derivation")
 
     # 2) An operator decision still pending blocks the onboarding handoff item.
-    if requires_decision and blocking:
+    #    Once an approved decision HAS been applied to this field the item is
+    #    resolved: continuing to report it as blocking is precisely the stale
+    #    pre-application state that kept a fully-approved pack un-ready.
+    if requires_decision and blocking and not decision_applied:
         return out(HC_OPERATOR_DECISION_PENDING, OWN_OPERATOR,
                    "resolve_blocking_operator_decision", "blocking")
     if requires_decision and not decision_applied:
@@ -207,7 +210,7 @@ def classify_field(row: Dict[str, Any], *, decision_applied: bool = False) -> Di
         return out(HC_PENDING_REGIME_RULE, OWN_PROJECTION,
                    "implement_or_defer_regime_rule", "needs_projection")
     if status == tcov.MISSING_REQUIRED:
-        if blocking:
+        if blocking and not decision_applied:
             return out(HC_OPERATOR_DECISION_PENDING, OWN_OPERATOR,
                        "resolve_blocking_missing_required", "blocking")
         return out(HC_SOURCE_ABSENT, OWN_TRANSFORMATION,
@@ -355,7 +358,10 @@ def build_field_contract(
             "decision_id": decision.get("decision_id", ""),
             "decision_status": ("applied" if applied else
                                 ("pending" if decision else "")),
-            "blocking_decision": bool(decision.get("blocking", row.get("blocking", False))),
+            # Final state: a decision that has been APPLIED is no longer blocking.
+            "blocking_decision": bool(
+                not applied
+                and decision.get("blocking", row.get("blocking", False))),
             "lineage_status": lineage_status,
             "handoff_status": cls["handoff_status"],
             "handoff_classification": cls["handoff_classification"],
@@ -523,6 +529,33 @@ def _counts(contract: List[Dict[str, Any]]) -> Dict[str, int]:
     }
 
 
+def count_final_blockers(
+    contract: List[Dict[str, Any]],
+    *,
+    context_conflict: bool = False,
+    context_rows_present: int = 0,
+) -> Tuple[int, bool]:
+    """Count blockers from the FINAL contract state.
+
+    A blocker is a contract row that ends the handoff in ``handoff_status ==
+    "blocking"`` — i.e. an operator decision that is still unresolved after every
+    approved decision has been applied. Nothing is added from a pre-application
+    summary, so an approved decision that resolves the last blocking row leaves
+    this at zero, and an empty decision queue with no blocking rows cannot
+    produce a phantom blocker.
+
+    A run-context conflict that NO contract row carries (because the field is not
+    part of this target contract) would otherwise disappear. It is returned
+    separately as ``unrepresented_context_blocker`` and counted, so the blocker is
+    still visible in readiness rather than silently dropped or silently added.
+
+    Returns ``(blocking_count, unrepresented_context_blocker)``.
+    """
+    blocking = sum(1 for c in contract if c.get("handoff_status") == "blocking")
+    unrepresented = bool(context_conflict and context_rows_present == 0)
+    return blocking + (1 if unrepresented else 0), unrepresented
+
+
 def compute_readiness(
     *,
     central_exists: bool,
@@ -584,6 +617,7 @@ def _resolve_run_context(
     asset_config_path: str = "", regime_config_path: str = "",
     reporting_date: str = "", override_reporting_date: bool = False,
     reporting_period: str = "", run_id: str = "", managed_service: bool = False,
+    target_contract_id: str = "",
 ) -> Dict[str, Any]:
     """Resolve portfolio-level context fields (currently data_cut_off_date).
 
@@ -603,25 +637,31 @@ def _resolve_run_context(
             override_reporting_date=override_reporting_date,
             folder_period=reporting_period,
             run_id=run_id,
-            managed_service=managed_service)
+            managed_service=managed_service,
+            target_contract_id=target_contract_id)
     except Exception as exc:  # never break the handoff on context extraction
         return {"value": "", "source": "", "source_file": "", "source_location": "",
                 "confidence": 0.0, "candidates": [], "conflict": False,
-                "conflict_detail": f"extraction_error: {exc}", "missing": True}
+                "conflict_detail": f"extraction_error: {exc}", "missing": True,
+                "row_level": False, "row_level_distinct_values": []}
 
 
 def _apply_run_context_to_contract(
     contract: List[Dict[str, Any]],
     lineage: List[Dict[str, Any]],
     run_context: Dict[str, Any],
-) -> bool:
+) -> Tuple[bool, int]:
     """Stamp the resolved run-context date onto the data_cut_off_date contract row.
 
-    Returns True when the context is in conflict (a blocking operator item).
+    Returns ``(conflict, rows_touched)``. ``conflict`` is True when the context is
+    genuinely in conflict (a blocking operator item); ``rows_touched`` says how
+    many contract rows carry that state, so a conflict that no contract row
+    represents can still be surfaced coherently rather than counted invisibly.
     """
     value = run_context.get("value", "")
     source = run_context.get("source", "")
     conflict = bool(run_context.get("conflict"))
+    row_level = bool(run_context.get("row_level"))
     rows = [c for c in contract if c.get("canonical_field") in _RUN_CONTEXT_FIELDS]
     for c in rows:
         if conflict:
@@ -632,6 +672,39 @@ def _apply_run_context_to_contract(
             c["blocking_decision"] = True
             c["notes"] = (run_context.get("conflict_detail", "")
                           or "conflicting run-context date candidates")
+            continue
+        if row_level:
+            # The field legitimately varies per loan under this target contract.
+            # There is no pack-level value to stamp: each row keeps the date its
+            # source supplied, and Transformation must not replace them.
+            distinct = run_context.get("row_level_distinct_values", []) or []
+            c["handoff_classification"] = HC_SOURCE_CONTEXT_MAPPED
+            c["downstream_owner"] = OWN_TRANSFORMATION
+            c["handoff_status"] = "resolved"
+            c["next_agent_action"] = "preserve_row_level_source_values"
+            c["blocking_decision"] = False
+            c["selected_value_sample"] = distinct[0] if distinct else ""
+            c["lineage_status"] = "source_row_level_linked"
+            c["notes"] = (f"row-level source values preserved "
+                          f"({len(distinct)} distinct); "
+                          f"{run_context.get('conflict_detail', '')}").strip("; ")
+            lineage.append({
+                "target_field": c.get("target_field", ""),
+                "esma_code": c.get("esma_code", ""),
+                "canonical_field": c.get("canonical_field", ""),
+                "source_file": run_context.get("source_file", ""),
+                "source_column": run_context.get("source_location", ""),
+                "mapping_confidence": run_context.get("confidence", ""),
+                "classification": HC_SOURCE_CONTEXT_MAPPED,
+                "downstream_owner": OWN_TRANSFORMATION,
+                "operator_decision_id": "",
+                "operator_decision_status": "",
+                "llm_recommendation_id": "",
+                "lineage_note": (
+                    f"run_context_row_level values={distinct} "
+                    f"folder_period_context={run_context.get('folder_period_date', '')} "
+                    f"(pack context only — source row values preserved)"),
+            })
             continue
         if not value:
             # Missing — leave the row's coverage-based classification so Validation
@@ -664,7 +737,7 @@ def _apply_run_context_to_contract(
             "llm_recommendation_id": "",
             "lineage_note": f"run_context_resolved value={value} source={source}",
         })
-    return conflict
+    return conflict, len(rows)
 
 
 def build_handoff_package(
@@ -703,7 +776,6 @@ def build_handoff_package(
 
     dec = _read_json(project_dir / "28c_human_decision_queue.json") or {}
     decision_rows = dec.get("rows", []) or []
-    dec_sum = dec.get("summary", {}) or {}
     decisions_by_field = {d.get("target_field", ""): d
                           for d in decision_rows if d.get("target_field")}
 
@@ -746,18 +818,23 @@ def build_handoff_package(
         project_dir, output_root, central["path"],
         asset_config_path=asset_config_path, regime_config_path=regime_config_path,
         reporting_date=reporting_date, override_reporting_date=override_reporting_date,
-        reporting_period=reporting_period, run_id=run_id, managed_service=managed_service)
-    context_conflict = _apply_run_context_to_contract(contract, lineage, run_context)
+        reporting_period=reporting_period, run_id=run_id, managed_service=managed_service,
+        target_contract_id=contract_id)
+    context_conflict, context_rows = _apply_run_context_to_contract(
+        contract, lineage, run_context)
 
     counts = _counts(contract)
 
-    blocking_decision_count = int(dec_sum.get("blocking_decisions",
-                                              sum(1 for d in decision_rows if d.get("blocking"))))
-    # A conflicting (non-silently resolvable) run-context date is a blocking
-    # operator item — surfaced, never auto-picked.
-    if context_conflict:
-        blocking_decision_count += 1
-    non_blocking_decision_count = max(0, len(decision_rows) - blocking_decision_count)
+    # Blocking count is derived from the FINAL, post-application contract — not
+    # from the 28c queue summary, which is a snapshot taken BEFORE approved
+    # decisions were applied. Reading the stale summary is what left an approved
+    # pack reporting a blocker with an empty decision queue and no blocking row.
+    blocking_decision_count, unrepresented_context_blocker = count_final_blockers(
+        contract, context_conflict=context_conflict,
+        context_rows_present=context_rows)
+    non_blocking_decision_count = max(
+        0, sum(1 for c in contract
+               if c.get("decision_id") and c.get("handoff_status") != "blocking"))
 
     readiness = compute_readiness(
         central_exists=central["exists"],
@@ -812,6 +889,16 @@ def build_handoff_package(
         "data_cut_off_date_conflict": bool(run_context.get("conflict", False)),
         "data_cut_off_date_missing": bool(run_context.get("missing", False)),
         "data_cut_off_date_candidates": run_context.get("candidates", []),
+        # Row-level resolution: the field legitimately varies per loan under this
+        # target contract, so there is no single pack-level value to materialise.
+        "data_cut_off_date_row_level": bool(run_context.get("row_level", False)),
+        "data_cut_off_date_row_level_values": run_context.get(
+            "row_level_distinct_values", []),
+        "data_cut_off_date_policy": run_context.get("policy", {}),
+        # The blob folder's reporting period is PACK CONTEXT. It is recorded here
+        # for provenance and never replaces a date a source row already carries.
+        "reporting_period_context": run_context.get("folder_period", ""),
+        "reporting_period_context_date": run_context.get("folder_period_date", ""),
 
         # Onboarding artefact references the next agent should read.
         "target_coverage_matrix_path": _p(project_dir, "28a_target_coverage_matrix.csv"),
@@ -864,6 +951,17 @@ def build_handoff_package(
         "target_universe_loaded": bool(coverage_rows),
         "registry_gap_count": registry_gap_count,
         "blocking_decision_count": blocking_decision_count,
+        "blocking_decision_source": "final_field_contract",
+        "blocking_contract_rows": [
+            {"target_field": c.get("target_field", ""),
+             "next_agent_action": c.get("next_agent_action", ""),
+             "notes": c.get("notes", "")}
+            for c in contract if c.get("handoff_status") == "blocking"],
+        "run_context_blocker": unrepresented_context_blocker,
+        "run_context_blocker_detail": (
+            run_context.get("conflict_detail", "")
+            if unrepresented_context_blocker else ""),
+        "data_cut_off_date_row_level": bool(run_context.get("row_level", False)),
         "operator_decision_pending_count": counts["operator_decision_pending_count"],
         "downstream_default_required_count": counts["downstream_default_required_count"],
         "pending_regime_rule_count": counts["pending_regime_rule_count"],

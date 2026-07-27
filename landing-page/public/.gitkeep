@@ -1,0 +1,6 @@
+# Static assets served at the site root.
+#
+# Empty today. The demo video and its poster frame go here when the final asset
+# exists — see README.md § "Replacing the demo video". This file keeps the
+# directory in git so the Dockerfile's `COPY public ./public` succeeds on a
+# fresh clone.

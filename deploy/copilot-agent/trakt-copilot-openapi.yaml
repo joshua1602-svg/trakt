@@ -13,7 +13,7 @@ info:
     Trakt portfolio MI and artefact retrieval for Microsoft 365 Copilot.
     Answers come from Trakt's deterministic MI engine and published pipeline
     outputs — never from model estimation.
-  version: 1.0.0
+  version: 2.0.0
 servers:
   - url: https://trakt-mi-api.azurewebsites.net
     description: Trakt MI API (set to your deployment URL before packaging)
@@ -34,6 +34,8 @@ paths:
         unless the user explicitly names a historical run — point-in-time
         questions are answered from the current active governed dataset. Never
         compute portfolio figures yourself — always call this action.
+      parameters:
+        - $ref: '#/components/parameters/PackageVersion'
       requestBody:
         required: true
         content:
@@ -53,39 +55,35 @@ paths:
           $ref: '#/components/responses/MalformedRequest'
         '503':
           $ref: '#/components/responses/Unavailable'
-  /v1/copilot/artifacts/latest/investor-deck:
+  /v1/copilot/artifacts/latest:
     get:
-      operationId: getLatestInvestorDeck
-      summary: Get the latest generated investor deck (PPTX)
+      operationId: getArtifact
+      summary: Get the latest generated artifact of a given type
       description: >-
-        Use when the user asks for the latest investor deck, investor pack,
-        presentation, or slides. Returns file metadata and a short-lived
-        download link to present to the user. Do not use for data questions.
+        Use when the user asks for a downloadable Trakt artifact — investor
+        deck, canonical loan tape, mapping report, validation report, or ESMA
+        Annex 2 XML. Pass the artifactType that matches the request. Returns
+        file metadata and a short-lived download link to present to the user.
+        Trakt validates the type server-side and returns a 404 listing the
+        available types if it does not recognise one; new artifact types become
+        available without any package change. Do not use for data questions.
+      parameters:
+        - $ref: '#/components/parameters/PackageVersion'
+        - name: artifactType
+          in: query
+          required: true
+          description: >-
+            The kind of artifact to retrieve. Known types include
+            investor_deck, canonical_tape, mapping_report, validation_report and
+            esma_xml; Trakt may add more, validated server-side. This is an open
+            string, not a fixed enumeration, so new artifact types need no
+            package update.
+          schema:
+            type: string
+            minLength: 1
       responses:
         '200':
-          description: Metadata and a short-lived download link for the deck.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CopilotArtifactInfo'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '503':
-          $ref: '#/components/responses/Unavailable'
-  /v1/copilot/artifacts/latest/canonical-tape:
-    get:
-      operationId: getLatestCanonicalTape
-      summary: Get the latest canonical loan tape (CSV)
-      description: >-
-        Use when the user asks for the canonical tape, canonical loan tape,
-        loan tape, or latest normalised dataset. Returns file metadata and a
-        short-lived download link to present to the user. Do not use for data
-        questions.
-      responses:
-        '200':
-          description: Metadata and a short-lived download link for the tape.
+          description: Metadata and a short-lived download link for the artifact.
           content:
             application/json:
               schema:
@@ -97,6 +95,18 @@ paths:
         '503':
           $ref: '#/components/responses/Unavailable'
 components:
+  parameters:
+    PackageVersion:
+      name: X-Trakt-Package-Version
+      in: header
+      required: false
+      description: >-
+        The Trakt Copilot package version this tenant is running. Sent on every
+        request so backend logs can detect tenants on a stale package. Defaults
+        to the version this package was built from.
+      schema:
+        type: string
+        default: "2.0.0"
   securitySchemes:
     entraBearer:
       type: oauth2
@@ -272,6 +282,22 @@ components:
         truncationNote:
           type: string
           nullable: true
+        classification:
+          type: string
+          description: >-
+            fully-served-simple | fully-served-complex | unmet. Indicates
+            whether the richer React MI Workspace would materially help.
+        workspaceUrl:
+          type: string
+          nullable: true
+          description: >-
+            Deep link that restores this query's context (client, run, question,
+            filters) in the React MI Workspace. Present ONLY for
+            fully-served-complex and unmet answers, and only when configured.
+            Surface it to the user when present.
+        packageVersion:
+          type: string
+          description: The Copilot package version the backend expects (telemetry).
     CopilotArtifactInfo:
       type: object
       required: [ok, artifactType, fileName, contentType, clientId, downloadUrl, downloadExpiresAt]

@@ -4332,7 +4332,10 @@ fields:
   protected_equity_percentage:
     allowed_values: null
     category: analytics
-    format: decimal
+    # Percentage points (20.0 == 20%), matching the canonical convention used by
+    # current_loan_to_value and the interest-rate fields. The `percentage` format
+    # strips a "%" suffix without rescaling the magnitude.
+    format: percentage
     portfolio_type: equity_release
     layer: product
     core_canonical: false
