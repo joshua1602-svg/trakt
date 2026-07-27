@@ -134,24 +134,41 @@ def expected_protected_equity() -> Tuple[int, int, int]:
     return zero, positive, blank
 
 
+#: The placeholder some deliveries carry in a date column when the provider does
+#: not yet know the value. It is NOT a global null marker — what it means is an
+#: operator decision, scoped to this source and contract.
+DOB_PLACEHOLDER = "TBC"
+
+
+def placeholder_row_indices(count: int) -> List[int]:
+    """Deterministic row positions that carry ``DOB_PLACEHOLDER``."""
+    return [i * 97 % ROW_COUNT for i in range(count)]
+
+
 def write_tape(dest_dir: str | Path,
                extra_columns: Optional[Sequence[str]] = None,
-               drop_columns: Optional[Sequence[str]] = None) -> Path:
+               drop_columns: Optional[Sequence[str]] = None,
+               dob_placeholder_rows: int = 0) -> Path:
     """Write ``AcquiredLoanTape.csv`` into ``dest_dir`` and return its path.
 
     ``extra_columns`` appends optional columns (an ADDITIVE change, which the
     approval policy treats as non-material). ``drop_columns`` removes columns —
     dropping a mandatory one is a MATERIAL change that must stop for review.
+    ``dob_placeholder_rows`` puts ``TBC`` into that many ``Borrower 1 DOB`` cells,
+    modelling a delivery whose provider has not established those dates yet.
     """
     dropped = set(drop_columns or ())
     columns = [c for c in COLUMNS if c not in dropped] + list(extra_columns or ())
+    placeholders = set(placeholder_row_indices(dob_placeholder_rows))
     dest = Path(dest_dir)
     dest.mkdir(parents=True, exist_ok=True)
     path = dest / FILE_NAME
     with path.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=columns, extrasaction="ignore")
         writer.writeheader()
-        for row in _rows():
+        for i, row in enumerate(_rows()):
+            if i in placeholders:
+                row = {**row, "Borrower 1 DOB": DOB_PLACEHOLDER}
             writer.writerow({**row, **{c: "" for c in (extra_columns or ())}})
     return path
 
@@ -168,7 +185,8 @@ def pack_key_for_period(period: str = PACK_PERIOD) -> str:
 def write_blob_tree(root: str | Path, container: str = "raw-v2",
                     period: str = PACK_PERIOD,
                     extra_columns: Optional[Sequence[str]] = None,
-                    drop_columns: Optional[Sequence[str]] = None) -> Path:
+                    drop_columns: Optional[Sequence[str]] = None,
+                    dob_placeholder_rows: int = 0) -> Path:
     """Lay the pack out under a local blob-container tree and return the folder.
 
     Produces ``{container}/ERE/acquired/funded/ad_hoc/acquired_001/{period}/``
@@ -180,6 +198,7 @@ def write_blob_tree(root: str | Path, container: str = "raw-v2",
     need re-approval. See :func:`write_tape` for the column overrides.
     """
     folder = Path(root) / container / blob_prefix(period)
-    write_tape(folder, extra_columns=extra_columns, drop_columns=drop_columns)
+    write_tape(folder, extra_columns=extra_columns, drop_columns=drop_columns,
+               dob_placeholder_rows=dob_placeholder_rows)
     (folder / "_READY.json").write_text("{}", encoding="utf-8")
     return folder

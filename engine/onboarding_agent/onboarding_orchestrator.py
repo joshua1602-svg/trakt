@@ -467,6 +467,12 @@ def run_onboarding(
                 aliases_dir=aliases_dir, mode=policy.name,
                 regulatory_reporting_enabled=regulatory_reporting_enabled,
                 client_id=client_id, run_id=run_id,
+                # Scope for operator source-value decisions. At this layer
+                # ``client_id`` is the SOURCE PORTFOLIO (the adapter passes
+                # source_portfolio_id there) and ``client_name`` is the tenant, so
+                # they are named explicitly rather than inferred downstream.
+                scope_client_id=client_name,
+                scope_source_portfolio_id=client_id,
                 enable_llm=enable_llm_map, llm_callable=llm_mapping_callable,
                 only_unresolved=llm_mapping_only_unresolved,
                 memory_store=mr_store,

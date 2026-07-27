@@ -70,6 +70,10 @@ def run_llm_assisted_mapping(
     regulatory_reporting_enabled: bool = False,
     client_id: str = "",
     run_id: str = "",
+    # Scope for operator source-value normalisation decisions. Defaults keep the
+    # existing single-argument callers working.
+    scope_client_id: str = "",
+    scope_source_portfolio_id: str = "",
     source_file_name: str = "",
     enable_llm: bool = False,
     llm_callable: Optional[Callable[[str], str]] = None,
@@ -349,7 +353,14 @@ def run_llm_assisted_mapping(
         registry_path=registry_path,
         client_id=client_id, run_id=run_id,
         decisions_path=target_first_decisions_path,
-        artefact_roles=artefact_roles)
+        artefact_roles=artefact_roles,
+        # The loaded source frames, so a mapped column carrying a value the
+        # deterministic parser rejects can be surfaced as an operator decision.
+        source_tables=tables,
+        scope_client_id=(scope_client_id or client_id),
+        source_portfolio_id=(scope_source_portfolio_id or client_id),
+        source_schema_fingerprint=str(
+            (context or {}).get("source_schema_fingerprint", "") or ""))
 
     # 36 — OPTIONAL target-first LLM ADVISOR. Operates on the 28c decisions +
     # 28a/28b evidence (NOT the raw source-column universe). Advisory only: it

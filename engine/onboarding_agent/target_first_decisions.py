@@ -34,6 +34,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
+from . import source_value_rules
+
 # Recognised operator actions (selected_action values).
 SUPPORTED_ACTIONS = [
     "confirm_selected",
@@ -43,6 +45,11 @@ SUPPORTED_ACTIONS = [
     "confirm_default_or_nd",
     "mark_not_applicable",
     "provide_source_mapping",
+    # Record a SPECIFIC source value as meaning "no value", scoped to this
+    # client / source portfolio / source column / canonical field / target
+    # contract. Generic by design — it names the treatment, not the field — and
+    # deliberately does NOT touch the global null markers. See source_value_rules.
+    source_value_rules.ACTION_TREAT_AS_NULL,
     "defer",
     "reject_recommendation",
 ]
@@ -112,6 +119,14 @@ def build_decision_template(
             "blocking": bool(d.get("blocking", False)),
             "operator_question": d.get("operator_question", ""),
             "evidence_summary": d.get("evidence_summary", ""),
+            # --- source-value normalisation scope (read-only) ---
+            # Present only for source_value_normalisation decisions; these are
+            # what make an approved decision self-describing and reapplicable to
+            # the next pack from the same source.
+            **({k: d.get(k, "") for k in (
+                "canonical_field", "source_value", "affected_row_count",
+                "client_id", "source_portfolio_id", "source_schema_fingerprint")}
+               if dtype == source_value_rules.DECISION_TYPE else {}),
             # --- operator-editable fields ---
             "status": "pending",
             "selected_action": None,
@@ -243,6 +258,11 @@ def apply_decisions(
             continue
 
         # Actions that mutate 28a require the target field to exist.
+        # NOTE: treat_source_value_as_null is deliberately NOT here. It is about a
+        # SOURCE COLUMN feeding a canonical field, and a column can do that without
+        # being a field of the target contract (borrower_1_DOB is mapped into the
+        # canonical tape but is not in the MI semantics registry). Requiring a 28a
+        # row would make the decision unavailable for exactly those columns.
         needs_cov = action in {
             "confirm_selected", "choose_alternative", "configure_static_value",
             "confirm_default_or_nd", "mark_not_applicable", "provide_source_mapping",
@@ -273,7 +293,38 @@ def apply_decisions(
             log.append(e)
             continue
 
-        if action == "confirm_selected":
+        if action == source_value_rules.ACTION_TREAT_AS_NULL:
+            # The approved treatment becomes a RULE, carried to Transformation and
+            # applied before type normalisation so the parser never sees the
+            # placeholder. It changes no mapping and no coverage status: the column
+            # is still source-mapped, some of its values are simply known to be
+            # absent. When the field IS also a 28a row, the rule is annotated there
+            # too for per-field visibility.
+            rule = source_value_rules.rule_from_decision(d)
+            if rule is None:
+                e["application_status"] = INVALID
+                e["message"] = (f"{action} requires source_value, canonical_field, "
+                                "source_column and target_contract_id")
+                log.append(e)
+                continue
+            if cov_row is not None:
+                existing = list(cov_row.get("source_value_rules", []) or [])
+                if not any(str(r.get("source_value", "")).strip().lower()
+                           == rule.source_value.strip().lower() for r in existing):
+                    existing.append(rule.as_row())
+                cov_row["source_value_rules"] = existing
+                cov_row["requires_user_decision"] = False
+                cov_row["blocking"] = False
+                e["applied_to_28a"] = True
+            e["applied_to_28c"] = True
+            e["application_status"] = APPLIED
+            e["message"] = (f"source value {rule.source_value!r} in "
+                            f"'{rule.source_column}' treated as null for "
+                            f"{rule.canonical_field} "
+                            f"(contract={rule.target_contract_id})")
+            resolved_ids.add(did)
+
+        elif action == "confirm_selected":
             cov_row["requires_user_decision"] = False
             cov_row["blocking"] = False
             cov_row["decision_reason"] = "operator confirmed selected source"
