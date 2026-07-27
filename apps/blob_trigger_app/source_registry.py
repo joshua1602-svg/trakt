@@ -141,6 +141,14 @@ class SourceRegistry:
         return any(r.client_id == client_id and r.source_portfolio_id == source_portfolio_id
                    for r in self._records.values())
 
+    def records_for_portfolio(self, client_id: str,
+                              source_portfolio_id: str) -> List[SourceRecord]:
+        """Every record for one portfolio (it may have several dataset/frequency
+        entries). Empty when the portfolio is unknown to the registry."""
+        return [r for r in self._records.values()
+                if r.client_id == client_id
+                and r.source_portfolio_id == source_portfolio_id]
+
     def upsert(self, record: SourceRecord) -> SourceRecord:
         self._records[record.key] = record
         self.save()
