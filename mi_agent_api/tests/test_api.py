@@ -43,14 +43,14 @@ def test_duplicate_columns_return_controlled_validation_not_500(monkeypatch):
     # A duplicated column in the served dataset must yield a controlled 200
     # validation failure (duplicate_column_names), never a raw 500.
     import pandas as pd
-    from mi_agent_api import app as app_module
+    from mi_agent_api import datasets as datasets_module
 
     df = pd.DataFrame({"loan_identifier": [1, 2, 3]})
     df["current_outstanding_balance"] = [100000.0, 200000.0, 90000.0]
     df["youngest_borrower_age"] = [67, 72, 80]
     df["current_loan_to_value"] = [0.30, 0.40, 0.25]
     df.insert(2, "current_loan_to_value", [0.31, 0.41, 0.26], allow_duplicates=True)
-    monkeypatch.setattr(app_module, "get_dataframe", lambda: df)
+    monkeypatch.setattr(datasets_module, "get_dataframe", lambda: df)
 
     r = client.post("/mi/query", json={"question": "balance by ltv by age"})
     assert r.status_code == 200          # NOT a raw 500
@@ -132,14 +132,14 @@ def test_query_applies_drill_through_filters(monkeypatch):
     # A drill-through filter passed on the request narrows the FULL dataset before
     # aggregation, so the chart only contains the selected dimension value.
     import pandas as pd
-    from mi_agent_api import app as app_module
+    from mi_agent_api import datasets as datasets_module
 
     regions = ["North", "South", "East"]
     df = pd.DataFrame([{
         "current_outstanding_balance": 100_000 + i * 1000,
         "geographic_region_obligor": regions[i % 3],
     } for i in range(30)])
-    monkeypatch.setattr(app_module, "get_dataframe", lambda: df)
+    monkeypatch.setattr(datasets_module, "get_dataframe", lambda: df)
 
     r = client.post("/mi/query", json={
         "question": "Show balance by region",
@@ -156,13 +156,13 @@ def test_query_applies_drill_through_filters(monkeypatch):
 
 def test_query_invalid_drill_filter_field_rejected_safely(monkeypatch):
     import pandas as pd
-    from mi_agent_api import app as app_module
+    from mi_agent_api import datasets as datasets_module
 
     df = pd.DataFrame([{
         "current_outstanding_balance": 100_000 + i * 1000,
         "geographic_region_obligor": ["North", "South", "East"][i % 3],
     } for i in range(30)])
-    monkeypatch.setattr(app_module, "get_dataframe", lambda: df)
+    monkeypatch.setattr(datasets_module, "get_dataframe", lambda: df)
 
     r = client.post("/mi/query", json={
         "question": "Show balance by region",

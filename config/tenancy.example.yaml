@@ -1,0 +1,55 @@
+# =========================================================================
+# Tenant registry — who this deployment serves, and which portfolios each
+# tenant owns.
+# =========================================================================
+#
+# OPTIONAL. Copy to config/tenancy.yaml (or point TRAKT_TENANCY_CONFIG at it) to
+# turn on explicit tenant→portfolio authorisation.
+#
+# With NO config file the deployment is treated as single-tenant: the tenant
+# comes from the trusted execution context (MI_AGENT_CLIENT_ID, else the client
+# embedded in MI_AGENT_PLATFORM_URI), it owns its own portfolio namespace, and
+# the dataset resolver still scopes every read to that tenant's storage root.
+# That is the current ERE production shape and needs no file.
+#
+# Add this file when EITHER:
+#   * one deployment must serve more than one tenant; or
+#   * you want an explicit allow-list of the portfolios a tenant may read,
+#     rather than "any well-formed selector inside its own namespace".
+#
+# Authorisation rules applied by trakt_core.tenancy.authorise_portfolio_access:
+#   1. the tenant always comes from the authenticated ExecutionContext — never
+#      from portfolio_id, client_id or any other request field;
+#   2. a portfolio selector naming a DIFFERENT tenant in this file is refused
+#      with TENANT_MISMATCH;
+#   3. with `portfolios` and/or `portfolio_patterns` set, a selector must match
+#      one of them or it is refused with PORTFOLIO_NOT_AUTHORISED;
+#   4. when the caller names no portfolio, `default_portfolio` is used.
+#
+# Once this file exists, a tenant NOT listed here is refused entirely
+# (PERMISSION_DENIED), so list every tenant the deployment serves.
+
+tenants:
+
+  ERE:
+    display_name: Equity Release Europe
+    # Used when a caller names no portfolio.
+    default_portfolio: ERE
+    # The books this tenant may read. `ERE` itself means the consolidated
+    # platform canonical across all of the tenant's source portfolios.
+    portfolios:
+      - ERE
+      - direct_001
+      - acquired_001
+      - acquired_002
+    # Additional selectors accepted without listing each one. Anchored regexes.
+    portfolio_patterns:
+      - '^(direct|acquired)_\d{3}$'
+
+  # A second client would be added like this. Its portfolios are unreachable
+  # from an ERE context, and vice versa.
+  #
+  # client_002:
+  #   display_name: Example Lender
+  #   default_portfolio: client_002
+  #   portfolios: [client_002, direct_001]

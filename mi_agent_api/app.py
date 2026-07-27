@@ -56,7 +56,86 @@ from . import geo as geo_mod
 # call. It imports this module's data resolvers lazily, so there is no cycle.
 from . import mi_service
 
+# Dataset resolution now lives in an interface-neutral module (no FastAPI), so the
+# governed capability, the deck generator and any future adapter can resolve data
+# without importing this HTTP module. Re-exported here under their original names
+# so the routes below — and existing callers/tests that reference
+# ``mi_agent_api.app._<helper>`` — are unchanged.
+from trakt_core.context import CHANNEL_REACT
+from trakt_core.errors import TraktError
+from trakt_core.runtime import runtime_mode, validate_runtime_mode
+
+from . import artefacts as artefacts_mod
+from . import identity as identity_mod
+from . import presenters
+from .dependencies import default_tenant_id
+
+from .datasets import (  # noqa: F401  (re-exported for backward compatibility)
+    # The mutable resolution caches are re-exported as the SAME objects, so an
+    # existing caller that clears ``app._PIPELINE_MIRROR_CACHE`` still clears the
+    # cache ``datasets`` actually reads.
+    _CLIENT_CURRENCY_CACHE,
+    _PIPELINE_MIRROR_CACHE,
+    _PIPELINE_URI_CACHE,
+    _apply_request_currency,
+    _blob_dated_snapshots,
+    _blob_funded_evolution,
+    _blob_platform_index,
+    _clean_provenance_value,
+    _client_from_platform_uri,
+    _evo_ids,
+    _funded_date_from_run,
+    _kfi_completion_lag_weeks,
+    _kfi_lag_weeks_from_model,
+    _latest_pipeline_extract_date,
+    _materialise_pipeline_root,
+    _mi_llm_config,
+    _onboarding_output_root,
+    _period_from_platform_uri,
+    _pid_label,
+    _pipeline_discovery_root,
+    _pipeline_history,
+    _pipeline_root,
+    _pipeline_root_from_uri,
+    _platform_client_id,
+    _platform_reporting_date,
+    _platform_snapshot_index,
+    _resolve_pipeline_source,
+    _resolve_pipeline_uri_local,
+    _resolve_query_frame,
+    _resolve_run_dataframe,
+    _scan_any_date_column,
+    _weekly_files_window,
+)
+
 logger = logging.getLogger("mi_agent_api")
+
+# Fail closed at import time on an unsafe runtime mode: a non-production mode is
+# refused outright inside Azure, so a stray app setting cannot turn a deployed
+# API into one that answers from fixture or synthetic data. Raising here means a
+# misconfigured deployment does not start, rather than starting and quietly
+# serving unapproved answers.
+validate_runtime_mode()
+
+
+def _execution_context(request: "Request", *, channel: str):
+    """The trusted context for this request.
+
+    The tenant is deployment configuration, the actor is the authenticated
+    principal, and the request id honours an inbound ``X-Request-Id`` /
+    ``X-Correlation-Id`` so a caller can correlate its own trace with the audit
+    event. Raises :class:`~trakt_core.errors.TraktError` when identity cannot be
+    established — the caller maps that to its status code.
+    """
+    principal = (getattr(request.state, "principal", None)
+                 or principal_from_request(request))
+    return identity_mod.context_from_principal(
+        principal,
+        tenant_id=default_tenant_id(),
+        channel=channel,
+        request_id=request.headers.get("x-request-id") or None,
+        correlation_id=request.headers.get("x-correlation-id") or None,
+    )
 
 
 def _warm_caches() -> None:
@@ -104,6 +183,20 @@ app.add_middleware(
 )
 
 
+@app.exception_handler(TraktError)
+async def _trakt_error_handler(request: Request, exc: TraktError) -> JSONResponse:
+    """Map a governed error onto its stable HTTP status and machine-readable body.
+
+    The status comes from the shared code table in ``trakt_core.errors``, so a
+    given code produces the same classification here and in the Copilot adapter.
+    """
+    logger.info("governed error on %s %s: %s", request.method, request.url.path, exc.code)
+    return JSONResponse(status_code=exc.http_status,
+                        content={"ok": False, "error": exc.message,
+                                 "errorCode": exc.code, "retryable": exc.retryable,
+                                 "category": exc.category})
+
+
 @app.exception_handler(Exception)
 async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Fail safe: never leak a stack trace / internal path to a client. Unhandled
@@ -137,24 +230,6 @@ class QueryRequest(BaseModel):
     # id ("direct_001" / "acquired_001"). Acts as the default scope; a portfolio
     # named in the question overrides it. Realised as a provenance filter.
     sourcePortfolioLens: Optional[str] = None
-
-
-def _onboarding_output_root() -> Optional[str]:
-    """The local onboarding output root used for run/portfolio discovery."""
-    root = os.environ.get("MI_AGENT_ONBOARDING_OUTPUT_ROOT")
-    if root:
-        return root
-    # Fall back to inferring a root from an explicit central tape path so a
-    # single configured run is still discoverable (`.../output` above /central).
-    tape = os.environ.get("MI_AGENT_CENTRAL_TAPE")
-    if tape:
-        from pathlib import Path
-        p = Path(tape)
-        # .../<client>/<run>/output/central/18_central_lender_tape.csv -> climb to a
-        # root that still contains the client/run components for inference.
-        parents = list(p.parents)
-        return str(parents[3]) if len(parents) > 3 else str(p.parent.parent)
-    return None
 
 
 @app.get("/")
@@ -198,6 +273,16 @@ def health() -> Dict[str, Any]:
         # LLM parser availability (ENABLE_LLM_MI_AGENT + key). The chat runs
         # deterministically when unavailable — surface which mode is live.
         "llm": get_llm_config().to_dict(),
+        # Governance posture. Surfaced so a deployment check can assert it
+        # without reading Azure config by hand: which runtime mode is live
+        # (production refuses fixture/synthetic sources), whether the injected
+        # client-principal header can be trusted, and which tenant this
+        # deployment serves. No secrets, no paths.
+        "governance": {
+            "runtimeMode": runtime_mode(),
+            "tenantId": default_tenant_id(),
+            "platformAuth": identity_mod.platform_auth_status(),
+        },
     }
 
 
@@ -216,21 +301,6 @@ def me(request: Request) -> Dict[str, Any]:
 @app.get("/mi/catalogue")
 def catalogue() -> Dict[str, Any]:
     return build_catalogue()
-
-
-def _clean_provenance_value(v: Any) -> Optional[str]:
-    """Normalise a provenance cell: pandas NaN / blank / 'nan' → None, so blank
-    labels fall back to the source_portfolio_id rather than the string 'nan'."""
-    if v is None:
-        return None
-    try:
-        import math
-        if isinstance(v, float) and math.isnan(v):
-            return None
-    except Exception:  # noqa: BLE001
-        pass
-    s = str(v).strip()
-    return None if s.lower() in ("", "nan", "none", "nat", "<na>") else s
 
 
 @app.get("/mi/source-portfolios")
@@ -265,185 +335,6 @@ def source_portfolios() -> Dict[str, Any]:
         "lenses": lenses,
         "source": data_source_label(),
     }
-
-
-def _client_from_platform_uri() -> Optional[str]:
-    """Best-effort client id from MI_AGENT_PLATFORM_URI
-    (``blob://{processed}/platform/{client}/latest/…``)."""
-    uri = os.environ.get("MI_AGENT_PLATFORM_URI") or ""
-    parts = [p for p in uri.replace("blob://", "").split("/") if p]
-    if "platform" in parts:
-        i = parts.index("platform")
-        if i + 1 < len(parts):
-            return parts[i + 1]
-    return None
-
-
-def _platform_client_id(df) -> str:
-    explicit = os.environ.get("MI_AGENT_CLIENT_ID")
-    if explicit:
-        return explicit
-    from_uri = _client_from_platform_uri()
-    if from_uri:
-        return from_uri
-    if "client_id" in getattr(df, "columns", []):
-        vals = df["client_id"].dropna()
-        if not vals.empty:
-            return str(vals.iloc[0])
-    return "platform"
-
-
-def _period_from_platform_uri() -> Optional[str]:
-    """A reporting period embedded in MI_AGENT_PLATFORM_URI, if any
-    (``…/platform/{client}/2026-01-31/…`` or ``…/2026-01/…``). ``/latest/`` has
-    none → None. Month periods are normalised to the month-end date."""
-    import calendar
-    import re
-    uri = os.environ.get("MI_AGENT_PLATFORM_URI") or ""
-    for seg in uri.replace("blob://", "").split("/"):
-        if re.match(r"^\d{4}-\d{2}-\d{2}$", seg):
-            return seg
-        m = re.match(r"^(\d{4})-(\d{2})$", seg)      # YYYY-MM → month-end
-        if m:
-            y, mo = int(m.group(1)), int(m.group(2))
-            if 1 <= mo <= 12:
-                return f"{y:04d}-{mo:02d}-{calendar.monthrange(y, mo)[1]:02d}"
-    return None
-
-
-def _scan_any_date_column(sub) -> Optional[str]:
-    """Last-resort: the max parseable date in ANY date-like column, so a real
-    date in the frame is never reported as null."""
-    import pandas as pd
-    for col in getattr(sub, "columns", []):
-        name = str(col).lower()
-        if not ("date" in name or "cut_off" in name or "cutoff" in name
-                or name.endswith("_dt")):
-            continue
-        try:
-            rd = pd.to_datetime(sub[col], errors="coerce").dropna()
-        except Exception:  # noqa: BLE001
-            continue
-        if not rd.empty:
-            return rd.max().date().isoformat()
-    return None
-
-
-def _platform_reporting_date(sub, run_id: str) -> Optional[str]:
-    """Reporting date for a platform (sub)frame, in priority order:
-    reporting_date → data_cut_off_date → cut_off_date (via infer_reporting_date),
-    then the platform period path, then MI_AGENT_REPORTING_DATE, then any other
-    date-like column. Never null when a real date exists in the frame."""
-    from_data = snapshots_mod.infer_reporting_date(run_id, sub)
-    if from_data:
-        return from_data
-    from_path = _period_from_platform_uri()
-    if from_path:
-        return from_path
-    env = os.environ.get("MI_AGENT_REPORTING_DATE")
-    if env:
-        return env
-    return _scan_any_date_column(sub)
-
-
-def _pid_label(sub, pid: str) -> str:
-    if "source_portfolio_label" in getattr(sub, "columns", []):
-        for v in sub["source_portfolio_label"].dropna():
-            cleaned = _clean_provenance_value(v)
-            if cleaned:
-                return cleaned
-    return pid
-
-
-def _platform_snapshot_index() -> Optional[Dict[str, Any]]:
-    """Portfolio/run index derived from the loaded **platform canonical**.
-
-    When ``MI_AGENT_PLATFORM_URI`` is configured the active dataset is the combined
-    platform canonical (no on-disk onboarding runs), so the portfolio /
-    reporting-date dropdowns are built from the loaded dataframe. Portfolios are
-    derived from ``source_portfolio_id`` (so ``direct_001`` is the selectable
-    funded portfolio), each with one run at that portfolio's latest reporting
-    date. Falls back to a single client entry when the canonical has no
-    provenance. Returns ``None`` when the platform canonical is not the active
-    source.
-    """
-    if data_source_kind() != KIND_PLATFORM_CANONICAL:
-        return None
-    try:
-        df = get_dataframe()
-    except Exception as exc:  # noqa: BLE001 - discovery must never 500
-        logger.warning("platform snapshot index: dataframe load failed: %s", exc)
-        return None
-    run_id = os.environ.get("MI_AGENT_RUN_ID") or "latest"
-
-    portfolios: List[Dict[str, Any]] = []
-    if "source_portfolio_id" in df.columns:
-        ids = df["source_portfolio_id"].dropna().astype(str).str.strip()
-        distinct = sorted({p for p in ids.unique() if p and p.lower() != "nan"})
-        for pid in distinct:
-            sub = df[ids == pid]
-            portfolios.append({
-                "client_id": pid,                    # React selects on client_id
-                "label": _pid_label(sub, pid),
-                "source_portfolio_id": pid,
-                "runs": [{
-                    "run_id": run_id,
-                    "reporting_date": _platform_reporting_date(sub, run_id),
-                    "loan_count": int(len(sub)),
-                    "current_outstanding_balance": round(snapshots_mod._balance_sum(sub), 2),
-                }],
-            })
-
-    if not portfolios:  # no provenance → single client entry (prior behaviour)
-        client_id = _platform_client_id(df)
-        portfolios = [{
-            "client_id": client_id, "label": str(client_id).upper(),
-            "runs": [{
-                "run_id": run_id,
-                "reporting_date": _platform_reporting_date(df, run_id),
-                "loan_count": int(len(df)),
-                "current_outstanding_balance": round(snapshots_mod._balance_sum(df), 2),
-            }],
-        }]
-
-    return {"portfolios": portfolios, "source": data_source_label()}
-
-
-def _blob_platform_index(root: str) -> Optional[Dict[str, Any]]:
-    """The dated funded platform-canonical index for a ``blob://`` onboarding
-    output root, or None when nothing dated is published under it."""
-    try:
-        from apps.blob_trigger_app.storage import open_storage
-        storage = open_storage()
-        return platform_blob_mod.build_index(
-            root, storage, label_fn=_pid_label,
-            balance_fn=snapshots_mod._balance_sum,
-            default_client_id=os.environ.get("MI_AGENT_CLIENT_ID"))
-    except Exception as exc:  # noqa: BLE001 - discovery must never 500
-        logger.warning("blob platform snapshot index failed for %s: %s", root, exc)
-        return None
-
-
-def _blob_funded_evolution(root: str, cid: str, trid: Optional[str]) -> Dict[str, Any]:
-    """Funded evolution over the dated platform canonicals under a ``blob://`` root.
-
-    Uses the SOURCE PORTFOLIO id (e.g. ``direct_001``) — not the selected run — and
-    aggregates ALL dated cuts for it (truncated to ``trid`` when that is a date).
-    ``total`` / a type lens aggregates across the matching source portfolios. Never
-    collapses to the currently-selected run."""
-    from apps.blob_trigger_app.storage import open_storage
-    from .funded_prep import prepare_funded_mi_dataset
-    frames = platform_blob_mod.build_funded_evolution_frames(
-        root, open_storage(), cid, trid, prepare_funded_mi_dataset)
-    result = evolution_mod.assemble_funded_evolution(
-        frames, cid, trid,
-        lineage={
-            "source": "governed dated platform canonicals (platform_canonical_typed.csv)",
-            "metric": "funded book actuals per reporting cut",
-            "note": "One period per dated platform canonical for the selected "
-                    "source portfolio / lens; no cross-run merge.",
-        })
-    return result
 
 
 @app.get("/mi/snapshots")
@@ -486,44 +377,6 @@ def snapshots() -> Dict[str, Any]:
     if platform is not None:
         return platform
     return {"portfolios": [], "source": "unavailable"}
-
-
-def _resolve_run_dataframe(client_id: str, run_id: str, root: Optional[str]):
-    """``(df, prep_report)`` for a specific run, preferring on-disk discovery and
-    falling back to the active env-configured dataframe for the active run."""
-    # A dated cut under a blob:// platform root: load THAT canonical (scoped to the
-    # source portfolio), not the active/latest one — so selecting an earlier month
-    # shows that month's data.
-    if root and platform_blob_mod.is_blob_root(root):
-        try:
-            from apps.blob_trigger_app.storage import open_storage
-            raw = platform_blob_mod.resolve_run_frame(
-                root, open_storage(), client_id, run_id)
-            if raw is not None and not raw.empty:
-                from .funded_prep import prepare_funded_mi_dataset
-                return prepare_funded_mi_dataset(raw)
-        except Exception as exc:  # noqa: BLE001 - fall back to active source
-            logger.warning("blob platform run resolution failed for %s/%s: %s",
-                           client_id, run_id, exc)
-    if root and not platform_blob_mod.is_blob_root(root):
-        tape = snapshots_mod.resolve_tape_path(root, client_id, run_id)
-        if tape is not None:
-            return snapshots_mod.load_prepared_run(tape)
-    # Fall back to the active data source if it matches the requested run.
-    info = data_source_info()
-    if info.get("client_id") == client_id and info.get("run_id") == run_id:
-        return get_dataframe(), info
-    # Platform canonical: the combined dataset IS the run. Serve it for the
-    # synthesized portfolio/run from _platform_snapshot_index(); when the requested
-    # id is a source_portfolio_id present in the canonical, scope to that book.
-    if data_source_kind() == KIND_PLATFORM_CANONICAL:
-        df = get_dataframe()
-        if client_id and "source_portfolio_id" in df.columns:
-            ids = df["source_portfolio_id"].astype(str).str.strip()
-            if (ids == client_id).any():
-                df = df[ids == client_id]
-        return df, info
-    return None, None
 
 
 @app.get("/mi/snapshot")
@@ -589,140 +442,6 @@ def snapshot(portfolioId: Optional[str] = None,
     return result
 
 
-#: A trailing dated (or ``latest``) folder in a pipeline snapshot pointer.
-_PIPELINE_URI_TAIL_RE = re.compile(r"^(?:\d{4}-\d{2}-\d{2}|latest)$", re.IGNORECASE)
-
-
-def _pipeline_root_from_uri() -> Optional[str]:
-    """Derive a pipeline DISCOVERY ROOT from ``MI_AGENT_PIPELINE_URI`` (the weekly
-    snapshot pointer) when ``MI_AGENT_PIPELINE_ROOT`` is not set.
-
-    The URI points at a SINGLE snapshot (``…/{date|latest}/pipeline_snapshot.csv``,
-    a ``.json`` pointer, or a ``latest/`` dir). Discovery/evolution/funnel need the
-    CONTAINING root so they can enumerate ALL dated weekly cuts, not just one — so
-    strip the filename and a trailing ``{date}``/``latest`` folder to reach it."""
-    uri = os.environ.get("MI_AGENT_PIPELINE_URI")
-    if not uri:
-        return None
-    path = uri.rstrip("/")
-    if path.endswith(".csv") or path.endswith(".json"):
-        path = path.rsplit("/", 1)[0]
-    last = path.rsplit("/", 1)[-1]
-    if _PIPELINE_URI_TAIL_RE.match(last):
-        path = path.rsplit("/", 1)[0]
-    return path or None
-
-
-def _pipeline_root() -> Optional[str]:
-    """Root to discover governed pipeline sources (18a tape / M2L KFI extracts).
-
-    Precedence: explicit ``MI_AGENT_PIPELINE_ROOT`` → a root DERIVED from the
-    weekly ``MI_AGENT_PIPELINE_URI`` pointer → ``MI_AGENT_ONBOARDING_OUTPUT_ROOT``
-    → the inferred onboarding root. The URI-derived root comes before the
-    onboarding root because the onboarding/platform root holds FUNDED cuts, not
-    the weekly pipeline extracts."""
-    explicit = os.environ.get("MI_AGENT_PIPELINE_ROOT")
-    if explicit:
-        return explicit
-    derived = _pipeline_root_from_uri()
-    if derived:
-        return derived
-    root = os.environ.get("MI_AGENT_ONBOARDING_OUTPUT_ROOT")
-    if root:
-        return root
-    return _onboarding_output_root()
-
-
-#: A dated published pipeline snapshot under a ``blob://`` root:
-#: ``…/pipeline/{client}/{YYYY-MM-DD}/pipeline_snapshot.csv``. The ``latest/``
-#: pointer folder is excluded because ``latest`` is not a ``YYYY-MM-DD`` date.
-_BLOB_DATED_SNAPSHOT_RE = re.compile(
-    r"/(?P<date>\d{4}-\d{2}-\d{2})/pipeline_snapshot\.csv$")
-
-
-def _blob_dated_snapshots(root: str, storage) -> List[Dict[str, str]]:
-    """List the DATED published pipeline snapshots under a ``blob://`` root, using
-    the storage abstraction (same helper that downloads MI_AGENT_PIPELINE_URI).
-
-    Includes only ``{YYYY-MM-DD}/pipeline_snapshot.csv`` blobs, EXCLUDES the
-    ``latest/`` pointer, and returns ``[{date, uri}]`` sorted chronologically. A
-    non-blob root, or any listing error, yields ``[]`` (the caller then falls back
-    to unchanged filesystem discovery)."""
-    if not str(root).startswith("blob://"):
-        return []
-    try:
-        uris = storage.list(root)
-    except Exception as exc:  # noqa: BLE001 - discovery must never 500
-        logger.warning("blob pipeline listing failed for %s: %s", root, exc)
-        return []
-    dated: List[Dict[str, str]] = []
-    for uri in uris:
-        if "/latest/" in uri:
-            continue  # the latest/ pointer is never a dated historical source
-        m = _BLOB_DATED_SNAPSHOT_RE.search(uri)
-        if m:
-            dated.append({"date": m.group("date"), "uri": uri})
-    dated.sort(key=lambda d: d["date"])
-    return dated
-
-
-#: Local mirror of the blob dated snapshots, keyed by root and content signature
-#: (sorted uri:etag) so we only re-download when a snapshot is added/republished.
-_PIPELINE_MIRROR_CACHE: Dict[str, Any] = {"root": None, "sig": None, "local": None}
-
-
-def _materialise_pipeline_root(root: Optional[str]) -> Optional[str]:
-    """Return a LOCAL discovery root for ``root``.
-
-    Filesystem roots are returned unchanged (fixtures behave exactly as before).
-    A ``blob://`` root is mirrored to a local scratch tree
-    (``{scratch}/pipeline_root/{client}/{date}/pipeline_snapshot.csv``) containing
-    ONLY the dated snapshots (``latest/`` excluded), so every downstream consumer —
-    ``/mi/pipeline/snapshots``, ``/mi/evolution/pipeline`` and the historical model
-    — discovers the SAME set of dated sources through the existing filesystem
-    discovery. etag-cached, so repeated requests do not re-download."""
-    if not root or not str(root).startswith("blob://"):
-        return root
-    try:
-        from pathlib import Path as _Path
-        from apps.blob_trigger_app.storage import open_storage, split_blob_uri
-        storage = open_storage()
-        dated = _blob_dated_snapshots(root, storage)
-        if not dated:
-            return root  # nothing dated to mirror; blob discovery yields []
-        sig = ";".join(f"{d['uri']}:{storage.etag(d['uri']) or ''}" for d in dated)
-        cache = _PIPELINE_MIRROR_CACHE
-        if (cache.get("root") == root and cache.get("sig") == sig
-                and cache.get("local") and _Path(cache["local"]).exists()):
-            return cache["local"]
-        scratch = os.environ.get("MI_AGENT_SCRATCH", "/tmp/trakt/mi_platform")
-        base = _Path(scratch) / "pipeline_root"
-        _container, key = split_blob_uri(root)
-        prefix = key.rstrip("/")
-        for d in dated:
-            # Preserve the {client}/{date}/pipeline_snapshot.csv tail below the root
-            # prefix so folder-date + client inference resolve on the local mirror.
-            _c, ukey = split_blob_uri(d["uri"])
-            rel = ukey[len(prefix):].lstrip("/") if ukey.startswith(prefix) else \
-                f"{d['date']}/pipeline_snapshot.csv"
-            dest = base / rel
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            storage.download_file(d["uri"], dest)
-        cache.update(root=root, sig=sig, local=str(base))
-        return str(base)
-    except Exception as exc:  # noqa: BLE001 - never break discovery on mirror errors
-        logger.warning("pipeline blob mirror failed for %s: %s", root, exc)
-        return root
-
-
-def _pipeline_discovery_root() -> Optional[str]:
-    """The pipeline root to run governed discovery/evolution/history against —
-    filesystem unchanged, ``blob://`` mirrored locally so all consumers share the
-    same dated snapshot set."""
-    return _materialise_pipeline_root(
-        os.environ.get("MI_AGENT_PIPELINE_ROOT") or _pipeline_root())
-
-
 @app.get("/mi/pipeline/snapshots")
 def pipeline_snapshots(portfolioId: Optional[str] = None) -> Dict[str, Any]:
     """Data-driven discovery of governed pipeline sources and reporting dates."""
@@ -738,167 +457,6 @@ def pipeline_snapshots(portfolioId: Optional[str] = None) -> Dict[str, Any]:
         return {"sources": [], "source": "error", "error": str(exc)}
     # Report the ORIGINAL configured root (the blob:// URI), not the local mirror.
     return {"sources": sources, "source": configured}
-
-
-#: etag-cached local copy of the blob pipeline snapshot (avoid re-download when
-#: unchanged; re-download when a new weekly run republishes it).
-_PIPELINE_URI_CACHE: Dict[str, Any] = {"etag": None, "path": None}
-
-
-def _resolve_pipeline_uri_local() -> Optional[str]:
-    """Resolve MI_AGENT_PIPELINE_URI (the durable weekly pipeline snapshot pointer,
-    CSV, or ``latest/`` dir) to a LOCAL CSV path, etag-cached so a re-published
-    weekly extract renders on the next request without a restart. ``None`` when
-    unset/absent — filesystem resolution below is then unchanged."""
-    uri = os.environ.get("MI_AGENT_PIPELINE_URI")
-    if not uri:
-        return None
-    try:
-        import json as _json
-        from pathlib import Path as _Path
-        from apps.blob_trigger_app.storage import open_storage
-        storage = open_storage()
-        csv_uri = uri
-        if uri.endswith(".json"):
-            ptr = _json.loads(storage.read_text(uri))
-            csv_uri = ptr.get("blob_name") or ptr.get("source_file")
-        elif not uri.endswith(".csv"):
-            csv_uri = f"{uri.rstrip('/')}/pipeline_snapshot.csv"
-        if not csv_uri or not storage.exists(csv_uri):
-            return None
-        et = storage.etag(csv_uri)
-        cached = _PIPELINE_URI_CACHE
-        if (et and et == cached.get("etag") and cached.get("path")
-                and _Path(cached["path"]).exists()):
-            return cached["path"]
-        local = storage._local_path(csv_uri)
-        if _Path(str(local)).exists():
-            dest = str(local)
-        else:
-            scratch = os.environ.get("MI_AGENT_SCRATCH", "/tmp/trakt/mi_platform")
-            dest = str(storage.download_file(csv_uri, _Path(scratch) / "pipeline_snapshot.csv"))
-        _PIPELINE_URI_CACHE.update(etag=et, path=dest)
-        return dest
-    except Exception as exc:  # noqa: BLE001 — never 500 pipeline resolution
-        logger.warning("pipeline blob resolution failed for %s: %s", uri, exc)
-        return None
-
-
-def _latest_pipeline_extract_date(client_id: str) -> Optional[str]:
-    """The latest available weekly pipeline extract date for ``client_id`` from
-    governed discovery (the max dated snapshot). Used to recover the real as-of
-    date when the source was resolved via the ``latest/`` pointer (whose path
-    carries no date), so the pipeline is disclosed as of its true extract date."""
-    root = _pipeline_discovery_root()
-    if not root:
-        return None
-    try:
-        srcs = pipeline_mod.discover_pipeline_sources(root, client_id=client_id)
-    except Exception:  # noqa: BLE001 - discovery must never break resolution
-        return None
-    dates = [s.get("pipeline_as_of_date") or s.get("pipeline_extract_date")
-             for s in srcs]
-    dates = [d for d in dates if d]
-    return max(dates) if dates else None
-
-
-def _weekly_files_window(client_id: str, as_of: Optional[str]) -> list:
-    """The governed weekly-extract window (every unique dated extract up to and
-    including ``as_of``) for ``client_id``, from the SAME discovery the evolution
-    and history endpoints use — including a ``blob://`` root's dated snapshots.
-
-    Used to attach ``weekly_files`` to a source resolved via the ``latest/``
-    blob pointer (whose single CSV carries no prior-week history), so week-on-week
-    tile deltas can select and aggregate the real prior extract. Returns ``[]``
-    when there is no discovery root or fewer than two dated extracts.
-    """
-    root = _pipeline_discovery_root()
-    if not root:
-        return []
-    try:
-        inv = pipeline_mod.weekly_extract_inventory(root, client_id)
-    except Exception:  # noqa: BLE001 - discovery must never break resolution
-        return []
-    extracts = inv.get("extracts", []) or []
-    if as_of:
-        extracts = [e for e in extracts
-                    if (e.get("pipeline_extract_date") or "") <= as_of]
-    return extracts
-
-
-def _resolve_pipeline_source(client_id: str, run_id: Optional[str]) -> Optional[Dict[str, Any]]:
-    """The governed pipeline scope for a client/run (blob URI, explicit env, or
-    discovery). Returns a scope dict with the separated date concepts (folder /
-    extract / as-of), never a single ambiguous reporting date.
-
-    The pipeline scope ALWAYS reflects the LATEST available weekly extract — the
-    funded ``run_id`` never truncates it (funded actuals may lag the pipeline).
-    """
-    # Durable blob pipeline snapshot (production) wins, then an explicit local file.
-    explicit = _resolve_pipeline_uri_local() or os.environ.get("MI_AGENT_PIPELINE_SOURCE")
-    if explicit:
-        from pathlib import Path as _Path
-        p = _Path(explicit)
-        if p.exists():
-            folder_date = pipeline_mod._folder_date(p.parent)
-            extract_date = pipeline_mod._extract_date(p)
-            # The latest/ pointer carries no date in its path; recover the true
-            # extract date from discovery so the pipeline as-of is not lost/None.
-            as_of = extract_date or folder_date or _latest_pipeline_extract_date(client_id)
-            return {"client_id": client_id, "source_file": str(p),
-                    "run_id": run_id or pipeline_mod._run_id_for(folder_date, extract_date, p),
-                    "pipeline_source_folder": str(p.parent),
-                    "pipeline_source_folder_date": folder_date,
-                    "pipeline_extract_date": extract_date or as_of,
-                    "pipeline_as_of_date": as_of,
-                    "current_pipeline_snapshot_date": as_of,
-                    "current_pipeline_source_file": p.name,
-                    # The latest/ pointer is a single CSV with no prior-week
-                    # history; attach the governed dated-extract window so the
-                    # week-on-week tile deltas can select the real prior extract.
-                    "weekly_files": _weekly_files_window(client_id, as_of)}
-    root = _pipeline_discovery_root()
-    if root:
-        return pipeline_mod.resolve_pipeline_source(root, client_id, run_id)
-    return None
-
-
-def _pipeline_history(client_id: str) -> Optional[Dict[str, Any]]:
-    """The historical completion-rate model from a client's weekly pipeline files.
-
-    Built from the SAME discovered dated sources as ``/mi/pipeline/snapshots`` and
-    ``/mi/evolution/pipeline`` — including a ``blob://`` root's dated snapshots
-    (the ``MI_AGENT_PIPELINE_URI`` latest pointer is only the current snapshot; it
-    does NOT suppress the multi-week history when the root holds several dated
-    snapshots). Returns None for a single explicit local source, no discovery root,
-    or when fewer than two weekly extracts exist (no multi-week history to model)."""
-    if os.environ.get("MI_AGENT_PIPELINE_SOURCE"):
-        return None  # single explicit local source → no multi-week history model
-    root = _pipeline_discovery_root()
-    if not root:
-        return None
-    try:
-        model = pipeline_mod.build_pipeline_history(root, client_id)
-    except Exception as exc:  # noqa: BLE001 - history is additive; never 500
-        logger.warning("pipeline history build failed for %s: %s", client_id, exc)
-        return None
-    if int((model or {}).get("uniqueWeeklyExtractsUsed", 0)) < 2:
-        return None  # a single dated snapshot is not a multi-week history
-    return model
-
-
-def _kfi_lag_weeks_from_model(model: Optional[Dict[str, Any]]) -> Optional[int]:
-    """Median KFI->completion lag in whole weeks from an already-built history
-    model. Returns None when no timing is available."""
-    timing = ((model or {}).get("historicalCompletionTimingByStage") or {}).get("KFI") or {}
-    median_days = timing.get("medianDays")
-    return max(1, round(float(median_days) / 7.0)) if median_days else None
-
-
-def _kfi_completion_lag_weeks(client_id: str) -> Optional[int]:
-    """Median KFI->completion lag, in whole weeks, from the historical model.
-    Convenience wrapper that builds the model; never raises."""
-    return _kfi_lag_weeks_from_model(_pipeline_history(client_id))
 
 
 @app.get("/mi/pipeline/snapshot")
@@ -1015,32 +573,6 @@ def forecast_snapshot(portfolioId: Optional[str] = None,
     envelope["pipelineTiming"] = timing_mod.timing_disclosure(
         funded_reporting_date or _funded_date_from_run(run_id), pipeline_as_of)
     return envelope
-
-
-def _funded_date_from_run(run_id: Optional[str]) -> Optional[str]:
-    """The funded reporting date implied by a selected run id: a ``YYYY-MM-DD``
-    run IS the date; an ``mi_YYYY_MM`` run maps to that month-end; otherwise None."""
-    import calendar
-    if not run_id:
-        return None
-    s = str(run_id)
-    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
-        return s
-    m = re.fullmatch(r"mi_(\d{4})_(\d{2})", s) or re.fullmatch(r"(\d{4})-(\d{2})", s)
-    if m:
-        y, mo = int(m.group(1)), int(m.group(2))
-        if 1 <= mo <= 12:
-            return f"{y:04d}-{mo:02d}-{calendar.monthrange(y, mo)[1]:02d}"
-    return None
-
-
-def _evo_ids(portfolioId, client_id, toRunId, to_run_id):
-    """Resolve (client_id, to_run_id) from a portfolioId or explicit params."""
-    if portfolioId and "/" in portfolioId:
-        client_id, to_run_id = portfolioId.split("/", 1)
-    elif portfolioId:
-        client_id = portfolioId
-    return (client_id or "client_001"), (toRunId or to_run_id)
 
 
 @app.get("/mi/evolution/funded")
@@ -1251,27 +783,32 @@ def list_decks(portfolioId: Optional[str] = None,
 
 
 @app.get("/mi/decks/download")
-def download_deck(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
-                  period: Optional[str] = None):
+def download_deck(request: Request, portfolioId: Optional[str] = None,
+                  client_id: Optional[str] = None, period: Optional[str] = None):
     """Serve an investor PPTX deck (the latest, or a specific reporting period).
 
-    Returns the .pptx bytes as an attachment with a friendly filename. 404 (JSON)
-    when the requested deck does not exist, so the UI can disable the action.
+    The deck is selected by the AUTHENTICATED tenant, not by ``client_id``.
+    ``client_id`` is retained for backward compatibility and is DEPRECATED: it is
+    accepted when it matches the trusted tenant and refused (403) when it names
+    another one. Previously it selected the deck outright, which allowed any
+    authenticated user to fetch another tenant's investor pack from the shared
+    deck container.
     """
-    cid, _trid = _evo_ids(portfolioId, client_id, None, None)
-    try:
-        resolved = decks_mod.resolve_deck_local(cid, period)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("deck download failed for %s: %s", cid, exc)
-        resolved = None
-    if resolved is None:
-        which = period or "latest"
+    context = _execution_context(request, channel=CHANNEL_REACT)
+    result = artefacts_mod.get_investor_pack(
+        context, portfolio_id=portfolioId, period=period,
+        requested_client_id=client_id)
+    if not result.ok:
+        err = result.error
         return JSONResponse(
-            status_code=404,
-            content={"ok": False,
-                     "error": f"No investor deck available for {cid} ({which})."})
-    path, filename = resolved
-    return FileResponse(str(path), media_type=_PPTX_MEDIA_TYPE, filename=filename)
+            status_code=result.http_status,
+            content={"ok": False, "error": err.message if err else "Unavailable.",
+                     "errorCode": err.code if err else None,
+                     "retryable": err.retryable if err else False,
+                     "requestId": result.request_id})
+    artefact = result.result
+    return FileResponse(str(artefact.local_path), media_type=artefact.content_type,
+                        filename=artefact.download_name)
 
 
 @app.get("/mi/evolution/forecast")
@@ -1428,141 +965,41 @@ def workspace_view(portfolioId: Optional[str] = None,
     }
 
 
-def _resolve_query_frame(view: str, portfolio_id: Optional[str]):
-    """``(df, error)`` for a tab-aware query. Funded keeps the existing active
-    dataset (unchanged); pipeline / forecast resolve the governed pipeline (and,
-    for forecast, a derived funded + weighted-pipeline frame)."""
-    client_id, run_id = "client_001", None
-    if portfolio_id and "/" in portfolio_id:
-        client_id, run_id = portfolio_id.split("/", 1)
-    elif portfolio_id:
-        client_id = portfolio_id
-
-    if view == "funded":
-        # Honour the selected reporting run: when the portfolio id carries a
-        # run_id, load THAT run's funded book (exactly as /mi/snapshot does)
-        # instead of the active/latest dataset. Otherwise an earlier-run
-        # selection would be answered from the latest snapshot yet labelled with
-        # the selected date — a stale, mislabelled answer. Falls back to the
-        # active dataset when no run_id is given or the run cannot be resolved.
-        if run_id:
-            try:
-                run_df, _ = _resolve_run_dataframe(
-                    client_id, run_id, _onboarding_output_root())
-            except Exception as exc:  # noqa: BLE001 - fall back to active source
-                logger.warning("funded run resolution failed for %s/%s: %s",
-                               client_id, run_id, exc)
-                run_df = None
-            if run_df is not None and len(run_df):
-                return run_df, None
-        return get_dataframe(), None  # active/latest funded dataset
-
-    pipeline_df = None
-    source = _resolve_pipeline_source(client_id, run_id)
-    if source is not None:
-        try:
-            pipeline_df, _ = pipeline_mod.load_prepared_pipeline(
-                source, historical_model=_pipeline_history(source.get("client_id", client_id)))
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("pipeline frame load failed for query: %s", exc)
-
-    if view == "pipeline":
-        if pipeline_df is None or not len(pipeline_df):
-            return None, "No governed pipeline data is available for the pipeline view."
-        return pipeline_df, None
-
-    # forecast — derived funded + weighted pipeline frame.
-    funded_df = None
-    if run_id:
-        funded_df, _ = _resolve_run_dataframe(client_id, run_id, _onboarding_output_root())
-    if funded_df is None:
-        try:
-            funded_df = get_dataframe()
-        except FileNotFoundError:
-            funded_df = None
-    frame = workspace_mod.build_forecast_view_frame(funded_df, pipeline_df)
-    if not len(frame):
-        return None, "No forecast data is available for the forecast view."
-    return frame, None
-
-
-def _mi_llm_config() -> SimpleNamespace:
-    """LLM-parser configuration for the MI Agent query path.
-
-    Returns an object with ``enabled`` (the parser should attempt the LLM),
-    ``available`` (it can actually run — a key is present), ``model``, a
-    human-readable ``status``, and any ``warnings``. The LLM is the FALLBACK for
-    questions the deterministic parser can't resolve (``zero_cost_first`` keeps
-    easy questions free — no LLM call). It is enabled by default whenever an
-    ``ANTHROPIC_API_KEY`` is configured; with no key the parser stays
-    deterministic-only (never crashes). Operators can force it with
-    ``MI_AGENT_LLM_PARSER=on|off|auto`` and override the model with
-    ``MI_AGENT_LLM_MODEL``.
-    """
-    mode = os.environ.get("MI_AGENT_LLM_PARSER", "auto").strip().lower()
-    has_key = bool(os.environ.get("ANTHROPIC_API_KEY"))
-    if mode in ("off", "0", "false", "no"):
-        enabled = False
-    elif mode in ("on", "1", "true", "yes"):
-        enabled = True
-    else:  # auto
-        enabled = has_key
-    model = os.environ.get("MI_AGENT_LLM_MODEL") or None
-    available = bool(enabled and has_key)
-    warnings: List[str] = []
-    if enabled and not has_key:
-        status = "unavailable_no_api_key"
-        warnings.append("LLM parser requested but ANTHROPIC_API_KEY is not set; "
-                        "using the deterministic parser.")
-    elif enabled:
-        status = "enabled"
-    else:
-        status = "disabled"
-    return SimpleNamespace(enabled=enabled, model=model, available=available,
-                           status=status, warnings=warnings)
-
-
-_CLIENT_CURRENCY_CACHE: Dict[str, str] = {}
-
-
-def _apply_request_currency(cid: str, portfolio_id: Optional[str]) -> None:
-    """Set the request-scoped display currency for a client (tape -> config ->
-    GBP), cached per client. Resolved from the client's funded book, which is
-    book-level (one currency), so it covers the routed answers too. Never raises."""
-    code = _CLIENT_CURRENCY_CACHE.get(cid)
-    if code is None:
-        code = "GBP"
-        try:
-            fdf, ferr = _resolve_query_frame("funded", portfolio_id)
-            if fdf is not None and not ferr:
-                code = currency_mod.resolve_currency_code(fdf)
-        except Exception as exc:  # noqa: BLE001 - currency is presentational
-            logger.warning("currency resolution failed for %s: %s", cid, exc)
-        _CLIENT_CURRENCY_CACHE[cid] = code
-    currency_mod.set_currency(code)
-
-
 @app.post("/mi/query")
-def query(req: QueryRequest) -> Dict[str, Any]:
-    """React MI Agent channel — a THIN adapter over the shared governed MI
-    application service (``mi_service.execute_governed_mi_query``).
+def query(req: QueryRequest, request: Request) -> Any:
+    """React MI Agent channel — a THIN adapter over the governed MI capability.
 
-    No analytical behaviour lives here: parsing, intent routing, dataset
-    resolution, calculation, validation, reconciliation, provenance and artifact
-    creation are all owned by the shared service, so every improvement made
-    there is inherited by the Copilot channel automatically (and vice versa).
-    The envelope is returned verbatim — the existing React contract (charts,
-    tables, drill-through, workspace, follow-ups) is unchanged.
+    The adapter does exactly three things: turn the authenticated principal into
+    an :class:`~trakt_core.context.ExecutionContext`, translate the HTTP body
+    into an ``MiQueryRequest``, and present the ``GovernedResult``. No parsing,
+    routing, dataset resolution, calculation, validation, policy or provenance
+    logic lives here — all of it is owned by ``mi_service`` and is therefore
+    shared with Copilot and with any future adapter.
+
+    The response body is the existing React envelope plus an additive
+    ``governance`` block; no pre-existing field changed.
     """
-    return mi_service.execute_governed_mi_query(mi_service.MiQueryRequest(
-        question=req.question,
-        portfolio_id=req.portfolioId or (req.portfolio.id if req.portfolio else None),
-        as_of_date=req.asOfDate,
-        filters=req.filters,
-        dataset_context=req.datasetContext,
-        context=req.context,
-        source_portfolio_lens=req.sourcePortfolioLens,
-    ))
+    context = _execution_context(request, channel=CHANNEL_REACT)
+    result = mi_service.execute_governed_mi_query(
+        mi_service.MiQueryRequest(
+            question=req.question,
+            portfolio_id=req.portfolioId or (req.portfolio.id if req.portfolio else None),
+            as_of_date=req.asOfDate,
+            filters=req.filters,
+            dataset_context=req.datasetContext,
+            context=req.context,
+            source_portfolio_lens=req.sourcePortfolioLens,
+        ),
+        context,
+    )
+    payload = presenters.to_react_payload(result)
+    # Governance refusals (unauthorised portfolio, unapproved data source) carry
+    # their mapped HTTP status. Analytical outcomes stay 200 with ok=false, which
+    # is the contract the React client already implements.
+    status = result.http_status
+    if status == 200:
+        return payload
+    return JSONResponse(status_code=status, content=payload)
 
 
 # Microsoft 365 Copilot v1 actions (askTraktMi / getLatestInvestorDeck /

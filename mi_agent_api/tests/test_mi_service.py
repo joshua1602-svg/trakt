@@ -27,8 +27,17 @@ if str(_REPO_ROOT) not in sys.path:
 
 import pytest
 
+from trakt_core.context import ExecutionContext
 from mi_agent_api import data_source, mi_service
 from mi_agent_api.mi_service import MiQueryRequest, execute_governed_mi_query
+
+#: A trusted context, as an interface adapter would build one. Constructed here
+#: WITHOUT importing FastAPI — the point of the capability boundary.
+TEST_TENANT = "ERE"
+
+
+def _context(tenant_id: str = TEST_TENANT, **kw) -> ExecutionContext:
+    return ExecutionContext.for_internal(tenant_id, **kw)
 
 
 def _demo_csv() -> Path:
@@ -50,8 +59,15 @@ def governed_dataset(monkeypatch):
     data_source.reset_cache()
 
 
+def _run(question: str, *, context: ExecutionContext | None = None, **kw):
+    """Invoke the governed capability and return the full ``GovernedResult``."""
+    return execute_governed_mi_query(
+        MiQueryRequest(question=question, **kw), context or _context())
+
+
 def _ask(question: str, **kw) -> dict:
-    return execute_governed_mi_query(MiQueryRequest(question=question, **kw))
+    """The analytical payload — what the channels present. Unchanged in shape."""
+    return _run(question, **kw).result
 
 
 def _rows(envelope: dict) -> list:
@@ -157,8 +173,8 @@ def test_unavailable_dataset_is_a_controlled_governed_error(monkeypatch):
     def _boom(_view, _portfolio_id):
         raise FileNotFoundError("no governed dataset is configured")
 
-    from mi_agent_api import app as app_mod
-    monkeypatch.setattr(app_mod, "_resolve_query_frame", _boom)
+    from mi_agent_api import datasets as datasets_mod
+    monkeypatch.setattr(datasets_mod, "_resolve_query_frame", _boom)
     env = _ask("What is the total current balance?")
     assert env["ok"] is False
     assert "no governed dataset is configured" in env["error"]
@@ -167,8 +183,8 @@ def test_unavailable_dataset_is_a_controlled_governed_error(monkeypatch):
 
 
 def test_frame_error_is_reported_not_downgraded(monkeypatch):
-    from mi_agent_api import app as app_mod
-    monkeypatch.setattr(app_mod, "_resolve_query_frame",
+    from mi_agent_api import datasets as datasets_mod
+    monkeypatch.setattr(datasets_mod, "_resolve_query_frame",
                         lambda _v, _p: (None, "No governed pipeline data is available."))
     env = _ask("What is the pipeline amount?", dataset_context="pipeline")
     assert env["ok"] is False
@@ -186,12 +202,33 @@ def test_client_context_scopes_the_query_without_a_run(governed_dataset):
     assert meta["selectedRun"] is None
 
 
-def test_explicit_portfolio_overrides_the_client_context(governed_dataset):
-    env = _ask("What is the total current balance?",
-               portfolio_id="ERE/run_2026_01", client_id="OTHER")
-    meta = env["metadata"]
+def test_explicit_portfolio_narrows_within_the_trusted_tenant(governed_dataset):
+    """An explicit portfolio selects a book WITHIN the authenticated tenant."""
+    result = _run("What is the total current balance?", portfolio_id="ERE/run_2026_01")
+    meta = result.result["metadata"]
     assert meta["selectedClient"] == "ERE"
     assert meta["selectedPortfolio"] == "ERE/run_2026_01"
+    assert result.portfolio_id == "ERE/run_2026_01"
+    assert result.tenant_id == "ERE"
+
+
+def test_conflicting_client_id_cannot_redefine_the_tenant(governed_dataset):
+    """The defect this boundary exists to close.
+
+    ``client_id`` used to be OR-ed into the effective portfolio and then split
+    back out as the client, so a caller-supplied value silently replaced the
+    authenticated tenant. It is now a deprecated portfolio fallback only, and a
+    value that disagrees with the trusted tenant is refused outright.
+    """
+    result = _run("What is the total current balance?",
+                  portfolio_id="ERE/run_2026_01", client_id="OTHER",
+                  context=_context("ERE"))
+    assert result.blocked
+    assert result.error.code == "TENANT_MISMATCH"
+    assert result.tenant_id == "ERE"
+    # No analytical answer was produced for the mismatched caller.
+    assert result.result["ok"] is False
+    assert result.result["artifacts"] == []
 
 
 def test_split_portfolio_forms():
@@ -212,25 +249,90 @@ def test_only_genuinely_temporal_routes_are_run_scoped():
 
 
 # --------------------------------------------------------------------------- #
-# Fail-closed: the synthetic demo dataset never reaches Copilot
+# Fail-closed: production never answers from the synthetic demo dataset
+#
+# The refusal now lives in the capability (trakt_core.policy), not in the Copilot
+# adapter, so it applies to EVERY channel. These tests set the production runtime
+# mode explicitly; the suite default (see the repo-root conftest) is ``test``,
+# which is what legitimately allows the fixtures the rest of this file uses.
 # --------------------------------------------------------------------------- #
-def test_synthetic_dataset_is_refused_by_the_copilot_channel(monkeypatch):
-    from fastapi.testclient import TestClient
-    from mi_agent_api.app import app
-
-    monkeypatch.setenv("TRAKT_COPILOT_AUTH_MODE", "disabled")
+def _force_synthetic(monkeypatch):
     for var in ("MI_AGENT_DATA_CSV", "MI_AGENT_ANALYTICS_DATASET",
                 "MI_AGENT_CENTRAL_TAPE", "MI_AGENT_ONBOARDING_OUTPUT_ROOT",
                 "MI_AGENT_PLATFORM_URI", "MI_AGENT_PLATFORM_CANONICAL",
                 "MI_AGENT_PLATFORM_DIR"):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("MI_AGENT_DATA_CACHE_TTL", "0")
+    monkeypatch.setenv("TRAKT_RUNTIME_MODE", "production")
     data_source.reset_cache()
+
+
+def test_synthetic_dataset_is_refused_by_the_copilot_channel(monkeypatch):
+    from fastapi.testclient import TestClient
+    from mi_agent_api.app import app
+
+    monkeypatch.setenv("TRAKT_COPILOT_AUTH_MODE", "disabled")
+    _force_synthetic(monkeypatch)
     try:
         assert data_source.data_source_kind() == data_source.KIND_SYNTHETIC_DEMO
         r = TestClient(app).post("/v1/copilot/mi/query",
                                  json={"question": "What is the total balance?"})
         assert r.status_code == 503
-        assert r.json()["ok"] is False
+        body = r.json()
+        assert body["ok"] is False
+        assert body["errorCode"] == "DATA_SOURCE_NOT_APPROVED"
+    finally:
+        data_source.reset_cache()
+
+
+def test_synthetic_dataset_is_refused_by_the_react_channel(monkeypatch):
+    """The gap the central policy closes: React had no source-approval check at
+    all, so it would answer a production question from the demo dataset."""
+    from fastapi.testclient import TestClient
+    from mi_agent_api.app import app
+
+    _force_synthetic(monkeypatch)
+    try:
+        r = TestClient(app).post("/mi/query",
+                                 json={"question": "What is the total balance?"})
+        assert r.status_code == 503
+        body = r.json()
+        assert body["ok"] is False
+        assert body["governance"]["error"]["code"] == "DATA_SOURCE_NOT_APPROVED"
+        assert body["governance"]["policy"]["data_approved"] is False
+    finally:
+        data_source.reset_cache()
+
+
+def test_synthetic_dataset_is_refused_for_a_direct_python_caller(monkeypatch):
+    """And for an in-process caller — no HTTP layer involved in the refusal."""
+    _force_synthetic(monkeypatch)
+    try:
+        result = _run("What is the total balance?")
+        assert result.blocked
+        assert result.error.code == "DATA_SOURCE_NOT_APPROVED"
+        assert result.policy.data_approved is False
+    finally:
+        data_source.reset_cache()
+
+
+def test_explicit_csv_pointing_at_the_demo_pack_is_also_refused(monkeypatch):
+    """The hole the old adapter-level check missed.
+
+    ``MI_AGENT_DATA_CSV=<the synthetic demo CSV>`` resolves to display kind
+    ``explicit_csv``, so the previous ``kind in {synthetic_demo, unavailable}``
+    block did not fire and Copilot answered from demo data. The policy now
+    decides on the resolution BASE, so a fixture is a fixture whichever
+    environment variable pointed at it.
+    """
+    monkeypatch.setenv("MI_AGENT_DATA_CSV", str(_demo_csv()))
+    monkeypatch.setenv("MI_AGENT_DATA_CACHE_TTL", "0")
+    monkeypatch.setenv("TRAKT_RUNTIME_MODE", "production")
+    data_source.reset_cache()
+    try:
+        assert data_source.data_source_kind() == data_source.KIND_EXPLICIT_CSV
+        result = _run("What is the total balance?")
+        assert result.blocked
+        assert result.error.code == "DATA_SOURCE_NOT_APPROVED"
     finally:
         data_source.reset_cache()

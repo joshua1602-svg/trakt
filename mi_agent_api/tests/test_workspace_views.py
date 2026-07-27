@@ -175,10 +175,17 @@ class TestWorkspaceApi(unittest.TestCase):
         # A crash inside the MI pipeline must be surfaced as a controlled error
         # response (HTTP 200, ok=False, readable message) — never a raw 500 that
         # the UI reports as "could not reach the API".
+        #
+        # The executor now runs inside the governed capability, so the seam is
+        # mi_agent.mi_agent_workflow rather than the FastAPI module. The message
+        # is also deliberately generic: the internal exception class and its text
+        # are logged server-side but never returned, so a client cannot learn the
+        # engine's internals from an error. The machine-readable classification
+        # lives in governance.error.code instead.
         import unittest.mock as mock
         from fastapi.testclient import TestClient
         from mi_agent_api.app import app
-        with mock.patch("mi_agent_api.app.run_mi_agent_query",
+        with mock.patch("mi_agent.mi_agent_workflow.run_mi_agent_query",
                         side_effect=RuntimeError("boom in executor")):
             resp = TestClient(app).post("/mi/query", json={
                 "question": "balance by borrower type by region",
@@ -186,8 +193,12 @@ class TestWorkspaceApi(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         body = resp.json()
         self.assertFalse(body["ok"])
-        self.assertIn("boom in executor", body["error"])
-        self.assertIn("RuntimeError", body["error"])
+        self.assertTrue(body["error"])
+        # No internal detail leaks to the caller.
+        self.assertNotIn("RuntimeError", body["error"])
+        self.assertNotIn("boom in executor", body["error"])
+        # …but the failure is still machine-classifiable.
+        self.assertEqual(body["governance"]["error"]["code"], "CALCULATION_FAILED")
 
     def test_separation_funded_and_pipeline_not_merged(self):
         # The forecast frame is derived in-memory; the funded tape on disk is

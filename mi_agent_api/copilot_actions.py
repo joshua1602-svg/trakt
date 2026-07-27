@@ -76,14 +76,12 @@ from pydantic import BaseModel, Field
 
 from .copilot_auth import copilot_auth_guard
 from .copilot_text import normalise_payload, normalise_text
-from .data_source import (
-    KIND_SYNTHETIC_DEMO,
-    KIND_UNAVAILABLE,
-    data_source_kind,
-    data_source_label,
-)
+from .data_source import data_source_kind, data_source_label
+from . import artefacts as artefacts_mod
 from . import decks as decks_mod
+from . import identity as identity_mod
 from . import mi_service
+from . import presenters
 
 logger = logging.getLogger("mi_agent_api.copilot")
 
@@ -92,9 +90,6 @@ router = APIRouter(prefix="/v1/copilot", tags=["copilot"])
 _PPTX_MEDIA_TYPE = (
     "application/vnd.openxmlformats-officedocument.presentationml.presentation")
 _CSV_MEDIA_TYPE = "text/csv"
-
-#: Data-source kinds the Copilot MI action refuses to answer from (fail closed).
-_BLOCKED_SOURCE_KINDS = {KIND_SYNTHETIC_DEMO, KIND_UNAVAILABLE}
 
 _MAX_SUPPORTING_ROWS = 50
 
@@ -388,28 +383,45 @@ def _supporting_values(artifacts: List[Dict[str, Any]]
                503: {"model": CopilotError}},
     dependencies=[Depends(copilot_auth_guard)],
 )
-def ask_trakt_mi(req: CopilotMiQueryRequest):
-    # Fail closed: the Copilot surface must never answer from the synthetic demo
-    # dataset or an unresolved source — a structured 503, never a plausible 200.
-    kind = data_source_kind()
-    if kind in _BLOCKED_SOURCE_KINDS:
-        return _error_json(
-            503, "No governed live data source is configured for this deployment; "
-                 "Trakt cannot answer portfolio questions from Copilot right now.")
-
-    # THE SHARED SERVICE — the same in-process call the React /mi/query route
+def ask_trakt_mi(req: CopilotMiQueryRequest, request: Request):
+    # THE SHARED CAPABILITY — the same in-process call the React /mi/query route
     # makes. Same parser, same intent routing, same active-dataset resolution,
     # same deterministic executor, same metric/dimension/filter definitions,
     # same validation and provenance. No alternate route, no run-id requirement
     # for point-in-time questions, no downgrade to a simpler path.
-    envelope = mi_service.execute_governed_mi_query(mi_service.MiQueryRequest(
-        question=req.question,
-        portfolio_id=req.portfolioId,
-        as_of_date=req.asOfDate,
-        client_id=_copilot_client_id(),
-    ))
-    if not isinstance(envelope, dict):  # defensive: service contract is a dict
+    #
+    # The source-approval check that used to live here (a Copilot-only block on
+    # the synthetic demo dataset) now runs inside the capability, so React,
+    # Copilot and any future caller are refused identically — and the check is
+    # made on the dataset's resolution base rather than its display kind, which
+    # closes the gap where MI_AGENT_DATA_CSV pointed at the demo CSV.
+    context = identity_mod.context_from_copilot_principal(
+        getattr(request.state, "copilot_principal", None),
+        tenant_id=_copilot_client_id(),
+        request_id=request.headers.get("x-request-id") or None,
+        correlation_id=request.headers.get("x-correlation-id") or None,
+    )
+    result = mi_service.execute_governed_mi_query(
+        mi_service.MiQueryRequest(
+            question=req.question,
+            portfolio_id=req.portfolioId,
+            as_of_date=req.asOfDate,
+        ),
+        context,
+    )
+    if result.http_status != 200:
+        # A governance refusal or an infrastructure fault keeps the documented
+        # Copilot error shape, with the stable code alongside so an agent can
+        # branch without parsing prose. Analytical outcomes (unsupported /
+        # ambiguous / no records) map to HTTP 200 and fall through below, which
+        # is the behaviour the Copilot contract and the parity suite expect.
+        return JSONResponse(status_code=result.http_status,
+                            content=presenters.to_copilot_error(result))
+
+    envelope = result.result
+    if not isinstance(envelope, dict):  # defensive: capability contract is a dict
         return _error_json(503, "The MI Agent returned an unexpected response.")
+    kind = data_source_kind()
 
     meta = envelope.get("metadata") or {}
     supporting, truncation_notes = _supporting_values(envelope.get("artifacts") or [])
@@ -457,32 +469,29 @@ def ask_trakt_mi(req: CopilotMiQueryRequest):
     dependencies=[Depends(copilot_auth_guard)],
 )
 def get_latest_investor_deck(request: Request):
-    client_id = _copilot_client_id()
-    try:
-        resolved = decks_mod.resolve_deck_local(client_id, None)
-        listing = decks_mod.list_decks(client_id)
-    except Exception as exc:  # noqa: BLE001 - storage fault → explicit 503
-        logger.warning("copilot deck resolution failed for %s: %s", client_id, exc)
-        return _error_json(503, "The investor-deck store is currently unavailable.")
-    if resolved is None:
-        return _error_json(
-            404, f"No investor deck has been generated yet for {client_id}.")
+    # The SAME governed artefact capability the React deck route calls: tenant
+    # from the validated context, portfolio authorised before any path is built.
+    # The signed download token is minted only after that authorisation succeeds.
+    context = identity_mod.context_from_copilot_principal(
+        getattr(request.state, "copilot_principal", None),
+        tenant_id=_copilot_client_id(),
+        request_id=request.headers.get("x-request-id") or None,
+    )
+    result = artefacts_mod.get_investor_pack(context)
+    if not result.ok:
+        return JSONResponse(status_code=result.http_status,
+                            content=presenters.to_copilot_error(result))
 
-    path, download_name = resolved
-    latest = (listing or {}).get("latest") or {}
-    token, expires = make_download_token("deck", client_id)
-    try:
-        size: Optional[int] = path.stat().st_size
-    except OSError:
-        size = None
+    artefact = result.result
+    token, expires = make_download_token("deck", context.tenant_id)
     return CopilotArtifactInfo(
-        artifactType="investor_deck",
-        fileName=download_name,
-        contentType=_PPTX_MEDIA_TYPE,
-        sizeBytes=size,
-        clientId=client_id,
-        reportingPeriod=latest.get("period"),
-        generatedAt=latest.get("generatedAt"),
+        artifactType=artefact.artefact_type,
+        fileName=artefact.download_name,
+        contentType=artefact.content_type,
+        sizeBytes=artefact.size_bytes,
+        clientId=artefact.tenant_id,
+        reportingPeriod=artefact.period,
+        generatedAt=artefact.generated_at,
         downloadUrl=_download_url(request, token),
         downloadExpiresAt=expires,
     )
