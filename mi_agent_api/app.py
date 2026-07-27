@@ -24,6 +24,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from .auth import auth_guard, principal_from_request
+from . import gateway
 
 from mi_agent.mi_agent_config import get_llm_config
 from mi_agent.mi_agent_workflow import run_mi_agent_query
@@ -182,6 +183,9 @@ _origins = os.environ.get(
     "MI_AGENT_CORS_ORIGINS",
     "http://localhost:5173,http://localhost:4173",
 ).split(",")
+# The deployed front end's origin, when the UI is served cross-origin rather than
+# through the linked-backend proxy. Additive; there is still deliberately no "*".
+_origins += gateway.extra_cors_origins()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in _origins if o.strip()],
@@ -189,6 +193,14 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
 )
+
+# Accept the gateway prefix this deployment sits behind (default "/api") as well
+# as the bare paths. Installed AFTER CORS so it is the outermost layer and every
+# downstream component — CORS, the auth guard, the router — sees one normalised
+# path regardless of which front door the request came through. See gateway.py
+# for why: without it, the Static Web Apps linked-backend topology forwards
+# /api/mi/query to an app that only serves /mi/query, and every question 404s.
+API_PREFIX = gateway.install_gateway_prefix(app)
 
 
 @app.exception_handler(TraktError)
@@ -290,6 +302,16 @@ def health() -> Dict[str, Any]:
             "runtimeMode": runtime_mode(),
             "tenantId": default_tenant_id(),
             "platformAuth": identity_mod.platform_auth_status(),
+        },
+        # How this deployment is reachable. Surfaced so a 404 can be diagnosed
+        # with one request: it states the gateway prefix the API accepts and the
+        # exact path forms the chat endpoint answers on, instead of leaving the
+        # caller to infer the topology from a build log.
+        "routing": {
+            "apiPrefix": API_PREFIX or None,
+            "queryPaths": [p for p in ("/mi/query",
+                                       f"{API_PREFIX}/mi/query" if API_PREFIX else None)
+                           if p],
         },
     }
 

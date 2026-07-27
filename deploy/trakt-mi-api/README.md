@@ -40,7 +40,32 @@ onboarding / regime logic is changed.
 | `SCM_DO_BUILD_DURING_DEPLOYMENT` | `true` (Oryx builds `requirements.txt`) |
 | `WEBSITES_PORT` | `8000` |
 | `MI_AGENT_CORS_ORIGINS` | your React host(s), comma-separated |
+| `MI_AGENT_ALLOWED_ORIGIN` | the Static Web App origin, when the UI calls the API **cross-origin** (absolute `VITE_AGENT_API_URL`) rather than through the linked backend |
+| `MI_AGENT_API_PREFIX` | gateway prefix to accept, default `/api`. Leave unset unless a gateway mounts the API somewhere other than `/api` |
 | `MI_API_WORKERS` / `MI_API_TIMEOUT` | `2` / `120` (optional) |
+
+## Which front door is this deployment behind?
+
+The API serves its routes **bare** (`/mi/query`) *and* under the gateway prefix
+(`/api/mi/query`), so both supported topologies work without a code change:
+
+| Topology | `VITE_AGENT_API_URL` | Browser calls | App Service receives |
+|---|---|---|---|
+| SWA **linked backend** (recommended — Easy Auth injects the principal) | `/api` | `/api/mi/query` | `/api/mi/query` |
+| Absolute base URL (cross-origin; set `MI_AGENT_ALLOWED_ORIGIN`) | `https://trakt-mi-api.azurewebsites.net` | `…/mi/query` | `/mi/query` |
+
+This is why the chatbot previously returned **404** under the linked-backend
+topology: SWA forwards the path intact, and the app served only the bare form.
+`mi_agent_api/gateway.py` now normalises the prefix, and
+`mi_agent_api/tests/test_mi_query_route_contract.py` asserts every path the React
+client calls is servable in **both** forms, so the fault cannot recur silently.
+
+Confirm which form a deployment answers on:
+
+```bash
+curl -s https://trakt-mi-api.azurewebsites.net/health | jq .routing
+# {"apiPrefix": "/api", "queryPaths": ["/mi/query", "/api/mi/query"]}
+```
 
 `MI_AGENT_PLATFORM_URI` is resolved through the storage abstraction: in Azure
 (`TRAKT_STORAGE_BACKEND=blob` + connection) it downloads the blob to a local

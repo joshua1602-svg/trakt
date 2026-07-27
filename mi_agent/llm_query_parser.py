@@ -644,8 +644,16 @@ def _detect_metric(text: str, semantics: dict) -> Tuple[Optional[str], str, List
     return None, "sum", matched
 
 
+#: "top 5", "bottom 5", "largest 10". The DIRECTION is resolved separately by
+#: ``_detect_ranking``; this only extracts the N. "bottom"/"smallest"/"lowest"
+#: were missing, so a Bottom-N question kept its ascending sort but silently lost
+#: its limit and returned every group.
+_TOP_N_RE = re.compile(
+    r"\b(?:top|bottom|first|last|largest|biggest|highest|smallest|lowest)\s+(\d+)\b")
+
+
 def _detect_top_n(q: str) -> Optional[int]:
-    m = re.search(r"\btop\s+(\d+)\b", q)
+    m = _TOP_N_RE.search(q)
     return int(m.group(1)) if m else None
 
 
@@ -1333,9 +1341,25 @@ _POSTFIX_COMPARATORS: List[Tuple[str, str]] = [
 ]
 
 
-def _parse_filters(q: str, semantics: dict, available_columns=None) -> Dict[str, Any]:
-    """Parse one or more filters joined by ``and`` / ``with`` (numeric thresholds —
-    prefix OR postfix — and a categorical region value). ``{field_key: condition}``."""
+#: Clause boundaries for predicate parsing. ``where`` / ``whose`` / ``having``
+#: were missing, so "balance by region WHERE flurb is above 3" was ONE clause
+#: containing the word "balance" — and the threshold bound to the balance column,
+#: silently filtering the answer by a predicate the user never asked for. A
+#: threshold must be resolved against its own clause, or not at all.
+_CLAUSE_SPLIT_RE = re.compile(r"\band\b|\bwith\b|\bwhere\b|\bwhose\b|\bhaving\b")
+
+
+def _parse_filters(q: str, semantics: dict, available_columns=None,
+                   unresolved: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Parse one or more filters joined by ``and`` / ``with`` / ``where`` (numeric
+    thresholds — prefix OR postfix — and a categorical value).
+    ``{field_key: condition}``.
+
+    ``unresolved`` — when supplied — collects a note for every clause that stated
+    a numeric threshold whose FIELD could not be resolved. Such a predicate is
+    never guessed onto another column and never silently dropped: the caller
+    surfaces it so the operator learns the filter was not applied.
+    """
     filters: Dict[str, Any] = {}
     work_q = q
     # Parse a 'between A and B' first so its 'and' is not used as a clause split.
@@ -1346,9 +1370,9 @@ def _parse_filters(q: str, semantics: dict, available_columns=None) -> Dict[str,
             filters[field] = {"op": "between", "value": _amount_from_match(bm, "between")}
         work_q = work_q[:bm.start()] + " " + work_q[bm.end():]
 
-    # Split into clauses on 'and' / 'with' so "<age> 70+ with LTV above 50" yields
-    # two independent thresholds.
-    for clause in re.split(r"\band\b|\bwith\b", work_q):
+    # Split into clauses so "<age> 70+ with LTV above 50" yields two independent
+    # thresholds, and a threshold is only ever resolved against its own clause.
+    for clause in _CLAUSE_SPLIT_RE.split(work_q):
         clause = clause.strip()
         if not clause:
             continue
@@ -1370,6 +1394,13 @@ def _parse_filters(q: str, semantics: dict, available_columns=None) -> Dict[str,
             if field:
                 filters[field] = {"op": op, "value": _amount_from_match(m, op)}
                 matched = True
+            elif unresolved is not None:
+                # A threshold was stated but its field is not a governed field in
+                # this dataset. Refuse it visibly rather than binding it to some
+                # other column that happens to be named elsewhere in the question.
+                unresolved.append(
+                    f"'{clause.strip()}' — no governed field matches this "
+                    "condition, so the filter was not applied")
             break
         if matched:
             continue
@@ -1396,8 +1427,8 @@ def _grouped_value_filters(q: str, semantics: dict, available_columns,
     grouping, not a filter). Returns ``(filters, unavailable_notes)`` — mirrors
     the filtered-KPI branch so a grouped filter is never silently discarded."""
     exclude = set(exclude_dims or ())
-    filters = _parse_filters(q, semantics, available_columns)
     unavailable: List[str] = []
+    filters = _parse_filters(q, semantics, available_columns, unresolved=unavailable)
     # A borrower-structure value filter ("... for joint borrowers") resolves to a
     # categorical filter (or an unavailable note). Skip it when the grouping IS
     # the borrower dimension (that is the breakdown, not a filter).
@@ -1579,7 +1610,9 @@ def _deterministic_parse(question: str, semantics: dict,
         # Support one OR MORE filters joined by "and" (numeric thresholds and a
         # categorical region value), e.g. "youngest age more than 70 and
         # geographic region south west".
-        filters = _parse_filters(q, semantics, available_columns)
+        unresolved_notes: List[str] = []
+        filters = _parse_filters(q, semantics, available_columns,
+                                 unresolved=unresolved_notes)
         # Borrower-structure intent ("how many joint borrowers"): resolve joint/sole
         # to a filter. When the field is unavailable, record the predicate as
         # UNAVAILABLE (never silently dropped).
@@ -1592,6 +1625,24 @@ def _deterministic_parse(question: str, semantics: dict,
                 filters.update(bfilters)
             else:
                 unavailable.append(bnote)
+        # When the ONLY predicate is one whose field this dataset does not carry
+        # ("how many loans have Risk Score above 700"), the filter IS the
+        # question. Answering the unfiltered count would answer a different
+        # question with a confident number, so refuse instead — the workflow's
+        # controlled-unmapped guard turns "unmapped" into an honest explanation.
+        # A predicate that merely NARROWS an otherwise-valid grouped question
+        # ("balance by region where flurb is above 3") is different: that answer
+        # still stands, with the unapplied filter disclosed (see
+        # ``_grouped_value_filters``).
+        if unresolved_notes and not filters and not unavailable:
+            return (MIQuerySpec(
+                intent="summary", chart_type="none", aggregation="count",
+                title=title, unavailable_filters=unresolved_notes,
+                explanation="Could not map the requested condition to a governed "
+                            "field.",
+                output_format="text"),
+                _det_meta("low", False, [], note="unmapped"))
+        unavailable = unavailable + unresolved_notes
         if filters or unavailable:
             if is_balance_q or (is_count_q and wants_balance_too):
                 metric = _balance_metric(semantics, available_columns)

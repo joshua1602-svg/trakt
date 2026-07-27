@@ -27,7 +27,6 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from mi_agent.llm_query_parser import _deterministic_parse
-from mi_agent.mi_agent_workflow import _detect_unsupported_concept
 from mi_agent.mi_query_executor import _apply_filters
 
 from mi_agent import portfolio_lens as _portfolio_lens
@@ -100,7 +99,8 @@ def _envelope(*, ok: bool, question: str, answer: str, spec: Dict[str, Any],
               artifacts: List[Dict[str, Any]], reconciliation: Optional[Dict[str, Any]] = None,
               source_notes: Optional[List[Dict[str, Any]]] = None,
               warnings: Optional[List[str]] = None, route: str = "",
-              error: Optional[str] = None) -> Dict[str, Any]:
+              error: Optional[str] = None,
+              lens_applied: Optional[bool] = None) -> Dict[str, Any]:
     notes = source_notes or []
     for art in artifacts:
         if art.get("type") in ("chart", "table", "kpi") and reconciliation:
@@ -123,7 +123,12 @@ def _envelope(*, ok: bool, question: str, answer: str, spec: Dict[str, Any],
         "diagnostics": [],
         "assumptions": [],
         "metadata": {"engine": "mi_agent", "source": "python", "mock": False,
-                     "route": route},
+                     "route": route,
+                     # Whether this route actually narrowed its figures to the
+                     # requested portfolio lens. ``None`` means "not stated" and
+                     # is resolved centrally in try_route; ``False`` means the
+                     # numbers are whole-book and MUST NOT be labelled otherwise.
+                     "lensApplied": lens_applied},
     }
 
 
@@ -262,6 +267,26 @@ def _resolve_lens(question: str, source_lens) -> Any:
     except Exception as exc:  # noqa: BLE001 - routing must never break on scope
         _logger.info("routed lens scope resolution unavailable: %s", exc)
         return lens
+
+
+def _apply_lens_filter(df, lens) -> Any:
+    """Narrow a dataframe to the portfolio ids a RESOLVED lens carries.
+
+    ``_resolve_lens`` returns the registry-resolved id list (never a type
+    string), so this is the same narrowing the point-in-time executor performs —
+    a group is exactly the sum of its current members. Total carries no filter
+    and the frame is returned unchanged; a frame without provenance is likewise
+    unchanged (a single-portfolio deployment is already the whole scope).
+    """
+    ids = (lens.filters or {}).get(_portfolio_lens.SOURCE_ID_FIELD)
+    if df is None or not ids:
+        return df
+    if _portfolio_lens.SOURCE_ID_FIELD not in getattr(df, "columns", []):
+        return df
+    wanted = {str(i).strip().lower() for i in (ids if isinstance(ids, (list, tuple, set))
+                                               else [ids])}
+    col = df[_portfolio_lens.SOURCE_ID_FIELD].astype("string").str.strip().str.lower()
+    return df[col.isin(wanted)]
 
 
 def _pct_points(value: Optional[float], decimals: int = 1) -> str:
@@ -1441,17 +1466,31 @@ _RISK_LIMIT_TERMS = ("limit", "breach", "appetite", "covenant", "threshold",
                      "rag", "amber", " red ")
 
 
+#: An explicitly GROUPED ranking — "top 5 regions BY balance", "largest areas by
+#: exposure". The "by <measure>" makes this an ordinary ranked stratification of
+#: a named metric, which the point-in-time executor answers with the requested
+#: top-N, the requested metric, the requested filters and the portfolio lens.
+#: The ITL3 exposure engine honours none of those, so it must not capture it.
+_GROUPED_RANKING_RE = re.compile(
+    r"\b(?:top|bottom|largest|biggest|smallest|lowest|highest)\b[^?]*?\bby\b")
+
+
 def _is_geo_exposure(question: str) -> bool:
     q = f" {question.lower()} "
     if any(t in q for t in _RISK_LIMIT_TERMS):
         return False  # a limit/breach question is a risk-monitor question
     if "bridge" in q:
         return False  # a balance bridge by region is the bridge route
+    if _GROUPED_RANKING_RE.search(q):
+        # "show top 5 regions by balance" is a ranking question that happens to
+        # mention geography — not a request for the ITL3 concentration view.
+        # Routing it here discarded top_n, the metric and the lens.
+        return False
     return any(t in q for t in _GEO_TERMS) and any(m in q for m in _GEO_MARKERS)
 
 
 def _route_geo(question, spec_dict, *, client_id, run_id, frame_resolver,
-               portfolio_id, as_of) -> Dict[str, Any]:
+               portfolio_id, as_of, source_lens=None) -> Dict[str, Any]:
     """Funded exposure by UK ITL3 area → a ranked bar + table, from the ITL3
     exposure engine (tape ITL3 field, else postcode-derived). Answers "largest
     geographic concentration / where is the book". Degrades honestly when the
@@ -1461,11 +1500,18 @@ def _route_geo(question, spec_dict, *, client_id, run_id, frame_resolver,
     answers from the ACTIVE governed dataset — the frame resolver returns exactly
     the frame the point-in-time executor would use — so it must never demand a
     run id. Genuinely temporal geography (evolution / comparison / cohort) is a
-    different route."""
+    different route.
+
+    The frame is narrowed to the resolved portfolio scope BEFORE exposure is
+    computed, so "where is the acquired book concentrated?" reports the acquired
+    book — and the share-of-book percentages are shares of that scope, not of the
+    platform. This route reads a dataframe, so it can honour a lens exactly as
+    the point-in-time executor does; routes that read pre-aggregated run
+    artefacts cannot, and disclose that instead (see ``try_route``)."""
     if frame_resolver is None:
         return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
                          answer="I can't resolve the funded book for a geographic view here.",
-                         route="geo_exposure",
+                         route="geo_exposure", lens_applied=True,
                          warnings=["insufficient-data: no funded frame available."])
     try:
         df = frame_resolver(client_id, run_id)
@@ -1475,8 +1521,23 @@ def _route_geo(question, spec_dict, *, client_id, run_id, frame_resolver,
         scope = "this run" if run_id else "the active reporting dataset"
         return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
                          answer=f"I couldn't load the funded book for {scope} to map exposure.",
-                         route="geo_exposure",
+                         route="geo_exposure", lens_applied=True,
                          warnings=[f"insufficient-data: no funded frame for {scope}."])
+
+    # Narrow to the governed scope the caller is working in, using the SAME
+    # registry-resolved id list the point-in-time path filters on.
+    lens = _resolve_lens(question, source_lens)
+    lens_warnings: List[str] = []
+    if lens.filters:
+        df = _apply_lens_filter(df, lens)
+        if df is None or not len(df):
+            return _envelope(
+                ok=True, question=question, spec=spec_dict, artifacts=[],
+                answer=(f"There are no funded loans in {lens.label} to map, so I "
+                        "can't report a geographic concentration for it."),
+                route="geo_exposure", lens_applied=True,
+                warnings=[f"no rows in scope for {lens.label}."])
+        lens_warnings.append(f"portfolio scope applied: {lens.label}")
 
     result = geo_mod.exposure_by_itl3(df)
     if not result.get("available"):
@@ -1484,8 +1545,8 @@ def _route_geo(question, spec_dict, *, client_id, run_id, frame_resolver,
         return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
                          answer=(f"I can't build a geographic exposure view for this book: "
                                  f"{reason}."),
-                         route="geo_exposure",
-                         warnings=[f"insufficient-data: {reason}"])
+                         route="geo_exposure", lens_applied=True,
+                         warnings=lens_warnings + [f"insufficient-data: {reason}"])
 
     areas = result.get("areas", [])
     top = areas[0]
@@ -1507,8 +1568,9 @@ def _route_geo(question, spec_dict, *, client_id, run_id, frame_resolver,
             {"key": "share", "label": "Book share", "align": "right", "format": "text"},
         ], rows=rows, spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of)
     top_name = top["itl3_name"] or top["itl3_code"]
+    book = "the book" if not lens.filters else lens.label
     answer = (f"Largest geographic concentration: {top_name} at {_gbp(top['balance'])} "
-              f"({top['sharePct']:.1f}% of the book) across {result.get('areaCount', len(areas))} "
+              f"({top['sharePct']:.1f}% of {book}) across {result.get('areaCount', len(areas))} "
               f"ITL3 area(s). Basis: {result.get('basis', 'tape')}; "
               f"resolved coverage {result.get('coveragePct', 0)}%.")
     notes = [{"field": "geo_basis",
@@ -1519,7 +1581,8 @@ def _route_geo(question, spec_dict, *, client_id, run_id, frame_resolver,
              "coverage_by_balance_pct": result.get("coveragePct", 100.0)}
     return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
                      artifacts=[chart, table], reconciliation=recon,
-                     source_notes=notes, route="geo_exposure")
+                     source_notes=notes, route="geo_exposure",
+                     warnings=lens_warnings, lens_applied=True)
 
 
 # --------------------------------------------------------------------------- #
@@ -1616,6 +1679,65 @@ def _is_evolution(question: str, spec) -> bool:
     return any(m in q for m in _EVOLUTION_MARKERS)
 
 
+#: Routes that genuinely narrow their figures to the requested portfolio lens.
+#: Everything else answers from a pre-aggregated run artefact that carries no
+#: per-portfolio provenance, so it CANNOT narrow — and must say so rather than
+#: let a whole-book number be labelled with a narrower scope.
+_LENS_AWARE_ROUTES = frozenset({
+    "portfolio_summary", "period_movement", "funded_bridge",
+    "cohort_progression", "geo_exposure",
+})
+
+#: Human wording per route for the disclosure below.
+_ROUTE_NOUN = {
+    "temporal_compare": "period comparison", "evolution": "trend",
+    "evolution_funnel": "funnel trend", "evolution_pipeline_stage": "pipeline trend",
+    "forecast_extrapolation": "forecast", "scenario": "scenario",
+    "risk_limits": "risk-limit", "cohort_conversion": "conversion",
+}
+
+
+def _disclose_lens_scope(envelope: Optional[Dict[str, Any]], question: str,
+                         source_lens: Optional[Any]) -> Optional[Dict[str, Any]]:
+    """Make every routed answer state, truthfully, what scope it covers.
+
+    A routed answer that was not narrowed to the requested lens is whole-book.
+    Saying nothing let the governed envelope stamp it with the narrow scope
+    anyway (``mi_service._stamp_routed_scope``), so the one control that exists
+    to prevent misattribution was performing it. This marks the answer instead:
+    ``metadata.lensApplied`` becomes an explicit boolean, and a non-total lens
+    that could not be applied is disclosed to the user in plain words.
+    """
+    if not isinstance(envelope, dict):
+        return envelope
+    meta = envelope.setdefault("metadata", {})
+    if not isinstance(meta, dict):
+        return envelope
+    route = meta.get("route") or ""
+    if meta.get("lensApplied") is None:
+        meta["lensApplied"] = route in _LENS_AWARE_ROUTES
+    if meta["lensApplied"]:
+        return envelope
+    try:
+        lens = _resolve_lens(question, source_lens)
+    except Exception:  # noqa: BLE001 - disclosure must never break an answer
+        return envelope
+    if not lens.filters:          # Total was requested; whole-book IS the scope.
+        meta["lensApplied"] = True
+        return envelope
+    noun = _ROUTE_NOUN.get(route, "routed")
+    disclosure = (
+        f"Scope not narrowed: this {noun} answer is computed across the whole "
+        f"platform book. It is sourced from a governed run artefact that carries "
+        f"no source-portfolio provenance, so it could not be scoped to "
+        f"'{lens.label}' — these figures are NOT {lens.label}-only.")
+    warnings = envelope.setdefault("warnings", [])
+    if isinstance(warnings, list) and disclosure not in warnings:
+        warnings.append(disclosure)
+    meta["lensRequested"] = lens.label
+    return envelope
+
+
 def try_route(question: str, *, portfolio_id: Optional[str], view: str,
               output_root: Optional[str], pipeline_root: Optional[str],
               semantics: Dict[str, Any], history_model: Optional[Dict[str, Any]] = None,
@@ -1635,12 +1757,12 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
     except Exception:  # noqa: BLE001 - never block the normal path on a parse hiccup
         return None
 
-    # Defer governed-unsupported concepts (arrears / default / NNEG …) to the
-    # existing controlled-unsupported guard.
-    if _detect_unsupported_concept(question, semantics, set(semantics.get("fields", {}))) is not None:
-        # available_columns isn't known here; the workflow re-checks against the
-        # real dataframe, so only skip when the concept clearly has no field at all.
-        pass
+    # NOTE: governed-unsupported concepts (arrears / default / NNEG …) are NOT
+    # checked here. ``available_columns`` is not known at routing time, and
+    # ``run_mi_agent_query`` re-checks the concept against the real dataframe —
+    # which is the only check that can distinguish "this client's pack lacks the
+    # field" from "the registry lacks the field". A duplicate check here would
+    # either be wrong or be a no-op; it was the latter, and is now removed.
 
     # Merge caller-supplied filters (UI drill-through / req.filters) into the spec,
     # mirroring the point-in-time path (mi_agent_workflow), so a routed evolution
@@ -1655,36 +1777,44 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
     kw = dict(client_id=client_id, run_id=run_id, output_root=output_root,
               pipeline_root=pipeline_root, portfolio_id=portfolio_id, as_of=as_of)
 
+    # EVERY route leaves through here, so the scope disclosure cannot be
+    # forgotten when a capability is added: a new route is whole-book (and says
+    # so) until it is listed in _LENS_AWARE_ROUTES, which is the safe default.
+    def _out(envelope):
+        return _disclose_lens_scope(envelope, question, source_lens)
+
     # What-if / scenario is checked first: it perturbs the run-rate and re-solves
     # the milestone. If the magnitude can't be quantified it returns None and we
     # fall through to the normal forecast / conversion routing.
     if _is_scenario(question):
         scen = _route_scenario(question, spec, spec_dict, history_model=history_model, **kw)
         if scen is not None:
-            return scen
+            return _out(scen)
 
     # Conversion (cohort-tracked) is the canonical "conversion" answer and is
     # checked before forecast so a bare "conversion rate" resolves to the single
     # cumulative-cohort definition; projection/threshold/what-if framings are
     # excluded by _is_conversion and fall through to the forecast route.
     if _is_conversion(question):
-        return _route_conversion(question, spec_dict, history_model=history_model,
-                                 portfolio_id=portfolio_id, as_of=as_of)
+        return _out(_route_conversion(question, spec_dict, history_model=history_model,
+                                      portfolio_id=portfolio_id, as_of=as_of))
     if spec.forecast_mode == "extrapolation":
-        return _route_forecast(question, spec, spec_dict, history_model=history_model, **kw)
+        return _out(_route_forecast(question, spec, spec_dict,
+                                    history_model=history_model, **kw))
     if getattr(spec, "bridge_query", False):
-        return _route_bridge(question, spec, spec_dict,
-                             client_id=client_id, run_id=run_id, output_root=output_root,
-                             portfolio_id=portfolio_id, as_of=as_of, semantics=semantics,
-                             source_lens=source_lens)
+        return _out(_route_bridge(question, spec, spec_dict,
+                                  client_id=client_id, run_id=run_id, output_root=output_root,
+                                  portfolio_id=portfolio_id, as_of=as_of, semantics=semantics,
+                                  source_lens=source_lens))
     if getattr(spec, "cohort_progression", False):
-        return _route_cohort_progression(question, spec, spec_dict,
-                                        client_id=client_id, run_id=run_id,
-                                        output_root=output_root, portfolio_id=portfolio_id,
-                                        as_of=as_of, source_lens=source_lens)
+        return _out(_route_cohort_progression(question, spec, spec_dict,
+                                              client_id=client_id, run_id=run_id,
+                                              output_root=output_root, portfolio_id=portfolio_id,
+                                              as_of=as_of, source_lens=source_lens))
     if _is_geo_exposure(question):
-        return _route_geo(question, spec_dict, client_id=client_id, run_id=run_id,
-                          frame_resolver=frame_resolver, portfolio_id=portfolio_id, as_of=as_of)
+        return _out(_route_geo(question, spec_dict, client_id=client_id, run_id=run_id,
+                               frame_resolver=frame_resolver, portfolio_id=portfolio_id,
+                               as_of=as_of, source_lens=source_lens))
     # Governed composite answers. Checked before compare/evolution because both
     # are narrower intents than a single-metric comparison; each returns None (or
     # a controlled insufficient-data envelope) when it cannot answer, so the
@@ -1695,20 +1825,21 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
             output_root=output_root, portfolio_id=portfolio_id, as_of=as_of,
             source_lens=source_lens)
         if moved is not None:
-            return moved
+            return _out(moved)
     if _is_portfolio_summary(question):
         summarised = _route_portfolio_summary(
             question, spec, spec_dict, client_id=client_id, run_id=run_id,
             output_root=output_root, portfolio_id=portfolio_id, as_of=as_of,
             source_lens=source_lens)
         if summarised is not None:
-            return summarised
+            return _out(summarised)
     if spec.temporal_mode == "compare":
-        return _route_compare(question, spec, spec_dict, view=view, **kw)
+        return _out(_route_compare(question, spec, spec_dict, view=view, **kw))
     if spec.risk_limit_query:
-        return _route_risk(question, spec, spec_dict,
-                           client_id=client_id, run_id=run_id, output_root=output_root,
-                           portfolio_id=portfolio_id, as_of=as_of)
+        return _out(_route_risk(question, spec, spec_dict,
+                                client_id=client_id, run_id=run_id, output_root=output_root,
+                                portfolio_id=portfolio_id, as_of=as_of))
     if _is_evolution(question, spec):
-        return _route_evolution(question, spec, spec_dict, view=view, semantics=semantics, **kw)
+        return _out(_route_evolution(question, spec, spec_dict, view=view,
+                                     semantics=semantics, **kw))
     return None

@@ -324,6 +324,17 @@ def run_mi_agent_query(
         if not _portfolio_scope.is_total:
             warnings.append(f"portfolio scope applied: {_portfolio_scope.label} "
                             f"({', '.join(_portfolio_scope.portfolio_ids) or 'no portfolios'})")
+        elif _portfolio_scope.fell_back_to_total:
+            # The requested portfolio is not in the governed registry, so the
+            # answer widened to the whole book. Recording that only in the scope
+            # dict is not a disclosure — a stale selection, a renamed portfolio
+            # or a typo would silently change the scope of the answer. Say it.
+            warnings.append(
+                f"Requested portfolio '{_portfolio_scope.requested_context_id}' is "
+                "not in the governed portfolio registry, so this answer covers the "
+                "TOTAL book "
+                f"({', '.join(_portfolio_scope.portfolio_ids) or 'no portfolios'}) "
+                "rather than the requested scope.")
 
     # ---- merge drill-through filters into the parsed spec -----------------
     # Additive: caller-supplied filters (e.g. a UI drill into one region/broker/

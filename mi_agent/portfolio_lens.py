@@ -45,10 +45,21 @@ _COHORT_ID_RE = re.compile(r"\b((?:direct|acquired)_\d+)\b", re.IGNORECASE)
 _SELECTABLE_COHORT_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$")
 
 # Phrase → lens. Order matters only within a family; matching is keyword-based.
+#
+# Every entry must be PORTFOLIO-qualified, for the same reason a bare "total" is
+# absent from _TOTAL_TERMS below. A bare "origination" / "originated" /
+# "new lending" / "current book" is ordinary MEASURE vocabulary — "show
+# origination volumes by month" asks for a measure over time, not for the Direct
+# book — and treating it as a scope silently narrowed a Total workspace to the
+# direct portfolios only. That is a silent scope mutation, and exactly the class
+# of defect the governed context exists to stop. The qualified forms
+# ("directly originated", "own book", "organically originated") are unambiguous
+# and stay.
 _DIRECT_TERMS = (
-    "direct", "directly originated", "originated", "origination",
-    "organic", "current book", "own book", "in-house", "new origination",
-    "new lending", "newly originated",
+    "direct", "directly originated", "organic book", "organic portfolio",
+    "organically originated", "own book", "own originated", "in-house",
+    "in house", "originated book", "origination book", "originated portfolio",
+    "newly originated",
 )
 _ACQUIRED_TERMS = (
     "acquired", "acquisition", "back book", "backbook", "purchased book",
