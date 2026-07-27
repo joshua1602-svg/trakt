@@ -46,6 +46,50 @@ SRC_FOLDER_PERIOD = "folder_period"
 SRC_RUN_ID = "run_id"
 SRC_CONFIG = "config"
 SRC_CLI_FALLBACK = "cli_fallback"
+#: The field genuinely varies per loan and the target contract permits it. There
+#: is no single pack-level value; every row keeps the date its source supplied.
+SRC_SOURCE_ROW_LEVEL = "source_row_level"
+
+# --------------------------------------------------------------------------- #
+# Contract-scoped run-context policy
+# --------------------------------------------------------------------------- #
+
+#: Row-level variation dispositions.
+VARIATION_CONFLICT = "conflict"
+VARIATION_ALLOWED = "allowed"
+
+_POLICY_PATH = (Path(__file__).resolve().parents[2]
+                / "config" / "system" / "run_context_policy.yaml")
+_DEFAULT_POLICY: Dict[str, str] = {
+    "row_level_variation": VARIATION_CONFLICT,
+}
+
+
+def load_run_context_policy(
+    field: str = "data_cut_off_date",
+    target_contract_id: str = "",
+    *,
+    policy_path: str | Path = "",
+) -> Dict[str, str]:
+    """Resolve the run-context policy for one field under one target contract.
+
+    Falls back to the strict default (``row_level_variation: conflict``) whenever
+    the config is missing or says nothing about this field/contract — an unknown
+    contract must never silently gain the permissive MI behaviour.
+    """
+    path = Path(policy_path) if policy_path else _POLICY_PATH
+    try:
+        cfg = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+    except Exception:  # noqa: BLE001 — policy is additive; strict default stands
+        return dict(_DEFAULT_POLICY)
+    policy = dict(_DEFAULT_POLICY)
+    policy.update({k: v for k, v in (cfg.get("defaults", {}) or {}).items()
+                   if k in _DEFAULT_POLICY})
+    field_cfg = ((cfg.get("fields", {}) or {}).get(field, {}) or {})
+    contract_cfg = ((field_cfg.get("contracts", {}) or {})
+                    .get(str(target_contract_id or ""), {}) or {})
+    policy.update({k: v for k, v in contract_cfg.items() if k in _DEFAULT_POLICY})
+    return policy
 
 _MONTHS = {m.lower(): i for i, m in enumerate(calendar.month_name) if m}
 _MONTHS.update({m.lower(): i for i, m in enumerate(calendar.month_abbr) if m})
@@ -263,6 +307,8 @@ def extract_data_cut_off_date(
     input_dir: str | Path = "",
     folder_period: str = "",
     managed_service: bool = False,
+    target_contract_id: str = "",
+    policy_path: str | Path = "",
 ) -> Dict[str, Any]:
     """Resolve a single portfolio-level ``data_cut_off_date`` with full evidence.
 
@@ -293,6 +339,8 @@ def extract_data_cut_off_date(
     project_dir = Path(project_dir)
     central_tape = Path(central_tape)
     candidates: List[Dict[str, Any]] = []
+    policy = load_run_context_policy(
+        "data_cut_off_date", target_contract_id, policy_path=policy_path)
 
     # Tier 2: source columns (canonical column + profiler detected_reporting_date)
     source_vals: List[Dict[str, Any]] = []
@@ -333,6 +381,7 @@ def extract_data_cut_off_date(
                             "source_file": "",
                             "source_location": f"blob_folder_period:{folder_period}",
                             "confidence": 0.75})
+    folder_period_context = fp_iso or ""
     period_dirs: List[str] = []
     if input_dir:
         ip = Path(input_dir)
@@ -381,6 +430,16 @@ def extract_data_cut_off_date(
         "value": "", "source": "", "source_file": "", "source_location": "",
         "confidence": 0.0, "candidates": candidates, "conflict": False,
         "conflict_detail": "", "missing": False,
+        # Pack-level context, always recorded even when it is not the resolved
+        # value, so downstream can still report which period folder the pack
+        # arrived under.
+        "folder_period": folder_period or "",
+        "folder_period_date": folder_period_context,
+        "target_contract_id": target_contract_id or "",
+        "policy": dict(policy),
+        # Row-level resolution (set when the contract permits per-loan variation).
+        "row_level": False,
+        "row_level_distinct_values": [],
     }
 
     def _accept(c: Dict[str, Any]) -> None:
@@ -403,15 +462,38 @@ def extract_data_cut_off_date(
 
     # Walk the deterministic tiers; surface intra-tier conflicts.
     for tier in (source_vals, filename_vals, folder_vals, runid_vals, config_vals):
+        if not tier:
+            continue
         distinct = sorted({c["value"] for c in tier})
         if len(distinct) == 1:
             _accept(next(c for c in tier if c["value"] == distinct[0]))
             return result
-        if len(distinct) > 1:
-            result["conflict"] = True
-            result["conflict_detail"] = (
-                f"conflicting {tier[0]['source']} candidates: {distinct}")
+        # Several distinct values within one tier. For SOURCE data under a
+        # contract that permits per-loan variation this is legitimate portfolio
+        # data (e.g. an acquired book combining two legacy rump populations with
+        # different cut-offs), not a conflict to resolve: there is simply no
+        # single pack-level value, and every row keeps its own.
+        if (tier is source_vals
+                and policy.get("row_level_variation") == VARIATION_ALLOWED):
+            result.update({
+                "row_level": True,
+                "row_level_distinct_values": distinct,
+                "source": SRC_SOURCE_ROW_LEVEL,
+                "source_file": tier[0].get("source_file", ""),
+                "source_location": "column:data_cut_off_date",
+                "confidence": 0.97,
+                "conflict": False,
+                "conflict_detail": (
+                    f"{len(distinct)} distinct row-level values retained "
+                    f"({distinct[0]}…{distinct[-1]}); row-level variation is "
+                    f"permitted for target contract "
+                    f"{target_contract_id or 'unspecified'}"),
+            })
             return result
+        result["conflict"] = True
+        result["conflict_detail"] = (
+            f"conflicting {tier[0]['source']} candidates: {distinct}")
+        return result
 
     # No source-derived value: allow a plain CLI fallback if supplied.
     if cli_iso:

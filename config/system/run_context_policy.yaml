@@ -1,0 +1,55 @@
+# run_context_policy.yaml
+# =======================
+#
+# Per-TARGET-CONTRACT policy for portfolio-level run/source context fields —
+# currently the reporting cut-off date (`data_cut_off_date`, ESMA Annex 2 RREL6).
+#
+# The policy decides ONE thing: whether differing row-level values for the field
+# are a conflict to resolve, or legitimate data to preserve.
+#
+# row_level_variation:
+#   conflict  — differing row-level values are a blocking operator decision. The
+#               run stops and a human picks; nothing is auto-resolved.
+#   allowed   — differing row-level values are legitimate portfolio data. The
+#               field resolves as `source_row_level`: there is no single
+#               pack-level value, and every row keeps the date its source gave.
+#
+# Why this is contract-scoped rather than global:
+#
+#   * A REGULATORY delivery is a submission for ONE reporting period. Two
+#     different cut-off dates in one Annex 2 tape is a genuine defect, so
+#     row-level variation stays a blocking conflict there.
+#
+#   * MI describes a commercial portfolio as it actually is. A portfolio acquired
+#     as two legacy rump books legitimately carries different per-loan cut-off
+#     dates, and flattening them to one date would destroy real information.
+#
+# An unlisted field or contract gets the strict default below, so permissiveness
+# is always opt-in and never inherited by accident.
+#
+# NOT configurable here, because it holds for every contract: a resolved
+# pack-level value (including a blob folder period) only ever fills rows that
+# carry no date of their own. It never replaces a date a source row supplied.
+# Replacing the whole column is reserved for an explicit operator override
+# (`--override-reporting-date`). That rule is enforced in the Transformation
+# Agent's run-context materialisation.
+
+version: 1
+
+defaults:
+  row_level_variation: conflict
+
+fields:
+
+  data_cut_off_date:
+    contracts:
+
+      # Mixed row-level cut-off dates are legitimate MI (e.g. an acquired
+      # portfolio combining two legacy rump books with different cut-offs).
+      mi_semantics_field_registry:
+        row_level_variation: allowed
+
+      # One submission, one reporting period: conflicting row-level cut-off
+      # dates remain a blocking operator decision.
+      esma_annex_2:
+        row_level_variation: conflict

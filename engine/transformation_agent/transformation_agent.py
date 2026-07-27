@@ -47,6 +47,7 @@ def _disposition_action(disposition: str) -> str:
     return _tcc.transformation_action_for_disposition(disposition)
 
 from engine.onboarding_agent import onboarding_handoff as oh
+from engine.transformation_agent import canonical_derivations as cd
 from engine.transformation_agent import gate2_adapter as g2
 
 # --------------------------------------------------------------------------- #
@@ -92,6 +93,7 @@ IT_SEMANTIC_DERIVATION = "semantic_derivation_required"
 IT_OPERATOR_PENDING = "operator_decision_pending"
 IT_PENDING_PROJECTION = "pending_projection_rule"
 IT_SOURCE_ABSENT = "source_absent"
+IT_DERIVATION_FAILED = "derivation_failed"
 
 # Downstream owners (mirror the onboarding handoff vocabulary).
 OWN_TRANSFORMATION = "transformation_validation"
@@ -114,8 +116,16 @@ _CONTRACT_COLUMNS = [
     "field_disposition", "disposition_source", "disposition_action",
     "transformation_status", "transformed_value_sample", "value_source",
     "type_cast", "enum_map_used", "parse_rule", "issue_id",
+    # Derivation provenance: a value computed by a canonical derivation rule
+    # names the rule and the field it came from, so it is never read as sourced.
+    "derived_from", "derivation_rule", "value_origin",
     "blocking_for_validation", "blocking_for_projection", "downstream_owner", "notes",
 ]
+
+
+#: Run-context fields that MAY legitimately vary per loan when the target
+#: contract permits it (see config/system/run_context_policy.yaml).
+_ROW_LEVEL_CAPABLE_FIELDS = ("data_cut_off_date",)
 
 
 class HandoffValidationError(RuntimeError):
@@ -337,6 +347,7 @@ def build_transformation_package(
     regime_config_path: str = "",
     registry_path: str = "",
     enum_mapping_path: str = "",
+    derivations_config_path: str = "",
     dayfirst: bool = True,
 ) -> Dict[str, Any]:
     """Consume the onboarding handoff package and emit the transformation package.
@@ -421,13 +432,20 @@ def build_transformation_package(
     # 8. Canonical enum normalisation (internal standardisation; not projection).
     enum_report = g2.normalize_enums(df, asset_cfg)
 
+    # 8b. Deterministic canonical derivations (config-driven). Runs AFTER typing
+    #     so each rule reads the PARSED canonical value — e.g. the protected-equity
+    #     flag is computed from the parsed percentage, never from percentage text.
+    derivation_results = _apply_canonical_derivations(
+        df, issues, config_path=derivations_config_path)
+
     # --- surface uncontrolled type/parse failures as issues ---
     _record_parse_issues(type_report, registry_fields, contract_rows, issues)
 
     # --- finalise per-field contract + transformation status ---
     contract_out, status_counts = _finalise_contract(
         df, contract_rows, field_results, enum_report, type_report,
-        registry_fields, regime_defaults, issues)
+        registry_fields, regime_defaults, issues,
+        derivation_results=derivation_results)
 
     # --- readiness ---
     blocking_validation_issues = sum(
@@ -466,6 +484,7 @@ def build_transformation_package(
         central_row_count=central_row_count,
         type_report=type_report,
         enum_report=enum_report,
+        derivation_results=derivation_results,
         config_paths={
             "asset_config_path": asset_config_path,
             "regime_config_path": regime_config_path,
@@ -479,20 +498,90 @@ def build_transformation_package(
 # Field materialisation
 # --------------------------------------------------------------------------- #
 
-def _materialise_run_context(
-    df: pd.DataFrame, tf: str, canonical: str, esma_code: str,
-    contract_value: Any, cls: str, issues: _IssueLog,
-) -> Dict[str, Any]:
-    """Materialise a portfolio-level run/source context value into every row.
+def _normalise_existing_context_column(df: pd.DataFrame, canonical: str) -> int:
+    """ISO-normalise the values a run-context column already carries.
 
-    The value is normalised to ISO ``YYYY-MM-DD``; an unparseable value is a
-    controlled date_parse_failed issue (Validation will then fail), never guessed.
+    Used when row-level values are preserved: each row keeps its own date, but the
+    rendering is made canonical so downstream typing sees ISO. Returns the number
+    of non-blank values present.
     """
     from engine.onboarding_agent import run_context as rc
 
+    if canonical not in df.columns:
+        return 0
+    present = 0
+    values = []
+    for raw in df[canonical].tolist():
+        if _is_blank(raw):
+            values.append(pd.NA)
+            continue
+        present += 1
+        iso = rc.normalize_to_iso(raw)
+        values.append(iso if iso else str(raw).strip())
+    df[canonical] = pd.Series(values, index=df.index, dtype="object")
+    return present
+
+
+def _fill_unresolved_context(df: pd.DataFrame, canonical: str, iso: str) -> int:
+    """Fill only the rows that do NOT already carry a real date. Returns rows filled.
+
+    A row whose value parses as a date is source data and is left exactly as it
+    is — a pack-level period (the blob folder period) is context, not a
+    replacement for what the source actually said. A row that is blank, or carries
+    something that is not a date at all (a stale ``reporting cut-off pending``
+    placeholder), has no date to protect, so the resolved value completes it
+    rather than leaving a guaranteed parse failure behind.
+    """
+    from engine.onboarding_agent import run_context as rc
+
+    if canonical not in df.columns:
+        df[canonical] = pd.NA
+    values = []
+    filled = 0
+    for raw in df[canonical].tolist():
+        existing = None if _is_blank(raw) else rc.normalize_to_iso(raw)
+        if existing:
+            values.append(existing)          # a real source date — preserved
+        else:
+            values.append(iso)
+            filled += 1
+    df[canonical] = pd.Series(values, index=df.index, dtype="object")
+    return filled
+
+
+def _materialise_run_context(
+    df: pd.DataFrame, tf: str, canonical: str, esma_code: str,
+    contract_value: Any, cls: str, issues: _IssueLog,
+    *, row_level: bool = False, overwrite: bool = False,
+) -> Dict[str, Any]:
+    """Materialise a portfolio-level run/source context value.
+
+    Three modes, all non-destructive by default:
+
+      * ``row_level`` — the target contract permits the field to vary per loan
+        (e.g. an acquired portfolio combining two rump books). Every row keeps the
+        date its source supplied; only the rendering is ISO-normalised.
+      * default — the resolved value fills only the rows that carry no date of
+        their own (blank, or a non-date placeholder). A pack-level period never
+        replaces a real date a source row already carries.
+      * ``overwrite`` — reserved for an explicit operator override, where
+        replacing the column is the point of the instruction.
+
+    The value is normalised to ISO ``YYYY-MM-DD``; an unparseable value is a
+    controlled issue (Validation will then fail), never guessed.
+    """
+    from engine.onboarding_agent import run_context as rc
+
+    source = ("source_context" if cls == oh.HC_SOURCE_CONTEXT_MAPPED else "run_context")
+
+    if row_level:
+        present = _normalise_existing_context_column(df, canonical)
+        return {"value_source": "source_row_level", "materialised": present > 0,
+                "value": "", "run_context": True, "source": source,
+                "row_level": True, "rows_with_source_value": present}
+
     raw = "" if _is_blank(contract_value) else str(contract_value).strip()
     iso = rc.normalize_to_iso(raw) if raw else None
-    source = ("source_context" if cls == oh.HC_SOURCE_CONTEXT_MAPPED else "run_context")
 
     if not iso:
         # No usable context value — surface, never fabricate.
@@ -506,11 +595,18 @@ def _materialise_run_context(
         return {"value_source": "", "materialised": False, "value": "",
                 "issue_id": issue_id, "absent": True, "run_context": True, "source": source}
 
-    if canonical not in df.columns:
-        df[canonical] = pd.NA
-    df[canonical] = iso  # one portfolio-level value for every row
+    if overwrite:
+        if canonical not in df.columns:
+            df[canonical] = pd.NA
+        df[canonical] = iso
+        filled = int(len(df))
+    else:
+        # A resolved pack-level date completes rows that carry no date of their
+        # own, and leaves every genuine source date exactly as it was.
+        filled = _fill_unresolved_context(df, canonical, iso)
     return {"value_source": f"handoff_{source}", "materialised": True,
-            "value": iso, "run_context": True, "source": source}
+            "value": iso, "run_context": True, "source": source,
+            "rows_filled": filled, "overwrote_source_values": bool(overwrite)}
 
 
 def _materialise_run_context_fields(
@@ -520,11 +616,18 @@ def _materialise_run_context_fields(
     """Materialise portfolio-level run/source context values (e.g.
     ``data_cut_off_date``) BEFORE type-normalisation.
 
-    The handoff resolves ONE authoritative cut-off value for the whole tape; it
-    supersedes any per-loan raw source column. Materialising it first means Gate 2
-    types the resolved value — not a stale/unparseable raw column that the resolved
-    value replaces — so a valid resolved date never yields a spurious
-    ``date_parse_failed``.
+    Materialising first means Gate 2 types the resolved value rather than a stale
+    raw rendering, so a valid date never yields a spurious ``date_parse_failed``.
+
+    What gets materialised is decided by the ONBOARDING handoff, not here:
+
+      * the handoff resolved ONE pack-level value → that value FILLS BLANKS. It
+        completes rows the source left empty and never replaces a date a source
+        row already carries (a blob folder period is pack context, not data);
+      * the handoff resolved the field as ROW-LEVEL (the target contract permits
+        per-loan variation) → every row keeps its own source date, ISO-normalised;
+      * an explicit operator override → the column is replaced, which is the
+        stated intent of the override.
 
     Two sources of run-context fields, both honoured:
 
@@ -535,28 +638,45 @@ def _materialise_run_context_fields(
          columns that are NOT target-contract rows (e.g. ``data_cut_off_date``
          resolved via a cli/config fallback), so (1) alone never covers them.
     """
+    handoff = handoff or {}
+    # The onboarding handoff decides whether the field resolved to ONE pack-level
+    # value or to legitimate per-loan values; Transformation executes that, it does
+    # not re-decide it. An explicit operator override is the only case in which
+    # replacing source-supplied row values is intended.
+    row_level = bool(handoff.get("data_cut_off_date_row_level", False))
+    overwrite = str(handoff.get("data_cut_off_date_source", "")) == "cli_override"
+
     results: Dict[str, Dict[str, Any]] = {}
     handled: set = set()
     for row in contract_rows:
         cls = row.get("handoff_classification", "")
         canonical = (row.get("canonical_field") or "").strip()
         if cls in (oh.HC_SOURCE_CONTEXT_MAPPED, oh.HC_RUN_CONTEXT_MAPPED) and canonical:
+            field_row_level = row_level and canonical in _ROW_LEVEL_CAPABLE_FIELDS
             results[row.get("target_field", "")] = _materialise_run_context(
                 df, row.get("target_field", ""), canonical, row.get("esma_code", ""),
-                row.get("selected_value_sample", ""), cls, issues)
+                row.get("selected_value_sample", ""), cls, issues,
+                row_level=field_row_level, overwrite=overwrite and not field_row_level)
             handled.add(canonical)
 
-    for canonical in (handoff or {}).get("run_context_fields", []) or []:
+    for canonical in handoff.get("run_context_fields", []) or []:
         canonical = str(canonical or "").strip()
         if not canonical or canonical in handled:
             continue
-        value = (handoff or {}).get(canonical, "")
+        if row_level and canonical in _ROW_LEVEL_CAPABLE_FIELDS:
+            results[canonical] = _materialise_run_context(
+                df, canonical, canonical, "", "", oh.HC_SOURCE_CONTEXT_MAPPED,
+                issues, row_level=True)
+            handled.add(canonical)
+            continue
+        value = handoff.get(canonical, "")
         # Only when the handoff actually RESOLVED a value — a blank leaves the
         # column to normal typing (never fabricates a source_absent for it here).
         if _is_blank(value):
             continue
         results[canonical] = _materialise_run_context(
-            df, canonical, canonical, "", value, oh.HC_RUN_CONTEXT_MAPPED, issues)
+            df, canonical, canonical, "", value, oh.HC_RUN_CONTEXT_MAPPED, issues,
+            overwrite=overwrite)
         handled.add(canonical)
     return results
 
@@ -678,6 +798,36 @@ def _materialise_fields(
 
 
 # --------------------------------------------------------------------------- #
+# Deterministic canonical derivations (config-driven)
+# --------------------------------------------------------------------------- #
+
+def _apply_canonical_derivations(
+    df: pd.DataFrame, issues: _IssueLog, *, config_path: str = "",
+) -> Dict[str, Dict[str, Any]]:
+    """Apply ``config/system/canonical_derivations.yaml`` to the typed tape.
+
+    Each derivation is deterministic and null-preserving. Source values a rule
+    cannot interpret are surfaced as a controlled ``derivation_failed`` issue —
+    never defaulted to a flag value.
+    """
+    results = cd.apply_derivations(df, config_path=config_path)
+    for target, res in results.items():
+        if not res.get("applied") or not res.get("failure_count"):
+            continue
+        res["issue_id"] = issues.add(
+            severity="error", field=target, canonical_field=target, esma_code="",
+            issue_type=IT_DERIVATION_FAILED,
+            source_value_sample="; ".join(res.get("sample_failures", [])[:5]),
+            description=(f"{res['failure_count']} value(s) of "
+                         f"{res['derived_from']} could not be interpreted by the "
+                         f"deterministic '{res['rule']}' derivation rule"),
+            blocking_for_validation=True, blocking_for_projection=True,
+            recommended_action="correct the source values or adjust the derivation rule",
+            downstream_owner=OWN_TRANSFORMATION)
+    return results
+
+
+# --------------------------------------------------------------------------- #
 # Parse-failure issues
 # --------------------------------------------------------------------------- #
 
@@ -700,7 +850,9 @@ def _record_parse_issues(
             continue
         fmt = str(info.get("format", "")).lower()
         if fmt == "date":
-            it, rule = IT_DATE_PARSE, "iso_then_dayfirst"
+            it, rule = IT_DATE_PARSE, "explicit_iso_then_uk_day_first_ladder"
+        elif fmt in {"percentage", "percent", "pct"}:
+            it, rule = IT_NUMERIC_PARSE, "percentage_strip"
         elif fmt in {"decimal", "number", "float", "integer", "int"}:
             it, rule = IT_NUMERIC_PARSE, "numeric_strip"
         elif fmt in {"boolean", "bool", "y/n"}:
@@ -741,7 +893,9 @@ def _finalise_contract(
     registry_fields: Dict[str, Any],
     regime_defaults: Dict[str, Dict[str, Any]],
     issues: _IssueLog,
+    derivation_results: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
+    derivation_results = derivation_results or {}
     enum_fields = set(
         (enum_report.get("canonical_enum_normalization", {}) or {}).get("fields", {}).keys())
     enum_map_fields = set(enum_report.get("_normalization_map_fields", []) or [])
@@ -802,6 +956,50 @@ def _finalise_contract(
                 "blocking_for_validation": False,
                 "blocking_for_projection": False,
                 "downstream_owner": owner,
+                "notes": note,
+            })
+            continue
+
+        # Config-driven canonical derivation (e.g. protected_equity_flag computed
+        # from the parsed protected_equity_percentage). A field the canonical model
+        # DEFINES as derived is materialised by its rule, so it is neither a
+        # missing source nor an undefined derivation.
+        derivation = derivation_results.get(canonical) if canonical else None
+        if derivation and derivation.get("applied"):
+            status = TS_DERIVED
+            value_source = f"canonical_derivation:{derivation['rule']}"
+            owner = OWN_VALIDATION
+            parse_rule = derivation["rule"]
+            issue_id = derivation.get("issue_id", "")
+            b_val = bool(issue_id)
+            b_proj = bool(issue_id)
+            note = (note + f" | derived from {derivation['derived_from']} "
+                    f"({derivation['rule']})").strip(" |")
+            counts[status] = counts.get(status, 0) + 1
+            out.append({
+                "target_contract_id": row.get("target_contract_id", ""),
+                "esma_code": esma_code,
+                "target_field": tf,
+                "canonical_field": canonical,
+                "domain": row.get("domain", ""),
+                "coverage_status": row.get("coverage_status", ""),
+                "handoff_classification": cls,
+                "handoff_downstream_owner": handoff_owner,
+                "field_disposition": row.get("field_disposition", ""),
+                "disposition_source": row.get("disposition_source", ""),
+                "transformation_status": status,
+                "transformed_value_sample": _col_sample(df, canonical),
+                "value_source": value_source,
+                "type_cast": type_cast,
+                "enum_map_used": "",
+                "parse_rule": parse_rule,
+                "issue_id": issue_id,
+                "blocking_for_validation": b_val,
+                "blocking_for_projection": b_proj,
+                "downstream_owner": owner,
+                "derived_from": derivation["derived_from"],
+                "derivation_rule": derivation["rule"],
+                "value_origin": "derived",
                 "notes": note,
             })
             continue
@@ -1048,6 +1246,28 @@ def compute_readiness(
 # Artefact writers
 # --------------------------------------------------------------------------- #
 
+#: Where a materialised value actually came from, by transformation status. Used
+#: for lineage so a configured default is never reported as sourced data.
+_VALUE_ORIGIN_BY_STATUS = {
+    TS_DERIVED: "derived",
+    TS_DEFAULT: "configured_default",
+    TS_ND_DEFAULT: "configured_nd_default",
+    TS_CONFIGURED_STATIC: "configured_static",
+    TS_SOURCE_CONTEXT: "source_context",
+    TS_RUN_CONTEXT: "run_context",
+    TS_SOURCE_ABSENT: "absent",
+    TS_NOT_APPLICABLE: "not_applicable",
+    TS_OPERATOR_PENDING: "unresolved",
+    TS_SEMANTIC_DERIVATION: "unresolved",
+    TS_PENDING_PROJECTION: "unresolved",
+}
+
+
+def _value_origin(transformation_status: str) -> str:
+    """Lineage label for where a field's value came from."""
+    return _VALUE_ORIGIN_BY_STATUS.get(transformation_status, "sourced")
+
+
 def _df_records(df: pd.DataFrame) -> List[Dict[str, Any]]:
     records: List[Dict[str, Any]] = []
     for _, r in df.iterrows():
@@ -1062,6 +1282,7 @@ def _write_artefacts(
     client_id: str, run_id: str, target_contract_id: str, central_row_count: int,
     type_report: Dict[str, Any], enum_report: Dict[str, Any],
     config_paths: Dict[str, str],
+    derivation_results: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
 
     # 31 — transformed canonical tape (csv + json)
@@ -1111,9 +1332,9 @@ def _write_artefacts(
     lineage_path = out_dir / "34_transformation_lineage.json"
     onboarding_lineage = _read_json(paths["lineage"]) or {}
     tx_rows = []
-    contract_by_field = {r["target_field"]: r for r in contract_out}
+    type_fields = type_report.get("fields", {}) or {}
     for r in contract_out:
-        tx_rows.append({
+        row = {
             "target_field": r["target_field"],
             "esma_code": r["esma_code"],
             "source_canonical_field": r["canonical_field"],
@@ -1124,7 +1345,33 @@ def _write_artefacts(
             "type_cast": r["type_cast"],
             "parse_rule": r["parse_rule"],
             "issue_id": r["issue_id"],
-        })
+        }
+        # Deterministic derivation provenance (rule + the field it was computed
+        # from) so a derived value is never mistaken for a sourced one.
+        if r.get("derived_from"):
+            row["derived_from"] = r["derived_from"]
+            row["derivation_rule"] = r.get("derivation_rule", "")
+            row["value_origin"] = "derived"
+        else:
+            row["value_origin"] = _value_origin(r["transformation_status"])
+        # Observed source date precision (e.g. a provider that knows only month
+        # and year and supplies day 01 by convention).
+        prec = (type_fields.get(r["canonical_field"], {}) or {}).get("date_precision")
+        if prec and prec.get("parsed_count"):
+            row["source_date_precision"] = prec.get("precision", "")
+            if prec.get("day_convention"):
+                row["source_day_convention"] = prec["day_convention"]
+        tx_rows.append(row)
+    # Observed source date precision for EVERY typed date column on the tape —
+    # not only those that are target-contract fields — so a provider convention
+    # such as "month and year known, day supplied as 01" is recorded wherever it
+    # occurs. Purely observational; no value is changed.
+    date_precision = {
+        col: info["date_precision"]
+        for col, info in type_fields.items()
+        if (info.get("date_precision") or {}).get("parsed_count")
+    }
+
     lineage_path.write_text(json.dumps({
         "client_id": client_id,
         "run_id": run_id,
@@ -1132,6 +1379,12 @@ def _write_artefacts(
         "onboarding_lineage": onboarding_lineage.get("rows", []),
         "onboarding_lineage_source": "27_onboarding_handoff_lineage.json",
         "transformation_lineage": tx_rows,
+        "source_date_precision": date_precision,
+        "canonical_derivations": {
+            t: {"derived_from": r.get("derived_from"), "rule": r.get("rule"),
+                "applied": r.get("applied"), "value_counts": r.get("value_counts")}
+            for t, r in (derivation_results or {}).items() if r.get("applied")
+        },
     }, indent=2, default=str), encoding="utf-8")
 
     # 33 — readiness (json + md)
@@ -1204,6 +1457,12 @@ def _write_artefacts(
         "transformation_status_counts": status_counts,
         "issue_count": len(issues),
         "issue_type_counts": issue_type_counts,
+
+        # Deterministic canonical derivations applied (rule + parent field).
+        "canonical_derivations": {
+            t: {k: v for k, v in r.items() if k != "sample_failures"}
+            for t, r in (derivation_results or {}).items()
+        },
 
         # Readiness.
         **readiness,

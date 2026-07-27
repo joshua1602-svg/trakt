@@ -22,6 +22,7 @@ import argparse
 import json
 import re
 import calendar
+import warnings
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 from datetime import datetime
@@ -157,6 +158,35 @@ def _strip_nd(series: pd.Series) -> pd.Series:
     return series
 
 
+#: Textual renderings of "no value". A CSV round-trip turns a real null into an
+#: empty string, and a pandas NA into the literal ``nan``/``NaT``/``<NA>``, so
+#: these are ABSENT values, not values that failed to parse. Counting them as
+#: parse failures is what made an empty second-borrower DOB look like a broken
+#: date.
+#:
+#: Deliberately limited to unambiguous null RENDERINGS. Client null markers such
+#: as ``N/A`` or ``-`` are NOT here: they are real content a source chose to
+#: write, and silently voiding them would be a semantic decision this layer has
+#: no business making. They keep surfacing as parse failures, which is the point.
+_BLANK_TOKENS = {"", "nan", "nat", "none", "null", "<na>"}
+
+
+def _blank_token_mask(series: pd.Series) -> pd.Series:
+    """Boolean mask of cells that carry no value (blank / null rendering)."""
+    if series.dtype == object or str(series.dtype) == "string":
+        s = series.astype("string").str.strip().str.lower()
+        return s.isna() | s.isin(_BLANK_TOKENS)
+    return series.isna()
+
+
+def _void_blanks(series: pd.Series) -> pd.Series:
+    """Replace blank-token cells with real NA so parsers never see them."""
+    mask = _blank_token_mask(series)
+    if not bool(mask.any()):
+        return series
+    return series.mask(mask, other=pd.NA)
+
+
 def _normalise_key(value: Any) -> str:
     s = str(value or "").strip().lower()
     return MULTISPACE.sub(" ", s)
@@ -232,32 +262,156 @@ def apply_canonical_enum_normalization(
     return report
 
 
+#: Explicit, ordered date formats tried BEFORE any locale/format inference.
+#:
+#: Precedence is unambiguous and identical for every column and every row, so a
+#: value never depends on what happened to sit in row 0 (pandas infers ONE format
+#: from the first non-null element and coerces everything else to NaT — that is
+#: format inference, not a parsing rule, and it is why a normalised UK tape could
+#: report ``date_parse_failed`` on perfectly valid dates).
+#:
+#: ISO comes first because ``2011-03-04`` is unambiguous. Day-first UK forms come
+#: next because that is the UK source convention: ``01/11/1935`` is 1 November
+#: 1935. Month-first forms are NOT in the ladder — adding them would make
+#: ``01/11/1935`` ambiguous again.
+_ISO_DATE_FORMATS: tuple = (
+    "%Y-%m-%d",
+    "%Y-%m-%d %H:%M:%S",
+    "%Y-%m-%dT%H:%M:%S",
+    "%Y/%m/%d",
+)
+_UK_DATE_FORMATS: tuple = (
+    "%d/%m/%Y",
+    "%d-%m-%Y",
+    "%d.%m.%Y",
+    "%d/%m/%Y %H:%M:%S",
+    "%d/%m/%y",
+    "%d-%m-%y",
+    "%d %b %Y",
+    "%d %B %Y",
+)
+#: Month-first ladder, used ONLY when a caller explicitly asks for day-last
+#: parsing (``dayfirst=False``). Never mixed with the UK ladder.
+_US_DATE_FORMATS: tuple = (
+    "%m/%d/%Y",
+    "%m-%d-%Y",
+    "%m/%d/%Y %H:%M:%S",
+    "%m/%d/%y",
+)
+
+
+def date_format_ladder(dayfirst: bool = True) -> tuple:
+    """The ordered, explicit date formats applied before any inference."""
+    return _ISO_DATE_FORMATS + (_UK_DATE_FORMATS if dayfirst else _US_DATE_FORMATS)
+
+
 def to_iso_date(series: pd.Series, dayfirst: bool = True) -> pd.Series:
-    """Robust Date Parser (v1.8)"""
-    s = _strip_nd(series)
+    """Deterministically parse a column to ISO ``YYYY-MM-DD``.
+
+    Order of resolution (fixed, never data-dependent):
+
+      1. blank / null renderings become NA (absent, not a parse failure);
+      2. Excel serial numbers;
+      3. the explicit format ladder (:func:`date_format_ladder`) — ISO first,
+         then the UK day-first forms — each applied with an exact ``format=`` so
+         ``01/11/1935`` is always 1 November 1935 and the supplied day ``01`` is
+         preserved rather than reinterpreted;
+      4. only whatever is still unparsed falls back to pandas' ``dayfirst``
+         inference, so no previously-parsing format regresses.
+
+    A value that survives all four is genuinely unparseable and stays NaT.
+    """
+    s = _void_blanks(_strip_nd(series))
     s_num = pd.to_numeric(s, errors="coerce")
     is_serial = s_num.notna() & (s_num > 25000)
-    
-    dt_out = pd.Series(pd.NaT, index=s.index)
 
-    if is_serial.any():
+    dt_out = pd.Series(pd.NaT, index=s.index, dtype="datetime64[ns]")
+
+    if bool(is_serial.any()):
         dt_out.loc[is_serial] = pd.to_datetime(
             s_num[is_serial], unit="D", origin="1899-12-30"
         )
 
     is_str = s.notna() & ~is_serial
-    if is_str.any():
-        s_str = s[is_str].astype(str)
-        # Parse strict ISO dates first (prevents day-first ambiguity on YYYY-MM-DD).
-        dt_iso = pd.to_datetime(s_str, format="%Y-%m-%d", errors="coerce", utc=False)
-        dt_any = pd.to_datetime(s_str, dayfirst=dayfirst, errors="coerce", utc=False)
-        dt_out.loc[is_str] = dt_iso.fillna(dt_any)
+    if bool(is_str.any()):
+        s_str = s[is_str].astype(str).str.strip()
+        parsed = pd.Series(pd.NaT, index=s_str.index, dtype="datetime64[ns]")
+        for fmt in date_format_ladder(dayfirst):
+            remaining = parsed.isna()
+            if not bool(remaining.any()):
+                break
+            attempt = pd.to_datetime(
+                s_str[remaining], format=fmt, errors="coerce", utc=False)
+            parsed.loc[remaining] = attempt
+        # Backstop only for what the explicit ladder could not place, so formats
+        # that parsed before this change still parse.
+        remaining = parsed.isna()
+        if bool(remaining.any()):
+            # Per-element dateutil fallback is intentional here (the ladder has
+            # already had its say), so pandas' "could not infer format" warning is
+            # expected noise rather than a signal.
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                parsed.loc[remaining] = pd.to_datetime(
+                    s_str[remaining], dayfirst=dayfirst, errors="coerce", utc=False)
+        dt_out.loc[is_str] = parsed
 
     return dt_out.dt.strftime("%Y-%m-%d")
 
 
+def date_precision_report(original: pd.Series, parsed: pd.Series) -> Dict[str, Any]:
+    """Describe the precision the SOURCE actually carried for a date column.
+
+    Some providers know only month and year and set the day to ``01`` by
+    convention. That is a real property of the source, not an error and not
+    something to re-derive: when every parsed value lands on day 01 the column is
+    recorded as month-precision with a source-supplied day. Purely observational —
+    no value is changed and nothing is inferred beyond counting.
+    """
+    iso = pd.Series(parsed).dropna().astype(str)
+    iso = iso[iso.str.match(r"^\d{4}-\d{2}-\d{2}$", na=False)]
+    total = int(len(iso))
+    if total == 0:
+        return {"parsed_count": 0, "precision": "unknown", "day_01_count": 0}
+    day_01 = int((iso.str.slice(8, 10) == "01").sum())
+    return {
+        "parsed_count": total,
+        "day_01_count": day_01,
+        "precision": "month" if day_01 == total else "day",
+        "day_convention": ("source_supplied_01" if day_01 == total else ""),
+    }
+
+
+def to_percentage(series: pd.Series) -> pd.Series:
+    """Parse a percentage column to the canonical PERCENTAGE-POINT scale.
+
+    The repository's canonical convention for percentage-valued fields is
+    percentage points, not a 0-1 fraction: Gate 2 derives
+    ``current_loan_to_value = (balance / valuation) * 100``, and the MI/demo
+    layers describe LTV and rate fields as "percentage points" throughout. So
+    ``20.00%`` is 20.0 here — the ``%`` suffix is stripped and the magnitude is
+    kept exactly as written. No rescaling is inferred from the magnitude of the
+    value, because guessing that ``0.2`` "means" 20% is exactly the kind of
+    silent reinterpretation this pipeline must not do.
+
+    A value that is not a number after stripping ``%`` / thousands separators
+    stays NA and is reported as a controlled numeric parse failure.
+    """
+    s = _void_blanks(_strip_nd(series))
+    if s.dtype == object or str(s.dtype) == "string":
+        cleaned = (
+            s.astype("string")
+            .str.strip()
+            .str.replace("%", "", regex=False)
+            .str.replace(",", "", regex=False)
+            .str.strip()
+        )
+        return pd.to_numeric(cleaned, errors="coerce")
+    return pd.to_numeric(s, errors="coerce")
+
+
 def to_decimal(series: pd.Series) -> pd.Series:
-    s = _strip_nd(series)
+    s = _void_blanks(_strip_nd(series))
     if s.dtype == object:
         cleaned = (
             s.astype(str)
@@ -274,7 +428,7 @@ def to_integer(series: pd.Series) -> pd.Series:
 
 
 def to_bool_yn(series: pd.Series) -> pd.Series:
-    s = _strip_nd(series)
+    s = _void_blanks(_strip_nd(series))
     if s.dtype != object:
         return s.map(lambda v: "Y" if v == 1 else ("N" if v == 0 else pd.NA))
     t = s.astype(str).str.strip().str.lower()
@@ -313,6 +467,8 @@ def apply_types(df: pd.DataFrame, fields_meta: dict, currency_synonyms: dict | N
         
         if fmt == "date":
             out = to_iso_date(df[col], dayfirst=dayfirst)
+        elif fmt in {"percentage", "percent", "pct"}:
+            out = to_percentage(df[col])
         elif fmt in {"decimal", "number", "float"}:
             out = to_decimal(df[col])
         elif fmt in {"integer", "int"}:
@@ -322,31 +478,42 @@ def apply_types(df: pd.DataFrame, fields_meta: dict, currency_synonyms: dict | N
         elif fmt in {"currency_code", "ccy_code", "iso_currency_code", "currency", "ccy"} or col.endswith("_currency"):
             out = to_currency(df[col], synonym_map=currency_synonyms)
         else:
-            out = _strip_nd(df[col])
+            out = _void_blanks(_strip_nd(df[col]))
             if out.dtype == object:
                 out = out.astype("string").str.strip()
 
         df[col] = out
-        
-        # Metrics
+
+        # Metrics. An ABSENT value is not a parse failure: a CSV round-trip
+        # renders a real null as "" (or the literal "nan"/"<NA>"), and counting
+        # those as failures is what turned an empty second-borrower DOB into a
+        # spurious date_parse_failed. Only a cell that carried an actual value the
+        # deterministic rules could not place is a failure.
         nd_mask = original.astype(str).str.match(ND_PATTERN, na=False)
-        failures_mask = original.notna() & out.isna() & ~nd_mask
-        
+        blank_mask = _blank_token_mask(original)
+        failures_mask = original.notna() & out.isna() & ~nd_mask & ~blank_mask
+
         sample = []
         if failures_mask.sum() > 0:
             try:
                 sample = original[failures_mask].astype('string').dropna().drop_duplicates().head(5).tolist()
             except Exception:
                 pass
-                
-        report["fields"][col] = {
+
+        field_report = {
             "format": fmt or "string",
             "nulls_before": before_null,
             "nulls_after": int(df[col].isna().sum()),
             "nd_stripped": int(nd_mask.sum()),
+            "blank_values": int(blank_mask.sum()),
             "parse_failures": int(failures_mask.sum()),
             "sample_failures": sample,
         }
+        if fmt == "date":
+            # Observational provenance: records that a source carried month-level
+            # precision with a conventional day of 01 (see date_precision_report).
+            field_report["date_precision"] = date_precision_report(original, out)
+        report["fields"][col] = field_report
     return report
 
 def derive_reporting_date(df, filename, dayfirst, infer_year, derive_month, default_year):

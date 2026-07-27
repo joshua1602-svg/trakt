@@ -383,11 +383,28 @@ CURATION: Dict[str, dict] = {
         "business_description": "Whether a further advance has been taken.",
         "synonyms": ["further advance", "further advance flag", "additional borrowing"],
     },
-    "protected_equity_flag": {
+    # Protected equity arrives from source as a PERCENTAGE ("20.00%"), which is
+    # MI in its own right — so the percentage is the sourced field and the flag is
+    # derived from it. Keeping "protected equity" as a synonym of the FLAG is what
+    # sent percentage text into the boolean parser; the flag's synonyms are
+    # therefore flag-specific only.
+    "protected_equity_percentage": {
         "tier": "core", "business_name": "Protected Equity",
-        "business_description": "Whether the loan carries protected equity.",
-        "synonyms": ["protected equity", "protected equity flag",
-                     "equity protection"],
+        "business_description": "Protected-equity share of the property, in "
+                                "percentage points (e.g. 20.0 for 20%).",
+        "synonyms": ["protected equity", "protected equity percentage",
+                     "protected equity %", "protected equity percent",
+                     "equity protection percentage"],
+    },
+    "protected_equity_flag": {
+        "tier": "core", "derived": True,
+        "derived_from": "protected_equity_percentage",
+        "business_name": "Protected Equity Flag",
+        "business_description": "Whether the loan carries protected equity "
+                                "(derived from protected_equity_percentage: Y "
+                                "above zero, N at zero, null when absent).",
+        "synonyms": ["protected equity flag", "equity protection flag",
+                     "has protected equity"],
     },
     "negative_equity_guarantee": {
         "tier": "core", "business_name": "Negative Equity Guarantee",
@@ -1052,6 +1069,10 @@ def infer_format(name: str, reg_format: Optional[str], allowed_values) -> str:
     if nf in ("list", "string", "currency_code", "enum", "category"):
         return "string"
 
+    # An explicit canonical `percentage` format is authoritative, so a percentage
+    # field whose NAME does not say so still maps to the MI percent format.
+    if nf in ("percentage", "percent", "pct"):
+        return "percent"
     if _contains(name, ("ltv", "loan_to_value", "percentage", "pct", "margin", "spread")) or \
             "rate" in toks:
         return "percent"

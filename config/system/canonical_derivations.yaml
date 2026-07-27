@@ -1,0 +1,44 @@
+# canonical_derivations.yaml
+# ==========================
+#
+# Declarative, deterministic canonical field derivations applied by the
+# Transformation Agent AFTER type normalisation and BEFORE the field contract is
+# finalised.
+#
+# These are NOT projection rules and NOT LLM inferences. Each entry names one
+# canonical target field, the canonical field it is computed from, and a rule
+# from the fixed rule library in
+# ``engine.transformation_agent.canonical_derivations``. Nothing here can invent
+# a value: every rule maps null to null.
+#
+# A derived field must never also be mapped directly from source — the onboarding
+# coverage layer enforces that (see target_coverage._apply_derived_source_guard),
+# and lineage records the derivation so the value is never mistaken for sourced
+# data.
+#
+# Rule library (see canonical_derivations.RULES):
+#   positive_number_to_flag
+#       null            -> null
+#       value <= 0      -> "N"
+#       value > 0       -> "Y"
+#       unparseable     -> null + a controlled derivation issue
+#   presence_to_flag
+#       null / blank    -> "N"
+#       any value       -> "Y"
+
+version: 1
+
+derivations:
+
+  # Protected equity: the SOURCE carries the percentage (e.g. "20.00%"), which is
+  # valuable MI in its own right and is mapped to protected_equity_percentage.
+  # The boolean flag is a view OF that percentage, so it is derived from the
+  # parsed canonical number rather than parsed from the percentage text — feeding
+  # "20.00%" to a Y/N parser is what produced boolean_parse_failed.
+  protected_equity_flag:
+    from: protected_equity_percentage
+    rule: positive_number_to_flag
+    description: >-
+      Y when the loan carries a protected-equity percentage greater than zero,
+      N when the percentage is present and zero, null when the source is blank.
+    preserve_source: true
