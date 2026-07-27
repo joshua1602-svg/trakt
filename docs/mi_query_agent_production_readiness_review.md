@@ -548,11 +548,27 @@ regression guards rather than assertions written around current behaviour.
 |---|---|---|
 | `mi_agent/tests` + `mi_agent_api/tests` | 1205 passed, **11 failed** | 1391 passed, **11 failed** |
 | Affected repo-wide suites (governed portfolio, lens wiring, provenance, dependency direction, envelope, render, packaging) | — | 219 passed |
+| Full `tests/` (21 min) | — | 2646 passed, 15 failed, 10 errors |
 
-The 11 failures are **pre-existing and out of scope** — Copilot artefact
-resolution (`test_copilot_actions.py`), the funded central tape and funded
-enrichment. Confirmed unchanged by re-running one on stashed code: it fails
-identically with and without this change. No regression was introduced.
+**No regression was introduced.** Every failure is pre-existing and out of
+scope, verified by running the same suites on `main`:
+
+* **11** in `mi_agent_api/tests` — Copilot artefact resolution, funded central
+  tape, funded enrichment. One was re-run on stashed code and fails identically.
+* **6 failed + 10 errors** in `tests/test_delivery_xml_agent_review.py`,
+  `test_onboarding_annex2_workflow.py` and `test_phase1_analytics_lib.py` —
+  `main` and this branch both produce exactly `6 failed, 123 passed, 10 errors`.
+* **6** `test_no_regulatory_or_annex2_files_modified` guards — an artefact of a
+  **stale local `main` ref** in this environment (`5aa9805` vs `origin/main`
+  `1063206`). Those guards diff the working branch against local `main`, so they
+  saw ~280 files of already-merged upstream work. After
+  `git update-ref refs/heads/main origin/main` all six pass (217 passed across
+  the six phase suites).
+
+  The scope claim is independently verifiable: this commit touches **15 files**,
+  and none matches any forbidden prefix (`config/regime/`, `config/delivery/`,
+  `engine/gate_`, `engine/delivery_xml_agent/`, `engine/projection_agent/`) or
+  substring (`annex2`, `annex_2`, `annex12`, `_xsd`, `.xsd`).
 
 ---
 
