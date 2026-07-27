@@ -536,6 +536,31 @@ def _counts(contract: List[Dict[str, Any]]) -> Dict[str, int]:
     }
 
 
+def _source_value_scope(svr_doc: Dict[str, Any], rules: List[Dict[str, Any]],
+                        contract_id: str) -> Dict[str, str]:
+    """The scope Transformation must match source-value rules against.
+
+    Derived from the APPROVED RULES when there are any, so the scope that runs is
+    provably the one the operator approved rather than one reconstructed from the
+    current run. With no rules in force yet, the 28d document's own scope stands
+    in so the block is still well-formed.
+    """
+    from . import source_value_rules as svr
+
+    scope = {
+        "client_id": svr_doc.get("client_id", ""),
+        "source_portfolio_id": svr_doc.get("source_portfolio_id", ""),
+        "target_contract_id": svr_doc.get("target_contract_id", "") or contract_id,
+        "source_schema_fingerprint": svr_doc.get("source_schema_fingerprint", ""),
+    }
+    if not rules:
+        return scope
+    from_rules = svr.scope_of_rules(rules)
+    # A dimension the rules agree on wins; one they disagree on (or leave blank)
+    # keeps the document's value, which is never narrower than the rules.
+    return {k: (from_rules.get(k) or scope.get(k, "")) for k in scope}
+
+
 def count_final_blockers(
     contract: List[Dict[str, Any]],
     *,
@@ -954,16 +979,14 @@ def build_handoff_package(
         # client / source portfolio / column / canonical field / target contract).
         "source_value_rules": source_value_rule_rows,
         "source_value_rule_count": len(source_value_rule_rows),
-        # The scope those rules were recorded under, carried verbatim from 28d.
-        # Downstream must match against THIS, not the manifest's ``client_id`` —
-        # at the onboarding layer that field holds the source portfolio, so
-        # re-deriving the scope here would silently mismatch every rule.
-        "source_value_scope": {
-            "client_id": svr_doc.get("client_id", ""),
-            "source_portfolio_id": svr_doc.get("source_portfolio_id", ""),
-            "target_contract_id": svr_doc.get("target_contract_id", "") or contract_id,
-            "source_schema_fingerprint": svr_doc.get("source_schema_fingerprint", ""),
-        },
+        # The scope the APPROVED RULES were recorded under. Taken from the rules
+        # themselves so Transformation matches against exactly what the operator
+        # approved — never a scope re-derived from the current run. (The
+        # manifest's own ``client_id`` is the SOURCE PORTFOLIO at the onboarding
+        # layer, so re-deriving here would silently mismatch every rule.) Falls
+        # back to the 28d document's scope when no rule is in force yet.
+        "source_value_scope": _source_value_scope(svr_doc, source_value_rule_rows,
+                                                  contract_id),
 
         # Onboarding artefact references the next agent should read.
         "target_coverage_matrix_path": _p(project_dir, "28a_target_coverage_matrix.csv"),

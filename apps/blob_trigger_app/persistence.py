@@ -214,6 +214,14 @@ class ProductionPersistence:
         from . import decisions_bridge as _db
         return _db.approved_decisions_uri(self.layout, pack_key)
 
+    def load_source_value_rules(self, pack_key: str) -> Dict[str, Any]:
+        from . import decisions_bridge as _db
+        return _db.load_source_value_rules(self.storage, self.layout, pack_key)
+
+    def approve_source_value(self, pack_key: str, **kw) -> Dict[str, Any]:
+        from . import decisions_bridge as _db
+        return _db.approve_source_value(self.storage, self.layout, pack_key, **kw)
+
     def localise_approved_decisions(self, pack_key: str, dest_dir: str) -> Optional[str]:
         from . import decisions_bridge as _db
         return _db.localise_approved_decisions(self.storage, self.layout, pack_key, dest_dir)
