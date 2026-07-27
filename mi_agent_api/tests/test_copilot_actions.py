@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """mi_agent_api/tests/test_copilot_actions.py
 
-The three Microsoft 365 Copilot v1 actions (/v1/copilot/*):
+The Microsoft 365 Copilot actions (/v1/copilot/*):
 
-  askTraktMi              - valid question via the deterministic MI path; live
-                            data source required; synthetic fallback refused;
-                            malformed request; unauthenticated request.
-  getLatestInvestorDeck   - latest deck found (+ controlled download); absent;
-                            storage unavailable; unauthenticated request.
-  getLatestCanonicalTape  - latest tape found (+ controlled download); absent;
-                            storage unavailable; unauthenticated request.
+  askTraktMi   - valid question via the deterministic MI path; live data source
+                 required; synthetic fallback refused; malformed request;
+                 unauthenticated request; classification + package telemetry.
+  getArtifact  - ONE generic action over the artifact registry: investor_deck
+                 and canonical_tape (behaviour-preserving migration) plus a
+                 registry-added type; unknown type 404; absent; storage
+                 unavailable; unauthenticated request; controlled download.
 
 Functional tests run with TRAKT_COPILOT_AUTH_MODE=disabled (the documented
 local-dev mode); the auth tests exercise the fail-closed entra default.
@@ -124,6 +124,46 @@ def test_mi_supporting_values_carry_kpis(live_dataset):
     assert "kpi" in kinds or "table" in kinds
 
 
+def test_mi_answer_carries_classification_and_package_version(live_dataset):
+    from mi_agent_api.copilot_package import COPILOT_PACKAGE_VERSION
+
+    r = client.post("/v1/copilot/mi/query",
+                    json={"question": "What is the total current balance?"})
+    body = r.json()
+    assert body["classification"] in (
+        "fully-served-simple", "fully-served-complex", "unmet")
+    assert body["packageVersion"] == COPILOT_PACKAGE_VERSION
+    # No Workspace base URL configured in this test → no link is emitted.
+    assert body.get("workspaceUrl") in (None, "")
+
+
+def test_mi_workspace_link_emitted_for_complex_when_configured(
+        live_dataset, monkeypatch):
+    """With a Workspace base URL set, a complex/unmet answer carries a deep link
+    that restores context; a simple lookup does not."""
+    monkeypatch.setenv("TRAKT_COPILOT_WORKSPACE_BASE_URL",
+                       "https://trakt.example/workspace")
+    r = client.post("/v1/copilot/mi/query",
+                    json={"question": "Show the LTV distribution as a chart."})
+    body = r.json()
+    if body["classification"] != "fully-served-simple":
+        assert body["workspaceUrl"], body["classification"]
+        assert body["workspaceUrl"].startswith("https://trakt.example/workspace")
+        assert "q=" in body["workspaceUrl"]
+
+
+def test_mi_package_version_telemetry_flags_stale_tenant(live_dataset, caplog):
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="mi_agent_api.copilot"):
+        client.post("/v1/copilot/mi/query",
+                    json={"question": "total balance?"},
+                    headers={"X-Trakt-Package-Version": "1.0.0"})
+    line = "\n".join(caplog.messages)
+    assert "package_version=1.0.0" in line
+    assert "STALE_TENANT_PACKAGE" in line
+
+
 def test_mi_synthetic_fallback_is_refused(synthetic_dataset):
     assert data_source.data_source_kind() == data_source.KIND_SYNTHETIC_DEMO
     r = client.post("/v1/copilot/mi/query", json={"question": "total balance?"})
@@ -172,10 +212,15 @@ def test_mi_unauthenticated_request_refused(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# getLatestInvestorDeck
+# getArtifact — investor_deck (behaviour-preserving migration) + unknown type
 # --------------------------------------------------------------------------- #
+def _get_artifact(artifact_type: str):
+    return client.get("/v1/copilot/artifacts/latest",
+                      params={"artifactType": artifact_type})
+
+
 def test_deck_latest_found_with_metadata_and_download(deck_root):
-    r = client.get("/v1/copilot/artifacts/latest/investor-deck")
+    r = _get_artifact("investor_deck")
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is True
@@ -195,41 +240,57 @@ def test_deck_latest_found_with_metadata_and_download(deck_root):
     assert "presentationml" in d.headers["content-type"]
 
 
+def test_deck_alias_resolves_to_same_artifact(deck_root):
+    """The model may pass a natural phrase; the registry normalises it."""
+    r = _get_artifact("Investor Deck")
+    assert r.status_code == 200
+    assert r.json()["artifactType"] == "investor_deck"
+
+
 def test_deck_absent_is_404(tmp_path, monkeypatch, copilot_auth_off):
     monkeypatch.setenv("MI_AGENT_DECK_ROOT", str(tmp_path / "empty"))
     (tmp_path / "empty").mkdir()
-    r = client.get("/v1/copilot/artifacts/latest/investor-deck")
+    r = _get_artifact("investor_deck")
     assert r.status_code == 404
     assert r.json()["ok"] is False
 
 
 def test_deck_storage_unavailable_is_503(monkeypatch, copilot_auth_off):
-    import mi_agent_api.copilot_actions as ca
+    import mi_agent_api.decks as decks
 
     def _boom(*_a, **_k):
         raise RuntimeError("blob store down")
 
-    monkeypatch.setattr(ca.decks_mod, "resolve_deck_local", _boom)
-    r = client.get("/v1/copilot/artifacts/latest/investor-deck")
+    monkeypatch.setattr(decks, "resolve_deck_local", _boom)
+    r = _get_artifact("investor_deck")
     assert r.status_code == 503
     assert r.json()["ok"] is False
 
 
-def test_deck_unauthenticated_refused(monkeypatch):
+def test_artifact_unauthenticated_refused(monkeypatch):
     for var in ("TRAKT_COPILOT_AUTH_MODE",):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("TRAKT_COPILOT_ENTRA_TENANT_ID",
                        "00000000-0000-0000-0000-000000000000")
     monkeypatch.setenv("TRAKT_COPILOT_ENTRA_AUDIENCE", "api://trakt-test")
-    r = client.get("/v1/copilot/artifacts/latest/investor-deck")
+    r = _get_artifact("investor_deck")
     assert r.status_code == 401
 
 
+def test_unknown_artifact_type_is_404_listing_available_types(copilot_auth_off):
+    r = _get_artifact("mystery_report")
+    assert r.status_code == 404
+    body = r.json()
+    assert body["ok"] is False
+    # The error names the real registered types so the model can relay them.
+    assert "investor_deck" in body["error"] and "esma_xml" in body["error"]
+
+
 # --------------------------------------------------------------------------- #
-# getLatestCanonicalTape
+# getArtifact — canonical_tape (behaviour-preserving migration)
 # --------------------------------------------------------------------------- #
 def test_tape_latest_found_with_metadata_and_download(tape_dir):
-    r = client.get("/v1/copilot/artifacts/latest/canonical-tape")
+    r = _get_artifact("canonical_tape")
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is True
@@ -250,32 +311,56 @@ def test_tape_absent_is_404(monkeypatch, tmp_path, copilot_auth_off):
     monkeypatch.delenv("MI_AGENT_PLATFORM_URI", raising=False)
     monkeypatch.delenv("MI_AGENT_PLATFORM_CANONICAL", raising=False)
     monkeypatch.chdir(tmp_path)   # keep the out_platform/ convention from matching
-    import mi_agent_api.copilot_actions as ca
-    monkeypatch.setattr(ca, "_resolve_latest_tape", lambda *_a, **_k: None)
-    r = client.get("/v1/copilot/artifacts/latest/canonical-tape")
+    import mi_agent_api.copilot_artifacts as ca_art
+    monkeypatch.setattr(ca_art, "_resolve_latest_tape", lambda *_a, **_k: None)
+    r = _get_artifact("canonical_tape")
     assert r.status_code == 404
     assert r.json()["ok"] is False
     assert "canonical loan tape" in r.json()["error"]
 
 
 def test_tape_storage_unavailable_is_503(monkeypatch, copilot_auth_off):
-    import mi_agent_api.copilot_actions as ca
+    import mi_agent_api.copilot_artifacts as ca_art
 
     def _boom(*_a, **_k):
         raise RuntimeError("blob store down")
 
-    monkeypatch.setattr(ca, "_resolve_latest_tape", _boom)
-    r = client.get("/v1/copilot/artifacts/latest/canonical-tape")
+    monkeypatch.setattr(ca_art, "_resolve_latest_tape", _boom)
+    r = _get_artifact("canonical_tape")
     assert r.status_code == 503
 
 
-def test_tape_unauthenticated_refused(monkeypatch):
-    monkeypatch.delenv("TRAKT_COPILOT_AUTH_MODE", raising=False)
-    monkeypatch.setenv("TRAKT_COPILOT_ENTRA_TENANT_ID",
-                       "00000000-0000-0000-0000-000000000000")
-    monkeypatch.setenv("TRAKT_COPILOT_ENTRA_AUDIENCE", "api://trakt-test")
-    r = client.get("/v1/copilot/artifacts/latest/canonical-tape")
-    assert r.status_code == 401
+# --------------------------------------------------------------------------- #
+# getArtifact — a registry-added type ships WITHOUT any package change
+# --------------------------------------------------------------------------- #
+def test_new_registry_type_resolves_server_side(tmp_path, monkeypatch,
+                                                 copilot_auth_off):
+    """mapping_report is served purely from the server registry + a resolver;
+    no manifest function or path exists for it."""
+    for var in ("MI_AGENT_PLATFORM_URI", "MI_AGENT_PLATFORM_DIR",
+                "MI_AGENT_CLIENT_ID"):
+        monkeypatch.delenv(var, raising=False)
+    report = tmp_path / "mapping.csv"
+    report.write_text("source_field,canonical_field\nfoo,bar\n")
+    monkeypatch.setenv("MI_AGENT_MAPPING_REPORT", str(report))
+    r = _get_artifact("mapping_report")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["artifactType"] == "mapping_report"
+    assert body["contentType"] == "text/csv"
+    token = body["downloadUrl"].split("token=", 1)[1]
+    d = client.get("/v1/copilot/artifacts/download", params={"token": token})
+    assert d.status_code == 200
+    assert b"canonical_field" in d.content
+
+
+def test_new_registry_type_absent_is_404(monkeypatch, copilot_auth_off):
+    for var in ("MI_AGENT_ESMA_XML", "MI_AGENT_PLATFORM_URI",
+                "MI_AGENT_PLATFORM_DIR"):
+        monkeypatch.delenv(var, raising=False)
+    r = _get_artifact("esma_xml")
+    assert r.status_code == 404
+    assert "ESMA Annex 2 XML" in r.json()["error"]
 
 
 # --------------------------------------------------------------------------- #
@@ -308,7 +393,7 @@ def test_download_token_carries_no_credentials_or_paths(deck_root):
     """The token is an opaque, signed reference — never a path or a secret."""
     import base64
 
-    r = client.get("/v1/copilot/artifacts/latest/investor-deck")
+    r = _get_artifact("investor_deck")
     token = r.json()["downloadUrl"].split("token=", 1)[1]
     payload = token.split(".", 1)[0]
     decoded = base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)).decode()
@@ -347,7 +432,7 @@ def test_tape_refuses_a_client_mismatch(monkeypatch, tmp_path, copilot_auth_off)
     monkeypatch.setenv("MI_AGENT_PLATFORM_URI",
                        "blob://processed-v2/platform/OTHER/latest/"
                        "platform_canonical_typed.csv")
-    r = client.get("/v1/copilot/artifacts/latest/canonical-tape")
+    r = _get_artifact("canonical_tape")
     assert r.status_code == 404
     assert r.json()["ok"] is False
 

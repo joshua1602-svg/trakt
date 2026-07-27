@@ -1565,9 +1565,9 @@ def query(req: QueryRequest) -> Dict[str, Any]:
     ))
 
 
-# Microsoft 365 Copilot v1 actions (askTraktMi / getLatestInvestorDeck /
-# getLatestCanonicalTape) — a thin, bearer-token-authenticated action layer over
-# the handlers above. Imported last (the module calls back into this one lazily).
+# Microsoft 365 Copilot actions (askTraktMi / getArtifact) — a thin,
+# bearer-token-authenticated action layer over the handlers above. Imported last
+# (the module calls back into this one lazily).
 from .copilot_actions import router as _copilot_router  # noqa: E402
 
 app.include_router(_copilot_router)

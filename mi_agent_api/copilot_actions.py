@@ -1,4 +1,4 @@
-"""copilot_actions.py — the three Microsoft 365 Copilot v1 actions.
+"""copilot_actions.py — the Microsoft 365 Copilot actions.
 
 A THIN action layer over the existing Trakt capabilities — no business logic,
 no calculations, no new pipeline:
@@ -16,22 +16,19 @@ no calculations, no new pipeline:
 
       Channel-specific behaviour is limited to: Entra authentication, the
       deployment's client context, response-size truncation (explicitly flagged),
-      and Unicode/Markdown normalisation for the Copilot renderer
-      (``copilot_text``).
+      Unicode/Markdown normalisation for the Copilot renderer (``copilot_text``),
+      and Workspace promotion (``copilot_workspace``) — a deterministic decision,
+      over signals the engine already emitted, on whether to offer a deep link
+      into the richer React MI Workspace.
 
-  GET /v1/copilot/artifacts/latest/investor-deck
-      getLatestInvestorDeck — resolves the CURRENT latest deck exactly as the
-      dashboard does (``mi_agent_api.decks``: MI_AGENT_DECK_ROOT local mode, else
-      the durable blob store ``decks/{client}/latest/investor_pack.pptx``) and
-      returns metadata plus a short-lived, HMAC-signed download URL.
-
-  GET /v1/copilot/artifacts/latest/canonical-tape
-      getLatestCanonicalTape — resolves the CURRENT latest platform canonical
-      exactly as the API's data layer does (``data_source._resolve_platform_canonical``:
-      MI_AGENT_PLATFORM_URI → …/platform/{client}/latest/platform_canonical_typed.csv,
-      or the explicit/local equivalents) and returns metadata plus a short-lived
-      signed download URL. Never falls back to the synthetic demo dataset or any
-      substitute artifact.
+  GET /v1/copilot/artifacts/latest?artifactType=…
+      getArtifact — ONE generic action over the server-side artifact registry
+      (``copilot_artifacts``). ``artifactType`` is an open string the server maps
+      to a registered resolver, so a NEW downloadable artifact is a server deploy
+      (register a resolver) and never a Copilot package change. Each resolver
+      reuses the existing latest-output conventions and returns metadata plus a
+      short-lived, HMAC-signed download URL. Never falls back to the synthetic
+      demo dataset or any substitute artifact.
 
   GET /v1/copilot/artifacts/download?token=…
       Redeems a signed token for the file bytes. The token is the ONLY
@@ -67,7 +64,6 @@ import os
 import secrets
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, Request
@@ -82,16 +78,14 @@ from .data_source import (
     data_source_kind,
     data_source_label,
 )
-from . import decks as decks_mod
+from . import copilot_artifacts as artifacts_registry
+from . import copilot_package
+from . import copilot_workspace
 from . import mi_service
 
 logger = logging.getLogger("mi_agent_api.copilot")
 
 router = APIRouter(prefix="/v1/copilot", tags=["copilot"])
-
-_PPTX_MEDIA_TYPE = (
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation")
-_CSV_MEDIA_TYPE = "text/csv"
 
 #: Data-source kinds the Copilot MI action refuses to answer from (fail closed).
 _BLOCKED_SOURCE_KINDS = {KIND_SYNTHETIC_DEMO, KIND_UNAVAILABLE}
@@ -172,6 +166,16 @@ class CopilotMiAnswer(BaseModel):
         False, description="True when supporting rows were capped for the Copilot "
                            "response limit. The underlying totals are unaffected.")
     truncationNote: Optional[str] = None
+    classification: str = Field(
+        "fully-served-simple",
+        description="fully-served-simple | fully-served-complex | unmet — whether "
+                    "the richer React MI Workspace would materially help.")
+    workspaceUrl: Optional[str] = Field(
+        None, description="Deep link that restores this query's context in the "
+                          "React MI Workspace. Present ONLY for fully-served-complex "
+                          "and unmet answers, and only when configured.")
+    packageVersion: str = Field(
+        ..., description="Copilot package version the backend expects (telemetry).")
 
 
 class CopilotArtifactInfo(BaseModel):
@@ -282,50 +286,6 @@ def _copilot_client_id() -> str:
     return from_uri or "client_001"
 
 
-def _resolve_latest_tape(client_id: Optional[str] = None) -> Optional[Path]:
-    """The latest canonical loan tape via the EXISTING platform-canonical
-    resolution (blob ``…/platform/{client}/latest/platform_canonical_typed.csv``
-    or its explicit/local equivalents). Deliberately does NOT continue down the
-    wider data-source chain — no central-tape substitute, no demo fallback.
-
-    Client isolation: the tape follows the SAME governed client context as every
-    other Copilot action. When the configured platform URI names a client, it
-    must be the deployment's client — a mismatch is a misconfiguration and fails
-    closed rather than serving another tenant's tape.
-    """
-    if client_id:
-        from .app import _client_from_platform_uri
-        uri_client = _client_from_platform_uri()
-        if uri_client and uri_client != client_id:
-            logger.error("copilot tape client mismatch: deployment client %r vs "
-                         "platform URI client %r — refusing to serve.",
-                         client_id, uri_client)
-            return None
-    from .data_source import _resolve_platform_canonical
-    path = _resolve_platform_canonical()
-    if path is None:
-        return None
-    p = Path(path)
-    return p if p.exists() else None
-
-
-def _tape_reporting_period() -> Optional[str]:
-    """Best-effort reporting period for the latest tape from the dated platform
-    cuts alongside ``latest/`` (blob deployments). ``None`` when undeterminable."""
-    uri = os.environ.get("MI_AGENT_PLATFORM_URI") or ""
-    if "/platform/" not in uri:
-        return None
-    try:
-        from apps.blob_trigger_app.storage import open_storage
-        from . import platform_snapshots_blob as psb
-        root = uri.split("/latest", 1)[0]
-        dated = psb.list_dated_platform_canonicals(root, open_storage())
-        dates = sorted(d.get("date") for d in dated if d.get("date"))
-        return dates[-1] if dates else None
-    except Exception:  # noqa: BLE001 - metadata is best-effort, never blocks
-        return None
-
-
 # --------------------------------------------------------------------------- #
 # Supporting-value extraction from the existing adapter envelope
 # --------------------------------------------------------------------------- #
@@ -388,7 +348,10 @@ def _supporting_values(artifacts: List[Dict[str, Any]]
                503: {"model": CopilotError}},
     dependencies=[Depends(copilot_auth_guard)],
 )
-def ask_trakt_mi(req: CopilotMiQueryRequest):
+def ask_trakt_mi(req: CopilotMiQueryRequest, request: Request):
+    # Package-version telemetry: one log line identifying the tenant's package.
+    copilot_package.log_request(request, "askTraktMi")
+
     # Fail closed: the Copilot surface must never answer from the synthetic demo
     # dataset or an unresolved source — a structured 503, never a plausible 200.
     kind = data_source_kind()
@@ -412,11 +375,29 @@ def ask_trakt_mi(req: CopilotMiQueryRequest):
         return _error_json(503, "The MI Agent returned an unexpected response.")
 
     meta = envelope.get("metadata") or {}
-    supporting, truncation_notes = _supporting_values(envelope.get("artifacts") or [])
+    raw_artifacts = envelope.get("artifacts") or []
+    supporting, truncation_notes = _supporting_values(raw_artifacts)
+
+    # Workspace promotion: a deterministic decision over signals the engine
+    # already emitted — NOT new analysis. Only complex/unmet answers get a link.
+    ok = bool(envelope.get("ok"))
+    max_total_rows = max((s.totalRows or 0 for s in supporting), default=0)
+    classification, workspace_url = copilot_workspace.promote(
+        ok=ok,
+        question=str(envelope.get("question") or req.question),
+        spec=envelope.get("spec") or {},
+        artifacts=raw_artifacts,
+        truncated=bool(truncation_notes),
+        max_total_rows=max_total_rows,
+        client=meta.get("selectedClient"),
+        run=meta.get("selectedRun"),
+        filters=(envelope.get("spec") or {}).get("filters") or None,
+    )
+
     # A governed analytical failure is reported AS a failure — never replaced by
     # a generic narrative and never padded with metrics the engine did not emit.
     return CopilotMiAnswer(
-        ok=bool(envelope.get("ok")),
+        ok=ok,
         question=normalise_text(str(envelope.get("question") or req.question)),
         answer=normalise_text(str(envelope.get("answer") or "")),
         error=normalise_payload(envelope.get("error")),
@@ -439,94 +420,64 @@ def ask_trakt_mi(req: CopilotMiQueryRequest):
         assumptions=[normalise_text(str(a)) for a in (envelope.get("assumptions") or [])],
         truncated=bool(truncation_notes),
         truncationNote=" ".join(truncation_notes) or None,
+        classification=classification,
+        workspaceUrl=workspace_url,
+        packageVersion=copilot_package.COPILOT_PACKAGE_VERSION,
     )
 
 
 # --------------------------------------------------------------------------- #
-# Action 2 — Get latest investor deck
+# Action 2 — Get a downloadable artifact (ONE generic action over the registry)
 # --------------------------------------------------------------------------- #
 @router.get(
-    "/artifacts/latest/investor-deck",
-    operation_id="getLatestInvestorDeck",
-    summary="Get the latest generated investor deck (PPTX)",
-    description=("Locates the current latest investor deck published by the Trakt "
-                 "pipeline and returns its metadata plus a short-lived download link."),
+    "/artifacts/latest",
+    operation_id="getArtifact",
+    summary="Get the latest generated artifact of a given type",
+    description=("Locates the current latest artifact of the requested type "
+                 "(investor_deck, canonical_tape, mapping_report, "
+                 "validation_report, esma_xml, or any type Trakt later adds) and "
+                 "returns its metadata plus a short-lived download link. New "
+                 "artifact types are added server-side; unknown types 404."),
     response_model=CopilotArtifactInfo,
     responses={401: {"model": CopilotError}, 404: {"model": CopilotError},
                503: {"model": CopilotError}},
     dependencies=[Depends(copilot_auth_guard)],
 )
-def get_latest_investor_deck(request: Request):
+def get_artifact(artifactType: str, request: Request):
+    copilot_package.log_request(request, "getArtifact")
+
+    spec = artifacts_registry.lookup(artifactType)
+    if spec is None:
+        available = ", ".join(artifacts_registry.available_types())
+        return _error_json(
+            404, f"'{artifactType}' is not a Trakt artifact type. "
+                 f"Available types: {available}.")
+
     client_id = _copilot_client_id()
     try:
-        resolved = decks_mod.resolve_deck_local(client_id, None)
-        listing = decks_mod.list_decks(client_id)
+        resolved = spec.resolve(client_id)
     except Exception as exc:  # noqa: BLE001 - storage fault → explicit 503
-        logger.warning("copilot deck resolution failed for %s: %s", client_id, exc)
-        return _error_json(503, "The investor-deck store is currently unavailable.")
+        logger.warning("copilot artifact resolution failed for %s/%s: %s",
+                       client_id, spec.artifact_type, exc)
+        return _error_json(
+            503, f"The {spec.label} store is currently unavailable.")
     if resolved is None:
         return _error_json(
-            404, f"No investor deck has been generated yet for {client_id}.")
+            404, f"No {spec.label} is available yet for {client_id}.")
 
-    path, download_name = resolved
-    latest = (listing or {}).get("latest") or {}
-    token, expires = make_download_token("deck", client_id)
+    token, expires = make_download_token(spec.artifact_type, client_id)
     try:
-        size: Optional[int] = path.stat().st_size
+        size: Optional[int] = resolved.path.stat().st_size
     except OSError:
         size = None
     return CopilotArtifactInfo(
-        artifactType="investor_deck",
-        fileName=download_name,
-        contentType=_PPTX_MEDIA_TYPE,
+        artifactType=spec.artifact_type,
+        fileName=resolved.file_name,
+        contentType=spec.content_type,
         sizeBytes=size,
         clientId=client_id,
-        reportingPeriod=latest.get("period"),
-        generatedAt=latest.get("generatedAt"),
-        downloadUrl=_download_url(request, token),
-        downloadExpiresAt=expires,
-    )
-
-
-# --------------------------------------------------------------------------- #
-# Action 3 — Get latest canonical loan tape
-# --------------------------------------------------------------------------- #
-@router.get(
-    "/artifacts/latest/canonical-tape",
-    operation_id="getLatestCanonicalTape",
-    summary="Get the latest canonical loan tape (CSV)",
-    description=("Locates the current latest canonical (normalised) loan tape "
-                 "published by the Trakt pipeline and returns its metadata plus a "
-                 "short-lived download link."),
-    response_model=CopilotArtifactInfo,
-    responses={401: {"model": CopilotError}, 404: {"model": CopilotError},
-               503: {"model": CopilotError}},
-    dependencies=[Depends(copilot_auth_guard)],
-)
-def get_latest_canonical_tape(request: Request):
-    client_id = _copilot_client_id()
-    try:
-        path = _resolve_latest_tape(client_id)
-    except Exception as exc:  # noqa: BLE001 - storage fault → explicit 503
-        logger.warning("copilot tape resolution failed for %s: %s", client_id, exc)
-        return _error_json(503, "The canonical-tape store is currently unavailable.")
-    if path is None:
-        return _error_json(
-            404, f"No canonical loan tape is available yet for {client_id}.")
-
-    token, expires = make_download_token("tape", client_id)
-    try:
-        size: Optional[int] = path.stat().st_size
-    except OSError:
-        size = None
-    return CopilotArtifactInfo(
-        artifactType="canonical_tape",
-        fileName=f"{client_id}_canonical_loan_tape_latest.csv",
-        contentType=_CSV_MEDIA_TYPE,
-        sizeBytes=size,
-        clientId=client_id,
-        reportingPeriod=_tape_reporting_period(),
-        generatedAt=None,
+        reportingPeriod=resolved.reporting_period,
+        generatedAt=resolved.generated_at,
         downloadUrl=_download_url(request, token),
         downloadExpiresAt=expires,
     )
@@ -546,24 +497,15 @@ def download_artifact(token: str):
     if data is None:
         return _error_json(403, "The download link is invalid or has expired. "
                                 "Ask Trakt for the artifact again to get a fresh link.")
-    kind, client_id = data.get("k"), str(data.get("c") or "")
-    if kind == "deck":
-        try:
-            resolved = decks_mod.resolve_deck_local(client_id, None)
-        except Exception:  # noqa: BLE001
-            resolved = None
-        if resolved is None:
-            return _error_json(404, "The investor deck is no longer available.")
-        path, name = resolved
-        return FileResponse(str(path), media_type=_PPTX_MEDIA_TYPE, filename=name)
-    if kind == "tape":
-        try:
-            path = _resolve_latest_tape(client_id)
-        except Exception:  # noqa: BLE001
-            path = None
-        if path is None:
-            return _error_json(404, "The canonical loan tape is no longer available.")
-        return FileResponse(
-            str(path), media_type=_CSV_MEDIA_TYPE,
-            filename=f"{client_id or 'client'}_canonical_loan_tape_latest.csv")
-    return _error_json(403, "The download link is invalid.")
+    kind, client_id = str(data.get("k") or ""), str(data.get("c") or "")
+    spec = artifacts_registry.lookup(kind)
+    if spec is None:
+        return _error_json(403, "The download link is invalid.")
+    try:
+        resolved = spec.resolve(client_id)
+    except Exception:  # noqa: BLE001
+        resolved = None
+    if resolved is None:
+        return _error_json(404, f"The {spec.label} is no longer available.")
+    return FileResponse(str(resolved.path), media_type=spec.content_type,
+                        filename=resolved.file_name)

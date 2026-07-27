@@ -34,7 +34,7 @@ import {
 } from "@/lib/analysisContext";
 import { buildSuggestedActions } from "@/lib/suggestedActions";
 import { presentAnswer } from "@/lib/responsePresenter";
-import { loadState, saveState } from "./persistence";
+import { loadState, readUrlContext, saveState } from "./persistence";
 
 function greeting(portfolioLabel: string, asOf: string | null): ChatMessage {
   const date = asOf
@@ -80,6 +80,9 @@ export interface Workspace {
   messages: ChatMessage[];
   artifacts: Artifact[];
   isWorking: boolean;
+  /** Question carried on a Copilot "Open in Workspace" deep link, to pre-fill
+   *  the composer once (empty string when the app was opened normally). */
+  initialQuestion: string;
   setPortfolio: (clientId: string) => void;
   setRun: (runId: string) => void;
   ask: (question: string) => void;
@@ -107,10 +110,16 @@ export interface Workspace {
 
 export function useWorkspace(client: AgentClient): Workspace {
   const persisted = useRef(loadState()).current;
+  // Copilot "Open in Workspace" deep-link context (client, run, question,
+  // filters). When present it takes precedence over persisted selection so the
+  // link restores context; otherwise the existing localStorage flow is used.
+  const urlContext = useRef(readUrlContext()).current;
 
   const [portfolios, setPortfolios] = useState<SnapshotPortfolio[]>([]);
-  const [selectedClientId, setSelectedClientId] = useState<string | null>(persisted?.clientId ?? null);
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(persisted?.runId ?? null);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(
+    urlContext.clientId ?? persisted?.clientId ?? null);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(
+    urlContext.runId ?? persisted?.runId ?? null);
   const [snapshot, setSnapshot] = useState<FundedSnapshot | null>(null);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
   const [forecast, setForecast] = useState<ForecastSnapshot | null>(null);
@@ -201,14 +210,17 @@ export function useWorkspace(client: AgentClient): Workspace {
           runsPerPortfolio: pfs.map((p) => p.runs?.length ?? 0),
         });
         if (pfs.length === 0) return;
-        const persistedPf = pfs.find((p) => p.client_id === persisted?.clientId);
-        const pf = pfs.length === 1 ? pfs[0] : (persistedPf ?? pfs[pfs.length - 1]);
-        const persistedRun =
-          persistedPf && pf.runs.find((r) => r.run_id === persisted?.runId);
-        const run = persistedRun ?? pf.runs[pf.runs.length - 1]; // latest reporting date
+        // A Workspace deep link's client/run wins over persisted selection.
+        const preferredClientId = urlContext.clientId ?? persisted?.clientId;
+        const preferredRunId = urlContext.runId ?? persisted?.runId;
+        const preferredPf = pfs.find((p) => p.client_id === preferredClientId);
+        const pf = pfs.length === 1 ? pfs[0] : (preferredPf ?? pfs[pfs.length - 1]);
+        const preferredRun = pf.runs.find((r) => r.run_id === preferredRunId);
+        const run = preferredRun ?? pf.runs[pf.runs.length - 1]; // latest reporting date
         if (pfs.length === 1) {
-          // Exactly one funded portfolio → auto-select it and its latest reporting
-          // date (override any stale persisted selection from another deployment).
+          // Exactly one funded portfolio → auto-select it. Honour a deep-link run
+          // when it exists, else the latest reporting date (dropping any stale
+          // persisted selection from another deployment).
           setSelectedClientId(pf.client_id);
           setSelectedRunId(run?.run_id ?? null);
         } else {
@@ -227,7 +239,8 @@ export function useWorkspace(client: AgentClient): Workspace {
     return () => {
       cancelled = true;
     };
-  }, [client, persisted?.clientId, persisted?.runId]);
+  }, [client, persisted?.clientId, persisted?.runId,
+      urlContext.clientId, urlContext.runId]);
 
   const activePortfolio = useMemo(
     () => portfolios.find((p) => p.client_id === selectedClientId) ?? portfolios[0] ?? null,
@@ -619,6 +632,7 @@ export function useWorkspace(client: AgentClient): Workspace {
     messages,
     artifacts,
     isWorking,
+    initialQuestion: urlContext.question ?? "",
     setPortfolio,
     setRun: setSelectedRunId,
     ask,
