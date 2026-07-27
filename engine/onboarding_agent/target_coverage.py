@@ -199,6 +199,7 @@ def load_mi_target_contract(
             "match_field": entry.get("canonical_field", name),
             "synonyms": list(entry.get("synonyms", []) or []),
             "derived": derived,
+            "derived_from": entry.get("derived_from", "") or "",
             "derivation_rule": (f"derived from {entry.get('derived_from')}"
                                 if derived and entry.get("derived_from") else ""),
             "default_rule": "",
@@ -2337,6 +2338,58 @@ def _apply_funded_role_guardrail(
     return [], note, "", pipe_disp
 
 
+def _apply_derived_source_guard(
+    tf: Dict[str, Any],
+    cands: List[Dict[str, Any]],
+    parent_candidate_keys: Dict[str, set],
+) -> Tuple[List[Dict[str, Any]], str]:
+    """Stop a DERIVED target field consuming its own parent's source column.
+
+    A field the target contract declares as ``derived_from`` another target field
+    is, by definition, computed from that field's canonical value — not read
+    independently from source. When both fields match the SAME source column, the
+    derived field is not really mapped: it is about to receive the parent's raw
+    text and hand it to the wrong parser. That is exactly how a
+    ``Protected Equity`` column of ``20.00%`` ended up in a boolean parser as
+    ``protected_equity_flag``.
+
+    The colliding candidate is never SELECTED, but it is never deleted either —
+    it stays recorded as an alternative so the evidence remains auditable, and the
+    field falls through to its declared derivation. A derived field that matches a
+    genuinely DIFFERENT source column is untouched and still maps directly, so
+    contracts where the source really does carry both fields keep working.
+
+    Returns ``(candidates_for_classification, note, demoted_display)``, mirroring
+    :func:`_apply_funded_role_guardrail`.
+    """
+    def _key(c: Dict[str, Any]) -> Tuple[str, str, str]:
+        return (c["source_file"], c["source_sheet"], c["source_column"])
+
+    parent = str(tf.get("derived_from", "") or "").strip()
+    if not parent or not cands:
+        return cands, "", ""
+    parent_keys = parent_candidate_keys.get(parent)
+    if not parent_keys:
+        return cands, "", ""
+
+    colliding = [c for c in cands if _key(c) in parent_keys]
+    if not colliding:
+        return cands, "", ""
+    remaining = [c for c in cands if _key(c) not in parent_keys]
+    demoted = "; ".join(
+        f"{c['source_file']}::{c['source_sheet']}::{c['source_column']} "
+        f"(shared with {parent})" for c in colliding)
+    note = (f"derived field: {len(colliding)} candidate(s) shared with its source "
+            f"field '{parent}' demoted — value is derived from {parent}, not "
+            f"re-read from source")
+    if remaining:
+        # A genuine, distinct source column still wins; the shared one drops to
+        # an alternative.
+        return remaining + colliding, note, ""
+    # Nothing but the parent's own column: never auto-select it.
+    return [], note, demoted
+
+
 def build_target_coverage(
     mode: str,
     context: Dict[str, Any],
@@ -2362,12 +2415,28 @@ def build_target_coverage(
     resolved_by_key = {_ek(r): r for r in resolved_rows}
     matched_by_key: Dict[Tuple[str, str, str], List[Tuple[str, float, bool]]] = {}
     rows: List[Dict[str, Any]] = []
+
+    # Candidates for every target field, computed once, so a DERIVED field can be
+    # checked against the candidates of the field it is derived from.
+    candidates_by_field: Dict[str, List[Dict[str, Any]]] = {
+        tf["target_field"]: _match_candidates(tf, evidence_rows, resolved_by_key)
+        for tf in target_fields}
+    parent_candidate_keys: Dict[str, set] = {
+        field: {(c["source_file"], c["source_sheet"], c["source_column"]) for c in cands}
+        for field, cands in candidates_by_field.items()}
+
     for tf in target_fields:
-        cands = _match_candidates(tf, evidence_rows, resolved_by_key)
+        cands = list(candidates_by_field.get(tf["target_field"], []))
+        # Derived-field guard: a field declared derived_from another target field
+        # must not select that field's own source column (see the function docs).
+        cands, derived_note, derived_excluded = _apply_derived_source_guard(
+            tf, cands, parent_candidate_keys)
         # Artefact-role guardrail: keep pipeline artefacts from auto-filling
         # funded-book base-MI fields (they may stay as lower-priority alternatives).
         cands, role_note, selected_role, pipeline_excluded = _apply_funded_role_guardrail(
             tf, cands, artefact_roles)
+        role_note = "; ".join(n for n in (derived_note, role_note) if n)
+        excluded_display = [d for d in (derived_excluded, pipeline_excluded) if d]
         for i, c in enumerate(cands):
             k = (c["source_file"], c["source_sheet"], c["source_column"])
             matched_by_key.setdefault(k, []).append(
@@ -2405,7 +2474,7 @@ def build_target_coverage(
             "alternative_source_candidates": "; ".join(
                 [f"{c['source_file']}::{c['source_sheet']}::{c['source_column']} "
                  f"({c['confidence']})" for c in alts]
-                + ([pipeline_excluded] if pipeline_excluded else [])),
+                + excluded_display),
             "artefact_role_selected": selected_role,
             "role_preference_note": role_note,
             "overlap_evidence": (

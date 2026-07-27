@@ -861,11 +861,26 @@ def _persist_pipeline_outputs(persistence, manifest, parsed, result, *,
 # Pack idempotency helpers (folder-level, keyed on the reporting pack)
 # --------------------------------------------------------------------------- #
 
-def _pack_key(parsed: ParsedPath) -> str:
+def pack_key_for(*, client_id: str, source_portfolio_id: str, dataset: str,
+                 frequency: str, reporting_period: str) -> str:
+    """The durable pack key for a pack's identifying parts.
+
+    Exposed (rather than only derivable from a ``ParsedPath``) so any caller that
+    already knows the parts — a scoped backfill, an ops command — addresses the
+    SAME run record the live blob event created, e.g.
+    ``ERE_acquired_001_funded_ad_hoc_2026-06-30``.
+    """
     import re
-    raw = "/".join([parsed.client_id, parsed.source_portfolio_id,
-                    parsed.dataset, parsed.frequency, parsed.reporting_period])
+    raw = "/".join([client_id, source_portfolio_id, dataset, frequency,
+                    reporting_period])
     return re.sub(r"[^A-Za-z0-9._-]+", "_", raw)
+
+
+def _pack_key(parsed: ParsedPath) -> str:
+    return pack_key_for(
+        client_id=parsed.client_id, source_portfolio_id=parsed.source_portfolio_id,
+        dataset=parsed.dataset, frequency=parsed.frequency,
+        reporting_period=parsed.reporting_period)
 
 
 def _processed_path(out_dir: str | Path, pack_key: str) -> Path:

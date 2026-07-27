@@ -60,6 +60,15 @@ def _run(input_file, mode):
     return res, out
 
 
+def _mi_registry_field_count() -> int:
+    """The MI semantics registry's own field count (the MI target contract size)."""
+    import yaml
+    path = (Path(__file__).resolve().parents[1] / "mi_agent"
+            / "mi_semantics_field_registry.yaml")
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return len(data.get("fields", {}) or {})
+
+
 # --------------------------------------------------------------------------- #
 # 1 + 5 + 7 — target contract loading
 # --------------------------------------------------------------------------- #
@@ -68,7 +77,10 @@ class TestTargetContractLoading(unittest.TestCase):
         cid, csrc, fields = tcov.load_target_contract("mi_only", {})
         self.assertEqual(cid, "mi_semantics_field_registry")
         self.assertTrue(csrc.endswith("mi_semantics_field_registry.yaml"))
-        self.assertEqual(len(fields), 72)  # not pruned at this stage
+        # The whole registry, not pruned at this stage. Asserted against the
+        # registry itself rather than a hard-coded count, so curating a field in
+        # or out is not a test failure.
+        self.assertEqual(len(fields), _mi_registry_field_count())
         names = {f["target_field"] for f in fields}
         self.assertIn("account_status", names)
         self.assertIn("current_interest_rate", names)
@@ -103,7 +115,8 @@ class TestTargetFieldLed(unittest.TestCase):
         # … and the count is the contract size, NOT the source-column count.
         source_cols = len(res["evidence"])
         self.assertNotEqual(len(tf["coverage"]), source_cols)
-        self.assertEqual(tf["coverage_summary"]["target_fields_total"], 72)
+        self.assertEqual(tf["coverage_summary"]["target_fields_total"],
+                         _mi_registry_field_count())
 
     def test_coverage_status_vocabulary(self):
         res, _ = _run(ERE, "mi_only")

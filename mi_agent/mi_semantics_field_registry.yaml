@@ -4,7 +4,7 @@
 # Do NOT edit by hand without also updating the build script (CURATION),
 # or your changes will be overwritten on the next regeneration.
 metadata:
-  generated_at: '2026-07-04T21:05:58.570926+00:00'
+  generated_at: '2026-07-27T10:59:46.015142+00:00'
   source_registry: /home/user/trakt/config/system/fields_registry.yaml
   selection_approach: curated MI-first allowlist (see CURATION in build script)
   selection_rules:
@@ -21,10 +21,10 @@ metadata:
   mi_tiers:
   - core
   - extended
-  field_count: 105
-  core_field_count: 72
+  field_count: 106
+  core_field_count: 73
   extended_field_count: 33
-  derived_field_count: 15
+  derived_field_count: 16
   virtual_field_count: 15
   missing_curated_fields: []
   version: 0.3.0
@@ -2803,16 +2803,17 @@ fields:
   protected_equity_flag:
     canonical_field: protected_equity_flag
     mi_tier: core
-    business_name: Protected Equity
+    business_name: Protected Equity Flag
     display_name: Protected Equity Flag
-    business_description: Whether the loan carries protected equity.
+    business_description: 'Whether the loan carries protected equity (derived from protected_equity_percentage:
+      Y above zero, N at zero, null when absent).'
     description: ''
     synonyms:
-    - protected equity
     - protected equity flag
-    - equity protection
+    - equity protection flag
+    - has protected equity
     source_criteria:
-    - layer:product
+    - derived_bucket
     role: flag
     format: boolean
     chartable: true
@@ -2826,6 +2827,42 @@ fields:
     - group
     default_chart_role: filter
     weight_field: null
+    bucket_field: null
+    notes: ''
+    derived: true
+    derived_from: protected_equity_percentage
+  protected_equity_percentage:
+    canonical_field: protected_equity_percentage
+    mi_tier: core
+    business_name: Protected Equity
+    display_name: Protected Equity Percentage
+    business_description: Protected-equity share of the property, in percentage points (e.g. 20.0 for
+      20%).
+    description: ''
+    synonyms:
+    - protected equity
+    - protected equity percentage
+    - protected equity %
+    - protected equity percent
+    - equity protection percentage
+    source_criteria:
+    - layer:product
+    role: metric
+    format: percent
+    chartable: true
+    allowed_aggregations:
+    - avg
+    - weighted_avg
+    - distribution
+    default_aggregation: weighted_avg
+    allowed_chart_roles:
+    - y
+    - x
+    - bucket
+    - filter
+    - color
+    default_chart_role: y
+    weight_field: current_outstanding_balance
     bucket_field: null
     notes: ''
   recoveries_in_period:
