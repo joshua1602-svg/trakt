@@ -31,7 +31,7 @@ import logging
 import os
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from trakt_core.portfolio import (  # noqa: F401  (capabilities_to_dict re-exported)
     CapabilityState,
@@ -59,6 +59,10 @@ class ResolvedContext:
     #: ``None`` means "not discoverable in this deployment" (declared metadata
     #: is then authoritative) — deliberately distinct from "none found".
     pipeline_portfolios: Optional[List[str]] = None
+    #: False when the discovered pipeline extract carries no per-portfolio
+    #: provenance — the portfolios above are then the originating GROUP it
+    #: belongs to, not books it was individually attributed to.
+    pipeline_attributed: bool = True
 
     def capability(self, name: str) -> Optional[CapabilityState]:
         return self.capabilities.get(name)
@@ -135,6 +139,24 @@ def build_registry(df=None, *, client_id: Optional[str] = None,
     return registry
 
 
+def discover_pipeline_availability(client_id: Optional[str] = None,
+                                   registry: Optional[PortfolioRegistry] = None
+                                   ) -> Tuple[Optional[List[str]], bool]:
+    """``(portfolios, attributed)`` for the governed pipeline data.
+
+    ``attributed`` is False when the discovered extract carries no
+    source-portfolio provenance: the portfolios are then the originating group
+    the pipeline belongs to. The capability resolver discloses that rather than
+    implying each book has its own pipeline, and no allocation is invented.
+    """
+    portfolios = discovered_pipeline_portfolios(client_id, registry)
+    return portfolios, _LAST_ATTRIBUTION.get("attributed", True)
+
+
+#: Set by the discovery below; read by :func:`discover_pipeline_availability`.
+_LAST_ATTRIBUTION: Dict[str, bool] = {"attributed": True}
+
+
 def discovered_pipeline_portfolios(client_id: Optional[str] = None,
                                    registry: Optional[PortfolioRegistry] = None
                                    ) -> Optional[List[str]]:
@@ -184,15 +206,20 @@ def discovered_pipeline_portfolios(client_id: Optional[str] = None,
         if pid and pid not in attributed:
             attributed.append(pid)
     if attributed:
+        _LAST_ATTRIBUTION["attributed"] = True
         return attributed
 
     # (2) explicit source-registry registration.
     if registered:
+        _LAST_ATTRIBUTION["attributed"] = True
         return registered
 
     # (3) sources exist for the client but are not attributed per portfolio: the
     # originating portfolios in the registry own them. This preserves ERE's
     # current single-originator behaviour without hard-coding direct_001.
+    # The extract is NOT attributed per portfolio — say so, rather than letting
+    # the group list read as per-book attribution.
+    _LAST_ATTRIBUTION["attributed"] = False
     reg = registry if registry is not None else build_registry(client_id=cid)
     return [p.portfolio_id for p in reg if p.originates and p.pipeline_data_available]
 
@@ -212,11 +239,15 @@ def resolve_context(context_id: Optional[Any] = None, *,
     reg = registry if registry is not None else build_registry(df, client_id=client_id)
     scope = resolve_scope(reg, context_id)
     pipes = pipeline_portfolios
+    attributed = True
     if pipes is None and discover_pipeline:
-        pipes = discovered_pipeline_portfolios(client_id=client_id, registry=reg)
-    caps = resolve_capabilities(reg, scope, pipeline_portfolios=pipes)
+        pipes, attributed = discover_pipeline_availability(client_id=client_id,
+                                                           registry=reg)
+    caps = resolve_capabilities(reg, scope, pipeline_portfolios=pipes,
+                                pipeline_attributed=attributed)
     return ResolvedContext(registry=reg, scope=scope, capabilities=caps,
-                           pipeline_portfolios=pipes)
+                           pipeline_portfolios=pipes,
+                           pipeline_attributed=attributed)
 
 
 def context_index(client_id: Optional[str] = None, df=None) -> Dict[str, Any]:
@@ -228,11 +259,12 @@ def context_index(client_id: Optional[str] = None, df=None) -> Dict[str, Any]:
     never compute applicability itself.
     """
     reg = build_registry(df, client_id=client_id)
-    pipes = discovered_pipeline_portfolios(client_id=client_id, registry=reg)
+    pipes, attributed = discover_pipeline_availability(client_id=client_id, registry=reg)
     contexts = reg.contexts()
     for ctx in contexts:
         scope = resolve_scope(reg, ctx["context_id"])
-        caps = resolve_capabilities(reg, scope, pipeline_portfolios=pipes)
+        caps = resolve_capabilities(reg, scope, pipeline_portfolios=pipes,
+                                    pipeline_attributed=attributed)
         ctx["capabilities"] = capabilities_to_dict(caps)
     return {
         "available": bool(reg),
@@ -242,6 +274,7 @@ def context_index(client_id: Optional[str] = None, df=None) -> Dict[str, Any]:
         "portfolios": [p.to_dict() for p in reg],
         "portfolio_types": reg.types(),
         "pipeline_portfolios": pipes,
+        "pipeline_attributed": attributed,
     }
 
 

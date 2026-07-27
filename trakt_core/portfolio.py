@@ -544,6 +544,10 @@ class CapabilityState:
     excluded_portfolios: Tuple[str, ...] = ()
     #: True when only some of the scope's portfolios contribute.
     partial: bool = False
+    #: False when the underlying data is reported for the contributing GROUP
+    #: rather than attributed to each portfolio individually (an extract with no
+    #: source-portfolio provenance). Never silently split across books.
+    attributed: bool = True
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -554,6 +558,7 @@ class CapabilityState:
             "contributing_portfolios": list(self.contributing_portfolios),
             "excluded_portfolios": list(self.excluded_portfolios),
             "partial": self.partial,
+            "attributed": self.attributed,
         }
 
 
@@ -587,6 +592,7 @@ def resolve_capabilities(
     scope: PortfolioScope,
     *,
     pipeline_portfolios: Optional[Iterable[str]] = None,
+    pipeline_attributed: bool = True,
 ) -> Dict[str, CapabilityState]:
     """Resolve every governed capability for one scope.
 
@@ -595,6 +601,13 @@ def resolve_capabilities(
     registry's origination metadata, so a book that is configured to originate
     but has no pipeline extract yet is disclosed rather than shown as an empty
     Pipeline tab.
+
+    ``pipeline_attributed=False`` says the discovered extract carries no
+    per-portfolio provenance, so the portfolios listed are the originating GROUP
+    the pipeline belongs to rather than books it was individually attributed to.
+    The capability says so in as many words. Trakt does not split an unattributed
+    pipeline across several originating books: there is no basis for an
+    allocation, so none is invented.
 
     Group behaviour follows from the members, never from the group name: Direct
     Pipeline is enabled if *any* direct portfolio originates and has data, and
@@ -628,7 +641,7 @@ def resolve_capabilities(
             CAP_PIPELINE, False, REASON_NO_PORTFOLIOS_IN_SCOPE,
             "No governed portfolios resolve for this selection.")
     elif pipeline_ids:
-        detail = None
+        parts = []
         if pipeline_excluded:
             reasons = []
             if non_originating:
@@ -636,14 +649,22 @@ def resolve_capabilities(
             awaiting = [pid for pid in pipeline_excluded if pid not in non_originating]
             if awaiting:
                 reasons.append(f"no pipeline data supplied: {_join(awaiting)}")
-            detail = ("Pipeline is sourced from originating portfolios only. "
-                      f"Included: {_join(pipeline_ids)}. Excluded — "
-                      + "; ".join(reasons) + ".")
+            parts.append("Pipeline is sourced from originating portfolios only. "
+                         f"Included: {_join(pipeline_ids)}. Excluded — "
+                         + "; ".join(reasons) + ".")
+        if not pipeline_attributed:
+            parts.append(
+                "The governed pipeline extract carries no source-portfolio "
+                f"provenance, so it is reported for the originating group "
+                f"({_join(pipeline_ids)}) rather than attributed to an individual "
+                "portfolio.")
+        detail = " ".join(parts) or None
         states[CAP_PIPELINE] = CapabilityState(
             CAP_PIPELINE, True, detail=detail,
             contributing_portfolios=pipeline_ids,
             excluded_portfolios=pipeline_excluded,
-            partial=bool(pipeline_excluded))
+            partial=bool(pipeline_excluded) or not pipeline_attributed,
+            attributed=pipeline_attributed)
     elif originating:
         states[CAP_PIPELINE] = CapabilityState(
             CAP_PIPELINE, False, REASON_NO_PIPELINE_DATA,

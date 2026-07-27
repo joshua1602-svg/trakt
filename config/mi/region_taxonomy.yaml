@@ -1,0 +1,117 @@
+# =========================================================================
+# Governed region taxonomy — cross-portfolio geographic harmonisation.
+# =========================================================================
+#
+# Direct and acquired books describe geography in whatever vocabulary their
+# source system used ("South West", "south-west", "SOUTH WEST", "Greater
+# London"). A consolidated Total geography view needs one shared taxonomy, but
+# flattening every book to the lowest common denominator would destroy source
+# granularity. So there are TWO governed levels:
+#
+#   canonical_region_detail     the most granular governed value the source
+#                               supports — London stays London
+#   canonical_region_reporting  the client-level consolidated value used when
+#                               books are combined
+#
+# By default the reporting level is the SAME as the detail level (identity).
+# A consolidation such as London -> South East applies ONLY where a reporting
+# taxonomy explicitly declares it. There is deliberately no unconditional rule
+# anywhere in the code that folds London into South East.
+#
+# Resolution order at onboarding (see engine/region_taxonomy.py):
+#
+#   raw source region
+#     -> deterministic cleaning (trim, case, punctuation, separators)
+#     -> exact canonical match
+#     -> approved synonym
+#     -> LLM-assisted PROPOSAL for anything still unresolved  (onboarding only)
+#     -> human/governed approval, persisted back into `synonyms` below
+#     -> canonical_region_detail + canonical_region_reporting on the tape
+#
+# The runtime MI path reads the persisted canonical columns only. It never asks
+# an LLM to classify a region while answering a question or drawing a chart.
+
+version: 1
+
+#: The taxonomy a client's canonical detail level uses.
+default_taxonomy: uk_itl1
+
+taxonomies:
+
+  # UK ITL1 (the former NUTS1 regions). The detailed governed vocabulary.
+  uk_itl1:
+    label: UK ITL1 regions
+    values:
+      - North East
+      - North West
+      - Yorkshire and The Humber
+      - East Midlands
+      - West Midlands
+      - East of England
+      - London
+      - South East
+      - South West
+      - Wales
+      - Scotland
+      - Northern Ireland
+
+    # Approved synonyms, keyed by the DETERMINISTICALLY CLEANED raw value
+    # (lower-cased, punctuation and separators collapsed to single spaces).
+    # Anything matched here resolves without an LLM. Values confirmed through
+    # the onboarding review flow are appended here and become deterministic for
+    # every subsequent run.
+    synonyms:
+      greater london: London
+      london region: London
+      southwest: South West
+      south west england: South West
+      southeast: South East
+      south east england: South East
+      northwest: North West
+      north west england: North West
+      northeast: North East
+      north east england: North East
+      yorkshire: Yorkshire and The Humber
+      yorkshire and humber: Yorkshire and The Humber
+      yorkshire and the humber: Yorkshire and The Humber
+      yorks and humber: Yorkshire and The Humber
+      east midlands region: East Midlands
+      west midlands region: West Midlands
+      east anglia: East of England
+      eastern: East of England
+      east england: East of England
+      east of england region: East of England
+      wales cymru: Wales
+      cymru: Wales
+      scotland uk: Scotland
+      northern ireland uk: Northern Ireland
+      ni: Northern Ireland
+
+#: Reporting taxonomies. A reporting taxonomy names the vocabulary a
+#: CONSOLIDATED view is expressed in, plus the approved consolidations that get
+#: it there. `consolidations` is empty by default: the reporting level equals
+#: the detail level unless a client's approved taxonomy says otherwise.
+reporting_taxonomies:
+
+  # The default: report exactly what the source supports. London stays London.
+  uk_itl1:
+    label: UK ITL1 regions (no consolidation)
+    base: uk_itl1
+    consolidations: {}
+
+  # An OPTIONAL taxonomy for a client whose approved investor reporting does not
+  # separate London. Selected per client via `clients:` below — never by default,
+  # and every consolidation stays visible in provenance and is reversible by
+  # reading canonical_region_detail.
+  uk_itl1_london_in_south_east:
+    label: UK ITL1 regions, London consolidated into South East
+    base: uk_itl1
+    consolidations:
+      London: South East
+
+#: Per-client selection. A client with no entry uses `default_taxonomy` at the
+#: detail level and the identity reporting taxonomy — i.e. no consolidation.
+clients:
+  ERE:
+    taxonomy: uk_itl1
+    reporting_taxonomy: uk_itl1
