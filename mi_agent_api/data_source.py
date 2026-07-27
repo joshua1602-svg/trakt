@@ -373,6 +373,13 @@ def reset_cache() -> None:
     """Clear the cached active dataset (used by tests, and by an explicit refresh
     after a new run publishes). The next request reloads from the current source."""
     _ACTIVE_CACHE.update(sig=None, value=None, checked_at=0.0)
+    # Anything derived from the active frame goes with it, so a dataset swap
+    # cannot leave a governed portfolio registry pointing at the old book.
+    try:
+        from . import portfolio_context
+        portfolio_context.reset_registry_cache()
+    except Exception:  # noqa: BLE001 - cache clearing must never raise
+        pass
 
 
 def get_dataframe() -> pd.DataFrame:

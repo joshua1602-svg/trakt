@@ -11,6 +11,7 @@ function countingClient(): { client: AgentClient; counts: Record<string, number>
     ask: vi.fn(),
     getSnapshots: vi.fn(async () => { bump("snapshots"); return {} as any; }),
     getSourcePortfolios: vi.fn(async () => ({}) as any),
+    getPortfolioContext: vi.fn(async () => ({ available: false, client_id: null, default_context_id: "total", contexts: [], portfolios: [], portfolio_types: [], pipeline_portfolios: null })),
     getSnapshot: vi.fn(async (p: string) => { bump(`snapshot:${p}`); return { portfolioId: p } as any; }),
     getForecastSnapshot: vi.fn(async () => ({}) as any),
     getFundedEvolution: vi.fn(async () => ({}) as any),

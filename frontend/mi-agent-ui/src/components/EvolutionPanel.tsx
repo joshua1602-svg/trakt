@@ -17,7 +17,6 @@ import type {
   CohortDimension,
   CohortGrain,
   CohortProgression,
-  SourcePortfolioLens,
   StagePoint,
 } from "@/domain";
 import { TimingDisclosureBanner } from "@/components/TimingDisclosureBanner";
@@ -517,48 +516,47 @@ const _PROG_METRICS: { key: string; label: string; fmt: "gbp" | "pct" | "count";
  * point-in-time cohort composition table across a selectable lens (vintage,
  * borrower age, LTV band or origination channel). Replaces the old
  * single-snapshot vintage bar (redundant with the table's balance column). */
-function CohortView({ client, portfolioId }: { client: AgentClient; portfolioId: string }) {
+function CohortView({ client, portfolioId, portfolioContext }: {
+  client: AgentClient; portfolioId: string; portfolioContext?: string;
+}) {
   const [grain, setGrain] = useState<CohortGrain>("Y");
-  const [lens, setLens] = useState("total");
   const [vintage, setVintage] = useState("");
   const [metric, setMetric] = useState("funded_balance");
   const [dimension, setDimension] = useState<CohortDimension>("vintage");
-  const [lenses, setLenses] = useState<SourcePortfolioLens[]>([]);
   const [cohorts, setCohorts] = useState<CohortAnalysis | null>(null);
   const [composition, setComposition] = useState<CohortAnalysis | null>(null);
   const [prog, setProg] = useState<CohortProgression | null>(null);
 
-  useEffect(() => {
-    let c = false;
-    Promise.resolve(client.getSourcePortfolios())
-      .then((r) => { if (!c && r) setLenses(r.lenses ?? []); }).catch(() => {});
-    return () => { c = true; };
-  }, [client]);
+  // NOTE: this view deliberately has NO portfolio selector of its own. It used
+  // to fetch the lens list and offer a second scope control, which allowed the
+  // cohort analysis to sit on a different portfolio from the rest of the
+  // workspace. Scope now comes from the ONE governed workspace context.
+  const scopeId = portfolioContext ?? "total";
 
   // Vintage cohorts feed the progression's vintage selector (always vintage).
   useEffect(() => {
     let c = false;
-    Promise.resolve(client.getCohorts(portfolioId, grain))
+    Promise.resolve(client.getCohorts(portfolioId, grain, undefined, scopeId))
       .then((r) => { if (!c) setCohorts(r); }).catch(() => {});
     return () => { c = true; };
-  }, [client, portfolioId, grain]);
+  }, [client, portfolioId, grain, scopeId]);
 
   // The composition table follows the selected cohort dimension (deduped with
   // the vintage fetch above when dimension === "vintage").
   useEffect(() => {
     let c = false;
-    Promise.resolve(client.getCohorts(portfolioId, grain, dimension))
+    Promise.resolve(client.getCohorts(portfolioId, grain, dimension, scopeId))
       .then((r) => { if (!c) setComposition(r); }).catch(() => {});
     return () => { c = true; };
-  }, [client, portfolioId, grain, dimension]);
+  }, [client, portfolioId, grain, dimension, scopeId]);
 
   useEffect(() => {
     let c = false;
     Promise.resolve(client.getCohortProgression(portfolioId,
-      { lens, vintage: vintage || undefined, grain }))
+      { lens: scopeId, vintage: vintage || undefined, grain }))
       .then((r) => { if (!c) setProg(r); }).catch(() => {});
     return () => { c = true; };
-  }, [client, portfolioId, lens, vintage, grain]);
+  }, [client, portfolioId, scopeId, vintage, grain]);
 
   // Progression's vintage options come from the vintage fetch; the composition
   // table follows the selected dimension.
@@ -577,16 +575,12 @@ function CohortView({ client, portfolioId }: { client: AgentClient; portfolioId:
   const pm = metricOpts.find((m) => m.key === metric) ?? metricOpts[0];
   const progData = (prog?.periods ?? []).map((p) => ({ period: p.period, value: p.metrics?.[pm.key] ?? null }));
   const scope = (prog?.lens ?? "Total") + (vintage ? `, ${vintage} vintage` : "");
-  const portfolioOptions = [
-    { value: "total", label: "Consolidated (Total)" },
-    ...lenses.filter((l) => l.id !== "total").map((l) => ({ value: l.id, label: l.label })),
-  ];
 
   return (
     <div className="space-y-3" data-testid="cohorts-view">
-      {/* Cohort selector: source portfolio × vintage × grain × metric. */}
+      {/* Cohort controls: vintage × grain × metric. Portfolio scope is the
+          workspace context — there is no second portfolio control here. */}
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-[var(--color-line)] bg-navy-900/40 px-3 py-2.5">
-        <CohortSelect label="Portfolio" value={lens} onChange={setLens} options={portfolioOptions} testId="cohort-lens" />
         <CohortSelect label="Vintage" value={vintage} onChange={setVintage}
           options={[{ value: "", label: "All vintages" }, ...vintageOpts.map((v) => ({ value: v, label: v }))]}
           testId="cohort-vintage" />
@@ -706,10 +700,13 @@ function CohortView({ client, portfolioId }: { client: AgentClient; portfolioId:
 const ALL_EVO_TABS: EvoView[] = ["funded", "pipeline", "origination", "cohorts", "forecast"];
 
 export function EvolutionPanel({
-  client, portfolioId, tabs, heading = true,
+  client, portfolioId, portfolioContext, tabs, heading = true,
 }: {
   client: AgentClient;
   portfolioId: string;
+  /** The governed workspace portfolio scope, forwarded to every series fetch so
+   *  Evolution and Cohorts always show the same book as the rest of the app. */
+  portfolioContext?: string;
   /** Restrict to a subset of series (the IA hosts subsets under Funded /
    * Pipeline / Forecast). Defaults to all five. */
   tabs?: EvoView[];
@@ -736,11 +733,11 @@ export function EvolutionPanel({
     setLoading(true);
     const run = async () => {
       try {
-        if (view === "funded") setFunded(await client.getFundedEvolution(portfolioId));
-        else if (view === "pipeline") setPipeline(await client.getPipelineEvolution(portfolioId));
-        else if (view === "origination") setFunnel(await client.getFunnelEvolution(portfolioId));
+        if (view === "funded") setFunded(await client.getFundedEvolution(portfolioId, portfolioContext));
+        else if (view === "pipeline") setPipeline(await client.getPipelineEvolution(portfolioId, portfolioContext));
+        else if (view === "origination") setFunnel(await client.getFunnelEvolution(portfolioId, portfolioContext));
         else if (view === "cohorts") { /* CohortView is self-contained (owns its fetches) */ }
-        else setForecast(await client.getForecastEvolution(portfolioId));
+        else setForecast(await client.getForecastEvolution(portfolioId, portfolioContext));
       } catch {
         /* keep prior state; charts show empty */
       } finally {
@@ -749,7 +746,7 @@ export function EvolutionPanel({
     };
     void run();
     return () => { cancelled = true; };
-  }, [client, portfolioId, view]);
+  }, [client, portfolioId, portfolioContext, view]);
 
   const fundedSeries = useMemo(
     () => (funded?.periods ?? []).map((p) => ({ period: p.period, ...p.metrics })),
@@ -1005,7 +1002,8 @@ export function EvolutionPanel({
         </div>
       )}
 
-      {view === "cohorts" && <CohortView client={client} portfolioId={portfolioId} />}
+      {view === "cohorts" && <CohortView client={client} portfolioId={portfolioId}
+        portfolioContext={portfolioContext} />}
 
       {view === "forecast" && (
         <div className="space-y-3" data-testid="forecast-evolution">

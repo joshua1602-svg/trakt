@@ -39,6 +39,7 @@ interface ApiResponse {
   diagnostics?: string[];
   assumptions?: string[];
   metadata?: Record<string, unknown>;
+  portfolioCoverage?: import("@/domain").PortfolioCoverage;
 }
 
 /** Best-effort coarse intent from the interpreted spec (display only).
@@ -117,52 +118,72 @@ export class HttpAgentClient implements AgentClient {
       "/mi/source-portfolios", signal);
   }
 
+  getPortfolioContext(signal?: AbortSignal) {
+    return this.getJson<import("@/domain").PortfolioContextIndex>(
+      "/mi/portfolio-context", signal);
+  }
+
+  /** `?portfolioId=…` plus the governed portfolio context, when one is selected.
+   * One query-string builder for every portfolio-scoped route, so no call site
+   * can forget to pass the workspace scope. */
+  private scoped(portfolioId: string, portfolioContext?: string,
+                 extra?: Record<string, string | undefined>): string {
+    const q = new URLSearchParams({ portfolioId });
+    if (portfolioContext) q.set("portfolioContext", portfolioContext);
+    for (const [k, v] of Object.entries(extra ?? {})) if (v) q.set(k, v);
+    return q.toString();
+  }
+
   getSnapshots(signal?: AbortSignal): Promise<SnapshotIndex> {
     return this.getJson<SnapshotIndex>("/mi/snapshots", signal);
   }
 
-  getSnapshot(portfolioId: string, signal?: AbortSignal): Promise<FundedSnapshot> {
+  getSnapshot(portfolioId: string, portfolioContext?: string,
+             signal?: AbortSignal): Promise<FundedSnapshot> {
     return this.getJson<FundedSnapshot>(
-      `/mi/snapshot?portfolioId=${encodeURIComponent(portfolioId)}`,
-      signal,
-    );
+      `/mi/snapshot?${this.scoped(portfolioId, portfolioContext)}`, signal);
   }
 
-  getForecastSnapshot(portfolioId: string, signal?: AbortSignal): Promise<ForecastSnapshot> {
+  getForecastSnapshot(portfolioId: string, portfolioContext?: string,
+                     signal?: AbortSignal): Promise<ForecastSnapshot> {
     return this.getJson<ForecastSnapshot>(
-      `/mi/forecast/snapshot?portfolioId=${encodeURIComponent(portfolioId)}`,
-      signal,
-    );
+      `/mi/forecast/snapshot?${this.scoped(portfolioId, portfolioContext)}`, signal);
   }
 
-  getFundedEvolution(portfolioId: string, signal?: AbortSignal): Promise<FundedEvolution> {
+  getFundedEvolution(portfolioId: string, portfolioContext?: string,
+                    signal?: AbortSignal): Promise<FundedEvolution> {
     return this.getJson<FundedEvolution>(
-      `/mi/evolution/funded?portfolioId=${encodeURIComponent(portfolioId)}`, signal);
+      `/mi/evolution/funded?${this.scoped(portfolioId, portfolioContext)}`, signal);
   }
 
-  getPipelineEvolution(portfolioId: string, signal?: AbortSignal): Promise<PipelineEvolution> {
+  getPipelineEvolution(portfolioId: string, portfolioContext?: string,
+                      signal?: AbortSignal): Promise<PipelineEvolution> {
     return this.getJson<PipelineEvolution>(
-      `/mi/evolution/pipeline?portfolioId=${encodeURIComponent(portfolioId)}`, signal);
+      `/mi/evolution/pipeline?${this.scoped(portfolioId, portfolioContext)}`, signal);
   }
 
-  getForecastEvolution(portfolioId: string, signal?: AbortSignal): Promise<ForecastEvolution> {
+  getForecastEvolution(portfolioId: string, portfolioContext?: string,
+                      signal?: AbortSignal): Promise<ForecastEvolution> {
     return this.getJson<ForecastEvolution>(
-      `/mi/evolution/forecast?portfolioId=${encodeURIComponent(portfolioId)}`, signal);
+      `/mi/evolution/forecast?${this.scoped(portfolioId, portfolioContext)}`, signal);
   }
 
-  getFunnelEvolution(portfolioId: string, signal?: AbortSignal): Promise<PipelineFunnelEvolution> {
+  getFunnelEvolution(portfolioId: string, portfolioContext?: string,
+                    signal?: AbortSignal): Promise<PipelineFunnelEvolution> {
     return this.getJson<PipelineFunnelEvolution>(
-      `/mi/evolution/funnel?portfolioId=${encodeURIComponent(portfolioId)}`, signal);
+      `/mi/evolution/funnel?${this.scoped(portfolioId, portfolioContext)}`, signal);
   }
 
-  getRiskLimits(portfolioId: string, signal?: AbortSignal): Promise<RiskLimitsSnapshot> {
+  getRiskLimits(portfolioId: string, portfolioContext?: string,
+               signal?: AbortSignal): Promise<RiskLimitsSnapshot> {
     return this.getJson<RiskLimitsSnapshot>(
-      `/mi/risk-limits?portfolioId=${encodeURIComponent(portfolioId)}`, signal);
+      `/mi/risk-limits?${this.scoped(portfolioId, portfolioContext)}`, signal);
   }
 
-  getForecastExtrapolation(portfolioId: string, signal?: AbortSignal): Promise<ForecastExtrapolation> {
+  getForecastExtrapolation(portfolioId: string, portfolioContext?: string,
+                          signal?: AbortSignal): Promise<ForecastExtrapolation> {
     return this.getJson<ForecastExtrapolation>(
-      `/mi/forecast/extrapolation?portfolioId=${encodeURIComponent(portfolioId)}`, signal);
+      `/mi/forecast/extrapolation?${this.scoped(portfolioId, portfolioContext)}`, signal);
   }
 
   async getMe(signal?: AbortSignal): Promise<import("@/lib/identity").UserIdentity> {
@@ -188,24 +209,24 @@ export class HttpAgentClient implements AgentClient {
 
   getCohorts(portfolioId: string, grain?: import("@/domain").CohortGrain,
              dimension?: import("@/domain").CohortDimension,
+             portfolioContext?: string,
              signal?: AbortSignal): Promise<import("@/domain").CohortAnalysis> {
-    const g = grain ? `&grain=${grain}` : "";
-    const d = dimension ? `&dimension=${dimension}` : "";
     return this.getJson<import("@/domain").CohortAnalysis>(
-      `/mi/cohorts?portfolioId=${encodeURIComponent(portfolioId)}${g}${d}`, signal);
+      `/mi/cohorts?${this.scoped(portfolioId, portfolioContext, { grain, dimension })}`,
+      signal);
   }
 
-  getGeoExposure(portfolioId: string,
+  getGeoExposure(portfolioId: string, portfolioContext?: string,
                  signal?: AbortSignal): Promise<import("@/domain").GeoExposure> {
     return this.getJson<import("@/domain").GeoExposure>(
-      `/mi/geo/exposure?portfolioId=${encodeURIComponent(portfolioId)}`, signal);
+      `/mi/geo/exposure?${this.scoped(portfolioId, portfolioContext)}`, signal);
   }
 
   getCohortProgression(portfolioId: string,
                        query?: import("@/domain").CohortProgressionQuery,
                        signal?: AbortSignal): Promise<import("@/domain").CohortProgression> {
     const p = new URLSearchParams({ portfolioId });
-    if (query?.lens) p.set("lens", query.lens);
+    if (query?.lens) p.set("portfolioContext", query.lens);
     if (query?.vintage) p.set("vintage", query.vintage);
     if (query?.grain) p.set("grain", query.grain);
     return this.getJson<import("@/domain").CohortProgression>(
@@ -224,6 +245,8 @@ export class HttpAgentClient implements AgentClient {
           portfolioId: request.portfolio.id,
           asOfDate: request.reporting.asOf,
           datasetContext: request.datasetContext,
+          // The governed workspace scope. A portfolio named in the question
+          // overrides it backend-side; the UI never resolves it itself.
           sourcePortfolioLens: request.sourceLens,
           // Merge the top_n hint with any drill-through filters; send undefined
           // when neither is present so the contract stays additive.
@@ -273,6 +296,9 @@ export class HttpAgentClient implements AgentClient {
       diagnostics: body.diagnostics ?? [],
       spec: normalizeSpec(body.spec),
       datasetContext: asString(meta.datasetContext),
+      // Governed portfolio coverage, passed through verbatim. The UI shows what
+      // the backend decided about consolidation — it never recomputes it.
+      portfolioCoverage: body.portfolioCoverage,
       error: body.error ?? undefined,
     };
   }

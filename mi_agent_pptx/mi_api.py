@@ -196,19 +196,37 @@ def _kfi_lag_weeks(model: Optional[Dict[str, Any]]) -> Optional[int]:
     return max(1, round(float(median_days) / 7.0)) if median_days else None
 
 
+def _scoped_to(df: Optional[pd.DataFrame], cid: str) -> Optional[pd.DataFrame]:
+    """Narrow a canonical frame to a governed portfolio context.
+
+    Deck generation resolves scope through the SAME governed resolver React and
+    Copilot use, so an investor pack can never disagree with the workspace about
+    what a book contains. ``cid`` may be a client id (no narrowing), a type group
+    (``direct`` / ``acquired`` — every current member) or a single
+    ``source_portfolio_id``; an unrecognised value resolves to the consolidated
+    platform, which is the pre-existing behaviour for a client id.
+    """
+    if df is None or getattr(df, "empty", True) or not cid:
+        return df
+    try:
+        from mi_agent.portfolio_scope import apply_scope, resolve
+        _registry, scope = resolve(df, cid)
+        if scope.is_total:
+            return df
+        scoped = apply_scope(df, scope)
+        return scoped if scoped is not None and len(scoped) else df
+    except Exception:  # noqa: BLE001 - deck generation must never break on scope
+        return df
+
+
 def _funded_frame(cid: str) -> Optional[pd.DataFrame]:
     """The prepared funded frame for the active run (the platform canonical set via
-    ``MI_AGENT_PLATFORM_CANONICAL``), scoped to the client when the canonical
-    carries multiple source portfolios — mirrors ``app._resolve_run_dataframe``."""
+    ``MI_AGENT_PLATFORM_CANONICAL``), scoped to the governed portfolio context."""
     from mi_agent_api import data_source
     df = data_source.get_dataframe()
     if df is None or df.empty:
         return None
-    if cid and "source_portfolio_id" in df.columns:
-        ids = df["source_portfolio_id"].astype(str).str.strip()
-        if (ids == cid).any():
-            return df[ids == cid]
-    return df
+    return _scoped_to(df, cid)
 
 
 def _pipeline_client(prow, cid: str) -> str:
@@ -274,10 +292,7 @@ def _local_funded_frames(cuts: List[Tuple[str, str]], cid: str) -> List[Dict[str
             raw = pd.read_csv(path, low_memory=False)
         except Exception:  # noqa: BLE001
             continue
-        if cid and "source_portfolio_id" in raw.columns:
-            ids = raw["source_portfolio_id"].astype(str).str.strip()
-            if (ids == cid).any():
-                raw = raw[ids == cid]
+        raw = _scoped_to(raw, cid)
         try:
             df, _rep = prepare_funded_mi_dataset(raw)
         except Exception:  # noqa: BLE001

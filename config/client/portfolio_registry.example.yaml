@@ -1,0 +1,85 @@
+# =========================================================================
+# Governed portfolio registry — per-portfolio business metadata.
+# =========================================================================
+#
+# OPTIONAL. Copy to config/client/portfolio_registry.yaml (or point
+# TRAKT_PORTFOLIO_REGISTRY at it, including a blob:// URI) to override what the
+# platform assumes about a source portfolio.
+#
+# With NO file the registry resolves entirely from canonical provenance
+# (source_portfolio_id / source_portfolio_type, stamped at onboarding — see
+# engine/provenance.py) plus one governed default: direct books originate, and
+# acquired books do not. That is the current ERE shape and needs no file.
+#
+# Add this file when a portfolio's BUSINESS behaviour differs from that default:
+#
+#   * an acquired vehicle that DOES write new business;
+#   * a direct book that has stopped originating;
+#   * an acquired book for which the client has supplied an approved runoff or
+#     balance-retention curve.
+#
+# Everything here is a governed assumption SUPPLIED to Trakt. Trakt consumes a
+# runoff curve; it never generates one. There is no mortality table, no
+# actuarial equity-release decay and no fitted amortisation anywhere in the
+# forecast engine — an acquired balance with no supplied curve is held constant
+# and the response discloses exactly that, per portfolio.
+#
+# Consumed by mi_agent/portfolio_metadata.py; the resolved contract is
+# trakt_core.portfolio.PortfolioRecord.
+
+portfolios:
+
+  # A direct originating book. This entry is redundant with the default and is
+  # shown only to document the fields.
+  - source_portfolio_id: direct_001
+    source_portfolio_type: direct
+    source_portfolio_label: ERE Direct Originations
+    # Does this book write new business? Drives Pipeline + origination forecast.
+    originates: true
+    # Is governed pipeline (pre-funded) data actually supplied for it? The
+    # capability resolver also checks what was really discovered, so a book that
+    # is configured to originate but has no extract yet is DISCLOSED rather than
+    # shown as an empty Pipeline tab.
+    pipeline_data_available: true
+    # origination | runoff | hold_constant. Defaulted from `originates` and the
+    # presence of a runoff curve; set explicitly only to override.
+    forecast_treatment: origination
+
+  # An acquired back book with NO supplied runoff curve — the common case. Its
+  # balance is held constant over the forecast horizon and the response says
+  # "Runoff not modelled for acquired_001".
+  - source_portfolio_id: acquired_001
+    source_portfolio_type: acquired
+    source_portfolio_label: BigBank Legacy Book
+    originates: false
+
+  # An acquired back book WITH an approved runoff curve supplied by the client.
+  # `runoff_curve` is a list of monthly BALANCE-RETENTION factors: the share of
+  # today's balance still outstanding after month N. Past the end of the list the
+  # final factor is held (extrapolating would be an assumption Trakt was not
+  # given). Only where this is present is runoff modelled at all.
+  #
+  # - source_portfolio_id: acquired_002
+  #   source_portfolio_type: acquired
+  #   source_portfolio_label: Seller A 2026 Purchase
+  #   originates: false
+  #   runoff_profile_id: seller_a_2026_approved_v1
+  #   runoff_curve: [0.995, 0.990, 0.984, 0.978, 0.971, 0.964,
+  #                  0.957, 0.949, 0.941, 0.932, 0.923, 0.913]
+
+  # A future acquired vehicle that DOES originate. Nothing in the code treats
+  # "acquired" as universally non-originating — this single entry turns Pipeline
+  # and the origination forecast on for it.
+  #
+  # - source_portfolio_id: acquired_003
+  #   source_portfolio_type: acquired
+  #   originates: true
+  #   pipeline_data_available: true
+
+# A registry shared by several tenants may instead be keyed by client:
+#
+# clients:
+#   ERE:
+#     portfolios:
+#       - source_portfolio_id: acquired_001
+#         originates: false

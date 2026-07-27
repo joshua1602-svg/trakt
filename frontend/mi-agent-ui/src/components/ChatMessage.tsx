@@ -92,6 +92,29 @@ export function ChatMessage({
           </div>
         )}
 
+        {/* Governed portfolio coverage. Every word here — including the list of
+            portfolios and the "not fully consolidated" statement — is authored by
+            the backend. The chat renders it; it never works out consolidation
+            status for itself, which is what stops a partial answer being read as
+            a Total. */}
+        {message.portfolioCoverage?.disclosure && (
+          <div
+            data-testid="chat-portfolio-coverage"
+            data-fully-consolidated={message.portfolioCoverage.is_fully_consolidated ? "true" : "false"}
+            className={[
+              "mt-2 rounded-lg border px-3 py-2 text-[11px] leading-relaxed",
+              message.portfolioCoverage.is_fully_consolidated
+                ? "border-[var(--color-line-soft)] bg-navy-900/50 text-ink-400"
+                : "border-amber-400/25 bg-amber-400/5 text-amber-200/90",
+            ].join(" ")}
+          >
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-500">
+              Portfolio coverage
+            </div>
+            <div className="mt-1">{message.portfolioCoverage.disclosure}</div>
+          </div>
+        )}
+
         {message.assumptions && message.assumptions.length > 0 && (
           <div className="mt-2 rounded-lg border border-[var(--color-line-soft)] bg-navy-900/50 px-3 py-2">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-500">Assumptions</div>

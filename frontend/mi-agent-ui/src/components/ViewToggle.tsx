@@ -14,19 +14,24 @@ const VIEWS: { id: WorkspaceView; label: string; icon: typeof Landmark }[] = [
 
 /** Segmented control selecting the active MI workspace view.
  *
- * ``disabledViews`` disables views that don't apply to the active scope — e.g.
- * an acquired-only source portfolio has no origination Pipeline / Forecast, so
- * those tabs are disabled. The source-portfolio lens and this view toggle are
- * independent axes. */
+ * ``disabledViews`` and ``disabledReasons`` come from the GOVERNED CAPABILITY
+ * CONTRACT for the selected portfolio context — this component does not decide
+ * that an acquired book has no pipeline, or that any scope lacks a forecast. It
+ * renders the backend's decision and shows the backend's explanation, so a
+ * disabled tab always says why in business terms rather than simply going dead.
+ */
 export function ViewToggle({
   active,
   onChange,
   disabledViews = [],
+  disabledReasons = {},
   className,
 }: {
   active: WorkspaceView;
   onChange: (view: WorkspaceView) => void;
   disabledViews?: WorkspaceView[];
+  /** Backend-authored business reason per disabled view, shown on hover. */
+  disabledReasons?: Record<string, string>;
   /** Optional wrapper classes (e.g. `flex-1` to span the dashboard width). */
   className?: string;
 }) {
@@ -51,7 +56,11 @@ export function ViewToggle({
             aria-selected={selected}
             aria-disabled={isDisabled}
             disabled={isDisabled}
-            title={isDisabled ? "Not applicable for an acquired back book (Funded only)" : undefined}
+            title={isDisabled
+              ? (disabledReasons[id]
+                 ?? "Not applicable for the selected portfolio scope.")
+              : undefined}
+            data-disabled-reason={isDisabled ? (disabledReasons[id] ?? undefined) : undefined}
             onClick={() => !isDisabled && onChange(id)}
             className={cn(
               // Each tab flexes to share the row evenly across the full width.

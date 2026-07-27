@@ -30,6 +30,7 @@ function client(over: Partial<AgentClient> = {}): AgentClient {
     ask: vi.fn(),
     getSnapshots: vi.fn(),
     getSourcePortfolios: vi.fn(),
+    getPortfolioContext: vi.fn(async () => ({ available: false, client_id: null, default_context_id: "total", contexts: [], portfolios: [], portfolio_types: [], pipeline_portfolios: null })),
     getSnapshot: vi.fn(),
     getForecastSnapshot: vi.fn(),
     getFundedEvolution: vi.fn(async () => mockFundedEvolution("client_001")),
@@ -113,7 +114,9 @@ describe("EvolutionPanel", () => {
     fireEvent.change(screen.getByTestId("cohort-dimension"), { target: { value: "age" } });
     await waitFor(() =>
       expect(screen.getByTestId("cohorts-table").textContent).toMatch(/Borrower age/));
-    expect(c.getCohorts).toHaveBeenCalledWith("client_001/mi_2025_11", "Y", "age");
+    // Dimension change re-fetches, carrying the governed workspace scope
+    // ("total" when the panel is rendered without an explicit context).
+    expect(c.getCohorts).toHaveBeenCalledWith("client_001/mi_2025_11", "Y", "age", "total");
   });
 
   it("renders the cohort static-pool progression with selectors (close the loop)", async () => {
@@ -121,9 +124,12 @@ describe("EvolutionPanel", () => {
     render(<EvolutionPanel client={c} portfolioId="client_001/mi_2025_11" />);
     await screen.findByText("Funded balance by month");
     fireEvent.click(screen.getByRole("tab", { name: "Cohorts" }));
-    // The selector row (source portfolio × vintage × grain × metric).
-    expect(await screen.findByTestId("cohort-lens")).toBeInTheDocument();
-    expect(screen.getByTestId("cohort-vintage")).toBeInTheDocument();
+    // The control row (vintage × grain × metric). There is deliberately NO
+    // portfolio control here: scope is the ONE governed workspace context, so a
+    // second selector would let cohorts sit on a different book from the rest
+    // of the workspace.
+    expect(screen.queryByTestId("cohort-lens")).toBeNull();
+    expect(await screen.findByTestId("cohort-vintage")).toBeInTheDocument();
     expect(screen.getByTestId("cohort-grain")).toBeInTheDocument();
     expect(screen.getByTestId("cohort-metric")).toBeInTheDocument();
     // The progression (across periods) is fetched and its table rendered.

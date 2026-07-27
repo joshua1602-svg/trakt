@@ -54,10 +54,17 @@ _ACQUIRED_TERMS = (
     "acquired", "acquisition", "back book", "backbook", "purchased book",
     "purchased", "bought book", "inorganic", "legacy book", "m&a",
 )
+# Phrases that name the CONSOLIDATED SCOPE. Every entry must be
+# portfolio-qualified. A bare "total" / "overall" / "combined" is deliberately
+# absent: "what is the total current balance?" asks for an aggregation, not for
+# the Total book, and treating it as a scope silently widened a Direct or
+# Acquired workspace selection back to the whole platform — a silent scope
+# mutation, and exactly the class of defect the governed context exists to stop.
 _TOTAL_TERMS = (
-    "total", "whole book", "whole portfolio", "all loans", "all portfolios",
-    "entire portfolio", "entire book", "combined", "overall", "group",
-    "across the book", "across all",
+    "total portfolio", "total book", "total platform", "whole book",
+    "whole portfolio", "all loans", "all portfolios", "entire portfolio",
+    "entire book", "combined book", "combined portfolio", "consolidated",
+    "across the book", "across all portfolios", "across all books",
 )
 
 _COMPARISON_TERMS = (" vs ", " vs. ", " versus ", "compare", "comparison",
@@ -195,6 +202,52 @@ def apply_lens(spec, lens: PortfolioLens):
     return spec
 
 
+def context_id(lens: PortfolioLens) -> str:
+    """The governed portfolio-context id a resolved lens names.
+
+    The lens layer's job is *natural-language recognition*; deciding what the
+    named scope actually contains belongs to the governed registry
+    (:mod:`trakt_core.portfolio`). This is the handover point: a cohort lens
+    yields its portfolio id, a type lens its type, and total yields ``total``.
+    """
+    if lens is None:
+        return LENS_TOTAL
+    if lens.name == LENS_COHORT and lens.cohort_id:
+        return lens.cohort_id
+    return lens.name
+
+
+def apply_scope(spec, lens: PortfolioLens, scope) -> Any:
+    """Merge a RESOLVED governed scope onto a spec (in place) and return it.
+
+    Same contract as :func:`apply_lens` — the label and title suffix are the
+    lens's — except the filter comes from the resolved scope, so a group narrows
+    to the explicit portfolio ids the registry currently holds rather than to a
+    type string. That is what makes the hierarchy dynamic: a newly onboarded
+    ``direct_002`` joins the Direct answer without any code change here.
+    """
+    if scope is None:
+        return apply_lens(spec, lens)
+    merged = dict(getattr(spec, "filters", {}) or {})
+    merged.update(scope.filters)
+    spec.filters = merged
+    label = scope.label if lens is None else lens.label
+    try:
+        spec.portfolio_lens = {
+            **(lens.to_dict() if lens is not None else total_lens().to_dict()),
+            "filters": dict(scope.filters),
+            "context_id": scope.context_id,
+            "context_kind": scope.context_kind,
+            "portfolio_ids": list(scope.portfolio_ids),
+        }
+    except Exception:  # pragma: no cover - spec without the attribute
+        pass
+    if not scope.is_total and getattr(spec, "title", None):
+        if label not in str(spec.title):
+            spec.title = f"{spec.title} — {label}"
+    return spec
+
+
 def resolve_and_apply(spec, text: Optional[str]):
     """Convenience: resolve the lens from text and apply it to the spec."""
     return apply_lens(spec, resolve_lens(text))
@@ -248,13 +301,12 @@ def resolve_lens_with_default(
     return default or total_lens()
 
 
-def is_acquired_only(lens: PortfolioLens) -> bool:
-    """True when the lens covers acquired books only (no funding pipeline)."""
-    if lens.name == LENS_ACQUIRED:
-        return True
-    if lens.name == LENS_COHORT and (lens.cohort_id or "").startswith("acquired_"):
-        return True
-    return False
+# NOTE: ``is_acquired_only()`` used to live here and decided, from an
+# ``acquired_`` id prefix, that a scope had no funding pipeline. Business
+# applicability is now resolved from governed portfolio metadata by
+# ``trakt_core.portfolio.resolve_capabilities`` — which is what lets an acquired
+# vehicle that DOES originate be configured rather than coded around, and stops
+# a portfolio's NAME deciding what analysis it may support.
 
 
 def available_lenses(records: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:

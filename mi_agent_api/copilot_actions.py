@@ -75,6 +75,8 @@ from .copilot_text import normalise_payload, normalise_text
 from .data_source import data_source_kind, data_source_label
 from . import artefacts as artefacts_mod
 from . import decks as decks_mod
+from . import copilot_package
+from . import copilot_workspace
 from . import identity as identity_mod
 from . import mi_service
 from . import presenters
@@ -154,6 +156,15 @@ class CopilotMiAnswer(BaseModel):
         None, description="Deterministic validation result from the MI engine.")
     reconciliation: Optional[Dict[str, Any]] = Field(
         None, description="Coverage / reconciliation footer for the result.")
+    portfolioCoverage: Optional[Dict[str, Any]] = Field(
+        None, description="Governed portfolio scope + coverage: portfolios in "
+                          "scope, which answered, which were excluded and why, "
+                          "whether the answer is fully consolidated, and "
+                          "per-field availability by portfolio. Produced by the "
+                          "governed backend — identical to what the React MI "
+                          "workspace receives. Never restate an answer as "
+                          "consolidated when is_fully_consolidated is false; "
+                          "quote the `disclosure` sentence instead.")
     sourceNotes: List[Any] = Field(default_factory=list,
                                    description="Provenance/source notes from the MI Agent.")
     warnings: List[str] = Field(default_factory=list)
@@ -425,6 +436,9 @@ def ask_trakt_mi(req: CopilotMiQueryRequest, request: Request):
         supportingValues=supporting,
         validation=envelope.get("validation") or None,
         reconciliation=envelope.get("reconciliation") or None,
+        # The SAME governed provenance React receives — one backend fact set, so
+        # a Copilot narrative can never claim a consolidation React does not show.
+        portfolioCoverage=(result.scope.to_dict() if result.scope else None),
         sourceNotes=normalise_payload(envelope.get("sourceNotes") or []),
         warnings=[normalise_text(str(w)) for w in (envelope.get("warnings") or [])],
         diagnostics=[normalise_text(str(d)) for d in (envelope.get("diagnostics") or [])],

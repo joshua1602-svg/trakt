@@ -32,6 +32,7 @@ from .mi_query_executor import (
 from .mi_query_spec import MIQuerySpec
 from .mi_query_validator import load_mi_semantics, recover_chart_spec, validate_mi_query
 from . import portfolio_lens as _portfolio_lens
+from . import portfolio_scope as _portfolio_registry
 
 # Chart types the chart factory can render (others are table/summary only).
 _RENDERABLE = {"bar", "line", "scatter", "bubble", "heatmap", "treemap"}
@@ -305,14 +306,24 @@ def run_mi_agent_query(
     # default). The lens is realised as a filter on the provenance fields, so it
     # only narrows rows — it never changes any MI calculation. No-op when the
     # dataset carries no provenance (the filter simply matches nothing to drop).
+    _portfolio_scope = None
     if "source_portfolio_id" in available_columns or "source_portfolio_type" in available_columns:
         _default_lens = (_portfolio_lens.lens_from_selection(source_portfolio_lens)
                          if source_portfolio_lens is not None else None)
         _lens = _portfolio_lens.resolve_lens_with_default(question, _default_lens)
-        _portfolio_lens.apply_lens(spec, _lens)
+        # The lens names the scope; the GOVERNED REGISTRY resolves what that
+        # scope means. "direct" is every portfolio currently typed direct, so
+        # onboarding direct_002 widens the answer with no code change — and the
+        # filter is the resolved id list, never a type string, so a group is
+        # exactly the sum of its registered members.
+        _registry, _portfolio_scope = _portfolio_registry.resolve(
+            df, _portfolio_lens.context_id(_lens))
+        _portfolio_lens.apply_scope(spec, _lens, _portfolio_scope)
         result["portfolio_lens"] = spec.portfolio_lens
-        if _lens.name != _portfolio_lens.LENS_TOTAL:
-            warnings.append(f"portfolio lens applied: {_lens.label}")
+        result["portfolio_scope"] = _portfolio_scope.to_dict()
+        if not _portfolio_scope.is_total:
+            warnings.append(f"portfolio scope applied: {_portfolio_scope.label} "
+                            f"({', '.join(_portfolio_scope.portfolio_ids) or 'no portfolios'})")
 
     # ---- merge drill-through filters into the parsed spec -----------------
     # Additive: caller-supplied filters (e.g. a UI drill into one region/broker/
@@ -572,6 +583,26 @@ def run_mi_agent_query(
             filter_invariant=filter_invariant)
     except Exception as exc:  # pragma: no cover - defensive
         warnings.append(f"query trace unavailable: {exc}")
+
+    # ---- governed portfolio coverage --------------------------------------
+    # Which portfolios in scope actually answered, which could not, and why —
+    # resolved from the SAME fields the executor calculated on, so a coverage
+    # statement can never disagree with the number above it. Produced here, in
+    # the governed backend; React and Copilot format it, never derive it.
+    if _portfolio_scope is not None:
+        try:
+            _fields = _portfolio_registry.requested_fields(spec)
+            _resolved = (result.get("validation") or {}).get("resolved_fields") or {}
+            _fields = _dedupe([f for f in list(_fields) + [
+                v for v in _resolved.values() if isinstance(v, str)] if f])
+            _fields = [f for f in _fields if f in available_columns]
+            _coverage = _portfolio_registry.coverage_for_frame(
+                df, _portfolio_scope, fields=_fields)
+            result["portfolio_coverage"] = _coverage.to_dict()
+            if not _coverage.is_fully_consolidated and _coverage.disclosure():
+                warnings.append(_coverage.disclosure())
+        except Exception as exc:  # noqa: BLE001 - disclosure must never break an answer
+            warnings.append(f"portfolio coverage unavailable: {exc}")
 
     result["ok"] = True
     # The chart factory copies the executor's warnings onto its result, so the

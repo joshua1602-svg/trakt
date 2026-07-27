@@ -251,7 +251,8 @@ def _blob_platform_index(root: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def _blob_funded_evolution(root: str, cid: str, trid: Optional[str]) -> Dict[str, Any]:
+def _blob_funded_evolution(root: str, cid: str, trid: Optional[str],
+                           scope=None) -> Dict[str, Any]:
     """Funded evolution over the dated platform canonicals under a ``blob://`` root.
 
     Uses the SOURCE PORTFOLIO id (e.g. ``direct_001``) — not the selected run — and
@@ -262,6 +263,8 @@ def _blob_funded_evolution(root: str, cid: str, trid: Optional[str]) -> Dict[str
     from .funded_prep import prepare_funded_mi_dataset
     frames = platform_blob_mod.build_funded_evolution_frames(
         root, open_storage(), cid, trid, prepare_funded_mi_dataset)
+    # One governed scope filter, applied to every period frame.
+    frames = evolution_mod._apply_scope_to_frames(frames, scope)
     result = evolution_mod.assemble_funded_evolution(
         frames, cid, trid,
         lineage={

@@ -357,14 +357,18 @@ def _withdraw_kfi_model(model_b: Dict[str, Any]) -> Dict[str, Any]:
 
 def build_extrapolation(output_root, pipeline_root, client_id: str,
                         to_run_id: Optional[str], *,
-                        history_model: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """Compose Models A/B/C from the governed funded + pipeline + forecast series."""
-    funded = evolution_mod.funded_evolution(output_root, client_id, to_run_id)
+                        history_model: Optional[Dict[str, Any]] = None,
+                        scope=None) -> Dict[str, Any]:
+    """Compose Models A/B/C from the governed funded + pipeline + forecast series,
+    with the funded side narrowed to the governed portfolio ``scope``."""
+    funded = evolution_mod.funded_evolution(output_root, client_id, to_run_id,
+                                            scope=scope)
     # Weight the pipeline by the SAME governed historical stage rates as the
     # point-in-time bridge, so Model C's 'weighted expected pipeline' matches the
     # Forecast tab instead of silently using the config-only fallback.
     forecast = evolution_mod.forecast_evolution(
-        output_root, pipeline_root, client_id, to_run_id, historical_model=history_model)
+        output_root, pipeline_root, client_id, to_run_id, historical_model=history_model,
+        scope=scope)
     try:
         pipeline = evolution_mod.pipeline_evolution(pipeline_root, client_id, to_run_id)
     except Exception:  # noqa: BLE001

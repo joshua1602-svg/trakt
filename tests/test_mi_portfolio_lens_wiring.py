@@ -66,11 +66,10 @@ class TestLensHelpers(unittest.TestCase):
         # No scope, no default -> total.
         self.assertEqual(pl.resolve_lens_with_default("show balance", None).name, "total")
 
-    def test_is_acquired_only(self):
-        self.assertTrue(pl.is_acquired_only(pl.lens_from_selection("acquired")))
-        self.assertTrue(pl.is_acquired_only(pl.lens_from_selection("acquired_002")))
-        self.assertFalse(pl.is_acquired_only(pl.lens_from_selection("direct")))
-        self.assertFalse(pl.is_acquired_only(pl.total_lens()))
+    def test_applicability_is_not_decided_from_a_portfolio_name(self):
+        """The prefix-based ``is_acquired_only`` rule is gone: what a scope may
+        do is resolved from governed metadata, not from its id."""
+        self.assertFalse(hasattr(pl, "is_acquired_only"))
 
     def test_available_lenses(self):
         records = _df()[["source_portfolio_id", "source_portfolio_type",
@@ -97,7 +96,9 @@ class TestWorkflowLensWiring(unittest.TestCase):
     def test_nl_direct(self):
         lens, filt, ok = self._lens("show direct book balance")
         self.assertEqual(lens.get("name"), "direct")
-        self.assertEqual(filt.get("source_portfolio_type"), "direct")
+        # The lens NAMES the scope; the governed registry RESOLVES it, so the
+        # filter is the current direct membership, not a type string.
+        self.assertEqual(filt.get("source_portfolio_id"), ["direct_001"])
 
     def test_nl_acquired_and_backbook(self):
         self.assertEqual(self._lens("show acquired book balance")[0].get("name"), "acquired")
@@ -106,12 +107,15 @@ class TestWorkflowLensWiring(unittest.TestCase):
     def test_nl_cohort(self):
         lens, filt, _ = self._lens("balance for acquired_001 only")
         self.assertEqual(lens.get("name"), "cohort")
-        self.assertEqual(filt.get("source_portfolio_id"), "acquired_001")
+        self.assertEqual(filt.get("source_portfolio_id"), ["acquired_001"])
 
     def test_dropdown_default_applies(self):
         lens, filt, _ = self._lens("show portfolio balance", sel="acquired")
         self.assertEqual(lens.get("name"), "acquired")
-        self.assertEqual(filt.get("source_portfolio_type"), "acquired")
+        # Both acquired portfolios in the fixture — the group is the sum of its
+        # governed members, never a single hard-coded id.
+        self.assertEqual(sorted(filt.get("source_portfolio_id")),
+                         ["acquired_001", "acquired_002"])
 
     def test_nl_overrides_dropdown(self):
         lens, _, _ = self._lens("show direct book balance", sel="acquired_001")
@@ -131,6 +135,9 @@ class TestApiLensEndpoints(unittest.TestCase):
             from fastapi.testclient import TestClient
         except Exception:
             self.skipTest("fastapi not installed")
+        # Exercise the ROUTES, not the auth guard (which test_auth.py covers).
+        self._saved_auth = os.environ.get("MI_AGENT_AUTH_ENABLED")
+        os.environ["MI_AGENT_AUTH_ENABLED"] = "false"
         from engine import platform_assembler as pa
         self._tmp = tempfile.TemporaryDirectory()
         td = Path(self._tmp.name)
@@ -145,6 +152,10 @@ class TestApiLensEndpoints(unittest.TestCase):
         self.client = TestClient(app)
 
     def tearDown(self):
+        if self._saved_auth is None:
+            os.environ.pop("MI_AGENT_AUTH_ENABLED", None)
+        else:
+            os.environ["MI_AGENT_AUTH_ENABLED"] = self._saved_auth
         if self._saved is None:
             os.environ.pop("MI_AGENT_PLATFORM_CANONICAL", None)
         else:

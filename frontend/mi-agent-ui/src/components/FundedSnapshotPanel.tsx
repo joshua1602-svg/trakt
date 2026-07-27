@@ -123,11 +123,33 @@ export function FundedSnapshotPanel({
               const data: BarDatum[] = s.bars.map((b) => ({
                 label: b.label, value: b.balance, count: b.count,
               }));
+              // The backend decides whether a dimension is available, entirely
+              // null, not supplied for these portfolios, or only partially
+              // covered. Each state renders distinctly — a chart area is never
+              // simply left blank.
+              const state = s.availability ?? (data.length ? "available" : "not_supplied");
+              const drawable = data.length > 0;
               return (
                 <div key={s.key}
+                  data-testid={`strat-${s.key}`}
+                  data-availability={state}
                   className="rounded-lg border border-[var(--color-line-soft)] bg-navy-900/50 p-3">
-                  <div className="mb-2 text-[11px] font-medium text-ink-300">{s.label}</div>
-                  <BarList data={data} format="gbp" />
+                  <div className="mb-2 flex items-baseline justify-between gap-2">
+                    <span className="text-[11px] font-medium text-ink-300">{s.label}</span>
+                    {state === "partially_available" && (
+                      <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-amber-200/90">
+                        Partial
+                      </span>
+                    )}
+                  </div>
+                  {drawable ? <BarList data={data} format="gbp" /> : (
+                    <p className="py-3 text-[11px] leading-relaxed text-ink-500">
+                      {s.reason ?? "Not available for the selected portfolios."}
+                    </p>
+                  )}
+                  {drawable && s.reason && (
+                    <p className="mt-2 text-[10px] leading-relaxed text-ink-500">{s.reason}</p>
+                  )}
                 </div>
               );
             })}

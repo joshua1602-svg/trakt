@@ -199,12 +199,15 @@ class TestProbabilityGovernance(unittest.TestCase):
         self.assertLess(b["weightedExpectedFundedAmount"], b["pipelineAmount"])
 
     def test_endpoint_takes_no_probability_input(self):
-        # The forecast endpoint signature accepts only portfolio/run identifiers;
-        # probabilities cannot be injected by the caller.
+        # The forecast endpoint signature accepts only SCOPE identifiers — which
+        # portfolio, which run, which governed portfolio context. No completion
+        # probability, weighting or assumption can be injected by the caller;
+        # those come from the governed pipeline config alone.
         import inspect
         from mi_agent_api.app import forecast_snapshot
         params = set(inspect.signature(forecast_snapshot).parameters)
-        self.assertEqual(params, {"portfolioId", "client_id", "runId", "run_id"})
+        self.assertEqual(params, {"portfolioId", "client_id", "runId", "run_id",
+                                  "portfolioContext"})
 
 
 # --------------------------------------------------------------------------- #

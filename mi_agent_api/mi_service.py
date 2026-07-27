@@ -52,6 +52,7 @@ from trakt_core.envelope import (
     GovernedResult,
     PolicyState,
     ProvenanceRef,
+    ScopeRef,
     SnapshotRef,
 )
 from trakt_core.errors import ErrorCategory, ErrorCode, TraktError
@@ -337,7 +338,7 @@ def execute_governed_mi_query(
         correlation_id=context.correlation_id, tenant_id=context.tenant_id,
         portfolio_id=authorised.portfolio_id, snapshot=snapshot, result=payload,
         warnings=tuple(str(w) for w in (payload.get("warnings") or [])),
-        policy=policy,
+        policy=policy, scope=_scope_ref(payload),
         provenance=ProvenanceRef(
             source_notes=tuple(payload.get("sourceNotes") or ()),
             reconciliation=payload.get("reconciliation"), snapshot=snapshot),
@@ -348,6 +349,56 @@ def execute_governed_mi_query(
                      error_code=error.code if error else None))
     emit_audit_event(result)
     return result
+
+
+def _scope_ref(payload: Dict[str, Any]) -> Optional[ScopeRef]:
+    """The governed portfolio scope + coverage for this answer, if it had one.
+
+    Read from the analytical payload the engine produced — never recomputed
+    here, so the envelope and the answer can never disagree about who
+    contributed.
+    """
+    if not isinstance(payload, dict):
+        return None
+    coverage = payload.get("portfolioCoverage")
+    if coverage:
+        return ScopeRef.from_dict(coverage)
+    scope = payload.get("portfolioScope")
+    if scope:
+        ids = tuple(scope.get("portfolio_ids") or ())
+        return ScopeRef(context_id=scope.get("context_id"),
+                        context_kind=scope.get("context_kind"),
+                        label=scope.get("label"),
+                        portfolios_in_scope=ids, portfolios_used=ids,
+                        is_fully_consolidated=True)
+    return None
+
+
+def _stamp_routed_scope(routed: Dict[str, Any], req: MiQueryRequest) -> None:
+    """Stamp the resolved portfolio scope onto a ROUTED analytical answer.
+
+    Routed intents (evolution, cohort progression, bridges, forecast) apply the
+    same lens the point-in-time path does, but they never reach the executor, so
+    they carry no field-level coverage. Recording the resolved scope keeps the
+    governed envelope complete for every route: a caller always learns which
+    portfolios an answer covers.
+    """
+    if not isinstance(routed, dict) or routed.get("portfolioScope"):
+        return
+    try:
+        from mi_agent import portfolio_lens as plens
+
+        from . import portfolio_context as ctx_mod
+
+        lens = plens.resolve_lens_with_default(
+            req.question,
+            plens.lens_from_selection(req.source_portfolio_lens)
+            if req.source_portfolio_lens is not None else None)
+        resolved = ctx_mod.resolve_context(plens.context_id(lens),
+                                           discover_pipeline=False)
+        routed["portfolioScope"] = resolved.scope.to_dict()
+    except Exception as exc:  # noqa: BLE001 - disclosure must never break a route
+        logger.info("routed scope stamping skipped: %s", exc)
 
 
 def _classify_analytical_failure(payload: Dict[str, Any]) -> str:
@@ -420,6 +471,7 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         routed = None
     if routed is not None:
         route = (routed.get("metadata") or {}).get("route") if isinstance(routed, dict) else None
+        _stamp_routed_scope(routed, req)
         return _governed_context(routed, req=req, client_id=client_id, run_id=run_id,
                                  view=view, run_required=_route_requires_run(route))
 
@@ -465,6 +517,14 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
                        "status": llm_cfg.status}
         if workflow.get("portfolio_lens"):
             meta["portfolioLens"] = workflow["portfolio_lens"]
+    # Governed portfolio scope + coverage. The BACKEND states which portfolios
+    # were in scope, which answered and which could not; every channel renders
+    # these facts rather than deriving its own.
+    if isinstance(result, dict):
+        if workflow.get("portfolio_scope"):
+            result["portfolioScope"] = workflow["portfolio_scope"]
+        if workflow.get("portfolio_coverage"):
+            result["portfolioCoverage"] = workflow["portfolio_coverage"]
     # An LLM that was requested but is unusable is a configuration fault the
     # operator must see, not a silent downgrade.
     if llm_cfg.enabled and not llm_cfg.available and isinstance(result, dict):

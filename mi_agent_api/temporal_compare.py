@@ -151,13 +151,16 @@ def compare_periods(periods: List[Dict[str, Any]], *, metric_key: str,
 def run_temporal_compare(output_root, pipeline_root, client_id: str,
                          to_run_id: Optional[str], *, dataset: str,
                          metric: Optional[str], aggregation: str,
-                         period_a: str, period_b: str) -> Dict[str, Any]:
-    """Build the relevant evolution series then compute the governed comparison."""
+                         period_a: str, period_b: str,
+                         scope=None) -> Dict[str, Any]:
+    """Build the relevant evolution series then compute the governed comparison,
+    over the governed portfolio ``scope``."""
     metric_key, label, fmt = resolve_metric_key(dataset, metric, aggregation)
     if (dataset or "funded").lower() == "pipeline":
         evo = evolution_mod.pipeline_evolution(pipeline_root, client_id, to_run_id)
     else:
-        evo = evolution_mod.funded_evolution(output_root, client_id, to_run_id)
+        evo = evolution_mod.funded_evolution(output_root, client_id, to_run_id,
+                                             scope=scope)
     out = compare_periods(evo.get("periods", []), metric_key=metric_key,
                           period_a=period_a, period_b=period_b, label=label, fmt=fmt)
     out["dataset"] = dataset

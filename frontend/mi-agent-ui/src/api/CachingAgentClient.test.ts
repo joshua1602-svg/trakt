@@ -25,6 +25,7 @@ function fakeClient(response: AgentResponse): { client: AgentClient; ask: Return
     ask,
     getSnapshots: vi.fn(),
     getSourcePortfolios: vi.fn(),
+    getPortfolioContext: vi.fn(async () => ({ available: false, client_id: null, default_context_id: "total", contexts: [], portfolios: [], portfolio_types: [], pipeline_portfolios: null })),
     getSnapshot: vi.fn(),
     getForecastSnapshot: vi.fn(),
     getFundedEvolution: vi.fn(),

@@ -9,6 +9,7 @@ function client(geo: GeoExposure): AgentClient {
   return {
     id: "test", mock: true,
     ask: vi.fn(), getSnapshots: vi.fn(), getSourcePortfolios: vi.fn(), getSnapshot: vi.fn(),
+    getPortfolioContext: vi.fn(async () => ({ available: false, client_id: null, default_context_id: "total", contexts: [], portfolios: [], portfolio_types: [], pipeline_portfolios: null })),
     getForecastSnapshot: vi.fn(), getFundedEvolution: vi.fn(), getPipelineEvolution: vi.fn(),
     getForecastEvolution: vi.fn(), getFunnelEvolution: vi.fn(), getRiskLimits: vi.fn(),
     getForecastExtrapolation: vi.fn(), getMe: vi.fn(), getDecks: vi.fn(),
@@ -29,7 +30,9 @@ describe("GeographyPanel", () => {
     // Bristol (the forced top area) leads the ranked list + the top-area KPI.
     const rank = screen.getByTestId("geo-rank");
     expect(rank.textContent).toMatch(/Bristol/);
-    expect(c.getGeoExposure).toHaveBeenCalledWith("client_001/mi_2025_11");
+    // The governed portfolio context is forwarded on every scoped fetch
+    // (undefined here — this render passes no workspace scope).
+    expect(c.getGeoExposure).toHaveBeenCalledWith("client_001/mi_2025_11", undefined);
   });
 
   it("shows average ticket, LTV and borrower age on area hover", async () => {

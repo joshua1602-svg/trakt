@@ -193,6 +193,157 @@ def build_pipeline_watchlist(df: pd.DataFrame, pipeline_report: Dict[str, Any],
 # --------------------------------------------------------------------------- #
 # Forecast bridge composition
 # --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- #
+# Portfolio-aware consolidated projection
+# --------------------------------------------------------------------------- #
+#: Default projection horizon in months. A horizon does NOT imply a decay model:
+#: without a supplied governed curve a balance is carried flat and disclosed.
+DEFAULT_HORIZON_MONTHS = 12
+
+
+def _retention_at(curve, horizon_months: int) -> Optional[float]:
+    """The supplied curve's balance-retention factor at ``horizon_months``.
+
+    The curve is a GOVERNED ASSUMPTION supplied by the client — a list of
+    monthly balance-retention factors. Trakt consumes it and never generates
+    one: there is deliberately no mortality table, no actuarial equity-release
+    decay and no fitted amortisation anywhere in this module. Past the end of a
+    supplied curve the last supplied factor is held (an extrapolation would be
+    an assumption Trakt was not given)."""
+    if not curve:
+        return None
+    idx = max(0, min(int(horizon_months) - 1, len(curve) - 1))
+    try:
+        return float(curve[idx])
+    except (TypeError, ValueError, IndexError):
+        return None
+
+
+def portfolio_projections(
+    funded_df: Optional[pd.DataFrame],
+    registry,
+    scope,
+    *,
+    weighted_pipeline: float = 0.0,
+    pipeline_portfolios: Optional[List[str]] = None,
+    horizon_months: int = DEFAULT_HORIZON_MONTHS,
+) -> Dict[str, Any]:
+    """Project each portfolio in scope under its OWN governed treatment.
+
+        Total projected balance
+            = Σ projected balances for all direct portfolios
+            + Σ projected balances for all acquired portfolios
+
+    Per portfolio:
+
+    * an originating book carries its current funded position plus the expected
+      future originations attributable to it (the governed weighted pipeline);
+    * a non-originating book contributes ZERO new originations unless its
+      governed metadata says otherwise;
+    * a runoff curve is applied only where one has been SUPPLIED; otherwise the
+      balance is held constant and the response says so, per portfolio.
+
+    Attribution of the weighted pipeline is evidence-based: it is assigned to a
+    portfolio only where the governed pipeline data identifies one, or where
+    exactly one portfolio in scope originates. Where neither holds it is
+    reported separately as unattributed rather than split by an invented rule.
+    """
+    from trakt_core.portfolio import scope_records
+
+    records = scope_records(registry, scope) if (registry and scope) else []
+    balance_col = "current_outstanding_balance"
+
+    def _balance_for(pid: str) -> float:
+        if funded_df is None or balance_col not in getattr(funded_df, "columns", []):
+            return 0.0
+        if "source_portfolio_id" not in funded_df.columns:
+            return _num_sum(funded_df, balance_col)
+        mask = (funded_df["source_portfolio_id"].astype(str).str.strip().str.casefold()
+                == pid.strip().casefold())
+        return float(coerce_numeric(funded_df.loc[mask, balance_col]).sum())
+
+    originating = [r for r in records if r.originates]
+    attributed = {str(p).strip().casefold() for p in (pipeline_portfolios or [])}
+    # Attribute the weighted pipeline only where the evidence supports it.
+    attributable = [r for r in originating
+                    if r.portfolio_id.strip().casefold() in attributed]
+    if not attributable and len(originating) == 1:
+        attributable = originating
+
+    projections: List[Dict[str, Any]] = []
+    runoff_modelled: List[str] = []
+    runoff_not_modelled: List[str] = []
+    disclosures: List[str] = []
+    unattributed_originations = 0.0
+
+    per_originator = (float(weighted_pipeline) / len(attributable)
+                      if attributable and weighted_pipeline else 0.0)
+    if weighted_pipeline and not attributable and originating:
+        unattributed_originations = float(weighted_pipeline)
+        disclosures.append(
+            "The governed pipeline is not attributed to an individual portfolio; "
+            "expected future originations are reported for the originating group "
+            f"({', '.join(r.portfolio_id for r in originating)}) rather than split "
+            "between them.")
+
+    for rec in records:
+        current = round(_balance_for(rec.portfolio_id), 2)
+        new_originations = round(per_originator, 2) if rec in attributable else 0.0
+
+        retention = _retention_at(rec.runoff_profile, horizon_months)
+        if retention is not None:
+            projected_existing = current * retention
+            runoff_modelled.append(rec.portfolio_id)
+            runoff_note = (f"Runoff modelled for {rec.portfolio_id} from the supplied "
+                           f"governed curve {rec.runoff_profile_id or ''}".strip() + ".")
+        elif rec.has_runoff_profile:
+            # A profile id is registered but its curve is not loaded here: hold
+            # flat and say so rather than guess at the shape.
+            projected_existing = current
+            runoff_not_modelled.append(rec.portfolio_id)
+            runoff_note = (f"Runoff profile {rec.runoff_profile_id} is registered for "
+                           f"{rec.portfolio_id} but its curve was not supplied to this "
+                           "run; the balance is held constant.")
+        else:
+            projected_existing = current
+            runoff_not_modelled.append(rec.portfolio_id)
+            runoff_note = f"Runoff not modelled for {rec.portfolio_id}."
+        disclosures.append(runoff_note)
+
+        projections.append({
+            "portfolioId": rec.portfolio_id,
+            "portfolioType": rec.portfolio_type,
+            "label": rec.display_label,
+            "forecastTreatment": rec.forecast_treatment,
+            "originates": rec.originates,
+            "currentBalance": current,
+            "expectedNewOriginations": new_originations,
+            "runoffModelled": retention is not None,
+            "runoffProfileId": rec.runoff_profile_id,
+            "balanceRetentionFactor": retention,
+            "projectedBalance": round(projected_existing + new_originations, 2),
+            "disclosure": runoff_note,
+        })
+
+    total_current = round(sum(p["currentBalance"] for p in projections), 2)
+    total_projected = round(
+        sum(p["projectedBalance"] for p in projections) + unattributed_originations, 2)
+    return {
+        "horizonMonths": int(horizon_months),
+        "portfolios": projections,
+        "totalCurrentBalance": total_current,
+        "totalProjectedBalance": total_projected,
+        "unattributedExpectedOriginations": round(unattributed_originations, 2),
+        "runoffModelled": runoff_modelled,
+        "runoffNotModelled": runoff_not_modelled,
+        "disclosures": disclosures,
+        "basis": ("Σ per-portfolio projected balances under each portfolio's "
+                  "governed forecast treatment. No mortality, decay or runoff "
+                  "assumption is generated by Trakt: a runoff curve is applied "
+                  "only where the client has supplied an approved one."),
+    }
+
+
 def compute_forecast_bridge(
     *,
     client_id: str,
