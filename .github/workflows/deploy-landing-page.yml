@@ -149,7 +149,7 @@ jobs:
       - name: Smoke-check liveness
         working-directory: .
         run: |
-          base="https://${{ vars.AZURE_LANDING_PAGE_APP_NAME }}.azurewebsites.net"
+          base="${{ vars.LANDING_PAGE_SITE_URL }}"
           for i in 1 2 3 4 5 6; do
             code=$(curl -s -o /dev/null -w '%{http_code}' "$base/api/health" || true)
             if [ "$code" = "200" ]; then echo "health: ok"; exit 0; fi
@@ -163,7 +163,7 @@ jobs:
       - name: Smoke-check readiness
         working-directory: .
         run: |
-          base="https://${{ vars.AZURE_LANDING_PAGE_APP_NAME }}.azurewebsites.net"
+          base="${{ vars.LANDING_PAGE_SITE_URL }}"
           body=$(curl -s "$base/api/ready" || true)
           code=$(curl -s -o /dev/null -w '%{http_code}' "$base/api/ready" || true)
           echo "$body"
@@ -177,7 +177,7 @@ jobs:
       - name: Verify the served portfolio identity
         working-directory: .
         run: |
-          base="https://${{ vars.AZURE_LANDING_PAGE_APP_NAME }}.azurewebsites.net"
+          base="${{ vars.LANDING_PAGE_SITE_URL }}"
           expected_client=$(node -p "require('./landing-page/data/demo-pack.json').source.clientId")
           expected_portfolio=$(node -p "require('./landing-page/data/demo-pack.json').source.portfolioId")
           expected_balance=$(node -p "require('./landing-page/data/demo-pack.json').portfolio.totalBalanceDisplay")
