@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 #: Total rows in the acquired tape, split across the two legacy rump books.
 ROW_COUNT = 885
@@ -134,26 +134,52 @@ def expected_protected_equity() -> Tuple[int, int, int]:
     return zero, positive, blank
 
 
-def write_tape(dest_dir: str | Path) -> Path:
-    """Write ``AcquiredLoanTape.csv`` into ``dest_dir`` and return its path."""
+def write_tape(dest_dir: str | Path,
+               extra_columns: Optional[Sequence[str]] = None,
+               drop_columns: Optional[Sequence[str]] = None) -> Path:
+    """Write ``AcquiredLoanTape.csv`` into ``dest_dir`` and return its path.
+
+    ``extra_columns`` appends optional columns (an ADDITIVE change, which the
+    approval policy treats as non-material). ``drop_columns`` removes columns —
+    dropping a mandatory one is a MATERIAL change that must stop for review.
+    """
+    dropped = set(drop_columns or ())
+    columns = [c for c in COLUMNS if c not in dropped] + list(extra_columns or ())
     dest = Path(dest_dir)
     dest.mkdir(parents=True, exist_ok=True)
     path = dest / FILE_NAME
     with path.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=COLUMNS)
+        writer = csv.DictWriter(fh, fieldnames=columns, extrasaction="ignore")
         writer.writeheader()
-        writer.writerows(_rows())
+        for row in _rows():
+            writer.writerow({**row, **{c: "" for c in (extra_columns or ())}})
     return path
 
 
-def write_blob_tree(root: str | Path, container: str = "raw-v2") -> Path:
+def blob_prefix(period: str = PACK_PERIOD) -> str:
+    return (f"{CLIENT_ID}/acquired/{DATASET}/{FREQUENCY}/"
+            f"{SOURCE_PORTFOLIO_ID}/{period}")
+
+
+def pack_key_for_period(period: str = PACK_PERIOD) -> str:
+    return (f"{CLIENT_ID}_{SOURCE_PORTFOLIO_ID}_{DATASET}_{FREQUENCY}_{period}")
+
+
+def write_blob_tree(root: str | Path, container: str = "raw-v2",
+                    period: str = PACK_PERIOD,
+                    extra_columns: Optional[Sequence[str]] = None,
+                    drop_columns: Optional[Sequence[str]] = None) -> Path:
     """Lay the pack out under a local blob-container tree and return the folder.
 
-    Produces ``{container}/ERE/acquired/funded/ad_hoc/acquired_001/2026-06-30/``
+    Produces ``{container}/ERE/acquired/funded/ad_hoc/acquired_001/{period}/``
     with the tape and a ``_READY.json`` marker, i.e. exactly the path convention
     the blob trigger and the backfill parse.
+
+    ``period`` writes a later delivery of the SAME source. With no column
+    overrides its schema is identical — used to prove a recurring pack does not
+    need re-approval. See :func:`write_tape` for the column overrides.
     """
-    folder = Path(root) / container / BLOB_PREFIX
-    write_tape(folder)
+    folder = Path(root) / container / blob_prefix(period)
+    write_tape(folder, extra_columns=extra_columns, drop_columns=drop_columns)
     (folder / "_READY.json").write_text("{}", encoding="utf-8")
     return folder

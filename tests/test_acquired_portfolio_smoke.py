@@ -79,14 +79,23 @@ def _write_direct_pack(root: Path) -> Path:
     return folder
 
 
-class TestAcquiredPortfolioSmoke(unittest.TestCase):
-    """One run of the acquired pack, asserted from every artefact it produced."""
+class _AcquiredRunBase(unittest.TestCase):
+    """Shared harness: onboard, approve, promote and rerun the acquired pack.
+
+    Each subclass gets its OWN container tree, state store and registry, so a
+    test that goes on to process further packs (and therefore re-pins the
+    registry) cannot disturb another class's assertions. That independence
+    matters here: the outcome of a pack depends on the registry state the
+    previous pack left behind, so shared state would make results depend on test
+    order.
+    """
 
     maxDiff = None
+    prefix = "acquired_smoke_"
 
     @classmethod
     def setUpClass(cls):
-        cls._td = tempfile.TemporaryDirectory(prefix="acquired_smoke_")
+        cls._td = tempfile.TemporaryDirectory(prefix=cls.prefix)
         cls.root = Path(cls._td.name)
         AP.write_blob_tree(cls.root)
         _write_direct_pack(cls.root)
@@ -161,6 +170,10 @@ class TestAcquiredPortfolioSmoke(unittest.TestCase):
         return pd.read_csv(
             self.run_dir / "output" / "transformation" / "31_transformed_canonical_tape.csv",
             dtype=str)
+
+
+class TestAcquiredPortfolioSmoke(_AcquiredRunBase):
+    """One run of the acquired pack, asserted from every artefact it produced."""
 
     # -- gate: onboarding -------------------------------------------------- #
 
@@ -376,6 +389,56 @@ class TestAcquiredPortfolioSmoke(unittest.TestCase):
                          [AP.RUMP_A_CUT_OFF, AP.RUMP_B_CUT_OFF])
         self.assertEqual(raw["Borrower 1 DOB"].iloc[0], "01/01/1930")
         self.assertEqual(raw["Protected Equity"].iloc[1], "20.00%")
+
+
+class TestAcquiredPackRecurrence(_AcquiredRunBase):
+    """Later deliveries of an already-approved acquired source.
+
+    Runs in its own container tree and state store: processing further packs
+    re-pins the registry, so sharing that state with the artefact assertions
+    above would make both sets of results depend on test order.
+    """
+
+    prefix = "acquired_recurrence_"
+
+    def test_recurring_packs_process_without_re_approval_but_drift_still_stops(self):
+        """One-click review is a FIRST-SIGHT gate, not a per-delivery tax.
+
+        Two states of the same promoted source, asserted in order because each
+        one leaves the registry as the next one finds it:
+
+          1. a later delivery of the SAME shape must process straight through.
+             The fingerprint is structural (column names, order, sheets, file
+             type) — never the filename, the period folder or any cell value — so
+             the next acquired pack matches the promoted signature. Re-asking
+             here is what turns "approve once" into "approve every month".
+          2. a MATERIAL change — a mandatory field disappearing — must still stop
+             for review rather than run on a mapping approved for another shape.
+
+        (An ADDITIVE optional column is deliberately not material: the approval
+        policy documents reorder / header-rename / additive-optional as
+        auto-approvable, precisely so routine supplier tweaks do not queue.)
+        """
+        # 1. Same schema, later period → no operator intervention.
+        later = "2026-09-30"
+        AP.write_blob_tree(self.root, period=later)
+        recurring = self._backfill(
+            selector=BF.PackSelector(pack_key=AP.pack_key_for_period(later)))
+        self.assertEqual(len(recurring), 1)
+        self.assertEqual(recurring[0]["status"], "processed")
+        self.assertEqual(recurring[0]["decision"], "deterministic")
+        pending = " ".join(a["approval_id"] for a
+                           in APPROVALS.list_pending(self.storage, self.layout))
+        self.assertNotIn(later, pending)
+
+        # 2. Mandatory loan identifier gone → material → held for review.
+        drifted = "2026-12-31"
+        AP.write_blob_tree(self.root, period=drifted,
+                           drop_columns=("Loan Policy Number",))
+        held = self._backfill(
+            selector=BF.PackSelector(pack_key=AP.pack_key_for_period(drifted)))
+        self.assertEqual(len(held), 1)
+        self.assertNotEqual(held[0]["status"], "processed")
 
 
 if __name__ == "__main__":  # pragma: no cover
