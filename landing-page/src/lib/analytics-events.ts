@@ -12,14 +12,12 @@
 
 export const ANALYTICS_EVENTS = [
   "hero_demo_click",
-  "video_play",
   "demo_open",
   "suggested_question_click",
   "typed_question_submit",
   "demo_answer_returned",
   "demo_refusal_returned",
   "report_preview_opened",
-  "capability_interaction",
   "book_demo_click",
   "lead_submit_success",
   "lead_submit_failure",
@@ -44,7 +42,6 @@ export const ANALYTICS_PROPERTY_KEYS = [
   "intentId",
   "reportId",
   "refusalCategory",
-  "capabilityId",
   "section",
   "source",
   "outcome",

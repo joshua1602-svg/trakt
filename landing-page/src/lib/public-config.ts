@@ -12,8 +12,5 @@ export const publicConfig = {
     | "none"
     | "appinsights"
     | "firstparty",
-  /** Optional hosted URL for the product overview video. */
-  videoUrl: process.env.NEXT_PUBLIC_DEMO_VIDEO_URL ?? "",
-  videoPoster: process.env.NEXT_PUBLIC_DEMO_VIDEO_POSTER ?? "",
   contactEmail: process.env.NEXT_PUBLIC_CONTACT_EMAIL ?? "",
 } as const;

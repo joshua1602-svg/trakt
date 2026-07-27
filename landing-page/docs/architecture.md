@@ -89,8 +89,8 @@ GET /
   → app/layout.tsx  metadata · structured data · design tokens
   → app/page.tsx    (server component)
       buildMeta()   reads data/demo-pack.json in-process
-      renders Nav, Hero (with this portfolio's real figures), DemoVideo,
-              CopilotDemo(meta), content sections, LeadForm, Footer
+      renders Nav, Hero (with this portfolio's real figures),
+              content sections, CopilotDemo(meta), LeadForm, Footer
   ← HTML, complete
 ```
 
@@ -355,7 +355,7 @@ write is cheap and refusing to render the page is not.
 
 ### 8.4 Analytics collector
 
-`POST /api/analytics` is an allow-list of twelve event names with a fixed
+`POST /api/analytics` is an allow-list of ten event names with a fixed
 property vocabulary, each value stripped to `[A-Za-z0-9_.-]` and capped. It
 always returns 204 — a rejected event, a rate-limited caller and a malformed
 body are indistinguishable, so the endpoint cannot be probed and analytics can

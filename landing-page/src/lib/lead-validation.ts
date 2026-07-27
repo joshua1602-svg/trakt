@@ -76,7 +76,8 @@ export function validateLead(input: LeadInput): {
     errors.email = "Please use your work email address.";
   }
   if (value.company.length < 2) errors.company = "Please enter your company.";
-  if (value.role.length < 2) errors.role = "Please enter your role.";
+  // Role and message are optional: name, work email and company are enough to
+  // hold a conversation, and every extra required field costs enquiries.
   if (input.consent !== true) {
     errors.consent = "Please confirm you are happy for us to contact you.";
   }

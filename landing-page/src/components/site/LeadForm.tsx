@@ -152,10 +152,10 @@ export function LeadForm() {
           id={ids.role}
           name="role"
           label="Role"
+          optional
           autoComplete="organization-title"
           maxLength={LEAD_FIELD_LIMITS.role}
           error={errors.role}
-          required
         />
       </div>
 
@@ -222,6 +222,7 @@ function Field({
   error,
   type = "text",
   required,
+  optional,
   autoComplete,
   maxLength,
 }: {
@@ -231,6 +232,7 @@ function Field({
   error?: string;
   type?: string;
   required?: boolean;
+  optional?: boolean;
   autoComplete?: string;
   maxLength?: number;
 }) {
@@ -239,6 +241,7 @@ function Field({
       <label htmlFor={id} className="block text-xs font-medium text-ink-300">
         {label}
         {required ? <span aria-hidden="true" className="ml-0.5 text-peri-400">*</span> : null}
+        {optional ? <span className="text-ink-500"> (optional)</span> : null}
       </label>
       <input
         id={id}

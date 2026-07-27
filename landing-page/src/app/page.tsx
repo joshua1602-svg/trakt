@@ -2,17 +2,15 @@ import { CopilotDemo } from "@/components/demo/CopilotDemo";
 import { AttributionCapture } from "@/components/site/AttributionCapture";
 import {
   CapabilityStack,
-  Governance,
+  DeliveryModel,
   Lifecycle,
   OperatingModel,
-  Omnichannel,
 } from "@/components/site/Content";
-import { DemoVideo } from "@/components/site/DemoVideo";
 import { Footer } from "@/components/site/Footer";
 import { Hero } from "@/components/site/Hero";
 import { LeadForm } from "@/components/site/LeadForm";
 import { Nav } from "@/components/site/Nav";
-import { Card, Section, SectionHeading, buttonStyles } from "@/components/ui";
+import { Section, SectionHeading } from "@/components/ui";
 import { buildMeta } from "@/lib/demo-pack";
 
 /**
@@ -23,6 +21,10 @@ import { buildMeta } from "@/lib/demo-pack";
  * server and passed down, so the page paints complete on first byte with no
  * client-side fetch and no layout shift. Interaction beyond that goes through
  * `/api/demo/*`.
+ *
+ * Seven sections, in the order a sceptical institutional reader asks their
+ * questions: what is it, what does it do, how do I get it, how does it work,
+ * when do I use it, show me, talk to me.
  */
 export default function Page() {
   const meta = buildMeta();
@@ -36,87 +38,48 @@ export default function Page() {
       <Nav />
 
       <main id="main">
+        {/* 1 — Value proposition */}
         <div id="top" className="pt-28 pb-16 sm:pt-32 sm:pb-20">
           <Section id="product">
             <Hero scope={meta.scope} />
           </Section>
         </div>
 
-        {/* C — Product overview video */}
-        <Section id="overview" className="pb-16 sm:pb-20">
-          <SectionHeading
-            id="overview"
-            eyebrow="Overview"
-            title="Two minutes on what Trakt does"
-            intro="A short walkthrough of the governed data layer, the analytics it powers and the channels it reaches."
-          />
-          <div className="mt-8">
-            <DemoVideo />
-          </div>
+        {/* 2 — Capabilities */}
+        <Section id="capabilities" className="pb-16 sm:pb-20">
+          <CapabilityStack />
         </Section>
 
-        {/* D — Interactive synthetic demonstration */}
-        <Section id="live-demo" className="pb-6">
+        {/* 3 — Delivery model */}
+        <Section id="delivery" className="pb-16 sm:pb-20">
+          <DeliveryModel />
+        </Section>
+
+        {/* 4 — How it works */}
+        <Section id="how-it-works" className="pb-16 sm:pb-20">
+          <OperatingModel />
+        </Section>
+
+        {/* 5 — Where it applies */}
+        <Section id="lifecycle" className="pb-16 sm:pb-20">
+          <Lifecycle />
+        </Section>
+
+        {/* 6 — Example. The only demo surface on the page, and the only place
+            the synthetic-portfolio disclaimer appears. */}
+        <Section id="example" className="pb-16 sm:pb-20">
           <SectionHeading
-            id="live-demo"
-            eyebrow="Live demonstration"
+            id="example"
+            eyebrow="Example"
             title="Ask a portfolio question. Get a governed answer."
-            intro="This is the Trakt Copilot experience, running against a synthetic equity release portfolio. Answers are computed by the same deterministic engine that serves the Trakt workspace and Microsoft 365 Copilot."
+            intro="Every answer comes from the deterministic engine that serves the workspace and Microsoft 365 Copilot. The portfolio is wholly synthetic, and the page accepts no uploads."
           />
           <div className="mt-8">
             <CopilotDemo meta={meta} />
           </div>
         </Section>
 
-        {/* E — Demo scope explanation */}
-        <Section id="demo-scope" className="pb-16 sm:pb-20">
-          <div className="mt-6 grid gap-4 lg:grid-cols-2">
-            <Card>
-              <h3 className="text-sm font-semibold text-ink-100">What this shows</h3>
-              <p className="mt-2 text-sm leading-relaxed text-ink-400">
-                This demonstration shows Trakt&apos;s conversational interface. In
-                production, the same governed data layer powers portfolio analytics,
-                reporting, monitoring and operational workflows across the
-                organisation.
-              </p>
-            </Card>
-            <Card>
-              <h3 className="text-sm font-semibold text-ink-100">What the data is</h3>
-              <p className="mt-2 text-sm leading-relaxed text-ink-400">
-                The demonstration uses a wholly synthetic portfolio. No client or
-                consumer information is displayed. The page accepts no uploads, returns
-                no exposure-level records and reaches no client environment.
-              </p>
-            </Card>
-          </div>
-        </Section>
-
-        {/* F — Omnichannel */}
-        <Section id="channels" className="pb-16 sm:pb-20">
-          <Omnichannel />
-        </Section>
-
-        {/* G — Capability stack */}
-        <Section id="capabilities" className="pb-16 sm:pb-20">
-          <CapabilityStack />
-        </Section>
-
-        {/* H — Connected operating model */}
-        <Section id="how-it-works" className="pb-16 sm:pb-20">
-          <OperatingModel />
-        </Section>
-
-        {/* I — Portfolio lifecycle */}
-        <Section id="lifecycle" className="pb-16 sm:pb-20">
-          <Lifecycle />
-        </Section>
-
-        {/* J — Governance */}
-        <Section id="governance" className="pb-16 sm:pb-20">
-          <Governance />
-        </Section>
-
-        {/* K — Final CTA */}
+        {/* 7 — Contact */}
         <Section id="book-a-demo" className="pb-20 sm:pb-24">
           <div className="rounded-2xl border border-line bg-navy-900/70 p-6 sm:p-9">
             <div className="grid gap-9 lg:grid-cols-[1fr_1.05fr] lg:gap-12">
@@ -128,12 +91,9 @@ export default function Page() {
                   See Trakt applied to your operating model
                 </h2>
                 <p className="mt-4 text-[15px] leading-relaxed text-ink-300">
-                  We will demonstrate how Trakt can integrate with your existing
-                  portfolio data, reporting requirements and Microsoft 365 environment.
+                  We will demonstrate Trakt against your own portfolio data, reporting
+                  requirements and Microsoft 365 environment.
                 </p>
-                <a href="#overview" className={`${buttonStyles.secondary} mt-6`}>
-                  Watch the overview
-                </a>
               </div>
               <div>
                 <LeadForm />

@@ -14,13 +14,16 @@ test.describe("Trakt landing page", () => {
   test("loads with the proposition, navigation and both CTAs", async ({ page }) => {
     await expect(page).toHaveTitle(/Trakt \| Governed Portfolio Intelligence/);
     await expect(
-      page.getByRole("heading", { level: 1, name: /portfolio intelligence\. wherever you work\./i }),
+      page.getByRole("heading", {
+        level: 1,
+        name: /one governed portfolio dataset\. every book, every report\./i,
+      }),
     ).toBeVisible();
     await expect(
-      page.getByText(/turns fragmented portfolio data into trusted answers/i),
+      page.getByText(/normalises loan tapes, servicing extracts, valuations/i),
     ).toBeVisible();
     await expect(
-      page.getByText(/Microsoft 365 Copilot, Teams, the Trakt workspace or automated reporting/i),
+      page.getByText(/reconciled by construction rather than by comparison/i),
     ).toBeVisible();
     await expect(page.getByRole("link", { name: /explore the live demo/i })).toBeVisible();
     await expect(
@@ -30,13 +33,13 @@ test.describe("Trakt landing page", () => {
 
   test("the hero CTA takes the visitor to the demo", async ({ page }) => {
     await page.getByRole("link", { name: /explore the live demo/i }).click();
-    await expect(page).toHaveURL(/#live-demo$/);
-    await expect(page.locator("#live-demo")).toBeVisible();
+    await expect(page).toHaveURL(/#example$/);
+    await expect(page.locator("#example")).toBeVisible();
     await expect(page.getByText("Synthetic Demo Lender").first()).toBeVisible();
   });
 
   test("a suggested question returns an answer with metrics and provenance", async ({ page }) => {
-    const demo = page.locator("#live-demo");
+    const demo = page.locator("#example");
     await demo.scrollIntoViewIfNeeded();
 
     await demo.getByRole("button", { name: "Which regions have the highest exposure?" }).click();
@@ -47,11 +50,12 @@ test.describe("Trakt landing page", () => {
     await expect(demo.getByText("East Midlands").first()).toBeVisible();
     await expect(demo.getByText(/As at 30 November 2025/)).toBeVisible();
     await expect(demo.getByText("Synthetic portfolio", { exact: true })).toBeVisible();
-    await expect(demo.getByText(/11 of 12 questions remaining/)).toBeVisible();
+    // The cap is real but silent this early: it is not a meter.
+    await expect(demo.getByText(/questions remaining/)).toHaveCount(0);
   });
 
   test("a typed unsupported question is declined clearly, not guessed", async ({ page }) => {
-    const demo = page.locator("#live-demo");
+    const demo = page.locator("#example");
     await demo.scrollIntoViewIfNeeded();
 
     await demo.getByLabel(/ask a question/i).fill("How has the portfolio changed since last month?");
@@ -64,7 +68,7 @@ test.describe("Trakt landing page", () => {
   });
 
   test("the conversation can be reset", async ({ page }) => {
-    const demo = page.locator("#live-demo");
+    const demo = page.locator("#example");
     await demo.scrollIntoViewIfNeeded();
 
     await demo.getByRole("button", { name: "What is the current funded portfolio balance?" }).click();
@@ -75,7 +79,7 @@ test.describe("Trakt landing page", () => {
   });
 
   test("a report preview renders pages without offering a download", async ({ page }) => {
-    const demo = page.locator("#live-demo");
+    const demo = page.locator("#example");
     await demo.scrollIntoViewIfNeeded();
 
     await demo.getByRole("button", { name: /generate the latest investor report/i }).click();
@@ -93,42 +97,59 @@ test.describe("Trakt landing page", () => {
     await expect(page.locator('a[href*=".pptx"], a[href*=".csv"], a[href*="blob.core"]')).toHaveCount(0);
   });
 
-  test("all eight capability areas are shown", async ({ page }) => {
+  test("six capabilities are shown, led by multi-source ingestion", async ({ page }) => {
     const capabilities = page.locator("#capabilities");
     await capabilities.scrollIntoViewIfNeeded();
 
-    for (const name of [
-      "Portfolio Integration",
-      "Portfolio Analytics",
-      "Management Reporting",
-      "Investor Reporting",
-      "Regulatory Reporting",
-      "Governance and Audit",
-      "Portfolio Monitoring",
-      "Omnichannel Intelligence",
-    ]) {
+    const names = [
+      "Multi-source portfolio ingestion",
+      "Portfolio analytics and monitoring",
+      "Management reporting",
+      "Investor reporting",
+      "Regulatory reporting",
+      "Governance and audit",
+    ];
+    for (const name of names) {
       await expect(capabilities.getByRole("heading", { name, level: 3 })).toBeVisible();
     }
+    await expect(capabilities.getByRole("heading", { level: 3 })).toHaveCount(names.length);
+
+    // The differentiator leads, and says what no LLM wrapper can.
+    await expect(capabilities).toContainText(/each reportable on its own and in aggregate/i);
+
+    // "Illustrative capabilities" hedged every tile; it is gone.
+    await expect(capabilities.getByText(/illustrative/i)).toHaveCount(0);
   });
 
-  test("the four delivery channels and the operating model are explained", async ({ page }) => {
+  test("delivery modes separate what ships from what is planned", async ({ page }) => {
+    const delivery = page.locator("#delivery");
+    await delivery.scrollIntoViewIfNeeded();
+
+    await expect(delivery.getByText("Available today")).toBeVisible();
     for (const name of [
+      "Managed service",
+      "Trakt Agent workspace",
       "Microsoft 365 Copilot and Teams",
-      "Trakt Workspace",
-      "Automated Delivery",
     ]) {
-      await expect(page.locator("#channels").getByRole("heading", { name, level: 3 })).toBeVisible();
+      await expect(delivery.getByRole("heading", { name, level: 3 })).toBeVisible();
     }
-    // The declarative agent is the Teams claim; no standalone bot is implied.
-    await expect(page.locator("#channels")).toContainText(/declarative agent/i);
+
+    // Roadmap is labelled as roadmap. Neither item is a shipped route today:
+    // both are reserved channels in trakt_core/context.py.
+    await expect(delivery.getByText("Roadmap")).toBeVisible();
+    for (const name of ["Enterprise agent deployment", "Agent-to-agent integration"]) {
+      await expect(delivery.getByRole("heading", { name, level: 3 })).toBeVisible();
+    }
+
+    // No timer trigger or cron exists in the repository, so nothing claims
+    // "scheduled" delivery as a platform capability.
+    await expect(delivery).not.toContainText(/scheduled/i);
+    await expect(delivery).toContainText(/calculated once and distributed/i);
 
     const model = page.locator("#how-it-works");
     await expect(model.getByText("Source data and documents")).toBeVisible();
     await expect(model.getByText("Trakt governed data layer")).toBeVisible();
     await expect(model.getByText("Analytics and business rules")).toBeVisible();
-    await expect(
-      model.getByText(/calculates the answer once, governs it centrally/i),
-    ).toBeVisible();
   });
 
   test("the lead form validates, then accepts a complete submission", async ({ page }) => {
@@ -141,7 +162,8 @@ test.describe("Trakt landing page", () => {
     await cta.getByLabel(/^name/i).fill("Alex Fenn");
     await cta.getByLabel(/work email/i).fill("alex@northbridge-credit.co.uk");
     await cta.getByLabel(/^company/i).fill("Northbridge Credit");
-    await cta.getByLabel(/^role/i).fill("Head of Portfolio");
+    // Role is optional — a complete submission does not need it.
+    await expect(cta.getByLabel(/^role/i)).not.toHaveAttribute("required", /.*/);
     await cta.getByRole("checkbox").check();
 
     // The minimum form-fill time is enforced server-side.
@@ -151,12 +173,21 @@ test.describe("Trakt landing page", () => {
     await expect(cta.getByRole("status")).toContainText(/thank you/i);
   });
 
-  test("the demo scope and synthetic-data notices are stated", async ({ page }) => {
+  test("the synthetic-data disclaimer is stated exactly once, in the example", async ({ page }) => {
+    const disclaimer = page.getByText(
+      /The portfolio is wholly synthetic, and the page accepts no uploads/,
+    );
+    await expect(disclaimer).toHaveCount(1);
+    await expect(page.locator("#example").getByText(
+      /The portfolio is wholly synthetic, and the page accepts no uploads/,
+    )).toBeVisible();
+
+    // Repeated reassurance reads as anxiety: the old wording appeared five times.
+    await expect(page.getByText(/uses a wholly synthetic portfolio/)).toHaveCount(0);
+
+    // Refusal is a differentiator, so it is stated rather than footnoted.
     await expect(
-      page.getByText(/This demonstration shows Trakt's conversational interface/),
-    ).toBeVisible();
-    await expect(
-      page.getByText(/The demonstration uses a wholly synthetic portfolio/).first(),
+      page.locator("#example").getByText(/Trakt declines what it cannot derive/),
     ).toBeVisible();
   });
 
@@ -198,9 +229,9 @@ test.describe("Trakt landing page", () => {
 
     // The figure in the hero is the same figure the demo answers with.
     await expect(page.locator("#product").getByText(totalBalanceDisplay).first()).toBeVisible();
-    await expect(page.locator("#live-demo")).toContainText(client);
-    await expect(page.locator("#live-demo")).toContainText(`${loanCount} exposures`);
-    await expect(page.locator("#live-demo")).toContainText(asOfDisplay);
+    await expect(page.locator("#example")).toContainText(client);
+    await expect(page.locator("#example")).toContainText(`${loanCount} exposures`);
+    await expect(page.locator("#example")).toContainText(asOfDisplay);
 
     // en-GB formatting throughout: pounds, thousands separators, no dollars.
     expect(totalBalanceDisplay).toMatch(/^£[\d,]+$/);
@@ -216,7 +247,7 @@ test.describe("Trakt landing page", () => {
       }
     });
 
-    const demo = page.locator("#live-demo");
+    const demo = page.locator("#example");
     await demo.scrollIntoViewIfNeeded();
     await demo.getByLabel(/ask a question/i).fill("what is the weighted average ltv");
     await demo.getByRole("button", { name: /ask trakt/i }).click();
@@ -281,7 +312,7 @@ test.describe("Trakt landing page", () => {
     page.on("pageerror", (error) => errors.push(String(error)));
 
     await page.goto("/");
-    const demo = page.locator("#live-demo");
+    const demo = page.locator("#example");
     await demo.scrollIntoViewIfNeeded();
     await demo.getByRole("button", { name: "Which regions have the highest exposure?" }).click();
     await expect(demo.getByText(/is the largest regional exposure at/i)).toBeVisible();

@@ -31,6 +31,9 @@ type Turn =
 let turnCounter = 0;
 const nextTurnId = () => `turn-${(turnCounter += 1)}`;
 
+/** Questions remaining at which the session counter becomes visible. */
+const COUNTER_VISIBLE_FROM = 3;
+
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const response = await fetch(url, {
     method: "POST",
@@ -202,9 +205,7 @@ export function CopilotDemo({ meta }: { meta: DemoMetaResponse }) {
 
         {!started ? (
           <p className="mb-4 max-w-2xl text-sm leading-relaxed text-ink-300">
-            {meta.scope.clientDescription} Ask a question below, or choose one of the
-            suggestions — every answer is computed by Trakt&apos;s deterministic engine
-            from this portfolio&apos;s governed dataset.
+            {meta.scope.clientDescription}
           </p>
         ) : null}
 
@@ -255,10 +256,16 @@ export function CopilotDemo({ meta }: { meta: DemoMetaResponse }) {
           </button>
         </form>
 
-        <p className="mt-2 text-[11px] text-ink-500">
-          {remaining} of {meta.limits.questionsPerSession} questions remaining in this
-          demonstration session.
-        </p>
+        {/* The session cap is real and server-enforced, but a counter running
+            from the first question reads as metering. It stays silent until the
+            visitor is nearly at the limit, which is the only point at which the
+            number is of any use to them. */}
+        {remaining <= COUNTER_VISIBLE_FROM ? (
+          <p className="mt-2 text-[11px] text-ink-500">
+            {remaining} of {meta.limits.questionsPerSession} questions remaining in this
+            demonstration session.
+          </p>
+        ) : null}
 
         <div className="mt-5">
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-400">
@@ -271,7 +278,9 @@ export function CopilotDemo({ meta }: { meta: DemoMetaResponse }) {
                   type="button"
                   disabled={busy || outOfQuestions}
                   onClick={() => onSuggested(question.id, question.label)}
-                  className="rounded-full border border-line bg-navy-850 px-3.5 py-1.5 text-xs text-ink-200 transition-colors hover:border-peri-500 hover:text-ink-100 disabled:opacity-50"
+                  /* Left-aligned: centred text in a pill wraps raggedly at phone
+                     width and turns nine suggestions into a wall. */
+                  className="rounded-full border border-line bg-navy-850 px-3.5 py-1.5 text-left text-xs text-ink-200 transition-colors hover:border-peri-500 hover:text-ink-100 disabled:opacity-50"
                 >
                   {question.label}
                 </button>
@@ -289,7 +298,7 @@ export function CopilotDemo({ meta }: { meta: DemoMetaResponse }) {
                   type="button"
                   disabled={busy}
                   onClick={() => requestReport(action.id, action.label)}
-                  className="rounded-full border border-peri-500/50 bg-peri-400/10 px-3.5 py-1.5 text-xs font-medium text-peri-200 transition-colors hover:bg-peri-400/20 disabled:opacity-50"
+                  className="rounded-full border border-peri-500/50 bg-peri-400/10 px-3.5 py-1.5 text-left text-xs font-medium text-peri-200 transition-colors hover:bg-peri-400/20 disabled:opacity-50"
                 >
                   {action.label}
                 </button>
@@ -297,24 +306,33 @@ export function CopilotDemo({ meta }: { meta: DemoMetaResponse }) {
             ))}
           </ul>
 
+          {/* Refusal is the differentiator against every LLM wrapper in this
+              market, so it is stated rather than footnoted. */}
           {meta.exampleUnsupported.length > 0 ? (
-            <p className="mt-4 text-[11px] leading-relaxed text-ink-500">
-              Trakt declines what it cannot derive. Try{" "}
-              {meta.exampleUnsupported.map((example, index) => (
-                <span key={example.id}>
-                  {index > 0 ? " or " : ""}
-                  <button
-                    type="button"
-                    disabled={busy || outOfQuestions}
-                    onClick={() => onSuggested(example.id, example.label)}
-                    className="underline decoration-dotted underline-offset-2 hover:text-ink-300 disabled:opacity-50"
-                  >
-                    “{example.label}”
-                  </button>
-                </span>
-              ))}{" "}
-              to see how.
-            </p>
+            <div className="mt-5 border-t border-line-soft pt-4">
+              <p className="text-[15px] font-semibold text-mint-400">
+                Trakt declines what it cannot derive.
+              </p>
+              <p className="mt-1.5 text-sm leading-relaxed text-ink-400">
+                Try{" "}
+                {meta.exampleUnsupported.map((example, index) => (
+                  <span key={example.id}>
+                    {index > 0 ? " or " : ""}
+                    <button
+                      type="button"
+                      disabled={busy || outOfQuestions}
+                      onClick={() => onSuggested(example.id, example.label)}
+                      /* Inline in a sentence: a button centres its own wrapped
+                         lines by default, which reads as ragged at phone width. */
+                      className="text-left underline decoration-dotted underline-offset-2 hover:text-ink-200 disabled:opacity-50"
+                    >
+                      “{example.label}”
+                    </button>
+                  </span>
+                ))}{" "}
+                to see how.
+              </p>
+            </div>
           ) : null}
         </div>
       </div>

@@ -124,9 +124,9 @@ Consequences, all of them deliberate:
 ## 8. What does not exist in the repository
 
 * **No demo video asset.** No `.mp4`/`.webm`/`.mov` anywhere, and no hosted video
-  URL in any config. The page therefore ships a documented placeholder video
-  component (`DemoVideo.tsx`) that degrades to a static interface preview, with
-  the exact drop-in location documented in the README.
+  URL in any config. The page carries no video section at all — a placeholder
+  reading "the recorded walkthrough will appear here" tells a visitor the site is
+  unfinished. README § "Adding a product overview video" documents how to add one.
 * **No second reporting period** for the synthetic portfolio, so month-on-month
   movement, pipeline, funnel and forecast questions cannot be answered honestly.
   They are wired as *controlled unsupported* responses rather than fabricated.

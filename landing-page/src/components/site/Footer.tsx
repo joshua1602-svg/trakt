@@ -13,11 +13,6 @@ export function Footer() {
             private-credit managers, servicing businesses and securitisation
             participants.
           </p>
-          <p>
-            The demonstration on this page uses a wholly synthetic portfolio. No
-            client or consumer information is displayed, and no data is accepted from
-            visitors.
-          </p>
           <p>© {new Date().getFullYear()} Trakt. All rights reserved.</p>
         </div>
       </div>
