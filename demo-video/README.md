@@ -54,7 +54,7 @@ Output lands in `demo-video/out/`:
 |---|---|
 | `trakt-demo-1080p.mp4` | 1920×1080, 30 fps, H.264 — the master |
 | `trakt-demo-square.mp4` | 1080×1080 — the LinkedIn and email variant |
-| `stills/trakt-demo-frame-{800,1500,2100}.png` | the three frames for the outbound email body |
+| `stills/trakt-demo-frame-{700,1420,2100}.png` | the three frames for the outbound email body |
 | `stills/review/*.png` | twenty-four frames for a human to check before publishing — one at the midpoint of every beat, not just every scene |
 | `voiceover-script.md` | narration script with per-scene timings and pace |
 | `captions.srt` / `captions.vtt` | subtitles matching the burned-in captions exactly |
@@ -80,12 +80,14 @@ scene component:
 
 | Scene | Beat | Scene frames | What is on screen |
 |---|---|---|---|
-| S2 | the clock | 0–120 | `41:20` counting up, then handing over to a corner stamp |
-| S2 | what arrives | 120–270 | five artefacts, five owners, three reporting cycles |
-| S2 | the receipt | 270–420 | six counts from the first run, and the one referred item |
-| S2 | what comes out | 420–480 | loan level, portfolio level, sponsor level |
+| S2 | the clock | 0–114 | `41:20` counting up, then handing over to a corner stamp |
+| S2 | the funnel | 114–294 | five artefact tiles converging into one governed band |
+| S2 | the receipt | 294–426 | six counts from the first run, and the one referred item |
+| S2 | what comes out | 426–480 | loan level, portfolio level, sponsor level |
 | S3 | consolidation | 0–300 | three portfolio lanes, then **sponsor** scope: £2.81bn / 15,215 |
 | S3 | the platform figure | 300–780 | back to **platform** scope: £1.96bn, six outputs, 33/33 |
+| S4 | the three panels | 0–312 | artifact drop, Copilot thread, workspace query and chart |
+| S4 | the payload | 312–510 | one balance, three panels, one baseline, one frame |
 
 `src/timeline.ts` is the single source for scene lengths, captions and narration. The
 composition, the burned-in captions, the subtitle files and the voice-over script are
@@ -133,6 +135,14 @@ value proven in three places, which is the argument of the scene.
 
 `flag` (amber) stays locked to S2's referred-for-review beat and S1's failed connection.
 Nowhere else, and the lint asserts the count.
+
+**Nothing renders below 22px.** `theme.minFontSize` is the floor, and it is enforced at
+render time rather than by review: `<Figure>`, `<Body>`, `<Stamp>`, `<Label>`, `<Claim>`
+and `<Headline>` all throw on a resolved size beneath it, in whichever layout is
+rendering. A lint cannot see through a `scale` prop and a layout multiplier to the size
+that reaches the screen; the component can. **The fix for an overflow is to cut content,
+never to scale the type down** — every cut this rule has forced is listed at the end of
+this file.
 
 **The mono role is semantic.** If a figure came out of the pipeline — a balance, a
 count, an LTV, a field name, a portfolio code, a filename, a timestamp — it is set in
@@ -354,9 +364,21 @@ The storyboard's twelve items. Ten are mechanised; two need eyes.
   markers to cut a licensed track to, and nothing in the picture depends on a cue.
 - **The narration is a script, not a track.** `out/voiceover-script.md` is written to
   sit inside each scene at ~150 words per minute; recording it is a separate job.
-- **The Copilot and workspace panels in S4 are silhouettes, not screens.** They are
-  reduced to three elements each, by design — recognisable shapes, not readable UI. The
-  action names and the regional split in them are real.
+- **The Microsoft 365 Copilot panel carries a wordmark, not the app icon.** Microsoft
+  Legal states that "our logos, app and product icons, illustrations, photographs,
+  videos, and designs can never be used without an express license"
+  ([trademark and brand guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks)),
+  and this project holds none. The panel therefore leads with the product NAME set in the
+  body face at full contrast, with the trademark attribution in the result band beneath.
+  A test fails the build if an `<Img>` or a `public/brand/` asset appears in that scene,
+  or if any caption or narration line abbreviates the name. If a licence is obtained, the
+  asset drops into `public/brand/` and renders beside the wordmark.
+- **The S4 panel content is representative, not a screen recording.** The chat thread and
+  the workspace query are composed in the film's own type system rather than captured
+  from a running product. Everything numeric in them is real: the Copilot answer is
+  condensed from the recorded turn in `demo_metrics.json` and a test holds it to that
+  recording, the artifact filenames are the ones the run wrote, and the four bars are the
+  actual regional split.
 - **One production configuration gap is worked around, not fixed.**
   `config/system/enum_mapping.yaml` maps `collateral_type` onto property-type codes
   (`R1`/`R2`/`C1`/`C2`) that the auth.099.001.04 `CollTp` enumeration does not accept,
@@ -365,3 +387,37 @@ The storyboard's twelve items. Ten are mechanised; two need eyes.
   codes the XSD itself enumerates and passes it through the projector's own
   `--enum-mapping` argument. Production configuration is untouched. The underlying gap
   is real and worth fixing in its own change.
+
+
+---
+
+## What was cut to reach the 22px floor
+
+`body`, `label` and `stamp` were set at 26/14/15 — a reading size for a document and an
+unreadable size for a film in an email client at part-screen. Raising them to 34/22/24
+broke seven layouts. Every one was fixed by removing content, and this is the complete
+list, so a future change can put something back deliberately rather than by accident.
+
+**Wide (1920×1080) — the master:**
+
+| Where | Cut |
+|---|---|
+| S2, the funnel | The `owner` column. Five rows of title/format/owner/frequency became five tiles of title and `format · frequency` |
+| S3, artifact cards | The three-column grid gained width per card (380 → 560) and each card lost its second and third meta facts to two short lines |
+| S3, the platform beat | The six cards now CLEAR before the reconciliation figure arrives instead of sitting above it — at the larger type the grid reaches within 20px of the caption plate |
+| S4, the Copilot panel | "· deterministic MI engine" from the grounding stamp. It wrapped, and the result band says it three inches below |
+| S4, the workspace panel | The three-region prose answer became one region. The four bars beneath carry all four |
+| S1 caption, S1/S2/S3/S4 narration | Trimmed to fit the 175 wpm ceiling after the recut |
+
+**Square (1080×1080) — the LinkedIn and email variant, cut harder:**
+
+| Where | Cut |
+|---|---|
+| S2, the funnel | The five tiles stack into a column instead of a row. Five 34px titles across 1,080px is not a row, it is five overflowing boxes |
+| S3, the lanes | The `status` column ("Sponsored · sold"). The balance must be 0.36 of the `stat` token to clear the floor, and four columns no longer fit; the status line beneath the rule already says it |
+| S3, artifact cards | Six cards → **four**, in a 2×2, one meta line each. The four kept preserve all three scopes, so the prefixes still make their point |
+| S4, the panels | **All three panels' content** — the artifact list, the chat thread and the chart. At 24px mono a filename is 400px wide and a square panel is 330px. The square crop shows channel, use line and figure |
+| S4, the result band | The month's movement. Three stacked panels plus a two-line trademark notice leave the band ~50px, and between the movement and the three use lines, the use lines are what a scrolling viewer needs |
+
+The square cuts are the reason the acceptance criteria are checked against the 1920×1080
+master. The square crop is a scroll-stopper; the master is the film.

@@ -11,26 +11,28 @@
  * The scene never raises the objection either. A line rebutting it would keep mapping as
  * the topic.
  *
- * What replaces it is what actually arrives: five artefact types, from five owners, on
- * three reporting cycles. Nobody looking at a trustee's quarterly PDF beside a servicer's
- * monthly CSV thinks "column matching". Showing it is stronger than arguing it, so the
- * beat is uncaptioned and unexplained.
+ * What replaces it is a FUNNEL. Five artefact types enter across the top of the frame,
+ * hold, then converge inward and downward into a single governed band. Five rows stacked
+ * in a list read as a list; five tiles collapsing into one band read as a transformation,
+ * which is the actual claim. Nobody looking at a warehouse agreement beside a monthly
+ * cash-flow workbook thinks "column matching". Showing it is stronger than arguing it, so
+ * the beat is uncaptioned and unexplained.
  *
  * Mapping does appear — once, as six words in the receipt strip, alongside the other
  * things the run produced. That is the correct weight for it.
  *
- * Beats: the clock (120) · what arrives (150) · the receipt (150) · what comes out (60).
+ * Beats: the clock (114) · the funnel (180) · the receipt (132) · what comes out (54).
  */
 
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame } from "remotion";
 
-import { ONBOARDING_HOURS } from "../claims";
+import { ARRIVING_ARTEFACTS, FUNNEL_CLAIM, ONBOARDING_HOURS } from "../claims";
 import {
   Body,
+  Claim,
   Counter,
   Enter,
-  Headline,
   Label,
   Panel,
   Rule,
@@ -40,7 +42,6 @@ import {
   useIsSquare,
 } from "../components/kit";
 import {
-  ARRIVALS,
   ASSERTIONS,
   ARTEFACTS,
   CURRENT_PERIOD,
@@ -71,44 +72,68 @@ const REFERRAL_LINES = [
 ];
 
 /**
- * One arriving cut: what it is, then format, owner and frequency.
+ * One arriving artefact, as a tile that will later collapse into the band.
  *
- * The title is set in the BODY face, not the data face. Two reasons, and the second is
- * the one that matters: an artefact's name is not a computed value, so mono would be
- * wrong under the film's own rule; and five rows of 15px monospace is a table a viewer
- * skips. Whether these five rows are read is the whole beat — if they are not, the scene
- * has an unsupported claim over an unreadable list. So the title carries the weight and
- * the three metadata columns stay in the data face beside it, exactly as an artifact
- * card is arranged.
+ * The title is set in the BODY face, not the data face: an artefact's name is not a
+ * computed value, so mono would be wrong under the film's own rule, and a tile whose
+ * title a viewer skips is a tile that proves nothing. Format and frequency stay in the
+ * data face beneath it.
+ *
+ * `converge` runs 0 -> 1 across the collapse. The tile slides toward the centre of the
+ * row and down toward the band, shrinking and fading as it goes, so five things
+ * visibly become one thing.
  */
-const ArrivalRow: React.FC<{
+const ArtefactTile: React.FC<{
   at: number;
   index: number;
+  /** Signed offset from the centre of the run, in tile-plus-gap units. */
+  offset: number;
+  pitch: number;
+  converge: number;
+  /** Square stacks the five tiles into a column: five 34px titles across 1080px is not a
+   *  row, it is five overflowing boxes. The collapse then runs vertically. */
+  vertical: boolean;
   title: string;
   format: string;
-  owner: string;
   frequency: string;
-}> = ({ at, index, title, format, owner, frequency }) => {
-  const isSquare = useIsSquare();
+}> = ({ at, index, offset, pitch, converge, vertical, title, format, frequency }) => {
+  const slide = -offset * pitch * converge;
   return (
-    <Enter at={at} index={index * 2}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: theme.motion.base }}>
-        <Body
+    <Enter at={at} index={index * 3} style={{ flex: 1, minWidth: 0 }}>
+      <div
+        style={{
+          transform:
+            (vertical
+              ? `translate(0px, ${slide + 60 * converge}px) `
+              : `translate(${slide}px, ${140 * converge}px) `) +
+            `scale(${1 - 0.4 * converge})`,
+          opacity: 1 - converge,
+        }}
+      >
+        <Panel
           style={{
-            width: isSquare ? 300 : 400,
-            flexShrink: 0,
-            fontSize: theme.type.body.fontSize * (isSquare ? 0.72 : 0.86),
+            height: vertical ? undefined : TILE_HEIGHT,
+            padding: theme.motion.base,
+            display: "flex",
+            flexDirection: vertical ? "row" : "column",
+            alignItems: vertical ? "baseline" : undefined,
+            justifyContent: "space-between",
+            gap: theme.motion.base,
           }}
         >
-          {title}
-        </Body>
-        <Stamp style={{ width: isSquare ? 60 : 70, flexShrink: 0 }}>{format}</Stamp>
-        <Stamp style={{ width: isSquare ? 220 : 260, flexShrink: 0 }}>{owner}</Stamp>
-        <Stamp>{frequency}</Stamp>
+          <Body>{title}</Body>
+          <Stamp>{`${format} · ${frequency}`}</Stamp>
+        </Panel>
       </div>
     </Enter>
   );
 };
+
+/** Tile height in the wide row. Fixed, so five unequal titles stay one row. */
+const TILE_HEIGHT = 150;
+
+/** Rendered height of a square tile plus its gap — the distance it travels per step. */
+const TILE_PITCH_SQUARE = 100;
 
 /** One level of the granularity claim. */
 const GranularityRow: React.FC<{ at: number; index: number; level: string; detail: string }> = ({
@@ -141,12 +166,18 @@ export const S2Onboard: React.FC = () => {
   );
 
   // Beat boundaries, scene-relative.
-  const CLOCK_HANDOVER = 108;
-  const ARRIVALS_AT = 120;
-  const ARRIVALS_CLAIM_AT = 210;
-  const RECEIPT_AT = 270;
-  const REFERRAL_AT = 330;
-  const GRANULARITY_AT = 420;
+  const CLOCK_HANDOVER = 102;
+  // --- Beat 2 · the funnel (114-294) --------------------------------------
+  const TILES_AT = 114;
+  /** The collapse. Tiles have been up ~40 frames by here, which is long enough to read
+   *  five titles and short enough that the frame has not gone static. */
+  const CONVERGE_AT = 198;
+  const BAND_AT = 222;
+  const FUNNEL_CLAIM_AT = 252;
+  // --- Beats 3 and 4 -------------------------------------------------------
+  const RECEIPT_AT = 294;
+  const REFERRAL_AT = 342;
+  const GRANULARITY_AT = 426;
 
   const clockOpacity = interpolate(
     frame,
@@ -160,27 +191,36 @@ export const S2Onboard: React.FC = () => {
     [0, 1],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
-  const arrivalsOpacity = interpolate(
+  /** 0 -> 1 across the collapse. Drives every tile's transform, so they move together. */
+  const converge = interpolate(frame, [CONVERGE_AT, CONVERGE_AT + theme.motion.slow], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const tilesOpacity = interpolate(frame, [TILES_AT, TILES_AT + theme.motion.base], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const bandOpacity = interpolate(
     frame,
-    [ARRIVALS_AT, ARRIVALS_AT + theme.motion.base, 252, 270],
+    [BAND_AT, BAND_AT + theme.motion.base, RECEIPT_AT - 18, RECEIPT_AT],
     [0, 1, 1, 0],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
-  const arrivalsClaimOpacity = interpolate(
+  const funnelClaimOpacity = interpolate(
     frame,
-    [ARRIVALS_CLAIM_AT, ARRIVALS_CLAIM_AT + theme.motion.base, 252, 270],
+    [FUNNEL_CLAIM_AT, FUNNEL_CLAIM_AT + theme.motion.base, RECEIPT_AT - 18, RECEIPT_AT],
     [0, 1, 1, 0],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
   const receiptOpacity = interpolate(
     frame,
-    [RECEIPT_AT, RECEIPT_AT + theme.motion.base, 402, 420],
+    [RECEIPT_AT, RECEIPT_AT + theme.motion.base, GRANULARITY_AT - 18, GRANULARITY_AT],
     [0, 1, 1, 0],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
   const referralOpacity = interpolate(
     frame,
-    [REFERRAL_AT, REFERRAL_AT + theme.motion.base, 402, 420],
+    [REFERRAL_AT, REFERRAL_AT + theme.motion.base, GRANULARITY_AT - 18, GRANULARITY_AT],
     [0, 1, 1, 0],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
@@ -233,47 +273,88 @@ export const S2Onboard: React.FC = () => {
         <Stamp>{`${hoursMinutes(ONBOARDING_HOURS)} HRS · DATA RECEIVED → GOVERNED OUTPUT`}</Stamp>
       </div>
 
-      {/* Beat 2 · what arrives. Five formats, five owners, three frequencies. */}
-      <AbsoluteFill
+      {/* Beat 2 · the funnel. Five artefacts in, one governed dataset out.
+
+          The tiles are laid out as a normal flex row and then TRANSFORMED inward, rather
+          than being absolutely positioned and animated to a target. The row keeps them
+          equal-width and evenly pitched for free, and the transform is what makes the
+          collapse read — five things arriving at one place, not five things fading. */}
+      <div
         style={{
-          alignItems: "center",
-          justifyContent: "center",
-          paddingBottom: geometry.captionReserve + (isSquare ? 100 : 110),
-          opacity: arrivalsOpacity,
+          position: "absolute",
+          top: isSquare ? geometry.edge + theme.motion.slow * 2 : 130,
+          left: geometry.gutter,
+          right: geometry.gutter,
+          display: "flex",
+          flexDirection: isSquare ? "column" : "row",
+          gap: theme.motion.quick,
+          opacity: tilesOpacity,
         }}
       >
-        <div style={{ display: "flex", flexDirection: "column", gap: theme.motion.quick }}>
-          {ARRIVALS.map((arrival, i) => (
-            <ArrivalRow
-              key={arrival.title}
-              at={ARRIVALS_AT}
-              index={i}
-              title={arrival.title}
-              format={arrival.format}
-              owner={arrival.owner}
-              frequency={arrival.frequency}
-            />
-          ))}
-        </div>
-      </AbsoluteFill>
+        {ARRIVING_ARTEFACTS.map((artefact, i) => (
+          <ArtefactTile
+            key={artefact.title}
+            at={TILES_AT}
+            index={i}
+            offset={i - (ARRIVING_ARTEFACTS.length - 1) / 2}
+            pitch={
+              isSquare
+                ? TILE_PITCH_SQUARE
+                : (geometry.width - geometry.gutter * 2 + theme.motion.quick) /
+                  ARRIVING_ARTEFACTS.length
+            }
+            vertical={isSquare}
+            converge={converge}
+            title={artefact.title}
+            format={artefact.format}
+            frequency={artefact.frequency}
+          />
+        ))}
+      </div>
+
+      {/* What the funnel resolves into. */}
+      <div
+        style={{
+          position: "absolute",
+          top: isSquare ? geometry.height * 0.36 : 330,
+          left: geometry.gutter,
+          right: geometry.gutter,
+          opacity: bandOpacity,
+        }}
+      >
+        <Panel
+          style={{
+            padding: geometry.gutter / 2,
+            display: "flex",
+            flexDirection: "column",
+            gap: theme.motion.quick,
+          }}
+        >
+          <Label tone="signal" style={{ opacity: theme.signalSoftOpacity }}>
+            Governed portfolio dataset
+          </Label>
+          <Rule />
+          <Stamp tone="paper" style={{ overflowWrap: "anywhere" }}>
+            {`${count(Number(tape?.rows))} rows · ${count(Number(tape?.columns))} canonical ` +
+              "fields · six provenance fields on every row"}
+          </Stamp>
+        </Panel>
+      </div>
 
       <div
         style={{
           position: "absolute",
           left: 0,
           right: 0,
-          bottom: geometry.captionReserve + (isSquare ? 10 : 40),
+          top: isSquare ? geometry.height * 0.5 : 500,
+          bottom: geometry.captionReserve,
           display: "flex",
+          alignItems: "center",
           justifyContent: "center",
-          opacity: arrivalsClaimOpacity,
+          opacity: funnelClaimOpacity,
         }}
       >
-        {/* HEADLINE, not display. The display size is for a line that owns the whole
-            frame; this one sits under five rows of evidence and has to be the smaller
-            voice of the two, or the slogan buries the argument it is drawing. */}
-        <Headline measure={isSquare ? 0.94 : 0.66}>
-          Disparate portfolio cuts in. One governed portfolio out.
-        </Headline>
+        <Claim measure={isSquare ? 0.92 : 0.78}>{FUNNEL_CLAIM}</Claim>
       </div>
 
       {/* Beat 3 · the receipt, with the referred item beneath it.

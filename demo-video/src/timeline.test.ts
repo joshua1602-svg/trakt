@@ -29,7 +29,6 @@ import {
   totalFrames,
 } from "./timeline";
 import {
-  ARRIVALS,
   ARTEFACTS,
   ASSERTIONS,
   CURRENT_PERIOD,
@@ -52,7 +51,11 @@ import {
   ONBOARDING_CLAIM_HOURS,
   ONBOARDING_HOURS,
   OPENING_LINE,
-  STATED_ARRIVAL,
+  ARRIVING_ARTEFACTS,
+  COPILOT_ASK,
+  FUNNEL_CLAIM,
+  MICROSOFT_CHANNEL,
+  MS_TRADEMARK_NOTICE,
 } from "./claims";
 import { count, elapsed, hoursMinutes, money, percent, signedMoney } from "./format";
 import theme from "./theme";
@@ -70,6 +73,20 @@ const SCENE_FILES = [
 
 const sceneSource = (name: string): string =>
   readFileSync(join(__dirname, "scenes", `${name}.tsx`), "utf8");
+
+/**
+ * A scene's source with comments removed.
+ *
+ * Structural assertions below count JSX elements. The scene headers explain the rules by
+ * naming those same elements — S4's header says the three figures share one `<Counter>`,
+ * and describes the `<Img>` that a licensed Microsoft asset would need — so a raw count
+ * fails on the prose describing the thing it is counting. Blanking comments to spaces
+ * rather than deleting them keeps character offsets, so `indexOf` stays meaningful.
+ */
+const sceneCode = (name: string): string =>
+  sceneSource(name)
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
+    .replace(/^\s*\/\/.*$/gm, "");
 
 /**
  * The literal text a scene puts on screen, and nothing else.
@@ -220,9 +237,36 @@ describe("brand tokens", () => {
     expect(theme.type.display.fontSize).toBe(128);
     expect(theme.type.headline.fontSize).toBe(64);
     expect(theme.type.stat.fontSize).toBe(88);
-    expect(theme.type.body.fontSize).toBe(26);
-    expect(theme.type.label.fontSize).toBe(14);
-    expect(theme.type.stamp.fontSize).toBe(15);
+    expect(theme.type.body.fontSize).toBe(34);
+    expect(theme.type.label.fontSize).toBe(22);
+    expect(theme.type.stamp.fontSize).toBe(24);
+  });
+
+  it("puts every declared size at or above the legibility floor", () => {
+    expect(theme.minFontSize).toBe(22);
+    for (const [name, spec] of Object.entries(theme.type)) {
+      expect(spec.fontSize, name).toBeGreaterThanOrEqual(theme.minFontSize);
+    }
+    // And the floor survives the square crop, where display and stat are scaled down.
+    expect(theme.type.display.fontSize * theme.layout.square.displayScale).toBeGreaterThanOrEqual(
+      theme.minFontSize,
+    );
+    expect(theme.type.headline.fontSize * theme.layout.square.displayScale).toBeGreaterThanOrEqual(
+      theme.minFontSize,
+    );
+  });
+
+  it("throws at render time on anything beneath the floor", () => {
+    // The floor is only real if something fails. A lint cannot see through `scale` props
+    // and layout multipliers to the size that reaches the screen; the components can, so
+    // they check the resolved number and throw. This asserts that guard exists and is
+    // wired into every primitive that can put type on screen.
+    const kit = readFileSync(join(__dirname, "components", "kit.tsx"), "utf8");
+    expect(kit).toMatch(/const legible = \(size: number, where: string\): number => \{/);
+    expect(kit).toContain("if (size < theme.minFontSize)");
+    for (const where of ["Label", "Stamp", "Body", "Figure", "Claim", "Headline"]) {
+      expect(kit, where).toMatch(new RegExp(`(legible|checkedStyle)\\([^)]*"${where}"`, "s"));
+    }
   });
 
   it("puts tabular-nums on every mono size, or counters jitter", () => {
@@ -267,7 +311,7 @@ describe("delivery", () => {
   });
 
   it("exports the three still frames the outbound email uses", () => {
-    expect([...STILL_FRAMES]).toEqual([800, 1500, 2100]);
+    expect([...STILL_FRAMES]).toEqual([700, 1420, 2100]);
     for (const frame of STILL_FRAMES) {
       expect(frame).toBeLessThan(totalFrames());
     }
@@ -281,7 +325,7 @@ describe("delivery", () => {
   });
 
   it("lands each still inside the scene the storyboard intended", () => {
-    // 800 is deep in S2's referred-for-review hold; 1500 is S3's card fan-out;
+    // 700 is S2's governed band; 1500 is S3's card fan-out;
     // 2100 is S4's simultaneous payload. Those are the three beats worth an email.
     expect(STILL_FRAMES[0]).toBeGreaterThan(startOf("onboard"));
     expect(STILL_FRAMES[0]).toBeLessThan(startOf("dataset"));
@@ -371,16 +415,27 @@ describe("S2 · onboarded once", () => {
     expect(referred[0].note.length).toBeGreaterThan(40);
   });
 
-  it("shows five arriving cuts, from five owners, on more than one cycle", () => {
-    // The beat's argument is heterogeneity, and it only lands if the rows genuinely
-    // differ. If they collapse to one owner or one cycle there is nothing to look at.
-    expect(ARRIVALS).toHaveLength(5);
-    expect(new Set(ARRIVALS.map((a) => a.owner)).size).toBe(5);
-    expect(new Set(ARRIVALS.map((a) => a.frequency)).size).toBeGreaterThanOrEqual(2);
-    expect(new Set(ARRIVALS.map((a) => a.format)).size).toBeGreaterThanOrEqual(2);
-    // Four of the five are the demonstration's own; only the facility schedule is stated.
-    const stated = ARRIVALS.filter((a) => a.title === STATED_ARRIVAL.title);
-    expect(stated).toHaveLength(1);
+  it("funnels five artefacts, genuinely heterogeneous, into one band", () => {
+    // The beat's argument is heterogeneity collapsing into one thing, and it only lands
+    // if the five tiles genuinely differ. If they share a format and a cycle there is
+    // nothing to look at and the collapse proves nothing.
+    expect(ARRIVING_ARTEFACTS).toHaveLength(5);
+    expect(new Set(ARRIVING_ARTEFACTS.map((a) => a.title)).size).toBe(5);
+    expect(new Set(ARRIVING_ARTEFACTS.map((a) => a.format)).size).toBeGreaterThanOrEqual(3);
+    expect(new Set(ARRIVING_ARTEFACTS.map((a) => a.frequency)).size).toBeGreaterThanOrEqual(3);
+    // And the tiles must visibly converge — a transform driven by one shared value, not
+    // five independent fades. `converge` is that value; the tile applies it to translate
+    // AND scale, which is what makes five things read as arriving at one place.
+    const src = sceneCode("S2Onboard");
+    expect(src).toMatch(/const CONVERGE_AT = /);
+    expect(src).toMatch(/converge=\{converge\}/);
+    expect(src).toContain("const slide = -offset * pitch * converge;");
+    expect(src).toMatch(/scale\(\$\{1 - 0\.4 \* converge\}\)/);
+    expect(src).toContain("opacity: 1 - converge,");
+    // The band it resolves into, and the claim beneath it.
+    expect(src).toContain("Governed portfolio dataset");
+    expect(src).toContain("{FUNNEL_CLAIM}");
+    expect(FUNNEL_CLAIM).toMatch(/one governed dataset\.$/i);
   });
 
   it("shows the onboarding clock in hours, not on a stopwatch", () => {
@@ -519,7 +574,7 @@ describe("S1 · stated copy", () => {
 // --------------------------------------------------------------------------- //
 describe("S4 · three ways in", () => {
   it("gives every channel a plain-English use line", () => {
-    for (const label of ["Managed service", "Microsoft 365 Copilot", "MI Agent workspace"]) {
+    for (const label of ["Managed service", MICROSOFT_CHANNEL, "MI Agent workspace"]) {
       expect(CHANNEL_USE[label], label).toBeTruthy();
       // Plain English: no mono identifiers — no snake_case, no file extension, no
       // call syntax. A trailing full stop is a sentence, not an identifier.
@@ -528,26 +583,91 @@ describe("S4 · three ways in", () => {
     }
   });
 
-  it("precedes the Copilot product name with Microsoft, as the trademark rules require", () => {
-    expect(Object.keys(CHANNEL_USE)).toContain("Microsoft 365 Copilot");
+
+
+  it("gives every panel real content, not a stub", () => {
+    const src = sceneCode("S4Omnichannel");
+    // Panel 1: the three artefacts the run actually produced, named exactly.
+    for (const file of [
+      String(ARTEFACTS.regulatoryOutput.fileName),
+      String(ARTEFACTS.investorDeck.fileName),
+      String(ARTEFACTS.canonicalTape.fileName),
+    ]) {
+      expect(src, file).toContain(file);
+    }
+    expect(src).toContain("DELIVERED 07:00 · FIRST BUSINESS DAY");
+    // Panel 2: a chat thread — a question, a tool call, an answer on a light plate.
+    expect(src).toContain("{COPILOT_ASK}");
+    expect(src).toContain("Called ${COPILOT.actions[0]} ✓");
+    expect(src).toContain("backgroundColor: theme.color.paper");
+    expect(src).toContain("Funded balances up ");
+    expect(src).toContain("Grounded in Trakt");
+    // Panel 3: a query, an answer and four animated bars.
+    expect(src).toContain("Show funded balance by region.");
+    expect(src).toContain("SUMMARY.topRegions.slice(0, 4)");
+    expect(src).toMatch(/const BARS_AT = /);
+    expect(src).toMatch(/width: `\$\{\(region\.balance \/ largest\) \* 100 \* grow\}%`/);
+  });
+
+  it("condenses the Copilot answer without drifting from what the agent said", () => {
+    // The panel shows one sentence; the fixture holds the recorded turn. Every figure and
+    // phrase on screen has to appear in it, or the panel is putting words in the agent's
+    // mouth — which is the one thing a demonstration of a deterministic engine cannot do.
+    const recorded = COPILOT.answers
+      .map((a) => a.answer)
+      .join(" ")
+      .toLowerCase();
+    expect(recorded).toContain(money(MOVEMENT.delta.funded_balance ?? 0).toLowerCase());
+    expect(recorded).toContain(percent(SUMMARY.metrics.wa_ltv_points ?? 0, 1));
+    expect(recorded).toContain(
+      `completions in the ${MOVEMENT.primaryRegion?.region}`.toLowerCase(),
+    );
+    // And the question is stated copy, so it carries no figure to drift.
+    expect(COPILOT_ASK).not.toMatch(/[0-9]/);
+  });
+
+  it("carries a Microsoft identifier, in the only form the guidelines permit", () => {
+    // Microsoft Legal: "our logos, app and product icons, illustrations, photographs,
+    // videos, and designs can never be used without an express license." This project
+    // holds none, so the panel carries the product NAME as a wordmark and no icon.
+    expect(MICROSOFT_CHANNEL).toBe("Microsoft 365 Copilot");
+    // Microsoft first, name unaltered and unabbreviated.
+    expect(MICROSOFT_CHANNEL).toMatch(/^Microsoft /);
+    expect(MICROSOFT_CHANNEL).not.toMatch(/\bM365\b|\bMS\b|\bCopilot\b(?<!365 Copilot)/);
+    const src = sceneCode("S4Omnichannel");
+    expect(src).toContain("{ label: MICROSOFT_CHANNEL");
+    // No unlicensed asset may creep in later without this failing.
+    expect(src).not.toMatch(/<Img\b/);
+    expect(src).not.toMatch(/brand\/(copilot|microsoft|m365)/i);
+    // And the attribution is on screen with it.
+    expect(MS_TRADEMARK_NOTICE).toMatch(/trademarks of the microsoft group of companies/i);
+    expect(src).toContain("{MS_TRADEMARK_NOTICE}");
   });
 
   it("renders the three figures from ONE counter, so they cannot land on different frames", () => {
     // Simultaneity is the whole argument of the scene. It is guaranteed structurally:
     // the three panels come from a single `<Counter>` inside `CHANNELS.map(...)`, with a
     // single shared `at`. One element, three instances, identical inputs.
-    const src = readFileSync(join(__dirname, "scenes", "S4Omnichannel.tsx"), "utf8");
+    // Stronger than before: the payload is now a single JSX ELEMENT, defined once and
+    // rendered into all three columns. There is one <Counter> in the file and one
+    // PAYLOAD_AT, so the three figures are literally the same node three times over.
+    const src = sceneCode("S4Omnichannel");
     expect([...src.matchAll(/<Counter\b/g)]).toHaveLength(1);
     expect(src).toMatch(/at=\{PAYLOAD_AT\}/);
     expect([...src.matchAll(/const PAYLOAD_AT = /g)]).toHaveLength(1);
+    expect([...src.matchAll(/const payload = \(/g)]).toHaveLength(1);
+    expect([...src.matchAll(/\{payload\}/g)].length).toBeGreaterThanOrEqual(2);
     // And nothing may stagger them: no `index` or `i` in the payload's timing.
-    const payload = src.slice(src.indexOf("<Figure scale={FIGURE_SCALE}"));
-    expect(payload.slice(0, payload.indexOf("</Figure>"))).not.toMatch(/\bi\b|index/);
+    const payload = src.slice(src.indexOf("const payload = ("));
+    expect(payload.slice(0, payload.indexOf("</>"))).not.toMatch(/\bi\b|index/);
   });
 
   it("produces the same counter value in all three panels on every frame of the count", () => {
-    // The value-level proof, using the same spring the component uses.
-    const at = 300;
+    // The value-level proof, using the same spring the component uses — and reading the
+    // frame it starts on out of the scene, so a retime cannot leave this passing against
+    // a number the film no longer uses.
+    const at = Number(sceneCode("S4Omnichannel").match(/const PAYLOAD_AT = (\d+)/)?.[1]);
+    expect(at).toBeGreaterThan(0);
     const frames = theme.motion.slow;
     const total = SUMMARY.metrics.funded_balance ?? 0;
     const valueAt = (frame: number) =>
@@ -650,6 +770,16 @@ describe("terminology", () => {
     expect(hits).toEqual(["mapped"]);
     // And that one use is the receipt item.
     expect(sceneCopy("S2Onboard")).toContain("fields mapped");
+  });
+
+  it("never abbreviates the Microsoft product name anywhere a viewer can read it", () => {
+    // Microsoft's guidelines require the name unaltered and preceded by "Microsoft".
+    // The burned-in wordmark is checked in the S4 block; this covers the caption track
+    // and the narration, where "Copilot." on its own is the easy slip.
+    for (const match of filmCopy().matchAll(/\bCopilot\b/g)) {
+      const before = filmCopy().slice(Math.max(0, (match.index ?? 0) - 22), match.index);
+      expect(before, `bare "Copilot" at ${match.index}`).toMatch(/Microsoft 365 $/);
+    }
   });
 
   it("never rebuts the mapping objection — raising it would keep it the topic", () => {

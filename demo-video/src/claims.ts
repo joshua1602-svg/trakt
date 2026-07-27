@@ -40,24 +40,63 @@ export const MONTH_END_COST = "Five days of month-end. Every month. For every po
 export const OPENING_LINE = "You bought a back book. It didn't come with your data model.";
 
 /**
- * The one arriving cut the demonstration does not itself carry.
+ * The five artefacts a specialist lender's month-end actually runs on.
  *
- * Four of the five inputs S2 shows are real: three are the source schemas the generator
- * actually writes (`src/data/fixtures.ts` derives them from `SCHEMAS`), and the risk
- * limit schedule is the Schedule 8 document the concentration monitor genuinely reads.
- * A warehouse facility schedule is part of this buyer's month-end and is not in the
- * synthetic set, so it is declared here as stated copy rather than dressed up as data.
+ * STATED, not measured, and all five of them — which is a deliberate change from the
+ * previous version, where four rows were derived from the demonstration's own source
+ * schemas. The funnel is making a claim about the buyer's world, not about this
+ * synthetic portfolio: these are the artefact TYPES that arrive, in the buyer's own
+ * vocabulary, and dressing three of them up as fixture-derived would be claiming
+ * measurement for something that is really industry knowledge.
+ *
+ * The demonstration does carry three of them for real — the loan tape and the
+ * collateral tape as `origination_extract` / `servicer_account_extract` /
+ * `trustee_deal_extract`, and the covenant schedule as the Schedule 8 limits the
+ * concentration monitor reads. That is why the claim is safe to make. It is not why it
+ * is true, so it lives here.
+ *
+ * Three formats and three frequencies, not five and three: these five artefacts carry
+ * CSV, XLSX and PDF between them. The heterogeneity the beat is showing is real without
+ * inventing two more file types to reach a number.
  */
-export const STATED_ARRIVAL = {
-  title: "Warehouse facility schedule",
-  format: "XLSX",
-  owner: "funding counterparty",
-  frequency: "monthly",
-};
+export const ARRIVING_ARTEFACTS = [
+  { title: "Loan tape", format: "CSV", frequency: "monthly" },
+  { title: "Collateral tape", format: "CSV", frequency: "monthly" },
+  { title: "Cash flows", format: "XLSX", frequency: "monthly" },
+  { title: "Warehouse agreement", format: "PDF", frequency: "on change" },
+  { title: "Covenant schedule", format: "XLSX", frequency: "quarterly" },
+] as const;
+
+/** The line the funnel resolves into. */
+export const FUNNEL_CLAIM = "Every artifact your portfolio runs on. One governed dataset.";
+
+/**
+ * The Microsoft product name, exactly as Microsoft's trademark guidelines require it:
+ * "Microsoft" first, the product name unaltered and unabbreviated.
+ *
+ * Microsoft Legal states that "our logos, app and product icons, illustrations,
+ * photographs, videos, and designs can never be used without an express license", which
+ * this project does not hold — so S4's panel carries this wordmark, set in the body face,
+ * and no app icon. See the header of `src/scenes/S4Omnichannel.tsx`.
+ */
+export const MICROSOFT_CHANNEL = "Microsoft 365 Copilot";
+
+/** Attribution for the wordmark above. Rendered in S4's result band. */
+export const MS_TRADEMARK_NOTICE =
+  "MICROSOFT AND MICROSOFT 365 COPILOT ARE TRADEMARKS OF THE MICROSOFT GROUP OF COMPANIES";
+
+/**
+ * The question S4's Copilot panel shows.
+ *
+ * Stated, not measured: it is a person typing, so there is no fixture behind it. The
+ * ANSWER beneath it is condensed from the recorded turn in `demo_metrics.json`, and a
+ * test holds the condensation to what the agent actually said.
+ */
+export const COPILOT_ASK = "What changed versus last month?";
 
 /** Plain-English use lines for the three channels in S4, keyed by channel label. */
 export const CHANNEL_USE: Record<string, string> = {
   "Managed service": "You never log in.",
-  "Microsoft 365 Copilot": "Ask from where you already work.",
+  [MICROSOFT_CHANNEL]: "Ask from where you already work.",
   "MI Agent workspace": "Open it when you need to drill in.",
 };

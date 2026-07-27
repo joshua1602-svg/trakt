@@ -15,7 +15,6 @@ import artefactFixture from "../../public/fixtures/artefact_catalogue.json";
 import assertionFixture from "../../public/fixtures/assertion_report.json";
 import safetyFixture from "../../public/fixtures/safety_report.json";
 import manifestFixture from "../../public/fixtures/demo_manifest.json";
-import { STATED_ARRIVAL } from "../claims";
 
 // --------------------------------------------------------------------------- //
 // Shapes (only the fields the film reads are typed)
@@ -418,58 +417,6 @@ export const portfolioLanes = (): PortfolioLane[] => {
   }
   return lanes;
 };
-
-/**
- * What arrives, before anything is done to it.
- *
- * Five artefact types, five owners, three reporting cycles — which is the whole point of
- * the beat, and why it needs no caption. Four rows are read from the demonstration
- * itself: the three source schemas the generator writes, plus the risk limit schedule
- * the concentration monitor reads. The fifth is stated copy (see `src/claims.ts`).
- */
-export interface Arrival {
-  title: string;
-  format: string;
-  owner: string;
-  frequency: string;
-}
-
-const ARRIVAL_META: Record<string, { title: string; owner: string; frequency: string }> = {
-  origination_extract: {
-    title: "Origination extract",
-    owner: "internal system",
-    frequency: "monthly",
-  },
-  servicer_account_extract: {
-    title: "Servicer account extract",
-    owner: "third-party servicer",
-    frequency: "monthly",
-  },
-  trustee_deal_extract: {
-    title: "SPV1 trustee asset schedule",
-    owner: "deal trustee",
-    frequency: "quarterly",
-  },
-};
-
-export const ARRIVALS: Arrival[] = [
-  ...Object.entries(ARRIVAL_META).map(([schemaName, meta]) => {
-    if (!SCHEMAS[schemaName]) {
-      throw new Error(`No source schema ${schemaName} in the fixtures`);
-    }
-    return { ...meta, format: "CSV" };
-  }),
-  {
-    title: "Risk limit schedule",
-    format: "PDF",
-    owner: String(
-      (artefactFixture as unknown as Record<string, ArtefactEntry>).riskMonitor?.limitsSource ??
-        "facility agent",
-    ).replace(/ document$/, ""),
-    frequency: "quarterly",
-  },
-  STATED_ARRIVAL,
-];
 
 /** One portfolio's narrative record, by storyboard key ("A" | "B"). */
 export const portfolio = (key: string): PortfolioNarrative => {

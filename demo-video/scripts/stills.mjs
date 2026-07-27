@@ -25,7 +25,7 @@ const OUT = join(ROOT, "out", "stills");
 const REVIEW = join(OUT, "review");
 
 /** Kept in step with STILL_FRAMES in src/timeline.ts by a unit test. */
-const EMAIL_FRAMES = [800, 1500, 2100];
+const EMAIL_FRAMES = [700, 1420, 2100];
 
 /**
  * Review frames.
@@ -41,11 +41,12 @@ const REVIEW_FRAMES = [
   { frame: 210, name: "s1-03-midpoint" },
   { frame: 300, name: "s1-04-cost-anchor" },
   // S2 starts at 420. Beats: clock 0-120, arrivals 120-270, receipt 270-420, out 420-480.
-  { frame: 480, name: "s2-01-clock" },
-  { frame: 600, name: "s2-02-arrivals" },
-  { frame: 650, name: "s2-03-arrivals-claim" },
-  { frame: 730, name: "s2-04-receipt" },
-  { frame: 800, name: "s2-05-referral" },
+  // S2 starts at 420. Beats: clock 0-114, funnel 114-294, receipt 294-426, out 426-480.
+  { frame: 470, name: "s2-01-clock" },
+  { frame: 590, name: "s2-02-tiles" },
+  { frame: 640, name: "s2-03-converging" },
+  { frame: 700, name: "s2-04-band-and-claim" },
+  { frame: 800, name: "s2-05-receipt-and-referral" },
   { frame: 870, name: "s2-06-granularity" },
   // S3 starts at 900. Beats: lanes 0-210, sponsor 198-300, platform 300-780.
   { frame: 1000, name: "s3-01-lanes" },
@@ -53,12 +54,12 @@ const REVIEW_FRAMES = [
   { frame: 1180, name: "s3-03-sponsor-claim" },
   { frame: 1240, name: "s3-04-platform-parts" },
   { frame: 1330, name: "s3-05-platform-total" },
-  { frame: 1500, name: "s3-06-cards" },
-  { frame: 1550, name: "s3-07-reconciliation" },
+  { frame: 1420, name: "s3-06-cards" },
+  { frame: 1540, name: "s3-07-reconciliation" },
   { frame: 1650, name: "s3-08-claim" },
-  // S4 starts at 1680. Payload 1992 onward; the claim takes over at 2190.
+  // S4 starts at 1680. Content 1764, bars 1830, payload 1992, claim 2190.
   { frame: 1800, name: "s4-01-panels" },
-  { frame: 1900, name: "s4-02-silhouettes" },
+  { frame: 1900, name: "s4-02-content" },
   { frame: 2100, name: "s4-03-payload" },
   { frame: 2250, name: "s4-04-claim" },
   { frame: 2520, name: "s5-01-midpoint" },

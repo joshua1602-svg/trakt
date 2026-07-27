@@ -63,22 +63,19 @@ export const SCENES: SceneSpec[] = [
     number: 2,
     title: "Disparate cuts in, one governed portfolio out",
     frames: 480,
-    // The arrivals beat (120–270) is deliberately UNcaptioned. Five artefacts from five
-    // owners on three cycles is an argument that works by being looked at; a caption
-    // underneath it would explain a picture that does not need explaining, and every
-    // sentence spent on it is a sentence spent near the word "mapping".
+    // The funnel (114–294) is deliberately UNcaptioned. Five artefacts collapsing into
+    // one governed band is an argument that works by being looked at, and it already
+    // carries its own display claim; a caption underneath would explain a picture that
+    // does not need explaining, and every sentence spent on it is a sentence spent near
+    // the word "mapping".
     captions: [
       { at: 6, hold: 108, text: "Onboarded once, in under forty-eight hours." },
-      {
-        at: 276,
-        hold: 144,
-        text: "Everything the run produced — including what it would not guess.",
-      },
+      { at: 300, hold: 126, text: "Everything the run produced, and what it would not guess." },
     ],
     narration:
-      "Trakt onboards a portfolio once, in under forty-eight hours. And it is never one " +
-      "clean file — five artefacts, five owners, three reporting cycles. What comes " +
-      "back is a receipt, including the two decisions it referred to a human.",
+      "Trakt onboards a portfolio once, in under forty-eight hours. Not one clean file " +
+      "— a loan tape, a collateral tape, cash flows, a warehouse agreement, a covenant " +
+      "schedule. Every artifact your portfolio runs on, and one governed dataset out.",
   },
   {
     id: "dataset",
@@ -114,14 +111,15 @@ export const SCENES: SceneSpec[] = [
       {
         at: 132,
         hold: 180,
-        text: "A managed service. Copilot. Or the workspace, when you need to drill in.",
+        text: "A managed service. Microsoft 365 Copilot. Or the workspace.",
       },
       { at: 318, hold: 168, text: "Same engine, same answer, every time." },
     ],
     narration:
       "Consume it however you already work. Run it as a managed service and never " +
-      "log in. Ask it from Copilot, in the tools you have. Or open the workspace " +
-      "when you need to drill in. Same platform canonical, same answer, every time.",
+      "log in. Ask it from Microsoft 365 Copilot, in the tools you have. Or open the " +
+      "workspace when you need to drill in. Same platform canonical, same answer, " +
+      "every time.",
   },
   {
     id: "close",
@@ -173,11 +171,11 @@ export const captions = (): AbsoluteCaption[] => {
  * The still frames the outbound email body uses — one per scene that carries an
  * argument on its own, taken at the beat's midpoint rather than its entrance:
  *
- *   800  S2, the receipt strip with the referred-for-review card beneath it
- *   1500 S3, the six governed outputs fanned out under the platform figure
+ *   700  S2, the funnel resolved into one governed band, with its claim
+ *   1420 S3, the six governed outputs fanned out under the platform figure
  *   2100 S4, the same balance landed simultaneously in all three panels
  */
-export const STILL_FRAMES = [800, 1500, 2100] as const;
+export const STILL_FRAMES = [700, 1420, 2100] as const;
 
 export const timecode = (frame: number): string => {
   const total = frame / FPS;

@@ -85,6 +85,13 @@ export const weight = {
  *
  * Each entry is a complete, ready-to-spread CSSProperties object, so a scene can
  * never assemble a seventh size out of parts.
+ *
+ * On the three supporting sizes: `body`, `label` and `stamp` were set at 26/14/15,
+ * which is a reading size for a document and an unreadable size for a film. The buyer
+ * opens this in an email client at part-screen — a 1080p canvas in a 700px column —
+ * where 15px lands at about 10 physical pixels. Every supporting size is now above the
+ * floor below, and the layouts were fixed by CUTTING CONTENT rather than by scaling
+ * anything back down.
  */
 export const type = {
   display: {
@@ -112,13 +119,13 @@ export const type = {
   body: {
     fontFamily: family.body,
     fontWeight: weight.regular,
-    fontSize: 26,
-    lineHeight: 1.45,
+    fontSize: 34,
+    lineHeight: 1.4,
   },
   label: {
     fontFamily: family.body,
     fontWeight: weight.medium,
-    fontSize: 14,
+    fontSize: 22,
     lineHeight: 1.2,
     letterSpacing: "0.1em",
     textTransform: "uppercase" as const,
@@ -126,12 +133,23 @@ export const type = {
   stamp: {
     fontFamily: family.data,
     fontWeight: weight.medium,
-    fontSize: 15,
-    lineHeight: 1.2,
+    fontSize: 24,
+    lineHeight: 1.25,
     fontVariantNumeric: "tabular-nums",
     fontFeatureSettings: '"tnum" 1',
   },
 } as const;
+
+/**
+ * The legibility floor. NOTHING in the film renders below this.
+ *
+ * It is not advisory. `<Figure>`, `<Body>`, `<Stamp>`, `<Label>`, `<Claim>` and
+ * `<Headline>` all throw at render time on a computed size beneath it, in either
+ * layout — which means a scene that tries to shrink its way out of an overflow fails
+ * the render instead of shipping something the buyer cannot read. The fix for an
+ * overflow is always to cut content.
+ */
+export const minFontSize = 22;
 
 // --------------------------------------------------------------------------- //
 // Motion
@@ -233,6 +251,7 @@ export const theme = {
   family,
   weight,
   type,
+  minFontSize,
   motion,
   layout,
   radius,

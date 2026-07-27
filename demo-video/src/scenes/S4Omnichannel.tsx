@@ -1,43 +1,52 @@
 /**
  * S4 · Three ways in — 660 frames (0:56–1:18)
  *
- * Three panels, each reduced to three elements: a scheduled artifact drop, a Copilot
- * thread calling `askTraktMi`, and the workspace with the regional bars. Recognisable
- * silhouettes, not readable screens.
+ * The strongest twenty seconds in the film, and the only place the product is shown
+ * rather than described. Three panels, each holding REAL content — a scheduled artifact
+ * drop, a Copilot thread with a question and an answer, and a workspace query with a
+ * chart. The panels used to hold three monospace stubs, which read as three near-empty
+ * boxes and threw away the whole beat.
  *
- * Each panel carries a plain-English use line beneath its label. Without it two of the
- * three panels are just lists of monospace strings and the three read as
- * interchangeable — the use line is the differentiation, so it sits above the mono
- * content, in the body face, at full contrast.
+ * Then the payload: the consolidated balance counts up SIMULTANEOUSLY in a result band
+ * beneath all three panels, on one baseline, landing on the same frame. Simultaneity is
+ * the argument; if the three counters land on different frames the beat is dead. They
+ * share one `at` and one `<Counter>` element, so they cannot drift.
  *
- * Then the payload: the consolidated balance counts up SIMULTANEOUSLY in all three
- * panels, landing on the same frame, followed by the movement beneath each — also
- * simultaneous. Simultaneity is the whole argument; if the three counters land on
- * different frames the beat is dead. They share one `at`, so they cannot drift.
+ * On the Microsoft 365 Copilot panel — the mark, and why this is a wordmark.
  *
- * The panels are sized and positioned so the three figures sit on a shared horizontal
- * eye-line at the vertical centre of the frame. A fixed-height top block above the
- * figure guarantees the eye-line holds whatever length the content above it runs to.
+ * Microsoft Legal's trademark page states that "our logos, app and product icons,
+ * illustrations, photographs, videos, and designs can never be used without an express
+ * license". This project holds no such licence, and no licensed asset exists in
+ * `public/brand/` to render. The app icon is therefore out, and the compliant identifier
+ * is the product NAME as a wordmark, which is what the panel carries: set in the body
+ * face at full contrast, at the head of the panel, as the most prominent text in it.
+ *
+ * The same page permits truthfully naming a Microsoft product in text, and the panel
+ * meets the conditions it sets: "Microsoft" precedes the product name, the name is
+ * unaltered and unabbreviated, it is used adjectivally ahead of the panel's content, no
+ * endorsement or affiliation is implied, Trakt's own lockup is the most prominent brand
+ * on screen, and the trademark attribution sits in the result band below.
+ *
+ * If a licence is obtained: drop the official asset into `public/brand/`, render it with
+ * <Img src={staticFile(...)} /> beside `MICROSOFT_CHANNEL`, and honour the minimum size
+ * and clear space the licence specifies.
  *
  * On `signal`: the film's general rule is one accented element per frame. This scene is
  * the stated exception — the three figures are one value proven in three places, which
  * is the point of the scene, so they carry it together.
- *
- * Data used: the consolidated balance, the month's movement, the Copilot action names
- * and the regional split — all from the fixtures.
  */
 
 import React from "react";
-import { AbsoluteFill, interpolate, useCurrentFrame } from "remotion";
+import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 
-import { CHANNEL_USE } from "../claims";
+import { CHANNEL_USE, COPILOT_ASK, MICROSOFT_CHANNEL, MS_TRADEMARK_NOTICE } from "../claims";
 import {
   Body,
   Claim,
   Counter,
   Enter,
   Figure,
-  Label,
+  Inline,
   Panel,
   Rule,
   Stamp,
@@ -45,107 +54,211 @@ import {
   useIsSquare,
 } from "../components/kit";
 import { COPILOT, CURRENT_PERIOD, MOVEMENT, SUMMARY } from "../data/fixtures";
-import { money, noBreakSigns, periodLabel, shortDate, signedMoney } from "../format";
+import { money, noBreakSigns, percent, periodLabel, shortDate, signedMoney } from "../format";
 import theme from "../theme";
 
-/** A row in a silhouette: a leader hairline and one mono string. */
-const SilhouetteRow: React.FC<{
-  at: number;
-  index: number;
-  children: React.ReactNode;
-  tone?: "paper" | "mute";
-}> = ({ at, index, children, tone = "mute" }) => (
-  <Enter at={at} index={index}>
-    <div style={{ display: "flex", alignItems: "center", gap: theme.motion.quick }}>
-      <div
-        style={{
-          width: theme.motion.quick,
-          height: theme.hairline,
-          backgroundColor: theme.color.rule,
-          flexShrink: 0,
-        }}
-      />
-      <Stamp tone={tone}>{children}</Stamp>
-    </div>
-  </Enter>
-);
+// --------------------------------------------------------------------------- //
+// Beat boundaries
+// --------------------------------------------------------------------------- //
+/** Panel content enters here, staggered across the three. */
+const CONTENT_AT = 84;
+/** The workspace bars grow from here. The only motion in the frame besides the count. */
+const BARS_AT = 150;
+/** The payload. ONE `at`, shared by all three panels. */
+const PAYLOAD_AT = 312;
+const MOVEMENT_AT = 360;
+const CLAIM_AT = 510;
 
-/** A scheduled artifact drop. */
-const ManagedSilhouette: React.FC<{ at: number }> = ({ at }) => (
+// --------------------------------------------------------------------------- //
+// Panel 1 · Managed service
+// --------------------------------------------------------------------------- //
+/**
+ * What lands in the folder, and when.
+ *
+ * Three filenames and a delivery stamp. The filenames are the artefacts the run actually
+ * produced — `scripts/lint-theme.mjs` cannot check that, but `timeline.test.ts` asserts
+ * each one against `artefact_catalogue.json`.
+ */
+const ManagedPanel: React.FC<{ at: number }> = ({ at }) => (
   <div style={{ display: "flex", flexDirection: "column", gap: theme.motion.quick }}>
     {["annex2_submission.xml", "investor_pack.pptx", "platform_canonical_typed.csv"].map(
       (name, i) => (
-        <SilhouetteRow key={name} at={at} index={i}>
-          {name}
-        </SilhouetteRow>
+        <Enter key={name} at={at} index={i * 2}>
+          <Stamp tone="paper">{name}</Stamp>
+        </Enter>
       ),
     )}
+    <Enter at={at} index={8} style={{ paddingTop: theme.motion.quick }}>
+      <Rule />
+    </Enter>
+    <Enter at={at} index={10}>
+      <Stamp>DELIVERED 07:00 · FIRST BUSINESS DAY</Stamp>
+    </Enter>
   </div>
 );
 
-/** A Copilot thread: the plugin's three actions, the one it calls first at full contrast. */
-const CopilotSilhouette: React.FC<{ at: number }> = ({ at }) => (
-  <div style={{ display: "flex", flexDirection: "column", gap: theme.motion.quick }}>
-    {COPILOT.actions.slice(0, 3).map((action, i) => (
-      <SilhouetteRow key={action} at={at} index={i} tone={i === 0 ? "paper" : "mute"}>
-        {`${action}()`}
-      </SilhouetteRow>
-    ))}
-  </div>
-);
-
-/** The workspace: three regional bars, from the real regional split. */
-const WorkspaceSilhouette: React.FC<{ at: number }> = ({ at }) => {
-  const regions = SUMMARY.topRegions.slice(0, 3);
-  const largest = Math.max(...regions.map((r) => r.balance), 1);
+// --------------------------------------------------------------------------- //
+// Panel 2 · Microsoft 365 Copilot
+// --------------------------------------------------------------------------- //
+/**
+ * A chat thread: the question right-aligned, the answer on a light plate.
+ *
+ * The answer is condensed from `copilot.answers[1]` in the metrics fixture — the recorded
+ * turn for this question, written for the record rather than for a viewer with six
+ * seconds. A unit test asserts every figure and phrase below still appears in that
+ * recorded answer, so the condensation cannot drift from what the agent actually said.
+ *
+ * The two figures are wrapped in <Inline>, because the mono role is semantic and holds
+ * inside a sentence.
+ */
+const CopilotPanel: React.FC<{ at: number; isSquare: boolean }> = ({ at, isSquare }) => {
+  const movement = MOVEMENT.delta.funded_balance ?? 0;
+  const ltv = SUMMARY.metrics.wa_ltv_points ?? 0;
+  const region = MOVEMENT.primaryRegion?.region ?? "";
+  const scale = isSquare ? 0.72 : 0.82;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.motion.quick }}>
-      {regions.map((region, i) => (
-        <Enter key={region.region} at={at} index={i}>
-          <div style={{ display: "flex", alignItems: "center", gap: theme.motion.quick }}>
-            <Stamp style={{ width: "42%", flexShrink: 0 }}>{region.region}</Stamp>
-            <div
-              style={{
-                width: `${(region.balance / largest) * 58}%`,
-                height: theme.motion.quick / 2,
-                // `mute`, not `rule`: a hairline-coloured bar on a hull panel is
-                // invisible, and an invisible bar is not a silhouette of anything.
-                backgroundColor: theme.color.mute,
-              }}
-            />
-          </div>
-        </Enter>
-      ))}
+      {/* The user turn. Right-aligned, no plate — it is the human, not the product. */}
+      <Enter at={at} style={{ display: "flex", justifyContent: "flex-end" }}>
+        <Body
+          style={{
+            fontSize: theme.type.body.fontSize * scale,
+            textAlign: "right",
+            maxWidth: "88%",
+          }}
+        >
+          {COPILOT_ASK}
+        </Body>
+      </Enter>
+
+      {/* The tool call. A check state, so `signal` at the soft strength — never full. */}
+      <Enter at={at} index={4}>
+        <Stamp tone="signal" style={{ opacity: theme.signalSoftOpacity }}>
+          {`Called ${COPILOT.actions[0]} ✓`}
+        </Stamp>
+      </Enter>
+
+      {/* The answer, on a light plate. */}
+      <Enter at={at} index={7}>
+        <div
+          style={{
+            backgroundColor: theme.color.paper,
+            borderRadius: theme.radius.plate,
+            padding: theme.motion.base,
+          }}
+        >
+          <Body tone="ink" style={{ fontSize: theme.type.body.fontSize * scale }}>
+            {`Funded balances up `}
+            <Inline>{money(movement)}</Inline>
+            {`, driven by completions in the ${region}. WA LTV stable at `}
+            <Inline>{percent(ltv, 1)}</Inline>
+            {`.`}
+          </Body>
+        </div>
+      </Enter>
+
+      <Enter at={at} index={10}>
+        {/* "· deterministic MI engine" wrapped to a second line and the result band
+            already says it three inches below. Cut. */}
+        <Stamp>Grounded in Trakt</Stamp>
+      </Enter>
     </div>
   );
 };
 
+// --------------------------------------------------------------------------- //
+// Panel 3 · MI Agent workspace
+// --------------------------------------------------------------------------- //
 /**
- * On the Microsoft 365 Copilot panel.
+ * A query, an answer and four bars.
  *
- * The panel carries the product NAME as a wordmark and no app icon. Microsoft's
- * trademark guidelines state that their "logos, app and product icons, illustrations,
- * photographs, videos, and designs can never be used without an express license", which
- * this project does not hold; the instruction's own fallback is a wordmark rather than an
- * approximation of the mark.
- *
- * The `label` token IS that wordmark — it is set in the body face (Inter 500), which is
- * what the fallback asks for — so no second element is needed, and adding one would just
- * print "Microsoft 365" twice. The guidelines' text rules are met by the label itself:
- * "Microsoft" precedes the product name, the name is unaltered and used adjectivally
- * ahead of the panel's content, no affiliation is implied, and Trakt's own lockup is the
- * most prominent brand on screen.
- *
- * If a licence is obtained, drop the official asset into `public/brand/` and render it
- * beside the label with <Img src={staticFile(...)} /> at the sizing the licence specifies.
+ * The chart is the reason this panel exists: it is the capability the Copilot channel
+ * deliberately does not have. Region name and balance share a line and the bar runs the
+ * full panel width beneath them, which is the only arrangement that leaves the bar long
+ * enough for its growth to read at all.
  */
+const WorkspacePanel: React.FC<{ at: number; isSquare: boolean }> = ({ at, isSquare }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const regions = SUMMARY.topRegions.slice(0, 4);
+  const largest = Math.max(...regions.map((r) => r.balance), 1);
+  const scale = isSquare ? 0.72 : 0.82;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: theme.motion.quick }}>
+      <Enter at={at}>
+        <Body style={{ fontSize: theme.type.body.fontSize * scale }}>
+          Show funded balance by region.
+        </Body>
+      </Enter>
+      <Enter at={at} index={4}>
+        {/* One region, not three: the chart immediately beneath carries all four, and
+            repeating them in prose is the line that overflows the panel. */}
+        <Stamp tone="paper">
+          {`${regions[0].region} leads at ${money(regions[0].balance)}`}
+        </Stamp>
+      </Enter>
+
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: theme.motion.quick,
+          paddingTop: theme.motion.quick / 2,
+        }}
+      >
+        {regions.map((region, i) => {
+          const start = BARS_AT + i * theme.motion.stagger * 3;
+          const grow = spring({
+            frame: frame - start,
+            fps,
+            config: theme.motion.spring,
+            durationInFrames: theme.motion.slow,
+          });
+          return (
+            <Enter key={region.region} at={at} index={7 + i * 2}>
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: theme.motion.quick / 2 }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <Stamp tone="paper">{region.region}</Stamp>
+                  <Stamp>{money(region.balance)}</Stamp>
+                </div>
+                {/* A full-width TRACK with the bar inside it. Without the track the bar
+                    sits alone under the label and reads as an underline of the text
+                    rather than as a quantity, which is the whole point of the panel. */}
+                <div
+                  style={{
+                    width: "100%",
+                    height: theme.motion.quick,
+                    backgroundColor: theme.color.rule,
+                  }}
+                >
+                  <div
+                    style={{
+                      // `mute`, not `rule`: a hairline-coloured bar on a hull panel is
+                      // invisible, and an invisible bar is not a chart.
+                      backgroundColor: theme.color.mute,
+                      height: "100%",
+                      width: `${(region.balance / largest) * 100 * grow}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            </Enter>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 
 const CHANNELS = [
-  { label: "Managed service", Silhouette: ManagedSilhouette },
-  { label: "Microsoft 365 Copilot", Silhouette: CopilotSilhouette },
-  { label: "MI Agent workspace", Silhouette: WorkspaceSilhouette },
+  { label: "Managed service", Content: ManagedPanel },
+  { label: MICROSOFT_CHANNEL, Content: CopilotPanel },
+  { label: "MI Agent workspace", Content: WorkspacePanel },
 ] as const;
 
+// --------------------------------------------------------------------------- //
 export const S4Omnichannel: React.FC = () => {
   const frame = useCurrentFrame();
   const geometry = useGeometry();
@@ -154,44 +267,27 @@ export const S4Omnichannel: React.FC = () => {
   const total = SUMMARY.metrics.funded_balance ?? 0;
   const movement = MOVEMENT.delta.funded_balance ?? 0;
 
-  // Panel geometry. The top block is a FIXED height, so the figure beneath it starts at
-  // the same offset in all three panels and the eye-line holds.
-  const PAD = isSquare ? theme.motion.base : theme.motion.base + theme.motion.quick / 2;
   /**
-   * WIDE only. A fixed top block is what holds the three figures on one eye-line, and it
-   * is only safe when its height is known to exceed the content. In the square crop the
-   * three panels are stacked, so there is no eye-line to hold and a fixed height just
-   * clips: there the panels size to their content instead.
-   */
-  const TOP_BLOCK = 190;
-  const FIGURE_SCALE = isSquare ? 0.4 : 0.46;
-  /** Rendered height of the figure itself: the `stat` token has lineHeight 1. */
-  const FIGURE_HEIGHT = theme.type.stat.fontSize * FIGURE_SCALE * geometry.statScale;
-  const FIGURE_BLOCK = FIGURE_HEIGHT + theme.motion.quick / 2 + theme.type.stamp.fontSize * 1.2;
-  const PANEL_HEIGHT = PAD * 2 + TOP_BLOCK + FIGURE_BLOCK;
-  /**
-   * Wide: position the row so the FIGURE — not the figure block — sits on the frame's
-   * vertical centre. The three figures are the beat; they have to be level and central,
-   * and centring the block instead leaves them a movement-stamp's height high.
+   * WIDE geometry. The three panels are a fixed-height row and the result band is
+   * positioned from the bottom of it, so the three figures sit on one baseline whatever
+   * length the panel content runs to.
    *
-   * Square stacks the three panels, where a shared horizontal eye-line is impossible by
-   * construction, so there the row is simply positioned from the top.
+   * SQUARE stacks the three panels, where a shared baseline is impossible by
+   * construction, so there the figure lives inside each panel and the band is one scope
+   * stamp. The square crop also drops the panel content entirely: at 24px mono a
+   * filename is 400px wide and the panels are 330px, and the fix for an overflow is to
+   * cut, never to shrink. See the README for the full list.
    */
-  const rowTop = isSquare
-    ? geometry.edge + theme.motion.slow * 2
-    : geometry.height / 2 - (PAD + TOP_BLOCK + FIGURE_HEIGHT / 2);
+  const PAD = theme.motion.base + theme.motion.quick / 2;
+  const PANEL_TOP = isSquare ? geometry.edge + theme.motion.slow : 96;
+  const PANEL_HEIGHT = 540;
+  const BAND_TOP = PANEL_TOP + PANEL_HEIGHT + theme.motion.slow;
+  const FIGURE_SCALE = isSquare ? 0.46 : 0.62;
 
   const panelsOpacity = interpolate(frame, [0, 24, 486, 510], [0, 1, 1, 0], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
-  const silhouetteOpacity = interpolate(frame, [90, 114, 300, 318], [0, 1, 1, 0.4], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  // The payload. ONE `at`, shared by all three panels.
-  const PAYLOAD_AT = 312;
-  const MOVEMENT_AT = 360;
   const payloadOpacity = interpolate(frame, [PAYLOAD_AT, PAYLOAD_AT + 18], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
@@ -200,17 +296,43 @@ export const S4Omnichannel: React.FC = () => {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
-  const claimOpacity = interpolate(frame, [510, 534], [0, 1], {
+  const claimOpacity = interpolate(frame, [CLAIM_AT, CLAIM_AT + 24], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
+
+  const movementStamp = (
+    <div style={{ opacity: movementOpacity }}>
+      <Stamp>
+        {noBreakSigns(`${signedMoney(movement)} vs ${periodLabel(MOVEMENT.priorPeriod)}`)}
+      </Stamp>
+    </div>
+  );
+
+  /**
+   * The payload, rendered once per column. One `at`, one format, one spring.
+   *
+   * The movement rides with it in the WIDE layout, where the three columns are side by
+   * side and the repetition is the argument. The square crop drops it entirely — see the
+   * band below.
+   */
+  const payload = (
+    <>
+      <Figure scale={FIGURE_SCALE} tone="signal">
+        <Counter from={0} to={total} at={PAYLOAD_AT} frames={theme.motion.slow} format={money} />
+      </Figure>
+      {isSquare ? null : (
+        <div style={{ paddingTop: theme.motion.quick / 2 }}>{movementStamp}</div>
+      )}
+    </>
+  );
 
   return (
     <AbsoluteFill>
       <div
         style={{
           position: "absolute",
-          top: rowTop,
+          top: PANEL_TOP,
           left: geometry.gutter,
           right: geometry.gutter,
           display: "flex",
@@ -220,7 +342,7 @@ export const S4Omnichannel: React.FC = () => {
           opacity: panelsOpacity,
         }}
       >
-        {CHANNELS.map(({ label, Silhouette }, i) => (
+        {CHANNELS.map(({ label, Content }, i) => (
           <Panel
             key={label}
             style={{
@@ -229,77 +351,77 @@ export const S4Omnichannel: React.FC = () => {
               padding: PAD,
               display: "flex",
               flexDirection: "column",
+              gap: theme.motion.quick,
               minWidth: 0,
             }}
           >
-            <div
-              style={{
-                height: isSquare ? undefined : TOP_BLOCK,
-                display: "flex",
-                flexDirection: "column",
-                gap: theme.motion.quick,
-                paddingBottom: isSquare ? theme.motion.quick : undefined,
-              }}
+            {/* The channel name. On panel 2 this IS the Microsoft wordmark — body face,
+                full contrast, unaltered, and the most prominent text in the panel. */}
+            <Body>{label}</Body>
+            <Rule />
+            {/* The differentiation: what using it actually feels like. */}
+            <Body
+              tone="mute"
+              style={{ fontSize: theme.type.body.fontSize * (isSquare ? 0.72 : 0.82) }}
             >
-              <Label>{label}</Label>
-              <Rule />
-              {/* The differentiation: what using it actually feels like. */}
-              <Body style={{ fontSize: theme.type.body.fontSize * (isSquare ? 0.72 : 0.86) }}>
-                {CHANNEL_USE[label]}
-              </Body>
-              <div style={{ opacity: silhouetteOpacity }}>
-                <Silhouette at={90 + i * theme.motion.stagger} />
+              {CHANNEL_USE[label]}
+            </Body>
+            {isSquare ? (
+              <div style={{ opacity: payloadOpacity, paddingTop: theme.motion.quick }}>
+                {payload}
               </div>
-            </div>
-
-            <div style={{ opacity: payloadOpacity }}>
-              <Figure scale={FIGURE_SCALE} tone="signal">
-                <Counter
-                  from={0}
-                  to={total}
-                  at={PAYLOAD_AT}
-                  frames={theme.motion.slow}
-                  format={money}
-                />
-              </Figure>
-              <div style={{ opacity: movementOpacity, paddingTop: theme.motion.quick / 2 }}>
-                <Stamp>
-                  {noBreakSigns(
-                    `${signedMoney(movement)} vs ${periodLabel(MOVEMENT.priorPeriod)}`,
-                  )}
-                </Stamp>
+            ) : (
+              <div style={{ paddingTop: theme.motion.quick }}>
+                <Content at={CONTENT_AT + i * theme.motion.stagger * 2} isSquare={isSquare} />
               </div>
-            </div>
+            )}
           </Panel>
         ))}
       </div>
 
-      {/* One provenance rule for all three, and it names the SCOPE.
-          S3 shows a sponsor-level figure for ten seconds; without a scope stamp here a
-          viewer could reasonably carry that number into this scene, where every figure
-          is the platform canonical. "PLATFORM CANONICAL" closes that off in three words.
-          Wide only — under a stack of three square panels there is no room for a fourth
-          block, and each panel's own movement stamp already names the period. */}
-      {isSquare ? null : (
-        <div
-          style={{
-            position: "absolute",
-            left: geometry.gutter,
-            right: geometry.gutter,
-            top: rowTop + PANEL_HEIGHT + theme.motion.slow,
-            display: "flex",
-            flexDirection: "column",
-            gap: theme.motion.quick / 2,
-            opacity: payloadOpacity * panelsOpacity,
-          }}
-        >
-          <Rule />
+      {/* The result band. Three columns on the SAME grid as the panels above, so each
+          figure sits under its own channel and the three share one baseline. */}
+      <div
+        style={{
+          position: "absolute",
+          top: isSquare ? undefined : BAND_TOP,
+          bottom: isSquare ? geometry.captionReserve : undefined,
+          left: geometry.gutter,
+          right: geometry.gutter,
+          display: "flex",
+          flexDirection: "column",
+          gap: theme.motion.base,
+          opacity: panelsOpacity,
+        }}
+      >
+        {/* CUT in square: the movement. Three stacked panels plus a two-line trademark
+            notice leave the band about 50px of room, and between the month's movement and
+            the three use lines the use lines are what a scrolling viewer needs. The
+            balance, the scope and the attribution all survive. */}
+        {isSquare ? null : (
+          <div style={{ display: "flex", gap: theme.motion.base, opacity: payloadOpacity }}>
+            {CHANNELS.map(({ label }) => (
+              <div key={label} style={{ flex: 1, minWidth: 0, paddingLeft: PAD }}>
+                {payload}
+              </div>
+            ))}
+          </div>
+        )}
+        <Rule />
+        <div style={{ display: "flex", flexDirection: "column", gap: theme.motion.quick / 2 }}>
+          {/* Which scope the viewer is looking at. S3 shows a sponsor-level figure for
+              ten seconds; without this a viewer could reasonably carry it into a scene
+              where every figure is the platform canonical. */}
           <Stamp>
             {`PLATFORM CANONICAL · ${shortDate(CURRENT_PERIOD.reportingDate).toUpperCase()} · ` +
               "DETERMINISTIC MI ENGINE"}
           </Stamp>
+          {/* Trademark attribution for the wordmark in panel 2. It sits here rather than
+              in the chrome because the chrome is pixel-identical across the whole film
+              and this notice belongs to the one scene that makes the reference. */}
+          <Stamp>{MS_TRADEMARK_NOTICE}</Stamp>
         </div>
-      )}
+      </div>
 
       <AbsoluteFill
         style={{
@@ -309,7 +431,7 @@ export const S4Omnichannel: React.FC = () => {
           opacity: claimOpacity,
         }}
       >
-        <Enter at={510}>
+        <Enter at={CLAIM_AT}>
           <Claim measure={isSquare ? 0.86 : 0.58}>Three ways in. One governed answer.</Claim>
         </Enter>
       </AbsoluteFill>

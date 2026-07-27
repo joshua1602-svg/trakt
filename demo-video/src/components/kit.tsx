@@ -93,12 +93,46 @@ export const Enter: React.FC<{
 // --------------------------------------------------------------------------- //
 // Type primitives
 // --------------------------------------------------------------------------- //
+/**
+ * The legibility floor, enforced at render time.
+ *
+ * `theme.minFontSize` is only real if something fails when it is breached, and a lint
+ * cannot see through `scale` props, layout multipliers and inline overrides to the size
+ * that actually reaches the screen. This can: it runs inside the component, on the
+ * resolved number, in whichever layout is rendering. A scene that tries to shrink its
+ * way out of an overflow throws instead of shipping something the buyer cannot read.
+ *
+ * The fix for an overflow is always to cut content.
+ */
+const legible = (size: number, where: string): number => {
+  if (size < theme.minFontSize) {
+    throw new Error(
+      `${where}: ${size.toFixed(1)}px is below the ${theme.minFontSize}px legibility ` +
+        "floor. Cut content — do not scale the type down.",
+    );
+  }
+  return size;
+};
+
+/** Applies the floor to whatever a caller passed in `style.fontSize`. */
+const checkedStyle = (
+  base: React.CSSProperties,
+  style: React.CSSProperties | undefined,
+  where: string,
+): React.CSSProperties => {
+  const merged = { ...base, ...style };
+  if (typeof merged.fontSize === "number") legible(merged.fontSize, where);
+  return merged;
+};
+
 export const Label: React.FC<{
   children: React.ReactNode;
   tone?: keyof typeof theme.color;
   style?: React.CSSProperties;
 }> = ({ children, tone = "mute", style }) => (
-  <div style={{ ...theme.type.label, color: theme.color[tone], ...style }}>{children}</div>
+  <div style={checkedStyle({ ...theme.type.label, color: theme.color[tone] }, style, "Label")}>
+    {children}
+  </div>
 );
 
 export const Stamp: React.FC<{
@@ -106,7 +140,9 @@ export const Stamp: React.FC<{
   tone?: keyof typeof theme.color;
   style?: React.CSSProperties;
 }> = ({ children, tone = "mute", style }) => (
-  <div style={{ ...theme.type.stamp, color: theme.color[tone], ...style }}>{children}</div>
+  <div style={checkedStyle({ ...theme.type.stamp, color: theme.color[tone] }, style, "Stamp")}>
+    {children}
+  </div>
 );
 
 export const Body: React.FC<{
@@ -114,7 +150,30 @@ export const Body: React.FC<{
   tone?: keyof typeof theme.color;
   style?: React.CSSProperties;
 }> = ({ children, tone = "paper", style }) => (
-  <div style={{ ...theme.type.body, color: theme.color[tone], ...style }}>{children}</div>
+  <div style={checkedStyle({ ...theme.type.body, color: theme.color[tone] }, style, "Body")}>
+    {children}
+  </div>
+);
+
+/**
+ * A run of data-face text INSIDE a body-face sentence.
+ *
+ * The mono role is semantic, and S4's Copilot answer is the one place where a computed
+ * figure has to live inside prose: the panel is showing a chat response, and setting the
+ * whole sentence in mono would make it read as terminal output rather than as an answer.
+ * This wraps just the figures, at the surrounding size, so the rule holds inside a
+ * sentence the same way it holds on a card.
+ */
+export const Inline: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <span
+    style={{
+      fontFamily: theme.family.data,
+      fontWeight: theme.weight.medium,
+      fontVariantNumeric: "tabular-nums",
+    }}
+  >
+    {children}
+  </span>
 );
 
 /** A 1px hairline. The only depth cue in the film. */
@@ -200,7 +259,7 @@ export const Figure: React.FC<{
     <div
       style={{
         ...theme.type.stat,
-        fontSize: theme.type.stat.fontSize * scale * geometry.statScale,
+        fontSize: legible(theme.type.stat.fontSize * scale * geometry.statScale, "Figure"),
         color: color ?? theme.color[tone],
         whiteSpace: "nowrap",
         ...style,
@@ -299,7 +358,7 @@ export const Claim: React.FC<{
     <div
       style={{
         ...theme.type.display,
-        fontSize: theme.type.display.fontSize * geometry.displayScale,
+        fontSize: legible(theme.type.display.fontSize * geometry.displayScale, "Claim"),
         color: accent ? theme.color.signal : theme.color.paper,
         textAlign: align,
         width: geometry.width * measure,
@@ -326,7 +385,7 @@ export const Headline: React.FC<{
     <div
       style={{
         ...theme.type.headline,
-        fontSize: theme.type.headline.fontSize * geometry.displayScale,
+        fontSize: legible(theme.type.headline.fontSize * geometry.displayScale, "Headline"),
         color: theme.color.paper,
         textAlign: align,
         width: geometry.width * measure,
@@ -374,9 +433,11 @@ export const ArtifactCard: React.FC<{
   return (
     <Panel
       style={{
-        width: isSquare ? 320 : 380,
+        // Wider at the larger type: at 380 a filename in 24px mono wraps to two lines
+        // and the card grows a row taller than its neighbours.
+        width: isSquare ? 460 : 560,
         height: "100%",
-        padding: theme.motion.base + theme.motion.quick / 2,
+        padding: theme.motion.base,
         display: "flex",
         flexDirection: "column",
         gap: theme.motion.quick,

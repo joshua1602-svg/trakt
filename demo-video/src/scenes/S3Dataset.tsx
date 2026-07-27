@@ -57,7 +57,9 @@ const PLATFORM_AT = 300;
  * consolidated dataset and its checks are the platform's. The audit trail is ALL,
  * because it covers every portfolio governed through the gates.
  */
-const cardSpecs = (): { title: string; scope: string; meta: string; confirm?: string }[] => {
+const cardSpecs = (
+  isSquare: boolean,
+): { title: string; scope: string; meta: string[]; confirm?: string }[] => {
   const regulatory = ARTEFACTS.regulatoryOutput;
   const deck = ARTEFACTS.investorDeck;
   const tape = ARTEFACTS.canonicalTape;
@@ -70,50 +72,61 @@ const cardSpecs = (): { title: string; scope: string; meta: string; confirm?: st
       available: Boolean(regulatory?.available),
       title: "Regulatory submission",
       scope: "SPV1",
-      meta: `${regulatory?.fileName} · ESMA Annex 2`,
+      meta: [String(regulatory?.fileName), "ESMA Annex 2"],
       confirm: regulatory?.xsdValidated ? "XSD validated" : undefined,
     },
     {
       available: Boolean(deck?.available),
       title: "Investor pack",
       scope: "SPV1",
-      meta:
-        `${deck?.fileName} · ${count(Number(deck?.slides))} slides · ` +
-        `${periodLabel(CURRENT_PERIOD.period)}`,
+      meta: [
+        String(deck?.fileName),
+        `${count(Number(deck?.slides))} slides · ${periodLabel(CURRENT_PERIOD.period)}`,
+      ],
     },
     {
       available: Boolean(tape?.available),
       title: "Consolidated dataset",
       scope: "PLATFORM",
-      meta:
-        `${tape?.fileName} · ${count(Number(tape?.rows))} rows · ` +
-        `${count(Number(tape?.columns))} fields`,
+      meta: [
+        String(tape?.fileName),
+        `${count(Number(tape?.rows))} rows · ${count(Number(tape?.columns))} fields`,
+      ],
     },
     {
       available: Boolean(validation?.available),
       title: "Validation report",
       scope: "PLATFORM",
-      meta:
-        `validation_report.json · ` +
+      meta: [
+        "validation_report.json",
         `${count(Number(validation?.businessRuleExceptions))} exceptions · ` +
-        `${percent(Number(validation?.exceptionRatePct), 2)}`,
+          `${percent(Number(validation?.exceptionRatePct), 2)}`,
+      ],
     },
     {
       available: Boolean(risk?.available),
       title: "Concentration monitor",
       scope: "PLATFORM",
-      meta: `concentration_monitor.json · ${count(Number(risk?.limitCount))} limits tested`,
+      meta: ["concentration_monitor.json", `${count(Number(risk?.limitCount))} limits tested`],
     },
     {
       available: Boolean(audit?.available),
       title: "Audit trail",
       scope: "ALL",
-      meta: "audit_manifest.json · content-hashed · SHA-256",
+      meta: ["audit_manifest.json", "content-hashed · SHA-256"],
     },
   ];
-  return specs
+  const available = specs
     .filter((spec) => spec.available)
     .map(({ title, scope, meta, confirm }) => ({ title, scope, meta, confirm }));
+  if (!isSquare) return available;
+  // CUT in the square crop: six cards at the larger type need three columns and 1,700px,
+  // and 1,080 gives two. Four cards in a 2x2, one meta line each — and the four kept are
+  // chosen to preserve all three scopes, so the point the prefixes make survives.
+  const keep = ["Regulatory submission", "Consolidated dataset", "Validation report", "Audit trail"];
+  return available
+    .filter((card) => keep.includes(card.title))
+    .map((card) => ({ ...card, meta: card.meta.slice(0, 1) }));
 };
 
 /** One portfolio lane in the consolidation beat. */
@@ -150,8 +163,14 @@ const Lane: React.FC<{
           <Stamp tone="paper" style={{ width: isSquare ? 230 : 330, flexShrink: 0 }}>
             {displayId}
           </Stamp>
-          <Stamp style={{ width: isSquare ? 210 : 300, flexShrink: 0 }}>{status}</Stamp>
-          <Figure scale={isSquare ? 0.22 : 0.3} style={{ width: isSquare ? 150 : 210 }}>
+          {/* CUT in the square crop. At 1080 wide the balance has to be 0.36 of the stat
+              token to clear the legibility floor, and four columns no longer fit; the
+              status line beneath the rule already says whether the book is sold or held,
+              so this column is the redundant one. */}
+          {isSquare ? null : (
+            <Stamp style={{ width: 300, flexShrink: 0 }}>{status}</Stamp>
+          )}
+          <Figure scale={isSquare ? 0.36 : 0.3} style={{ width: isSquare ? 220 : 210 }}>
             {money(balance)}
           </Figure>
           <Stamp>{`${count(loans)} loans`}</Stamp>
@@ -169,7 +188,7 @@ export const S3Dataset: React.FC = () => {
   const isSquare = useIsSquare();
 
   const lanes = portfolioLanes();
-  const cards = cardSpecs();
+  const cards = cardSpecs(isSquare);
 
   // --- Beat 1 · consolidation (0–300) ------------------------------------
   const lanesOpacity = interpolate(frame, [0, theme.motion.base, 186, 210], [0, 1, 1, 0], {
@@ -199,26 +218,30 @@ export const S3Dataset: React.FC = () => {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
-  const totalLift = interpolate(rel, [108, 138], [0, isSquare ? -178 : -196], {
+  const totalLift = interpolate(rel, [108, 138], [0, isSquare ? -186 : -262], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
   const spread = isSquare ? 190 : 430;
-  const cardsOpacity = interpolate(rel, [120, 150, 372, 396], [0, 1, 1, 0], {
+  // The cards CLEAR before the reconciliation arrives. At the larger type a six-card
+  // grid reaches within 20px of the caption plate, so the check no longer has anywhere
+  // to sit beneath it — and the hand-over reads better anyway: the outputs are shown,
+  // then the frame empties and one line says they all agree.
+  const cardsOpacity = interpolate(rel, [120, 150, 276, 300], [0, 1, 1, 0], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
-  const checkOpacity = interpolate(rel, [264, 288, 366, 384], [0, 1, 1, 0], {
+  const checkOpacity = interpolate(rel, [300, 324, 378, 396], [0, 1, 1, 0], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
   // `signal` hand-over: the platform figure holds the accent until the reconciliation
   // check takes it, and the check clears before the claim takes it. Never two at once.
-  const totalAccent = interpolate(rel, [252, 276], [1, 0], {
+  const totalAccent = interpolate(rel, [288, 312], [1, 0], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
-  const checkAccent = interpolate(rel, [252, 276], [0, 1], {
+  const checkAccent = interpolate(rel, [288, 312], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
@@ -373,7 +396,7 @@ export const S3Dataset: React.FC = () => {
           position: "absolute",
           left: 0,
           right: 0,
-          top: isSquare ? geometry.height * 0.3 : geometry.height * 0.35,
+          top: isSquare ? 340 : 300,
           display: "flex",
           justifyContent: "center",
           opacity: cardsOpacity,
@@ -382,8 +405,8 @@ export const S3Dataset: React.FC = () => {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(3, max-content)",
-            gap: isSquare ? theme.motion.quick : theme.motion.base,
+            gridTemplateColumns: isSquare ? "repeat(2, max-content)" : "repeat(3, max-content)",
+            gap: theme.motion.quick,
             alignItems: "stretch",
           }}
         >
@@ -392,7 +415,7 @@ export const S3Dataset: React.FC = () => {
               <ArtifactCard
                 title={card.title}
                 scope={card.scope}
-                meta={[card.meta]}
+                meta={card.meta}
                 confirm={card.confirm}
               />
             </Enter>
@@ -421,7 +444,7 @@ export const S3Dataset: React.FC = () => {
           <Counter
             from={0}
             to={ASSERTIONS.checksPassed}
-            at={PLATFORM_AT + 270}
+            at={PLATFORM_AT + 306}
             format={(v) => `${count(v)}/${count(ASSERTIONS.checksRun)} checks passed`}
           />
         </Figure>

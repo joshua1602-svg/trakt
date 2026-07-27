@@ -84,9 +84,13 @@ for (const file of sourceFiles) {
 // counter in its own styled div can silently put a governed figure in Archivo, which is
 // exactly the violation the rule exists to prevent.
 const MONO_HOSTS = ["<Figure", "<Stat", "<Counter"];
+/** Source with comments removed. A scene header that EXPLAINS the rule by naming
+ *  `<Counter>` is not a counter, and must not be scanned as one. */
+const code = (text) =>
+  text.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " ")).replace(/^\s*\/\/.*$/gm, "");
 for (const file of sourceFiles) {
   if (!file.includes(`${sep}scenes${sep}`)) continue;
-  const text = readFileSync(file, "utf8");
+  const text = code(readFileSync(file, "utf8"));
   const rel = relative(ROOT, file);
   for (const match of text.matchAll(/<Counter\b/g)) {
     // Walk backwards to the nearest opening component tag and check what it is.
@@ -146,7 +150,7 @@ if (findings.length) {
 
 const counters = sourceFiles
   .filter((f) => f.includes(`${sep}scenes${sep}`))
-  .reduce((n, f) => n + [...readFileSync(f, "utf8").matchAll(/<Counter\b/g)].length, 0);
+  .reduce((n, f) => n + [...code(readFileSync(f, "utf8")).matchAll(/<Counter\b/g)].length, 0);
 
 console.log(
   `[lint-theme] PASS — ${sourceFiles.length} files, ${sizes.length} type sizes, ` +
