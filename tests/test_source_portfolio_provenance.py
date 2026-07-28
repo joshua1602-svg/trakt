@@ -221,8 +221,32 @@ class TestPortfolioLensResolver(unittest.TestCase):
     def test_synonyms(self):
         from mi_agent import portfolio_lens as pl
         self.assertEqual(pl.resolve_lens("originated loans, organic book").name, "direct")
+
         self.assertEqual(pl.resolve_lens("the purchased back book").name, "acquired")
         self.assertEqual(pl.resolve_lens("whole book").name, "total")
+
+    def test_a_dimension_named_origination_is_not_a_portfolio_scope(self):
+        from mi_agent import portfolio_lens as pl
+        """"by origination channel" asks for a breakdown, not for the direct book.
+
+        The bare terms "origination"/"originated" used to resolve to the Direct
+        lens, so a question naming the DIMENSION had a scope filter applied to
+        it. On a three-book platform the answer then covered 68% of the funded
+        book while still describing itself as a share "of the funded book" —
+        the silent scope mutation this module exists to prevent.
+        """
+        for question in (
+            "Show the portfolio by origination channel.",
+            "Show the portfolio by origination date",
+            "originations by region",
+            "what is the origination channel mix",
+        ):
+            self.assertEqual(pl.resolve_lens(question).name, "total", question)
+
+        # The qualified forms must keep working: they name the book, not the
+        # dimension.
+        self.assertEqual(pl.resolve_lens("directly originated loans").name, "direct")
+        self.assertEqual(pl.resolve_lens("new origination book").name, "direct")
 
     def test_comparisons(self):
         from mi_agent import portfolio_lens as pl
