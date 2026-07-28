@@ -26,9 +26,8 @@
       "observedValues": [
         "AVM (desktop)"
       ],
-      "allowedCanonicalValues": [
-        "FOEI",
-        "FOEI",
+      "allowedCanonicalValues": [],
+      "allowedRegimeValues": [
         "FOEI",
         "OTHR"
       ],
@@ -66,6 +65,7 @@
       "affectedExposures": 2,
       "observedValues": [],
       "allowedCanonicalValues": [],
+      "allowedRegimeValues": [],
       "byBook": [
         {
           "bookId": "spv1_sponsored",
@@ -103,6 +103,7 @@
         "Origination date 2024-04-30 00:00:00 > maturity date 2022-10-30 00:00:00."
       ],
       "allowedCanonicalValues": [],
+      "allowedRegimeValues": [],
       "byBook": [
         {
           "bookId": "alp_acquired",
@@ -126,6 +127,7 @@
         "ACTIVE loan with maturity_date 2022-10-30 00:00:00 < reporting_date 2026-06-30 00:00:00."
       ],
       "allowedCanonicalValues": [],
+      "allowedRegimeValues": [],
       "byBook": [
         {
           "bookId": "alp_acquired",

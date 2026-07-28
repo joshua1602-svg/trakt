@@ -1612,7 +1612,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             # before they can even start — and the environment is usually the
             # thing that differs.
             print(f"STALE: {out} differs from a fresh build. Re-run without "
-                  f"--check.", file=sys.stderr)
+                  f"--check.\n  If this is the second occurrence, see "
+                  f"landing-page/docs/open-investigations.md OI-1 — it is a "
+                  f"determinism defect, not a CI flake. Do NOT regenerate to "
+                  f"make the job green.", file=sys.stderr)
             _report_pack_difference(committed, text)
             return 1
         print(f"OK: {out} is reproducible "

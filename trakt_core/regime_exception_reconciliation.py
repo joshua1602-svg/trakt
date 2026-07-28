@@ -173,12 +173,26 @@ def _row_indices(frame: Optional[pd.DataFrame], column: str,
 
 
 def _allowed_canonical_values(enum_mapping: Dict[str, Any], field: str) -> List[str]:
-    table = (enum_mapping.get("enums") or enum_mapping).get(field)
-    if isinstance(table, dict):
-        return sorted({str(v) for v in table.values()} | {str(k) for k in table})
-    if isinstance(table, list):
-        return sorted(str(v) for v in table)
-    return []
+    """The values the CANONICAL model accepts for a field.
+
+    The mapping file is nested by regime (``{ESMA_Annex2: {field: {...}}}``), so
+    a flat lookup silently returns nothing — which reads in the artefact as "no
+    constraint" rather than "not looked up". Both shapes are handled.
+    """
+    tables = []
+    for value in enum_mapping.values():
+        if isinstance(value, dict) and field in value:
+            tables.append(value[field])
+    if field in enum_mapping:
+        tables.append(enum_mapping[field])
+
+    allowed: set = set()
+    for table in tables:
+        if isinstance(table, dict):
+            allowed |= {str(v) for v in table.values()} | {str(k) for k in table}
+        elif isinstance(table, list):
+            allowed |= {str(v) for v in table}
+    return sorted(allowed)
 
 
 def _delivery_only_exceptions(delivery_issues: Optional[pd.DataFrame],
@@ -223,8 +237,9 @@ def _delivery_only_exceptions(delivery_issues: Optional[pd.DataFrame],
             "canonicalMateriality": "",
             "affectedExposures": int(len(group)),
             "observedValues": observed,
-            "allowedCanonicalValues": sorted(
-                (rule.get("transform") or {}).get("enum_map", {}).values()),
+            "allowedCanonicalValues": [],
+            "allowedRegimeValues": sorted(
+                {str(v) for v in (rule.get("transform") or {}).get("enum_map", {}).values()}),
             "byBook": _books_for_rows(canonical, indices),
             "annexCodes": [code],
             "annex": [{
@@ -301,6 +316,7 @@ def _nd_defaulted_exceptions(projected: Optional[pd.DataFrame],
             "affectedExposures": len(indices),
             "observedValues": [],
             "allowedCanonicalValues": [],
+            "allowedRegimeValues": [],
             "byBook": _books_for_rows(canonical, indices),
             "annexCodes": [code],
             "annex": [{
@@ -378,6 +394,7 @@ def reconcile(field_summary: pd.DataFrame, violations: pd.DataFrame,
                 "affectedExposures": int(row.get("affected_rows") or 0),
                 "observedValues": messages,
                 "allowedCanonicalValues": [],
+                "allowedRegimeValues": [],
                 "byBook": books,
                 "annexCodes": [],
                 "disposition": OUT_OF_SCOPE,
@@ -406,6 +423,7 @@ def reconcile(field_summary: pd.DataFrame, violations: pd.DataFrame,
             "affectedExposures": int(row.get("affected_rows") or 0),
             "observedValues": observed,
             "allowedCanonicalValues": _allowed_canonical_values(enum_mapping, field),
+            "allowedRegimeValues": [],
             "byBook": _books_for_rows(canonical, _row_indices(
                 violations, "row", "field", field)),
             "annexCodes": codes,
