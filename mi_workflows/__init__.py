@@ -25,6 +25,12 @@ Structure
     The Portfolio Risk Comparison workflow: deterministic comparison of
     multiple governed portfolio scopes at one reporting date.
 
+``concentration_analysis``
+    The Concentration Analysis workflow: deterministic measurement of how
+    exposure is distributed across governed dimensions (and governed
+    single-name identifiers) for one portfolio scope at one reporting date.
+    Measures concentration; never judges whether it is acceptable.
+
 Dependency direction: ``mi_agent_api`` (adapters) → ``mi_workflows`` →
 ``mi_agent`` / ``trakt_core``. Nothing in this package imports a web
 framework, performs I/O beyond reading governed registry files, calls an LLM,

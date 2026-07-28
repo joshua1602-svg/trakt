@@ -50,6 +50,7 @@ from .recogniser_registry import (
     resolve_capability_state,
 )
 
+from mi_workflows import concentration_analysis as conc_mod
 from mi_workflows import portfolio_risk_comparison as prc_mod
 from mi_workflows.semantics import load_business_semantics
 
@@ -1907,6 +1908,178 @@ def _route_portfolio_comparison(request: RouteRequest) -> Optional[Dict[str, Any
     return envelope
 
 
+# --------------------------------------------------------------------------- #
+# Concentration Analysis — adapter for the governed workflow package.
+#
+# The workflow (mi_workflows.concentration_analysis) owns recognition
+# predicates, scope resolution, Business Semantics Registry consumption and
+# every calculation. This adapter only resolves the collaborators the workflow
+# needs (frame, portfolio registry, BSR, the workspace scope) and re-keys the
+# result contract into the chat envelope — it performs no calculations and
+# takes no decisions.
+# --------------------------------------------------------------------------- #
+def _recognise_concentration(request: RouteRequest) -> Recognition:
+    matched, reason = conc_mod.is_concentration_question(
+        request.question, request.spec)
+    return (Recognition.yes(_WORKFLOW_CONFIDENCE, reason) if matched
+            else Recognition.no(reason))
+
+
+def _concentration_rows(categories: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [{
+        "rank": c["rank"],
+        "category": c["category"],
+        "exposure": "—" if c["exposure"] is None else _gbp(c["exposure"]),
+        "exposure_share": _share_pct(c["exposure_share"]),
+        "count": c["count"],
+        "count_share": _share_pct(c["count_share"]),
+        "cumulative_share": _share_pct(c["cumulative_share"]),
+    } for c in categories]
+
+
+_CONCENTRATION_COLUMNS = [
+    {"key": "rank", "label": "Rank", "align": "right", "format": "number"},
+    {"key": "category", "label": "Category", "align": "left", "format": "text"},
+    {"key": "exposure", "label": "Exposure", "align": "right", "format": "text"},
+    {"key": "exposure_share", "label": "Exposure share", "align": "right",
+     "format": "text"},
+    {"key": "count", "label": "Loans", "align": "right", "format": "number"},
+    {"key": "count_share", "label": "Loan share", "align": "right",
+     "format": "text"},
+    {"key": "cumulative_share", "label": "Cumulative", "align": "right",
+     "format": "text"},
+]
+
+
+def _concentration_tables(result: Dict[str, Any], *, spec_dict, portfolio_id,
+                          as_of) -> List[Dict[str, Any]]:
+    tables: List[Dict[str, Any]] = []
+    scope_label = (result.get("portfolio_scope") or {}).get("label") or "Total"
+    for dim in result.get("dimension_results") or []:
+        unknown = dim["unknown"]
+        rows = _concentration_rows(dim["categories"])
+        if unknown["count"]:
+            rows.append({
+                "rank": None, "category": conc_mod.engine.UNKNOWN_CATEGORY,
+                "exposure": ("—" if unknown["exposure"] is None
+                             else _gbp(unknown["exposure"])),
+                "exposure_share": _share_pct(unknown["exposure_share"]),
+                "count": unknown["count"],
+                "count_share": _share_pct(unknown["count_share"]),
+                "cumulative_share": "—",
+            })
+        tables.append(_table_artifact(
+            f"{dim['display_name']} concentration — {scope_label}",
+            columns=_CONCENTRATION_COLUMNS, rows=rows, spec=spec_dict,
+            portfolio_id=portfolio_id, as_of=as_of,
+            description=(f"{dim['category_count']} categor(ies) ranked by "
+                         f"{dim['basis']}; unknown values reported explicitly.")))
+    for sn in result.get("single_name_results") or []:
+        rows = _concentration_rows(sn["categories"])
+        tables.append(_table_artifact(
+            f"Largest {sn['kind']} exposures — {scope_label}",
+            columns=_CONCENTRATION_COLUMNS, rows=rows, spec=spec_dict,
+            portfolio_id=portfolio_id, as_of=as_of,
+            description=(f"Top {sn['listed']} of {sn['distinct_names']} "
+                         f"governed {sn['kind']} identifier(s) by "
+                         f"{sn['basis']}; remainder share "
+                         f"{_share_pct(sn['remainder']['share'])}.")))
+    return tables
+
+
+def _route_concentration(request: RouteRequest) -> Optional[Dict[str, Any]]:
+    """Adapter: collaborators in, workflow result out, envelope re-keying only."""
+    route = conc_mod.WORKFLOW_ID
+    if request.frame_resolver is None:
+        return _envelope(
+            ok=True, question=request.question, spec=request.spec_dict,
+            artifacts=[], route=route, lens_applied=True,
+            answer="I can't resolve the governed funded book to measure concentration here.",
+            warnings=["insufficient-data: no funded frame available."])
+    try:
+        df = request.frame_resolver(request.client_id, request.run_id)
+    except Exception:  # noqa: BLE001 - a resolution hiccup degrades, never 500s
+        df = None
+    if df is None or not len(df):
+        return _envelope(
+            ok=True, question=request.question, spec=request.spec_dict,
+            artifacts=[], route=route, lens_applied=True,
+            answer="I couldn't load the governed funded book to measure concentration.",
+            warnings=["insufficient-data: no funded frame available."])
+    try:
+        bsr = load_business_semantics()
+    except Exception as exc:  # noqa: BLE001 - a controlled outcome, never a 500
+        _logger.warning("business semantics registry unavailable: %s", exc)
+        return _envelope(
+            ok=True, question=request.question, spec=request.spec_dict,
+            artifacts=[], route=route, lens_applied=True,
+            answer=("Concentration analysis is unavailable: the Business "
+                    "Semantics Registry could not be loaded, and concentration "
+                    "is only measured over governed semantics."),
+            warnings=["insufficient-data: business semantics registry unavailable."])
+    try:
+        from . import portfolio_context as _ctx
+        registry = _ctx.build_registry(df, client_id=request.client_id)
+    except Exception:  # noqa: BLE001 - the workflow builds its own from the frame
+        registry = None
+
+    # The workspace scope, with question text taking precedence — the SAME
+    # lens precedence every other lens-aware route applies.
+    try:
+        lens = _resolve_lens(request.question, request.source_lens)
+        context_id = _portfolio_lens.context_id(lens)
+    except Exception:  # noqa: BLE001 - the workflow falls back to question text
+        context_id = None
+
+    result = conc_mod.run_concentration_analysis(
+        df, question=request.question, bsr=bsr, mi_semantics=request.semantics,
+        registry=registry, client_id=request.client_id, as_of=request.as_of,
+        spec=request.spec, parse_meta=request.parse_meta,
+        context_id=context_id)
+
+    warnings = list(result.get("warnings") or [])
+    warnings.extend(f"limitation: {note}" for note in result.get("limitations") or [])
+
+    if not result.get("available"):
+        envelope = _envelope(
+            ok=True, question=request.question, spec=request.spec_dict,
+            artifacts=[], route=route, lens_applied=True,
+            answer=f"I can't measure concentration here: {result.get('reason')}.",
+            warnings=warnings)
+        envelope["workflow"] = result
+        return envelope
+
+    scope = result["portfolio_scope"]
+    summary_lines = result.get("summary") or []
+    if summary_lines:
+        answer = " ".join(summary_lines)
+    else:
+        answer = (f"Measured concentration for {scope['label']} at "
+                  f"{result.get('reporting_date') or 'the current reporting date'} "
+                  f"on the {result.get('concentration_basis')} basis.")
+
+    artifacts = _concentration_tables(
+        result, spec_dict=request.spec_dict, portfolio_id=request.portfolio_id,
+        as_of=request.as_of)
+
+    audit = result.get("audit") or {}
+    notes = [{"field": "governance",
+              "note": (f"Business Semantics Registry v{audit.get('bsr_version')} "
+                       f"(schema {audit.get('bsr_schema_version')}); calculation "
+                       f"version {audit.get('calculation_version')}; only "
+                       "governed concentration dimensions were measured, on the "
+                       f"{result.get('concentration_basis')} basis.")}]
+    recon = {"dataset": conc_mod.DATASET,
+             "reporting_date": result.get("reporting_date"),
+             "rows_in_scope": scope["row_count"]}
+    envelope = _envelope(
+        ok=True, question=request.question, answer=answer,
+        spec=request.spec_dict, artifacts=artifacts, reconciliation=recon,
+        source_notes=notes, route=route, warnings=warnings, lens_applied=True)
+    envelope["workflow"] = result
+    return envelope
+
+
 #: Human wording per route for the lens disclosure below.
 _ROUTE_NOUN = {
     "temporal_compare": "period comparison", "evolution": "trend",
@@ -1914,6 +2087,7 @@ _ROUTE_NOUN = {
     "forecast_extrapolation": "forecast", "scenario": "scenario",
     "risk_limits": "risk-limit", "cohort_conversion": "conversion",
     "portfolio_risk_comparison": "portfolio comparison",
+    "concentration_analysis": "concentration",
 }
 
 
@@ -2099,6 +2273,30 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
             },
             recognise=_recognise_portfolio_comparison,
             handle=_route_portfolio_comparison),
+
+        # 6c. Concentration Analysis — the governed workflow layer's third
+        #     workflow. Recognition, scope resolution and every calculation
+        #     live in mi_workflows.concentration_analysis; this entry only
+        #     declares the route and its Business Semantics Registry terms.
+        #     Registered AFTER geo_exposure and the risk-limit monitor's
+        #     territory by construction: the workflow's own recognition defers
+        #     ITL3 location questions, limit/covenant framings, grouped
+        #     rankings and cross-portfolio comparisons to their owners.
+        Recogniser(
+            name=conc_mod.WORKFLOW_ID, priority=66, lens_aware=True,
+            description=("Deterministic measurement of exposure distribution "
+                         "across governed dimensions at one reporting date."),
+            metadata={
+                "workflow": conc_mod.WORKFLOW_ID,
+                "bsr_dimension_category": conc_mod.CONCENTRATION_CATEGORY,
+                "bsr_axes_consumed": (
+                    "analytical_role", "analytical_concept", "categories",
+                    "asset_applicability", "portfolio_comparability",
+                    "confidence"),
+                "concentration_bases": ("exposure", "count"),
+            },
+            recognise=_recognise_concentration,
+            handle=_route_concentration),
 
         # 7-8. Governed composite answers. Checked before compare/evolution
         #      because both are narrower intents than a single-metric

@@ -74,7 +74,8 @@ class TestRegistration:
 
     def test_existing_route_order_is_preserved(self):
         """Adding the workflow must not reorder the migrated chain."""
-        names = [n for n in REGISTRY.names() if n != prc.WORKFLOW_ID]
+        workflow_routes = {prc.WORKFLOW_ID, "concentration_analysis"}
+        names = [n for n in REGISTRY.names() if n not in workflow_routes]
         assert names == [
             "scenario", "cohort_conversion", "forecast_extrapolation",
             "funded_bridge", "cohort_progression", "geo_exposure",
