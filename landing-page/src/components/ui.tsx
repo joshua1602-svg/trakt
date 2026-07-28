@@ -87,12 +87,17 @@ export function Badge({
   tone = "neutral",
 }: {
   children: ReactNode;
-  tone?: "neutral" | "synthetic" | "positive";
+  /**
+   * `synthetic` is amber, the documented fourth token: this is synthetic, or a
+   * boundary Trakt will not cross. See the token note in `app/globals.css`.
+   * There is deliberately no green tone — green marks a proven state in prose
+   * and in the delivery model, not a badge.
+   */
+  tone?: "neutral" | "synthetic";
 }) {
   const tones = {
     neutral: "border-line bg-navy-850 text-ink-300",
     synthetic: "border-amber-400/35 bg-amber-400/10 text-amber-400",
-    positive: "border-mint-400/35 bg-mint-400/10 text-mint-400",
   } as const;
   return (
     <span

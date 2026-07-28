@@ -80,14 +80,16 @@ describe("GET /api/demo/meta", () => {
     const body: DemoMetaResponse = await response.json();
 
     expect(body.scope.synthetic).toBe(true);
-    expect(body.scope.client).toBe("Synthetic Demo Lender");
-    expect(body.scope.portfolio).toBe("SYNTHETIC_ERE_Portfolio_012026");
-    expect(body.scope.asOfDate).toBe("2025-11-30");
-    expect(body.suggestedQuestions.length).toBeGreaterThanOrEqual(6);
-    expect(body.reportActions.map((r) => r.id).sort()).toEqual([
-      "investor_report",
-      "management_summary",
-    ]);
+    expect(body.scope.client).toBe("Alderbridge Lending Platform");
+    expect(body.scope.portfolio).toBe("ALP_Platform_202606");
+    expect(body.scope.asOfDate).toBe("2026-06-30");
+    // Five choices in one row: four questions plus one report action, each
+    // showing a different capability.
+    expect(body.suggestedQuestions).toHaveLength(4);
+    // One report action, folded in beside the five questions so the row reads
+    // as five choices rather than two groups. management_summary remains in the
+    // pack and is still reachable as a follow-up.
+    expect(body.reportActions.map((r) => r.id)).toEqual(["investor_report"]);
     expect(body.limits.questionsPerSession).toBe(LIMITS.questionsPerSession);
   });
 
@@ -110,9 +112,9 @@ describe("POST /api/demo/query — supported questions", () => {
     expect(body.intentId).toBe("region_exposure");
     expect(body.synthetic).toBe(true);
     expect(body.answer.length).toBeGreaterThan(20);
-    expect(body.asOfDate).toBe("2025-11-30");
-    expect(body.asOfDisplay).toBe("30 November 2025");
-    expect(body.portfolioScope).toContain("SYNTHETIC_ERE_Portfolio_012026");
+    expect(body.asOfDate).toBe("2026-06-30");
+    expect(body.asOfDisplay).toBe("30 June 2026");
+    expect(body.portfolioScope).toContain("ALP_Platform_202606");
     expect(body.artifacts?.length).toBeGreaterThan(0);
     expect(body.followUps?.length).toBeGreaterThan(0);
     expect(body.usage.questionsRemaining).toBe(LIMITS.questionsPerSession - 1);
@@ -140,7 +142,7 @@ describe("POST /api/demo/query — supported questions", () => {
     const response = await queryPost(
       request("http://localhost:3000/api/demo/query", {
         questionId: "funded_balance",
-        portfolioId: "SYNTHETIC_ERE_Portfolio_012026",
+        portfolioId: "ALP_Platform_202606",
       }),
     );
     expect(response.status).toBe(200);
@@ -151,14 +153,28 @@ describe("POST /api/demo/query — refusals", () => {
   it("declines a known-unsupported topic with a reason, not a guess", async () => {
     const response = await queryPost(
       request("http://localhost:3000/api/demo/query", {
-        question: "How has the portfolio changed since last month?",
+        question: "Summarise the current pipeline.",
       }),
     );
     const body: DemoAnswerResponse = await response.json();
     expect(body.status).toBe("unsupported");
-    expect(body.intentId).toBe("temporal_movement");
+    expect(body.intentId).toBe("pipeline");
     expect(body.productionNote).toBeTruthy();
     expect(body.artifacts).toBeUndefined();
+  });
+
+  it("answers period-on-period movement from two governed snapshots", async () => {
+    const response = await queryPost(
+      request("http://localhost:3000/api/demo/query", {
+        question: "How has the portfolio changed since last month?",
+      }),
+    );
+    const body: DemoAnswerResponse = await response.json();
+    expect(body.status).toBe("answered");
+    expect(body.intentId).toBe("period_movement");
+    // Both governed scopes are named; neither is silently chosen for the reader.
+    expect(body.answer).toMatch(/platform/i);
+    expect(body.answer).toMatch(/sponsor/i);
   });
 
   it("refuses exposure-level requests", async () => {

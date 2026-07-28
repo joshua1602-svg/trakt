@@ -1,0 +1,29 @@
+{
+  "input": "/home/user/trakt/synthetic_demo/output/multibook/platform_2026-06-30_ESMA_Annex2_projected.csv",
+  "rules": "/home/user/trakt/config/regime/annex2_delivery_rules.yaml",
+  "outputs": {
+    "delivery_ready": "/home/user/trakt/synthetic_demo/output/multibook/platform_2026-06-30_ESMA_Annex2_delivery_ready.csv",
+    "report": "/home/user/trakt/synthetic_demo/output/multibook/platform_2026-06-30_ESMA_Annex2_delivery_report.json",
+    "issues": "/home/user/trakt/synthetic_demo/output/multibook/platform_2026-06-30_ESMA_Annex2_delivery_issues.csv"
+  },
+  "rows_in": 118,
+  "rows_out": 118,
+  "issues_total": 3,
+  "errors_total": 3,
+  "issue_breakdown": {
+    "enum": 3
+  },
+  "issue_category_breakdown": {
+    "enum / code mapping": 3
+  },
+  "preflight": {
+    "status": "FAIL",
+    "blocking_errors": 3,
+    "scope": {
+      "evaluates": "projected Annex 2 output (post Gate 4 transforms)",
+      "against": "field_rules in the delivery rules file",
+      "field_rules_applied": 68,
+      "does_not_evaluate": "the canonical model \u2014 Gate 3 owns that verdict, against the canonical enumerations, and the two can differ legitimately"
+    }
+  }
+}

@@ -1,0 +1,3 @@
+rule_id,severity,description,message,row_index
+DAT002,error,Origination date must be on or before maturity date.,Origination date 2024-04-30 00:00:00 > maturity date 2022-10-30 00:00:00.,73
+DAT101,warning,"For ACTIVE loans, maturity_date should be >= reporting_date.",ACTIVE loan with maturity_date 2022-10-30 00:00:00 < reporting_date 2026-06-30 00:00:00.,73

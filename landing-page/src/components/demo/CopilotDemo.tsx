@@ -203,7 +203,7 @@ export function CopilotDemo({ meta }: { meta: DemoMetaResponse }) {
           {announcement}
         </p>
 
-        {!started ? (
+        {!started && meta.scope.clientDescription ? (
           <p className="mb-4 max-w-2xl text-sm leading-relaxed text-ink-300">
             {meta.scope.clientDescription}
           </p>
@@ -269,7 +269,7 @@ export function CopilotDemo({ meta }: { meta: DemoMetaResponse }) {
 
         <div className="mt-5">
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-400">
-            Suggested questions
+            Try one of these
           </p>
           <ul className="flex flex-wrap gap-2">
             {meta.suggestedQuestions.map((question) => (
@@ -278,20 +278,12 @@ export function CopilotDemo({ meta }: { meta: DemoMetaResponse }) {
                   type="button"
                   disabled={busy || outOfQuestions}
                   onClick={() => onSuggested(question.id, question.label)}
-                  /* Left-aligned: centred text in a pill wraps raggedly at phone
-                     width and turns nine suggestions into a wall. */
                   className="rounded-full border border-line bg-navy-850 px-3.5 py-1.5 text-left text-xs text-ink-200 transition-colors hover:border-peri-500 hover:text-ink-100 disabled:opacity-50"
                 >
                   {question.label}
                 </button>
               </li>
             ))}
-          </ul>
-
-          <p className="mb-2 mt-4 text-[11px] font-semibold uppercase tracking-wider text-ink-400">
-            Report actions
-          </p>
-          <ul className="flex flex-wrap gap-2">
             {meta.reportActions.map((action) => (
               <li key={action.id}>
                 <button

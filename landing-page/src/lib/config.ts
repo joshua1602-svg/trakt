@@ -60,13 +60,13 @@ export interface ConfigIssue {
  * changing both, deliberately — which is the intent.
  */
 export const EXPECTED_DEMO_SOURCE = {
-  clientId: "synthetic_demo",
-  portfolioId: "SYNTHETIC_ERE_Portfolio_012026",
+  clientId: "alderbridge_demo",
+  portfolioId: "ALP_Platform_202606",
   currency: "GBP",
-  reportingDate: "2025-11-30",
-  minBalance: 5_000_000,
-  maxBalance: 6_000_000,
-  minExposures: 30,
+  reportingDate: "2026-06-30",
+  minBalance: 35_000_000,
+  maxBalance: 40_000_000,
+  minExposures: 100,
   packVersion: 1,
 } as const;
 

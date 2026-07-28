@@ -17,11 +17,14 @@
  * uses it for the same job and no other, so it stays a signal rather than
  * becoming a second brand colour:
  *
- *   USE     trust proof points · "reconciled by construction" · the lead
- *           ingestion tile's accent · "Available today" · lineage and
- *           validation markers
+ *   USE     trust proof points · "reconciled by construction" · the
+ *           "Available today" label and the three delivery modes it heads ·
+ *           "Trakt declines what it cannot derive" · lineage and validation
+ *           markers
  *   DO NOT  primary buttons (those stay periwinkle) · body copy · eyebrows
- *           · headings · backgrounds or filled panels · roadmap items
+ *           · headings · backgrounds or filled panels · roadmap items ·
+ *           capability tiles (they are peers, and comparative emphasis
+ *           fails on a phone where one card is visible at a time)
  *
  * Contrast on this page's navy: 8.5:1 on navy-950, 8.0:1 on navy-900 —
  * WCAG AA and AAA for normal text, so no lighter tint is derived.
@@ -30,6 +33,26 @@
  * frontend/mi-agent-ui/src/lib/theme.ts, mirrored in
  * mi_agent/mi_chart_factory.py). That green is tuned for chart fills and
  * reaches only 3.8:1 on navy-950 — it fails AA as type.
+ *
+ * ── The amber accent ────────────────────────────────────────────────
+ * `amber-400` (#e0a93b) is the fourth token, and it is deliberate rather
+ * than incidental. It is inherited from the MI Agent's own scale
+ * (frontend/mi-agent-ui/src/index.css:22), where it carries the same
+ * meaning, and it does exactly one job here:
+ *
+ *   SYNTHETIC, OR A BOUNDARY TRAKT WILL NOT CROSS.
+ *
+ *   USE     the "Synthetic data" / "Synthetic preview" labels · the
+ *           per-answer synthetic provenance tag · a book marked sold and
+ *           derecognised · the "not supported in this demonstration"
+ *           treatment on a declined answer
+ *   DO NOT  errors (those are rose) · warnings about quality · emphasis
+ *           of any kind · anything that is neither synthetic nor a
+ *           refusal
+ *
+ * Green and amber are complements, not a scale: green marks what has
+ * been proven, amber marks where the demonstration stops. Neither ever
+ * appears on a CTA, which stays periwinkle so both keep their meaning.
  * ------------------------------------------------------------------ */
 @theme {
   --color-navy-950: #0c1024;

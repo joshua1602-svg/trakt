@@ -55,18 +55,59 @@ from mi_agent_api.funded_prep import prepare_funded_mi_dataset  # noqa: E402
 # --------------------------------------------------------------------------- #
 # Repository inputs (all pre-existing; none created by the landing page)
 # --------------------------------------------------------------------------- #
-CANONICAL = _REPO_ROOT / (
-    "synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_canonical_typed.csv")
+_MULTIBOOK = _REPO_ROOT / "synthetic_demo/output/multibook"
+
+#: The current reporting period — every headline figure is as at this date.
+CANONICAL = _MULTIBOOK / "platform_2026-06-30_canonical_typed.csv"
+#: The prior period. Movement is computed by differencing the two governed
+#: snapshots; no delta is ever stored.
+CANONICAL_PRIOR = _MULTIBOOK / "platform_2026-05-31_canonical_typed.csv"
+
 SEMANTICS = _REPO_ROOT / "mi_agent/mi_semantics_field_registry.yaml"
-CLIENT_CONFIG = _REPO_ROOT / "synthetic_demo/config/config_client_SYNTHETIC_ERM.yaml"
-MAPPING_REPORT = _REPO_ROOT / (
-    "synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_header_mapping_report.json")
-TRANSFORM_REPORT = _REPO_ROOT / (
-    "synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_transform_report.json")
-VALIDATION_SUMMARY = _REPO_ROOT / (
-    "synthetic_demo/output/validation/SYNTHETIC_ERE_Portfolio_012026_field_summary.csv")
-DELIVERY_REPORT = _REPO_ROOT / (
-    "synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_delivery_report.json")
+CLIENT_CONFIG = _REPO_ROOT / (
+    "synthetic_demo/config/config_client_SYNTHETIC_MULTIBOOK.yaml")
+
+#: Gate reports. Header mapping and transform are per book, so the governance
+#: answer sums across the three.
+MAPPING_REPORTS = sorted(_MULTIBOOK.glob("*_2026-06-30_header_mapping_report.json"))
+TRANSFORM_REPORTS = sorted(_MULTIBOOK.glob("*_2026-06-30_transform_report.json"))
+VALIDATION_SUMMARY = _MULTIBOOK / "validation/platform_2026-06-30_field_summary.csv"
+DELIVERY_REPORT = _MULTIBOOK / (
+    "platform_2026-06-30_ESMA_Annex2_delivery_report.json")
+EXCEPTION_RECONCILIATION = _MULTIBOOK / (
+    "platform_2026-06-30_ESMA_Annex2_exception_reconciliation.json")
+
+# --------------------------------------------------------------------------- #
+# Book identity — mirrors demo_platform.config and the generator.
+# --------------------------------------------------------------------------- #
+#: id -> (label, short label, balance-sheet status, one-line status detail)
+BOOKS: Dict[str, Dict[str, str]] = {
+    "alp_origination": {
+        "label": "ALP Origination Book",
+        "short": "Origination",
+        "status": "warehoused",
+        "detail": "Warehoused, destined for SPV2",
+    },
+    "alp_acquired": {
+        "label": "ALP Acquired Back Book",
+        "short": "Acquired",
+        "status": "warehoused",
+        "detail": "Warehoused, destined for SPV2",
+    },
+    "spv1_sponsored": {
+        "label": "SPV1 Sponsored Securitisation",
+        "short": "SPV1",
+        "status": "sold",
+        "detail": "Sold and derecognised; servicing and reporting retained",
+    },
+}
+
+#: The warehoused platform: what sits on the sponsor's own balance sheet.
+PLATFORM_BOOKS = ("alp_origination", "alp_acquired")
+#: Everything the sponsor still reports on, including the deal it sold. Both
+#: totals are legitimate; the demonstration names which is which rather than
+#: silently picking one.
+SPONSOR_BOOKS = tuple(BOOKS)
 
 OUT = _LANDING_ROOT / "data" / "demo-pack.json"
 
@@ -112,12 +153,12 @@ INTENTS: List[Dict[str, Any]] = [
             "how big is the portfolio", "portfolio size", "aum", "book size",
         ],
         "narrative": (
-            "The funded book stands at {kpi0} across {loans} exposures as at "
-            "{as_of}. The figure is the sum of current outstanding balance on the "
-            "governed canonical dataset — the same calculation the MI workspace "
-            "and Microsoft 365 Copilot return for this portfolio."
+            "Aggregated across all three governed books, the funded position is "
+            "{kpi0} over {loans} exposures as at {as_of}. This is the sponsor "
+            "scope, which includes the sold SPV1 securitisation; ask for the "
+            "balance by book to see the platform total on its own."
         ),
-        "followUps": ["region_exposure", "ltv_band", "wa_ltv"],
+        "followUps": ["balance_by_book", "period_movement", "region_exposure"],
     },
     {
         "id": "loan_count",
@@ -131,10 +172,11 @@ INTENTS: List[Dict[str, Any]] = [
             "number of exposures", "how many accounts", "how many cases",
         ],
         "narrative": (
-            "There are {kpi0} exposures in the funded book as at {as_of}, "
-            "carrying {balance} of current outstanding balance."
+            "There are {kpi0} exposures across the three governed books as at "
+            "{as_of}, carrying {balance} of current outstanding balance in "
+            "aggregate."
         ),
-        "followUps": ["funded_balance", "ticket_band", "channel"],
+        "followUps": ["balance_by_book", "ticket_band", "channel"],
     },
     {
         "id": "wa_ltv",
@@ -267,7 +309,26 @@ INTENTS: List[Dict[str, Any]] = [
 
 #: Composite intents assembled from several engine runs plus governed pipeline
 #: artefacts. Handled by dedicated builders below.
-COMPOSITE_INTENT_IDS = ["portfolio_risks", "data_quality"]
+# TODO(B4) — deliberately out of scope for this pass, recorded so they are not
+# lost:
+#
+#   * Lineage trace as an ANSWER TYPE. "How do I know these numbers are right?"
+#     currently returns gate-level counts. The richer answer walks one published
+#     figure back through source header -> mapping -> transformation ->
+#     validation -> output. The evidence already exists per book in
+#     *_header_mapping_report.json and *_transform_report.json, and
+#     engine/gate_2_transform/lineage_tracker.py is the production path; what is
+#     missing is selecting a single figure and rendering its chain.
+#
+#   * Downloadable generated artefact from "Generate the latest investor report".
+#     The preview is deliberately preview-only today — no document, no download
+#     URL, no storage path — and that boundary is asserted by unit and E2E tests.
+#     Producing a real artefact means deciding how a public visitor may receive
+#     one, which is a hosting and access-control question, not a rendering one.
+
+COMPOSITE_INTENT_IDS = ["portfolio_risks", "data_quality",
+                        "balance_by_book", "period_movement",
+                        "annex_exceptions"]
 
 #: Report actions. These return an in-page preview only — never a document, a
 #: download URL, or a storage path.
@@ -278,25 +339,24 @@ REPORT_INTENT_IDS = ["management_summary", "investor_report"]
 #: behaviour, and the page shows them off on purpose.
 CONTROLLED_UNSUPPORTED: List[Dict[str, str]] = [
     {
-        "id": "temporal_movement",
-        "label": "How has the portfolio changed since last month?",
+        "id": "loan_level",
+        "label": "Show me individual loan records.",
         "phrases": [
-            "changed since last month", "since last month", "month on month",
-            "month-on-month", "movement", "versus last month", "vs last month",
-            "compared to last month", "trend", "over time", "evolution",
-            "last quarter", "since december", "growth",
+            "individual loan records", "loan level", "loan-level", "show me the loans",
+            "list the loans", "individual exposures", "borrower details",
+            "customer data", "personal data", "raw data", "export the tape",
+            "download the tape", "row level", "each loan",
         ],
         "reason": (
-            "This public demonstration contains a single governed reporting "
-            "period — the 30 November 2025 snapshot of 36 funded exposures — so "
-            "it cannot calculate movement between periods. Trakt will not "
-            "estimate a prior position it does not hold."
+            "Trakt will not return exposure-level records to a public page. This "
+            "is a governance boundary, not a data gap: the demonstration serves "
+            "aggregated figures only, and no loan, borrower or collateral record "
+            "leaves the governed dataset."
         ),
         "productionNote": (
-            "In a production Trakt environment, this answer is generated from "
-            "governed historical snapshots: month-on-month, quarter-on-quarter "
-            "and since-inception movement, with a reconciliation of every driver "
-            "of the change."
+            "In a client environment, exposure-level drill-through is available "
+            "in the Trakt workspace, governed by role-based access within that "
+            "client's own deployment."
         ),
     },
     {
@@ -304,14 +364,13 @@ CONTROLLED_UNSUPPORTED: List[Dict[str, str]] = [
         "label": "Summarise the current pipeline.",
         "phrases": [
             "summarise the current pipeline", "summarize the pipeline", "pipeline",
-            "applications", "new business", "funnel", "conversion", "offers",
+            "applications", "new business pipeline", "funnel", "conversion", "offers",
             "forecast", "expected completions", "what will we fund",
         ],
         "reason": (
-            "This public demonstration contains only the funded loan tape for "
-            "the 30 November 2025 snapshot, so it cannot calculate pipeline "
-            "volumes, conversion or expected completions — there is no "
-            "application-stage data behind it."
+            "This demonstration holds funded loan tapes only, so it cannot "
+            "calculate pipeline volumes, conversion or expected completions — "
+            "there is no application-stage data behind it."
         ),
         "productionNote": (
             "In a production Trakt environment, this answer is generated from "
@@ -328,35 +387,14 @@ CONTROLLED_UNSUPPORTED: List[Dict[str, str]] = [
             "impairment", "write-off", "loss", "recoveries", "in arrears",
         ],
         "reason": (
-            "This public demonstration contains 36 performing equity release "
-            "exposures with no arrears, default or loss balances recorded, so it "
-            "cannot calculate delinquency measures — an answer here would be "
+            "These three books carry no arrears, default or loss balances, so "
+            "delinquency measures cannot be calculated — an answer here would be "
             "meaningless rather than merely empty."
         ),
         "productionNote": (
             "In a production Trakt environment, this answer is generated from "
             "governed servicing data: arrears, default, forbearance and loss "
             "analytics, where the portfolio's own data supports them."
-        ),
-    },
-    {
-        "id": "loan_level",
-        "label": "Show me individual loan records.",
-        "phrases": [
-            "individual loan", "loan level", "loan-level", "show me the loans",
-            "list the loans", "borrower details", "customer details", "postcode",
-            "loan identifier", "specific loan", "each loan", "raw data",
-            "download the tape", "export the data", "csv",
-        ],
-        "reason": (
-            "This public demonstration returns aggregated portfolio measures "
-            "only, so it cannot show exposure-level records. Loan-level data is "
-            "never exposed on this page, even for a synthetic portfolio."
-        ),
-        "productionNote": (
-            "In a production Trakt environment, exposure-level drill-through is "
-            "available in the Trakt workspace, generated from the governed "
-            "canonical dataset and controlled by role-based access."
         ),
     },
 ]
@@ -618,19 +656,23 @@ class DemoSource:
 #: landing page by editing this object and re-running the generator. The
 #: assertions below will refuse anything that does not match.
 DEMO_SOURCE = DemoSource(
-    client_id="synthetic_demo",
-    client_name="Synthetic Demo Lender",
-    portfolio_id="SYNTHETIC_ERE_Portfolio_012026",
+    client_id="alderbridge_demo",
+    client_name="Alderbridge Lending Platform",
+    portfolio_id="ALP_Platform_202606",
     canonical_path=CANONICAL,
     config_path=CLIENT_CONFIG,
     expected_currency="GBP",
     expected_asset_class="equity_release",
-    expected_reporting_date="2025-11-30",
-    expected_min_balance=5_000_000.0,
-    expected_max_balance=6_000_000.0,
-    expected_min_exposures=30,
-    expected_sha256="2b98576cf223cc53b434330c3c73e0623a936988ac3b8458e07c622bfe61339f",
+    expected_reporting_date="2026-06-30",
+    expected_min_balance=35_000_000.0,
+    expected_max_balance=40_000_000.0,
+    expected_min_exposures=100,
+    expected_sha256="3a77cbaeb29e6bce2a23c469e1330e45643836c7d4d2e9ccf8c7cbf051c1b3d5",
 )
+
+#: The prior period, pinned the same way. Only its bytes and its balance are
+#: asserted — every other guarantee comes from the current-period source.
+PRIOR_SHA256 = "58fd505d0cfd0d8920e09a442c92f78c7a730f6f2473c5a777ecc2cbe9761b51"
 
 
 def _mismatch(source: DemoSource, problems: List[str]) -> DemoSourceMismatch:
@@ -899,49 +941,331 @@ def _concentration_table(engine: Engine, as_of_display: str) -> Dict[str, Any]:
     }
 
 
+def _book_totals(frame: "pd.DataFrame") -> Dict[str, Dict[str, float]]:
+    """Balance and exposure count per book, from the governed frame.
+
+    Book identity is a column on every row because Gate 2 stamped it, so this
+    is a group-by on the governed model rather than a filter invented here.
+    """
+    balances = pd.to_numeric(frame["current_outstanding_balance"],
+                             errors="coerce").fillna(0)
+    out: Dict[str, Dict[str, float]] = {}
+    for book_id in BOOKS:
+        mask = frame["source_portfolio_id"].astype(str) == book_id
+        out[book_id] = {
+            "balance": float(balances[mask].sum()),
+            "loans": int(mask.sum()),
+        }
+    return out
+
+
+def _balance_by_book(engine: Engine, as_of_display: str) -> Dict[str, Any]:
+    """Funded balance per book, with BOTH governed totals.
+
+    The sponsor originated SPV1 and then sold it, so it is off balance sheet —
+    and the sponsor still services it, retains risk and reports to its
+    noteholders. Two totals are therefore correct at once, and collapsing them
+    into one would misstate whichever question was actually being asked. The
+    answer gives both and says which is which.
+    """
+    totals = _book_totals(engine.frame)
+    platform_balance = sum(totals[b]["balance"] for b in PLATFORM_BOOKS)
+    platform_loans = sum(totals[b]["loans"] for b in PLATFORM_BOOKS)
+    sponsor_balance = sum(totals[b]["balance"] for b in SPONSOR_BOOKS)
+    sponsor_loans = sum(totals[b]["loans"] for b in SPONSOR_BOOKS)
+
+    rows = []
+    for book_id, meta in BOOKS.items():
+        rows.append({
+            "book": meta["label"],
+            "status": meta["detail"],
+            "exposures": f"{totals[book_id]['loans']:,}",
+            "balance": _fmt_currency(totals[book_id]["balance"]),
+        })
+    rows.append({
+        "book": "Platform total (warehoused)",
+        "status": "On balance sheet",
+        "exposures": f"{platform_loans:,}",
+        "balance": _fmt_currency(platform_balance),
+    })
+    rows.append({
+        "book": "Sponsor total (including SPV1)",
+        "status": "Everything the sponsor reports on",
+        "exposures": f"{sponsor_loans:,}",
+        "balance": _fmt_currency(sponsor_balance),
+    })
+
+    answer = (
+        f"Across three governed books as at {as_of_display}, the platform carries "
+        f"{_fmt_currency(platform_balance)} over {platform_loans:,} exposures on "
+        f"balance sheet. Including SPV1 — originated by the sponsor, securitised "
+        f"and sold, with servicing, risk retention and investor reporting "
+        f"retained — the sponsor reports on {_fmt_currency(sponsor_balance)} over "
+        f"{sponsor_loans:,} exposures. Both totals are correct; they answer "
+        "different questions, so Trakt returns both rather than choosing one."
+    )
+
+    return {
+        "id": "balance_by_book",
+        "label": "Show the funded balance by book.",
+        "category": "portfolio_kpi",
+        "phrases": [
+            "funded balance by book", "balance by book", "by book", "each book",
+            "split by book", "by portfolio", "by spv", "spv1", "spv 1",
+            "which books", "how many books", "book breakdown", "per book",
+            "origination book", "acquired book", "securitisation",
+            "balance sheet", "sponsor total", "platform total",
+        ],
+        "answer": answer,
+        "interpreted": "Balance by source portfolio; platform and sponsor scopes",
+        "artifacts": [{
+            "kind": "table",
+            "title": "Funded balance by governed book",
+            "columns": [
+                {"key": "book", "label": "Book", "align": "left"},
+                {"key": "status", "label": "Status", "align": "left"},
+                {"key": "exposures", "label": "Exposures", "align": "right"},
+                {"key": "balance", "label": "Balance", "align": "right"},
+            ],
+            "rows": rows,
+        }],
+        "followUps": ["period_movement", "annex_exceptions", "data_quality"],
+    }
+
+
+def _period_movement(engine: Engine, as_of_display: str) -> Dict[str, Any]:
+    """Movement between the two governed snapshots, per book and in aggregate.
+
+    Differenced from the two committed canonicals at build time. Nothing here is
+    a stored delta: change the prior snapshot and this answer changes with it.
+    """
+    digest = hashlib.sha256(CANONICAL_PRIOR.read_bytes()).hexdigest()
+    if digest != PRIOR_SHA256:
+        raise DemoSourceMismatch(
+            f"prior snapshot {CANONICAL_PRIOR.name} has SHA-256 {digest}, "
+            f"expected {PRIOR_SHA256}. Movement would be computed against an "
+            "unverified prior position."
+        )
+
+    prior_raw = pd.read_csv(CANONICAL_PRIOR, low_memory=False)
+    prior_frame, _ = prepare_funded_mi_dataset(prior_raw)
+    prior_date = sorted({str(v) for v in
+                         prior_frame["data_cut_off_date"].dropna().unique()})[-1]
+    prior_display = _as_of_display(prior_date)
+
+    now = _book_totals(engine.frame)
+    was = _book_totals(prior_frame)
+
+    def _delta(current: float, previous: float) -> str:
+        change = current - previous
+        return f"{'+' if change >= 0 else '−'}{_fmt_currency(abs(change))}"
+
+    def _pct(current: float, previous: float) -> str:
+        return "n/a" if previous == 0 else f"{(current - previous) / previous * 100:+.1f}%"
+
+    rows = []
+    for book_id, meta in BOOKS.items():
+        rows.append({
+            "book": meta["label"],
+            "exposures": f"{was[book_id]['loans']:,} → {now[book_id]['loans']:,}",
+            "movement": _delta(now[book_id]["balance"], was[book_id]["balance"]),
+            "pct": _pct(now[book_id]["balance"], was[book_id]["balance"]),
+        })
+
+    platform_now = sum(now[b]["balance"] for b in PLATFORM_BOOKS)
+    platform_was = sum(was[b]["balance"] for b in PLATFORM_BOOKS)
+    sponsor_now = sum(now[b]["balance"] for b in SPONSOR_BOOKS)
+    sponsor_was = sum(was[b]["balance"] for b in SPONSOR_BOOKS)
+    rows.append({
+        "book": "Platform total (warehoused)",
+        "exposures": (f"{sum(was[b]['loans'] for b in PLATFORM_BOOKS):,} → "
+                      f"{sum(now[b]['loans'] for b in PLATFORM_BOOKS):,}"),
+        "movement": _delta(platform_now, platform_was),
+        "pct": _pct(platform_now, platform_was),
+    })
+    rows.append({
+        "book": "Sponsor total (including SPV1)",
+        "exposures": (f"{sum(was[b]['loans'] for b in SPONSOR_BOOKS):,} → "
+                      f"{sum(now[b]['loans'] for b in SPONSOR_BOOKS):,}"),
+        "movement": _delta(sponsor_now, sponsor_was),
+        "pct": _pct(sponsor_now, sponsor_was),
+    })
+
+    added = now["alp_origination"]["loans"] - was["alp_origination"]["loans"]
+    left = was["alp_acquired"]["loans"] - now["alp_acquired"]["loans"]
+
+    answer = (
+        f"Comparing the {as_of_display} cut with {prior_display}, the platform "
+        f"moved {_delta(platform_now, platform_was)} to "
+        f"{_fmt_currency(platform_now)} ({_pct(platform_now, platform_was)}). The "
+        f"origination book added {added} exposures and the acquired book lost "
+        f"{left}; the remainder is interest roll-up on a book that capitalises "
+        f"rather than amortises. Including SPV1 the sponsor position moved "
+        f"{_delta(sponsor_now, sponsor_was)} to {_fmt_currency(sponsor_now)}. Both "
+        "figures are differenced from two governed snapshots — Trakt holds no "
+        "stored deltas."
+    )
+
+    return {
+        "id": "period_movement",
+        "label": "How has the portfolio changed since last month?",
+        "category": "temporal",
+        "phrases": [
+            "changed since last month", "since last month", "month on month",
+            "month-on-month", "movement", "versus last month", "vs last month",
+            "compared to last month", "trend", "over time", "evolution",
+            "growth", "how has the portfolio changed", "period on period",
+        ],
+        "answer": answer,
+        "interpreted": (
+            f"Movement {prior_display} to {as_of_display}; two governed snapshots"),
+        "artifacts": [{
+            "kind": "table",
+            "title": f"Movement {prior_display} to {as_of_display}",
+            "columns": [
+                {"key": "book", "label": "Book", "align": "left"},
+                {"key": "exposures", "label": "Exposures", "align": "right"},
+                {"key": "movement", "label": "Balance movement", "align": "right"},
+                {"key": "pct", "label": "Change", "align": "right"},
+            ],
+            "rows": rows,
+        }],
+        "followUps": ["balance_by_book", "annex_exceptions", "region_exposure"],
+    }
+
+
+def _annex_exceptions(engine: Engine, as_of_display: str) -> Dict[str, Any]:
+    """ESMA Annex 2 validation exceptions, with the reasoning behind each.
+
+    Read from the Gate 4b reconciliation, which classifies every exception from
+    either validation gate by its actual effect on the submission. A pass/fail
+    verdict would say nothing a lender could act on; what costs them weeks is
+    knowing which field, which book, what the regime requires, what the source
+    actually contained and what would clear it.
+    """
+    recon = json.loads(EXCEPTION_RECONCILIATION.read_text(encoding="utf-8"))
+    totals = recon.get("totals") or {}
+    exceptions = recon.get("exceptions") or []
+
+    label_for = {
+        "BLOCKS_DELIVERY": "Blocks submission",
+        "DEFAULTED_AT_DELIVERY": "Defaults to a no-data code",
+        "RESOLVED_AT_PROJECTION": "Resolved at projection",
+        "OUT_OF_REGIME_SCOPE": "Outside Annex 2 scope",
+    }
+
+    rows = []
+    for item in exceptions:
+        annex = (item.get("annex") or [{}])[0]
+        code = annex.get("code") or "—"
+        field = item.get("canonicalField") or item.get("businessRule") or "—"
+        books = ", ".join(
+            f"{b['bookLabel']} ({b['exposures']})" for b in item.get("byBook") or []
+        ) or "—"
+        observed = item.get("observedValues") or []
+        rows.append({
+            "disposition": label_for.get(item.get("disposition"),
+                                         str(item.get("disposition"))),
+            "field": f"{code} · {field}",
+            "books": books,
+            "found": str(observed[0])[:70] if observed else "no value supplied",
+            "resolution": str(item.get("resolution", ""))[:150],
+        })
+
+    blocking = int(totals.get("blocksDelivery") or 0)
+    defaulted = int(totals.get("defaultedAtDelivery") or 0)
+    out_of_scope = int(totals.get("outOfRegimeScope") or 0)
+    raised = int(totals.get("canonicalExceptions") or 0)
+
+    answer = (
+        f"The {as_of_display} Annex 2 preparation raised {raised} exceptions "
+        f"across the three books. {blocking} would block the submission, "
+        f"{defaulted} would pass while asserting a no-data code the source never "
+        f"supplied, and {out_of_scope} are governed data-quality findings that do "
+        "not reach the return. Each carries its Annex reference, the book and "
+        "exposures affected, what the source contained and what would clear it. "
+        "Trakt reports them; it does not resolve them for you."
+    )
+
+    return {
+        "id": "annex_exceptions",
+        "label": "Show the current Annex 2 validation exceptions.",
+        "category": "governance",
+        "phrases": [
+            "annex 2 validation exceptions", "annex 2 exceptions", "validation exceptions",
+            "annex exceptions", "regulatory exceptions", "esma exceptions",
+            "what is blocking the submission", "submission blocked", "annex 2",
+            "esma annex", "regulatory errors", "what would fail", "preflight",
+            "can we submit", "submission ready", "exceptions",
+        ],
+        "answer": answer,
+        "interpreted": "Annex 2 exception reconciliation; Gate 3 and Gate 4b",
+        "artifacts": [{
+            "kind": "table",
+            "title": "ESMA Annex 2 exceptions, by effect on the submission",
+            "columns": [
+                {"key": "disposition", "label": "Effect", "align": "left"},
+                {"key": "field", "label": "Annex field", "align": "left"},
+                {"key": "books", "label": "Book (exposures)", "align": "left"},
+                {"key": "found", "label": "Source value", "align": "left"},
+                {"key": "resolution", "label": "What would clear it", "align": "left"},
+            ],
+            "rows": rows,
+        }],
+        "followUps": ["data_quality", "balance_by_book", "investor_report"],
+    }
+
+
 def _data_quality(engine: Engine, as_of_display: str) -> Dict[str, Any]:
     """Governance evidence, read from the pipeline's own committed reports."""
-    mapping = json.loads(MAPPING_REPORT.read_text(encoding="utf-8"))
-    transform = json.loads(TRANSFORM_REPORT.read_text(encoding="utf-8"))
+    # Three books, so three of each gate report. The governance answer sums
+    # across them: the client onboarded three source schemas, not one.
+    mappings = []
+    for report in MAPPING_REPORTS:
+        mappings.extend(json.loads(report.read_text(encoding="utf-8")).get("mappings") or [])
+    fields: Dict[str, Any] = {}
+    parse_failures = 0
+    for report in TRANSFORM_REPORTS:
+        book_fields = json.loads(report.read_text(encoding="utf-8")).get("fields") or {}
+        fields.update(book_fields)
+        parse_failures += sum(int(f.get("parse_failures") or 0)
+                              for f in book_fields.values() if isinstance(f, dict))
+
     delivery = json.loads(DELIVERY_REPORT.read_text(encoding="utf-8"))
+    recon = json.loads(EXCEPTION_RECONCILIATION.read_text(encoding="utf-8"))
     validation = pd.read_csv(VALIDATION_SUMMARY)
 
-    mappings = mapping.get("mappings") or []
     exact = sum(1 for m in mappings if float(m.get("confidence") or 0) >= 1.0)
-    fields = transform.get("fields") or {}
-    parse_failures = sum(int(f.get("parse_failures") or 0)
-                         for f in fields.values() if isinstance(f, dict))
     blocking = int((validation["materiality"] == "BLOCKING").sum()) \
         if "materiality" in validation else len(validation)
 
+    totals = recon.get("totals") or {}
     rows = [
         {"gate": "1 · Semantic alignment",
-         "measure": "Source headers mapped to canonical fields",
+         "measure": "Source headers mapped to canonical fields, across three books",
          "result": f"{len(mappings)} mapped, {exact} at full confidence"},
         {"gate": "— · Transform",
          "measure": "Typed fields with parse failures",
          "result": f"{parse_failures} of {len(fields)} fields"},
         {"gate": "2/3 · Validation",
          "measure": "Field-level exceptions raised",
-         "result": f"{len(validation)} exception(s), {blocking} blocking"},
-        {"gate": "5 · ESMA Annex 2 delivery",
-         "measure": "Preflight on the projected regulatory output",
-         "result": (f"{delivery.get('preflight', {}).get('status', 'n/a')} — "
-                    f"{delivery.get('rows_in')} rows in / "
-                    f"{delivery.get('rows_out')} out, "
-                    f"{delivery.get('issues_total')} issues")},
+         "result": f"{len(validation)} exception(s) on the governed model"},
+        {"gate": "4b · ESMA Annex 2 delivery",
+         "measure": "Exceptions by effect on the submission",
+         "result": (f"{totals.get('blocksDelivery', 0)} blocking, "
+                    f"{totals.get('defaultedAtDelivery', 0)} no-data defaulted, "
+                    f"{totals.get('outOfRegimeScope', 0)} outside regime scope")},
     ]
 
     answer = (
         "Every figure on this page traces back through the same gated pipeline. "
-        f"For the {as_of_display} cut, {len(mappings)} source headers were mapped "
-        f"to canonical fields ({exact} at full confidence), the typed transform "
-        f"recorded {parse_failures} parse failures, validation raised "
-        f"{len(validation)} field-level exception(s) — both enumeration "
-        "mismatches, held open rather than silently corrected — and the ESMA "
-        "Annex 2 delivery preflight passed with "
-        f"{delivery.get('issues_total')} issues. The exceptions are real, and "
-        "Trakt reports them rather than resolving them for you."
+        f"For the {as_of_display} cut, {len(mappings)} source headers across three "
+        f"books were mapped to canonical fields ({exact} at full confidence), the "
+        f"typed transform recorded {parse_failures} parse failures, and validation "
+        f"raised {len(validation)} exception(s). The Annex 2 reconciliation then "
+        "classifies each one by whether it actually blocks the submission — "
+        f"{totals.get('blocksDelivery', 0)} do. The exceptions are real, and Trakt "
+        "reports them rather than resolving them for you."
     )
 
     return {
@@ -1068,7 +1392,7 @@ def _reports(engine: Engine, intents: Dict[str, Dict[str, Any]],
                                 "pipeline dataset that this public demonstration "
                                 "does not publish.")),
         ],
-        "followUps": ["management_summary", "data_quality", "region_exposure"],
+        "followUps": ["annex_exceptions", "balance_by_book", "region_exposure"],
     }
 
     management = {
@@ -1118,7 +1442,10 @@ def build_pack() -> Dict[str, Any]:
         intents[spec["id"]] = build_intent(engine, spec, as_of_display)
 
     for composite in (_concentration_table(engine, as_of_display),
-                      _data_quality(engine, as_of_display)):
+                      _data_quality(engine, as_of_display),
+                      _balance_by_book(engine, as_of_display),
+                      _period_movement(engine, as_of_display),
+                      _annex_exceptions(engine, as_of_display)):
         intents[composite["id"]] = composite
 
     reports = _reports(engine, intents, as_of_display)
@@ -1141,21 +1468,23 @@ def build_pack() -> Dict[str, Any]:
             "canonicalSha256": engine.fingerprint,
         },
         "client": {
-            "id": "synthetic_demo",
-            "name": "Synthetic Demo Lender",
-            "originator": "ERE Funding Limited",
-            "description": (
-                "A synthetic UK equity release lender used throughout the Trakt "
-                "demonstration materials. Its book is a lifetime-mortgage "
-                "portfolio with interest roll-up, funded through a warehouse "
-                "facility and reported to ESMA Annex 2 for securitisation."
-            ),
+            "id": "alderbridge_demo",
+            "name": "Alderbridge Lending Platform",
+            "originator": "Alderbridge Lending Platform (synthetic)",
+            # Deliberately empty. The page previously carried a paragraph of
+            # scene-setting here; the scope header above it already states the
+            # client, books, exposures, balance and date, which is what a reader
+            # needs before an answer means anything.
+            "description": "",
             "synthetic": True,
         },
         "portfolio": {
-            "id": "SYNTHETIC_ERE_Portfolio_012026",
-            "name": "Equity Release Portfolio",
-            "assetClass": "UK equity release mortgages",
+            "id": "ALP_Platform_202606",
+            "name": "Three governed books",
+            # Named generically on purpose: a single asset class tells a bridging
+            # lender, an auto-loan buyer or a private-credit manager that the
+            # product was not built for them.
+            "assetClass": "UK asset-backed portfolio",
             "currency": "GBP",
             "country": "United Kingdom",
             "asOfDate": engine.as_of,
@@ -1165,10 +1494,27 @@ def build_pack() -> Dict[str, Any]:
             "totalBalanceDisplay": _fmt_currency(engine.total_balance),
             "regulatoryRegime": "ESMA Annex 2",
             "deliveryPreflight": (delivery.get("preflight") or {}).get("status"),
+            "platformBalanceDisplay": _fmt_currency(
+                sum(_book_totals(engine.frame)[b]["balance"] for b in PLATFORM_BOOKS)),
+            "books": [
+                {
+                    "id": book_id,
+                    "label": meta["label"],
+                    "shortLabel": meta["short"],
+                    "balanceSheetStatus": meta["status"],
+                    "statusDetail": meta["detail"],
+                    "balanceDisplay": _fmt_currency(
+                        _book_totals(engine.frame)[book_id]["balance"]),
+                }
+                for book_id, meta in BOOKS.items()
+            ],
+            "priorAsOfDate": "2026-05-31",
         },
         "provenance": {
             "sourceDataset": (
-                "synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_canonical_typed.csv"),
+                "synthetic_demo/output/multibook/platform_2026-06-30_canonical_typed.csv"),
+            "priorDataset": (
+                "synthetic_demo/output/multibook/platform_2026-05-31_canonical_typed.csv"),
             "engine": [
                 "mi_agent_api.funded_prep.prepare_funded_mi_dataset",
                 "mi_agent.mi_agent_workflow.run_mi_agent_query",

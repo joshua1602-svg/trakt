@@ -357,6 +357,23 @@ def normalize_delivery(df: pd.DataFrame, rules: Dict[str, Any]) -> Tuple[pd.Data
         "preflight": {
             "status": "PASS" if not errors else "FAIL",
             "blocking_errors": int(len(errors)),
+            # What this verdict covers, stated in the artefact rather than left
+            # to the reader. A PASS here is NOT "the dataset has no exceptions":
+            # it is "the projected submission satisfies the Annex 2 field rules,
+            # after Gate 4 applied the documented transforms". Canonical
+            # exceptions are Gate 3's verdict against a different vocabulary and
+            # can legitimately stand open beside a PASS — see
+            # annex2_exception_reconciler.py, which classifies each one by its
+            # actual effect on the submission.
+            "scope": {
+                "evaluates": "projected Annex 2 output (post Gate 4 transforms)",
+                "against": "field_rules in the delivery rules file",
+                "field_rules_applied": int(len(fields_cfg)),
+                "does_not_evaluate": (
+                    "the canonical model — Gate 3 owns that verdict, against the "
+                    "canonical enumerations, and the two can differ legitimately"
+                ),
+            },
         },
     }
     return out_df, issues, summary

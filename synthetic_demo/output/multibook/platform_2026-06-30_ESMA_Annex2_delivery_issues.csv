@@ -1,0 +1,4 @@
+severity,delivery_category,issue_type,field,row_index,message,input_value,output_value
+error,enum / code mapping,enum,RREC14,51,Value 'AVM (desktop)' not found in enum_map,AVM (desktop),AVM (desktop)
+error,enum / code mapping,enum,RREC14,58,Value 'AVM (desktop)' not found in enum_map,AVM (desktop),AVM (desktop)
+error,enum / code mapping,enum,RREC14,65,Value 'AVM (desktop)' not found in enum_map,AVM (desktop),AVM (desktop)
