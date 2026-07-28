@@ -593,6 +593,97 @@ def _registry_metric_terms(semantics: dict) -> Dict[str, str]:
     return out
 
 
+# Words that may legitimately sit on the metric side of "<metric> by <dim>"
+# without naming a measure: request verbs, determiners, aggregation qualifiers,
+# chart words and connectives. Anything left over after removing these AND every
+# registry term is a measure the user named that this dataset does not have.
+_METRIC_SIDE_STOPWORDS = frozenset({
+    # request framing
+    "show", "shows", "display", "give", "gimme", "get", "list", "plot", "chart",
+    "draw", "render", "provide", "produce", "see", "view", "want", "need",
+    "please", "can", "you", "could", "would", "tell", "what", "whats", "which",
+    "how", "much", "many", "who", "where", "when", "why", "is", "are", "was",
+    "were", "do", "does", "did", "has", "have", "had", "the", "a", "an", "my",
+    "our", "me", "us", "it", "its", "this", "that", "these", "those", "there",
+    "of", "for", "in", "on", "at", "to", "from", "with", "and", "or", "as",
+    "per", "each", "every", "all", "any", "some", "across", "over", "under",
+    "between", "within", "into", "out", "up", "down", "look", "looking",
+    # aggregation / shape qualifiers (resolved separately by _aggregation_intent)
+    "sum", "total", "totals", "aggregate", "average", "avg", "mean", "median",
+    "weighted", "simple", "unweighted", "plain", "straight", "count", "counts",
+    "number", "numbers", "distribution", "breakdown", "break", "broken", "split",
+    "grouped", "group", "summary", "summarise", "summarize", "overview",
+    # chart / output words
+    "bar", "line", "pie", "table", "graph", "heatmap", "treemap", "bubble",
+    "scatter", "map", "matrix", "grid", "trend", "series", "chartd",
+})
+
+# Words that FRAME an analysis rather than name a measure. A question built only
+# from these legitimately has no metric of its own and defaults to the balance
+# measure — that is long-standing, governed behaviour ("concentration by region",
+# "coverage by borrower type", "regions with the most loans"), not a silent
+# substitution, because the user never named a different measure to substitute
+# for. Kept separate from the framing/stopword list above so the distinction
+# stays explicit: these are *analytical* words, not grammatical filler.
+_ANALYTICAL_FRAMING_WORDS = frozenset({
+    "concentration", "concentrations", "concentrated", "concentrate",
+    "coverage", "covered", "data", "quality", "completeness", "missing",
+    "most", "least", "largest", "biggest", "smallest", "highest", "lowest",
+    "top", "bottom", "rank", "ranked", "ranking", "leading", "worst", "best",
+    "mix", "composition", "profile", "position", "snapshot", "spread",
+    "exposure", "exposures", "book", "portfolio", "portfolios",
+})
+
+#: Minimum token length for a residue word to count as a named measure. Filters
+#: stray short tokens without needing an exhaustive stopword list.
+_METRIC_RESIDUE_MIN_LEN = 3
+
+
+def _metric_side_residue(metric_part: str, semantics: dict,
+                         available_columns=None) -> Optional[str]:
+    """The measure the user named that this dataset does not carry, if any.
+
+    ``_deterministic_parse`` used to default an unresolved metric to the balance
+    field, so "show me the unicorn ratio by region" answered as *balance by
+    region* with ``ok:true`` — a confident answer to a question nobody asked.
+    Refusing requires distinguishing two cases:
+
+    * **no measure named** ("breakdown by region") — defaulting to balance is the
+      documented, expected behaviour and must not change;
+    * **a measure named that does not resolve** ("unicorn ratio by region") — the
+      request must be refused, naming the term.
+
+    This returns the residual phrase for the second case and ``None`` for the
+    first. It removes request framing, aggregation qualifiers and chart words,
+    then every governed metric and dimension term the registry knows. Whatever
+    survives is a noun phrase the user supplied and the registry cannot map.
+    """
+    text = (metric_part or "").strip().lower()
+    if not text:
+        return None
+    # Blank out every registry term (longest first, so multi-word phrases win)
+    # plus the hard-coded explicit dimension vocabulary.
+    terms = set(_registry_metric_terms(semantics)) | set(_registry_dimension_terms(semantics))
+    terms |= set(EXPLICIT_DIMENSION_TERMS)
+    terms |= set(_NUMERIC_AXIS_BUCKET)
+    terms |= _REGION_GENERIC_TERMS | _BORROWER_GENERIC_TERMS
+    for term in sorted(terms, key=len, reverse=True):
+        if len(term) < 2:
+            continue
+        text = re.sub(r"\b" + re.escape(term) + r"\b", " ", text)
+    # Also blank the generic measure tokens: they are recognised metric words
+    # even when too ambiguous to map to one field on their own.
+    for token in _GENERIC_METRIC_TOKENS:
+        text = re.sub(r"\b" + re.escape(token) + r"\b", " ", text)
+    residue = [w for w in re.findall(r"[a-z][a-z\-']*", text)
+               if w not in _METRIC_SIDE_STOPWORDS
+               and w not in _ANALYTICAL_FRAMING_WORDS
+               and len(w) >= _METRIC_RESIDUE_MIN_LEN]
+    if not residue:
+        return None
+    return " ".join(residue)
+
+
 def _detect_metric(text: str, semantics: dict) -> Tuple[Optional[str], str, List[str]]:
     """Return (metric_key, aggregation, matched_terms) from free text.
 
@@ -1967,6 +2058,20 @@ def _deterministic_parse(question: str, semantics: dict,
             _det_meta("medium" if explicit else "low", explicit, dim_terms))
 
     if metric is None:
+        # NEVER substitute a different measure for one the user named. A grouped
+        # question whose metric side carries an unresolvable noun phrase ("the
+        # unicorn ratio by region") used to default to balance and answer with
+        # ok:true — a confident answer to a question nobody asked. Refuse it,
+        # naming the term, so the governed response is traceable.
+        residue = _metric_side_residue(metric_part, semantics, available_columns)
+        if residue:
+            return (MIQuerySpec(
+                intent="summary", chart_type="none", aggregation="count",
+                title=title, dimension=None,
+                explanation=f"'{residue}' is not a governed measure in this "
+                            "dataset; no substitute was used.",
+                output_format="text"),
+                _det_meta("low", explicit, dim_terms, note="unresolved_metric"))
         metric, agg = _balance_metric(semantics, available_columns), "sum"
     weight = _default_weight(semantics, metric) if agg == "weighted_avg" else None
     conf = "high" if explicit else ("medium" if not generic else "low")

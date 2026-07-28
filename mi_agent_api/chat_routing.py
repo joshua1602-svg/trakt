@@ -26,8 +26,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
-from mi_agent.llm_query_parser import _deterministic_parse
 from mi_agent.mi_query_executor import _apply_filters
+from mi_agent.parsed_question import ParsedQuestion
 
 from mi_agent import portfolio_lens as _portfolio_lens
 
@@ -41,6 +41,20 @@ from . import geo as geo_mod
 from . import movement_summary as movement_mod
 from . import risk_limits as risk_mod
 from . import scenario as scenario_mod
+from .recogniser_registry import (
+    REGISTRY,
+    Recogniser,
+    RecogniserRegistry,
+    RouteRequest,
+    resolve_capability_state,
+)
+
+from trakt_core.portfolio import (
+    CAP_COHORTS,
+    CAP_ORIGINATION_FORECAST,
+    CAP_PIPELINE,
+    CAP_RISK,
+)
 
 _PALETTE = ["#919dd1", "#36c2a8", "#e0a93b", "#c46b8f", "#3d4a82", "#6fcf97"]
 
@@ -1679,22 +1693,33 @@ def _is_evolution(question: str, spec) -> bool:
     return any(m in q for m in _EVOLUTION_MARKERS)
 
 
-#: Routes that genuinely narrow their figures to the requested portfolio lens.
-#: Everything else answers from a pre-aggregated run artefact that carries no
-#: per-portfolio provenance, so it CANNOT narrow — and must say so rather than
-#: let a whole-book number be labelled with a narrower scope.
-_LENS_AWARE_ROUTES = frozenset({
-    "portfolio_summary", "period_movement", "funded_bridge",
-    "cohort_progression", "geo_exposure",
-})
+# --------------------------------------------------------------------------- #
+# Capability routing — the governed recogniser registry
+# --------------------------------------------------------------------------- #
+# This section used to be a hand-ordered ``if/elif`` chain inside ``try_route``.
+# It is now a declarative registry (``recogniser_registry``): each capability
+# states its own name, precedence, recogniser, handler, lens behaviour and
+# governed capability gate in ONE place, and precedence is data rather than
+# source-code line order. Behaviour is preserved — every recogniser below keeps
+# its historical position via ``priority``, and all share DEFAULT_CONFIDENCE, so
+# ordering collapses to exactly the old chain order.
 
-#: Human wording per route for the disclosure below.
+#: Human wording per route for the lens disclosure below.
 _ROUTE_NOUN = {
     "temporal_compare": "period comparison", "evolution": "trend",
     "evolution_funnel": "funnel trend", "evolution_pipeline_stage": "pipeline trend",
     "forecast_extrapolation": "forecast", "scenario": "scenario",
     "risk_limits": "risk-limit", "cohort_conversion": "conversion",
 }
+
+
+def _lens_aware_routes() -> frozenset:
+    """Routes that genuinely narrow their figures to the portfolio lens.
+
+    Derived from the registry so the fact is declared once, on the recogniser,
+    rather than duplicated in a set that can drift out of step with it.
+    """
+    return frozenset(r.name for r in REGISTRY.ordered() if r.lens_aware)
 
 
 def _disclose_lens_scope(envelope: Optional[Dict[str, Any]], question: str,
@@ -1715,7 +1740,7 @@ def _disclose_lens_scope(envelope: Optional[Dict[str, Any]], question: str,
         return envelope
     route = meta.get("route") or ""
     if meta.get("lensApplied") is None:
-        meta["lensApplied"] = route in _LENS_AWARE_ROUTES
+        meta["lensApplied"] = route in _lens_aware_routes()
     if meta["lensApplied"]:
         return envelope
     try:
@@ -1738,6 +1763,172 @@ def _disclose_lens_scope(envelope: Optional[Dict[str, Any]], question: str,
     return envelope
 
 
+def _capability_unavailable_envelope(req: RouteRequest, recogniser,
+                                     state: Any) -> Dict[str, Any]:
+    """The governed 'this capability does not apply here' answer.
+
+    Built from the SAME ``CapabilityState`` the React dashboard renders, so a
+    scope that cannot support an analysis is explained identically on every
+    channel — rather than each surface inventing its own data-availability
+    error. ``controlledUnsupported`` makes ``mi_service`` classify it as
+    ``UNSUPPORTED_QUESTION`` (HTTP 200, ``ok:false``), which is the existing
+    governed contract for "I will not answer that".
+    """
+    detail = (getattr(state, "detail", None)
+              or "This analysis is not available for the selected portfolios.")
+    envelope = _envelope(
+        ok=False, question=req.question, answer=detail, spec=req.spec_dict,
+        artifacts=[], route=recogniser.name, error=detail,
+        lens_applied=True,
+        warnings=[f"capability unavailable: {recogniser.capability}"])
+    meta = envelope["metadata"]
+    meta["controlledUnsupported"] = True
+    meta["capability"] = recogniser.capability
+    meta["capabilityReason"] = getattr(state, "reason_code", None)
+    meta["capabilityExcluded"] = list(getattr(state, "excluded_portfolios", ()) or ())
+    return envelope
+
+
+def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserRegistry:
+    """Declare the eleven governed capability routes.
+
+    ``priority`` reproduces the historical chain order exactly. A capability
+    gate is declared ONLY where an unavailable capability is a genuine,
+    explainable outcome (pipeline / origination / cohort / risk); funded-book
+    routes are ungated because every scope with rows supports them, and gating
+    them would cost a context resolution on the common path for no decision.
+    """
+    registry.extend([
+        # 1. What-if / scenario perturbs the run-rate and re-solves the
+        #    milestone. Returns None when the magnitude cannot be quantified, so
+        #    it falls through to forecast / conversion.
+        Recogniser(
+            name="scenario", priority=10, capability=CAP_PIPELINE, lens_aware=False,
+            description="Deterministic what-if on the completion run-rate.",
+            recognise=lambda r: _is_scenario(r.question),
+            handle=lambda r: _route_scenario(
+                r.question, r.spec, r.spec_dict, client_id=r.client_id,
+                run_id=r.run_id, output_root=r.output_root,
+                pipeline_root=r.pipeline_root, history_model=r.history_model,
+                portfolio_id=r.portfolio_id, as_of=r.as_of)),
+
+        # 2. Cohort-tracked conversion is the canonical "conversion" answer and
+        #    is checked before forecast so a bare "conversion rate" resolves to
+        #    the single cumulative-cohort definition.
+        Recogniser(
+            name="cohort_conversion", priority=20, capability=CAP_PIPELINE,
+            description="Cumulative cohort conversion KFI → Funded.",
+            recognise=lambda r: _is_conversion(r.question),
+            handle=lambda r: _route_conversion(
+                r.question, r.spec_dict, history_model=r.history_model,
+                portfolio_id=r.portfolio_id, as_of=r.as_of)),
+
+        # 3. Run-rate / scale-up extrapolation.
+        Recogniser(
+            name="forecast_extrapolation", priority=30,
+            capability=CAP_ORIGINATION_FORECAST,
+            description="Completion run-rate forecast and milestone solving.",
+            recognise=lambda r: getattr(r.spec, "forecast_mode", None) == "extrapolation",
+            handle=lambda r: _route_forecast(
+                r.question, r.spec, r.spec_dict, client_id=r.client_id,
+                run_id=r.run_id, output_root=r.output_root,
+                pipeline_root=r.pipeline_root, history_model=r.history_model,
+                portfolio_id=r.portfolio_id, as_of=r.as_of)),
+
+        # 4. Funded-balance attribution bridge.
+        Recogniser(
+            name="funded_bridge", priority=40, lens_aware=True,
+            description="Governed funded-balance attribution waterfall.",
+            recognise=lambda r: bool(getattr(r.spec, "bridge_query", False)),
+            handle=lambda r: _route_bridge(
+                r.question, r.spec, r.spec_dict, client_id=r.client_id,
+                run_id=r.run_id, output_root=r.output_root,
+                portfolio_id=r.portfolio_id, as_of=r.as_of, semantics=r.semantics,
+                source_lens=r.source_lens)),
+
+        # 5. Static-pool cohort progression.
+        Recogniser(
+            name="cohort_progression", priority=50, capability=CAP_COHORTS,
+            lens_aware=True,
+            description="Metric progression across reporting dates by vintage.",
+            recognise=lambda r: bool(getattr(r.spec, "cohort_progression", False)),
+            handle=lambda r: _route_cohort_progression(
+                r.question, r.spec, r.spec_dict, client_id=r.client_id,
+                run_id=r.run_id, output_root=r.output_root,
+                portfolio_id=r.portfolio_id, as_of=r.as_of,
+                source_lens=r.source_lens)),
+
+        # 6. ITL3 geographic concentration. Reads a dataframe, so it narrows.
+        Recogniser(
+            name="geo_exposure", priority=60, lens_aware=True,
+            description="Funded exposure by UK ITL3 area.",
+            recognise=lambda r: _is_geo_exposure(r.question),
+            handle=lambda r: _route_geo(
+                r.question, r.spec_dict, client_id=r.client_id, run_id=r.run_id,
+                frame_resolver=r.frame_resolver, portfolio_id=r.portfolio_id,
+                as_of=r.as_of, source_lens=r.source_lens)),
+
+        # 7-8. Governed composite answers. Checked before compare/evolution
+        #      because both are narrower intents than a single-metric
+        #      comparison; each returns None when it cannot answer.
+        Recogniser(
+            name="period_movement", priority=70, lens_aware=True,
+            description="Month-on-month movement with attribution.",
+            recognise=lambda r: _is_period_movement(r.question),
+            handle=lambda r: _route_period_movement(
+                r.question, r.spec, r.spec_dict, client_id=r.client_id,
+                run_id=r.run_id, output_root=r.output_root,
+                portfolio_id=r.portfolio_id, as_of=r.as_of,
+                source_lens=r.source_lens)),
+        Recogniser(
+            name="portfolio_summary", priority=80, lens_aware=True,
+            description="Current governed headline position.",
+            recognise=lambda r: _is_portfolio_summary(r.question),
+            handle=lambda r: _route_portfolio_summary(
+                r.question, r.spec, r.spec_dict, client_id=r.client_id,
+                run_id=r.run_id, output_root=r.output_root,
+                portfolio_id=r.portfolio_id, as_of=r.as_of,
+                source_lens=r.source_lens)),
+
+        # 9. Cross-period comparison.
+        Recogniser(
+            name="temporal_compare", priority=90,
+            description="Governed comparison of two reporting periods.",
+            recognise=lambda r: getattr(r.spec, "temporal_mode", None) == "compare",
+            handle=lambda r: _route_compare(
+                r.question, r.spec, r.spec_dict, client_id=r.client_id,
+                run_id=r.run_id, output_root=r.output_root,
+                pipeline_root=r.pipeline_root, view=r.view,
+                portfolio_id=r.portfolio_id, as_of=r.as_of)),
+
+        # 10. Contractual risk limits.
+        Recogniser(
+            name="risk_limits", priority=100, capability=CAP_RISK,
+            description="Contractual concentration limits and headroom tests.",
+            recognise=lambda r: bool(getattr(r.spec, "risk_limit_query", None)),
+            handle=lambda r: _route_risk(
+                r.question, r.spec, r.spec_dict, client_id=r.client_id,
+                run_id=r.run_id, output_root=r.output_root,
+                portfolio_id=r.portfolio_id, as_of=r.as_of)),
+
+        # 11. Time series / evolution.
+        Recogniser(
+            name="evolution", priority=110,
+            description="Metric evolution across governed reporting periods.",
+            recognise=lambda r: _is_evolution(r.question, r.spec),
+            handle=lambda r: _route_evolution(
+                r.question, r.spec, r.spec_dict, client_id=r.client_id,
+                run_id=r.run_id, output_root=r.output_root,
+                pipeline_root=r.pipeline_root, view=r.view,
+                portfolio_id=r.portfolio_id, as_of=r.as_of,
+                semantics=r.semantics)),
+    ])
+    return registry
+
+
+_register_default_recognisers(REGISTRY)
+
+
 def try_route(question: str, *, portfolio_id: Optional[str], view: str,
               output_root: Optional[str], pipeline_root: Optional[str],
               semantics: Dict[str, Any], history_model: Optional[Dict[str, Any]] = None,
@@ -1745,101 +1936,76 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
               source_lens: Optional[Any] = None,
               frame_resolver: Optional[Callable[[str, Optional[str]], Any]] = None,
               extra_filters: Optional[Dict[str, Any]] = None,
+              parsed: Optional[Any] = None,
+              registry: Optional[RecogniserRegistry] = None,
+              capability_resolver: Optional[Callable[[Optional[str]], Any]] = None,
               ) -> Optional[Dict[str, Any]]:
-    """Route a question to an internal analytical service, or return None to defer
-    to the existing point-in-time MI Agent path. Never raises for analytics issues —
-    the caller wraps this defensively and falls back on any exception."""
+    """Route a question to a governed capability, or return ``None`` to defer to
+    the point-in-time MI Agent path.
+
+    ``parsed`` is the SINGLE :class:`~mi_agent.parsed_question.ParsedQuestion`
+    for this request. The caller (``mi_service``) parses once and passes it here
+    and to the workflow, so routing and execution can never disagree about the
+    spec. It is optional only so existing direct callers and tests keep working:
+    when omitted this parses once itself, which is still one parse per request.
+
+    Never raises for analytics issues — the caller wraps this defensively.
+    """
     client_id, run_id = _split_portfolio(portfolio_id)
+    reg = registry if registry is not None else REGISTRY
 
-    # Parse to a governed spec to detect the intent.
-    try:
-        spec, _meta = _deterministic_parse(question, semantics)
-    except Exception:  # noqa: BLE001 - never block the normal path on a parse hiccup
-        return None
-
-    # NOTE: governed-unsupported concepts (arrears / default / NNEG …) are NOT
-    # checked here. ``available_columns`` is not known at routing time, and
-    # ``run_mi_agent_query`` re-checks the concept against the real dataframe —
-    # which is the only check that can distinguish "this client's pack lacks the
-    # field" from "the registry lacks the field". A duplicate check here would
-    # either be wrong or be a no-op; it was the latter, and is now removed.
-
-    # Merge caller-supplied filters (UI drill-through / req.filters) into the spec,
-    # mirroring the point-in-time path (mi_agent_workflow), so a routed evolution
-    # answer is scoped identically to a within-snapshot one.
-    if extra_filters:
+    if parsed is None:
         try:
-            spec.filters = {**(spec.filters or {}), **extra_filters}
-        except Exception:  # noqa: BLE001 - never block routing on a bad filter dict
-            pass
+            parsed = ParsedQuestion.parse(question, semantics)
+        except Exception:  # noqa: BLE001 - never block the normal path on a parse hiccup
+            return None
+    # Caller-supplied filters (UI drill-through / req.filters) are merged onto
+    # the shared parse, so a routed answer is scoped identically to a
+    # within-snapshot one — and only ever merged once.
+    parsed.merge_filters(extra_filters)
+    spec = parsed.spec
 
-    spec_dict = spec.to_dict()
-    kw = dict(client_id=client_id, run_id=run_id, output_root=output_root,
-              pipeline_root=pipeline_root, portfolio_id=portfolio_id, as_of=as_of)
+    request = RouteRequest(
+        question=question, spec=spec, spec_dict=spec.to_dict(),
+        semantics=semantics, view=view, client_id=client_id, run_id=run_id,
+        portfolio_id=portfolio_id, output_root=output_root,
+        pipeline_root=pipeline_root, history_model=history_model, as_of=as_of,
+        source_lens=source_lens, frame_resolver=frame_resolver,
+        parse_meta=parsed.meta, semantics_context=parsed.semantics_context)
 
-    # EVERY route leaves through here, so the scope disclosure cannot be
-    # forgotten when a capability is added: a new route is whole-book (and says
-    # so) until it is listed in _LENS_AWARE_ROUTES, which is the safe default.
-    def _out(envelope):
-        return _disclose_lens_scope(envelope, question, source_lens)
+    # The governed scope this request runs in, resolved lazily and AT MOST ONCE
+    # per request — capability resolution can touch storage, so it must not run
+    # for a question no gated recogniser matched.
+    gate_cache: Dict[str, Any] = {}
 
-    # What-if / scenario is checked first: it perturbs the run-rate and re-solves
-    # the milestone. If the magnitude can't be quantified it returns None and we
-    # fall through to the normal forecast / conversion routing.
-    if _is_scenario(question):
-        scen = _route_scenario(question, spec, spec_dict, history_model=history_model, **kw)
-        if scen is not None:
-            return _out(scen)
+    def _capability_state(capability: str) -> Any:
+        if capability not in gate_cache:
+            try:
+                lens = _resolve_lens(question, source_lens)
+                context_id = _portfolio_lens.context_id(lens)
+            except Exception:  # noqa: BLE001
+                context_id = None
+            gate_cache[capability] = resolve_capability_state(
+                capability, context_id, resolver=capability_resolver)
+        return gate_cache[capability]
 
-    # Conversion (cohort-tracked) is the canonical "conversion" answer and is
-    # checked before forecast so a bare "conversion rate" resolves to the single
-    # cumulative-cohort definition; projection/threshold/what-if framings are
-    # excluded by _is_conversion and fall through to the forecast route.
-    if _is_conversion(question):
-        return _out(_route_conversion(question, spec_dict, history_model=history_model,
-                                      portfolio_id=portfolio_id, as_of=as_of))
-    if spec.forecast_mode == "extrapolation":
-        return _out(_route_forecast(question, spec, spec_dict,
-                                    history_model=history_model, **kw))
-    if getattr(spec, "bridge_query", False):
-        return _out(_route_bridge(question, spec, spec_dict,
-                                  client_id=client_id, run_id=run_id, output_root=output_root,
-                                  portfolio_id=portfolio_id, as_of=as_of, semantics=semantics,
-                                  source_lens=source_lens))
-    if getattr(spec, "cohort_progression", False):
-        return _out(_route_cohort_progression(question, spec, spec_dict,
-                                              client_id=client_id, run_id=run_id,
-                                              output_root=output_root, portfolio_id=portfolio_id,
-                                              as_of=as_of, source_lens=source_lens))
-    if _is_geo_exposure(question):
-        return _out(_route_geo(question, spec_dict, client_id=client_id, run_id=run_id,
-                               frame_resolver=frame_resolver, portfolio_id=portfolio_id,
-                               as_of=as_of, source_lens=source_lens))
-    # Governed composite answers. Checked before compare/evolution because both
-    # are narrower intents than a single-metric comparison; each returns None (or
-    # a controlled insufficient-data envelope) when it cannot answer, so the
-    # existing routes are unaffected.
-    if _is_period_movement(question):
-        moved = _route_period_movement(
-            question, spec, spec_dict, client_id=client_id, run_id=run_id,
-            output_root=output_root, portfolio_id=portfolio_id, as_of=as_of,
-            source_lens=source_lens)
-        if moved is not None:
-            return _out(moved)
-    if _is_portfolio_summary(question):
-        summarised = _route_portfolio_summary(
-            question, spec, spec_dict, client_id=client_id, run_id=run_id,
-            output_root=output_root, portfolio_id=portfolio_id, as_of=as_of,
-            source_lens=source_lens)
-        if summarised is not None:
-            return _out(summarised)
-    if spec.temporal_mode == "compare":
-        return _out(_route_compare(question, spec, spec_dict, view=view, **kw))
-    if spec.risk_limit_query:
-        return _out(_route_risk(question, spec, spec_dict,
-                                client_id=client_id, run_id=run_id, output_root=output_root,
-                                portfolio_id=portfolio_id, as_of=as_of))
-    if _is_evolution(question, spec):
-        return _out(_route_evolution(question, spec, spec_dict, view=view,
-                                     semantics=semantics, **kw))
+    for recogniser, _verdict in reg.candidates(request):
+        # Governed capability gate — the SAME resolution React uses. A capability
+        # that genuinely does not apply to this scope is explained, not attempted.
+        if recogniser.capability:
+            state = _capability_state(recogniser.capability)
+            # ``None`` means the gate could not be resolved (an infrastructure
+            # problem). Attempting the route is the honest fallback: claiming the
+            # capability does not apply would be a different, false statement.
+            if state is not None and not getattr(state, "enabled", True):
+                return _disclose_lens_scope(
+                    _capability_unavailable_envelope(request, recogniser, state),
+                    question, source_lens)
+        try:
+            envelope = recogniser.handle(request)
+        except Exception as exc:  # noqa: BLE001 - a broken route defers, never 500s
+            _logger.warning("route %s failed: %s", recogniser.name, exc)
+            continue
+        if envelope is not None:
+            return _disclose_lens_scope(envelope, question, source_lens)
     return None
