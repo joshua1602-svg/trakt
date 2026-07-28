@@ -73,10 +73,37 @@ Tracked here so nothing is lost; each is verified before classification.
 * **ASSURE-003** (candidate High) — `asOfDate` is a presentational label only on
   the point-in-time path: a caller can request an arbitrary date and receive the
   active dataset's numbers labelled as of that date, with no warning.
-* **ASSURE-004** (candidate High) — Default `/mi/query` path aggregates across
-  every reporting date present in a combined tape (no single-date guard), so a
-  loan present at two cuts is summed twice. Governed workflows refuse this; the
-  default route does not.
+## ASSURE-004 — Default point-in-time route aggregates across reporting dates
+
+* **severity:** High
+* **component:** `mi_agent_api/mi_service.py`
+* **fixture:** combined two-date multibook tape (2026-05-31 + 2026-06-30)
+* **question_id:** `assurance/runners/test_reporting_date_safety.py`
+* **observed_result:** "What is the total outstanding balance?" against a
+  combined tape returned £73,985,637 over 234 records — the sum of *both*
+  cut-off dates — labelled `reporting_date=2026-05-31` (first row), with no
+  warning. Every loan present at both cuts was counted twice.
+* **expected_result:** A point-in-time KPI resolves as of the latest reporting
+  date (£37,270,061, 118 records) and never silently aggregates incompatible
+  dates.
+* **root_cause:** The default point-in-time path (`run_mi_agent_query` →
+  `mi_query_executor`) has no reporting-date axis; `_resolve_query_frame`
+  returns the whole active frame when no run is selected. The governed
+  comparison/concentration workflows refuse a multi-date scope; the default
+  route did not.
+* **production_impact:** Materially wrong KPI whenever the active dataset is a
+  combined multi-date tape. Standard `…/latest` blob pointers resolve to a
+  single cut, so the common wiring is unaffected, but combined tapes are a
+  documented shape (`datasets._platform_runs`).
+* **fix:** `_narrow_to_latest_reporting_date` narrows the point-in-time frame to
+  its latest cut when multiple dates are present and discloses the narrowing as
+  a warning. No-op for single-date frames and for the reporting-date-less
+  in-memory fixtures, so existing behaviour is byte-identical in the common case.
+* **tests_added:** `assurance/runners/test_reporting_date_safety.py` (3 cases:
+  as-of-latest not aggregated, narrowing disclosed, single-date unchanged/unwarned).
+* **status:** FIXED
+
+### Remaining candidates pending verification
 * **ASSURE-005** (candidate Critical) — Weighted averages silently fall back to
   a simple mean on zero total weight in `analytics_lib/stratify.py` and
   `mi_agent_api/snapshots.py`, publishing an unweighted number under a

@@ -42,6 +42,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
+import pandas as pd
+
 from trakt_core.audit import emit_audit_event
 from trakt_core.context import SCOPE_MI_QUERY, ExecutionContext
 from trakt_core.envelope import (
@@ -433,6 +435,46 @@ def _classify_analytical_failure(payload: Dict[str, Any]) -> str:
     return ErrorCode.CALCULATION_FAILED
 
 
+#: Columns scanned, in order, for a per-row reporting date on the point-in-time
+#: path. Mirrors ``datasets._REPORTING_DATE_COLUMNS``.
+_POINT_IN_TIME_DATE_COLUMNS = ("reporting_date", "data_cut_off_date", "cut_off_date")
+
+
+def _narrow_to_latest_reporting_date(df):
+    """Narrow a point-in-time frame to its latest reporting date.
+
+    The default point-in-time route answers "as of the latest reporting date".
+    When the active dataset is a *combined* tape carrying more than one cut-off
+    date (a documented shape — see ``datasets._platform_runs``), aggregating a
+    KPI such as total balance across every date double-counts any loan present at
+    more than one cut. The governed comparison/concentration workflows already
+    refuse a multi-date scope; this brings the default route into line by
+    resolving to the latest cut and disclosing the narrowing, rather than
+    silently summing incompatible dates.
+
+    Returns ``(frame, note)`` where ``note`` is ``None`` when the frame already
+    holds a single reporting date (the overwhelmingly common case, so this is a
+    no-op for every single-date dataset and for the reporting-date-less
+    in-memory fixtures).
+    """
+    if df is None or not hasattr(df, "columns"):
+        return df, None
+    col = next((c for c in _POINT_IN_TIME_DATE_COLUMNS if c in df.columns), None)
+    if col is None:
+        return df, None
+    parsed = pd.to_datetime(df[col], errors="coerce")
+    distinct = parsed.dropna().dt.date.unique()
+    if len(distinct) <= 1:
+        return df, None
+    latest = max(distinct)
+    narrowed = df[parsed.dt.date == latest]
+    note = (
+        f"The active dataset carried {len(distinct)} reporting dates; this "
+        f"point-in-time answer is resolved as of the latest, {latest.isoformat()}. "
+        "Balances are not aggregated across reporting dates.")
+    return narrowed, note
+
+
 def _resolve_frame(ds, view: str, portfolio_id: Optional[str],
                    *, tenant_id: Optional[str] = None):
     """``(frame, error)`` for this request, resolved defensively.
@@ -553,6 +595,10 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         return _error_envelope("Could not load the governed data for this query.",
                                req=req, view=view)
 
+    # As-of-latest: never silently aggregate a KPI across incompatible reporting
+    # dates on the default point-in-time route (no-op for single-date frames).
+    df, reporting_date_note = _narrow_to_latest_reporting_date(df)
+
     currency_mod.resolve_and_set(df)
 
     llm_enabled, llm_model = llm_cfg.enabled, llm_cfg.model
@@ -592,6 +638,9 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
     # operator must see, not a silent downgrade.
     if llm_cfg.enabled and not llm_cfg.available and isinstance(result, dict):
         result.setdefault("warnings", []).extend(llm_cfg.warnings)
+    # Disclose a reporting-date narrowing so the client sees which cut answered.
+    if reporting_date_note and isinstance(result, dict):
+        result.setdefault("warnings", []).append(reporting_date_note)
     # A point-in-time answer is run-scoped only when a run was explicitly selected.
     return _governed_context(result, req=req, client_id=client_id, run_id=run_id,
                              view=view, run_required=bool(run_id))
