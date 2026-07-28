@@ -186,15 +186,43 @@ jobs:
         working-directory: .
         run: |
           base="${{ vars.LANDING_PAGE_SITE_URL }}"
-          expected_client=$(node -p "require('./landing-page/data/demo-pack.json').source.clientId")
-          expected_portfolio=$(node -p "require('./landing-page/data/demo-pack.json').source.portfolioId")
-          expected_balance=$(node -p "require('./landing-page/data/demo-pack.json').portfolio.totalBalanceDisplay")
+          pack=./landing-page/data/demo-pack.json
+          expected_marker=$(node -p "const p=require('$pack').source; [p.clientId,p.portfolioId,p.reportingDate].join('/')")
+          expected_balance=$(node -p "require('$pack').portfolio.totalBalanceDisplay")
 
-          html=$(curl -s "$base/")
-          for needle in "$expected_portfolio" "$expected_balance"; do
-            if ! printf '%s' "$html" | grep -qF -- "$needle"; then
-              echo "::error::the served page does not contain '$needle'"
-              exit 1
-            fi
-          done
-          echo "served portfolio identity confirmed: $expected_client / $expected_portfolio"
+          # --compressed, because the App Service negotiates gzip and a binary
+          # body makes every grep miss — which would report a stale deployment
+          # when the real problem was the request.
+          html=$(curl -sS --compressed "$base/")
+
+          # The marker is published deliberately as <meta name="trakt:pack">
+          # (see landing-page/src/app/layout.tsx). It is asserted rather than
+          # the raw portfolio id, which only ever appeared in the served HTML as
+          # an unrendered prop inside Next's RSC payload.
+          served_marker=$(printf '%s' "$html" \
+            | grep -o 'name="trakt:pack" content="[^"]*"' \
+            | head -1 | sed 's/.*content="//; s/"$//')
+
+          if [ -z "$served_marker" ]; then
+            echo "::error::the served page carries no trakt:pack marker."
+            echo "Either the deployment did not take (App Service is still serving"
+            echo "an older bundle), or the marker was removed from layout.tsx."
+            echo "Served <title>: $(printf '%s' "$html" | grep -o '<title>[^<]*</title>' | head -1)"
+            exit 1
+          fi
+
+          if [ "$served_marker" != "$expected_marker" ]; then
+            echo "::error::the served page was built from a different demo pack."
+            echo "  expected: $expected_marker"
+            echo "  served:   $served_marker"
+            echo "This is a stale or mismatched deployment, not a build problem —"
+            echo "the committed pack passed reproducibility in the verify job."
+            exit 1
+          fi
+
+          if ! printf '%s' "$html" | grep -qF -- "$expected_balance"; then
+            echo "::error::the served page does not show the pinned total '$expected_balance'"
+            exit 1
+          fi
+
+          echo "served pack confirmed: $expected_marker ($expected_balance)"

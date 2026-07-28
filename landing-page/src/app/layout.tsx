@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 
+import { demoPack } from "@/lib/demo-pack";
 import { publicConfig } from "@/lib/public-config";
 
 import "./globals.css";
@@ -32,6 +33,25 @@ export const metadata: Metadata = {
   },
   robots: { index: true, follow: true },
   category: "technology",
+  other: {
+    // Provenance of the demo pack this build was compiled against, published
+    // deliberately so the post-deploy smoke check has a stable contract.
+    //
+    // That check previously grepped the served HTML for the raw portfolio id.
+    // It worked only because the id travels inside Next's serialised RSC
+    // payload as an unrendered prop — an accident of framework serialisation,
+    // not a published fact. Dropping that prop, or a change in how Next
+    // serialises it, would have broken the deploy gate with no code change and
+    // no obvious cause.
+    //
+    // A meta tag rather than visible copy: an internal portfolio identifier is
+    // provenance, not something a prospect should be reading.
+    "trakt:pack": [
+      demoPack.source.clientId,
+      demoPack.source.portfolioId,
+      demoPack.source.reportingDate,
+    ].join("/"),
+  },
 };
 
 export const viewport: Viewport = {
