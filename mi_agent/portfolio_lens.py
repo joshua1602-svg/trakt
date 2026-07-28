@@ -45,11 +45,22 @@ _COHORT_ID_RE = re.compile(r"\b((?:direct|acquired)_\d+)\b", re.IGNORECASE)
 _SELECTABLE_COHORT_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$")
 
 # Phrase → lens. Order matters only within a family; matching is keyword-based.
+# "origination" and "originated" are deliberately ABSENT, for the same reason the
+# bare total terms below are: they match the DIMENSION they name, not a book.
+# "show the portfolio by origination channel", "by origination date",
+# "originations by region" all had a Direct scope filter applied to a question
+# that had asked for a breakdown, so the answer covered only the direct books
+# while still describing itself as a share "of the funded book" — the silent
+# scope mutation this module exists to prevent. On a three-book platform it
+# understated the funded book by a third.
+#
+# The QUALIFIED forms are kept, because they name the book rather than the
+# dimension: "directly originated", "new origination", "newly originated".
 _DIRECT_TERMS = (
-    "direct", "directly originated", "originated", "origination",
-    "organic", "current book", "own book", "in-house", "new origination",
-    "new lending", "newly originated",
+    "direct", "directly originated", "organic", "current book", "own book",
+    "in-house", "new origination", "new lending", "newly originated",
 )
+
 _ACQUIRED_TERMS = (
     "acquired", "acquisition", "back book", "backbook", "purchased book",
     "purchased", "bought book", "inorganic", "legacy book", "m&a",

@@ -1,9 +1,10 @@
 # Open investigations
 
-Things that went wrong once, could not be reproduced, and are therefore **parked
-rather than closed**. Each entry records what was tried, what was ruled out, what
-the diagnostics will print if it recurs, and — most importantly — the trigger at
-which it stops being a curiosity and becomes a defect.
+Things that went wrong and were not immediately explicable. Each entry records
+what was tried, what was ruled out, what the diagnostics will print if it
+recurs, and — most importantly — the trigger at which it stops being a curiosity
+and becomes a defect. Closed entries are kept, not deleted: the reasoning that
+turned a red build into a diagnosis is worth more than the conclusion.
 
 If you are reading this because one of them fired again: go straight to the
 escalation section of that entry. Do not re-run the ruled-out list.
@@ -16,8 +17,9 @@ escalation section of that entry. Do not re-run the ruled-out list.
 |---|---|
 | **Raised** | 28 July 2026 |
 | **Surface** | `deploy-landing-page.yml` → `landing-page/tests/demo_pack_reproducible_test.py::test_committed_pack_matches_a_fresh_build` |
-| **Status** | Parked. Occurred once. Not reproduced. |
-| **Severity if it recurs** | High — see *Escalation*. |
+| **Status** | **CLOSED, 28 July 2026.** Recurred; the diagnostics named the cause on the first line. |
+| **Root cause** | `mi_agent/portfolio_lens.py` read the word "origination" as a portfolio-scope selector. |
+| **Outcome** | A correctness defect in the product, exactly as the escalation predicted — not a CI flake. |
 
 ### What happened
 
@@ -90,6 +92,58 @@ On recurrence:
 3. Treat it as a defect against the engine's determinism, not against the
    landing page, unless the diff is confined to landing-page presentation
    values.
+
+### Resolution — it recurred, and the escalation was right
+
+The second occurrence printed, on the first diff line:
+
+```
+intents[8].answer
+  committed: Direct is the largest origination channel at £15,432,544 (61.0%) of the funded book.
+  fresh:     Direct is the largest origination channel at £15,432,544 (41.4%) of the funded book.
+intents[8].artifacts[0].coverage
+  committed: 67.9
+  fresh:     100.0
+```
+
+`_DIRECT_TERMS` in `mi_agent/portfolio_lens.py` contained the bare token
+`"origination"`. The question *"Show the portfolio by origination channel"*
+names a **dimension**, and it was being matched as a **portfolio scope** — so a
+Direct-only filter was applied to a question that had asked for a breakdown.
+
+The consequence was not cosmetic. On the three-book platform the answer covered
+81 of 118 exposures and £25.3m of £37.3m — 67.9% — while describing itself as a
+share *"of the funded book"*. The acquired book's 37 exposures and £11.97m were
+absent from a breakdown that claimed to be complete, and nothing in the answer
+said so.
+
+The module already forbids exactly this. Its own note on the total terms reads:
+a bare word that is really an aggregation is not a scope, and treating it as one
+is "a silent scope mutation, and exactly the class of defect the governed
+context exists to stop." `"origination"` and `"originated"` had been added to
+the direct terms without that rule being applied to them.
+
+**Fix.** Both bare tokens removed from `_DIRECT_TERMS`. The portfolio-qualified
+forms are kept — `"directly originated"`, `"new origination"`, `"newly
+originated"` name the book rather than the dimension — as are `"direct"`,
+`"organic"` and the book phrases, which comparisons depend on. Regression test:
+`tests/test_source_portfolio_provenance.py::TestPortfolioLensResolver::test_a_dimension_named_origination_is_not_a_portfolio_scope`.
+
+Every intent in the pack now reports 100% coverage, and the channel rows sum to
+£37,270,061.47 — the sponsor total to the penny.
+
+**Why it looked environment-dependent.** It was not a build-environment
+difference at all. The committed pack had been generated while the defect was
+firing; a fresh build in another environment did not reproduce that particular
+scoping. Chasing pandas and Python versions was the wrong tree, and the earlier
+"could not reproduce" conclusion was wrong — it was reproducible, in the pack
+that had been committed. The diagnostics existed precisely because that
+conclusion could not be trusted, and they are what closed it.
+
+**Lesson recorded:** a `--check` that reports only pass/fail on a large
+generated artefact is not a control, because the first instinct on a red build
+is to regenerate. The instruction not to regenerate, plus a diff, is what turned
+a second red build into a ten-minute diagnosis.
 
 ### Related guards added at the same time
 

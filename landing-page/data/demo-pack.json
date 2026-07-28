@@ -672,8 +672,8 @@
         "where did the loans come from",
         "introducer"
       ],
-      "answer": "Direct is the largest origination channel at £15,432,544 (61.0%) of the funded book.",
-      "interpreted": "Chart: Bar · Metric: Balance · Dimension: Origination Channel · Aggregation: Sum · Filters: {'Source Portfolio': ['alp_origination', 'spv1_sponsored']} · Parser: deterministic · Validation: Passed",
+      "answer": "Direct is the largest origination channel at £15,432,544 (41.4%) of the funded book.",
+      "interpreted": "Chart: Bar · Metric: Balance · Dimension: Origination Channel · Aggregation: Sum · Parser: deterministic · Validation: Passed",
       "artifacts": [
         {
           "kind": "chart",
@@ -713,17 +713,23 @@
               "origination_channel": "Direct",
               "current_outstanding_balance_sum": 15432544.31,
               "loan_count": 47,
-              "concentration_pct": 61.009009
+              "concentration_pct": 41.407349
+            },
+            {
+              "origination_channel": "Broker",
+              "current_outstanding_balance_sum": 11974544.28,
+              "loan_count": 37,
+              "concentration_pct": 32.129124
             },
             {
               "origination_channel": "IFA",
               "current_outstanding_balance_sum": 9862972.88,
               "loan_count": 34,
-              "concentration_pct": 38.990991
+              "concentration_pct": 26.463527
             }
           ],
-          "totalRows": 2,
-          "coverage": 67.9,
+          "totalRows": 3,
+          "coverage": 100.0,
           "chartType": "bar",
           "xKey": "origination_channel",
           "valueKey": "current_outstanding_balance_sum",
@@ -1807,17 +1813,23 @@
                   "origination_channel": "Direct",
                   "current_outstanding_balance_sum": 15432544.31,
                   "loan_count": 47,
-                  "concentration_pct": 61.009009
+                  "concentration_pct": 41.407349
+                },
+                {
+                  "origination_channel": "Broker",
+                  "current_outstanding_balance_sum": 11974544.28,
+                  "loan_count": 37,
+                  "concentration_pct": 32.129124
                 },
                 {
                   "origination_channel": "IFA",
                   "current_outstanding_balance_sum": 9862972.88,
                   "loan_count": 34,
-                  "concentration_pct": 38.990991
+                  "concentration_pct": 26.463527
                 }
               ],
-              "totalRows": 2,
-              "coverage": 67.9,
+              "totalRows": 3,
+              "coverage": 100.0,
               "chartType": "bar",
               "xKey": "origination_channel",
               "valueKey": "current_outstanding_balance_sum",

@@ -309,6 +309,42 @@ def test_annex_exceptions_carry_their_reasoning(pack):
     assert "Outside Annex 2 scope" in dispositions
 
 
+def test_every_published_breakdown_covers_the_whole_book(pack):
+    """A breakdown that says "of the funded book" must actually cover it.
+
+    This is the control for OI-1. A portfolio-scope filter was silently applied
+    to a question that had asked for a breakdown, so the channel answer covered
+    67.9% of the platform while describing itself as a share of the funded book.
+    The figures were individually correct and the total was wrong, which is the
+    hardest kind of error to see by reading.
+
+    Coverage is the engine's own reconciliation figure, so this asserts against
+    what the engine believes it included — not against a number recomputed here.
+    """
+    for intent in pack["intents"]:
+        for artifact in intent.get("artifacts") or []:
+            coverage = artifact.get("coverage")
+            if coverage is None:
+                continue  # composite answers carry their own reconciliation
+            assert coverage == pytest.approx(100.0, abs=0.05), (
+                f"{intent['id']}: breakdown covers {coverage}% of the book. "
+                "Either the answer is scoped and must say so, or a scope filter "
+                "is being applied to a question that did not ask for one."
+            )
+
+
+def test_channel_breakdown_reconciles_to_the_sponsor_total(pack):
+    """The specific figure OI-1 got wrong, pinned."""
+    channel = next(i for i in pack["intents"] if i["id"] == "channel")
+    rows = channel["artifacts"][0]["rows"]
+    assert {r["origination_channel"] for r in rows} == {"Direct", "Broker", "IFA"}, (
+        "all three books' channels must appear — the acquired book's 'Broker' "
+        "was the one silently dropped"
+    )
+    total = round(sum(r["current_outstanding_balance_sum"] for r in rows), 2)
+    assert total == pack["portfolio"]["totalBalance"]
+
+
 def test_no_exposure_level_column_reaches_the_pack(pack):
     forbidden = {
         "loan_identifier", "unique_identifier", "borrower_identifier", "postcode",
