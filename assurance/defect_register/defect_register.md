@@ -64,12 +64,60 @@ weakened to make a test pass.
 
 Tracked here so nothing is lost; each is verified before classification.
 
-* **ASSURE-002** (candidate High) — Dashboard GET routes (`/mi/snapshot`,
-  `/mi/evolution/*`, `/mi/cohorts`, `/mi/geo/exposure`, `/mi/risk-limits`,
-  `/mi/pipeline/*`, `/mi/forecast/*`) take `portfolioId`/`client_id`/`run_id`
-  as query params and resolve frames with no tenancy authorisation, no
-  source-approval check, and no audit. Same storage-path mechanism as
-  ASSURE-001. Needs an adversarial test through the HTTP layer.
+## ASSURE-002 — Cross-tenant read on the dashboard GET path
+
+* **severity:** Critical
+* **component:** `mi_agent_api/app.py` dashboard GET routes
+* **fixture:** two-client shared onboarding root (`assurance/runners/test_tenancy_isolation.py`)
+* **observed_result:** `GET /mi/snapshot?client_id=client_secret&run_id=2026_06`
+  on a deployment configured `MI_AGENT_CLIENT_ID=client_001` returned
+  client_secret's tape (£8.9MM marker), HTTP 200. The dashboard GET routes take
+  `client_id`/`run_id`/`portfolioId` as query params and call
+  `_resolve_run_dataframe(client_id, run_id, root)` directly — no
+  `authorise_portfolio_access`, no tenant binding, no source-approval, no audit.
+* **expected_result:** A dashboard GET can only read the deployment tenant's data.
+* **root_cause:** Same mechanism as ASSURE-001, on the GET path, which never
+  routes through the governed capability.
+* **production_impact:** Cross-tenant read on any deployment with a shared
+  multi-client onboarding root. React calls `/mi/snapshot`, so it is on the
+  launch surface.
+* **fix (primary route):** `/mi/snapshot` now binds the storage `client_id` to
+  `default_tenant_id()` (the deployment tenant); the caller's `run_id` still
+  selects the cut. Verified: `?client_id=client_secret` no longer leaks; legit
+  same-tenant request unchanged.
+* **residual:** `/mi/evolution/*`, `/mi/cohorts`, `/mi/geo/exposure`,
+  `/mi/risk-limits`, `/mi/pipeline/*`, `/mi/forecast/*` share the pattern and are
+  NOT yet bound. A full sweep is a broader change than a minimal isolated fix.
+* **containment:** Launch on a single-tenant deployment with a **dedicated**
+  (non-shared) onboarding root, so no other tenant's tape exists under the root.
+  This is a hard go-live condition; multi-tenant requires binding all GET routes.
+* **tests_added:** `test_tenancy_isolation.py::test_snapshot_get_cannot_read_another_tenants_tape`.
+* **status:** FIXED (`/mi/snapshot`) / CONTAIN (other GET routes; single-tenant + dedicated root)
+
+## ASSURE-010 — Filtered question answered with the unfiltered population
+
+* **severity:** Medium
+* **component:** default point-in-time route (`mi_query_executor`)
+* **fixture:** `three_portfolios` (has no default flag; `default_date` empty)
+* **question_id:** `cfl_*` "how many loans are in default?" (9 variants)
+* **observed_result:** "How many loans are in default?" returned 118 (the whole
+  book), `status: success`, no disclosure — the "in default" qualifier was
+  dropped (there is no governed default field, so the filter silently vanished).
+* **expected_result:** Either a governed refusal ("default status not reported")
+  or an explicitly zero/degraded answer — never the unfiltered book presented as
+  the answer.
+* **root_cause:** An unrecognised qualifier that maps to no governed field is not
+  applied and not disclosed; the executor answers the base metric on the full
+  population. Contrast "arrears" which maps to a present `arrears_balance` column
+  and correctly returns £0.
+* **production_impact:** A reader could infer 118 loans are in default. Narrow
+  (only bites when a filter term has no backing field) but genuinely misleading.
+* **fix:** Not fixed (would touch the frozen parser/executor filter-recognition
+  path; larger than a minimal isolated change). Recorded for remediation.
+* **status:** OPEN (recommend containment: keep default/arrears status off the
+  suggested-question set until filter-recognition degrades closed with disclosure)
+
+### Remaining candidates pending verification
 * **ASSURE-003** (candidate High) — `asOfDate` is a presentational label only on
   the point-in-time path: a caller can request an arbitrary date and receive the
   active dataset's numbers labelled as of that date, with no warning.

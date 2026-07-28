@@ -551,6 +551,14 @@ def snapshot(portfolioId: Optional[str] = None,
         return {"ok": False, "error": "portfolioId (client_id/run_id) is required",
                 "kpis": [], "warnings": [], "diagnostics": []}
 
+    # Tenant-bound storage: the client directory used to resolve a run tape is
+    # always the deployment tenant, never a caller-supplied client_id. Without
+    # this, `?client_id=<other>` reaches another tenant's tape under a shared
+    # onboarding root (the dashboard-GET analogue of the /mi/query cross-tenant
+    # read). The caller's run_id still selects the dated cut.
+    from .dependencies import default_tenant_id
+    client_id = default_tenant_id()
+
     root = _onboarding_output_root()
     df, prep_report = _resolve_run_dataframe(client_id, run_id, root)
     if df is None:

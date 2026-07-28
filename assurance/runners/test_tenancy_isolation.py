@@ -109,3 +109,39 @@ def test_envelope_never_stamps_foreign_balance(governed):
     tenant's own, so the governance envelope cannot certify a foreign figure."""
     for pid in ("client_002/2026_06", "client_002", "client_999/2026_06"):
         assert _balance(governed(portfolio_id=pid)) != pytest.approx(10 * FOREIGN_MARKER)
+
+
+# --------------------------------------------------------------------------- #
+# ASSURE-002 — the dashboard-GET analogue: GET /mi/snapshot?client_id=<other>
+# --------------------------------------------------------------------------- #
+def test_snapshot_get_cannot_read_another_tenants_tape(tmp_path, monkeypatch):
+    root = _lay_down_roots(tmp_path)
+    # A distinctly-marked foreign client tape under the same shared root.
+    foreign = pd.read_csv(BASE_TAPE).head(10).copy()
+    foreign["current_outstanding_balance"] = 888_888.0
+    dst = root / "client_secret" / "2026_06" / "output" / "central"
+    dst.mkdir(parents=True)
+    foreign.to_csv(dst / "18_central_lender_tape.csv", index=False)
+
+    monkeypatch.setenv("TRAKT_RUNTIME_MODE", "test")
+    monkeypatch.setenv("MI_AGENT_PLATFORM_CANONICAL", str(BASE_TAPE))
+    monkeypatch.setenv("MI_AGENT_ONBOARDING_OUTPUT_ROOT", str(root))
+    monkeypatch.setenv("MI_AGENT_CLIENT_ID", "client_001")
+    monkeypatch.setenv("MI_AGENT_AUTH_ENABLED", "false")
+    monkeypatch.setenv("MI_AGENT_LLM_ENABLED", "0")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    from mi_agent_api import data_source, datasets
+    data_source.reset_cache()
+    datasets._CLIENT_CURRENCY_CACHE.clear()
+
+    from fastapi.testclient import TestClient
+    from mi_agent_api.app import app
+    client = TestClient(app)
+    body = client.get("/mi/snapshot",
+                      params={"client_id": "client_secret", "run_id": "2026_06"}).json()
+    import json as _json
+    assert "888888" not in _json.dumps(body), (
+        "GET /mi/snapshot leaked another tenant's tape via ?client_id")
+    data_source.reset_cache()
+    datasets._CLIENT_CURRENCY_CACHE.clear()

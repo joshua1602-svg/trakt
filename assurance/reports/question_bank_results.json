@@ -1,8 +1,8 @@
 {
  "summary": {
   "total": 1000,
-  "passed": 939,
-  "failed": 61,
+  "passed": 991,
+  "failed": 9,
   "by_family": {
    "point_in_time": {
     "total": 150,
@@ -38,11 +38,11 @@
    },
    "ambiguous_adversarial": {
     "total": 100,
-    "passed": 86
+    "passed": 100
    },
    "controlled_failure": {
     "total": 80,
-    "passed": 33
+    "passed": 71
    },
    "followups_conversational": {
     "total": 50,
@@ -8828,13 +8828,11 @@
    "question_id": "amb_0003",
    "family": "ambiguous_adversarial",
    "checks": {
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "breach"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "amb_0004",
@@ -8900,13 +8898,11 @@
    "question_id": "amb_0010",
    "family": "ambiguous_adversarial",
    "checks": {
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "breach"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "amb_0011",
@@ -8972,13 +8968,11 @@
    "question_id": "amb_0017",
    "family": "ambiguous_adversarial",
    "checks": {
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "breach"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "amb_0018",
@@ -9044,13 +9038,11 @@
    "question_id": "amb_0024",
    "family": "ambiguous_adversarial",
    "checks": {
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "breach"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "amb_0025",
@@ -9116,13 +9108,11 @@
    "question_id": "amb_0031",
    "family": "ambiguous_adversarial",
    "checks": {
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "breach"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "amb_0032",
@@ -9188,13 +9178,11 @@
    "question_id": "amb_0038",
    "family": "ambiguous_adversarial",
    "checks": {
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "breach"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "amb_0039",
@@ -9260,13 +9248,11 @@
    "question_id": "amb_0045",
    "family": "ambiguous_adversarial",
    "checks": {
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "breach"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "amb_0046",
@@ -9332,13 +9318,11 @@
    "question_id": "amb_0052",
    "family": "ambiguous_adversarial",
    "checks": {
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "breach"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "amb_0053",
@@ -9404,13 +9388,11 @@
    "question_id": "amb_0059",
    "family": "ambiguous_adversarial",
    "checks": {
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "breach"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "amb_0060",
@@ -9476,13 +9458,11 @@
    "question_id": "amb_0066",
    "family": "ambiguous_adversarial",
    "checks": {
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "breach"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "amb_0067",
@@ -9548,13 +9528,11 @@
    "question_id": "amb_0073",
    "family": "ambiguous_adversarial",
    "checks": {
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "breach"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "amb_0074",
@@ -9620,13 +9598,11 @@
    "question_id": "amb_0080",
    "family": "ambiguous_adversarial",
    "checks": {
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "breach"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "amb_0081",
@@ -9692,13 +9668,11 @@
    "question_id": "amb_0087",
    "family": "ambiguous_adversarial",
    "checks": {
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "breach"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "amb_0088",
@@ -9764,13 +9738,11 @@
    "question_id": "amb_0094",
    "family": "ambiguous_adversarial",
    "checks": {
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "breach"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "amb_0095",
@@ -9836,14 +9808,12 @@
    "question_id": "cfl_0001",
    "family": "controlled_failure",
    "checks": {
-    "controlled_refusal": false,
-    "forbidden_claims_absent": false
+    "controlled_refusal": true,
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "arrears"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0002",
@@ -9860,27 +9830,23 @@
    "question_id": "cfl_0003",
    "family": "controlled_failure",
    "checks": {
-    "controlled_refusal": false,
-    "forbidden_claims_absent": false
+    "controlled_refusal": true,
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "arrears"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0004",
    "family": "controlled_failure",
    "checks": {
     "controlled_refusal": true,
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "error",
-   "leaked_claims": [
-    "NNEG"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0005",
@@ -9909,13 +9875,11 @@
    "family": "controlled_failure",
    "checks": {
     "controlled_refusal": true,
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "breach"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0008",
@@ -9932,14 +9896,12 @@
    "question_id": "cfl_0009",
    "family": "controlled_failure",
    "checks": {
-    "controlled_refusal": false,
-    "forbidden_claims_absent": false
+    "controlled_refusal": true,
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "arrears"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0010",
@@ -9956,27 +9918,23 @@
    "question_id": "cfl_0011",
    "family": "controlled_failure",
    "checks": {
-    "controlled_refusal": false,
-    "forbidden_claims_absent": false
+    "controlled_refusal": true,
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "arrears"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0012",
    "family": "controlled_failure",
    "checks": {
     "controlled_refusal": true,
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "error",
-   "leaked_claims": [
-    "NNEG"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0013",
@@ -10005,13 +9963,11 @@
    "family": "controlled_failure",
    "checks": {
     "controlled_refusal": true,
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "breach"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0016",
@@ -10028,14 +9984,12 @@
    "question_id": "cfl_0017",
    "family": "controlled_failure",
    "checks": {
-    "controlled_refusal": false,
-    "forbidden_claims_absent": false
+    "controlled_refusal": true,
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "arrears"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0018",
@@ -10052,27 +10006,23 @@
    "question_id": "cfl_0019",
    "family": "controlled_failure",
    "checks": {
-    "controlled_refusal": false,
-    "forbidden_claims_absent": false
+    "controlled_refusal": true,
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "arrears"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0020",
    "family": "controlled_failure",
    "checks": {
     "controlled_refusal": true,
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "error",
-   "leaked_claims": [
-    "NNEG"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0021",
@@ -10101,13 +10051,11 @@
    "family": "controlled_failure",
    "checks": {
     "controlled_refusal": true,
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "breach"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0024",
@@ -10124,14 +10072,12 @@
    "question_id": "cfl_0025",
    "family": "controlled_failure",
    "checks": {
-    "controlled_refusal": false,
-    "forbidden_claims_absent": false
+    "controlled_refusal": true,
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "arrears"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0026",
@@ -10148,27 +10094,23 @@
    "question_id": "cfl_0027",
    "family": "controlled_failure",
    "checks": {
-    "controlled_refusal": false,
-    "forbidden_claims_absent": false
+    "controlled_refusal": true,
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "arrears"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0028",
    "family": "controlled_failure",
    "checks": {
     "controlled_refusal": true,
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "error",
-   "leaked_claims": [
-    "NNEG"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0029",
@@ -10197,13 +10139,11 @@
    "family": "controlled_failure",
    "checks": {
     "controlled_refusal": true,
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "breach"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0032",
@@ -10220,12 +10160,12 @@
    "question_id": "cfl_0033",
    "family": "controlled_failure",
    "checks": {
-    "controlled_refusal": false,
+    "controlled_refusal": true,
     "forbidden_claims_absent": true
    },
    "status": "success",
    "leaked_claims": [],
-   "passed": false
+   "passed": true
   },
   {
    "question_id": "cfl_0034",
@@ -10287,13 +10227,11 @@
    "family": "controlled_failure",
    "checks": {
     "controlled_refusal": true,
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "breach"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0040",
@@ -10310,14 +10248,12 @@
    "question_id": "cfl_0041",
    "family": "controlled_failure",
    "checks": {
-    "controlled_refusal": false,
-    "forbidden_claims_absent": false
+    "controlled_refusal": true,
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "arrears"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0042",
@@ -10334,27 +10270,23 @@
    "question_id": "cfl_0043",
    "family": "controlled_failure",
    "checks": {
-    "controlled_refusal": false,
-    "forbidden_claims_absent": false
+    "controlled_refusal": true,
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "arrears"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0044",
    "family": "controlled_failure",
    "checks": {
     "controlled_refusal": true,
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "error",
-   "leaked_claims": [
-    "NNEG"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0045",
@@ -10383,13 +10315,11 @@
    "family": "controlled_failure",
    "checks": {
     "controlled_refusal": true,
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "breach"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0048",
@@ -10406,14 +10336,12 @@
    "question_id": "cfl_0049",
    "family": "controlled_failure",
    "checks": {
-    "controlled_refusal": false,
-    "forbidden_claims_absent": false
+    "controlled_refusal": true,
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "arrears"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0050",
@@ -10430,27 +10358,23 @@
    "question_id": "cfl_0051",
    "family": "controlled_failure",
    "checks": {
-    "controlled_refusal": false,
-    "forbidden_claims_absent": false
+    "controlled_refusal": true,
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "arrears"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0052",
    "family": "controlled_failure",
    "checks": {
     "controlled_refusal": true,
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "error",
-   "leaked_claims": [
-    "NNEG"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0053",
@@ -10479,13 +10403,11 @@
    "family": "controlled_failure",
    "checks": {
     "controlled_refusal": true,
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "breach"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0056",
@@ -10502,14 +10424,12 @@
    "question_id": "cfl_0057",
    "family": "controlled_failure",
    "checks": {
-    "controlled_refusal": false,
-    "forbidden_claims_absent": false
+    "controlled_refusal": true,
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "arrears"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0058",
@@ -10526,27 +10446,23 @@
    "question_id": "cfl_0059",
    "family": "controlled_failure",
    "checks": {
-    "controlled_refusal": false,
-    "forbidden_claims_absent": false
+    "controlled_refusal": true,
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "arrears"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0060",
    "family": "controlled_failure",
    "checks": {
     "controlled_refusal": true,
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "error",
-   "leaked_claims": [
-    "NNEG"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0061",
@@ -10575,13 +10491,11 @@
    "family": "controlled_failure",
    "checks": {
     "controlled_refusal": true,
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "breach"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0064",
@@ -10598,14 +10512,12 @@
    "question_id": "cfl_0065",
    "family": "controlled_failure",
    "checks": {
-    "controlled_refusal": false,
-    "forbidden_claims_absent": false
+    "controlled_refusal": true,
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "arrears"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0066",
@@ -10622,27 +10534,23 @@
    "question_id": "cfl_0067",
    "family": "controlled_failure",
    "checks": {
-    "controlled_refusal": false,
-    "forbidden_claims_absent": false
+    "controlled_refusal": true,
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "arrears"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0068",
    "family": "controlled_failure",
    "checks": {
     "controlled_refusal": true,
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "error",
-   "leaked_claims": [
-    "NNEG"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0069",
@@ -10671,13 +10579,11 @@
    "family": "controlled_failure",
    "checks": {
     "controlled_refusal": true,
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "breach"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0072",
@@ -10694,14 +10600,12 @@
    "question_id": "cfl_0073",
    "family": "controlled_failure",
    "checks": {
-    "controlled_refusal": false,
-    "forbidden_claims_absent": false
+    "controlled_refusal": true,
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "arrears"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0074",
@@ -10718,27 +10622,23 @@
    "question_id": "cfl_0075",
    "family": "controlled_failure",
    "checks": {
-    "controlled_refusal": false,
-    "forbidden_claims_absent": false
+    "controlled_refusal": true,
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "arrears"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0076",
    "family": "controlled_failure",
    "checks": {
     "controlled_refusal": true,
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "error",
-   "leaked_claims": [
-    "NNEG"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0077",
@@ -10767,13 +10667,11 @@
    "family": "controlled_failure",
    "checks": {
     "controlled_refusal": true,
-    "forbidden_claims_absent": false
+    "forbidden_claims_absent": true
    },
    "status": "success",
-   "leaked_claims": [
-    "breach"
-   ],
-   "passed": false
+   "leaked_claims": [],
+   "passed": true
   },
   {
    "question_id": "cfl_0080",
