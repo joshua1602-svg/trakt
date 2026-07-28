@@ -56,9 +56,15 @@ _SELECTABLE_COHORT_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$")
 #
 # The QUALIFIED forms are kept, because they name the book rather than the
 # dimension: "directly originated", "new origination", "newly originated".
+# "new lending" and "current book" are also absent, for the same reason: both
+# name a MEASURE, not a book. "show new lending by region" asks for originations
+# by region; "what is the current book balance?" asks for an aggregation. Each
+# was narrowing the answer to the direct books while presenting itself as the
+# whole. Asserted by
+# mi_agent/tests/test_mi_query_capability_matrix.py::test_measure_vocabulary_is_not_read_as_a_portfolio_scope.
 _DIRECT_TERMS = (
-    "direct", "directly originated", "organic", "current book", "own book",
-    "in-house", "new origination", "new lending", "newly originated",
+    "direct", "directly originated", "organic", "own book",
+    "in-house", "new origination", "newly originated",
 )
 
 _ACQUIRED_TERMS = (
