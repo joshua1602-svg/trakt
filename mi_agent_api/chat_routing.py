@@ -44,10 +44,14 @@ from . import scenario as scenario_mod
 from .recogniser_registry import (
     REGISTRY,
     Recogniser,
+    Recognition,
     RecogniserRegistry,
     RouteRequest,
     resolve_capability_state,
 )
+
+from mi_workflows import portfolio_risk_comparison as prc_mod
+from mi_workflows.semantics import load_business_semantics
 
 from trakt_core.portfolio import (
     CAP_COHORTS,
@@ -1704,12 +1708,212 @@ def _is_evolution(question: str, spec) -> bool:
 # its historical position via ``priority``, and all share DEFAULT_CONFIDENCE, so
 # ordering collapses to exactly the old chain order.
 
+# --------------------------------------------------------------------------- #
+# Portfolio Risk Comparison — adapter for the governed workflow package.
+#
+# The workflow (mi_workflows.portfolio_risk_comparison) owns recognition
+# predicates, scope resolution, Business Semantics Registry consumption and
+# every calculation. This adapter only resolves the collaborators the workflow
+# needs (frame, portfolio registry, BSR) and re-keys the result contract into
+# the chat envelope — it performs no calculations and takes no decisions.
+# --------------------------------------------------------------------------- #
+#: Workflow recognisers declare higher confidence than the single-capability
+#: default (0.5): a genuine workflow question outranks the single-capability
+#: recogniser that would otherwise catch it (architecture doc §11.3).
+_WORKFLOW_CONFIDENCE = 0.7
+
+
+def _recognise_portfolio_comparison(request: RouteRequest) -> Recognition:
+    matched, reason = prc_mod.is_portfolio_comparison_question(
+        request.question, request.spec)
+    return (Recognition.yes(_WORKFLOW_CONFIDENCE, reason) if matched
+            else Recognition.no(reason))
+
+
+def _share_pct(value: Optional[float]) -> str:
+    return "—" if value is None else f"{float(value) * 100:.1f}%"
+
+
+def _comparison_cell(value: Optional[float], unit: str) -> str:
+    if value is None:
+        return "—"
+    if unit == "currency":
+        return _gbp(value)
+    if unit == "share":
+        return _share_pct(value)
+    if unit == "integer":
+        return f"{float(value):,.1f}"
+    return f"{float(value):,.4g}"
+
+
+def _metric_comparison_table(result: Dict[str, Any], *, spec_dict, portfolio_id,
+                             as_of) -> Optional[Dict[str, Any]]:
+    comparisons = result.get("metric_comparisons") or []
+    if not comparisons:
+        return None
+    sides = result.get("portfolio_results") or []
+    label_a = sides[0]["label"] if sides else "Portfolio A"
+    label_b = sides[1]["label"] if len(sides) > 1 else "Portfolio B"
+    rows = []
+    for c in comparisons:
+        unit = c.get("unit") or "decimal"
+        rows.append({
+            "metric": c["display_name"],
+            "aggregation": c["aggregation"]
+            + (f" (wt: {c['weight_basis']})" if c.get("weight_basis") else ""),
+            "a": _comparison_cell(c["portfolio_a"]["value"], unit),
+            "b": _comparison_cell(c["portfolio_b"]["value"], unit),
+            "difference": _comparison_cell(c["difference"]["absolute"], unit),
+            "direction": (c["directionality"]["higher"] or "—").replace(
+                "portfolio_a", label_a).replace("portfolio_b", label_b),
+        })
+    return _table_artifact(
+        f"Portfolio comparison — {label_a} vs {label_b}",
+        columns=[
+            {"key": "metric", "label": "Metric", "align": "left", "format": "text"},
+            {"key": "aggregation", "label": "Aggregation", "align": "left",
+             "format": "text"},
+            {"key": "a", "label": label_a, "align": "right", "format": "text"},
+            {"key": "b", "label": label_b, "align": "right", "format": "text"},
+            {"key": "difference", "label": "Difference (A−B)", "align": "right",
+             "format": "text"},
+            {"key": "direction", "label": "Higher", "align": "left",
+             "format": "text"},
+        ], rows=rows, spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of,
+        description=f"{len(rows)} governed metric comparison(s).")
+
+
+def _distribution_comparison_tables(result: Dict[str, Any], *, spec_dict,
+                                    portfolio_id, as_of) -> List[Dict[str, Any]]:
+    sides = result.get("portfolio_results") or []
+    label_a = sides[0]["label"] if sides else "Portfolio A"
+    label_b = sides[1]["label"] if len(sides) > 1 else "Portfolio B"
+    tables = []
+    for dist in result.get("distribution_comparisons") or []:
+        rows = [{
+            "category": row["category"],
+            "count_a": _share_pct(row["count_share_a"]),
+            "count_b": _share_pct(row["count_share_b"]),
+            "exposure_a": _share_pct(row["exposure_share_a"]),
+            "exposure_b": _share_pct(row["exposure_share_b"]),
+        } for row in dist.get("categories") or []]
+        tables.append(_table_artifact(
+            f"{dist['display_name']} mix — {label_a} vs {label_b}",
+            columns=[
+                {"key": "category", "label": dist["display_name"],
+                 "align": "left", "format": "text"},
+                {"key": "count_a", "label": f"{label_a} (count)",
+                 "align": "right", "format": "text"},
+                {"key": "count_b", "label": f"{label_b} (count)",
+                 "align": "right", "format": "text"},
+                {"key": "exposure_a", "label": f"{label_a} (exposure)",
+                 "align": "right", "format": "text"},
+                {"key": "exposure_b", "label": f"{label_b} (exposure)",
+                 "align": "right", "format": "text"},
+            ], rows=rows, spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of,
+            description=f"Share of each scope; unknown values reported as "
+                        f"'{prc_mod.engine.UNKNOWN_CATEGORY}'."))
+    return tables
+
+
+def _route_portfolio_comparison(request: RouteRequest) -> Optional[Dict[str, Any]]:
+    """Adapter: collaborators in, workflow result out, envelope re-keying only."""
+    route = prc_mod.WORKFLOW_ID
+    if request.frame_resolver is None:
+        return _envelope(
+            ok=True, question=request.question, spec=request.spec_dict,
+            artifacts=[], route=route, lens_applied=True,
+            answer="I can't resolve the governed funded book to compare portfolios here.",
+            warnings=["insufficient-data: no funded frame available."])
+    try:
+        df = request.frame_resolver(request.client_id, request.run_id)
+    except Exception:  # noqa: BLE001 - a resolution hiccup degrades, never 500s
+        df = None
+    if df is None or not len(df):
+        return _envelope(
+            ok=True, question=request.question, spec=request.spec_dict,
+            artifacts=[], route=route, lens_applied=True,
+            answer="I couldn't load the governed funded book to compare portfolios.",
+            warnings=["insufficient-data: no funded frame available."])
+    try:
+        bsr = load_business_semantics()
+    except Exception as exc:  # noqa: BLE001 - a controlled outcome, never a 500
+        _logger.warning("business semantics registry unavailable: %s", exc)
+        return _envelope(
+            ok=True, question=request.question, spec=request.spec_dict,
+            artifacts=[], route=route, lens_applied=True,
+            answer=("Portfolio comparison is unavailable: the Business "
+                    "Semantics Registry could not be loaded, and comparison is "
+                    "only performed over governed semantics."),
+            warnings=["insufficient-data: business semantics registry unavailable."])
+    try:
+        from . import portfolio_context as _ctx
+        registry = _ctx.build_registry(df, client_id=request.client_id)
+    except Exception:  # noqa: BLE001 - the workflow builds its own from the frame
+        registry = None
+
+    result = prc_mod.run_portfolio_risk_comparison(
+        df, question=request.question, bsr=bsr, mi_semantics=request.semantics,
+        registry=registry, client_id=request.client_id, as_of=request.as_of,
+        spec=request.spec)
+
+    warnings = list(result.get("warnings") or [])
+    warnings.extend(f"limitation: {note}" for note in result.get("limitations") or [])
+
+    if not result.get("available"):
+        envelope = _envelope(
+            ok=True, question=request.question, spec=request.spec_dict,
+            artifacts=[], route=route, lens_applied=True,
+            answer=f"I can't compare portfolios here: {result.get('reason')}.",
+            warnings=warnings)
+        envelope["workflow"] = result
+        return envelope
+
+    sides = result["portfolio_results"]
+    summary_lines = result.get("summary") or []
+    if summary_lines:
+        answer = " ".join(summary_lines)
+    else:
+        answer = (f"Compared {sides[0]['label']} with {sides[1]['label']} at "
+                  f"{result.get('reporting_date') or 'the current reporting date'}: "
+                  "no governed directional differences were observed across the "
+                  "selected indicators.")
+
+    artifacts: List[Dict[str, Any]] = []
+    table = _metric_comparison_table(result, spec_dict=request.spec_dict,
+                                     portfolio_id=request.portfolio_id,
+                                     as_of=request.as_of)
+    if table is not None:
+        artifacts.append(table)
+    artifacts.extend(_distribution_comparison_tables(
+        result, spec_dict=request.spec_dict, portfolio_id=request.portfolio_id,
+        as_of=request.as_of))
+
+    audit = result.get("audit") or {}
+    notes = [{"field": "governance",
+              "note": (f"Business Semantics Registry v{audit.get('bsr_version')} "
+                       f"(schema {audit.get('bsr_schema_version')}); calculation "
+                       f"version {audit.get('calculation_version')}; only fields "
+                       "governed for portfolio comparison were compared.")}]
+    recon = {"dataset": prc_mod.DATASET,
+             "reporting_date": result.get("reporting_date"),
+             "portfolio_a_rows": sides[0]["row_count"],
+             "portfolio_b_rows": sides[1]["row_count"]}
+    envelope = _envelope(
+        ok=True, question=request.question, answer=answer,
+        spec=request.spec_dict, artifacts=artifacts, reconciliation=recon,
+        source_notes=notes, route=route, warnings=warnings, lens_applied=True)
+    envelope["workflow"] = result
+    return envelope
+
+
 #: Human wording per route for the lens disclosure below.
 _ROUTE_NOUN = {
     "temporal_compare": "period comparison", "evolution": "trend",
     "evolution_funnel": "funnel trend", "evolution_pipeline_stage": "pipeline trend",
     "forecast_extrapolation": "forecast", "scenario": "scenario",
     "risk_limits": "risk-limit", "cohort_conversion": "conversion",
+    "portfolio_risk_comparison": "portfolio comparison",
 }
 
 
@@ -1790,13 +1994,17 @@ def _capability_unavailable_envelope(req: RouteRequest, recogniser,
 
 
 def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserRegistry:
-    """Declare the eleven governed capability routes.
+    """Declare the governed capability routes (eleven migrated + one workflow).
 
     ``priority`` reproduces the historical chain order exactly. A capability
     gate is declared ONLY where an unavailable capability is a genuine,
     explainable outcome (pipeline / origination / cohort / risk); funded-book
     routes are ungated because every scope with rows supports them, and gating
     them would cost a context resolution on the common path for no decision.
+    The portfolio-risk-comparison workflow recogniser declares a HIGHER
+    confidence than the migrated routes, so a genuine multi-portfolio
+    comparison outranks any single-capability route that also matches — the
+    ordering mechanism the registry was built to support (architecture §11.3).
     """
     registry.extend([
         # 1. What-if / scenario perturbs the run-rate and re-solves the
@@ -1867,6 +2075,30 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
                 r.question, r.spec_dict, client_id=r.client_id, run_id=r.run_id,
                 frame_resolver=r.frame_resolver, portfolio_id=r.portfolio_id,
                 as_of=r.as_of, source_lens=r.source_lens)),
+
+        # 6b. Portfolio Risk Comparison — the governed workflow layer's second
+        #     workflow. Recognition, scope resolution and every calculation
+        #     live in mi_workflows.portfolio_risk_comparison; this entry only
+        #     declares the route and its Business Semantics Registry terms.
+        #     Ungated like the other funded-book routes: "there are not two
+        #     governed scopes to compare" is a workflow-level controlled
+        #     failure with its own explanation, not a CapabilityState.
+        Recogniser(
+            name=prc_mod.WORKFLOW_ID, priority=65, lens_aware=True,
+            description=("Deterministic comparison of governed portfolio "
+                         "scopes at one reporting date."),
+            metadata={
+                "workflow": prc_mod.WORKFLOW_ID,
+                "bsr_workflow_tag": "portfolio_comparison",
+                "bsr_axes_consumed": (
+                    "analytical_role", "analytical_concept", "categories",
+                    "default_aggregation", "weight_field", "share_basis",
+                    "directionality", "portfolio_comparability", "confidence",
+                    "rationale", "asset_applicability"),
+                "comparison_basis": "portfolio_scopes_at_one_reporting_date",
+            },
+            recognise=_recognise_portfolio_comparison,
+            handle=_route_portfolio_comparison),
 
         # 7-8. Governed composite answers. Checked before compare/evolution
         #      because both are narrower intents than a single-metric
