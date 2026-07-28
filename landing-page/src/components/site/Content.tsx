@@ -1,182 +1,73 @@
-"use client";
-
 import { Card, SectionHeading, cx } from "@/components/ui";
-import { track } from "@/lib/analytics";
 
 /**
- * The static marketing sections: omnichannel, capability stack, connected
+ * The static marketing sections: capabilities, delivery model, connected
  * operating model and portfolio lifecycle.
  *
  * Every claim here is mapped to repository evidence in
  * `landing-page/docs/content-map.md`; wording that describes a capability the
- * repository does not yet support is not present.
+ * repository does not yet support is not present, and anything that is a
+ * deployment choice rather than a shipped capability says so.
+ *
+ * These are server components — nothing here is interactive.
  */
 
 /* -------------------------------------------------------------------------- */
-/* F. Omnichannel                                                             */
-/* -------------------------------------------------------------------------- */
-
-const CHANNELS = [
-  {
-    id: "copilot",
-    name: "Microsoft 365 Copilot and Teams",
-    // Trakt ships a declarative agent, packaged as a Teams app and surfaced
-    // through Microsoft 365 Copilot. There is no standalone native Teams bot,
-    // so the copy claims the surfaces, not a second product.
-    copy: "Access Trakt's declarative agent through supported Microsoft 365 Copilot and Teams surfaces — ask portfolio questions, request reports and retrieve current management information without leaving the tools you already use.",
-  },
-  {
-    id: "workspace",
-    name: "Trakt Workspace",
-    copy: "Use the full analytical workspace for dashboards, drill-through, monitoring and portfolio investigation.",
-  },
-  {
-    id: "automated",
-    name: "Automated Delivery",
-    copy: "Generate scheduled reports, alerts, data outputs and governance artefacts without manual intervention.",
-  },
-] as const;
-
-export function Omnichannel() {
-  return (
-    <>
-      <SectionHeading
-        id="channels"
-        eyebrow="Access"
-        title="Intelligence delivered where your teams already work"
-        intro="The Copilot demonstration above is one way into Trakt, not the whole product. The same governed answer reaches every channel."
-      />
-      <ul className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {CHANNELS.map((channel) => (
-          <Card as="li" key={channel.id} className="flex flex-col">
-            <h3 className="text-[15px] font-semibold text-ink-100">{channel.name}</h3>
-            <p className="mt-2.5 text-sm leading-relaxed text-ink-400">{channel.copy}</p>
-          </Card>
-        ))}
-      </ul>
-    </>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/* G. Capability stack                                                        */
+/* Capabilities                                                               */
 /* -------------------------------------------------------------------------- */
 
 interface Capability {
   id: string;
   name: string;
   copy: string;
-  items: string[];
   icon: string;
 }
 
+/**
+ * The lead tile is the differentiator and is sized as one: prospects assume an
+ * LLM can already map field headers, so ingestion alone is not the claim. Many
+ * books held in one governed model, each reportable alone and in aggregate, is.
+ * It absorbs what used to be a separate "Portfolio Integration" tile, which said
+ * the same thing more weakly.
+ */
+const LEAD_CAPABILITY: Capability = {
+  id: "ingestion",
+  name: "Multi-source portfolio ingestion",
+  icon: "M4 7h16M4 12h16M4 17h10",
+  copy:
+    "Any number of books — direct originations, acquired back books, sponsored securitisations — held in one governed model, each reportable on its own and in aggregate.",
+};
+
 const CAPABILITIES: Capability[] = [
   {
-    id: "integration",
-    name: "Portfolio Integration",
-    icon: "M4 7h16M4 12h16M4 17h10",
-    copy: "Onboard new portfolios, acquisitions and servicing datasets into a consistent, traceable data model.",
-    items: [
-      "Data ingestion",
-      "Mapping",
-      "Standardisation",
-      "Deduplication",
-      "Portfolio migration",
-      "Acquisition integration",
-    ],
-  },
-  {
     id: "analytics",
-    name: "Portfolio Analytics",
+    name: "Portfolio analytics and monitoring",
     icon: "M4 19V5M4 19h16M8 15v-4M13 15V8M18 15v-6",
-    copy: "Monitor funded portfolios, pipelines, cohorts, concentrations, credit performance and operating trends.",
-    items: [
-      "Dashboards",
-      "Natural-language analysis",
-      "Drill-through",
-      "Cohort analysis",
-      "Trend analysis",
-      "Concentration analysis",
-    ],
+    copy: "Dashboards, cohorts, concentrations, drill-through and limit monitoring, funded book and pipeline.",
   },
   {
     id: "management-reporting",
-    name: "Management Reporting",
+    name: "Management reporting",
     icon: "M6 3h9l4 4v14H6zM15 3v4h4",
-    copy: "Automate recurring management information and provide consistent answers across finance, risk, operations and leadership.",
-    items: [
-      "KPI packs",
-      "Board reporting",
-      "Variance analysis",
-      "Management commentary",
-      "Scheduled MI",
-    ],
+    copy: "Recurring management information, and one consistent answer across finance, risk and operations.",
   },
   {
     id: "investor-reporting",
-    name: "Investor Reporting",
+    name: "Investor reporting",
     icon: "M4 18l5-6 4 3 6-8M20 7h-4M20 7v4",
-    copy: "Produce repeatable investor and funding-partner reporting from the same governed portfolio data.",
-    items: [
-      "Investor packs",
-      "Portfolio stratifications",
-      "Performance commentary",
-      "Scheduled delivery",
-      "Funding-partner reporting",
-    ],
+    copy: "Investor and funding-partner packs, with stratifications and commentary.",
   },
   {
     id: "regulatory",
-    name: "Regulatory Reporting",
+    name: "Regulatory reporting",
     icon: "M12 3l8 4v5c0 5-3.4 8.3-8 9-4.6-.7-8-4-8-9V7z",
-    copy: "Transform validated portfolio data into prescribed regulatory and securitisation reporting structures.",
-    items: [
-      "ESMA Annex 2 reporting",
-      "ESMA Annex 12 reporting",
-      "Field validation",
-      "Rule application",
-      "Submission-ready XML",
-    ],
+    copy: "ESMA Annex 2 and Annex 12 output, field-validated and built into submission-ready XML.",
   },
   {
     id: "governance",
-    name: "Governance and Audit",
+    name: "Governance and audit",
     icon: "M5 5h14v14H5zM9 9h6M9 13h6M9 17h3",
-    copy: "Maintain transparent lineage from source data through transformation, calculation and final output.",
-    items: [
-      "Provenance",
-      "Validation evidence",
-      "Exception logs",
-      "Versioning",
-      "Approval records",
-      "Reproducible outputs",
-    ],
-  },
-  {
-    id: "monitoring",
-    name: "Portfolio Monitoring",
-    icon: "M3 12h4l3 7 4-14 3 7h4",
-    copy: "Identify data-quality issues, limit breaches, performance deterioration and emerging portfolio risks.",
-    items: [
-      "Risk alerts",
-      "Covenant monitoring",
-      "Concentration limits",
-      "Exception management",
-      "Data-quality monitoring",
-    ],
-  },
-  {
-    id: "omnichannel",
-    name: "Omnichannel Intelligence",
-    icon: "M12 3v18M3 12h18M6.5 6.5l11 11M17.5 6.5l-11 11",
-    copy: "Provide governed portfolio answers through the Microsoft 365 Copilot and Teams surfaces, the Trakt workspace, APIs and scheduled reporting.",
-    items: [
-      "Conversational access",
-      "Workflow actions",
-      "Role-based delivery",
-      "Reusable intelligence",
-      "Scheduled outputs",
-    ],
+    copy: "Lineage from source header to published figure, with validation evidence and reproducible runs.",
   },
 ];
 
@@ -205,10 +96,21 @@ export function CapabilityStack() {
       <SectionHeading
         id="capabilities"
         eyebrow="What you buy"
-        title="A governed operating layer for specialist lending"
-        intro="Eight capability areas, connected through one data layer — not eight products bolted together."
+        title="Six capabilities on one governed layer"
       />
-      <ul className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+
+      <ul className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {/* Full width on mobile, two columns from lg — weight, not a filled block. */}
+        <Card as="li" className="flex flex-col border-mint-400/40 sm:col-span-2">
+          <span className="mb-3.5 flex h-9 w-9 items-center justify-center rounded-lg border border-mint-400/40 bg-navy-850 text-mint-400">
+            <CapabilityIcon path={LEAD_CAPABILITY.icon} />
+          </span>
+          <h3 className="text-base font-semibold text-ink-100">{LEAD_CAPABILITY.name}</h3>
+          <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-ink-300">
+            {LEAD_CAPABILITY.copy}
+          </p>
+        </Card>
+
         {CAPABILITIES.map((capability) => (
           <Card
             as="li"
@@ -220,28 +122,6 @@ export function CapabilityStack() {
             </span>
             <h3 className="text-[15px] font-semibold text-ink-100">{capability.name}</h3>
             <p className="mt-2 text-sm leading-relaxed text-ink-400">{capability.copy}</p>
-            <details
-              className="mt-3.5"
-              onToggle={(event) => {
-                if ((event.currentTarget as HTMLDetailsElement).open) {
-                  track("capability_interaction", { capabilityId: capability.id });
-                }
-              }}
-            >
-              <summary className="cursor-pointer text-xs font-medium text-peri-300 hover:text-peri-200">
-                Illustrative capabilities
-              </summary>
-              <ul className="mt-2.5 space-y-1">
-                {capability.items.map((item) => (
-                  <li key={item} className="flex gap-2 text-xs text-ink-400">
-                    <span aria-hidden="true" className="text-peri-500">
-                      ·
-                    </span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </details>
           </Card>
         ))}
       </ul>
@@ -250,7 +130,96 @@ export function CapabilityStack() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* H. Connected operating model                                               */
+/* Delivery model                                                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Two groups, never flattened.
+ *
+ * What ships today and what is a deployment choice are different claims, and
+ * the page's credibility rests on the distinction. Every live mode below is
+ * evidenced in the repository; both roadmap items are reserved channels
+ * (`trakt_core/context.py`) with a documented adapter shape and no shipped
+ * route, so they are labelled as roadmap and carry no accent.
+ */
+const LIVE_MODES = [
+  {
+    name: "Managed service",
+    copy: "Recurring reporting, regulatory output and governance artefacts, produced with no user interaction.",
+  },
+  {
+    name: "Trakt Agent workspace",
+    copy: "The full analytical environment: dashboards, charting, drill-through and portfolio investigation.",
+  },
+  {
+    name: "Microsoft 365 Copilot and Teams",
+    copy: "Portfolio questions and artefact requests inside the tools your teams already use.",
+  },
+] as const;
+
+const ROADMAP_MODES = [
+  {
+    name: "Enterprise agent deployment",
+    copy: "Trakt running inside a client's own agent estate.",
+  },
+  {
+    name: "Agent-to-agent integration",
+    copy: "Upstream and downstream systems consulting the governed layer directly.",
+  },
+] as const;
+
+export function DeliveryModel() {
+  return (
+    <>
+      <SectionHeading
+        id="delivery"
+        eyebrow="Delivery model"
+        title="Every mode reads the same governed layer"
+      />
+
+      <div className="mt-9">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-mint-400">
+          Available today
+        </p>
+        <ul className="mt-3 grid gap-4 lg:grid-cols-3">
+          {LIVE_MODES.map((mode) => (
+            <Card as="li" key={mode.name} className="flex flex-col">
+              <h3 className="text-[15px] font-semibold text-ink-100">{mode.name}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-ink-400">{mode.copy}</p>
+            </Card>
+          ))}
+        </ul>
+      </div>
+
+      <div className="mt-8">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-500">
+          Roadmap
+        </p>
+        <ul className="mt-3 grid gap-4 lg:grid-cols-2">
+          {ROADMAP_MODES.map((mode) => (
+            <Card
+              as="li"
+              key={mode.name}
+              className="flex flex-col border-line-soft bg-navy-900/40"
+            >
+              <h3 className="text-[15px] font-semibold text-ink-300">{mode.name}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-ink-500">{mode.copy}</p>
+            </Card>
+          ))}
+        </ul>
+      </div>
+
+      <p className="mt-8 text-[15px] leading-relaxed text-ink-300">
+        The answer is calculated once and distributed; the channel never changes it.
+        Deployments are isolated per client behind Microsoft Entra ID, with retention
+        and document delivery set at onboarding.
+      </p>
+    </>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* How it works                                                               */
 /* -------------------------------------------------------------------------- */
 
 const FLOW = [
@@ -268,22 +237,13 @@ const FLOW = [
   },
 ] as const;
 
-const OUTPUTS = [
-  "Copilot",
-  "Workspace",
-  "Reports",
-  "Regulatory outputs",
-  "Alerts",
-] as const;
-
 export function OperatingModel() {
   return (
     <>
       <SectionHeading
         id="how-it-works"
         eyebrow="How it works"
-        title="One calculation, governed centrally, delivered everywhere"
-        intro="Trakt calculates the answer once, governs it centrally and distributes it through every required channel."
+        title="One calculation, governed centrally"
       />
 
       <ol className="mt-9 grid gap-4 lg:grid-cols-3">
@@ -308,55 +268,31 @@ export function OperatingModel() {
           </li>
         ))}
       </ol>
-
-      <div className="mt-8 rounded-xl border border-peri-500/35 bg-peri-400/[0.06] p-5 sm:p-6">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-peri-300">
-          Delivered as
-        </p>
-        <ul className="mt-3 flex flex-wrap gap-2">
-          {OUTPUTS.map((output) => (
-            <li
-              key={output}
-              className="rounded-full border border-line bg-navy-900/70 px-3.5 py-1.5 text-sm text-ink-200"
-            >
-              {output}
-            </li>
-          ))}
-        </ul>
-        <p className="mt-4 text-sm leading-relaxed text-ink-300">
-          Because every channel reads the same governed layer, the figure in a board
-          pack, an investor report, a regulatory submission and a Copilot answer is
-          the same figure — reconciled by construction rather than by comparison.
-        </p>
-      </div>
     </>
   );
 }
 
 /* -------------------------------------------------------------------------- */
-/* I. Portfolio lifecycle                                                     */
+/* Where it applies                                                           */
 /* -------------------------------------------------------------------------- */
 
+/** A genuine sequence, so the numbers stay. */
 const LIFECYCLE = [
   {
-    title: "Launch or acquire a portfolio",
-    copy: "Standardise incoming data, identify quality issues and establish the initial reporting environment.",
+    title: "Onboard",
+    copy: "Launch or acquire a book, standardised into the governed model without building another reporting stack.",
   },
   {
-    title: "Run the portfolio",
+    title: "Run",
     copy: "Monitor performance, answer management questions and automate recurring information.",
   },
   {
-    title: "Finance the portfolio",
-    copy: "Support warehouse, investor and lender reporting from controlled portfolio data.",
+    title: "Finance",
+    copy: "Warehouse, investor and lender reporting, through to securitisation and refinancing, from controlled portfolio data.",
   },
   {
-    title: "Securitise or refinance",
-    copy: "Prepare validated datasets, regulatory outputs, portfolio stratifications and transaction reporting.",
-  },
-  {
-    title: "Integrate additional portfolios",
-    copy: "Bring new books into the existing operating model without building another reporting stack.",
+    title: "Exit",
+    copy: "Prepare validated datasets, stratifications and portfolio reporting for sell-side mandates.",
   },
 ] as const;
 
@@ -368,9 +304,9 @@ export function Lifecycle() {
         eyebrow="Where it applies"
         title="Built for the portfolio lifecycle"
       />
-      <ol className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <ol className="mt-9 grid gap-4 sm:grid-cols-2">
         {LIFECYCLE.map((stage, index) => (
-          <Card as="li" key={stage.title} className="flex gap-4">
+          <Card as="li" key={stage.title} className={cx("flex gap-4")}>
             <span
               aria-hidden="true"
               className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-line bg-navy-850 text-xs font-semibold tabular-nums text-peri-300"
@@ -384,72 +320,6 @@ export function Lifecycle() {
           </Card>
         ))}
       </ol>
-    </>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/* J. Governance and trust                                                    */
-/* -------------------------------------------------------------------------- */
-
-const GOVERNANCE = [
-  {
-    title: "Synthetic public demonstration",
-    copy: "This page runs on a wholly synthetic portfolio. It accepts no uploads, exposes no client environment and returns no exposure-level record.",
-  },
-  {
-    title: "Deterministic calculation logic",
-    copy: "Portfolio figures are produced by a deterministic engine against a governed dataset. The same question returns the same number, every time and in every channel.",
-  },
-  {
-    title: "Traceable source-to-output lineage",
-    copy: "Each reporting cut retains its header mapping, transformation record, validation exceptions and delivery preflight, so any published figure can be traced back to source.",
-  },
-  {
-    title: "Role-based access in production",
-    copy: "Client deployments sit behind Microsoft Entra ID; Copilot actions require a validated bearer token and fail closed when they are not configured.",
-  },
-  {
-    title: "Client-isolated environments",
-    copy: "Trakt runs one deployment per client, with that client's data sources and storage — the public demonstration reaches none of them.",
-  },
-  {
-    title: "Configurable data retention",
-    copy: "Reporting history, artefact retention and output storage are configured per client environment rather than fixed by the platform.",
-  },
-  {
-    title: "Controlled document and report delivery",
-    copy: "Generated documents are delivered through short-lived, server-redeemed links. Storage credentials and storage paths never leave the server.",
-  },
-] as const;
-
-export function Governance() {
-  return (
-    <>
-      <SectionHeading
-        id="governance"
-        eyebrow="Why you can rely on it"
-        title="Governance you can point at"
-        intro="What follows is what Trakt does today. Where something is a deployment choice rather than a platform guarantee, it says so."
-      />
-      <ul className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {GOVERNANCE.map((item) => (
-          <Card as="li" key={item.title}>
-            <h3 className="text-[15px] font-semibold text-ink-100">{item.title}</h3>
-            <p className="mt-2 text-sm leading-relaxed text-ink-400">{item.copy}</p>
-          </Card>
-        ))}
-      </ul>
-      <p
-        className={cx(
-          "mt-6 rounded-lg border border-line bg-navy-900/60 px-4 py-3",
-          "text-xs leading-relaxed text-ink-400",
-        )}
-      >
-        Deployment, hosting, retention and access-control arrangements are configured
-        for each client environment, and are agreed as part of onboarding rather than
-        being fixed by the platform.
-      </p>
     </>
   );
 }

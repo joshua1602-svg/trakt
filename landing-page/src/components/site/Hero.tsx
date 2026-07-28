@@ -1,13 +1,28 @@
 "use client";
 
-import { buttonStyles, cx } from "@/components/ui";
+import { buttonStyles } from "@/components/ui";
 import { track } from "@/lib/analytics";
 import type { DemoScopeInfo } from "@/types/demo";
 
 /**
- * Hero, with an interface preview built from the same synthetic portfolio the
- * live demo answers from — not stock photography, and not an invented screen.
+ * Value proposition.
+ *
+ * Leads on the governed single-source claim rather than on channel breadth —
+ * channel is a delivery choice and belongs in the delivery model section, where
+ * it is harder for an incumbent to copy.
+ *
+ * The three proof points are chips, not cards: a sceptical reader scanning for
+ * "can I trust the numbers" gets all three in one row without reading prose.
+ * Green marks them, and marks the reconciliation claim, because in the product
+ * green means proven — see the accent note in `app/globals.css`.
  */
+
+const PROOF_POINTS = [
+  "Deterministic engine — same question, same number, every channel",
+  "Traceable lineage — every published figure ties back to source",
+  "Client-isolated environments and controlled data handling",
+] as const;
+
 export function Hero({ scope }: { scope: DemoScopeInfo }) {
   return (
     <div className="grid items-center gap-10 lg:grid-cols-[1.05fr_1fr] lg:gap-14">
@@ -16,20 +31,37 @@ export function Hero({ scope }: { scope: DemoScopeInfo }) {
           Trakt for specialist lending
         </p>
         <h1 className="text-balance text-4xl font-semibold leading-[1.08] tracking-tight text-ink-100 sm:text-5xl">
-          Portfolio intelligence. Wherever you work.
+          One governed portfolio dataset. Every book, every report.
         </h1>
         <p className="mt-5 max-w-xl text-lg leading-relaxed text-ink-200">
-          Trakt turns fragmented portfolio data into trusted answers, automated
-          reporting and governed workflows.
+          Trakt normalises loan tapes, servicing extracts, valuations and funding data
+          into one governed model that drives management, investor and regulatory
+          reporting.
         </p>
-        <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-ink-400">
-          Use Trakt through Microsoft 365 Copilot, Teams, the Trakt workspace or
-          automated reporting processes.
+
+        <p className="mt-5 max-w-xl text-[15px] font-medium leading-relaxed text-mint-400">
+          Every figure is reconciled by construction rather than by comparison.
         </p>
+
+        {/* Chips, not cards: on a phone these stack as three tight lines, so the
+            reader takes all three in without reading prose. Borders appear only
+            once they sit in a row, where they separate the chips; unbordered on
+            mobile they stay a list rather than becoming a green panel. */}
+        <ul className="mt-6 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-2.5">
+          {PROOF_POINTS.map((point) => (
+            <li
+              key={point}
+              className="flex items-start gap-2 text-[13px] leading-snug text-ink-200 sm:max-w-[15rem] sm:flex-1 sm:rounded-lg sm:border sm:border-mint-400/30 sm:px-3 sm:py-2"
+            >
+              <CheckMark />
+              {point}
+            </li>
+          ))}
+        </ul>
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
           <a
-            href="#live-demo"
+            href="#example"
             onClick={() => track("hero_demo_click")}
             className={buttonStyles.primary}
           >
@@ -43,15 +75,30 @@ export function Hero({ scope }: { scope: DemoScopeInfo }) {
             Book a portfolio walkthrough
           </a>
         </div>
-
-        <p className="mt-6 text-xs text-ink-500">
-          The public demonstration uses a wholly synthetic portfolio. No client or
-          consumer information is displayed, and no upload is accepted.
-        </p>
       </div>
 
       <InterfacePreview scope={scope} />
     </div>
+  );
+}
+
+function CheckMark() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+      className="mt-0.5 shrink-0 text-mint-400"
+    >
+      <path d="M20 6L9 17l-5-5" />
+    </svg>
   );
 }
 
@@ -67,10 +114,9 @@ function InterfacePreview({ scope }: { scope: DemoScopeInfo }) {
       aria-label="Preview of a governed Trakt answer"
       role="img"
     >
-      <div className="flex items-center justify-between border-b border-line pb-3">
-        <p className="text-xs font-medium text-ink-300">Microsoft 365 Copilot</p>
-        <p className="text-[10px] uppercase tracking-wider text-amber-400">Synthetic</p>
-      </div>
+      <p className="border-b border-line pb-3 text-xs font-medium text-ink-300">
+        Microsoft 365 Copilot
+      </p>
 
       <div className="space-y-3 pt-4">
         <div className="flex justify-end">
@@ -123,16 +169,17 @@ function InterfacePreview({ scope }: { scope: DemoScopeInfo }) {
             ))}
           </div>
 
-          <p className="mt-3 border-t border-line-soft pt-2 text-[10px] text-ink-500">
-            Deterministic · As at {scope.asOfDisplay} · {scope.client}
+          {/* Provenance travels with the figures. "Deterministic" is a
+              confirmatory signal, so it carries the accent; the synthetic label
+              is a one-word provenance tag, not the page's disclaimer — that
+              lives once, in the example section. */}
+          <p className="mt-3 flex flex-wrap gap-x-2 border-t border-line-soft pt-2 text-[10px] text-ink-500">
+            <span className="font-medium text-mint-400">Deterministic</span>
+            <span>· As at {scope.asOfDisplay}</span>
+            <span>· Synthetic portfolio</span>
           </p>
         </div>
       </div>
-
-      <p className={cx("mt-4 text-center text-[10px] text-ink-500")}>
-        The same governed answer reaches Teams, the Trakt workspace and scheduled
-        reports.
-      </p>
     </div>
   );
 }

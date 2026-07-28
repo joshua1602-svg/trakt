@@ -31,7 +31,7 @@ relied on.
 - [Demo safety controls](#demo-safety-controls)
 - [Known limitations](#known-limitations)
 - [Updating the synthetic portfolio values](#updating-the-synthetic-portfolio-values)
-- [Replacing the demo video](#replacing-the-demo-video)
+- [Adding a product overview video](#adding-a-product-overview-video)
 - [Enabling or disabling supported demo questions](#enabling-or-disabling-supported-demo-questions)
 
 ---
@@ -588,15 +588,14 @@ This is a conscious, temporary arrangement and must be treated as such:
 | `appinsights` | Uses `window.appInsights.trackEvent` if an operator loaded the snippet; otherwise falls back to the first-party collector so events are not silently lost. This module never injects a script tag. |
 | `firstparty` | `sendBeacon` (with a `fetch` fallback) to this origin's `POST /api/analytics`. |
 
-**The twelve events**, and nothing else: `hero_demo_click`, `video_play`,
-`demo_open`, `suggested_question_click`, `typed_question_submit`,
-`demo_answer_returned`, `demo_refusal_returned`, `report_preview_opened`,
-`capability_interaction`, `book_demo_click`, `lead_submit_success`,
-`lead_submit_failure`.
+**The ten events**, and nothing else: `hero_demo_click`, `demo_open`,
+`suggested_question_click`, `typed_question_submit`, `demo_answer_returned`,
+`demo_refusal_returned`, `report_preview_opened`, `book_demo_click`,
+`lead_submit_success`, `lead_submit_failure`.
 
 **Data captured.** The event name plus a fixed, low-cardinality property
-vocabulary: `intentId`, `reportId`, `refusalCategory`, `capabilityId`,
-`section`, `source`, `outcome`. Each is stripped to `[A-Za-z0-9_.-]` and capped
+vocabulary: `intentId`, `reportId`, `refusalCategory`, `section`, `source`,
+`outcome`. Each is stripped to `[A-Za-z0-9_.-]` and capped
 at 64 characters — so a question string, an answer or an email address has no
 field to travel in, by construction rather than by policy.
 
@@ -772,9 +771,10 @@ it.
 - **Lead delivery has no dead-letter queue.** A provider outage returns 502 to
   the visitor with an alternative way to reach you; it retries once and does not
   queue.
-- **No transcript is shipped with the video component.** When the final asset is
-  added, add a transcript alongside it — see
-  [Replacing the demo video](#replacing-the-demo-video).
+- **There is no overview video.** The placeholder section was removed rather
+  than left telling visitors the walkthrough "will appear here" — see
+  [Adding a product overview video](#adding-a-product-overview-video). Ship a
+  transcript alongside the asset when it is added.
 
 ---
 
@@ -805,14 +805,15 @@ a stale pack can never be served silently.
 
 ---
 
-## Replacing the demo video
+## Adding a product overview video
 
 No `.mp4`/`.webm`/`.mov` and no hosted video URL exists anywhere in this
-repository, so `src/components/site/DemoVideo.tsx` ships as a documented
-placeholder: it renders a preview card that points at the live demonstration,
-and the page is complete without it.
+repository. The page previously carried a placeholder card reading "The recorded
+walkthrough will appear here"; it was removed, because a placeholder tells a
+prospect the site is unfinished. There is no video section today, and the page is
+complete without one.
 
-To add the final asset:
+To add it back once an asset exists:
 
 1. **Host it.** Either drop the file at
    `landing-page/public/media/trakt-overview.mp4` (fine up to ~20 MB; it is
@@ -821,19 +822,16 @@ To add the final asset:
 2. **Add a poster frame** at `landing-page/public/media/trakt-overview-poster.jpg`
    — with `preload="none"` the poster is all that loads until the visitor
    presses play, so it must exist to avoid an empty frame.
-3. **Point at them:**
-   ```bash
-   NEXT_PUBLIC_DEMO_VIDEO_URL=/media/trakt-overview.mp4
-   NEXT_PUBLIC_DEMO_VIDEO_POSTER=/media/trakt-overview-poster.jpg
-   ```
-   Both are inlined at build time — rebuild after setting them.
+3. **Add the component and the section.** A `<video>` with `controls`,
+   `preload="none"`, `playsInline` and a poster, wrapped in `Card`, placed after
+   the example section in `src/app/page.tsx`. Read the URL from
+   `publicConfig` (`src/lib/public-config.ts`), which no longer carries
+   `videoUrl` / `videoPoster` — add them back alongside the component.
 4. **If the asset is on another origin,** add that origin to `media-src` (and the
    poster's to `img-src`) in the CSP in `next.config.ts`. The CSP is `'self'`-only
    today and will otherwise block it.
-
-The player never autoplays, always shows native controls, and falls back to the
-placeholder card automatically if the source fails to load — so a broken or
-missing asset degrades gracefully rather than leaving a dead frame.
+5. **Ship a transcript** alongside it, and re-add `video_play` to
+   `ANALYTICS_EVENTS` in `src/lib/analytics-events.ts` if you want play tracked.
 
 ---
 

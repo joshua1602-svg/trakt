@@ -62,17 +62,15 @@ afterEach(() => {
 });
 
 describe("the event contract", () => {
-  it("accepts exactly the twelve allow-listed events", () => {
+  it("accepts exactly the ten allow-listed events", () => {
     expect([...ANALYTICS_EVENTS]).toEqual([
       "hero_demo_click",
-      "video_play",
       "demo_open",
       "suggested_question_click",
       "typed_question_submit",
       "demo_answer_returned",
       "demo_refusal_returned",
       "report_preview_opened",
-      "capability_interaction",
       "book_demo_click",
       "lead_submit_success",
       "lead_submit_failure",

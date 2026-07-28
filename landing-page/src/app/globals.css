@@ -8,6 +8,28 @@
  *   SECONDARY #919DD1  (periwinkle)      — analytics/charts_plotly.py
  * The scale below is carried over from frontend/mi-agent-ui/src/index.css so
  * the marketing site and the product read as one system.
+ *
+ * ── The green accent ────────────────────────────────────────────────
+ * `mint-400` (#36c2a8) is the MI Agent's UI green, taken verbatim from
+ * frontend/mi-agent-ui/src/index.css:21. In the product it marks one thing:
+ * a state that has been proven — validation "Pass", a clean pipeline
+ * snapshot, a risk limit inside its bound, a live deployment. This page
+ * uses it for the same job and no other, so it stays a signal rather than
+ * becoming a second brand colour:
+ *
+ *   USE     trust proof points · "reconciled by construction" · the lead
+ *           ingestion tile's accent · "Available today" · lineage and
+ *           validation markers
+ *   DO NOT  primary buttons (those stay periwinkle) · body copy · eyebrows
+ *           · headings · backgrounds or filled panels · roadmap items
+ *
+ * Contrast on this page's navy: 8.5:1 on navy-950, 8.0:1 on navy-900 —
+ * WCAG AA and AAA for normal text, so no lighter tint is derived.
+ *
+ * NOT used here: #2E7D5B (THEME.positive / rag.green in
+ * frontend/mi-agent-ui/src/lib/theme.ts, mirrored in
+ * mi_agent/mi_chart_factory.py). That green is tuned for chart fills and
+ * reaches only 3.8:1 on navy-950 — it fails AA as type.
  * ------------------------------------------------------------------ */
 @theme {
   --color-navy-950: #0c1024;

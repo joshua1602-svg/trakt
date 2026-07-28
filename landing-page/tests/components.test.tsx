@@ -60,21 +60,30 @@ afterEach(() => {
 });
 
 describe("Hero", () => {
-  it("renders the proposition, both CTAs and the synthetic notice", () => {
+  it("renders the proposition, the trust proof points and both CTAs", () => {
     render(<Hero scope={META.scope} />);
 
     expect(
-      screen.getByRole("heading", { level: 1, name: /portfolio intelligence\. wherever you work\./i }),
+      screen.getByRole("heading", {
+        level: 1,
+        name: /one governed portfolio dataset\. every book, every report\./i,
+      }),
     ).toBeInTheDocument();
+    // The strongest sentence on the page leads, rather than being buried.
+    expect(
+      screen.getByText(/reconciled by construction rather than by comparison/i),
+    ).toBeInTheDocument();
+    for (const proof of [/deterministic engine/i, /traceable lineage/i, /client-isolated/i]) {
+      expect(screen.getByText(proof)).toBeInTheDocument();
+    }
     expect(screen.getByRole("link", { name: /explore the live demo/i })).toHaveAttribute(
       "href",
-      "#live-demo",
+      "#example",
     );
     expect(screen.getByRole("link", { name: /book a portfolio walkthrough/i })).toHaveAttribute(
       "href",
       "#book-a-demo",
     );
-    expect(screen.getByText(/wholly synthetic portfolio/i)).toBeInTheDocument();
     // The preview uses this portfolio's real figures, not invented ones.
     expect(screen.getAllByText(/£5,382,463/).length).toBeGreaterThan(0);
   });
@@ -84,7 +93,7 @@ describe("Nav", () => {
   it("exposes the required destinations", () => {
     render(<Nav />);
     const nav = screen.getByRole("navigation", { name: /primary/i });
-    for (const label of ["Product", "Capabilities", "How it works", "Governance"]) {
+    for (const label of ["Capabilities", "Delivery", "How it works", "Example"]) {
       expect(within(nav).getByRole("link", { name: label })).toBeInTheDocument();
     }
     expect(within(nav).getByRole("link", { name: /book a demo/i })).toBeInTheDocument();
@@ -168,7 +177,9 @@ describe("CopilotDemo", () => {
     expect(screen.getByText(/Metric: Balance/)).toBeInTheDocument();
     expect(screen.getByText("As at 30 November 2025")).toBeInTheDocument();
     expect(screen.getByText("Synthetic portfolio")).toBeInTheDocument();
-    expect(screen.getByText("11 of 12 questions remaining in this demonstration session."))
+    // The session counter stays silent this early — it is a cap, not a meter.
+    expect(screen.queryByText(/questions remaining/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/trakt declines what it cannot derive/i))
       .toBeInTheDocument();
   });
 
@@ -399,10 +410,16 @@ describe("Nav — keyboard behaviour", () => {
 });
 
 describe("LeadForm", () => {
-  it("labels every field and requires consent", () => {
+  it("labels every field, requires only three, and requires consent", () => {
     render(<LeadForm />);
     for (const label of [/^name/i, /work email/i, /^company/i, /^role/i, /message/i]) {
       expect(screen.getByLabelText(label)).toBeInTheDocument();
+    }
+    for (const label of [/^name/i, /work email/i, /^company/i]) {
+      expect(screen.getByLabelText(label)).toBeRequired();
+    }
+    for (const label of [/^role/i, /message/i]) {
+      expect(screen.getByLabelText(label)).not.toBeRequired();
     }
     expect(screen.getByRole("checkbox")).toBeRequired();
     expect(screen.getByRole("button", { name: /book a tailored demonstration/i })).toBeInTheDocument();
