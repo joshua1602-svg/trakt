@@ -377,11 +377,17 @@ def _scope_ref(payload: Dict[str, Any]) -> Optional[ScopeRef]:
 def _stamp_routed_scope(routed: Dict[str, Any], req: MiQueryRequest) -> None:
     """Stamp the resolved portfolio scope onto a ROUTED analytical answer.
 
-    Routed intents (evolution, cohort progression, bridges, forecast) apply the
-    same lens the point-in-time path does, but they never reach the executor, so
-    they carry no field-level coverage. Recording the resolved scope keeps the
-    governed envelope complete for every route: a caller always learns which
-    portfolios an answer covers.
+    Routed intents never reach the executor, so they carry no field-level
+    coverage. Recording the resolved scope keeps the governed envelope complete
+    for every route: a caller always learns which portfolios an answer covers.
+
+    Critically, the scope stamped is the scope the ANSWER HAS, not the scope the
+    caller asked for. A route that could not narrow its figures reports
+    ``metadata.lensApplied is False`` (see ``chat_routing._disclose_lens_scope``)
+    and is stamped with the FULL platform scope, because that is what its numbers
+    actually cover. Stamping the requested lens on an un-narrowed answer turned
+    the governed envelope — the one control that exists to prevent
+    misattribution — into the thing performing it.
     """
     if not isinstance(routed, dict) or routed.get("portfolioScope"):
         return
@@ -390,12 +396,17 @@ def _stamp_routed_scope(routed: Dict[str, Any], req: MiQueryRequest) -> None:
 
         from . import portfolio_context as ctx_mod
 
-        lens = plens.resolve_lens_with_default(
-            req.question,
-            plens.lens_from_selection(req.source_portfolio_lens)
-            if req.source_portfolio_lens is not None else None)
-        resolved = ctx_mod.resolve_context(plens.context_id(lens),
-                                           discover_pipeline=False)
+        meta = routed.get("metadata") or {}
+        lens_applied = meta.get("lensApplied")
+        if lens_applied is False:
+            context_id = plens.LENS_TOTAL
+        else:
+            lens = plens.resolve_lens_with_default(
+                req.question,
+                plens.lens_from_selection(req.source_portfolio_lens)
+                if req.source_portfolio_lens is not None else None)
+            context_id = plens.context_id(lens)
+        resolved = ctx_mod.resolve_context(context_id, discover_pipeline=False)
         routed["portfolioScope"] = resolved.scope.to_dict()
     except Exception as exc:  # noqa: BLE001 - disclosure must never break a route
         logger.info("routed scope stamping skipped: %s", exc)

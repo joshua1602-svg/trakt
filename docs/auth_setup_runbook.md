@@ -77,6 +77,18 @@ domain, `digifinsolutions.co.uk`, in the app's config file.)*
   this step and I'll make that change in the code for you** (it only takes effect
   after step 4, so timing matters — that's why I've held it).
 
+> **Note (fixed).** The reports service now answers on **both** `/api/mi/…` and
+> `/mi/…`, so this step no longer depends on getting the two sides to agree. It
+> previously did: the website asked for `/api/mi/query`, the service only
+> answered `/mi/query`, and every question came back as "not found" (HTTP 404).
+> To check which form a deployment answers on:
+> `curl -s https://trakt-mi-api.azurewebsites.net/health | jq .routing`
+>
+> If you keep the absolute address instead of `/api`, also set
+> `MI_AGENT_ALLOWED_ORIGIN` on the reports service to your website's address —
+> otherwise the browser blocks the call (and the sign-in identity is not passed
+> through, so you would be asked to sign in again).
+
 ### 7. Put only yourself on the list
 - Go to **Enterprise applications** → open **`trakt-mi-agent`** → **Users and
   groups** → **Add user** → add **your own** `@digifinsolutions.co.uk` account and
