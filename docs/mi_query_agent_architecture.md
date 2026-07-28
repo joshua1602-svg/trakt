@@ -40,7 +40,8 @@ flowchart TB
 
   subgraph routing["Capability routing"]
     RREG["recogniser_registry.py<br/>ordering · capability gate"]
-    CR["chat_routing.py<br/>11 declared recognisers"]
+    CR["chat_routing.py<br/>12 declared recognisers"]
+    PC["period_change_route.py<br/>period_change_analysis"]
   end
 
   subgraph engine["Analytical engine — mi_agent"]
@@ -86,6 +87,7 @@ flowchart TB
 | `mi_service.py` | **The governed capability.** Scope → tenancy → source approval → execution → envelope | Import FastAPI; know a wire format |
 | `recogniser_registry.py` | Declarative registration, deterministic ordering, capability gating | Know what any individual capability does |
 | `chat_routing.py` | The registered recognisers and their handlers | Compute point-in-time analytics; re-parse the question |
+| `period_change_route.py` | Adapter for the governed Period Change Analysis workflow (`mi_agent/period_change`): snapshot supply, error mapping, rendering. See [`period_change_analysis_workflow.md`](period_change_analysis_workflow.md) | Calculate anything |
 | `parsed_question.py` | THE single parse of a question, plus the BSR metadata slot | Interpret `semantics_context` |
 | `mi_agent_workflow.py` | Point-in-time orchestration: parse → lens → validate → execute → invariants → chart | Know about HTTP or channels |
 | `llm_query_parser.py` | Question → `MIQuerySpec`. **Proposes only** | Execute, or read data values |
