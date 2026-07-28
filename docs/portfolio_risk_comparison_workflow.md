@@ -1,6 +1,8 @@
 # Portfolio Risk Comparison — governed workflow
 
-**Workflow id:** `portfolio_risk_comparison` · **Calculation version:** 1.0.0
+**Workflow id:** `portfolio_risk_comparison` · **Calculation version:** 1.1.0
+(1.1.0 added the shared ranked-distribution primitive for concentration
+analysis; every primitive this workflow uses is unchanged)
 
 **Artefacts:**
 

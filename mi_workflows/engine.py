@@ -12,6 +12,9 @@ Primitives
   ``share_basis`` (never by ad-hoc per-metric code);
 * :func:`distribution` — governed categorical distribution with explicit
   count share, exposure share and unknown share;
+* :func:`ranked_distribution` — the same governed distribution ordered into a
+  deterministic concentration ranking: rank, cumulative share, top-N share and
+  an explicit unknown block (never a silently dropped unknown);
 * :func:`compare_values` — absolute + relative difference, one definition;
 * :func:`directionality_verdict` — the observed relation between two values
   interpreted through governed directionality (never aggregated into a score);
@@ -35,8 +38,9 @@ import pandas as pd
 
 #: Version of the deterministic calculation semantics in this module. Recorded
 #: in every workflow audit block so a historical result can be tied to the
-#: calculation rules that produced it.
-CALCULATION_VERSION = "1.0.0"
+#: calculation rules that produced it. 1.1.0 added the ranked-distribution
+#: (concentration) primitive; every existing primitive is unchanged.
+CALCULATION_VERSION = "1.1.0"
 
 #: Aggregations the engine implements (the BSR's ``default_aggregations``
 #: taxonomy minus ``distribution``, which has its own primitive).
@@ -281,6 +285,141 @@ def distribution(df: pd.DataFrame, field: str, *,
     return Distribution(field=field, exposure_field=exposure_field,
                         population=population, unknown_count=unknown_count,
                         buckets=tuple(buckets))
+
+
+#: The two governed concentration bases. Exposure is the current outstanding
+#: balance; count is loans. No other basis exists in the platform.
+BASIS_EXPOSURE = "exposure"
+BASIS_COUNT = "count"
+
+
+@dataclass(frozen=True)
+class RankedBucket:
+    """One known category of a governed concentration ranking."""
+
+    rank: int
+    category: str
+    count: int
+    count_share: Optional[float]
+    exposure: Optional[float]
+    exposure_share: Optional[float]
+    #: Cumulative share of the ranking basis from rank 1 to this rank,
+    #: over ALL rows in scope (unknowns included in the denominator).
+    cumulative_share: Optional[float]
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"rank": self.rank, "category": self.category,
+                "count": self.count, "count_share": self.count_share,
+                "exposure": self.exposure, "exposure_share": self.exposure_share,
+                "cumulative_share": self.cumulative_share}
+
+
+@dataclass(frozen=True)
+class RankedDistribution:
+    """A governed distribution ordered into a deterministic concentration
+    ranking.
+
+    Built on :func:`distribution`, so count shares, exposure shares and the
+    unknown bucket mean exactly the same thing here as everywhere else. Known
+    categories are ranked by the chosen basis (value descending, then category
+    name ascending — total and stable, so the same frame always ranks the same
+    way). The unknown bucket is never ranked and never dropped: it is disclosed
+    as its own explicit block, and because every share keeps the full in-scope
+    denominator, cumulative shares can only reach 1 − unknown share.
+    """
+
+    field: str
+    basis: str
+    exposure_field: Optional[str]
+    population: int
+    total_exposure: Optional[float]
+    unknown_count: int
+    unknown_count_share: Optional[float]
+    unknown_exposure: Optional[float]
+    unknown_exposure_share: Optional[float]
+    buckets: Tuple[RankedBucket, ...]
+
+    def top_share(self, n: int) -> Optional[float]:
+        """Cumulative basis share of the top ``n`` known categories."""
+        if n <= 0 or not self.buckets:
+            return None
+        capped = self.buckets[:n]
+        return capped[-1].cumulative_share
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "field": self.field, "basis": self.basis,
+            "exposure_field": self.exposure_field,
+            "population": self.population,
+            "total_exposure": self.total_exposure,
+            "unknown_count": self.unknown_count,
+            "unknown_count_share": self.unknown_count_share,
+            "unknown_exposure": self.unknown_exposure,
+            "unknown_exposure_share": self.unknown_exposure_share,
+            "buckets": [b.to_dict() for b in self.buckets],
+        }
+
+
+def ranked_distribution(df: pd.DataFrame, field: str, *,
+                        exposure_field: Optional[str] = None,
+                        basis: str = BASIS_EXPOSURE
+                        ) -> Optional[RankedDistribution]:
+    """The governed concentration ranking of one categorical field.
+
+    A post-ordering of :func:`distribution` — no share or total is recomputed,
+    so this primitive can never disagree with the distribution it ranks.
+    Returns ``None`` when the field is not on the frame, or when the exposure
+    basis is requested but the frame carries no positive exposure to rank by
+    (the caller then decides whether to fall back to the count basis — the
+    engine implements bases, it never chooses them).
+    """
+    if basis not in (BASIS_EXPOSURE, BASIS_COUNT):
+        return None
+    dist = distribution(df, field, exposure_field=exposure_field)
+    if dist is None:
+        return None
+    if basis == BASIS_EXPOSURE and dist.exposure_field is None:
+        return None
+
+    unknown = dist.bucket(UNKNOWN_CATEGORY)
+    known = [b for b in dist.buckets if b.category != UNKNOWN_CATEGORY]
+    if basis == BASIS_EXPOSURE:
+        if all((b.exposure_share is None) for b in known) and known:
+            return None
+        known.sort(key=lambda b: (-(b.exposure_share or 0.0), b.category))
+    else:
+        known.sort(key=lambda b: (-(b.count_share or 0.0), b.category))
+
+    total_exposure: Optional[float] = None
+    if dist.exposure_field is not None:
+        total_exposure = float(sum(b.exposure or 0.0 for b in dist.buckets))
+
+    ranked: List[RankedBucket] = []
+    cumulative = 0.0
+    cumulative_known = True
+    for rank, bucket in enumerate(known, start=1):
+        share = (bucket.exposure_share if basis == BASIS_EXPOSURE
+                 else bucket.count_share)
+        if share is None:
+            cumulative_known = False
+        else:
+            cumulative += share
+        ranked.append(RankedBucket(
+            rank=rank, category=bucket.category, count=bucket.count,
+            count_share=bucket.count_share, exposure=bucket.exposure,
+            exposure_share=bucket.exposure_share,
+            cumulative_share=cumulative if cumulative_known else None))
+
+    return RankedDistribution(
+        field=field, basis=basis, exposure_field=dist.exposure_field,
+        population=dist.population, total_exposure=total_exposure,
+        unknown_count=dist.unknown_count,
+        unknown_count_share=dist.unknown_share,
+        unknown_exposure=(unknown.exposure if unknown is not None
+                          else (0.0 if dist.exposure_field else None)),
+        unknown_exposure_share=(unknown.exposure_share if unknown is not None
+                                else (0.0 if dist.exposure_field else None)),
+        buckets=tuple(ranked))
 
 
 def compare_values(a: Optional[float], b: Optional[float]) -> Dict[str, Optional[float]]:
