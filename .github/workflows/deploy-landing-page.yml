@@ -74,9 +74,17 @@ jobs:
         working-directory: .
         run: python -m pip install pytest
 
+      # The dataset beneath the pack. The generator is seeded and pure stdlib,
+      # so a drift here means the committed extracts were edited by hand.
+      - name: Synthetic source extracts are reproducible
+        working-directory: .
+        run: python synthetic_demo/build_multibook_input.py --check
+
       # Proves the committed pack is exactly what the deterministic engine
       # produces from the committed synthetic dataset, and that the source
-      # identity guards fail closed on every axis.
+      # identity guards fail closed on every axis. On a mismatch the generator
+      # prints the leaf values that differ and the interpreter/pandas versions,
+      # so the log is diagnosable without reproducing the environment first.
       - name: Demo-pack reproducibility and source identity
         working-directory: .
         run: python -m pytest landing-page/tests/demo_pack_reproducible_test.py -q
@@ -120,6 +128,13 @@ jobs:
     environment: production
     steps:
       - uses: actions/checkout@v4
+
+      # Pinned rather than relying on whatever the runner image ships: the
+      # identity verifier below uses `fetch` and `AbortSignal.timeout`, and a
+      # verification step that fails for its own reasons is worse than none.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
 
       - uses: actions/download-artifact@v4
         with:
@@ -172,21 +187,24 @@ jobs:
             exit 1
           fi
 
-      # The deployed HTML must carry the portfolio identity this build was
-      # pinned to. Catches a deployment that somehow served a different pack.
+      # The last gate, and the only one that establishes *which dataset* the
+      # running deployment is answering from. Liveness and readiness both return
+      # 200 for a perfectly healthy App Service still serving last week's bundle.
+      #
+      # `/api/demo-identity` publishes the pack's identity as a contract; the
+      # verifier compares it field by field — client, portfolio, source
+      # fingerprint, both balance scopes, exposures, pack version — against
+      # landing-page/data/demo-pack.json, and then cross-checks the homepage
+      # marker and the displayed total against the same document.
+      #
+      # It fails closed on every axis, including an endpoint that is missing,
+      # non-JSON or unreachable: an unverifiable deployment is treated exactly
+      # like a wrong one. Logic and its tests:
+      #   landing-page/scripts/verify-deployed-identity.mjs
+      #   landing-page/tests/api-demo-identity.test.ts
       - name: Verify the served portfolio identity
         working-directory: .
         run: |
-          base="${{ vars.LANDING_PAGE_SITE_URL }}"
-          expected_client=$(node -p "require('./landing-page/data/demo-pack.json').source.clientId")
-          expected_portfolio=$(node -p "require('./landing-page/data/demo-pack.json').source.portfolioId")
-          expected_balance=$(node -p "require('./landing-page/data/demo-pack.json').portfolio.totalBalanceDisplay")
-
-          html=$(curl -s "$base/")
-          for needle in "$expected_portfolio" "$expected_balance"; do
-            if ! printf '%s' "$html" | grep -qF -- "$needle"; then
-              echo "::error::the served page does not contain '$needle'"
-              exit 1
-            fi
-          done
-          echo "served portfolio identity confirmed: $expected_client / $expected_portfolio"
+          node landing-page/scripts/verify-deployed-identity.mjs \
+            --base "${{ vars.LANDING_PAGE_SITE_URL }}" \
+            --pack landing-page/data/demo-pack.json

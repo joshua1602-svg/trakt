@@ -9,6 +9,7 @@ to fall through unprocessed. This script normalises the intermediate CSV so
 Gate 2's type functions receive values in formats they can handle.
 """
 
+import argparse
 import csv
 import re
 import yaml
@@ -17,9 +18,18 @@ from pathlib import Path
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
-CANONICAL_FULL = ROOT / "synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_canonical_full.csv"
+DEFAULT_CANONICAL_FULL = (
+    ROOT / "synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_canonical_full.csv")
 CFG = ROOT / "synthetic_demo/config/config_client_SYNTHETIC_ERM.yaml"
 REGISTRY = ROOT / "config/system/fields_registry.yaml"
+
+# The multi-book build runs this once per book per period, so the target file is
+# a parameter. It defaults to the original single-book path, which is what
+# synthetic_demo/run_pipeline.sh still passes implicitly.
+_ap = argparse.ArgumentParser(description=__doc__)
+_ap.add_argument("--input", default=str(DEFAULT_CANONICAL_FULL),
+                 help="canonical_full.csv to normalise in place")
+CANONICAL_FULL = Path(_ap.parse_args().input)
 
 # ── Load config defaults ──────────────────────────────────────────────────────
 cfg = yaml.safe_load(CFG.read_text())

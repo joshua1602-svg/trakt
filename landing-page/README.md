@@ -84,6 +84,7 @@ exposure-level records, and reaches no client environment.
   │   /api/analytics    allow-listed events only                         │
   │   /api/health       liveness                                         │
   │   /api/ready        readiness (configuration gate)                   │
+  │   /api/demo-identity  which demo pack this deployment is serving     │
   └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -360,8 +361,9 @@ recommended for this app.
 
 `.github/workflows/deploy-landing-page.yml` implements the App Service route:
 lint → typecheck → unit tests → demo-pack reproducibility → build → assemble the
-standalone bundle → deploy → smoke-check `/api/health`. Manual trigger by
-default, matching `deploy-mi-api.yml`.
+standalone bundle → deploy → smoke-check `/api/health`, `/api/ready` and the
+served portfolio identity. Manual trigger by default, matching
+`deploy-mi-api.yml`.
 
 Set up once:
 
@@ -713,6 +715,69 @@ by tests.
 
 ---
 
+## Which pack is deployed — `GET /api/demo-identity`
+
+Liveness and readiness both answer 200 for a perfectly healthy App Service that
+is still running last week's bundle. Neither says **which dataset** is behind the
+figures on the page, and that is the question a deployment can silently get
+wrong.
+
+`GET /api/demo-identity` answers it. Every field is a direct projection of the
+committed `data/demo-pack.json` — no derivation, no runtime state — so a served
+value that differs from the repository can only mean the running bundle was
+built from a different pack.
+
+```json
+{
+  "clientId": "alderbridge_demo",
+  "portfolioId": "ALP_Platform_202606",
+  "sourceFingerprint": "ddea1c50…c723",
+  "reportingDate": "2026-06-30",
+  "currency": "GBP",
+  "totalBalanceDisplay": "£37,270,061",
+  "platformBalanceDisplay": "£27,407,089",
+  "exposures": 118,
+  "packVersion": 1,
+  "synthetic": true
+}
+```
+
+Everything here is synthetic, belongs to a fabricated lender, and is already
+visible to any visitor — the balances are the figures the page prints, and the
+fingerprint is a SHA-256 of a synthetic canonical extract committed to this
+repository. **That is a rule for what may ever be added to this document, not a
+description of what happens to be in it today**; the endpoint's value is that
+its contents are exhaustively known, so a field nobody reviewed is a field nobody
+reviewed for sensitivity either. The deploy gate treats an unexpected key as a
+failure for exactly that reason.
+
+It is `no-store`: a cached copy would vouch for a bundle that has stopped
+running, which is the failure the endpoint exists to detect. It fails closed —
+503 with no partial fields — if the pack cannot yield a complete identity, since
+a half-built document would satisfy a comparison of whatever survived.
+
+`scripts/verify-deployed-identity.mjs` is what the deploy job runs against it:
+
+```bash
+node scripts/verify-deployed-identity.mjs --base https://trakt.<your-domain>
+```
+
+It compares every field exactly, then cross-checks the homepage's
+`<meta name="trakt:pack">` marker and displayed total against the same document,
+so a partially-updated deployment (new API, cached HTML) is caught too. It fails
+on a differing field, a missing field, an unexpected field, a drifted type, a
+non-JSON body, a non-200 status, or an unreachable endpoint. There is no "could
+not check, carrying on" outcome: an unverifiable deployment is treated exactly
+like a wrong one.
+
+Because the verifier runs under bare `node` in the deploy job, it carries its own
+copy of the projection rather than importing the TypeScript it checks.
+`tests/api-demo-identity.test.ts` builds the document both ways and fails if they
+drift — without that, the gate would go on passing while checking a field set the
+endpoint no longer serves.
+
+---
+
 ## Demo safety controls
 
 | Control | Where |
@@ -775,6 +840,17 @@ it.
   than left telling visitors the walkthrough "will appear here" — see
   [Adding a product overview video](#adding-a-product-overview-video). Ship a
   transcript alongside the asset when it is added.
+
+---
+
+## Open investigations
+
+Failures that occurred once and could not be reproduced are recorded in
+[`docs/open-investigations.md`](docs/open-investigations.md), with what was
+ruled out and the point at which a recurrence stops being a flake. One entry is
+open: OI-1, a demo pack reported STALE in CI that reproduces cleanly everywhere
+else. If it fires again it is treated as a determinism defect in the engine,
+because "the same question returns the same number" is the claim it contradicts.
 
 ---
 

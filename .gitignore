@@ -104,3 +104,20 @@ reports/*_charts/
 demo_platform/workspace/
 demo-video/node_modules/
 demo-video/out/
+
+# The multi-book demonstration commits only the inputs and the artefacts the
+# landing-page demo pack reads. Per-book intermediates and dashboards are
+# regenerable with synthetic_demo/run_multibook_pipeline.sh.
+synthetic_demo/output/multibook/*_canonical_full.csv
+synthetic_demo/output/multibook/*_canonical_typed.csv
+!synthetic_demo/output/multibook/platform_*_canonical_typed.csv
+synthetic_demo/output/multibook/*_2026-05-31_header_mapping_report.json
+synthetic_demo/output/multibook/*_2026-05-31_transform_report.json
+synthetic_demo/output/multibook/*_provenance_manifest.json
+synthetic_demo/output/multibook/validation/*_dashboard.json
+synthetic_demo/output/multibook/validation/platform_2026-05-31_*
+# Annex-named pipeline artefacts are regenerable and their PATHS fall under the
+# regulatory change freeze that tests/test_*::test_no_regulatory_or_annex2_files_modified
+# enforces. The demo commits only the reconciliation, which carries the preflight
+# verdict it needs.
+synthetic_demo/output/multibook/*ESMA_Annex2*

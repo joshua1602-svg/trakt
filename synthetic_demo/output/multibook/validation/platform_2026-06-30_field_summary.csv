@@ -1,0 +1,3 @@
+canonical_field,field_name,issue_type,affected_rows,error_count,error_rate,severity,classification,materiality,suggested_actions,sample_violations
+PORTFOLIO,PORTFOLIO,DAT002,1,1,0.85,error,date_logic_violation,BLOCKING,"FIX_UPSTREAM, MANUAL_OVERRIDE, ESCALATE","[{""row_index"": 73, ""message"": ""Origination date 2024-04-30 00:00:00 > maturity date 2022-10-30 00:00:00.""}]"
+PORTFOLIO,PORTFOLIO,DAT101,1,1,0.85,warning,date_logic_violation,BLOCKING,"FIX_UPSTREAM, MANUAL_OVERRIDE, ESCALATE","[{""row_index"": 73, ""message"": ""ACTIVE loan with maturity_date 2022-10-30 00:00:00 < reporting_date 2026-06-30 00:00:00.""}]"

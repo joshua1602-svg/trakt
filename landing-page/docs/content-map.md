@@ -12,6 +12,14 @@ Every visible claim is classified:
 | **Positioning** | A statement of what Trakt is for. Not a capability claim. |
 | **Excluded** | Considered and deliberately **not** said, because the repository does not support it. |
 
+**Pass 2 changed the dataset.** The demonstration now runs on three governed
+books across two reporting periods
+(`synthetic_demo/output/multibook/platform_2026-06-30_canonical_typed.csv`,
+built by `synthetic_demo/run_multibook_pipeline.sh` from
+`build_multibook_input.py`). Book identities mirror `demo_platform.config`
+exactly, so the film and the web demonstration describe one platform in one
+vocabulary. Every figure below is as at 30 June 2026.
+
 Anyone editing page copy should add a row here, or delete one.
 
 The page is seven sections, in this order: value proposition · capabilities ·
@@ -32,12 +40,12 @@ delivery model · how it works · where it applies · example · contact.
 | Copy | Class | Evidence |
 |---|---|---|
 | "One governed portfolio dataset. Every book, every report." | Positioning | The operating-system claim. Leads on the governed single source rather than on channel — channel breadth is the easiest claim for an incumbent to copy, so it lives in section 3 instead. |
-| "Trakt normalises loan tapes, servicing extracts, valuations and funding data into one governed model that drives management, investor and regulatory reporting." | Evidenced | Ingest→canonical→validate→output pipeline: `engine/orchestrator/trakt_run.py`, gates in `README.md`. Reporting outputs: `mi_agent_pptx/`, `configs/pptx/investor_pack.yaml`, `engine/gate_5_delivery/`. |
+| "Trakt turns loan tapes, servicing extracts, valuations and funding data into one governed model." | Evidenced | Ingest→canonical→validate→output pipeline: `engine/orchestrator/trakt_run.py`, gates in `README.md`. Reporting outputs: `mi_agent_pptx/`, `configs/pptx/investor_pack.yaml`, `engine/gate_5_delivery/`. |
 | "Every figure is reconciled by construction rather than by comparison." | Evidenced | One analytical implementation behind every channel (`mi_agent_api/mi_service.py`); deck slides render from the same MI payloads as the dashboard (`mi_agent_pptx/mi_api.py`); parity asserted by `mi_agent_api/tests/test_channel_parity.py` across the golden-question library. **Moved here from "Delivered as", where it was buried.** |
 | Proof point: "Deterministic engine — same question, same number, every channel" | Evidenced | Deterministic parser + executor (`mi_agent/llm_query_parser.py` deterministic path, `mi_agent/mi_query_executor.py`); parity tested as above; the demo pack's reproducibility is itself asserted by `tests/demo_pack_reproducible_test.py`. |
 | Proof point: "Traceable lineage — every published figure ties back to source" | Evidenced | `engine/gate_2_transform/lineage_tracker.py` (Gate 2.5), the four committed gate reports, `out/run_manifest.json`. |
 | Proof point: "Client-isolated environments and controlled data handling" | Deployment | One deployment per client, selected by `MI_AGENT_CLIENT_ID` / `MI_AGENT_PLATFORM_URI` (`docs/copilot_v1_implementation.md` § "Tenancy"). Document delivery is HMAC-signed and server-redeemed (`mi_agent_api/copilot_actions.py`). |
-| Interface preview showing £5,382,463 / 36 exposures / regional bars | Evidenced | Rendered from `data/demo-pack.json`, produced by the engine from `synthetic_demo/output/…canonical_typed.csv`. Not a mock-up. |
+| Interface preview showing three books, a platform total and a sponsor total | Evidenced | Rendered from `data/demo-pack.json`. It answers "show the funded balance by book" rather than a flat balance: a single total in the top card would quietly contradict the multi-book claim beneath it. The four regional bars were dropped — books plus totals says more than books plus totals plus regions. |
 | Preview footer "Deterministic · As at … · Synthetic portfolio" | Demonstration | A provenance label travelling with the figures, not the page's disclaimer — that appears once, in section 6. |
 
 **Removed from this section:** the synthetic-portfolio disclaimer paragraph, the
@@ -49,13 +57,21 @@ workspace and scheduled reports."
 
 ## 2. Capabilities
 
-Six tiles, one sentence each. Reduced from eight; the "Illustrative
-capabilities" disclosure under every tile is gone, because "illustrative" tells
-a buyer the capability may not exist.
+The ingestion claim sits **above** the heading, not in the grid: it is the
+reason the other capabilities are possible, and comparative emphasis inside the
+grid fails on a phone, where only one card is visible at a time and a
+differently-styled tile reads as an inconsistency rather than a hierarchy. The
+five tiles below it are visually identical — same border, same icon treatment,
+no accent. The "Illustrative capabilities" disclosure under every tile is gone,
+because "illustrative" tells a buyer the capability may not exist.
+
+Heading is "Capabilities on one governed layer" — deliberately uncounted, so it
+does not invite the reader to count instead of read, and does not break when a
+capability is added or removed.
 
 | Tile | Class | Evidence |
 |---|---|---|
-| **Multi-source portfolio ingestion** (lead tile) — "Any number of books — direct originations, acquired back books, sponsored securitisations — held in one governed model, each reportable on its own and in aggregate." | Evidenced (with one qualification) | `trakt_core/portfolio.py` is the governed portfolio contract: `PortfolioRegistry`, `resolve_scope()`, `resolve_capabilities()`, `ScopeCoverage`. The hierarchy is dynamic and metadata-driven — "`direct` means every governed portfolio whose `source_portfolio_type` is direct, not `direct_001`". Total / by-type / individual-portfolio scope is rendered by `frontend/mi-agent-ui/src/components/PortfolioContextSelector.tsx` from `GET /mi/portfolio-context`; aggregation across a lens is in `mi_agent_api/datasets.py`. Ingestion and mapping: `engine/` Gate 1, `agents/onboarding_agent.py`. **Qualification:** the shipped type vocabulary is `direct` / `acquired` (`trakt_core/portfolio.py:45-47`); `PortfolioRegistry.types()` orders and returns any further type present, so a securitisation vehicle is a third governed type the model already holds rather than a shipped enum member. The claim is about the model, not about a securitisation-specific feature. |
+| **Ingestion claim, above the grid** — "Any number of books — direct originations, acquired back books, sponsored securitisations — held in one governed model, each reportable on its own and in aggregate." | Evidenced (with one qualification) | `trakt_core/portfolio.py` is the governed portfolio contract: `PortfolioRegistry`, `resolve_scope()`, `resolve_capabilities()`, `ScopeCoverage`. The hierarchy is dynamic and metadata-driven — "`direct` means every governed portfolio whose `source_portfolio_type` is direct, not `direct_001`". Total / by-type / individual-portfolio scope is rendered by `frontend/mi-agent-ui/src/components/PortfolioContextSelector.tsx` from `GET /mi/portfolio-context`; aggregation across a lens is in `mi_agent_api/datasets.py`. Ingestion and mapping: `engine/` Gate 1, `agents/onboarding_agent.py`. **Qualification:** the shipped type vocabulary is `direct` / `acquired` (`trakt_core/portfolio.py:45-47`); `PortfolioRegistry.types()` orders and returns any further type present, so a securitisation vehicle is a third governed type the model already holds rather than a shipped enum member. The claim is about the model, not about a securitisation-specific feature. |
 | **Portfolio analytics and monitoring** — dashboards, cohorts, concentrations, drill-through, limit monitoring, funded book and pipeline | Evidenced | `analytics/streamlit_app_erm.py`, `frontend/mi-agent-ui/`, `mi_agent/mi_query_executor.py`, `analytics_lib/cohort.py`, `analytics_lib/concentration.py`, `mi_agent_api/evolution.py`, `mi_agent/risk_monitor/`, `config/mi/risk_monitor.yaml`, `mi_agent_api/risk_limits.py`, `mi_agent_api/pipeline_prep.py`. **Merged:** the former "Portfolio Monitoring" tile said the same thing with a threshold attached. |
 | **Management reporting** — recurring MI, one consistent answer across finance, risk and operations | Evidenced | `analytics/mi_prep.py`, `mi_agent_pptx/`, `mi_agent_api/temporal_compare.py`, `mi_agent_pptx/insight_resolver.py`, `config/mi/state_library.yaml`. |
 | **Investor reporting** — packs, stratifications, commentary | Evidenced | `configs/pptx/investor_pack.yaml`, `analytics_lib/stratify.py`, `config/mi/stratification_catalogue.yaml`, `mi_agent_api/decks.py`. |
@@ -234,3 +250,72 @@ implementations. None is mentioned on the page.
 | Annex 12 investor XML at production maturity | Implemented, but `docs/xml_readiness_remediation_roadmap.md` lists open items. The page claims the reporting capability, not production certification. |
 | Public API access for clients | No public developer API is offered, and "APIs" no longer appears anywhere on the page. |
 | Product overview video | No `.mp4`/`.webm`/`.mov` and no hosted video URL exists in this repository. The placeholder section was removed rather than left saying "the recorded walkthrough will appear here", which tells a visitor the site is unfinished. See README § "Adding a product overview video". |
+
+
+---
+
+## Pass 2 — multi-book, period-on-period and Annex exception reasoning
+
+### The books
+
+| Book | `source_portfolio_id` | Provenance | Balance sheet | Exposures | Balance |
+|---|---|---|---|---:|---:|
+| ALP Origination Book | `alp_origination` | direct | warehoused, destined for SPV2 | 47 | £15,432,544 |
+| ALP Acquired Back Book | `alp_acquired` | acquired | warehoused, destined for SPV2 | 37 | £11,974,544 |
+| SPV1 Sponsored Securitisation | `spv1_sponsored` | direct | **sold and derecognised**; servicing, risk retention and investor reporting retained | 34 | £9,862,973 |
+| **Platform total** (warehoused) | — | — | on balance sheet | **84** | **£27,407,089** |
+| **Sponsor total** (incl. SPV1) | — | — | everything the sponsor reports on | **118** | **£37,270,061** |
+
+Sum of books reconciles to the sponsor total to the penny at both reporting
+dates. **Two totals are carried deliberately.** A book the sponsor originated,
+securitised and sold is off balance sheet and still carries reporting
+obligations; collapsing the two would misstate whichever question was actually
+asked, so every book-level answer names both.
+
+| Claim | Class | Evidence |
+|---|---|---|
+| Book identity is a first-class attribute, not a query filter | Evidenced | Stamped at Gate 2 from `--source-portfolio-id/-type/-label` (`engine/provenance.py`), so every canonical row carries it. `trakt_core/portfolio.py` resolves total / by-type / individual scope from those columns; `synthetic_demo/assemble_multibook.py` refuses to assemble a tape whose rows cannot name their book. |
+| "Show the funded balance by book" | Evidenced | `_balance_by_book` in `scripts/build_demo_pack.py` — a group-by on the governed frame. |
+| Single-portfolio questions default to the aggregate and say so | Evidenced | `funded_balance` and `loan_count` narratives now open "Aggregated across all three governed books…" and name the sponsor scope. |
+
+### Period-on-period
+
+| Claim | Class | Evidence |
+|---|---|---|
+| "How has the portfolio changed since last month?" | Evidenced | `_period_movement` differences the 31 May and 30 June governed canonicals at build time. **No stored deltas**: the prior snapshot's SHA-256 is asserted before the comparison runs, so movement computed against an unverified prior position fails the build. |
+| The comparison basis is explicit | Evidenced | The answer names both dates and both scopes; the artefact title is "Movement 31 May 2026 to 30 June 2026". |
+| **Removed from the refusal list** | — | `temporal_movement` was a controlled refusal and is now answerable. Keeping it would have contradicted the demo. |
+
+### Annex 2 exception reasoning
+
+The two validation gates disagreed, and the disagreement was **not a bug** —
+Gate 3 validates the canonical model against `enum_synonyms.yaml`, Gate 4b
+validates the projected submission against `annex2_delivery_rules.yaml` after
+Gate 4's documented transforms. Neither artefact said what it covered, so "2
+blocking" beside "preflight PASS, 0 issues" was indistinguishable from a
+regulatory miss. `engine/gate_4b_delivery/annex2_exception_reconciler.py` now
+classifies every exception, from either gate, by its actual effect on the
+submission; the preflight summary states its own scope.
+
+| Seeded exception | Book | Disposition | What it demonstrates |
+|---|---|---|---|
+| `current_valuation_method` = "AVM (desktop)" (3 exposures) | ALP Acquired Back Book | **BLOCKS_DELIVERY** (RREC14) | A value outside the enumerated list. The seller's own valuation taxonomy exists in neither the canonical enumeration nor the regime's code list, so the submission would state a method that does not exist. |
+| `current_valuation_date` absent (2 exposures) | SPV1 Sponsored Securitisation | **DEFAULTED_AT_DELIVERY** (RREC15) | A missing mandatory field that the delivery rules fill with `ND5`. The preflight passes — while the submission asserts "not applicable" about data the source never supplied. Invisible to both gates until reconciled. |
+| `maturity_date` before `origination_date` (1 exposure) | ALP Acquired Back Book | **OUT_OF_REGIME_SCOPE** (DAT002, DAT101) | A cross-field contradiction no field-level check would find. Real, and it does not reach the return. |
+
+Each is a different failure mode caught at a different gate. They **replace**
+the two `'manual'` placeholders, which failed on 100% of rows and read as a
+broken feed rather than a finding.
+
+**One production config change:** `RREL13`'s `enum_map` previously mapped only
+the placeholder `'manual'`, so real categorised employment values that the
+canonical enumeration accepts failed the preflight — correcting source data
+looked like a regression. The canonical values now map to their proper ESMA
+codes.
+
+### Deliberately out of scope (recorded as TODO(B4) in `build_demo_pack.py`)
+
+| Not built | Why |
+|---|---|
+| Lineage trace as an answer type | The evidence exists per book; what is missing is selecting one published figure and rendering its chain. |
+| Downloadable generated artefact | The preview is preview-only by design, asserted by unit and E2E tests. Producing a real artefact is a hosting and access-control decision, not a rendering one. |

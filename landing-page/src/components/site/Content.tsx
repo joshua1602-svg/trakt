@@ -24,19 +24,18 @@ interface Capability {
 }
 
 /**
- * The lead tile is the differentiator and is sized as one: prospects assume an
- * LLM can already map field headers, so ingestion alone is not the claim. Many
- * books held in one governed model, each reportable alone and in aggregate, is.
- * It absorbs what used to be a separate "Portfolio Integration" tile, which said
- * the same thing more weakly.
+ * The ingestion claim is not one capability among several — it is the reason the
+ * others are possible — so it sits above the grid rather than inside it.
+ *
+ * It previously led the grid as a green-bordered tile. That fails on a phone:
+ * only one card is visible at a time, so comparative emphasis reads as an
+ * inconsistency rather than a hierarchy. Above the heading it cannot be scrolled
+ * past, and every tile below can then be identical.
  */
-const LEAD_CAPABILITY: Capability = {
-  id: "ingestion",
-  name: "Multi-source portfolio ingestion",
-  icon: "M4 7h16M4 12h16M4 17h10",
-  copy:
-    "Any number of books — direct originations, acquired back books, sponsored securitisations — held in one governed model, each reportable on its own and in aggregate.",
-};
+const INGESTION_CLAIM =
+  "Any number of books — direct originations, acquired back books, sponsored " +
+  "securitisations — held in one governed model, each reportable on its own and " +
+  "in aggregate.";
 
 const CAPABILITIES: Capability[] = [
   {
@@ -93,24 +92,16 @@ function CapabilityIcon({ path }: { path: string }) {
 export function CapabilityStack() {
   return (
     <>
-      <SectionHeading
-        id="capabilities"
-        eyebrow="What you buy"
-        title="Six capabilities on one governed layer"
-      />
+      <p className="max-w-3xl text-lg font-medium leading-relaxed text-ink-200">
+        {INGESTION_CLAIM}
+      </p>
 
+      <div className="mt-9">
+        <SectionHeading id="capabilities" eyebrow="The platform" title="Capabilities on one governed layer" />
+      </div>
+
+      {/* Every tile identical: same border, same icon treatment, no accent. */}
       <ul className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {/* Full width on mobile, two columns from lg — weight, not a filled block. */}
-        <Card as="li" className="flex flex-col border-mint-400/40 sm:col-span-2">
-          <span className="mb-3.5 flex h-9 w-9 items-center justify-center rounded-lg border border-mint-400/40 bg-navy-850 text-mint-400">
-            <CapabilityIcon path={LEAD_CAPABILITY.icon} />
-          </span>
-          <h3 className="text-base font-semibold text-ink-100">{LEAD_CAPABILITY.name}</h3>
-          <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-ink-300">
-            {LEAD_CAPABILITY.copy}
-          </p>
-        </Card>
-
         {CAPABILITIES.map((capability) => (
           <Card
             as="li"
@@ -183,8 +174,8 @@ export function DeliveryModel() {
         </p>
         <ul className="mt-3 grid gap-4 lg:grid-cols-3">
           {LIVE_MODES.map((mode) => (
-            <Card as="li" key={mode.name} className="flex flex-col">
-              <h3 className="text-[15px] font-semibold text-ink-100">{mode.name}</h3>
+            <Card as="li" key={mode.name} className="flex flex-col border-mint-400/40">
+              <h3 className="text-[15px] font-semibold text-mint-400">{mode.name}</h3>
               <p className="mt-2 text-sm leading-relaxed text-ink-400">{mode.copy}</p>
             </Card>
           ))}

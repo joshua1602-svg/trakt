@@ -45,22 +45,28 @@ _COHORT_ID_RE = re.compile(r"\b((?:direct|acquired)_\d+)\b", re.IGNORECASE)
 _SELECTABLE_COHORT_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$")
 
 # Phrase → lens. Order matters only within a family; matching is keyword-based.
+# "origination" and "originated" are deliberately ABSENT, for the same reason the
+# bare total terms below are: they match the DIMENSION they name, not a book.
+# "show the portfolio by origination channel", "by origination date",
+# "originations by region" all had a Direct scope filter applied to a question
+# that had asked for a breakdown, so the answer covered only the direct books
+# while still describing itself as a share "of the funded book" — the silent
+# scope mutation this module exists to prevent. On a three-book platform it
+# understated the funded book by a third.
 #
-# Every entry must be PORTFOLIO-qualified, for the same reason a bare "total" is
-# absent from _TOTAL_TERMS below. A bare "origination" / "originated" /
-# "new lending" / "current book" is ordinary MEASURE vocabulary — "show
-# origination volumes by month" asks for a measure over time, not for the Direct
-# book — and treating it as a scope silently narrowed a Total workspace to the
-# direct portfolios only. That is a silent scope mutation, and exactly the class
-# of defect the governed context exists to stop. The qualified forms
-# ("directly originated", "own book", "organically originated") are unambiguous
-# and stay.
+# The QUALIFIED forms are kept, because they name the book rather than the
+# dimension: "directly originated", "new origination", "newly originated".
+# "new lending" and "current book" are also absent, for the same reason: both
+# name a MEASURE, not a book. "show new lending by region" asks for originations
+# by region; "what is the current book balance?" asks for an aggregation. Each
+# was narrowing the answer to the direct books while presenting itself as the
+# whole. Asserted by
+# mi_agent/tests/test_mi_query_capability_matrix.py::test_measure_vocabulary_is_not_read_as_a_portfolio_scope.
 _DIRECT_TERMS = (
-    "direct", "directly originated", "organic book", "organic portfolio",
-    "organically originated", "own book", "own originated", "in-house",
-    "in house", "originated book", "origination book", "originated portfolio",
-    "newly originated",
+    "direct", "directly originated", "organic", "own book",
+    "in-house", "new origination", "newly originated",
 )
+
 _ACQUIRED_TERMS = (
     "acquired", "acquisition", "back book", "backbook", "purchased book",
     "purchased", "bought book", "inorganic", "legacy book", "m&a",

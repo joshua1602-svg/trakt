@@ -140,6 +140,11 @@ HISTORICAL_ORDER = (
     "temporal_compare", "risk_limits", "evolution",
 )
 
+#: Workflow-layer routes registered ABOVE the migrated chain (additive
+#: registration — the extension mechanism the registry was built for). Each
+#: declares its own position; the historical chain keeps its relative order.
+WORKFLOW_ROUTES = ("portfolio_risk_comparison",)
+
 
 def test_the_live_registry_reproduces_the_historical_chain_order():
     """Every route from the old if/elif chain, in its original relative order.
@@ -311,12 +316,15 @@ def test_recogniser_metadata_is_a_declarative_slot_for_registry_terms():
 
 
 def test_dependencies_expose_the_semantics_resolver_seam():
+    """The seam is now WIRED: the Business Semantics Registry resolver is the
+    default, and explicit injection still wins (tests, alternative stores)."""
     from mi_agent_api.dependencies import build_dependencies
+    from mi_workflows.semantics import semantics_context_resolver
 
     marker = lambda q, s, sem: {"x": 1}  # noqa: E731
     deps = build_dependencies(semantics_resolver=marker)
     assert deps.semantics_resolver is marker
-    assert build_dependencies().semantics_resolver is None
+    assert build_dependencies().semantics_resolver is semantics_context_resolver
 
 
 def _semantics():
