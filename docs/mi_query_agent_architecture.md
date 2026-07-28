@@ -39,7 +39,8 @@ flowchart TB
   end
 
   subgraph routing["Capability routing"]
-    CR["chat_routing.py<br/>try_route + 11 handlers"]
+    RREG["recogniser_registry.py<br/>ordering · capability gate"]
+    CR["chat_routing.py<br/>11 declared recognisers"]
   end
 
   subgraph engine["Analytical engine — mi_agent"]
@@ -64,6 +65,7 @@ flowchart TB
   SVC --> DEPS
   SVC --> CTX & POL & ENV
   SVC --> CR
+  CR --> RREG
   SVC --> WF
   CR -.->|defers| WF
   WF --> PARSE --> VAL --> EXEC --> CONTRACT --> CHART
@@ -82,7 +84,9 @@ flowchart TB
 | `auth.py` | Parsing the platform-injected principal, role gating | Validate tokens (the platform does) |
 | `app.py` | HTTP ↔ capability translation, status mapping | Parse, route, calculate, resolve datasets |
 | `mi_service.py` | **The governed capability.** Scope → tenancy → source approval → execution → envelope | Import FastAPI; know a wire format |
-| `chat_routing.py` | Capability routing to specialised analytical services | Compute point-in-time analytics |
+| `recogniser_registry.py` | Declarative registration, deterministic ordering, capability gating | Know what any individual capability does |
+| `chat_routing.py` | The registered recognisers and their handlers | Compute point-in-time analytics; re-parse the question |
+| `parsed_question.py` | THE single parse of a question, plus the BSR metadata slot | Interpret `semantics_context` |
 | `mi_agent_workflow.py` | Point-in-time orchestration: parse → lens → validate → execute → invariants → chart | Know about HTTP or channels |
 | `llm_query_parser.py` | Question → `MIQuerySpec`. **Proposes only** | Execute, or read data values |
 | `mi_query_executor.py` | The single calculation engine | Parse, or decide policy |
@@ -143,14 +147,17 @@ sequenceDiagram
   S->>T: evaluate_source_approval(dataset, runtime_mode)
   T-->>S: AuthorisedPortfolio + approval
 
-  S->>C: try_route(question, source_lens, frame_resolver)
+  Note over S: resolve frame, then PARSE ONCE
+  S->>S: ParsedQuestion.parse(question, semantics, columns)
+  S->>C: try_route(parsed, source_lens, frame_resolver)
   alt a capability route matches
-    C->>C: parse → dispatch → _disclose_lens_scope
+    C->>C: registry.candidates → capability gate → handler
+    C->>C: _disclose_lens_scope
     C-->>S: routed envelope (metadata.lensApplied)
   else no route
     C-->>S: None
-    S->>W: run_mi_agent_query(question, frame, semantics)
-    W->>W: parse → LENS → validate → profile
+    S->>W: run_mi_agent_query(parsed=parsed, frame, semantics)
+    W->>W: LENS → validate → profile (no re-parse)
     W->>X: execute_mi_query
     X-->>W: MIQueryResult
     W->>W: dimension + filter invariants → chart → coverage
@@ -180,61 +187,85 @@ control. A user may only ever lens within their authorised portfolios.
 
 ```mermaid
 flowchart TB
-  Q["question + spec + source_lens"] --> TR["try_route"]
+  P["ParsedQuestion (single parse)"] --> RR["RouteRequest"]
+  RR --> REG["RecogniserRegistry.candidates()"]
 
-  subgraph chain["Ordered recogniser chain (first match wins)"]
+  subgraph reg["Declarative registry"]
     direction TB
-    R1["_is_scenario"] --> R2["_is_conversion"]
-    R2 --> R3["spec.forecast_mode"]
-    R3 --> R4["spec.bridge_query"]
-    R4 --> R5["spec.cohort_progression"]
-    R5 --> R6["_is_geo_exposure"]
-    R6 --> R7["_is_period_movement"]
-    R7 --> R8["_is_portfolio_summary"]
-    R8 --> R9["spec.temporal_mode"]
-    R9 --> R10["spec.risk_limit_query"]
-    R10 --> R11["_is_evolution"]
+    D1["Recogniser(name, priority,<br/>recognise, handle)"]
+    D2["lens_aware · capability<br/>confidence · metadata"]
   end
 
-  TR --> chain
-  chain -->|match| H["route handler → _envelope"]
-  chain -->|no match| PIT["None → point-in-time executor"]
-  H --> D["_disclose_lens_scope<br/>sets metadata.lensApplied"]
-  D --> OUT["routed envelope"]
+  REG -.reads.-> reg
+  REG --> ORD["sort by (-confidence, priority, index)"]
+  ORD --> GATE{"capability<br/>enabled?"}
+  GATE -->|no| UNAVAIL["governed CapabilityState<br/>explanation"]
+  GATE -->|yes or ungated| H["handler"]
+  H -->|None| ORD
+  H -->|envelope| DISC["_disclose_lens_scope"]
+  ORD -->|no candidate left| PIT["None → point-in-time executor"]
+  UNAVAIL --> DISC
+  DISC --> OUT["routed envelope"]
 ```
 
 ### How capabilities are registered
 
-**They are not registered — they are hard-coded positions in an ordered `if`
-chain** in `chat_routing.try_route`. A capability today is four things in four
-places:
+Declaratively, in `recogniser_registry.py`. One `Recogniser` states everything
+about a capability in one place:
 
-1. a **recogniser** (`_is_*` predicate, or a field the parser sets on the spec);
-2. a **position** in the chain — precedence is source-code line order;
-3. a **handler** (`_route_*`) that builds its own envelope;
-4. membership (or not) of `_LENS_AWARE_ROUTES`.
+```python
+Recogniser(
+    name="geo_exposure",        # route id, appears as metadata.route
+    priority=60,                # deterministic precedence — data, not line order
+    capability=None,            # governed CAP_* gate, or None
+    lens_aware=True,            # does the handler narrow to the portfolio lens?
+    recognise=lambda r: _is_geo_exposure(r.question),
+    handle=lambda r: _route_geo(...),
+    metadata={},                # reserved for Business Semantics Registry terms
+)
+```
 
-This is honest but not scalable — see §10.1.
+Guarantees the registry provides that the old `if/elif` chain could not:
 
-### How to add a capability today
+* **Deterministic registration** — a duplicate name raises rather than silently
+  shadowing an existing route.
+* **Deterministic ordering** — candidates sort by `(-confidence, priority,
+  registration_index)`; every component is total, so order never depends on
+  import order.
+* **Behaviour preservation** — every migrated recogniser shares
+  `DEFAULT_CONFIDENCE`, so ordering collapses to priority order, which is
+  exactly the historical chain. A handler returning `None` falls through to the
+  next candidate, as before.
+* **Capability gating in one place** — a recogniser declares the governed
+  capability it needs, resolved through the same `portfolio_context` service the
+  React dashboard uses.
+
+### How to add a capability
 
 1. **Recogniser.** Prefer a spec field set by `llm_query_parser` (declarative,
-   testable in isolation) over a `_is_*` string predicate in `chat_routing`.
-2. **Position.** Insert by *specificity*: narrower intents before broader ones.
-   A new capability that overlaps an existing one must be placed above it **and**
-   must return `None` when it cannot answer, so the existing route still runs.
-3. **Handler.** Return via `_envelope(...)`, always with `route="<name>"`.
+   testable in isolation) over a string predicate. Return a `bool` or a
+   `Recognition(matched, confidence)` when the match strength varies.
+2. **Priority.** Pick by *specificity*: narrower intents get lower numbers. A
+   capability that overlaps an existing one must sit above it **and** return
+   `None` when it cannot answer, so the existing route still runs. Genuinely
+   more-specific recognisers may instead declare a higher `confidence` and win
+   from any position.
+3. **Handler.** Return via `_envelope(...)`; `route=` is the recogniser name.
 4. **Lens.** If the handler reads a **dataframe**, apply the lens
-   (`_resolve_lens` → `_apply_lens_filter`), pass `lens_applied=True`, and add
-   the route to `_LENS_AWARE_ROUTES`. If it reads a **pre-aggregated run
-   artefact**, do nothing: the default is whole-book *with disclosure*, which is
-   the safe failure mode.
-5. **Tests.** Add to the lens matrix (`test_mi_query_lens_matrix.py`) and the
-   semantic bank (`test_mi_query_capability_matrix.py`).
+   (`_resolve_lens` → `_apply_lens_filter`), pass `lens_applied=True` and set
+   `lens_aware=True`. If it reads a **pre-aggregated run artefact**, leave it
+   false: the default is whole-book *with disclosure*.
+5. **Capability.** Declare `capability=CAP_*` when an unavailable capability is a
+   genuine, explainable outcome for a scope (pipeline / origination / cohorts /
+   risk). Leave `None` for funded-book routes — every scope with rows supports
+   them, and gating costs a context resolution for no decision.
+6. **Tests.** Add to the lens matrix (`test_mi_query_lens_matrix.py`), the
+   semantic bank (`test_mi_query_capability_matrix.py`) and, for ordering,
+   `test_recogniser_registry.py`.
 
-> **The safe default is deliberate.** A new route is treated as un-narrowable
-> until it declares otherwise, so forgetting step 4 produces an over-disclosed
-> answer rather than a mislabelled one.
+> **The safe defaults are deliberate.** A new route is un-narrowable (disclosed)
+> and ungated until it says otherwise, so a forgotten declaration produces an
+> over-disclosed answer rather than a mislabelled one.
 
 ### Why deterministic capabilities are separated from natural-language parsing
 
@@ -258,8 +289,7 @@ This is what makes the agent governable:
 
 ```mermaid
 flowchart TB
-  Q["question"] --> UNS["_detect_unsupported_concept<br/>governed concept, field absent → refuse"]
-  UNS --> PWR["parse_with_repair"]
+  Q["question"] --> PQ["ParsedQuestion.parse — the ONE parse site"]
 
   subgraph pwr["parse_with_repair"]
     DET["_deterministic_parse (always, free)"] --> DV["validate_mi_query"]
@@ -269,9 +299,13 @@ flowchart TB
     Z -->|missing column| SKIP["skip LLM — cannot fix without substituting"]
   end
 
-  PWR --> UNMAP{"note == unmapped?"}
-  UNMAP -->|yes| REFUSE["controlled refusal"]
-  UNMAP -->|no| LENS["portfolio lens → registry scope → spec.filters"]
+  PQ --> pwr
+  PQ --> BSR["semantics_resolver hook<br/>→ semantics_context"]
+  pwr --> UNS["_detect_unsupported_concept<br/>governed concept, field absent → refuse"]
+  UNS --> UNMAP{"note?"}
+  UNMAP -->|unmapped| REFUSE["controlled refusal"]
+  UNMAP -->|unresolved_metric| REFUSE2["refuse, naming the term<br/>NO substitute measure"]
+  UNMAP -->|mapped| LENS["portfolio lens → registry scope → spec.filters"]
   LENS --> DRILL["merge caller filters (drill-through)"]
   DRILL --> SPEC["MIQuerySpec"]
 ```
@@ -602,9 +636,11 @@ mi_agent/              the analytical engine — no HTTP, no tenancy
   mi_query_executor.py THE calculation engine
   mi_query_contract.py fail-closed invariants
   mi_agent_workflow.py point-in-time orchestration
+  parsed_question.py   THE parse entry point + BSR metadata slot
 mi_agent_api/          HTTP + governed capability
-  mi_service.py        THE governed capability
-  chat_routing.py      capability routing
+  mi_service.py        THE governed capability (parses ONCE, here)
+  recogniser_registry.py  routing contracts, ordering, capability gate
+  chat_routing.py      the registered recognisers + handlers
   gateway.py           deployment-topology normalisation
   app.py               thin HTTP adapter
   presenters.py        wire formats
@@ -621,13 +657,13 @@ collected at the end, so a maintainer reading a section sees its diagram. Index:
 |---|---|---|
 | **Component / dependency map** | §1 | Major components, layers and allowed dependency directions |
 | **Request flow** | §2 | React → gateway → auth → capability → routing → engine → envelope, as a sequence, including where governance runs |
-| **Capability architecture** | §3 | The ordered recogniser chain, handler dispatch and the lens-disclosure exit |
-| **Semantic pipeline** | §4 | Unsupported-concept guard → parse-with-repair → unmapped check → lens → filters |
+| **Capability architecture** | §3 | The recogniser registry, deterministic ordering, the capability gate and the lens-disclosure exit |
+| **Semantic pipeline** | §4 | The single parse site, the BSR hook, refusal branches, lens and filters |
 | **Lens resolution** | §4.4 | Question vs workspace precedence, and the handover to the governed registry |
 | **Execution pipeline** | §5 | Validate → profile → execute → invariants → chart → coverage → governed envelope |
 | **Deployment topology** | §7 | SWA, both route topologies, gateway normalisation, App Service |
 
-All diagrams are Mermaid and render natively in GitHub. Keep them at this level
+All diagrams are Mermaid, validated by parsing, and render natively in GitHub. Keep them at this level
 of detail: they are a **map, not a specification** — the owning source file is
 always the authority, and a diagram that tries to mirror every branch will rot.
 
@@ -637,24 +673,25 @@ always the authority, and a diagram that tries to mirror every branch will rot.
 
 Ordered by the cost of leaving it. Each is evidenced in the readiness review.
 
-### 10.1 Two intent taxonomies, and the question is parsed twice — **highest**
+### ~~10.1 Two intent taxonomies, and the question is parsed twice~~ — **RESOLVED**
 
-`chat_routing.try_route` parses the question, then `run_mi_agent_query` parses it
-again. The routing decision can be made on a *different* spec from the one
-executed (routing is always deterministic; the workflow may use the LLM). Costs
-double parse time and creates a divergence hazard.
+`mi_service._run_analysis` now resolves the frame, parses **once** via
+`ParsedQuestion.parse`, and threads the result through both the recogniser
+registry and the workflow. Routing and execution share one spec object, so they
+cannot disagree. Guarded by `test_single_parse_and_substitution.py`.
 
-**Fix:** parse once above routing; pass the spec down.
+### ~~10.2 The ordered `if` chain has no confidence arbitration~~ — **RESOLVED**
 
-### 10.2 The ordered `if` chain has no confidence arbitration
+Replaced by the governed `RecogniserRegistry` (§3): declarative registration,
+deterministic ordering by `(-confidence, priority, registration_index)`,
+duplicate names refused. Migrated recognisers share `DEFAULT_CONFIDENCE`, so
+ordering reproduces the historical chain exactly; a future recogniser may
+declare higher confidence to win from any position. Guarded by
+`test_recogniser_registry.py`.
 
-Precedence is source-code line order. A question matching two recognisers is
-resolved by which was written first, and ambiguity cannot be reported.
-
-**Fix:** a recogniser registry — each capability declares a recogniser, a
-confidence and a handler; the router picks the highest score and can surface the
-runner-up as an ambiguity. **This is the change that makes "thousands of
-questions" tractable**, and the prerequisite for most items below.
+*Still open within this area:* the router selects the first candidate whose
+handler answers; it does not yet **report** the runner-up as an ambiguity. The
+candidate list is already ordered and available, so surfacing it is additive.
 
 ### 10.3 Two runtimes
 
@@ -686,25 +723,38 @@ and is told nothing.
 
 **Fix:** distinguish "no route matched" from "routing failed" and disclose.
 
-### 10.6 Capability states are not consulted by the chat
+### ~~10.6 Capability states are not consulted by the chat~~ — **RESOLVED**
 
-`resolve_capabilities` decides Pipeline/forecast applicability from portfolio
-**metadata**, produces typed reason codes, and is used **only by the dashboard
-REST endpoints**. The chat therefore answers "what is in the pipeline?" with a
-data-availability error instead of *"no portfolio in this scope originates new
-lending"*.
+A recogniser declares the governed capability it needs; the router resolves it
+through the SAME `portfolio_context.resolve_context` the React dashboard uses
+and returns the governed `CapabilityState.detail` when it is unavailable. One
+resolution per request, cached, and only for gated routes.
 
-**Fix:** resolve capability state once in `try_route` and gate each route on it.
-This single change makes Direct/Acquired/Total behaviour correct for every
-present and future capability without per-route code.
+Two deliberate non-gates, both tested: an **unresolvable** gate (storage/config
+fault) attempts the route rather than claiming the analysis is inapplicable; and
+a deployment with **no portfolio registry at all** (a canonical tape without
+provenance — the current ERE production shape) reports
+`NO_PORTFOLIOS_IN_SCOPE` for every capability, which means "provenance
+unavailable", not "inapplicable", so it is not gated.
 
-### 10.7 Refuse-rather-than-substitute is incomplete
+*Still open within this area:* the point-in-time `pipeline`/`forecast` **views**
+still surface a data-availability error from frame resolution rather than the
+governed capability explanation. Only the routed capabilities are gated.
 
-An unresolved **dimension** fails closed. An unresolved **metric** is still
-silently replaced with the default balance metric ("show me the unicorn ratio by
-region" answers as balance by region, `ok:true`).
+### ~~10.7 Refuse-rather-than-substitute is incomplete~~ — **RESOLVED for metrics**
 
-**Fix:** apply the dimension rule to metrics.
+A grouped question whose metric side carries an unresolvable noun phrase now
+returns a governed refusal naming the term, with `unresolved_metric` in
+`validation.errors` and no substitute measure. Analytical *framing* words
+("concentration by region", "coverage by borrower type", "regions with the most
+loans") still default to balance — nothing was named to substitute for, and that
+is long-standing governed behaviour.
+
+*Still open within this area:* the residue detector is vocabulary-based
+(`_METRIC_SIDE_STOPWORDS` + `_ANALYTICAL_FRAMING_WORDS`). It is conservative —
+it refuses only what it is confident is a named-but-unknown measure — so a novel
+framing word could be misread as a measure. The Business Semantics Registry
+replaces this heuristic with a governed term list; see §11.
 
 ### 10.8 Executor performance
 
@@ -749,3 +799,70 @@ decomposition; it is simply not reachable from an explanatory question.
   multi-tenant-per-deployment becomes real; it is a security-relevant boundary.
 * **The backend is stateless per question.** Keeps `/mi/query` idempotent and
   auditable; revisit with §9.4.
+
+---
+
+## 11. Accommodating the Business Semantics Registry
+
+The Business Semantics Registry (BSR) is being built separately and will become
+the semantic foundation for future reasoning workflows — period change analysis,
+portfolio risk comparison, covenant headroom, driver attribution. **None of
+those are built here**, and no temporary semantic layer was introduced that
+would have to be unpicked when the registry lands.
+
+What exists instead are four seams, each already exercised by a test.
+
+### The intended end state
+
+```mermaid
+flowchart LR
+  BSR["Business Semantics<br/>Registry"] --> WR["Workflow Registry"]
+  WR --> RR["Recogniser Registry"]
+  RR --> CR["Capability Registry"]
+  CR --> DE["Deterministic Execution"]
+```
+
+Today's shape is the same chain with the first two boxes absent:
+**Question → Recogniser Registry → Capability Resolution → Deterministic
+Capability → Governed Response.** Adding the missing boxes is registration, not
+restructuring.
+
+### The four seams
+
+| # | Seam | Where | What plugs in |
+|---|---|---|---|
+| 1 | `semantics_resolver` | `CapabilityDependencies` → `build_dependencies()` | A BSR client, injected once. Reaches every channel at the same time |
+| 2 | `ParsedQuestion.semantics_context` | Populated at the single parse site | Governed business-term metadata resolved alongside the spec |
+| 3 | `RouteRequest.semantics_context` | Carried into every recogniser and handler | Recognisers read governed semantics with **no signature change** |
+| 4 | `Recogniser.metadata` | Declared per recogniser | A workflow recogniser declares the business terms, comparison bases or materiality rules it consumes; a BSR-aware loader validates them |
+
+Plus `RecogniserRegistry.register` is public and additive, so a BSR-driven
+loader can register recognisers **from configuration at startup** rather than
+from code.
+
+### What lands where, when the BSR exists
+
+1. **Wire the resolver** — one line in `build_dependencies()`. Every parse now
+   carries governed semantics; nothing else changes.
+2. **Replace the residue heuristic** — §10.7's vocabulary-based unresolved-metric
+   detector becomes a registry lookup: "is this a governed business term?"
+   `_metric_side_residue` is the only function to replace, and its contract
+   (phrase in → unresolved term or `None`) already matches.
+3. **Add a Workflow Registry above the Recogniser Registry** — workflow
+   recognisers register like any other, declaring their BSR terms in
+   `metadata` and a higher `confidence` so a genuine workflow question outranks
+   the single-capability recogniser that would otherwise catch it. The ordering
+   rule already supports this; **no change to the registry is required.**
+4. **Capability resolution stays as-is.** `Recogniser.capability` already gates
+   on governed `CapabilityState`. A workflow needing several capabilities
+   resolves each through the same `resolve_capability_state` — the multi-
+   capability orchestration lives in the workflow layer, not here.
+
+### What was deliberately NOT done
+
+No period-change analysis, portfolio risk comparison, covenant headroom, driver
+attribution, explanatory workflows, workflow planner, materiality logic,
+comparison engine or multi-capability orchestration. Routing dispatches to **one
+deterministic capability** and stops. The confidence field, the metadata slot and
+the semantics context are all *inert* today — carried, never interpreted — which
+is what keeps them free of assumptions the real registry would contradict.

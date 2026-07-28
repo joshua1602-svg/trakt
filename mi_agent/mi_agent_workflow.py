@@ -21,8 +21,8 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
-from .llm_query_parser import parse_with_repair
 from .mi_dataset_profile import profile_dataset, validate_query_data
+from .parsed_question import ParsedQuestion
 from .mi_chart_factory import MIChartError, MIChartResult, create_mi_chart
 from .mi_query_executor import (
     MIQueryExecutionError,
@@ -175,6 +175,7 @@ def run_mi_agent_query(
     source_portfolio_lens: Optional[Any] = None,
     dataset: Optional[str] = None,
     run_id: Optional[str] = None,
+    parsed: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Run one MI question end to end.
 
@@ -192,6 +193,11 @@ def run_mi_agent_query(
         the FULL underlying dataset narrowed to the selection — not just the rows
         already on screen. An unknown filter field is rejected as a controlled
         validation failure (never a 500).
+    parsed : an already-parsed :class:`~mi_agent.parsed_question.ParsedQuestion`.
+        Supplied by the chat path, which parses ONCE above routing and reuses the
+        result here, so the spec that was routed on is the spec that executes.
+        When ``None`` (Streamlit, harness, direct callers) this parses itself —
+        still exactly one parse per call.
 
     Returns a dict with: ok, error, parser_mode, spec, spec_obj, interpreted,
     validation, parse_metadata, query_result, chart_result, warnings, metadata.
@@ -245,16 +251,20 @@ def run_mi_agent_query(
         result["warnings"] = [unsupported["message"]]
         return result
 
-    # ---- parse (deterministic or LLM, with repair) ------------------------
+    # ---- parse (ONCE per request) -----------------------------------------
+    # The chat path parses above routing and passes the result in, so routing
+    # and execution share one spec. Every other caller parses here. Either way
+    # the question is parsed exactly once.
     effective_llm = bool(llm_enabled) and parser_mode == "llm"
     try:
-        spec, parse_meta = parse_with_repair(
-            question, semantics, available_columns=available_columns,
-            llm_enabled=effective_llm, model=model,
-            max_attempts=max_repair_attempts, llm_callable=llm_callable,
-            provider=provider, catalog_mode=catalog_mode,
-            zero_cost_first=zero_cost_first,
-        )
+        if parsed is None:
+            parsed = ParsedQuestion.parse(
+                question, semantics, available_columns=available_columns,
+                llm_enabled=effective_llm, model=model,
+                max_attempts=max_repair_attempts, llm_callable=llm_callable,
+                provider=provider, catalog_mode=catalog_mode,
+                zero_cost_first=zero_cost_first)
+        spec, parse_meta = parsed.spec, parsed.meta
     except Exception as exc:
         result["error"] = f"Parser error: {exc}"
         result["parse_metadata"] = {"parser_mode": parser_mode, "ok": False,
@@ -273,6 +283,35 @@ def run_mi_agent_query(
     # which answers a different question than the one asked. A question that
     # names a portfolio scope ("show the back book", "direct only") IS a
     # meaningful lens-scoped summary, so it stays on the summary path.
+    # An UNRESOLVED METRIC is refused unconditionally — including when a
+    # portfolio scope is named, and regardless of parser mode. "the unicorn
+    # ratio for the acquired book by region" must not become a balance answer
+    # just because it mentions a portfolio. The measure the user asked for does
+    # not exist here, and no other measure may stand in for it.
+    if parse_meta.get("note") == "unresolved_metric":
+        msg = (
+            f"{spec.explanation} I haven't computed an answer, and I have not "
+            "substituted a different measure for the one you asked about. Ask "
+            "for a governed measure — e.g. balance, LTV, interest rate, borrower "
+            "age or property value — optionally by a dimension."
+        )
+        result["unmapped_question"] = True
+        result["unresolved_metric"] = True
+        result["error"] = msg
+        result["answer"] = msg
+        result["parse_metadata"] = parse_meta
+        result["spec_obj"] = spec
+        result["spec"] = spec.to_dict()
+        result["validation"] = {
+            "ok": False,
+            "errors": [f"unresolved_metric: {spec.explanation}"],
+            "warnings": [], "resolved_fields": {},
+        }
+        result["warnings"] = [
+            "requested measure is not available in this dataset; no substitute "
+            "measure was used."]
+        return result
+
     if (result["parser_mode"] == "deterministic"
             and parse_meta.get("note") == "unmapped"
             and not _portfolio_lens.mentions_portfolio(question)):
