@@ -27,7 +27,7 @@ substitute another.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dc_field
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Set, Tuple
@@ -92,6 +92,22 @@ class SelectionPolicy:
     concept_max_measures: int
     concept_max_dimensions: int
     concept_min_confidence: str
+    reserve_one_measure_per_concept: bool = True
+    default_max_snapshot_gap_days: Optional[int] = None
+    gap_days_by_portfolio: Mapping[str, int] = dc_field(default_factory=dict)
+    flow_basis_tolerance_days: int = 5
+
+    def max_snapshot_gap_days(self, context_id: Optional[str] = None
+                              ) -> Optional[int]:
+        """The gap ceiling for one portfolio, falling back to the default.
+
+        A book on a quarterly cadence legitimately needs a wider ceiling than a
+        monthly one, so the value is per-portfolio configuration rather than a
+        constant.
+        """
+        if context_id and context_id in self.gap_days_by_portfolio:
+            return int(self.gap_days_by_portfolio[context_id])
+        return self.default_max_snapshot_gap_days
 
     def tier_rank(self, field: str) -> int:
         tier = mi_tier(field)
@@ -127,6 +143,8 @@ def parse_policy(data: Mapping[str, Any]) -> SelectionPolicy:
     temporality = data.get("temporality") or {}
     overview = data.get("overview") or {}
     concept = data.get("concept_mode") or {}
+    resolution = data.get("period_resolution") or {}
+    gap_default = resolution.get("max_snapshot_gap_days")
     return SelectionPolicy(
         name=str(policy.get("name") or "period_change_overview"),
         version=str(policy.get("version") or "0"),
@@ -147,7 +165,16 @@ def parse_policy(data: Mapping[str, Any]) -> SelectionPolicy:
         ("core", "extended"),
         concept_max_measures=int(concept.get("max_measures") or 12),
         concept_max_dimensions=int(concept.get("max_dimensions") or 4),
-        concept_min_confidence=str(concept.get("min_confidence") or "medium"))
+        concept_min_confidence=str(concept.get("min_confidence") or "medium"),
+        reserve_one_measure_per_concept=bool(
+            overview.get("reserve_one_measure_per_concept", True)),
+        default_max_snapshot_gap_days=(None if gap_default is None
+                                       else int(gap_default)),
+        gap_days_by_portfolio={
+            str(k): int(v) for k, v in
+            (resolution.get("max_snapshot_gap_days_by_portfolio") or {}).items()},
+        flow_basis_tolerance_days=int(
+            resolution.get("flow_basis_tolerance_days") or 5))
 
 
 @lru_cache(maxsize=4)
@@ -401,32 +428,52 @@ def _select_overview(inputs: SelectionInputs, policy: SelectionPolicy
             (_sort_key(entry, policy, state), entry))
 
     measures: List[str] = []
-    covered: List[str] = []
+    taken_per_concept: Dict[str, int] = {}
     signatures: Dict[Tuple[str, str, str], int] = {}
+    deferred: List[Tuple[str, Any]] = []
 
+    def _take(concept: str, entry) -> bool:
+        """Select ``entry`` unless a cap forbids it. Records the refusal reason."""
+        if len(measures) >= policy.max_measures_total:
+            excluded.append(ExcludedCandidate(entry.field, EXCLUDED_TOTAL_CAP))
+            return False
+        if taken_per_concept.get(concept, 0) >= policy.max_measures_per_concept:
+            excluded.append(ExcludedCandidate(entry.field, EXCLUDED_CONCEPT_CAP))
+            return False
+        signature = (concept, entry.default_aggregation, entry.temporality)
+        if signatures.get(signature, 0) >= policy.max_measures_per_signature:
+            excluded.append(ExcludedCandidate(
+                entry.field, EXCLUDED_SIGNATURE_CAP,
+                f"{signature[1]}/{signature[2]}"))
+            return False
+        signatures[signature] = signatures.get(signature, 0) + 1
+        taken_per_concept[concept] = taken_per_concept.get(concept, 0) + 1
+        measures.append(entry.field)
+        return True
+
+    # Pass 1 — reserve ONE measure for every eligible concept before spending the
+    # budget on second and third measures. Without this the concepts listed last
+    # (coverage, liquidity) are consumed by the total cap and disappear from the
+    # overview entirely, which a reader takes to mean "nothing changed there".
     # Concept order is the policy's order, so the overview always reads the same
     # way: exposure first, then performance, then quality, and so on.
     for concept in policy.overview_concepts:
         candidates = sorted(per_concept.get(concept, []), key=lambda item: item[0])
-        taken = 0
-        for _key, entry in candidates:
-            if len(measures) >= policy.max_measures_total:
-                excluded.append(ExcludedCandidate(entry.field, EXCLUDED_TOTAL_CAP))
-                continue
-            if taken >= policy.max_measures_per_concept:
-                excluded.append(ExcludedCandidate(entry.field, EXCLUDED_CONCEPT_CAP))
-                continue
-            signature = (concept, entry.default_aggregation, entry.temporality)
-            if signatures.get(signature, 0) >= policy.max_measures_per_signature:
-                excluded.append(ExcludedCandidate(
-                    entry.field, EXCLUDED_SIGNATURE_CAP,
-                    f"{signature[1]}/{signature[2]}"))
-                continue
-            signatures[signature] = signatures.get(signature, 0) + 1
-            measures.append(entry.field)
-            taken += 1
-        if taken:
-            covered.append(concept)
+        if not candidates:
+            continue
+        if policy.reserve_one_measure_per_concept:
+            head, tail = candidates[:1], candidates[1:]
+        else:
+            head, tail = candidates, []
+        for _key, entry in head:
+            _take(concept, entry)
+        deferred.extend((concept, entry) for _key, entry in tail)
+
+    # Pass 2 — fill the remaining budget in the same concept order.
+    for concept, entry in deferred:
+        _take(concept, entry)
+
+    covered = [c for c in policy.overview_concepts if taken_per_concept.get(c)]
 
     dimension_pool.sort()
     dimensions = [f for _, f in dimension_pool[:policy.max_dimensions]]

@@ -39,10 +39,16 @@ STATUS_INSUFFICIENT_HISTORY = "insufficient_history"
 STATUS_INVALID_WEIGHT_POPULATION = "invalid_weight_population"
 STATUS_ZERO_DENOMINATOR = "zero_denominator"
 STATUS_SOURCE_CONVENTION_UNCERTAIN = "source_convention_uncertain"
+#: The two snapshots' own reporting periods are of materially different length,
+#: so their period flows are not two comparable period totals (§7).
+STATUS_NOT_COMPARABLE_PERIOD_BASIS = "not_comparable_period_basis"
+#: The book reports more than one currency and no governed normalisation exists.
+STATUS_NOT_COMPARABLE_MIXED_CURRENCY = "not_comparable_mixed_currency"
 
 ALL_STATUSES: Tuple[str, ...] = (
     STATUS_AVAILABLE, STATUS_PARTIALLY_AVAILABLE, STATUS_NOT_AVAILABLE,
     STATUS_NOT_COMPARABLE, STATUS_NOT_COMPARABLE_DUE_TO_AVAILABILITY,
+    STATUS_NOT_COMPARABLE_PERIOD_BASIS, STATUS_NOT_COMPARABLE_MIXED_CURRENCY,
     STATUS_INSUFFICIENT_HISTORY, STATUS_INVALID_WEIGHT_POPULATION,
     STATUS_ZERO_DENOMINATOR, STATUS_SOURCE_CONVENTION_UNCERTAIN,
 )
@@ -90,6 +96,28 @@ CUMULATIVE_DECLINE_NOTE = (
     "is not expected to decrease; this may indicate a restatement or a source "
     "convention difference. The observed difference is retained unmodified.")
 
+#: Attached to a period_flow field whose two reporting periods are of different
+#: length. Comparing a month's flow with a quarter's would report a change in
+#: run-rate that is really a change in the length of the window.
+FLOW_BASIS_MISMATCH_NOTE = (
+    "The two snapshots cover reporting periods of materially different length, "
+    "so their period flows are not comparable period totals. The two values are "
+    "reported as observed; no movement is calculated.")
+
+#: Attached when the reporting period length of either snapshot cannot be
+#: established (typically the opening snapshot is the earliest one held).
+FLOW_BASIS_UNKNOWN_NOTE = (
+    "The reporting period length of at least one snapshot could not be "
+    "established from the available series, so the two period flows cannot be "
+    "confirmed to cover equal periods.")
+
+#: Attached wherever a monetary figure would otherwise be summed across
+#: currencies (§17). Used by the aggregate, the distribution and the bridge.
+MIXED_CURRENCY_NOTE = (
+    "The book reports more than one exposure currency and no governed "
+    "currency-normalisation capability exists, so monetary amounts are not "
+    "aggregated across currencies.")
+
 
 # --------------------------------------------------------------------------- #
 # Controlled interpretation — §12
@@ -117,8 +145,17 @@ SIGNIFICANCE_NO_BASIS = "insufficient_basis_for_materiality_assessment"
 #: materiality verdict. Materiality requires a configured rule; there is none.
 MATERIALITY_DISCLAIMER = (
     "No governed materiality threshold is configured for this portfolio, so "
-    "movements are ranked by observed size only. No movement is described as "
-    "material, significant, a breach or high risk.")
+    "movements are ranked by observed size only, within each unit of "
+    "measurement. No movement is described as material, significant, a breach "
+    "or high risk.")
+
+#: Ranking is ALWAYS within one unit of measurement. A currency movement and a
+#: percentage-point movement have no common scale, and ordering them in one
+#: sequence makes a 0.1% balance drift outrank a 15-point arrears rise.
+RANK_SCOPE_NOTE = (
+    "Movements are ranked within their unit of measurement. A currency movement "
+    "and a percentage-point movement are not ranked against each other, because "
+    "they have no common scale.")
 
 
 # --------------------------------------------------------------------------- #
@@ -276,6 +313,29 @@ ALL_RESOLUTION_METHODS: Tuple[str, ...] = (
 
 
 @dataclass(frozen=True)
+class FlowBasis:
+    """The reporting-period length behind each snapshot, and whether they match.
+
+    A ``period_flow`` value is "the flow during this snapshot's own reporting
+    period". Two such values are comparable only when those periods are of
+    similar length, which is derived from the gap to each snapshot's immediate
+    predecessor in the governed series. ``comparable is None`` means the length
+    could not be established, which is reported rather than assumed.
+    """
+
+    start_period_days: Optional[int] = None
+    end_period_days: Optional[int] = None
+    tolerance_days: int = 5
+    comparable: Optional[bool] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"start_period_days": self.start_period_days,
+                "end_period_days": self.end_period_days,
+                "tolerance_days": self.tolerance_days,
+                "comparable": self.comparable}
+
+
+@dataclass(frozen=True)
 class PeriodResolution:
     """What was asked for, what it resolved to, and whether it was adjusted."""
 
@@ -289,10 +349,28 @@ class PeriodResolution:
     adjustment_notes: Tuple[str, ...] = ()
     available_snapshots: Tuple[str, ...] = ()
     portfolio_scope: PortfolioScopeRef = field(default_factory=PortfolioScopeRef)
+    #: Days between each requested date and the snapshot it resolved to. ``None``
+    #: where no date was requested for that end.
+    start_gap_days: Optional[int] = None
+    end_gap_days: Optional[int] = None
+    max_gap_days: Optional[int] = None
+    #: Reporting-period lengths behind the two snapshots (see :class:`FlowBasis`).
+    flow_basis: FlowBasis = field(default_factory=FlowBasis)
 
     @property
     def any_adjusted(self) -> bool:
         return self.start_adjusted or self.end_adjusted
+
+    @property
+    def interval_days(self) -> Optional[int]:
+        """Days between the two resolved reporting dates."""
+        from datetime import date as _date
+        try:
+            start = _date.fromisoformat(str(self.start_snapshot.reporting_date)[:10])
+            end = _date.fromisoformat(str(self.end_snapshot.reporting_date)[:10])
+        except Exception:  # noqa: BLE001 - an undated snapshot has no interval
+            return None
+        return (end - start).days
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -303,6 +381,11 @@ class PeriodResolution:
             "resolved_end_snapshot": self.end_snapshot.reference(),
             "start_adjusted_to_available_snapshot": self.start_adjusted,
             "end_adjusted_to_available_snapshot": self.end_adjusted,
+            "start_gap_days": self.start_gap_days,
+            "end_gap_days": self.end_gap_days,
+            "max_snapshot_gap_days": self.max_gap_days,
+            "interval_days": self.interval_days,
+            "flow_basis": self.flow_basis.to_dict(),
             "adjustment_notes": list(self.adjustment_notes),
             "available_snapshots": list(self.available_snapshots),
             "portfolio_scope": self.portfolio_scope.to_dict(),
@@ -381,8 +464,13 @@ class MetricChange:
     evidence: Tuple[Dict[str, Any], ...] = ()
     notes: Tuple[str, ...] = ()
     significance: str = SIGNIFICANCE_NO_BASIS
+    #: Rank WITHIN ``movement_unit`` — never across units. See RANK_SCOPE_NOTE.
     movement_rank: Optional[int] = None
+    #: How many comparable metrics share this unit, so a rank of 1 of 1 is not
+    #: read as "the largest movement in the portfolio".
+    rank_population: Optional[int] = None
     contribution_to_balance_change: Optional[float] = None
+    flow_basis: Optional[FlowBasis] = None
 
     @property
     def comparable(self) -> bool:
@@ -420,7 +508,10 @@ class MetricChange:
             "notes": list(self.notes),
             "significance": self.significance,
             "movement_rank": self.movement_rank,
+            "movement_rank_scope": self.movement_unit,
+            "rank_population": self.rank_population,
             "contribution_to_balance_change": self.contribution_to_balance_change,
+            "flow_basis": self.flow_basis.to_dict() if self.flow_basis else None,
         }
 
 
@@ -518,6 +609,7 @@ BRIDGE_STATUS_UNAVAILABLE_NO_IDENTIFIER = "unavailable_no_loan_identifier"
 BRIDGE_STATUS_UNAVAILABLE_DUPLICATE_IDENTIFIERS = "unavailable_duplicate_identifiers"
 BRIDGE_STATUS_UNAVAILABLE_NO_BALANCE_FIELD = "unavailable_no_balance_field"
 BRIDGE_STATUS_UNAVAILABLE_MISSING_IDENTIFIERS = "unavailable_missing_identifiers"
+BRIDGE_STATUS_UNAVAILABLE_MIXED_CURRENCY = "unavailable_mixed_currency"
 BRIDGE_STATUS_DOES_NOT_RECONCILE = "does_not_reconcile"
 
 #: Absolute currency tolerance the reconciliation is allowed to miss by, to
@@ -531,7 +623,12 @@ class BalanceBridge:
 
     status: str
     balance_field: Optional[str] = None
+    #: The loan-identity key actually used. A composite key is rendered as
+    #: ``"source_portfolio_id + loan_identifier"``.
     identifier_field: Optional[str] = None
+    #: The columns making up the key, so an audit can see whether provenance
+    #: was available to disambiguate identifiers reused across originators.
+    identifier_fields: Tuple[str, ...] = ()
     opening_balance: Optional[float] = None
     closing_balance: Optional[float] = None
     new_loan_balance: Optional[float] = None
@@ -551,6 +648,7 @@ class BalanceBridge:
             "status": self.status,
             "balance_field": self.balance_field,
             "identifier_field": self.identifier_field,
+            "identifier_fields": list(self.identifier_fields),
             "opening_balance": self.opening_balance,
             "new_loan_closing_balance": self.new_loan_balance,
             "exited_loan_opening_balance": self.exited_loan_balance,

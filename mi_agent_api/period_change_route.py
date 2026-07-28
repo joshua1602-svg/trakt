@@ -46,6 +46,7 @@ from mi_agent.period_change.models import (
     UNIT_COUNT,
     UNIT_CURRENCY,
     UNIT_PERCENTAGE_POINT,
+    UNIT_RATIO,
     WORKFLOW_ID,
     PeriodChangeFailure,
     PeriodChangeResult,
@@ -314,6 +315,14 @@ def _failure_envelope(question: str, spec_dict: Dict[str, Any],
 # --------------------------------------------------------------------------- #
 # Presentation — deterministic, from the result only
 # --------------------------------------------------------------------------- #
+#: Reader-facing wording for a unit, used where the answer states the scope a
+#: ranking was made within.
+_UNIT_WORDS: Dict[str, str] = {
+    UNIT_CURRENCY: "currency", UNIT_COUNT: "counts",
+    UNIT_PERCENTAGE_POINT: "percentage points", UNIT_RATIO: "ratios",
+}
+
+
 def _format_value(value: Optional[float], unit: str) -> str:
     from . import chat_routing
 
@@ -337,6 +346,29 @@ def _format_movement(value: Optional[float], unit: str) -> str:
     return f"{sign}{_format_value(abs(float(value)), unit)}"
 
 
+def describe_basis(metric: Any) -> str:
+    """How the figure was calculated, in words a reader can act on.
+
+    Without this the table showed "Interest In Arrears 4.00% → 6.60%" with
+    nothing to say whether that is a share of LOANS or of BALANCE — and the
+    governed default for every v2 flag is a count share, which a reader
+    unfamiliar with the registry would not assume.
+    """
+    aggregation = (metric.aggregation or "").lower()
+    if aggregation == "share":
+        basis = (metric.share_basis or "count").lower()
+        return ("share of loan count" if basis == "count"
+                else f"share of {basis}")
+    if aggregation == "weighted_average":
+        return (f"weighted average by {metric.weight_field}"
+                if metric.weight_field else "weighted average")
+    if aggregation == "average":
+        return "simple average"
+    if aggregation == "sum":
+        return "sum"
+    return aggregation or "—"
+
+
 def _metric_rows(result: PeriodChangeResult) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     for metric in result.metric_changes:
@@ -345,7 +377,11 @@ def _metric_rows(result: PeriodChangeResult) -> List[Dict[str, Any]]:
             "canonical_field": metric.field,
             "concept": metric.analytical_concept,
             "temporality": metric.temporality,
+            "basis": describe_basis(metric),
             "aggregation": metric.aggregation,
+            "share_basis": metric.share_basis,
+            "weight_field": metric.weight_field,
+            "rank_scope": metric.movement_unit,
             "start_value": _format_value(metric.start_value, metric.movement_unit),
             "end_value": _format_value(metric.end_value, metric.movement_unit),
             "movement": _format_movement(metric.movement_value, metric.movement_unit),
@@ -363,12 +399,16 @@ _METRIC_COLUMNS = [
     {"key": "metric", "label": "Metric"},
     {"key": "concept", "label": "Concept"},
     {"key": "temporality", "label": "Temporality"},
+    # The basis is displayed, not buried in the payload: a share of loan count
+    # and a share of balance are different answers to "the arrears share".
+    {"key": "basis", "label": "Basis"},
     {"key": "start_value", "label": "Opening"},
     {"key": "end_value", "label": "Closing"},
     {"key": "movement", "label": "Movement"},
     {"key": "relative_change", "label": "Relative"},
     {"key": "interpretation", "label": "Interpretation"},
     {"key": "significance", "label": "Observed significance"},
+    {"key": "rank_scope", "label": "Ranked within"},
     {"key": "status", "label": "Status"},
 ]
 
@@ -448,14 +488,22 @@ def build_answer(result: PeriodChangeResult) -> str:
              f"{summary.get('metrics_analysed', 0)} governed metrics could be "
              f"compared across both snapshots."]
 
-    top = summary.get("top_movements") or []
-    if top:
+    # Reported per unit, and said so: a currency movement and a percentage-point
+    # movement are not ranked against each other, so presenting them in one
+    # "largest movements" list would assert a comparison that was not made.
+    by_unit = summary.get("top_movements_by_unit") or {}
+    for unit in sorted(by_unit):
+        rows = by_unit[unit] or []
+        if not rows:
+            continue
         described = "; ".join(
-            f"{row['display_name']} {_format_movement(row['movement_value'], row['movement_unit'])} "
-            f"({_format_value(row['start_value'], row['movement_unit'])} → "
-            f"{_format_value(row['end_value'], row['movement_unit'])})"
-            for row in top)
-        parts.append(f"The largest observed movements by rank were {described}.")
+            f"{row['display_name']} {_format_movement(row['movement_value'], unit)} "
+            f"({_format_value(row['start_value'], unit)} → "
+            f"{_format_value(row['end_value'], unit)})"
+            for row in rows)
+        parts.append(
+            f"Largest observed movements measured in "
+            f"{_UNIT_WORDS.get(unit, unit)}: {described}.")
 
     improvements = summary.get("improvements") or []
     deteriorations = summary.get("deteriorations") or []

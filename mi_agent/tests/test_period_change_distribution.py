@@ -187,3 +187,22 @@ class TestAvailabilityAndDiscipline:
         assert len(out.evidence) == 2
         assert all("snapshot_id" in e for e in out.evidence)
         assert "loan_identifier" not in str(out.evidence)
+
+
+def test_balance_shares_are_suppressed_on_a_mixed_currency_book():
+    """A balance share summed across GBP and EUR is a ratio of two meaningless
+    totals. Counts and count shares remain valid and are still reported."""
+    start = pd.DataFrame({
+        "collateral_geography": ["London", "Wales"],
+        "current_outstanding_balance": [300.0, 100.0],
+        "exposure_currency_denomination": ["GBP", "EUR"]})
+    end = pd.DataFrame({
+        "collateral_geography": ["London", "Wales"],
+        "current_outstanding_balance": [100.0, 300.0],
+        "exposure_currency_denomination": ["GBP", "EUR"]})
+    out = distribution_change(dimension(), snap(start, "s0", "2026-03-31"),
+                              snap(end, "s1", "2026-06-30"))
+    assert out.balance_field is None
+    assert all(c.balance_share_movement is None for c in out.categories)
+    assert all(c.count_share_movement is not None for c in out.categories)
+    assert any("currency" in n.lower() for n in out.notes)

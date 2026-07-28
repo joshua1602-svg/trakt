@@ -59,6 +59,12 @@ from ..business_semantics import (
 from ..mi_dataset_profile import PERCENT_POINTS, percent_storage_scale
 from .models import (
     BASIS_CUMULATIVE_DIFFERENCE,
+    FLOW_BASIS_MISMATCH_NOTE,
+    FLOW_BASIS_UNKNOWN_NOTE,
+    MIXED_CURRENCY_NOTE,
+    STATUS_NOT_COMPARABLE_MIXED_CURRENCY,
+    STATUS_NOT_COMPARABLE_PERIOD_BASIS,
+    FlowBasis,
     BASIS_FLOW_LEVEL_COMPARISON,
     BASIS_POINT_IN_TIME_DIFFERENCE,
     BASIS_STATIC_BASELINE_REFERENCE,
@@ -109,10 +115,9 @@ FALSE_TOKENS: frozenset = frozenset({
 #: shares; ``balance`` is supported because the governed balance field exists.
 SUPPORTED_SHARE_BASES: Tuple[str, ...] = ("count", "balance")
 
-_MIXED_CURRENCY_NOTE = (
-    "The snapshot reports more than one exposure currency and no governed "
-    "currency-normalisation capability exists, so monetary amounts are not "
-    "aggregated across currencies.")
+#: Re-exported so the distribution and bridge modules apply the SAME rule to the
+#: same balance field rather than each deciding for itself.
+_MIXED_CURRENCY_NOTE = MIXED_CURRENCY_NOTE
 
 
 # --------------------------------------------------------------------------- #
@@ -172,8 +177,14 @@ def _row_count(df: Any) -> int:
     return int(len(df)) if df is not None else 0
 
 
-def _mixed_currency(df: Any) -> bool:
-    """True when the frame reports more than one exposure currency."""
+def mixed_currency(df: Any) -> bool:
+    """True when the frame reports more than one exposure currency.
+
+    THE single currency test for the whole workflow. The metric aggregate, the
+    distribution's balance shares and the balance bridge all call this, so a
+    mixed-currency book cannot have its balances suppressed in one place and
+    silently summed in another.
+    """
     if df is None:
         return False
     for column in CURRENCY_FIELDS:
@@ -184,6 +195,10 @@ def _mixed_currency(df: Any) -> bool:
         if len(distinct) > 1:
             return True
     return False
+
+
+#: Backwards-compatible private alias used within this module.
+_mixed_currency = mixed_currency
 
 
 def _flag_counts(series: pd.Series) -> Tuple[int, int, int]:
@@ -254,7 +269,7 @@ def _aggregate_numeric(df: Any, ctx: PairContext, total_rows: int
 
     if notes:
         return AggregateOutcome(
-            None, STATUS_NOT_COMPARABLE, entry.default_aggregation,
+            None, STATUS_NOT_COMPARABLE_MIXED_CURRENCY, entry.default_aggregation,
             valid_population=valid, excluded_population=excluded, notes=notes)
     if valid == 0:
         return AggregateOutcome(
@@ -440,8 +455,14 @@ _TEMPORALITY_BASIS = {
 def metric_change(entry: BusinessSemanticsEntry,
                   start_snapshot: SnapshotFrame,
                   end_snapshot: SnapshotFrame, *,
-                  ctx: Optional[PairContext] = None) -> MetricChange:
-    """The governed movement of one field between two snapshots."""
+                  ctx: Optional[PairContext] = None,
+                  flow_basis: Optional[FlowBasis] = None) -> MetricChange:
+    """The governed movement of one field between two snapshots.
+
+    ``flow_basis`` carries the reporting-period length behind each snapshot. It
+    gates ``period_flow`` fields only: two flows are comparable period totals
+    only when the periods they cover are of similar length.
+    """
     ctx = ctx or build_pair_context(
         entry, [start_snapshot.frame, end_snapshot.frame])
     start = aggregate(start_snapshot.frame, ctx)
@@ -451,6 +472,7 @@ def metric_change(entry: BusinessSemanticsEntry,
     notes: List[str] = []
     movement: Optional[float] = None
     status = STATUS_AVAILABLE
+    is_flow = entry.temporality == TEMPORALITY_PERIOD_FLOW
 
     if entry.temporality == TEMPORALITY_STATIC_BASELINE:
         # §7: a static baseline is a reference value, not a series. It receives
@@ -461,17 +483,37 @@ def metric_change(entry: BusinessSemanticsEntry,
             "as a reference value at each date and is excluded from "
             "period-change ranking; a baseline does not change between periods.")
     elif not start.ok and not end.ok:
-        status = STATUS_NOT_AVAILABLE
+        # A shared blocking reason (mixed currency) is more informative than the
+        # generic "not available", so it is carried up rather than flattened.
+        if STATUS_NOT_COMPARABLE_MIXED_CURRENCY in (start.status, end.status):
+            status = STATUS_NOT_COMPARABLE_MIXED_CURRENCY
+            notes.append(MIXED_CURRENCY_NOTE)
+        else:
+            status = STATUS_NOT_AVAILABLE
     elif not start.ok or not end.ok:
         status = STATUS_NOT_COMPARABLE_DUE_TO_AVAILABILITY
         notes.append(
             "The field is populated at only one of the two reporting dates, so "
             "no movement can be calculated. It is retained for visibility and "
             "is not substituted with a related field.")
+    elif is_flow and flow_basis is not None and flow_basis.comparable is False:
+        # §7: two flows covering periods of different length are not two
+        # comparable period totals. Both values are reported; no movement is.
+        status = STATUS_NOT_COMPARABLE_PERIOD_BASIS
+        notes.append(FLOW_BASIS_MISMATCH_NOTE)
+        notes.append(
+            f"Opening period {flow_basis.start_period_days} days; closing "
+            f"period {flow_basis.end_period_days} days.")
     else:
         movement = float(end.value) - float(start.value)
-        if entry.temporality == TEMPORALITY_PERIOD_FLOW:
+        if is_flow:
             notes.append(FLOW_COMPARISON_NOTE)
+            if flow_basis is None or flow_basis.comparable is None:
+                # Unknown is not the same as mismatched. With only two snapshots
+                # the opening period's length cannot be established at all, and
+                # disqualifying every flow on that basis would report uncertainty
+                # as a defect. The movement stands; the uncertainty is stated.
+                notes.append(FLOW_BASIS_UNKNOWN_NOTE)
         elif entry.temporality == TEMPORALITY_CUMULATIVE and movement < 0:
             notes.append(CUMULATIVE_DECLINE_NOTE)
             status = STATUS_SOURCE_CONVENTION_UNCERTAIN
@@ -497,6 +539,7 @@ def metric_change(entry: BusinessSemanticsEntry,
         interpretation=interpret(entry.directionality, movement),
         status=status, start=start, end=end,
         confidence=entry.confidence, rationale=entry.rationale,
+        flow_basis=flow_basis if is_flow else None,
         evidence=(
             evidence_ref("aggregate", start_snapshot, field_name=entry.field,
                          detail={"role": "start", **start.to_dict()}),

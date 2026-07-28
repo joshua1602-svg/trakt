@@ -43,6 +43,7 @@ from .models import (
     INTERPRETATION_DETERIORATION,
     INTERPRETATION_IMPROVEMENT,
     MATERIALITY_DISCLAIMER,
+    RANK_SCOPE_NOTE,
     MODE_PORTFOLIO_OVERVIEW,
     RESULT_SCHEMA_VERSION,
     SIGNIFICANCE_LARGEST_DECREASE,
@@ -56,6 +57,7 @@ from .models import (
     WORKFLOW_ID,
     BalanceBridge,
     DistributionChange,
+    FlowBasis,
     MetricChange,
     PeriodChangeFailure,
     PeriodChangeResult,
@@ -166,7 +168,10 @@ def run_period_change_analysis(
     registry = registry.for_source(request.source_id)
     policy = policy or load_policy()
 
-    resolution = resolve_periods(snapshots, request.period_request, scope=scope)
+    resolution = resolve_periods(
+        snapshots, request.period_request, scope=scope,
+        max_gap_days=policy.max_snapshot_gap_days(scope.context_id),
+        flow_basis_tolerance_days=policy.flow_basis_tolerance_days)
     start_snapshot, end_snapshot = resolution.start_snapshot, resolution.end_snapshot
 
     selection = select_fields(SelectionInputs(
@@ -190,7 +195,8 @@ def run_period_change_analysis(
     limitations: List[str] = []
 
     metrics = _calculate_metrics(registry, selection.measures,
-                                 start_snapshot, end_snapshot, warnings)
+                                 start_snapshot, end_snapshot, warnings,
+                                 resolution.flow_basis)
     distributions = _calculate_distributions(registry, selection.dimensions,
                                              start_snapshot, end_snapshot, warnings)
     bridge = _calculate_bridge(request, start_snapshot, end_snapshot, limitations)
@@ -223,7 +229,8 @@ def run_period_change_analysis(
 # --------------------------------------------------------------------------- #
 def _calculate_metrics(registry: BusinessSemanticsRegistry,
                        fields: Sequence[str], start: SnapshotFrame,
-                       end: SnapshotFrame, warnings: List[str]
+                       end: SnapshotFrame, warnings: List[str],
+                       flow_basis: Optional[FlowBasis] = None
                        ) -> List[MetricChange]:
     out: List[MetricChange] = []
     for name in fields:
@@ -232,7 +239,8 @@ def _calculate_metrics(registry: BusinessSemanticsRegistry,
             continue
         try:
             ctx = build_pair_context(entry, [start.frame, end.frame])
-            change = metric_change(entry, start, end, ctx=ctx)
+            change = metric_change(entry, start, end, ctx=ctx,
+                                   flow_basis=flow_basis)
         except Exception as exc:  # noqa: BLE001 - one bad field never fails the analysis
             logger.warning("period-change metric %s failed: %s", name, exc)
             warnings.append(
@@ -284,29 +292,42 @@ def _calculate_bridge(request: PeriodChangeRequest, start: SnapshotFrame,
 # --------------------------------------------------------------------------- #
 def _rank(metrics: Sequence[MetricChange],
           bridge: Optional[BalanceBridge]) -> List[MetricChange]:
-    """Rank comparable movements and attach the controlled significance wording.
+    """Rank comparable movements WITHIN each unit, and label them accordingly.
 
-    Ranking is by |relative change| where one is defined, and by |movement|
-    within a unit otherwise — never across units, which would compare a
-    percentage point with a pound. Nothing here decides materiality.
+    Ranking is per ``movement_unit``. A currency movement and a percentage-point
+    movement have no common scale: putting them in one sequence made a +0.1%
+    balance drift outrank a +15-point arrears rise and be labelled the largest
+    observed increase. Each unit therefore has its own rank sequence and its own
+    largest increase and decrease. Nothing here decides materiality.
+
+    Within a unit, ordering is by |relative change| where the unit supports one
+    (currency, count, ratio) and by |movement| where it does not (percentage
+    points) — both are meaningful comparisons inside a single unit.
     """
     import dataclasses
 
     comparable = [m for m in metrics if m.comparable and m.movement_value is not None]
-    # Metrics with a relative change rank above those without one, so the
-    # ordering is total and stable regardless of dictionary iteration.
-    ordered = sorted(
-        comparable,
-        key=lambda m: (0 if m.relative_change is not None else 1,
-                       -abs(m.relative_change) if m.relative_change is not None
-                       else -abs(m.movement_value),
-                       m.field))
 
-    ranks = {m.field: index + 1 for index, m in enumerate(ordered)}
-    increases = [m for m in ordered if (m.movement_value or 0) > 0]
-    decreases = [m for m in ordered if (m.movement_value or 0) < 0]
-    largest_increase = increases[0].field if increases else None
-    largest_decrease = decreases[0].field if decreases else None
+    ranks: Dict[str, int] = {}
+    populations: Dict[str, int] = {}
+    largest_increase: Dict[str, str] = {}
+    largest_decrease: Dict[str, str] = {}
+
+    for unit in sorted({m.movement_unit for m in comparable}):
+        group = [m for m in comparable if m.movement_unit == unit]
+        ordered = sorted(
+            group,
+            key=lambda m: (-abs(m.relative_change) if m.relative_change is not None
+                           else -abs(m.movement_value), m.field))
+        for index, metric in enumerate(ordered):
+            ranks[metric.field] = index + 1
+            populations[metric.field] = len(ordered)
+        increases = [m for m in ordered if (m.movement_value or 0) > 0]
+        decreases = [m for m in ordered if (m.movement_value or 0) < 0]
+        if increases:
+            largest_increase[unit] = increases[0].field
+        if decreases:
+            largest_decrease[unit] = decreases[0].field
 
     total_balance_change = None
     if bridge and bridge.status == BRIDGE_STATUS_AVAILABLE \
@@ -319,9 +340,10 @@ def _rank(metrics: Sequence[MetricChange],
         rank = ranks.get(metric.field)
         significance = SIGNIFICANCE_NO_BASIS
         if rank is not None:
-            if metric.field == largest_increase:
+            unit = metric.movement_unit
+            if largest_increase.get(unit) == metric.field:
                 significance = SIGNIFICANCE_LARGEST_INCREASE
-            elif metric.field == largest_decrease:
+            elif largest_decrease.get(unit) == metric.field:
                 significance = SIGNIFICANCE_LARGEST_DECREASE
             elif metric.movement_value == 0:
                 significance = SIGNIFICANCE_RELATIVELY_STABLE
@@ -334,6 +356,7 @@ def _rank(metrics: Sequence[MetricChange],
             contribution = metric.movement_value / total_balance_change
         out.append(dataclasses.replace(
             metric, movement_rank=rank, significance=significance,
+            rank_population=populations.get(metric.field),
             contribution_to_balance_change=contribution))
     return out
 
@@ -379,9 +402,6 @@ def build_summary(metrics: Sequence[MetricChange],
                     if m.interpretation == INTERPRETATION_IMPROVEMENT]
     deteriorations = [m.field for m in comparable
                       if m.interpretation == INTERPRETATION_DETERIORATION]
-    ranked = sorted((m for m in comparable if m.movement_rank),
-                    key=lambda m: m.movement_rank)
-
     def _headline(metric: MetricChange) -> Dict[str, Any]:
         return {
             "canonical_field": metric.field,
@@ -395,7 +415,25 @@ def build_summary(metrics: Sequence[MetricChange],
             "interpretation": metric.interpretation,
             "significance": metric.significance,
             "movement_rank": metric.movement_rank,
+            "movement_rank_scope": metric.movement_unit,
+            "rank_population": metric.rank_population,
         }
+
+    # Top movements are reported PER UNIT. A single flattened list would put a
+    # currency movement above a percentage-point one purely because currency
+    # sorts first, reintroducing the cross-unit comparison this avoids.
+    units = sorted({m.movement_unit for m in comparable if m.movement_rank})
+    top_by_unit = {
+        unit: [_headline(m) for m in sorted(
+            (x for x in comparable
+             if x.movement_unit == unit and x.movement_rank),
+            key=lambda x: x.movement_rank)[:SUMMARY_TOP_N]]
+        for unit in units
+    }
+    largest_increases = [_headline(m) for m in metrics
+                         if m.significance == SIGNIFICANCE_LARGEST_INCREASE]
+    largest_decreases = [_headline(m) for m in metrics
+                         if m.significance == SIGNIFICANCE_LARGEST_DECREASE]
 
     composition: List[Dict[str, Any]] = []
     for dist in distributions:
@@ -429,13 +467,11 @@ def build_summary(metrics: Sequence[MetricChange],
         "not_assessed": [m.field for m in comparable
                          if m.interpretation not in (INTERPRETATION_IMPROVEMENT,
                                                      INTERPRETATION_DETERIORATION)],
-        "top_movements": [_headline(m) for m in ranked[:SUMMARY_TOP_N]],
-        "largest_observed_increase": next(
-            (_headline(m) for m in metrics
-             if m.significance == SIGNIFICANCE_LARGEST_INCREASE), None),
-        "largest_observed_decrease": next(
-            (_headline(m) for m in metrics
-             if m.significance == SIGNIFICANCE_LARGEST_DECREASE), None),
+        # Keyed by unit — never one cross-unit ordering. See RANK_SCOPE_NOTE.
+        "top_movements_by_unit": top_by_unit,
+        "largest_observed_increases": largest_increases,
+        "largest_observed_decreases": largest_decreases,
+        "rank_scope": RANK_SCOPE_NOTE,
         "largest_composition_shifts": composition[:SUMMARY_TOP_N],
         "balance_bridge": (
             {"status": bridge.status,

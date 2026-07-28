@@ -211,6 +211,34 @@ class TestRoutedAnswer:
         assert row["interpretation"] in ("deterioration", "improvement",
                                          "not_assessed", "no_movement")
 
+    def test_the_table_states_the_basis_of_every_figure(self, frames):
+        """A reader must not have to know the registry to tell a share of loans
+        from a share of balance, or a weighted average from a simple one."""
+        out = ask("What changed in the portfolio this month?")
+        table = next(a for a in out["artifacts"] if a["title"] == "Metric movements")
+        assert any(c["key"] == "basis" for c in table["columns"])
+
+        by_field = {r["canonical_field"]: r for r in table["rows"]}
+        assert by_field["interest_in_arrears"]["basis"] == "share of loan count"
+        assert by_field["current_loan_to_value"]["basis"] == (
+            "weighted average by current_outstanding_balance")
+        assert by_field["current_outstanding_balance"]["basis"] == "sum"
+
+    def test_the_table_states_the_scope_each_rank_was_made_within(self, frames):
+        out = ask("What changed in the portfolio this month?")
+        table = next(a for a in out["artifacts"] if a["title"] == "Metric movements")
+        assert any(c["key"] == "rank_scope" for c in table["columns"])
+        by_field = {r["canonical_field"]: r for r in table["rows"]}
+        assert by_field["current_outstanding_balance"]["rank_scope"] == "currency"
+        assert by_field["interest_in_arrears"]["rank_scope"] == "percentage_point"
+
+    def test_the_answer_states_which_unit_each_ranking_covers(self, frames):
+        """Presenting one "largest movements" list would assert a cross-unit
+        comparison the workflow deliberately did not make."""
+        out = ask("What changed in the portfolio this month?")
+        assert "measured in currency" in out["answer"]
+        assert "measured in percentage points" in out["answer"]
+
     def test_the_balance_bridge_reconciles_in_the_rendered_table(self, frames):
         out = ask("What changed in the portfolio this month?")
         bridge = out["periodChange"]["balance_bridge"]

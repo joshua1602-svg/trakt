@@ -7,8 +7,11 @@ governed snapshots, or into an explicit failure.
 Design rules, all from §5 of the workflow specification:
 
 * the platform's reporting dates are **irregular** — nothing here assumes a
-  calendar month end. A requested date is matched to the nearest *available*
-  snapshot and the adjustment is recorded, never hidden;
+  calendar month end. An EXPLICITLY requested date resolves to the latest
+  snapshot at or before it, never forward to a period that had not yet occurred;
+  a relative mode (month-on-month, …) whose target is derived arithmetically
+  takes the absolute nearest. Either way the adjustment and its size in days are
+  recorded, never hidden, and a gap beyond the governed ceiling is refused;
 * every resolution records what was asked for, what it resolved to, how, and
   whether either end moved;
 * the failure cases are enumerated and explicit. In particular the current
@@ -39,6 +42,7 @@ from .models import (
     METHOD_QUARTER_ON_QUARTER,
     METHOD_YEAR_ON_YEAR,
     METHOD_YEAR_TO_DATE,
+    FlowBasis,
     PeriodChangeFailure,
     PeriodResolution,
     PortfolioScopeRef,
@@ -210,10 +214,85 @@ def order_snapshots(snapshots: Sequence[SnapshotFrame]
     return tuple([s for s, _ in dated] + undated)
 
 
+def _guard_gap(gap_days: int, target: date, snap_date: date, label: str,
+               max_gap_days: Optional[int]) -> None:
+    """Refuse a resolution that is further from the request than the ceiling.
+
+    Without this a request for January against a book holding only June 2025 and
+    June 2026 silently answers about a snapshot six months away.
+    """
+    if max_gap_days is None or gap_days <= max_gap_days:
+        return
+    raise PeriodChangeFailure(
+        FAIL_AMBIGUOUS_PERIOD_RANGE,
+        f"The requested {label} date {target.isoformat()} is {gap_days} days "
+        f"from the nearest usable governed snapshot "
+        f"({snap_date.isoformat()}), beyond the {max_gap_days}-day limit for "
+        f"this portfolio. The comparison is not performed rather than answered "
+        f"about a different period.",
+        detail={"requested": target.isoformat(),
+                "resolved": snap_date.isoformat(),
+                "gap_days": gap_days, "max_snapshot_gap_days": max_gap_days})
+
+
+def _on_or_before(snapshots: Sequence[SnapshotFrame], target: date, *,
+                  granularity: str, label: str,
+                  max_gap_days: Optional[int] = None
+                  ) -> Tuple[SnapshotFrame, bool, Optional[str], int]:
+    """The latest snapshot AT OR BEFORE ``target``: ``(snap, adjusted, note, gap)``.
+
+    The rule for an explicitly requested date: never resolve forward to a period
+    that had not yet occurred when the caller's date fell. Absolute-nearest
+    matching would step over a period boundary — a request for 15 January lands
+    on 31 December because it is one day closer — which answers about a
+    different reporting period than the one asked for.
+    """
+    candidates = [(s, d) for s, d in _dated(snapshots) if d is not None]
+    if not candidates:
+        raise PeriodChangeFailure(
+            FAIL_AMBIGUOUS_PERIOD_RANGE,
+            f"No governed snapshot carries a reporting date, so the requested "
+            f"{label} period could not be resolved.")
+
+    eligible = [(s, d) for s, d in candidates if d <= target]
+    if not eligible:
+        earliest = min(d for _s, d in candidates)
+        raise PeriodChangeFailure(
+            FAIL_AMBIGUOUS_PERIOD_RANGE,
+            f"The requested {label} date {target.isoformat()} precedes every "
+            f"governed snapshot (the earliest is {earliest.isoformat()}). A "
+            f"later snapshot is not substituted for a period that had not yet "
+            f"occurred.",
+            detail={"requested": target.isoformat(),
+                    "earliest_snapshot": earliest.isoformat()})
+
+    snap, snap_date = max(eligible, key=lambda pair: (pair[1], pair[0].snapshot_id))
+    gap_days = (target - snap_date).days
+    _guard_gap(gap_days, target, snap_date, label, max_gap_days)
+
+    adjusted = snap_date != target
+    note = None
+    if adjusted:
+        in_month = [d for _s, d in candidates
+                    if (d.year, d.month) == (target.year, target.month)]
+        detail = ("" if not in_month or granularity != GRANULARITY_MONTH else
+                  f" ({len(in_month)} snapshot(s) fall inside the requested month)")
+        note = (f"Requested {label} period {target.isoformat()} resolved to the "
+                f"latest snapshot at or before it, {snap_date.isoformat()} "
+                f"({gap_days} days earlier){detail}.")
+    return snap, adjusted, note, gap_days
+
+
 def _nearest(snapshots: Sequence[SnapshotFrame], target: date, *,
-             granularity: str, label: str
-             ) -> Tuple[SnapshotFrame, bool, Optional[str]]:
-    """The snapshot closest to ``target``: ``(snapshot, adjusted, note)``.
+             granularity: str, label: str,
+             max_gap_days: Optional[int] = None
+             ) -> Tuple[SnapshotFrame, bool, Optional[str], int]:
+    """The snapshot closest to ``target``: ``(snapshot, adjusted, note, gap)``.
+
+    Used for RELATIVE modes only, whose target date is derived arithmetically:
+    on a book whose month end is the 30th, a month-on-month target of the 30th
+    must be allowed to match a 31st. Explicit requests use
+    :func:`_on_or_before` instead.
 
     A month-granularity request prefers a snapshot inside that calendar month
     before falling back to the nearest one. Two snapshots equidistant from a
@@ -231,14 +310,15 @@ def _nearest(snapshots: Sequence[SnapshotFrame], target: date, *,
                     if (d.year, d.month) == (target.year, target.month)]
         if len(in_month) == 1:
             snap, snap_date = in_month[0]
-            return snap, snap_date != target, None
+            return snap, snap_date != target, None, abs((snap_date - target).days)
         if len(in_month) > 1:
             # Several snapshots inside the requested month: the month end is the
             # governed reading of "that month".
             snap, snap_date = max(in_month, key=lambda pair: pair[1])
             return snap, snap_date != target, (
                 f"{len(in_month)} snapshots fall inside the requested {label} "
-                f"month; the latest ({snap_date.isoformat()}) was used.")
+                f"month; the latest ({snap_date.isoformat()}) was used."
+            ), abs((snap_date - target).days)
 
     distances = sorted(
         ((abs((d - target).days), d, s) for s, d in candidates),
@@ -255,13 +335,15 @@ def _nearest(snapshots: Sequence[SnapshotFrame], target: date, *,
             detail={"requested": target.isoformat(),
                     "equidistant": [item[1].isoformat() for item in tied]})
 
-    _distance, snap_date, snap = distances[0]
+    gap_days, snap_date, snap = distances[0]
+    _guard_gap(gap_days, target, snap_date, label, max_gap_days)
     adjusted = snap_date != target
     note = None
     if adjusted:
         note = (f"Requested {label} period {target.isoformat()} adjusted to the "
-                f"nearest available snapshot {snap_date.isoformat()}.")
-    return snap, adjusted, note
+                f"nearest available snapshot {snap_date.isoformat()} "
+                f"({gap_days} days away).")
+    return snap, adjusted, note, gap_days
 
 
 def _latest_on_or_before(snapshots: Sequence[SnapshotFrame], target: date
@@ -290,9 +372,40 @@ def _portfolio_presence(snapshot: SnapshotFrame,
     return tuple(p for p in wanted if p not in present)
 
 
+def reporting_period_days(ordered: Sequence[SnapshotFrame],
+                          snapshot: SnapshotFrame) -> Optional[int]:
+    """The length of ``snapshot``'s own reporting period, in days.
+
+    Derived from the gap to its immediate predecessor in the governed series —
+    the only evidence the platform holds about how long a ``period_flow`` value
+    covers. ``None`` when the snapshot is the earliest held, or is undated.
+    """
+    target = parse_date(snapshot.reporting_date)
+    if target is None:
+        return None
+    earlier = [d for _s, d in _dated(ordered) if d is not None and d < target]
+    if not earlier:
+        return None
+    return (target - max(earlier)).days
+
+
+def resolve_flow_basis(ordered: Sequence[SnapshotFrame],
+                       start: SnapshotFrame, end: SnapshotFrame, *,
+                       tolerance_days: int = 5) -> FlowBasis:
+    """Whether the two snapshots' reporting periods are of comparable length."""
+    start_days = reporting_period_days(ordered, start)
+    end_days = reporting_period_days(ordered, end)
+    if start_days is None or end_days is None:
+        return FlowBasis(start_days, end_days, tolerance_days, None)
+    return FlowBasis(start_days, end_days, tolerance_days,
+                     abs(start_days - end_days) <= tolerance_days)
+
+
 def resolve_periods(snapshots: Sequence[SnapshotFrame],
                     request: PeriodRequest, *,
-                    scope: Optional[PortfolioScopeRef] = None
+                    scope: Optional[PortfolioScopeRef] = None,
+                    max_gap_days: Optional[int] = None,
+                    flow_basis_tolerance_days: int = 5,
                     ) -> PeriodResolution:
     """Resolve a period request to two governed snapshots, or fail explicitly."""
     scope = scope or PortfolioScopeRef()
@@ -305,9 +418,10 @@ def resolve_periods(snapshots: Sequence[SnapshotFrame],
     available = tuple(s.snapshot_id for s in ordered)
     latest_date = parse_date(ordered[-1].reporting_date)
     notes: List[str] = []
+    gaps: Dict[str, Optional[int]] = {"start": None, "end": None}
 
     start, end, method, start_adjusted, end_adjusted = _resolve_pair(
-        ordered, request, latest_date, notes)
+        ordered, request, latest_date, notes, max_gap_days, gaps)
 
     start_date = parse_date(start.reporting_date)
     end_date = parse_date(end.reporting_date)
@@ -334,6 +448,14 @@ def resolve_periods(snapshots: Sequence[SnapshotFrame],
                     "start_snapshot": start.snapshot_id,
                     "end_snapshot": end.snapshot_id})
 
+    flow_basis = resolve_flow_basis(ordered, start, end,
+                                    tolerance_days=flow_basis_tolerance_days)
+    if flow_basis.comparable is False:
+        notes.append(
+            f"The two snapshots cover reporting periods of different length "
+            f"({flow_basis.start_period_days} and {flow_basis.end_period_days} "
+            f"days). Period-flow fields are reported but not compared.")
+
     return PeriodResolution(
         requested_start=request.requested_start,
         requested_end=request.requested_end,
@@ -342,16 +464,21 @@ def resolve_periods(snapshots: Sequence[SnapshotFrame],
         start_adjusted=start_adjusted, end_adjusted=end_adjusted,
         adjustment_notes=tuple(notes),
         available_snapshots=available,
-        portfolio_scope=scope)
+        portfolio_scope=scope,
+        start_gap_days=gaps["start"], end_gap_days=gaps["end"],
+        max_gap_days=max_gap_days, flow_basis=flow_basis)
 
 
 def _resolve_pair(ordered: Sequence[SnapshotFrame], request: PeriodRequest,
-                  latest_date: Optional[date], notes: List[str]
+                  latest_date: Optional[date], notes: List[str],
+                  max_gap_days: Optional[int],
+                  gaps: Dict[str, Optional[int]]
                   ) -> Tuple[SnapshotFrame, SnapshotFrame, str, bool, bool]:
     """The (start, end, method, start_adjusted, end_adjusted) decision."""
     # 1. Explicit dates win: the caller named the periods.
     if request.requested_start or request.requested_end:
-        return _resolve_explicit(ordered, request, latest_date, notes)
+        return _resolve_explicit(ordered, request, latest_date, notes,
+                                 max_gap_days, gaps)
 
     mode = request.relative_mode
     # 2. Previous governed snapshot — no calendar arithmetic at all.
@@ -375,15 +502,19 @@ def _resolve_pair(ordered: Sequence[SnapshotFrame], request: PeriodRequest,
             "The latest governed snapshot carries no reporting date, so a "
             f"{mode.replace('_', '-')} comparison cannot be resolved.")
     target = shift_months(latest_date, offset)
-    start, adjusted, note = _nearest(ordered[:-1], target,
-                                     granularity=GRANULARITY_DAY, label="start")
+    start, adjusted, note, gap = _nearest(
+        ordered[:-1], target, granularity=GRANULARITY_DAY, label="start",
+        max_gap_days=max_gap_days)
+    gaps["start"] = gap
     if note:
         notes.append(note)
     return start, end, mode, adjusted, False
 
 
 def _resolve_explicit(ordered: Sequence[SnapshotFrame], request: PeriodRequest,
-                      latest_date: Optional[date], notes: List[str]
+                      latest_date: Optional[date], notes: List[str],
+                      max_gap_days: Optional[int],
+                      gaps: Dict[str, Optional[int]]
                       ) -> Tuple[SnapshotFrame, SnapshotFrame, str, bool, bool]:
     start_target, start_grain = parse_period_token(
         request.requested_start, reference=latest_date)
@@ -409,8 +540,10 @@ def _resolve_explicit(ordered: Sequence[SnapshotFrame], request: PeriodRequest,
     if end_target is None:
         end, end_adjusted = ordered[-1], False
     else:
-        end, end_adjusted, note = _nearest(ordered, end_target,
-                                           granularity=end_grain, label="end")
+        end, end_adjusted, note, gap = _on_or_before(
+            ordered, end_target, granularity=end_grain, label="end",
+            max_gap_days=max_gap_days)
+        gaps["end"] = gap
         if note:
             notes.append(note)
 
@@ -432,8 +565,10 @@ def _resolve_explicit(ordered: Sequence[SnapshotFrame], request: PeriodRequest,
     # end. Excluding the end snapshot here would quietly slide a "compare 30 June
     # with 30 June" request onto the previous period instead of reporting that
     # both dates resolve to the same snapshot — which is the failure §5 requires.
-    start, start_adjusted, note = _nearest(ordered, start_target,
-                                           granularity=start_grain, label="start")
+    start, start_adjusted, note, gap = _on_or_before(
+        ordered, start_target, granularity=start_grain, label="start",
+        max_gap_days=max_gap_days)
+    gaps["start"] = gap
     if note:
         notes.append(note)
     return start, end, METHOD_EXPLICIT_DATES, start_adjusted, end_adjusted

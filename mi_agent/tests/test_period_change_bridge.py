@@ -148,10 +148,11 @@ def test_the_bridge_is_not_a_cashflow_waterfall():
     out = run(book({"L1": 100.0}), book({"L1": 120.0}))
     data = out.to_dict()
     assert set(data) == {
-        "status", "balance_field", "identifier_field", "opening_balance",
-        "new_loan_closing_balance", "exited_loan_opening_balance",
-        "movement_on_continuing_loans", "closing_balance", "new_loan_count",
-        "exited_loan_count", "continuing_loan_count", "reconciles", "residual",
+        "status", "balance_field", "identifier_field", "identifier_fields",
+        "opening_balance", "new_loan_closing_balance",
+        "exited_loan_opening_balance", "movement_on_continuing_loans",
+        "closing_balance", "new_loan_count", "exited_loan_count",
+        "continuing_loan_count", "reconciles", "residual",
         "rounding_tolerance", "limitation", "evidence"}
 
 
@@ -159,3 +160,82 @@ def test_the_evidence_names_snapshots_not_loans():
     out = run(book({"L1": 100.0}), book({"L1": 120.0}))
     assert [e["snapshot_id"] for e in out.evidence] == ["s0", "s1"]
     assert "L1" not in str(out.evidence)
+
+
+# --------------------------------------------------------------------------- #
+# Loan identity across originators — §14
+# --------------------------------------------------------------------------- #
+class TestCompositeIdentity:
+    def _book(self, rows):
+        """``[(portfolio, loan_id, balance)]`` → a consolidated funded frame."""
+        return pd.DataFrame({
+            "source_portfolio_id": [r[0] for r in rows],
+            "loan_identifier": [r[1] for r in rows],
+            "current_outstanding_balance": [r[2] for r in rows],
+        })
+
+    def test_provenance_makes_the_key_composite(self):
+        start = self._book([("alpha", "0001", 100.0)])
+        end = self._book([("alpha", "0001", 120.0)])
+        out = run(start, end)
+        assert out.identifier_fields == ("source_portfolio_id", "loan_identifier")
+        assert out.identifier_field == "source_portfolio_id + loan_identifier"
+        assert out.continuing_loan_count == 1
+
+    def test_an_identifier_reused_by_two_originators_is_not_one_loan(self):
+        """Originator alpha's 0001 exits and beta's 0001 arrives. On a bare
+        identifier these read as one continuing loan whose balance moved; on the
+        composite key they are correctly an exit and an arrival."""
+        start = self._book([("alpha", "0001", 100.0)])
+        end = self._book([("beta", "0001", 900.0)])
+        out = run(start, end)
+        assert out.status == m.BRIDGE_STATUS_AVAILABLE
+        assert out.exited_loan_count == 1
+        assert out.new_loan_count == 1
+        assert out.continuing_loan_count == 0
+        assert out.continuing_movement == 0.0
+        assert out.exited_loan_balance == 100.0
+        assert out.new_loan_balance == 900.0
+        assert out.reconciles is True
+
+    def test_the_same_identifier_within_one_originator_is_the_same_loan(self):
+        start = self._book([("alpha", "0001", 100.0), ("beta", "0001", 200.0)])
+        end = self._book([("alpha", "0001", 150.0), ("beta", "0001", 250.0)])
+        out = run(start, end)
+        assert out.continuing_loan_count == 2
+        assert out.continuing_movement == 100.0
+        assert out.new_loan_count == 0 and out.exited_loan_count == 0
+
+    def test_a_collision_within_one_originator_still_fails_closed(self):
+        start = self._book([("alpha", "0001", 100.0), ("alpha", "0001", 100.0)])
+        end = self._book([("alpha", "0001", 250.0)])
+        out = run(start, end)
+        assert out.status == m.BRIDGE_STATUS_UNAVAILABLE_DUPLICATE_IDENTIFIERS
+
+    def test_a_blank_key_component_is_a_missing_identifier(self):
+        start = self._book([("alpha", "0001", 100.0), ("", "0002", 50.0)])
+        end = self._book([("alpha", "0001", 120.0)])
+        out = run(start, end)
+        assert out.status == m.BRIDGE_STATUS_UNAVAILABLE_MISSING_IDENTIFIERS
+
+    def test_without_provenance_the_key_stays_bare(self):
+        out = run(book({"L1": 100.0}), book({"L1": 120.0}))
+        assert out.identifier_fields == ("loan_identifier",)
+
+
+def test_a_mixed_currency_book_gets_no_bridge():
+    """A bridge that added GBP to EUR would reconcile arithmetically while
+    meaning nothing — the worst possible failure mode for a reconciliation."""
+    start = pd.DataFrame({
+        "loan_identifier": ["L1", "L2"],
+        "current_outstanding_balance": [100.0, 100.0],
+        "exposure_currency_denomination": ["GBP", "EUR"]})
+    end = pd.DataFrame({
+        "loan_identifier": ["L1", "L2"],
+        "current_outstanding_balance": [120.0, 130.0],
+        "exposure_currency_denomination": ["GBP", "EUR"]})
+    out = run(start, end)
+    assert out.status == m.BRIDGE_STATUS_UNAVAILABLE_MIXED_CURRENCY
+    assert out.opening_balance is None and out.closing_balance is None
+    assert out.reconciles is None
+    assert "currency" in out.limitation.lower()

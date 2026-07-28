@@ -157,7 +157,7 @@ irregular, so nothing assumes a calendar month end.
 
 | Request | Behaviour |
 |---|---|
-| explicit dates | nearest available snapshot to each requested date |
+| explicit dates | the latest available snapshot **at or before** each requested date |
 | `current_vs_previous` | the previous **governed snapshot** — no calendar arithmetic |
 | `month_on_month` / `quarter_on_quarter` / `year_on_year` | end date shifted by 1 / 3 / 12 months, then nearest snapshot |
 | `year_to_date` | the latest snapshot on or before 31 December of the prior year |
@@ -167,10 +167,37 @@ A month end shifted by whole months stays a month end (31 March − 1 month =
 28 February), so a month-on-month request never lands on the wrong snapshot in a
 long month.
 
+### On-or-before, and the gap ceiling
+
+An **explicitly requested** date resolves backwards only. Absolute-nearest
+matching steps over period boundaries: a request for 15 January is one day nearer
+31 December than 31 January, so it would answer about December while appearing to
+answer about January. The rule is therefore *the last governed position at or
+before the date asked for*. A date preceding every snapshot is refused; a later
+snapshot is never substituted for a period that had not yet occurred.
+
+**Relative** modes keep absolute-nearest matching, because their target date is
+derived arithmetically — on a book whose month end is the 30th, a month-on-month
+target of the 30th must be allowed to match a 31st. A day-precise relative target
+equidistant from two snapshots is refused as ambiguous.
+
+Either way the gap is bounded. `max_snapshot_gap_days` (default **45**, and
+overridable per portfolio for a different reporting cadence) is the furthest a
+request may resolve. Beyond it the comparison fails as `ambiguous_period_range`
+rather than answering about a distant period:
+
+```yaml
+period_resolution:
+  max_snapshot_gap_days: 45
+  max_snapshot_gap_days_by_portfolio:
+    quarterly_book_id: 100
+```
+
 Every resolution records: requested start, requested end, resolved start
-snapshot, resolved end snapshot, resolution method, whether either end was
-adjusted, the adjustment wording, the full list of available snapshots, and the
-portfolio scope.
+snapshot, resolved end snapshot, **the gap in days at each end**, the ceiling
+applied, the interval between the two snapshots, the flow basis, resolution
+method, whether either end was adjusted, the adjustment wording, the full list of
+available snapshots, and the portfolio scope.
 
 ### Explicit failures
 
@@ -223,6 +250,23 @@ That distinction is the point: a differenced cumulative *is* the interval amount
 a differenced pair of flows is a change in run-rate, and must never be read as
 the first.
 
+### Flow basis — are the two periods the same length?
+
+The registry says a field is a `period_flow`; it does not say what period. Two
+flows are comparable period totals only when each covers a reporting period of
+similar length, so the workflow derives that length from the gap to each
+snapshot's immediate predecessor in the governed series:
+
+| Case | Behaviour |
+|---|---|
+| lengths within `flow_basis_tolerance_days` (default 5) | compared normally |
+| lengths differ by more | `not_comparable_period_basis`: both values reported, **no movement calculated**, mismatch noted |
+| a length cannot be established (the opening snapshot is the earliest held) | compared, with an explicit note that equal periods could not be confirmed |
+
+Unknown is not treated as mismatched. With exactly two snapshots the opening
+period's length is unknowable, and disqualifying every flow on that basis would
+report uncertainty as a defect.
+
 A cumulative value that **falls** between snapshots keeps its negative movement —
 it is never floored at zero — and raises a data-quality warning
 (`source_convention_uncertain`) noting a possible restatement or source
@@ -253,7 +297,11 @@ population, excluded rows, total eligible weight, numerator and denominator.
 
 **A count share is never silently turned into a balance share.** `share_basis`
 decides; `count` is the v2 default for flag shares, `balance` uses the governed
-balance field, and any other basis is refused rather than downgraded. A flag
+balance field, and any other basis is refused rather than downgraded. The basis
+is **displayed**, not merely recorded: the rendered table carries a **Basis**
+column reading "share of loan count", "weighted average by
+current_outstanding_balance", "sum" and so on, so a reader does not have to know
+the registry to tell an arrears share of *loans* from one of *balance*. A flag
 value outside the governed yes/no vocabulary is excluded from *both* the
 numerator and the denominator and reported as `source_convention_uncertain` —
 counting an unknown code as "no" would understate every flag share on a tape with
@@ -307,6 +355,13 @@ entries are reduced to a governed subset by, in order: workflow tag → role →
 asset applicability → availability → confidence floor → MI core/extended tier →
 concept coverage → non-duplication (at most one measure per
 `(concept, aggregation, temporality)` signature).
+
+Selection runs in **two passes**. The first reserves one measure for every
+eligible concept; the second spends the remaining budget on second and third
+measures in concept order. Without the reservation the total cap was consumed by
+the concepts listed first and the last ones — coverage, liquidity — vanished from
+the overview entirely, which a reader takes to mean "nothing changed there"
+rather than "not reported".
 
 The overview covers exposure, payment performance, credit quality, leverage,
 collateral, valuation, pricing, maturity, cashflow, loss, coverage and liquidity,
@@ -372,10 +427,21 @@ tolerance of 0.01. Identifier fields are tried in canonical order
 (`loan_identifier`, `original_loan_identifier`,
 `underlying_exposure_identifier`).
 
+**Loan identity is composite where provenance allows it.** Originators reuse
+simple sequences, so on a consolidated book `loan_identifier` alone is not an
+identity: originator A's loan `0001` exiting and originator B's `0001` arriving
+would read as one continuing loan whose balance moved. Where
+`source_portfolio_id` exists in both snapshots the key becomes
+`source_portfolio_id + loan_identifier`; `identifier_fields` records which
+columns were used, so an audit can see whether provenance was available to
+disambiguate.
+
 The bridge is **omitted entirely**, with an explicit limitation, when the balance
-field is absent, no canonical identifier is present in both snapshots,
-identifiers are duplicated, or identifiers are missing. An estimated bridge looks
-like a reconciliation and is not one.
+field is absent, the book reports more than one currency, no canonical identifier
+is present in both snapshots, identifiers are duplicated, or any key component is
+missing. An estimated bridge looks like a reconciliation and is not one — and a
+bridge that adds GBP to EUR reconciles arithmetically while meaning nothing,
+which is the worst failure mode a reconciliation has.
 
 Deliberately out of scope: cashflow waterfalls, attribution models, inferred
 transaction ledgers.
@@ -383,6 +449,21 @@ transaction ledgers.
 ---
 
 ## 11. Materiality boundary and directionality
+
+### Ranking is within a unit, never across units
+
+A currency movement and a percentage-point movement have no common scale.
+Ranking them in one sequence made a +0.1% balance drift outrank a +15-point
+arrears rise and be labelled the largest observed increase — a plausible-looking
+statement that was simply wrong.
+
+Each unit therefore has its **own** rank sequence, its own largest increase and
+its own largest decrease. `movement_rank` is a rank *within* `movement_unit`;
+`rank_population` states how many metrics share that unit, so "rank 1" is never
+read as "the largest movement in the portfolio". The summary reports
+`top_movements_by_unit` keyed by unit, and the rendered table carries a
+**Ranked within** column. Within one unit, ordering is by |relative change| where
+the unit supports one and by |movement| where it does not.
 
 ### Materiality
 
@@ -401,9 +482,9 @@ Every result carries:
 > movements are ranked by observed size only. No movement is described as
 > material, significant, a breach or high risk.
 
-Ranking is by `|relative change|` where one is defined and by `|movement|` within
-a unit otherwise — never across units, which would compare a percentage point
-with a pound.
+> Movements are ranked within their unit of measurement. A currency movement and
+> a percentage-point movement are not ranked against each other, because they
+> have no common scale.
 
 ### Directionality
 
@@ -440,7 +521,7 @@ Controlled statuses: `available`, `partially_available`, `not_available`,
 | new / disappearing enum values | reported with `presence`; enum labels normalised |
 | duplicate loan identifiers | bridge omitted with an explicit limitation |
 | missing loan identifiers | bridge omitted with an explicit limitation |
-| mixed currencies | monetary amounts **not** aggregated; status `not_comparable` |
+| mixed currencies | **every** monetary output suppressed: metric aggregates (`not_comparable_mixed_currency`), distribution balance shares, and the balance bridge (`unavailable_mixed_currency`). Counts, rates and count shares remain valid and are still answered |
 
 ---
 
@@ -509,7 +590,9 @@ Two governed monthly runs, 100 → 106 loans, produced by the code in this
 repository (`mi_agent_api/tests/test_period_change_route.py` exercises the same
 path against on-disk runs).
 
-Resolved period: `latest_available_pair`, 2026-05-31 → 2026-06-30.
+Resolved period: `latest_available_pair`, 2026-05-31 → 2026-06-30. Ranking below
+is within each unit, so the currency and percentage-point movements each have
+their own rank-1.
 
 ### 1. Current balance — a point-in-time stock
 
@@ -573,6 +656,9 @@ share can move in opposite directions.
 
 ### 8. Balance bridge
 
+Key: `source_portfolio_id + loan_identifier` (provenance present in both
+snapshots).
+
 | Component | Amount | Loans |
 |---|---|---|
 | Opening balance | £48,200,000 | 100 |
@@ -592,17 +678,26 @@ Reconciles: residual £0.00, inside the 0.01 tolerance.
    (§8). 14 of the 106 period-change entries are therefore withheld by default.
 2. **Funded book only.** The workflow reads the funded per-period frames.
    Pipeline and forecast views are declined rather than answered from funded data.
-3. **Incumbent routes keep their questions.** `period_movement` and
-   `temporal_compare` retain the questions they already answer (§3).
-4. **No migration matrix.** `derived_input` fields (previous/current PD, LGD,
+3. **Three movement engines still exist.** `period_movement` and
+   `temporal_compare` retain the questions they already answer (§3), and they do
+   NOT share this workflow's arithmetic — notably they fall back to a simple mean
+   on a zero-weight population where this workflow refuses. See
+   [`movement_engine_consolidation_plan.md`](movement_engine_consolidation_plan.md)
+   for the divergences and the proposed consolidation.
+4. **Flow basis is inferred, not declared.** The reporting-period length behind a
+   `period_flow` value is derived from the snapshot series, not from registry
+   metadata. A field that is genuinely month-to-date while the snapshots are
+   quarterly cannot be distinguished from a quarterly flow. A per-field period
+   basis in the BSR would close this.
+5. **No migration matrix.** `derived_input` fields (previous/current PD, LGD,
    IFRS 9 stage, risk grade) are excluded from overview metrics. No new migration
    formula is invented merely because previous/current inputs exist; the existing
    `mi_agent.risk_monitor.migration` service remains the governed migration path.
-5. **Balance bridge is identity-based only.** It distinguishes new, continuing and
+6. **Balance bridge is identity-based only.** It distinguishes new, continuing and
    exited loans. It is not a cashflow waterfall and does not attribute causes.
-6. **No materiality.** Movements are ranked, never classified. Materiality
+7. **No materiality.** Movements are ranked, never classified. Materiality
    requires a configured governed rule, and none exists.
-7. **Currency.** Mixed-currency snapshots produce no monetary totals; there is no
+8. **Currency.** Mixed-currency snapshots produce no monetary totals; there is no
    governed currency-normalisation capability to call.
 
 ---
@@ -612,7 +707,9 @@ Reconciles: residual £0.00, inside the 0.01 tolerance.
 | Extension | Where |
 |---|---|
 | Source-specific temporality overrides | `config/business_semantics_source_overrides.yaml` → `BusinessSemanticsRegistry.for_source()`. A source that reports `allocated_losses` as a period figure is corrected in **configuration**; no workflow code changes, and the override is recorded in the audit block. Only `temporality`, `default_aggregation`, `weight_field`, `share_basis`, `confidence` and `rationale` may be overridden — re-pointing a field's concept or role is curation and belongs in the registry build. |
-| Field-selection policy | `config/period_change_selection.yaml` — concepts, caps, confidence floor, MI-tier preference, non-duplication. |
+| Field-selection policy | `config/period_change_selection.yaml` — concepts, caps, confidence floor, MI-tier preference, non-duplication, per-concept reservation. |
+| Snapshot gap ceiling | `period_resolution.max_snapshot_gap_days` plus a per-portfolio override map, for books on a different reporting cadence. |
+| Flow-basis tolerance | `period_resolution.flow_basis_tolerance_days`. |
 | Asset classification | `period_change_route.resolve_asset_classes()` — supply a governed asset class and the asset-specific registry entries become eligible. |
 | Governed semantic hints from the parser | `ParsedQuestion.semantics_context` → `recognition.recognise(semantics_context=…)` accepts `period_change_fields` / `period_change_concepts` with no signature change. |
 | New share bases | `calculations.SUPPORTED_SHARE_BASES`. An unsupported basis is refused, never downgraded. |
@@ -643,4 +740,10 @@ sources:
 | `mi_agent/tests/test_period_change_bridge.py` | reconciliation, tolerance, every unavailable case |
 | `mi_agent/tests/test_period_change_recognition.py` | positives, negative controls, incumbent deference |
 | `mi_agent/tests/test_period_change_workflow.py` | modes, worked examples, ranking, summary, governance, audit |
-| `mi_agent_api/tests/test_period_change_route.py` | snapshot supply, rendering, registry precedence, on-disk end-to-end |
+| `mi_agent_api/tests/test_period_change_route.py` | snapshot supply, rendering, basis and rank-scope columns, registry precedence, on-disk end-to-end |
+
+Behaviours added after the first review, each with dedicated tests: on-or-before
+explicit date resolution, the snapshot-gap ceiling, flow-basis mismatch,
+per-unit ranking, composite bridge identity, mixed-currency suppression across
+every monetary output, the per-concept reservation, and a guard asserting the
+summary never asserts causation.

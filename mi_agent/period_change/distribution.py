@@ -34,8 +34,9 @@ from analytics_lib.numeric import coerce_numeric
 from analytics_lib.stratify import UNKNOWN_LABEL
 
 from ..business_semantics import BusinessSemanticsEntry
-from .calculations import BALANCE_FIELD
+from .calculations import BALANCE_FIELD, mixed_currency
 from .models import (
+    MIXED_CURRENCY_NOTE,
     STATUS_AVAILABLE,
     STATUS_NOT_AVAILABLE,
     STATUS_NOT_COMPARABLE_DUE_TO_AVAILABILITY,
@@ -129,8 +130,13 @@ def distribution_change(entry: BusinessSemanticsEntry,
                    f"reporting dates, so its composition shift cannot be "
                    f"calculated.",))
 
-    with_balance = all(BALANCE_FIELD in getattr(f, "columns", [])
-                       for f in (start_df, end_df))
+    # Balance shares need the governed balance field AND a single currency: a
+    # balance share summed across GBP and EUR is a ratio of two meaningless
+    # totals. The same test the metric aggregate and the bridge use.
+    currency_mixed = any(mixed_currency(f) for f in (start_df, end_df))
+    with_balance = (all(BALANCE_FIELD in getattr(f, "columns", [])
+                        for f in (start_df, end_df))
+                    and not currency_mixed)
     start_table, start_count, start_balance = _snapshot_table(
         start_df, field, with_balance=with_balance)
     end_table, end_count, end_balance = _snapshot_table(
@@ -192,8 +198,9 @@ def distribution_change(entry: BusinessSemanticsEntry,
             f"records; shares are calculated against each snapshot's own total.")
     if not with_balance:
         notes.append(
-            f"Balance shares are not reported: the governed balance field "
-            f"{BALANCE_FIELD!r} is not available in both snapshots.")
+            MIXED_CURRENCY_NOTE if currency_mixed else
+            (f"Balance shares are not reported: the governed balance field "
+             f"{BALANCE_FIELD!r} is not available in both snapshots."))
 
     unknown = next((c for c in shifts if c.category == UNKNOWN_LABEL), None)
     status = STATUS_AVAILABLE

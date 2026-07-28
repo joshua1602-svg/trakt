@@ -35,6 +35,24 @@ temporality:
   excluded_from_ranking:
     - static_baseline
 
+period_resolution:
+  # An EXPLICITLY requested date resolves to the latest available snapshot at or
+  # before it — never forward to a period that had not yet occurred. Beyond this
+  # gap the request is refused rather than answered about a distant period.
+  #
+  # Relative modes (month-on-month, quarter-on-quarter, …) keep absolute-nearest
+  # matching: their target date is derived arithmetically, and on a book whose
+  # month end is the 30th a target of the 30th must be allowed to match the 31st.
+  # The gap ceiling below applies to both.
+  max_snapshot_gap_days: 45
+  # Per-portfolio overrides for books on a different reporting cadence. Keyed by
+  # the governed portfolio / context id; falls back to the default above.
+  max_snapshot_gap_days_by_portfolio: {}
+  # Two period_flow values are only comparable when each covers a reporting
+  # period of similar length. Periods differing by more than this are reported
+  # as not_comparable rather than presented as a movement in run-rate.
+  flow_basis_tolerance_days: 5
+
 overview:
   # The concepts a governed overview covers, in report order. Concept coverage
   # is a selection input: the overview spreads across concepts rather than
@@ -62,6 +80,11 @@ overview:
     - maturity
   max_measures_per_concept: 3
   max_measures_total: 18
+  # Reserve one measure for EVERY eligible concept before spending the budget on
+  # second and third measures. Without this the concepts listed last (coverage,
+  # liquidity) are starved by the total cap and vanish from the overview
+  # entirely, which reads as "nothing changed there" rather than "not reported".
+  reserve_one_measure_per_concept: true
   max_dimensions: 4
   # Minimum governed confidence for an overview metric. "low" would admit
   # entries the registry review itself flagged as uncertain.

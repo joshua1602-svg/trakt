@@ -28,9 +28,11 @@ import pandas as pd
 
 from analytics_lib.numeric import coerce_numeric
 
-from .calculations import BALANCE_FIELD
+from .calculations import BALANCE_FIELD, mixed_currency
 from .models import (
     BRIDGE_ROUNDING_TOLERANCE,
+    BRIDGE_STATUS_UNAVAILABLE_MIXED_CURRENCY,
+    MIXED_CURRENCY_NOTE,
     BRIDGE_STATUS_AVAILABLE,
     BRIDGE_STATUS_DOES_NOT_RECONCILE,
     BRIDGE_STATUS_UNAVAILABLE_DUPLICATE_IDENTIFIERS,
@@ -49,6 +51,13 @@ from .models import (
 IDENTIFIER_FIELDS: Tuple[str, ...] = (
     "loan_identifier", "original_loan_identifier", "underlying_exposure_identifier")
 
+#: Provenance column that qualifies a loan identifier. Originators reuse simple
+#: sequences ("0001"), so on a consolidated book the identifier alone is not a
+#: loan identity. Where this column exists in both snapshots the key becomes
+#: composite, which is what stops originator A's loan 0001 exiting and
+#: originator B's loan 0001 arriving from reading as one continuing loan.
+QUALIFIER_FIELD = "source_portfolio_id"
+
 
 def _resolve_identifier(start_df: Any, end_df: Any) -> Optional[str]:
     for column in IDENTIFIER_FIELDS:
@@ -58,16 +67,49 @@ def _resolve_identifier(start_df: Any, end_df: Any) -> Optional[str]:
     return None
 
 
-def _keyed(df: Any, identifier: str) -> Tuple[pd.Series, int, int]:
-    """``(balance_by_id, missing_identifier_count, duplicate_id_count)``."""
-    ids = df[identifier].astype("string").str.strip()
-    blank = ids.isna() | ids.eq("") | ids.str.lower().isin(
-        ["nan", "none", "<na>", "null"])
+def resolve_key_fields(start_df: Any, end_df: Any) -> Tuple[str, ...]:
+    """The loan-identity key: composite where provenance allows, else bare.
+
+    Returns ``()`` when no canonical identifier is present in both snapshots.
+    """
+    identifier = _resolve_identifier(start_df, end_df)
+    if identifier is None:
+        return ()
+    if all(QUALIFIER_FIELD in getattr(f, "columns", [])
+           for f in (start_df, end_df)):
+        return (QUALIFIER_FIELD, identifier)
+    return (identifier,)
+
+
+def _key_series(df: Any, key_fields: Tuple[str, ...]) -> pd.Series:
+    """One normalised identity string per row, from one or more columns."""
+    parts = []
+    for column in key_fields:
+        parts.append(df[column].astype("string").str.strip().str.lower())
+    key = parts[0]
+    for extra in parts[1:]:
+        key = key.str.cat(extra, sep="␟", na_rep="")
+    return key
+
+
+def _keyed(df: Any, key_fields: Tuple[str, ...]) -> Tuple[pd.Series, int, int]:
+    """``(balance_by_key, missing_identifier_count, duplicate_key_count)``.
+
+    A row is "missing" when ANY component of the key is blank: a composite key
+    with a blank half identifies nothing.
+    """
+    blank = None
+    for column in key_fields:
+        col = df[column].astype("string").str.strip()
+        col_blank = col.isna() | col.eq("") | col.str.lower().isin(
+            ["nan", "none", "<na>", "null"])
+        blank = col_blank if blank is None else (blank | col_blank)
+
     missing = int(blank.sum())
-    usable = ids[~blank]
-    duplicates = int(len(usable) - usable.nunique())
+    keys = _key_series(df, key_fields)[~blank]
+    duplicates = int(len(keys) - keys.nunique())
     balances = coerce_numeric(df[BALANCE_FIELD]).fillna(0.0)[~blank]
-    return pd.Series(balances.values, index=usable.values), missing, duplicates
+    return pd.Series(balances.values, index=keys.values), missing, duplicates
 
 
 def balance_bridge(start_snapshot: SnapshotFrame, end_snapshot: SnapshotFrame
@@ -82,8 +124,16 @@ def balance_bridge(start_snapshot: SnapshotFrame, end_snapshot: SnapshotFrame
                         f"{BALANCE_FIELD!r} in both snapshots. It is not "
                         f"available, so no bridge is reported."))
 
-    identifier = _resolve_identifier(start_df, end_df)
-    if identifier is None:
+    if any(mixed_currency(f) for f in (start_df, end_df)):
+        return BalanceBridge(
+            status=BRIDGE_STATUS_UNAVAILABLE_MIXED_CURRENCY,
+            balance_field=BALANCE_FIELD,
+            limitation=(MIXED_CURRENCY_NOTE + " A bridge that added them would "
+                        "reconcile arithmetically while meaning nothing, so no "
+                        "bridge is reported."))
+
+    key_fields = resolve_key_fields(start_df, end_df)
+    if not key_fields:
         return BalanceBridge(
             status=BRIDGE_STATUS_UNAVAILABLE_NO_IDENTIFIER,
             balance_field=BALANCE_FIELD,
@@ -92,14 +142,16 @@ def balance_bridge(start_snapshot: SnapshotFrame, end_snapshot: SnapshotFrame
                         f"identifier fields ({', '.join(IDENTIFIER_FIELDS)}) is "
                         "available, so no bridge is reported and none is "
                         "estimated."))
+    identifier = " + ".join(key_fields)
 
-    start_balances, start_missing, start_dupes = _keyed(start_df, identifier)
-    end_balances, end_missing, end_dupes = _keyed(end_df, identifier)
+    start_balances, start_missing, start_dupes = _keyed(start_df, key_fields)
+    end_balances, end_missing, end_dupes = _keyed(end_df, key_fields)
 
     if start_dupes or end_dupes:
         return BalanceBridge(
             status=BRIDGE_STATUS_UNAVAILABLE_DUPLICATE_IDENTIFIERS,
             balance_field=BALANCE_FIELD, identifier_field=identifier,
+            identifier_fields=key_fields,
             limitation=(f"{start_dupes} opening and {end_dupes} closing records "
                         f"share a duplicate {identifier!r}. Loan identity cannot "
                         f"be established, so no bridge is reported."))
@@ -107,6 +159,7 @@ def balance_bridge(start_snapshot: SnapshotFrame, end_snapshot: SnapshotFrame
         return BalanceBridge(
             status=BRIDGE_STATUS_UNAVAILABLE_MISSING_IDENTIFIERS,
             balance_field=BALANCE_FIELD, identifier_field=identifier,
+            identifier_fields=key_fields,
             limitation=(f"{start_missing} opening and {end_missing} closing "
                         f"records carry no {identifier!r}. A bridge over a "
                         f"partial population would not reconcile to the book, "
@@ -136,6 +189,7 @@ def balance_bridge(start_snapshot: SnapshotFrame, end_snapshot: SnapshotFrame
         status=(BRIDGE_STATUS_AVAILABLE if reconciles
                 else BRIDGE_STATUS_DOES_NOT_RECONCILE),
         balance_field=BALANCE_FIELD, identifier_field=identifier,
+        identifier_fields=key_fields,
         opening_balance=opening, closing_balance=closing,
         new_loan_balance=new_balance, exited_loan_balance=exited_balance,
         continuing_movement=continuing_movement,

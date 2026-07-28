@@ -165,27 +165,71 @@ class TestExplicitResolution:
         assert (out.start_snapshot.reporting_date,
                 out.end_snapshot.reporting_date) == ("2026-03-31", "2026-06-30")
 
-    def test_a_requested_date_the_platform_never_reported_is_adjusted_and_recorded(self):
+    def test_an_explicit_date_never_resolves_forward_to_a_later_period(self):
+        """20 January is 11 days from 31 January and 20 from 31 December, but
+        the January snapshot did not exist when the caller's date fell. The
+        governed answer is the last position AT OR BEFORE the request."""
         out = resolve_periods(MONTHLY, PeriodRequest(
             requested_start="2026-01-20", requested_end="2026-06-30"))
-        assert out.start_snapshot.reporting_date == "2026-01-31"
+        assert out.start_snapshot.reporting_date == "2025-12-31"
         assert out.start_adjusted is True
         assert out.end_adjusted is False
-        assert any("adjusted to the nearest available snapshot" in n
-                   for n in out.adjustment_notes)
+        assert out.start_gap_days == 20
+        assert out.end_gap_days == 0
+        assert any("at or before it" in n for n in out.adjustment_notes)
+
+    def test_an_exactly_matched_date_has_no_gap_and_is_not_refused(self):
+        out = resolve_periods(MONTHLY, PeriodRequest(
+            requested_start="2026-03-31", requested_end="2026-06-30"),
+            max_gap_days=45)
+        assert out.start_gap_days == 0 and out.end_gap_days == 0
+        assert not out.any_adjusted
+
+    def test_a_request_far_from_any_snapshot_is_refused_not_answered(self):
+        sparse = [snap("a", "2025-06-30"), snap("b", "2026-06-30")]
+        with pytest.raises(m.PeriodChangeFailure) as err:
+            resolve_periods(sparse, PeriodRequest(
+                requested_start="2026-01-31", requested_end="2026-06-30"),
+                max_gap_days=45)
+        assert err.value.reason == m.FAIL_AMBIGUOUS_PERIOD_RANGE
+        assert err.value.detail["gap_days"] == 215
+        assert err.value.detail["max_snapshot_gap_days"] == 45
+
+    def test_the_ceiling_is_configurable_for_a_different_cadence(self):
+        sparse = [snap("a", "2025-06-30"), snap("b", "2026-06-30")]
+        out = resolve_periods(sparse, PeriodRequest(
+            requested_start="2026-01-31", requested_end="2026-06-30"),
+            max_gap_days=365)
+        assert out.start_snapshot.reporting_date == "2025-06-30"
+        assert out.start_gap_days == 215
+        assert out.max_gap_days == 365
+
+    def test_a_date_before_every_snapshot_is_refused(self):
+        with pytest.raises(m.PeriodChangeFailure) as err:
+            resolve_periods(MONTHLY, PeriodRequest(
+                requested_start="2024-01-31", requested_end="2026-06-30"))
+        assert err.value.reason == m.FAIL_AMBIGUOUS_PERIOD_RANGE
+        assert "precedes every governed snapshot" in err.value.message
 
     def test_only_an_end_date_compares_against_the_snapshot_before_it(self):
         out = resolve_periods(MONTHLY, PeriodRequest(requested_end="2026-03-31"))
         assert (out.start_snapshot.reporting_date,
                 out.end_snapshot.reporting_date) == ("2026-02-28", "2026-03-31")
 
-    def test_a_month_containing_several_snapshots_resolves_to_the_month_end(self):
+    def test_a_requested_month_takes_the_latest_snapshot_within_it(self):
+        """"June" means the June position. With a month end present that is the
+        month end; with only a mid-month cut it is the mid-month cut, never
+        July."""
         series = MONTHLY + [snap("mid", "2026-06-15")]
         out = resolve_periods(series, PeriodRequest(
             requested_start="March", requested_end="June"))
         assert out.end_snapshot.reporting_date == "2026-06-30"
-        assert any("snapshots fall inside the requested end month"
-                   in n for n in out.adjustment_notes)
+
+        no_month_end = [s for s in series if s.reporting_date != "2026-06-30"]
+        out = resolve_periods(no_month_end, PeriodRequest(
+            requested_start="March", requested_end="June"))
+        assert out.end_snapshot.reporting_date == "2026-06-15"
+        assert out.end_adjusted is True
 
 
 # --------------------------------------------------------------------------- #
@@ -214,14 +258,17 @@ class TestFailures:
             resolve_periods(MONTHLY, PeriodRequest(requested_start="whenever"))
         assert err.value.reason == m.FAIL_AMBIGUOUS_PERIOD_RANGE
 
-    def test_an_equidistant_day_precise_request_is_ambiguous(self):
-        series = [snap("a", "2026-01-10"), snap("b", "2026-01-20"),
-                  snap("c", "2026-06-30")]
+    def test_an_equidistant_relative_target_is_ambiguous(self):
+        """Explicit dates resolve on-or-before and cannot tie. A RELATIVE target
+        is derived arithmetically and still can, and is refused rather than
+        broken by an arbitrary rule."""
+        series = [snap("a", "2026-05-10"), snap("b", "2026-05-20"),
+                  snap("c", "2026-06-15")]
         with pytest.raises(m.PeriodChangeFailure) as err:
             resolve_periods(series, PeriodRequest(
-                requested_start="2026-01-15", requested_end="2026-06-30"))
+                relative_mode=m.METHOD_MONTH_ON_MONTH))
         assert err.value.reason == m.FAIL_AMBIGUOUS_PERIOD_RANGE
-        assert err.value.detail["equidistant"] == ["2026-01-10", "2026-01-20"]
+        assert err.value.detail["equidistant"] == ["2026-05-10", "2026-05-20"]
 
     def test_a_portfolio_absent_at_one_date_fails_explicitly(self):
         series = [snap("a", "2026-05-31", portfolios=("p1",)),
@@ -247,14 +294,22 @@ class TestFailures:
 def test_the_resolution_records_everything_needed_to_reproduce_it():
     out = resolve_periods(MONTHLY, PeriodRequest(
         requested_start="2026-01-20", requested_end="2026-06-30"),
-        scope=m.PortfolioScopeRef(tenant_id="t", label="Total"))
+        scope=m.PortfolioScopeRef(tenant_id="t", label="Total"),
+        max_gap_days=45)
     data = out.to_dict()
     assert data["requested_start_period"] == "2026-01-20"
     assert data["requested_end_period"] == "2026-06-30"
     assert data["resolution_method"] == m.METHOD_EXPLICIT_DATES
-    assert data["resolved_start_snapshot"]["reporting_date"] == "2026-01-31"
+    assert data["resolved_start_snapshot"]["reporting_date"] == "2025-12-31"
     assert data["resolved_end_snapshot"]["reporting_date"] == "2026-06-30"
     assert data["start_adjusted_to_available_snapshot"] is True
     assert data["end_adjusted_to_available_snapshot"] is False
     assert data["portfolio_scope"]["tenant_id"] == "t"
+    assert data["start_gap_days"] == 20
+    assert data["end_gap_days"] == 0
+    assert data["max_snapshot_gap_days"] == 45
+    assert data["interval_days"] == 181
+    assert data["flow_basis"]["start_period_days"] == 31   # 30 Nov -> 31 Dec
+    assert data["flow_basis"]["end_period_days"] == 30     # 31 May -> 30 Jun
+    assert data["flow_basis"]["comparable"] is True
     assert len(data["available_snapshots"]) == len(MONTHLY)

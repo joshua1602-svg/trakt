@@ -211,7 +211,7 @@ def test_amounts_are_not_aggregated_across_currencies():
                        "exposure_currency_denomination": ["GBP", "EUR"]})
     out = aggregate(df, build_pair_context(e, [df]))
     assert out.value is None
-    assert out.status == m.STATUS_NOT_COMPARABLE
+    assert out.status == m.STATUS_NOT_COMPARABLE_MIXED_CURRENCY
 
 
 # --------------------------------------------------------------------------- #

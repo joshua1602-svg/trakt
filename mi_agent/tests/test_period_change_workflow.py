@@ -199,14 +199,51 @@ class TestRankingAndSignificance:
     def result(self, snapshots):
         return run_period_change_analysis(request(), snapshots)
 
-    def test_comparable_movements_are_ranked(self, result):
-        ranks = [x.movement_rank for x in result.metric_changes
-                 if x.movement_rank is not None]
-        assert sorted(ranks) == list(range(1, len(ranks) + 1))
+    def test_movements_are_ranked_within_their_unit_never_across_units(self, result):
+        """A currency movement and a percentage-point movement have no common
+        scale. Each unit gets its own 1..n sequence."""
+        from collections import defaultdict
 
-    def test_the_largest_increase_and_decrease_are_named(self, result):
+        by_unit = defaultdict(list)
+        for change in result.metric_changes:
+            if change.movement_rank is not None:
+                by_unit[change.movement_unit].append(change.movement_rank)
+        assert len(by_unit) > 1, "fixture must exercise more than one unit"
+        for unit, ranks in by_unit.items():
+            assert sorted(ranks) == list(range(1, len(ranks) + 1)), unit
+        for change in result.metric_changes:
+            if change.movement_rank is not None:
+                assert change.rank_population == len(by_unit[change.movement_unit])
+
+    def test_a_tiny_currency_move_does_not_outrank_a_large_rate_move(self):
+        """The defect this replaced: a +0.1% balance drift was ranked above a
+        +15-point arrears rise and labelled the largest observed increase."""
+        start = book(loans=100, balance=1_000_000.0, ltv=0.40, arrears=2,
+                     status=["Performing"])
+        end = book(loans=100, balance=1_001_000.0, ltv=0.48, arrears=17,
+                   status=["Performing"])
+        out = run_period_change_analysis(request(), [
+            m.SnapshotFrame("a", "2026-03-31", start),
+            m.SnapshotFrame("b", "2026-06-30", end)])
+
+        balance = metric(out, "current_outstanding_balance")
+        arrears = metric(out, "interest_in_arrears")
+        assert balance.movement_unit == m.UNIT_CURRENCY
+        assert arrears.movement_unit == m.UNIT_PERCENTAGE_POINT
+        # Each is the largest observed increase IN ITS OWN UNIT, and both say so.
+        assert balance.significance == m.SIGNIFICANCE_LARGEST_INCREASE
+        assert arrears.significance == m.SIGNIFICANCE_LARGEST_INCREASE
+        assert balance.movement_rank == 1 and arrears.movement_rank == 1
+        increases = {row["canonical_field"]
+                     for row in out.summary["largest_observed_increases"]}
+        assert {"current_outstanding_balance", "interest_in_arrears"} <= increases
+
+    def test_the_largest_increase_and_decrease_are_named_per_unit(self, result):
         significances = {x.significance for x in result.metric_changes}
         assert m.SIGNIFICANCE_LARGEST_INCREASE in significances
+        for row in result.summary["largest_observed_increases"]:
+            assert row["movement_rank_scope"] == row["movement_unit"]
+        assert m.RANK_SCOPE_NOTE == result.summary["rank_scope"]
 
     def test_no_movement_is_called_material_or_a_breach(self, result):
         # The disclaimer itself names the words it refuses to use, so it is
@@ -240,9 +277,16 @@ class TestSummary:
 
     def test_the_summary_only_restates_calculated_values(self, result):
         calculated = {x.field: x.movement_value for x in result.metric_changes}
-        for row in result.summary["top_movements"]:
-            assert row["canonical_field"] in calculated
-            assert row["movement_value"] == calculated[row["canonical_field"]]
+        for rows in result.summary["top_movements_by_unit"].values():
+            for row in rows:
+                assert row["canonical_field"] in calculated
+                assert row["movement_value"] == calculated[row["canonical_field"]]
+
+    def test_top_movements_are_grouped_by_unit_not_flattened(self, result):
+        by_unit = result.summary["top_movements_by_unit"]
+        assert len(by_unit) > 1
+        for unit, rows in by_unit.items():
+            assert all(row["movement_unit"] == unit for row in rows)
 
     def test_improvements_and_deteriorations_come_from_directionality(self, result):
         improvements = {x.field for x in result.metric_changes
@@ -430,10 +474,76 @@ class TestDataQuality:
 
     def test_a_period_adjustment_becomes_a_warning(self, snapshots):
         out = run_period_change_analysis(request(period_request=PeriodRequest(
-            requested_start="2026-03-15", requested_end="2026-06-30")), snapshots)
+            requested_start="2026-04-15", requested_end="2026-06-30")), snapshots)
         assert out.period_resolution.start_adjusted
-        assert any("adjusted to the nearest available snapshot" in w
-                   for w in out.warnings)
+        assert out.period_resolution.start_gap_days == 15
+        assert any("at or before it" in w for w in out.warnings)
+
+    def test_a_period_flow_over_unequal_reporting_periods_is_not_compared(self):
+        """A monthly flow and a quarterly flow are not two comparable period
+        totals; differencing them reports a change in the length of the window."""
+        series = [
+            m.SnapshotFrame("q", "2026-01-31", book(
+                loans=10, balance=100.0, ltv=0.4, arrears=0,
+                status=["Performing"], recoveries=100.0)),
+            m.SnapshotFrame("a", "2026-04-30", book(          # 89-day period
+                loans=10, balance=100.0, ltv=0.4, arrears=0,
+                status=["Performing"], recoveries=300.0)),
+            m.SnapshotFrame("b", "2026-05-31", book(          # 31-day period
+                loans=10, balance=100.0, ltv=0.4, arrears=0,
+                status=["Performing"], recoveries=120.0)),
+        ]
+        out = run_period_change_analysis(request(
+            mode=m.MODE_REQUESTED_METRIC,
+            requested_fields=("recoveries_in_period",),
+            period_request=PeriodRequest(requested_start="2026-04-30",
+                                         requested_end="2026-05-31")), series)
+        change = metric(out, "recoveries_in_period")
+        assert change.status == m.STATUS_NOT_COMPARABLE_PERIOD_BASIS
+        assert change.movement_value is None
+        assert change.start_value == 300.0 and change.end_value == 120.0
+        assert change.flow_basis.start_period_days == 89
+        assert change.flow_basis.end_period_days == 31
+        assert m.FLOW_BASIS_MISMATCH_NOTE in change.notes
+
+    def test_equal_reporting_periods_leave_a_flow_comparable(self):
+        series = [
+            m.SnapshotFrame("a", "2026-03-31", book(
+                loans=10, balance=100.0, ltv=0.4, arrears=0,
+                status=["Performing"], recoveries=100.0)),
+            m.SnapshotFrame("b", "2026-04-30", book(
+                loans=10, balance=100.0, ltv=0.4, arrears=0,
+                status=["Performing"], recoveries=200.0)),
+            m.SnapshotFrame("c", "2026-05-31", book(
+                loans=10, balance=100.0, ltv=0.4, arrears=0,
+                status=["Performing"], recoveries=300.0)),
+        ]
+        out = run_period_change_analysis(request(
+            mode=m.MODE_REQUESTED_METRIC,
+            requested_fields=("recoveries_in_period",)), series)
+        change = metric(out, "recoveries_in_period")
+        assert change.flow_basis.comparable is True
+        assert change.movement_value == 100.0
+        assert change.status == m.STATUS_AVAILABLE
+
+    def test_an_unknown_period_length_states_the_uncertainty_without_disqualifying(self):
+        """With only two snapshots the opening period length cannot be known.
+        That is reported, not treated as a defect."""
+        series = [
+            m.SnapshotFrame("a", "2026-03-31", book(
+                loans=10, balance=100.0, ltv=0.4, arrears=0,
+                status=["Performing"], recoveries=100.0)),
+            m.SnapshotFrame("b", "2026-04-30", book(
+                loans=10, balance=100.0, ltv=0.4, arrears=0,
+                status=["Performing"], recoveries=200.0)),
+        ]
+        out = run_period_change_analysis(request(
+            mode=m.MODE_REQUESTED_METRIC,
+            requested_fields=("recoveries_in_period",)), series)
+        change = metric(out, "recoveries_in_period")
+        assert change.flow_basis.comparable is None
+        assert change.movement_value == 100.0
+        assert m.FLOW_BASIS_UNKNOWN_NOTE in change.notes
 
     def test_an_overview_states_that_it_is_a_governed_subset(self, snapshots):
         out = run_period_change_analysis(request(), snapshots)
@@ -447,3 +557,57 @@ def test_the_same_inputs_always_produce_the_same_result(snapshots):
     first = run_period_change_analysis(request(), snapshots).to_dict()
     second = run_period_change_analysis(request(), snapshots).to_dict()
     assert first == second
+
+
+# --------------------------------------------------------------------------- #
+# Mixed currency — §17. Suppression must reach every monetary output.
+# --------------------------------------------------------------------------- #
+def test_mixed_currency_suppresses_every_monetary_output_not_just_metrics():
+    """The defect this replaced: monetary metrics were suppressed while the
+    balance bridge happily added GBP to EUR and reported "reconciles: true"."""
+    def mixed(n, balance, ltv, arrears):
+        frame = book(loans=n, balance=balance, ltv=ltv, arrears=arrears,
+                     status=["Performing", "Arrears"])
+        frame["exposure_currency_denomination"] = [
+            ("GBP" if i % 2 else "EUR") for i in range(n)]
+        return frame
+
+    out = run_period_change_analysis(request(), [
+        m.SnapshotFrame("a", "2026-03-31", mixed(10, 1_000_000.0, 0.40, 1)),
+        m.SnapshotFrame("b", "2026-06-30", mixed(12, 1_200_000.0, 0.44, 3))])
+
+    balance = metric(out, "current_outstanding_balance")
+    assert balance.status == m.STATUS_NOT_COMPARABLE_MIXED_CURRENCY
+    assert balance.movement_value is None
+
+    assert out.balance_bridge.status == m.BRIDGE_STATUS_UNAVAILABLE_MIXED_CURRENCY
+    assert out.balance_bridge.opening_balance is None
+    assert out.balance_bridge.reconciles is None
+
+    for dist in out.distribution_changes:
+        assert dist.balance_field is None
+        assert all(c.balance_share_movement is None for c in dist.categories)
+
+    # Non-monetary metrics remain valid and are still answered.
+    arrears = metric(out, "interest_in_arrears")
+    assert arrears.status in (m.STATUS_AVAILABLE, m.STATUS_PARTIALLY_AVAILABLE)
+    assert arrears.movement_value is not None
+
+
+# --------------------------------------------------------------------------- #
+# Summary language — §15. Coincidence is never reported as cause.
+# --------------------------------------------------------------------------- #
+def test_the_summary_never_asserts_causation(snapshots):
+    """Only the balance bridge can attribute a balance movement. Nothing in the
+    summary may link a metric movement to a composition shift."""
+    out = run_period_change_analysis(request(), snapshots)
+    # The fixed methodological notes explain the METHOD ("ranked within a unit
+    # because they have no common scale"); they make no claim about the data, so
+    # they are removed before the check rather than weakening it.
+    text = str(out.summary).lower()
+    for boilerplate in (m.RANK_SCOPE_NOTE, m.MATERIALITY_DISCLAIMER):
+        text = text.replace(boilerplate.lower(), "")
+    for connective in ("because", "driven by", "due to", "caused by", "led to",
+                       "as a result of", "attributable to", "explained by",
+                       "thanks to", "owing to", "resulted in"):
+        assert connective not in text, connective
