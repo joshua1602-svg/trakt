@@ -86,6 +86,18 @@ export interface UnsupportedTopic {
 
 export interface DemoPack {
   packVersion: number;
+  /** Identity of the dataset this pack was built from. Validated at boot by
+   *  `lib/config.ts`, and published as the `trakt:pack` meta tag so the
+   *  post-deploy smoke check can assert which pack is actually being served. */
+  source: {
+    clientId: string;
+    portfolioId: string;
+    currency: string;
+    reportingDate: string;
+    totalBalance: number;
+    exposures: number;
+    canonicalSha256: string;
+  };
   client: {
     id: string;
     name: string;
