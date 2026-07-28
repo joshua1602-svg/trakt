@@ -49,8 +49,22 @@ class CapabilityDependencies:
     #: ``production`` | ``development`` | ``test``. Resolved once per invocation
     #: by the factory below so a capability never reads the environment mid-flight.
     runtime_mode: str = "production"
-    #: Optional override for the analytical engine, used by tests.
+    #: Optional override for the analytical engine, used by tests. A custom
+    #: runner must accept the same keyword arguments as
+    #: ``mi_agent.mi_agent_workflow.run_mi_agent_query`` — including ``parsed``,
+    #: which carries the single parse of the question.
     query_runner: Optional[Callable[..., Any]] = None
+    #: **Business Semantics Registry extension point.**
+    #:
+    #: ``f(question, spec, semantics) -> Mapping[str, Any]``. When supplied, it
+    #: is invoked at the single parse site and its result is carried on
+    #: ``ParsedQuestion.semantics_context`` → ``RouteRequest.semantics_context``,
+    #: reaching every recogniser and handler with no further plumbing.
+    #:
+    #: Left ``None`` until the registry exists. Wiring it in is a one-line change
+    #: in :func:`build_dependencies` — deliberately NOT a hard-coded semantic
+    #: layer here, which would have to be unpicked when the real registry lands.
+    semantics_resolver: Optional[Callable[..., Any]] = None
 
 
 def build_dependencies(
@@ -58,15 +72,21 @@ def build_dependencies(
     tenant_registry: Optional[TenantRegistry] = None,
     datasets: Any = None,
     mode: Optional[str] = None,
+    semantics_resolver: Optional[Callable[..., Any]] = None,
 ) -> CapabilityDependencies:
     """Construct the dependency set for one invocation.
 
     Not cached: the tenancy config and runtime mode are cheap to read and a
     long-lived cache would hide a config change from a running worker.
+
+    ``semantics_resolver`` is the Business Semantics Registry seam. Once the
+    registry exists, defaulting it here (rather than at each call site) makes
+    governed business semantics available to every channel at once.
     """
     return CapabilityDependencies(
         tenant_registry=tenant_registry
         or load_tenant_registry(default_tenant_id=default_tenant_id()),
         datasets=datasets or _datasets,
         runtime_mode=mode or runtime_mode(),
+        semantics_resolver=semantics_resolver,
     )
