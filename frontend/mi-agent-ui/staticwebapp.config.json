@@ -4,7 +4,11 @@
     "rewrite": "/index.html",
     "exclude": [
       "/assets/*",
-      "/*.{png,jpg,svg,ico,css,js,woff,woff2}"
+      "/*.{png,jpg,svg,ico,css,js,woff,woff2}",
+      "/api/*",
+      "/mi/*",
+      "/health",
+      "/me"
     ]
   },
   "globalHeaders": {

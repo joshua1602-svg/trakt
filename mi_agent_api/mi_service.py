@@ -377,11 +377,17 @@ def _scope_ref(payload: Dict[str, Any]) -> Optional[ScopeRef]:
 def _stamp_routed_scope(routed: Dict[str, Any], req: MiQueryRequest) -> None:
     """Stamp the resolved portfolio scope onto a ROUTED analytical answer.
 
-    Routed intents (evolution, cohort progression, bridges, forecast) apply the
-    same lens the point-in-time path does, but they never reach the executor, so
-    they carry no field-level coverage. Recording the resolved scope keeps the
-    governed envelope complete for every route: a caller always learns which
-    portfolios an answer covers.
+    Routed intents never reach the executor, so they carry no field-level
+    coverage. Recording the resolved scope keeps the governed envelope complete
+    for every route: a caller always learns which portfolios an answer covers.
+
+    Critically, the scope stamped is the scope the ANSWER HAS, not the scope the
+    caller asked for. A route that could not narrow its figures reports
+    ``metadata.lensApplied is False`` (see ``chat_routing._disclose_lens_scope``)
+    and is stamped with the FULL platform scope, because that is what its numbers
+    actually cover. Stamping the requested lens on an un-narrowed answer turned
+    the governed envelope — the one control that exists to prevent
+    misattribution — into the thing performing it.
     """
     if not isinstance(routed, dict) or routed.get("portfolioScope"):
         return
@@ -390,12 +396,17 @@ def _stamp_routed_scope(routed: Dict[str, Any], req: MiQueryRequest) -> None:
 
         from . import portfolio_context as ctx_mod
 
-        lens = plens.resolve_lens_with_default(
-            req.question,
-            plens.lens_from_selection(req.source_portfolio_lens)
-            if req.source_portfolio_lens is not None else None)
-        resolved = ctx_mod.resolve_context(plens.context_id(lens),
-                                           discover_pipeline=False)
+        meta = routed.get("metadata") or {}
+        lens_applied = meta.get("lensApplied")
+        if lens_applied is False:
+            context_id = plens.LENS_TOTAL
+        else:
+            lens = plens.resolve_lens_with_default(
+                req.question,
+                plens.lens_from_selection(req.source_portfolio_lens)
+                if req.source_portfolio_lens is not None else None)
+            context_id = plens.context_id(lens)
+        resolved = ctx_mod.resolve_context(context_id, discover_pipeline=False)
         routed["portfolioScope"] = resolved.scope.to_dict()
     except Exception as exc:  # noqa: BLE001 - disclosure must never break a route
         logger.info("routed scope stamping skipped: %s", exc)
@@ -422,16 +433,44 @@ def _classify_analytical_failure(payload: Dict[str, Any]) -> str:
     return ErrorCode.CALCULATION_FAILED
 
 
+def _resolve_frame(ds, view: str, portfolio_id: Optional[str]):
+    """``(frame, error)`` for this request, resolved defensively.
+
+    Called ONCE, before parsing, so the single parse can be resolved against the
+    dataset's real columns. Never raises: a frame that cannot be resolved yields
+    ``(None, message)``, and routing still runs — several governed capabilities
+    (forecast, risk limits, conversion) answer from run artefacts and do not need
+    a frame at all.
+    """
+    try:
+        return ds._resolve_query_frame(view, portfolio_id)
+    except FileNotFoundError as exc:
+        return None, str(exc)
+    except Exception:  # noqa: BLE001 - data load/prep must not raw-500
+        # The exception type/message is logged, never returned: an internal class
+        # name is not something a client should see.
+        logger.exception("MI query frame resolution failed for portfolio=%r view=%r",
+                         portfolio_id, view)
+        return None, "Could not load the governed data for this query."
+
+
 def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: str,
                   deps: CapabilityDependencies) -> Dict[str, Any]:
-    """The existing analytical pipeline, unchanged.
+    """The analytical pipeline.
 
-    Routed governed intents first (compare / evolution / forecast / risk / geo /
-    cohort / bridge / scenario); point-in-time questions fall through to the
-    deterministic executor.
+    The question is parsed **once**, above routing, and the resulting
+    :class:`~mi_agent.parsed_question.ParsedQuestion` is threaded through both
+    the recogniser registry and the executor — so the spec that was routed on is
+    the spec that runs. Previously each stage parsed independently, which cost
+    double the parse time and let routing and execution disagree.
+
+    Routed governed capabilities first (compare / evolution / forecast / risk /
+    geo / cohort / bridge / scenario); anything unmatched falls through to the
+    deterministic point-in-time executor.
     """
     from mi_agent.mi_agent_workflow import run_mi_agent_query
     from mi_agent.mi_query_validator import load_mi_semantics
+    from mi_agent.parsed_question import ParsedQuestion
 
     from .data_source import semantics_path
 
@@ -441,13 +480,35 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
     # default selector here would change which frame existing callers resolve.
     portfolio_id = authorised.requested_portfolio_id
     client_id, run_id = split_portfolio(portfolio_id)
+    semantics = load_mi_semantics(semantics_path())
+    llm_cfg = ds._mi_llm_config()
+
+    # ---- resolve the frame, then parse: ONCE, before anything branches ---- #
+    # Request-scoped display currency first, so routed answers format in the
+    # book's currency too (tape -> config -> GBP; cached per client).
+    try:
+        ds._apply_request_currency(client_id, portfolio_id)
+    except Exception as exc:  # noqa: BLE001 - currency must never fail a query
+        logger.info("request currency resolution skipped: %s", exc)
+    df, frame_error = _resolve_frame(ds, view, portfolio_id)
+
+    try:
+        parsed = ParsedQuestion.parse(
+            req.question, semantics,
+            available_columns=set(df.columns) if df is not None else None,
+            llm_enabled=llm_cfg.enabled, model=llm_cfg.model,
+            # Extension point: supply a Business Semantics Registry resolver here
+            # to attach governed business-term metadata to every parse. It flows
+            # to every recogniser via ``RouteRequest.semantics_context`` with no
+            # further plumbing.
+            semantics_resolver=deps.semantics_resolver)
+    except Exception:  # noqa: BLE001 - a parser fault is a controlled failure
+        logger.exception("MI query parse failed for question=%r", req.question)
+        return _error_envelope("The MI Agent could not interpret this question.",
+                               req=req, view=view)
 
     routed = None
     try:
-        # Request-scoped display currency BEFORE routing so routed answers format
-        # in the book's currency too (tape -> config -> GBP; cached per client).
-        ds._apply_request_currency(client_id, portfolio_id)
-
         def _routed_frame(cli: str, rid: Optional[str]):
             """The funded frame for a routed intent, resolved by exactly the same
             governed resolver the point-in-time path uses. With no run selected
@@ -461,11 +522,12 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
             req.question, portfolio_id=portfolio_id, view=view,
             output_root=ds._onboarding_output_root(),
             pipeline_root=ds._pipeline_discovery_root(),
-            semantics=load_mi_semantics(semantics_path()),
+            semantics=semantics,
             history_model=ds._pipeline_history(client_id), as_of=req.as_of_date,
             source_lens=req.source_portfolio_lens or None,
             frame_resolver=_routed_frame,
-            extra_filters=req.filters or None)
+            extra_filters=req.filters or None,
+            parsed=parsed)
     except Exception as exc:  # noqa: BLE001 - routing must never break the chat
         logger.warning("chat routing failed; using point-in-time path: %s", exc)
         routed = None
@@ -476,23 +538,14 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
                                  view=view, run_required=_route_requires_run(route))
 
     # ---- point-in-time: active governed dataset (or the selected run) ----- #
-    try:
-        df, frame_error = ds._resolve_query_frame(view, portfolio_id)
-    except FileNotFoundError as exc:
-        return _error_envelope(str(exc), req=req, view=view)
-    except Exception:  # noqa: BLE001 - data load/prep must not raw-500
-        # The exception type/message is logged, never returned: an internal class
-        # name is not something a client should see.
-        logger.exception("MI query frame resolution failed for portfolio=%r view=%r",
-                         portfolio_id, view)
-        return _error_envelope(
-            "Could not load the governed data for this query.", req=req, view=view)
     if frame_error:
         return _error_envelope(frame_error, req=req, view=view)
+    if df is None:
+        return _error_envelope("Could not load the governed data for this query.",
+                               req=req, view=view)
 
     currency_mod.resolve_and_set(df)
 
-    llm_cfg = ds._mi_llm_config()
     llm_enabled, llm_model = llm_cfg.enabled, llm_cfg.model
     runner = deps.query_runner or run_mi_agent_query
     try:
@@ -501,7 +554,8 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
             parser_mode="llm" if llm_enabled else "deterministic",
             llm_enabled=llm_enabled, model=llm_model,
             extra_filters=req.filters or None,
-            source_portfolio_lens=req.source_portfolio_lens or None)
+            source_portfolio_lens=req.source_portfolio_lens or None,
+            parsed=parsed)
         result = adapt_workflow_result(
             workflow, portfolio_id=portfolio_id, as_of=req.as_of_date)
     except Exception:  # noqa: BLE001 - surface, don't 500
