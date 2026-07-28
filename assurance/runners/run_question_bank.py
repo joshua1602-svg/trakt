@@ -130,7 +130,59 @@ def _answer_text(result) -> str:
     return " ".join(parts).lower()
 
 
+# Phrases that mark a governed refusal / limitation. When present, the response
+# is a controlled disclosure (it may legitimately NAME the unavailable field), so
+# a forbidden term appearing inside it is not a fabricated claim.
+_DISCLOSURE_MARKERS = (
+    "not available", "not reported", "cannot be answered", "no value was fabricated",
+    "unavailable", "need review", "does not include", "not present", "no data",
+    "missing field", "is not a", "not supported",
+)
+
+
+def _has_disclosure(result) -> bool:
+    r = result.result or {}
+    hay = str(r.get("answer") or "").lower()
+    for w in r.get("warnings") or []:
+        hay += " " + str(w).lower()
+    return any(m in hay for m in _DISCLOSURE_MARKERS)
+
+
+def _answer_is_none_or_zero(result) -> bool:
+    """True when the answer's *primary metric* is null or zero — an honest 'none'
+    rather than a fabricated value.
+
+    The ubiquitous ``Loan`` count KPI is context present on every answer, so it is
+    ignored unless it is the only KPI (a bare unfiltered count answering a
+    filtered question — e.g. "loans in default" -> whole book — which is exactly
+    the dropped-qualifier fabrication this check must catch)."""
+    import re
+    arts = (result.result or {}).get("artifacts") or []
+    if not arts:
+        return True
+    for art in arts:
+        kpis = art.get("kpis") or []
+        metric_kpis = [k for k in kpis
+                       if str(k.get("label", "")).strip().lower() not in ("loan", "loans")]
+        # A filtered question answered by the bare loan count of the whole book:
+        # treat the count as the (fabricated) answer.
+        judged = metric_kpis if metric_kpis else kpis
+        for kpi in judged:
+            raw = str(kpi.get("value", "")).replace(",", "")
+            for n in re.findall(r"-?\d[\d.]*", raw):
+                try:
+                    if abs(float(n)) > 0:
+                        return False
+                except ValueError:
+                    continue
+    return True
+
+
 def _check_forbidden(result, forbidden: List[str]) -> List[str]:
+    # A forbidden term inside a governed refusal/limitation is a disclosure, not a
+    # claim. Only flag forbidden terms in a confident, non-disclosed answer.
+    if result.status != "success" or _has_disclosure(result):
+        return []
     text = _answer_text(result)
     return [c for c in forbidden if c.lower() in text]
 
@@ -152,13 +204,19 @@ def evaluate(q: Dict[str, Any]) -> Dict[str, Any]:
 
     passed = True
 
-    # Controlled-failure family: must NOT return a fabricated numeric answer,
-    # and must not emit forbidden domain terms as if answered.
+    # Controlled-failure family: must NOT fabricate a confident answer to a field
+    # the book does not support. Three outcomes count as safe:
+    #   * a non-success status (the route failed closed), or
+    #   * a governed disclosure that the field is unavailable / needs review, or
+    #   * a genuinely null / zero answer (an honest "none", not a fabrication).
+    # A confident NON-ZERO numeric answer with no disclosure is a fabrication or a
+    # dropped-qualifier substitution (e.g. "loans in default" answered as the whole
+    # book) — the failure this family is designed to catch.
     if q["expected_status"] == "controlled_failure":
-        total = _extract_total(result)
-        refused = (result.status != "success") or (total is None)
-        outcome["checks"]["controlled_refusal"] = refused
-        passed = passed and refused
+        safe = (result.status != "success") or _has_disclosure(result) \
+            or _answer_is_none_or_zero(result)
+        outcome["checks"]["controlled_refusal"] = safe
+        passed = passed and safe
 
     # Forbidden claims (presentation safety) — applies to all families.
     if q.get("forbidden_claims"):

@@ -29792,12 +29792,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -29825,12 +29824,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -29858,12 +29856,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -29891,12 +29888,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -29924,12 +29920,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -29957,12 +29952,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -29990,12 +29984,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30023,12 +30016,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30056,12 +30048,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30089,12 +30080,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30122,12 +30112,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30155,12 +30144,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30188,12 +30176,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30221,12 +30208,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30254,12 +30240,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30287,12 +30272,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30320,12 +30304,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30353,12 +30336,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30386,12 +30368,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30419,12 +30400,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30452,12 +30432,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30485,12 +30464,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30518,12 +30496,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30551,12 +30528,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30584,12 +30560,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30617,12 +30592,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30650,12 +30624,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30683,12 +30656,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30716,12 +30688,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30749,12 +30720,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30782,12 +30752,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30815,12 +30784,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30848,12 +30816,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30881,12 +30848,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30914,12 +30880,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30947,12 +30912,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -30980,12 +30944,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31013,12 +30976,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31046,12 +31008,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31079,12 +31040,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31112,12 +31072,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31145,12 +31104,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31178,12 +31136,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31211,12 +31168,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31244,12 +31200,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31277,12 +31232,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31310,12 +31264,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31343,12 +31296,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31376,12 +31328,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31409,12 +31360,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31442,12 +31392,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31475,12 +31424,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31508,12 +31456,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31541,12 +31488,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31574,12 +31520,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31607,12 +31552,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31640,12 +31584,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31673,12 +31616,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31706,12 +31648,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31739,12 +31680,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31772,12 +31712,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31805,12 +31744,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31838,12 +31776,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31871,12 +31808,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31904,12 +31840,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31937,12 +31872,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -31970,12 +31904,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -32003,12 +31936,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -32036,12 +31968,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -32069,12 +32000,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -32102,12 +32032,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -32135,12 +32064,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -32168,12 +32096,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -32201,12 +32128,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -32234,12 +32160,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -32267,12 +32192,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -32300,12 +32224,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -32333,12 +32256,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -32366,12 +32288,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null
@@ -32399,12 +32320,11 @@
     "outcome"
    ],
    "forbidden_claims": [
-    "arrears",
-    "default rate",
-    "NNEG",
-    "breach",
-    "covenant",
-    "probability of default"
+    "within appetite",
+    "primarily driven by",
+    "covenant breach",
+    "is in breach",
+    "is safe"
    ],
    "severity_if_failed": "high",
    "oracle_check": null

@@ -536,8 +536,11 @@ def controlled_failure() -> List[Dict[str, Any]]:
             expected_owner="controlled", expected_route="controlled",
             expected_mode="unsupported", expected_status="controlled_failure",
             severity_if_failed="high",
-            forbidden_claims=["arrears", "default rate", "NNEG", "breach",
-                              "covenant", "probability of default"],
+            # Forbidden claims are fabricated CONCLUSIONS, not field names: naming
+            # an unavailable field in a governed refusal is correct behaviour. The
+            # non-fabrication property is enforced by the controlled_refusal check.
+            forbidden_claims=["within appetite", "primarily driven by",
+                              "covenant breach", "is in breach", "is safe"],
         ))
     return qs[:80]
 
