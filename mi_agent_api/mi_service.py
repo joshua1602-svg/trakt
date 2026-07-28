@@ -596,6 +596,9 @@ _RUN_SCOPED_ROUTES = {
     "temporal_compare", "evolution", "evolution_funnel",
     "evolution_pipeline_stage", "forecast_extrapolation", "scenario",
     "cohort_progression", "cohort_conversion", "risk_limits", "funded_bridge",
+    # Period Change Analysis resolves and compares two governed snapshots, so
+    # the run it closed on is genuinely part of the answer.
+    "period_change_analysis",
 }
 
 

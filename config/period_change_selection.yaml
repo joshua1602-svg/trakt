@@ -1,0 +1,108 @@
+# Governed field-selection policy for the Period Change Analysis workflow.
+#
+# §10 of the workflow specification: portfolio-overview mode must NOT return all
+# 242 Business Semantics Registry entries. It returns a deterministic, governed
+# subset, and the rules that produce that subset live HERE rather than inside the
+# workflow, so the selection can be reviewed and changed as configuration.
+#
+# Read by mi_agent/period_change/selection.py. Every value is used; nothing is
+# advisory. Changing this file changes which metrics an overview reports — and
+# the selection (including every exclusion and its reason) is recorded in the
+# result's audit block, so any change is visible in the output.
+policy:
+  name: period_change_overview
+  version: "1.0.0"
+  # Only entries carrying this workflow tag are candidates at all.
+  workflow_tag: period_change
+
+roles:
+  # Roles eligible for direct portfolio-level period-change analysis (§6).
+  measure_roles:
+    - measure
+  # Roles eligible for distribution / composition-shift analysis (§6).
+  dimension_roles:
+    - dimension
+  # Roles that must never appear as a standalone overview metric (§6).
+  #   derived_input       — a previous/current snapshot-pair input. It feeds a
+  #                         governed migration calculation; it is not a metric.
+  #   supporting_attribute — supports recency/event analysis only.
+  excluded_overview_roles:
+    - derived_input
+    - supporting_attribute
+
+temporality:
+  # Excluded from ordinary "changed between periods" ranking (§7).
+  excluded_from_ranking:
+    - static_baseline
+
+period_resolution:
+  # An EXPLICITLY requested date resolves to the latest available snapshot at or
+  # before it — never forward to a period that had not yet occurred. Beyond this
+  # gap the request is refused rather than answered about a distant period.
+  #
+  # Relative modes (month-on-month, quarter-on-quarter, …) keep absolute-nearest
+  # matching: their target date is derived arithmetically, and on a book whose
+  # month end is the 30th a target of the 30th must be allowed to match the 31st.
+  # The gap ceiling below applies to both.
+  max_snapshot_gap_days: 45
+  # Per-portfolio overrides for books on a different reporting cadence. Keyed by
+  # the governed portfolio / context id; falls back to the default above.
+  max_snapshot_gap_days_by_portfolio: {}
+  # Two period_flow values are only comparable when each covers a reporting
+  # period of similar length. Periods differing by more than this are reported
+  # as not_comparable rather than presented as a movement in run-rate.
+  flow_basis_tolerance_days: 5
+
+overview:
+  # The concepts a governed overview covers, in report order. Concept coverage
+  # is a selection input: the overview spreads across concepts rather than
+  # returning twenty variants of one idea.
+  concepts:
+    - exposure
+    - payment_performance
+    - credit_quality
+    - leverage
+    - collateral
+    - valuation
+    - pricing
+    - maturity
+    - cashflow
+    - loss
+    - coverage
+    - liquidity
+  # Concepts whose dimensions carry the composition story (§10).
+  distribution_concepts:
+    - product_mix
+    - geography
+    - credit_quality
+    - payment_performance
+    - origination
+    - maturity
+  max_measures_per_concept: 3
+  max_measures_total: 18
+  # Reserve one measure for EVERY eligible concept before spending the budget on
+  # second and third measures. Without this the concepts listed last (coverage,
+  # liquidity) are starved by the total cap and vanish from the overview
+  # entirely, which reads as "nothing changed there" rather than "not reported".
+  reserve_one_measure_per_concept: true
+  max_dimensions: 4
+  # Minimum governed confidence for an overview metric. "low" would admit
+  # entries the registry review itself flagged as uncertain.
+  min_confidence: medium
+  # Non-duplication (§10): at most this many measures sharing the same
+  # (concept, aggregation, temporality) signature. One balance-like sum per
+  # concept is an overview; five are a tape.
+  max_measures_per_signature: 1
+  # Preference order for the existing MI tier. Fields the product already treats
+  # as core MI are chosen first; fields outside the curated MI layer come last.
+  mi_tier_preference:
+    - core
+    - extended
+
+# Concept mode (§10.B) is less restrictive than the overview: the caller has
+# named the concept, so every eligible entry under it is in scope up to a cap
+# that keeps a response readable.
+concept_mode:
+  max_measures: 12
+  max_dimensions: 4
+  min_confidence: medium
