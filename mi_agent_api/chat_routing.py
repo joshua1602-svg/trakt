@@ -39,6 +39,7 @@ from . import evolution as evolution_mod
 from . import forecast_extrapolation as fx_mod
 from . import geo as geo_mod
 from . import movement_summary as movement_mod
+from . import period_change_route as _period_change
 from . import risk_limits as risk_mod
 from . import scenario as scenario_mod
 from .recogniser_registry import (
@@ -1994,17 +1995,16 @@ def _capability_unavailable_envelope(req: RouteRequest, recogniser,
 
 
 def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserRegistry:
-    """Declare the governed capability routes (eleven migrated + one workflow).
+    """Declare the governed capability routes.
 
-    ``priority`` reproduces the historical chain order exactly. A capability
-    gate is declared ONLY where an unavailable capability is a genuine,
-    explainable outcome (pipeline / origination / cohort / risk); funded-book
-    routes are ungated because every scope with rows supports them, and gating
-    them would cost a context resolution on the common path for no decision.
-    The portfolio-risk-comparison workflow recogniser declares a HIGHER
-    confidence than the migrated routes, so a genuine multi-portfolio
-    comparison outranks any single-capability route that also matches — the
-    ordering mechanism the registry was built to support (architecture §11.3).
+    ``priority`` reproduces the historical chain order exactly for the eleven
+    routes migrated from the old ``if/elif`` chain; ``period_change_analysis``
+    was added afterwards and takes a position between them without moving any
+    of them relative to each other. A capability gate is declared ONLY where an
+    unavailable capability is a genuine, explainable outcome (pipeline /
+    origination / cohort / risk); funded-book routes are ungated because every
+    scope with rows supports them, and gating them would cost a context
+    resolution on the common path for no decision.
     """
     registry.extend([
         # 1. What-if / scenario perturbs the run-rate and re-solves the
@@ -2121,6 +2121,30 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
                 run_id=r.run_id, output_root=r.output_root,
                 portfolio_id=r.portfolio_id, as_of=r.as_of,
                 source_lens=r.source_lens)),
+
+        # 8b. Governed Period Change Analysis — the first workflow layer built on
+        #     the Business Semantics Registry. It sits AFTER the two composite
+        #     routes above (which keep every question they already answer) and
+        #     BEFORE temporal_compare, whose single-metric named-period
+        #     comparison its recogniser explicitly declines. See
+        #     ``mi_agent.period_change.recognition`` for the full deference rules
+        #     and docs/period_change_analysis_workflow.md for why they are drawn
+        #     where they are.
+        Recogniser(
+            name=_period_change.ROUTE_NAME, priority=85, lens_aware=True,
+            description=("Governed period-change analysis across two portfolio "
+                         "snapshots, driven by the Business Semantics Registry."),
+            metadata={"business_semantics_workflow_tag": "period_change",
+                      "registry": "config/business_semantics_registry.yaml",
+                      "selection_policy": "config/period_change_selection.yaml"},
+            recognise=_period_change.recognise_request,
+            handle=lambda r: _period_change.route_period_change(
+                r.question, r.spec, r.spec_dict, client_id=r.client_id,
+                run_id=r.run_id, output_root=r.output_root,
+                portfolio_id=r.portfolio_id, as_of=r.as_of,
+                source_lens=r.source_lens,
+                semantics_context=dict(r.semantics_context or {}),
+                view=r.view)),
 
         # 9. Cross-period comparison.
         Recogniser(
