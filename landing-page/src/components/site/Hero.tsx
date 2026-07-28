@@ -34,9 +34,8 @@ export function Hero({ scope }: { scope: DemoScopeInfo }) {
           One governed portfolio dataset. Every book, every report.
         </h1>
         <p className="mt-5 max-w-xl text-lg leading-relaxed text-ink-200">
-          Trakt normalises loan tapes, servicing extracts, valuations and funding data
-          into one governed model that drives management, investor and regulatory
-          reporting.
+          Trakt turns loan tapes, servicing extracts, valuations and funding data into
+          one governed model.
         </p>
 
         <p className="mt-5 max-w-xl text-[15px] font-medium leading-relaxed text-mint-400">
@@ -121,53 +120,49 @@ function InterfacePreview({ scope }: { scope: DemoScopeInfo }) {
       <div className="space-y-3 pt-4">
         <div className="flex justify-end">
           <p className="rounded-xl rounded-br-sm bg-navy-700 px-3.5 py-2 text-[13px] text-ink-100">
-            What is the current funded portfolio balance?
+            Show the funded balance by book.
           </p>
         </div>
 
         <div className="rounded-xl border border-line bg-navy-950/70 p-3.5">
           <p className="text-[13px] leading-relaxed text-ink-100">
-            The funded book stands at {scope.totalBalanceDisplay} across{" "}
-            {scope.loanCount} exposures as at {scope.asOfDisplay}.
+            Three governed books as at {scope.asOfDisplay}.
           </p>
 
-          <dl className="mt-3 grid grid-cols-2 gap-2">
-            <div className="rounded-lg border border-line-soft bg-navy-900/60 px-3 py-2">
-              <dt className="text-[10px] uppercase tracking-wider text-ink-500">
-                Balance
-              </dt>
-              <dd className="mt-0.5 text-base font-semibold tabular-nums text-ink-100">
+          {/* The differentiator, first thing a visitor sees. A flat total here
+              would quietly contradict the multi-book claim above it — and the
+              two totals are the point: one book is sold and derecognised, and
+              the sponsor still reports on it. */}
+          <dl className="mt-3 space-y-1.5">
+            {scope.books.map((book) => (
+              <div
+                key={book.id}
+                className="flex items-baseline justify-between gap-3 rounded-lg border border-line-soft bg-navy-900/60 px-3 py-1.5"
+              >
+                <dt className="min-w-0 text-[11px] text-ink-300">
+                  {book.shortLabel}
+                  {book.balanceSheetStatus === "sold" ? (
+                    <span className="ml-1.5 text-[10px] text-amber-400">sold</span>
+                  ) : null}
+                </dt>
+                <dd className="shrink-0 text-[13px] font-semibold tabular-nums text-ink-100">
+                  {book.balanceDisplay}
+                </dd>
+              </div>
+            ))}
+            <div className="flex items-baseline justify-between gap-3 border-t border-line-soft px-3 pt-2">
+              <dt className="text-[11px] text-ink-400">Platform total</dt>
+              <dd className="text-[13px] font-semibold tabular-nums text-ink-200">
+                {scope.platformBalanceDisplay}
+              </dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-3 px-3">
+              <dt className="text-[11px] text-ink-300">Sponsor total</dt>
+              <dd className="text-base font-semibold tabular-nums text-ink-100">
                 {scope.totalBalanceDisplay}
               </dd>
             </div>
-            <div className="rounded-lg border border-line-soft bg-navy-900/60 px-3 py-2">
-              <dt className="text-[10px] uppercase tracking-wider text-ink-500">
-                Exposures
-              </dt>
-              <dd className="mt-0.5 text-base font-semibold tabular-nums text-ink-100">
-                {scope.loanCount}
-              </dd>
-            </div>
           </dl>
-
-          <div className="mt-3 space-y-1.5" aria-hidden="true">
-            {[
-              { label: "East Midlands", width: "100%" },
-              { label: "East of England", width: "91%" },
-              { label: "Yorkshire & Humber", width: "90%" },
-              { label: "London", width: "86%" },
-            ].map((bar) => (
-              <div key={bar.label} className="flex items-center gap-2">
-                <span className="w-28 shrink-0 text-[10px] text-ink-400">{bar.label}</span>
-                <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-navy-800">
-                  <span
-                    className="block h-full rounded-full bg-peri-400"
-                    style={{ width: bar.width }}
-                  />
-                </span>
-              </div>
-            ))}
-          </div>
 
           {/* Provenance travels with the figures. "Deterministic" is a
               confirmatory signal, so it carries the accent; the synthetic label

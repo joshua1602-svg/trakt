@@ -44,9 +44,28 @@ describe("resolveQuestion — report actions", () => {
   });
 });
 
+describe("resolveQuestion — period-on-period", () => {
+  it("answers movement now that a second governed snapshot exists", () => {
+    const result = resolveQuestion("how has the portfolio changed since last month");
+    expect(result.kind).toBe("intent");
+    if (result.kind === "intent") expect(result.id).toBe("period_movement");
+  });
+
+  it("routes a multi-book question to the by-book answer", () => {
+    const result = resolveQuestion("show the funded balance by book");
+    expect(result.kind).toBe("intent");
+    if (result.kind === "intent") expect(result.id).toBe("balance_by_book");
+  });
+
+  it("routes an Annex question to the exception reconciliation", () => {
+    const result = resolveQuestion("show the current annex 2 validation exceptions");
+    expect(result.kind).toBe("intent");
+    if (result.kind === "intent") expect(result.id).toBe("annex_exceptions");
+  });
+});
+
 describe("resolveQuestion — controlled refusals", () => {
   it.each([
-    ["how has the portfolio changed since last month", "temporal_movement"],
     ["summarise the current pipeline", "pipeline"],
     ["what are the arrears figures", "arrears"],
     ["show me individual loan records", "loan_level"],

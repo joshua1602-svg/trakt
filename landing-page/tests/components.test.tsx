@@ -10,15 +10,28 @@ import type { DemoMetaResponse } from "@/types/demo";
 
 const META: DemoMetaResponse = {
   scope: {
-    client: "Synthetic Demo Lender",
+    client: "Alderbridge Lending Platform",
     clientDescription: "A synthetic UK equity release lender.",
-    portfolio: "SYNTHETIC_ERE_Portfolio_012026",
+    portfolio: "ALP_Platform_202606",
     portfolioName: "Equity Release Portfolio",
     assetClass: "UK equity release mortgages",
-    asOfDate: "2025-11-30",
+    asOfDate: "2026-06-30",
     asOfDisplay: "30 November 2025",
     loanCount: 36,
-    totalBalanceDisplay: "£5,382,463",
+    totalBalanceDisplay: "£37,270,061",
+    platformBalanceDisplay: "£27,407,089",
+    books: [
+      { id: "alp_origination", label: "ALP Origination Book", shortLabel: "Origination",
+        balanceSheetStatus: "warehoused", statusDetail: "Warehoused, destined for SPV2",
+        balanceDisplay: "£15,432,544" },
+      { id: "alp_acquired", label: "ALP Acquired Back Book", shortLabel: "Acquired",
+        balanceSheetStatus: "warehoused", statusDetail: "Warehoused, destined for SPV2",
+        balanceDisplay: "£11,974,544" },
+      { id: "spv1_sponsored", label: "SPV1 Sponsored Securitisation", shortLabel: "SPV1",
+        balanceSheetStatus: "sold",
+        statusDetail: "Sold and derecognised; servicing and reporting retained",
+        balanceDisplay: "£9,862,973" },
+    ],
     currency: "GBP",
     regulatoryRegime: "ESMA Annex 2",
     synthetic: true,
@@ -84,8 +97,16 @@ describe("Hero", () => {
       "href",
       "#book-a-demo",
     );
-    // The preview uses this portfolio's real figures, not invented ones.
-    expect(screen.getAllByText(/£5,382,463/).length).toBeGreaterThan(0);
+    // The card leads on the differentiator, with this platform's real figures:
+    // three books, and both governed totals rather than one flat number.
+    for (const label of ["Origination", "Acquired", "SPV1"]) {
+      expect(screen.getByText(label)).toBeInTheDocument();
+    }
+    expect(screen.getByText("sold")).toBeInTheDocument();
+    expect(screen.getByText(/platform total/i)).toBeInTheDocument();
+    expect(screen.getByText("£27,407,089")).toBeInTheDocument();
+    expect(screen.getByText(/sponsor total/i)).toBeInTheDocument();
+    expect(screen.getByText("£37,270,061")).toBeInTheDocument();
   });
 });
 
@@ -122,7 +143,7 @@ describe("CopilotDemo", () => {
   it("shows the synthetic scope and the suggested questions before any interaction", () => {
     render(<CopilotDemo meta={META} />);
 
-    expect(screen.getByText("Synthetic Demo Lender")).toBeInTheDocument();
+    expect(screen.getByText("Alderbridge Lending Platform")).toBeInTheDocument();
     expect(screen.getByText("Synthetic data")).toBeInTheDocument();
     expect(screen.getByText(/36 exposures/)).toBeInTheDocument();
     expect(screen.getByText(/30 November 2025/)).toBeInTheDocument();
@@ -154,9 +175,9 @@ describe("CopilotDemo", () => {
               coverage: 100,
             },
           ],
-          asOfDate: "2025-11-30",
+          asOfDate: "2026-06-30",
           asOfDisplay: "30 November 2025",
-          portfolioScope: "Synthetic Demo Lender · SYNTHETIC_ERE_Portfolio_012026",
+          portfolioScope: "Alderbridge Lending Platform · ALP_Platform_202606",
           followUps: [{ id: "region_exposure", label: "Which regions have the highest exposure?" }],
           synthetic: true,
           usage: { questionsUsed: 1, questionsRemaining: 11 },
@@ -194,9 +215,9 @@ describe("CopilotDemo", () => {
           question: "How has the portfolio changed since last month?",
           answer: "Temporal comparison needs two governed reporting periods.",
           productionNote: "In a client environment, Trakt holds a governed snapshot history.",
-          asOfDate: "2025-11-30",
+          asOfDate: "2026-06-30",
           asOfDisplay: "30 November 2025",
-          portfolioScope: "Synthetic Demo Lender · SYNTHETIC_ERE_Portfolio_012026",
+          portfolioScope: "Alderbridge Lending Platform · ALP_Platform_202606",
           followUps: [],
           synthetic: true,
           usage: { questionsUsed: 1, questionsRemaining: 11 },

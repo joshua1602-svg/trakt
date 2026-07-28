@@ -72,7 +72,7 @@ export default function Page() {
             id="example"
             eyebrow="Example"
             title="Ask a portfolio question. Get a governed answer."
-            intro="Every answer comes from the deterministic engine that serves the workspace and Microsoft 365 Copilot. The portfolio is wholly synthetic, and the page accepts no uploads."
+            intro="Three governed books across two reporting periods, answered by the deterministic engine that serves the workspace and Microsoft 365 Copilot. The portfolios are wholly synthetic, and the page accepts no uploads."
           />
           <div className="mt-8">
             <CopilotDemo meta={meta} />

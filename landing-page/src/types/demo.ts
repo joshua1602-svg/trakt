@@ -103,7 +103,12 @@ export interface DemoPack {
     asOfDisplay: string;
     loanCount: number;
     totalBalance: number;
+    /** Sponsor scope: every book, including the sold SPV. */
     totalBalanceDisplay: string;
+    /** Warehoused scope: the books still on the sponsor's balance sheet. */
+    platformBalanceDisplay: string;
+    books: DemoBookInfo[];
+    priorAsOfDate: string;
     regulatoryRegime: string;
     deliveryPreflight: string | null;
   };
@@ -117,6 +122,17 @@ export interface DemoPack {
 /* Wire contracts (browser ⇄ /api/demo/*)                                      */
 /* -------------------------------------------------------------------------- */
 
+/** One governed book, as the pack describes it. */
+export interface DemoBookInfo {
+  id: string;
+  label: string;
+  shortLabel: string;
+  /** "warehoused" (on balance sheet) or "sold" (derecognised). */
+  balanceSheetStatus: string;
+  statusDetail: string;
+  balanceDisplay: string;
+}
+
 export interface DemoScopeInfo {
   client: string;
   clientDescription: string;
@@ -126,7 +142,11 @@ export interface DemoScopeInfo {
   asOfDate: string;
   asOfDisplay: string;
   loanCount: number;
+  /** Sponsor scope: every book, including the sold SPV. */
   totalBalanceDisplay: string;
+  /** Warehoused scope: the books still on the sponsor's balance sheet. */
+  platformBalanceDisplay: string;
+  books: DemoBookInfo[];
   currency: string;
   regulatoryRegime: string;
   synthetic: true;

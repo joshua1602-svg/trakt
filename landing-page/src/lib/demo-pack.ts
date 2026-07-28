@@ -53,18 +53,26 @@ export function labelFor(id: string): string | null {
   return intentsById.get(id)?.label ?? reportsById.get(id)?.label ?? null;
 }
 
-/** The suggested questions shown as chips, in the order the page presents them. */
+/**
+ * Four questions plus one report action — five choices, in one row.
+ *
+ * Five, not eleven: the previous set demonstrated a single capability, a
+ * stratification, five different ways. Each of these shows something the others
+ * do not, and the report action is folded in beside them rather than sitting
+ * under its own heading, so the row reads as five choices and not two groups.
+ *
+ * Concentration and the stratifications stay in the pack — reachable as
+ * follow-ups and by typing — but they are no longer what the page leads with.
+ */
 const SUGGESTED_ORDER = [
-  "funded_balance",
-  "region_exposure",
-  "ltv_band",
-  "age_band",
-  "portfolio_risks",
-  "ticket_band",
-  "channel",
-  "wa_ltv",
-  "data_quality",
+  "balance_by_book",    // the headline figure, and the differentiator
+  "period_movement",    // movement, differenced from two governed snapshots
+  "annex_exceptions",   // regulatory exceptions, with their reasoning
+  "data_quality",       // "how do I know these numbers are right?"
 ] as const;
+
+/** The single report action offered alongside them. */
+const SUGGESTED_REPORT_ID = "investor_report";
 
 export function buildMeta(): DemoMetaResponse {
   const suggested = SUGGESTED_ORDER.map((id) => intentsById.get(id)).filter(
@@ -82,6 +90,8 @@ export function buildMeta(): DemoMetaResponse {
       asOfDisplay: pack.portfolio.asOfDisplay,
       loanCount: pack.portfolio.loanCount,
       totalBalanceDisplay: pack.portfolio.totalBalanceDisplay,
+      platformBalanceDisplay: pack.portfolio.platformBalanceDisplay,
+      books: pack.portfolio.books,
       currency: pack.portfolio.currency,
       regulatoryRegime: pack.portfolio.regulatoryRegime,
       synthetic: true,
@@ -91,11 +101,16 @@ export function buildMeta(): DemoMetaResponse {
       label: i.label,
       category: i.category,
     })),
-    reportActions: pack.reports.map((r) => ({
-      id: r.id,
-      label: r.label,
-      documentTitle: r.documentTitle,
-    })),
+    reportActions: pack.reports
+      .filter((r) => r.id === SUGGESTED_REPORT_ID)
+      .map((r) => ({
+        id: r.id,
+        label: r.label,
+        documentTitle: r.documentTitle,
+      })),
+    // The first two are the two the page shows. Order is set in the pack:
+    // loan_level refuses on governance grounds and pipeline on a genuine data
+    // gap — both remain underivable now that movement is answerable.
     exampleUnsupported: pack.unsupported
       .slice(0, 2)
       .map((u) => ({ id: u.id, label: u.label })),
