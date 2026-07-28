@@ -170,7 +170,7 @@ def test_unsupported_concept_is_controlled_not_invented(governed_dataset):
 def test_unavailable_dataset_is_a_controlled_governed_error(monkeypatch):
     monkeypatch.setenv("MI_AGENT_LLM_PARSER", "off")
 
-    def _boom(_view, _portfolio_id):
+    def _boom(_view, _portfolio_id, *, tenant_id=None):
         raise FileNotFoundError("no governed dataset is configured")
 
     from mi_agent_api import datasets as datasets_mod
@@ -185,7 +185,7 @@ def test_unavailable_dataset_is_a_controlled_governed_error(monkeypatch):
 def test_frame_error_is_reported_not_downgraded(monkeypatch):
     from mi_agent_api import datasets as datasets_mod
     monkeypatch.setattr(datasets_mod, "_resolve_query_frame",
-                        lambda _v, _p: (None, "No governed pipeline data is available."))
+                        lambda _v, _p, *, tenant_id=None: (None, "No governed pipeline data is available."))
     env = _ask("What is the pipeline amount?", dataset_context="pipeline")
     assert env["ok"] is False
     assert "No governed pipeline data" in env["error"]

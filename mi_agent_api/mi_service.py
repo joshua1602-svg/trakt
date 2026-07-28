@@ -433,7 +433,8 @@ def _classify_analytical_failure(payload: Dict[str, Any]) -> str:
     return ErrorCode.CALCULATION_FAILED
 
 
-def _resolve_frame(ds, view: str, portfolio_id: Optional[str]):
+def _resolve_frame(ds, view: str, portfolio_id: Optional[str],
+                   *, tenant_id: Optional[str] = None):
     """``(frame, error)`` for this request, resolved defensively.
 
     Called ONCE, before parsing, so the single parse can be resolved against the
@@ -441,9 +442,12 @@ def _resolve_frame(ds, view: str, portfolio_id: Optional[str]):
     ``(None, message)``, and routing still runs — several governed capabilities
     (forecast, risk limits, conversion) answer from run artefacts and do not need
     a frame at all.
+
+    ``tenant_id`` binds storage resolution to the authorised tenant so a caller's
+    portfolio selector cannot redirect the load to another tenant's directory.
     """
     try:
-        return ds._resolve_query_frame(view, portfolio_id)
+        return ds._resolve_query_frame(view, portfolio_id, tenant_id=tenant_id)
     except FileNotFoundError as exc:
         return None, str(exc)
     except Exception:  # noqa: BLE001 - data load/prep must not raw-500
@@ -480,17 +484,22 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
     # default selector here would change which frame existing callers resolve.
     portfolio_id = authorised.requested_portfolio_id
     client_id, run_id = split_portfolio(portfolio_id)
+    # Storage is tenant-bound: every frame this request resolves is loaded under
+    # the AUTHORISED tenant's directory, never a client segment the caller chose.
+    # ``client_id`` above is retained only for presentational metadata stamping
+    # (``_governed_context``); it is never used to reach data.
+    tenant_id = authorised.tenant_id
     semantics = load_mi_semantics(semantics_path())
     llm_cfg = ds._mi_llm_config()
 
     # ---- resolve the frame, then parse: ONCE, before anything branches ---- #
     # Request-scoped display currency first, so routed answers format in the
-    # book's currency too (tape -> config -> GBP; cached per client).
+    # book's currency too (tape -> config -> GBP; cached per tenant).
     try:
-        ds._apply_request_currency(client_id, portfolio_id)
+        ds._apply_request_currency(client_id, portfolio_id, tenant_id=tenant_id)
     except Exception as exc:  # noqa: BLE001 - currency must never fail a query
         logger.info("request currency resolution skipped: %s", exc)
-    df, frame_error = _resolve_frame(ds, view, portfolio_id)
+    df, frame_error = _resolve_frame(ds, view, portfolio_id, tenant_id=tenant_id)
 
     try:
         parsed = ParsedQuestion.parse(
@@ -515,7 +524,7 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
             this is the ACTIVE governed dataset — a point-in-time question (e.g.
             regional concentration) must never require a run id."""
             pid = f"{cli}/{rid}" if rid else (cli or None)
-            frame, err = ds._resolve_query_frame("funded", pid)
+            frame, err = ds._resolve_query_frame("funded", pid, tenant_id=tenant_id)
             return None if err else frame
 
         routed = chat_routing_mod.try_route(

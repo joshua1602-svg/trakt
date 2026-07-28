@@ -675,15 +675,28 @@ def _evo_ids(portfolioId, client_id, toRunId, to_run_id):
     return (client_id or "client_001"), (toRunId or to_run_id)
 
 
-def _resolve_query_frame(view: str, portfolio_id: Optional[str]):
+def _resolve_query_frame(view: str, portfolio_id: Optional[str],
+                         *, tenant_id: Optional[str] = None):
     """``(df, error)`` for a tab-aware query. Funded keeps the existing active
     dataset (unchanged); pipeline / forecast resolve the governed pipeline (and,
-    for forecast, a derived funded + weighted-pipeline frame)."""
+    for forecast, a derived funded + weighted-pipeline frame).
+
+    ``tenant_id`` binds storage resolution to the authorised tenant. When it is
+    supplied (the governed ``/mi/query`` path), the caller's ``portfolio_id`` may
+    still carry a dated ``run_id``, but its client segment can never redirect the
+    storage path to another tenant's directory — the client directory used to
+    resolve a run tape is always the tenant. This closes the cross-tenant read
+    where an open-namespace selector (``"{other_client}/{run}"``) was used
+    verbatim as a client path segment. Dashboard callers that pass no
+    ``tenant_id`` keep their existing behaviour.
+    """
     client_id, run_id = "client_001", None
     if portfolio_id and "/" in portfolio_id:
         client_id, run_id = portfolio_id.split("/", 1)
     elif portfolio_id:
         client_id = portfolio_id
+    if tenant_id:
+        client_id = tenant_id
 
     if view == "funded":
         # Honour the selected reporting run: when the portfolio id carries a
@@ -772,20 +785,27 @@ def _mi_llm_config() -> SimpleNamespace:
 _CLIENT_CURRENCY_CACHE: Dict[str, str] = {}
 
 
-def _apply_request_currency(cid: str, portfolio_id: Optional[str]) -> None:
+def _apply_request_currency(cid: str, portfolio_id: Optional[str],
+                            *, tenant_id: Optional[str] = None) -> None:
     """Set the request-scoped display currency for a client (tape -> config ->
     GBP), cached per client. Resolved from the client's funded book, which is
-    book-level (one currency), so it covers the routed answers too. Never raises."""
-    code = _CLIENT_CURRENCY_CACHE.get(cid)
+    book-level (one currency), so it covers the routed answers too. Never raises.
+
+    ``tenant_id`` binds both the cache key and the funded frame used to resolve
+    the currency to the authorised tenant, so a caller-supplied selector cannot
+    read another tenant's book to set the display currency (nor pollute another
+    tenant's cache entry)."""
+    key = tenant_id or cid
+    code = _CLIENT_CURRENCY_CACHE.get(key)
     if code is None:
         code = "GBP"
         try:
-            fdf, ferr = _resolve_query_frame("funded", portfolio_id)
+            fdf, ferr = _resolve_query_frame("funded", portfolio_id, tenant_id=tenant_id)
             if fdf is not None and not ferr:
                 code = currency_mod.resolve_currency_code(fdf)
         except Exception as exc:  # noqa: BLE001 - currency is presentational
             logger.warning("currency resolution failed for %s: %s", cid, exc)
-        _CLIENT_CURRENCY_CACHE[cid] = code
+        _CLIENT_CURRENCY_CACHE[key] = code
     currency_mod.set_currency(code)
 
 
@@ -915,8 +935,13 @@ def resolve_authorised_frame(authorised, view: str = "funded"):
     Requiring the authorisation token — rather than a ``portfolio_id`` string —
     is what makes "no data is loaded before authorisation" checkable: there is no
     code path from a raw request field to a dataframe.
+
+    Storage is bound to ``authorised.tenant_id``: the token's ``portfolio_id`` may
+    carry a dated run, but the client directory resolved is always the tenant, so
+    the token cannot reach another tenant's data even under an open namespace.
     """
-    return _resolve_query_frame(view, authorised.portfolio_id)
+    return _resolve_query_frame(view, authorised.portfolio_id,
+                                tenant_id=authorised.tenant_id)
 
 
 def dataset_snapshot_for(authorised) -> DatasetDescriptor:
