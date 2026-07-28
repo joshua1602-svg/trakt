@@ -152,23 +152,6 @@ field_rules:
         STNT: STNT
         PNNR: PNNR
         OTHR: OTHR
-        # Canonical employment values -> their ESMA codes. Previously absent:
-        # the only source synonym mapped was "manual", so a tape carrying real
-        # categorised values (which the canonical enumeration in
-        # config/system/enum_synonyms.yaml accepts) failed the delivery
-        # preflight while a placeholder passed. That is backwards, and it made
-        # correcting the source data look like a regression.
-        RETIRED: PNNR
-        Retired: PNNR
-        PENSIONER: PNNR
-        EMPLOYED: EMUK
-        Employed: EMUK
-        SELF_EMPLOYED: SFEM
-        "Self employed": SFEM
-        "Self Employed": SFEM
-        UNEMPLOYED: UNEM
-        STUDENT: STNT
-        OTHER: OTHR
         # Source-value synonym retained from the prior rule: the projected data
         # carries "manual" for non-categorised employment status -> ESMA OTHR.
         manual: OTHR

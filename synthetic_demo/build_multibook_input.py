@@ -179,7 +179,13 @@ PURPOSES = ("Home improvements", "Debt Consolidation", "Equity release",
             "Purchase Main Residence")
 #: Replaces the previous 'manual' placeholder, which failed the canonical
 #: enumeration on 100% of rows and read as a broken feed rather than a finding.
-EMPLOYMENT_STATUSES = ("Retired", "Retired", "Self employed", "Employed")
+#:
+#: These are the ESMA codes that the canonical enumeration
+#: (config/system/enum_synonyms.yaml) and the Annex 2 delivery rule for RREL13
+#: BOTH already accept — PNNR pensioner, EMUK employed, SFEM self-employed.
+#: Deliberately chosen from that intersection so the demonstration needs no
+#: change to config/regime/, which is under a change freeze.
+EMPLOYMENT_STATUSES = ("PNNR", "PNNR", "SFEM", "EMUK")
 COLLATERAL_TYPE = "residential property"
 
 SOURCE_HEADERS: Tuple[str, ...] = (

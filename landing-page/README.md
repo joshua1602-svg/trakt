@@ -778,6 +778,17 @@ it.
 
 ---
 
+## Open investigations
+
+Failures that occurred once and could not be reproduced are recorded in
+[`docs/open-investigations.md`](docs/open-investigations.md), with what was
+ruled out and the point at which a recurrence stops being a flake. One entry is
+open: OI-1, a demo pack reported STALE in CI that reproduces cleanly everywhere
+else. If it fires again it is treated as a determinism defect in the engine,
+because "the same question returns the same number" is the claim it contradicts.
+
+---
+
 ## Updating the synthetic portfolio values
 
 Every figure comes from the Trakt engine, so you never edit numbers by hand.

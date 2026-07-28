@@ -1,7 +1,11 @@
 {
+  "preflight": {
+    "status": "FAIL",
+    "blocking_errors": 3
+  },
   "scope": {
     "canonicalValidation": "Gate 3. Checks the governed canonical model against config/system/enum_mapping.yaml and the field registry. Its verdict is about the dataset, not the submission.",
-    "annexPreflight": "Gate 4b. Checks the projected Annex 2 output against the 68 field rules in annex2_delivery_rules.yaml, AFTER Gate 4 has applied the documented projection transforms. Its verdict is about the submission, not the dataset.",
+    "annexPreflight": "Gate 4b. Checks the projected Annex 2 output against the 68 field rules in annex2_delivery_rules.yaml, AFTER Gate 4 has applied the documented projection transforms. Its verdict is about the submission, not the dataset. A PASS there is NOT 'the dataset has no exceptions'.",
     "note": "The two verdicts can legitimately differ. Every canonical exception below is classified by its actual effect on the Annex 2 submission, so a clean preflight beside an open exception is explained rather than merely asserted."
   },
   "totals": {
@@ -22,9 +26,8 @@
       "observedValues": [
         "AVM (desktop)"
       ],
-      "allowedCanonicalValues": [
-        "FOEI",
-        "FOEI",
+      "allowedCanonicalValues": [],
+      "allowedRegimeValues": [
         "FOEI",
         "OTHR"
       ],
@@ -62,6 +65,7 @@
       "affectedExposures": 2,
       "observedValues": [],
       "allowedCanonicalValues": [],
+      "allowedRegimeValues": [],
       "byBook": [
         {
           "bookId": "spv1_sponsored",
@@ -99,6 +103,7 @@
         "Origination date 2024-04-30 00:00:00 > maturity date 2022-10-30 00:00:00."
       ],
       "allowedCanonicalValues": [],
+      "allowedRegimeValues": [],
       "byBook": [
         {
           "bookId": "alp_acquired",
@@ -122,6 +127,7 @@
         "ACTIVE loan with maturity_date 2022-10-30 00:00:00 < reporting_date 2026-06-30 00:00:00."
       ],
       "allowedCanonicalValues": [],
+      "allowedRegimeValues": [],
       "byBook": [
         {
           "bookId": "alp_acquired",

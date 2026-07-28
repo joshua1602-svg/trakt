@@ -149,8 +149,9 @@ if [[ $DELIVERY_RC -ne 0 ]]; then
   echo "[EXPECTED] Preflight reports blocking errors — the seeded exceptions."
 fi
 
-echo "[Gate 4b] Exception reconciliation..."
-python engine/gate_4b_delivery/annex2_exception_reconciler.py \
+# Outside the frozen gate surface: reads the artefacts above, writes its own.
+echo "[Reconciliation] Exceptions by effect on the submission..."
+python trakt_core/regime_exception_reconciliation.py \
   --field-summary "$VAL_DIR/${STEM}_field_summary.csv" \
   --violations "$VAL_DIR/${STEM}_canonical_typed_canonical_violations.csv" \
   --canonical "$OUT_DIR/${STEM}_canonical_typed.csv" \
@@ -160,7 +161,8 @@ python engine/gate_4b_delivery/annex2_exception_reconciler.py \
   --business-rules "$VAL_DIR/${STEM}_business_rules_violations.csv" \
   --delivery-issues "$OUT_DIR/${STEM}_ESMA_Annex2_delivery_issues.csv" \
   --projected "$OUT_DIR/${STEM}_ESMA_Annex2_projected.csv" \
-  --output "$OUT_DIR/${STEM}_ESMA_Annex2_exception_reconciliation.json"
+  --delivery-report "$OUT_DIR/${STEM}_ESMA_Annex2_delivery_report.json" \
+  --output "$OUT_DIR/${STEM}_regime_exception_reconciliation.json"
 
 echo ""
 echo "Multi-book pipeline complete. Output: $OUT_DIR"
