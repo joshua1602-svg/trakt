@@ -60,7 +60,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE = REPO_ROOT / "config" / "system" / "fields_registry.yaml"
 DEFAULT_OUTPUT = REPO_ROOT / "config" / "business_semantics_registry.yaml"
 
-VERSION = "0.1.0"
+# Content (registry) version — bumps when curated content changes.
+VERSION = "0.2.0"
+# Schema version — bumps when the entry/metadata SHAPE changes.
+SCHEMA_VERSION = 2
 
 # --------------------------------------------------------------------------- #
 # Controlled taxonomy
@@ -68,23 +71,30 @@ VERSION = "0.1.0"
 
 TAXONOMY: Dict[str, List[str]] = {
     # Primary analytical concept (exactly one per entry). Asset-agnostic.
+    # v2: 'concentration' removed as a primary concept — concentration
+    # suitability follows from analytical_role: dimension plus workflow
+    # tags, not from an intrinsic field property.  Mix dimensions are
+    # re-homed to their substantive concepts (geography, product_mix,
+    # origination, ...); 'concentration' remains available as a category.
     "analytical_concepts": [
         "cashflow",
         "collateral",
-        "concentration",
         "coverage",
         "credit_quality",
         "data_quality",
         "eligibility",
         "exposure",
         "forecast",
+        "geography",
         "leverage",
         "liquidity",
         "loss",
         "maturity",
         "operational_performance",
+        "origination",
         "payment_performance",
         "pricing",
+        "product_mix",
         "tail_risk",
         "valuation",
     ],
@@ -126,12 +136,38 @@ TAXONOMY: Dict[str, List[str]] = {
         "portfolio_comparison",
         "ranking",
     ],
-    "aggregation_types": [
+    # How each entry participates in analysis (v2).
+    "analytical_roles": [
+        "derived_input",
+        "dimension",
+        "measure",
+        "supporting_attribute",
+    ],
+    # Temporal nature of the loan-level value (v2): a period-change workflow
+    # compares point_in_time stocks across snapshots, compares period_flow
+    # totals directly, must DIFFERENCE a cumulative series first, and never
+    # expects a static_baseline to move.
+    "temporality": [
+        "cumulative",
+        "period_flow",
+        "point_in_time",
+        "static_baseline",
+    ],
+    "default_aggregations": [
         "average",
         "distribution",
         "share",
         "sum",
         "weighted_average",
+    ],
+    # Cross-portfolio comparability (v2).  requires_scale_alignment marks
+    # lender/servicer-specific scales and vocabularies that need mapping
+    # before portfolios from different originators can be compared.
+    "portfolio_comparability": [
+        "comparable",
+        "not_comparable",
+        "requires_scale_alignment",
+        "within_asset_class_only",
     ],
     "directionality": [
         "context_dependent",
@@ -197,9 +233,15 @@ def E(concept: str,
       *,
       assets: Optional[List[str]] = None,
       display: Optional[str] = None,
-      comparable: bool = True,
       materiality: Optional[bool] = None) -> Dict[str, Any]:
-    """Compact curated-entry constructor (validated in build_registry)."""
+    """Compact curated-entry constructor (validated in build_registry).
+
+    v2 metadata (analytical_role, temporality, weight_field, share_basis,
+    portfolio_comparability) is derived mechanically in build_registry from
+    the default aggregation plus the explicit override sets below — it is
+    deliberately NOT free text per entry, so the classification rules stay
+    reviewable in one place.
+    """
     return {
         "concept": concept,
         "categories": list(categories),
@@ -210,7 +252,6 @@ def E(concept: str,
         "rationale": rationale,
         "assets": list(assets) if assets else None,
         "display": display,
-        "comparable": comparable,
         "materiality": materiality,
     }
 
@@ -674,26 +715,26 @@ CURATION: Dict[str, Dict[str, Any]] = {
         "higher_is_better", "sum", "medium",
         "Obligor turnover; business-scale and financial-strength measure."),
     "enterprise_size": E(
-        "concentration", ["concentration", "obligor_financials"], _PCMP,
+        "credit_quality", ["concentration", "obligor_financials"], _PCMP,
         "neutral", "distribution", "medium",
         "Obligor enterprise-size classification (ESMA enum); size-mix "
         "dimension for SME books."),
     "obligor_basel_iii_segment": E(
-        "concentration", ["concentration", "credit_quality"], _PCMP,
+        "credit_quality", ["concentration", "credit_quality"], _PCMP,
         "neutral", "distribution", "medium",
         "Obligor Basel III segment; regulatory risk-segmentation mix."),
     "borrower_basel_iii_segment": E(
-        "concentration", ["concentration", "credit_quality"], _PCMP,
+        "credit_quality", ["concentration", "credit_quality"], _PCMP,
         "neutral", "distribution", "medium",
         "Borrower Basel III segment (SME); regulatory risk-segmentation "
         "mix."),
     "nace_industry_code": E(
-        "concentration", ["concentration"], _PCMP_MON, "neutral",
+        "credit_quality", ["concentration"], _PCMP_MON, "neutral",
         "distribution", "medium",
         "NACE industry code (governed enum); industry concentration "
         "dimension."),
     "customer_type": E(
-        "concentration", ["concentration"], _PCMP, "neutral", "distribution",
+        "credit_quality", ["concentration"], _PCMP, "neutral", "distribution",
         "medium",
         "Customer type (ESMA enum); borrower-type mix dimension."),
 
@@ -1274,70 +1315,70 @@ CURATION: Dict[str, Dict[str, Any]] = {
 
     # ================= CONCENTRATION / MIX DIMENSIONS =================
     "geographic_region_obligor": E(
-        "concentration", ["concentration", "geography"], _PC_PCMP_MON,
+        "geography", ["concentration", "geography"], _PC_PCMP_MON,
         "neutral", "distribution", "high",
         "Obligor NUTS3 region (MI core); geographic concentration "
         "dimension monitored by the risk monitor."),
     "geographic_region_collateral": E(
-        "concentration", ["concentration", "geography", "collateral"],
+        "geography", ["concentration", "geography", "collateral"],
         _PC_PCMP_MON, "neutral", "distribution", "high",
         "Collateral NUTS3 region (MI extended); geographic concentration "
         "dimension."),
     "collateral_geography": E(
-        "concentration", ["concentration", "geography", "collateral"],
+        "geography", ["concentration", "geography", "collateral"],
         _PC_PCMP_MON, "neutral", "distribution", "high",
         "Readable collateral region label (MI core Region); geographic "
         "concentration dimension."),
     "postcode": E(
-        "concentration", ["concentration", "geography"], _PCMP, "neutral",
+        "geography", ["concentration", "geography"], _PCMP, "neutral",
         "distribution", "medium",
         "Property postcode (MI extended); granular geographic drilldown "
         "dimension."),
     "borrower_jurisdiction": E(
-        "concentration", ["concentration", "geography"], _PCMP, "neutral",
+        "geography", ["concentration", "geography"], _PCMP, "neutral",
         "distribution", "medium",
         "Borrower legal jurisdiction (MI core); country-mix dimension."),
     "broker_channel": E(
-        "concentration", ["concentration"], _PC_PCMP_MON, "neutral",
+        "origination", ["concentration"], _PC_PCMP_MON, "neutral",
         "distribution", "high",
         "Broker/origination channel (MI core); channel concentration "
         "monitored by the risk monitor."),
     "origination_channel": E(
-        "concentration", ["concentration"], _PC_PCMP_MON, "neutral",
+        "origination", ["concentration"], _PC_PCMP_MON, "neutral",
         "distribution", "high",
         "Origination channel (governed enum); channel concentration "
         "monitored by the risk monitor."),
     "originator_name": E(
-        "concentration", ["concentration"], _PCMP_MON, "neutral",
+        "origination", ["concentration"], _PCMP_MON, "neutral",
         "distribution", "high",
         "Originator (MI core); originator concentration dimension."),
     "servicer_name": E(
-        "concentration", ["concentration", "operational_performance"],
+        "operational_performance", ["concentration", "operational_performance"],
         _PCMP, "neutral", "distribution", "medium",
         "Servicer; servicer concentration and operational-dependency "
         "dimension."),
     "product_type": E(
-        "concentration", ["concentration", "product_mix"], _PCMP_MON,
+        "product_mix", ["concentration", "product_mix"], _PCMP_MON,
         "neutral", "distribution", "high",
         "Product type (governed enum); product-mix concentration "
         "dimension."),
     "erm_product_type": E(
-        "concentration", ["concentration", "product_mix"], _PC_PCMP_MON,
+        "product_mix", ["concentration", "product_mix"], _PC_PCMP_MON,
         "neutral", "distribution", "high",
         "Equity-release product type (MI core); product-mix dimension "
         "monitored by the risk monitor.",
         assets=["equity_release"], display="ERM Product Type"),
     "erm_sub_product_type": E(
-        "concentration", ["concentration", "product_mix"], _PCMP, "neutral",
+        "product_mix", ["concentration", "product_mix"], _PCMP, "neutral",
         "distribution", "medium",
         "Equity-release sub-product type (MI core); product-variant mix.",
         assets=["equity_release"], display="ERM Sub Product Type"),
     "debt_type": E(
-        "concentration", ["concentration", "product_mix"], _PCMP, "neutral",
+        "product_mix", ["concentration", "product_mix"], _PCMP, "neutral",
         "distribution", "medium",
         "Debt type (governed enum); instrument-mix dimension."),
     "asset_type": E(
-        "concentration", ["concentration", "product_mix"], _PCMP, "neutral",
+        "collateral", ["concentration", "product_mix"], _PCMP, "neutral",
         "distribution", "medium",
         "Asset type (SME, governed enum); financed-asset mix dimension."),
     "amortisation_type": E(
@@ -1346,7 +1387,7 @@ CURATION: Dict[str, Dict[str, Any]] = {
         "Amortisation/repayment profile (MI core enum); interest-only vs "
         "repayment mix monitored by the risk monitor."),
     "purpose": E(
-        "concentration", ["concentration", "credit_quality"], _PCMP,
+        "credit_quality", ["concentration", "credit_quality"], _PCMP,
         "neutral", "distribution", "medium",
         "Loan purpose (governed enum); purpose-mix dimension."),
     "special_scheme": E(
@@ -1354,12 +1395,12 @@ CURATION: Dict[str, Dict[str, Any]] = {
         "distribution", "medium",
         "Special scheme participation; government/support-scheme mix."),
     "exposure_currency_denomination": E(
-        "concentration", ["concentration", "risk"], _PCMP, "neutral",
+        "exposure", ["concentration", "risk"], _PCMP, "neutral",
         "distribution", "medium",
         "Exposure currency (core canonical); currency-mix and FX-risk "
         "dimension."),
     "source_portfolio_type": E(
-        "concentration", ["concentration"], _PCMP, "neutral",
+        "origination", ["concentration"], _PCMP, "neutral",
         "distribution", "medium",
         "Direct vs acquired book (MI segmentation dimension); origination-"
         "source mix."),
@@ -1369,6 +1410,172 @@ CURATION: Dict[str, Dict[str, Any]] = {
         "Whether the originator is an affiliate (MI extended); risk-"
         "retention/eligibility relevant share."),
 }
+
+# --------------------------------------------------------------------------- #
+# V2 CLASSIFICATION RULES (analytical_role / temporality / comparability)
+# --------------------------------------------------------------------------- #
+# Mechanical defaults:
+#   analytical_role:  distribution -> dimension, everything else -> measure,
+#                     then the explicit override sets below.
+#   temporality:      names containing "_in_period"/"_in_current_period" ->
+#                     period_flow; explicit sets below; otherwise
+#                     point_in_time.
+#   comparability:    "comparable" unless listed below.
+#   weight_field:     the governed MI weighting convention — every
+#                     weighted_average entry weights by
+#                     current_outstanding_balance (the MI layer's default
+#                     weight field).  No other weighting logic is invented.
+#   share_basis:      "count" for every share entry (the MI layer's default
+#                     aggregation for flags is count); balance-weighted share
+#                     variants are a future per-workflow decision.
+
+# Snapshot-pair / previous-period fields that exist only to feed migration
+# and movement computation (config/mi/risk_monitor.yaml migration pairs and
+# deterioration flags).  They are not standalone metrics and must not be
+# reported as such, so they are also not_comparable across portfolios.
+DERIVED_INPUT_FIELDS = {
+    "days_in_arrears_prior",
+    "ifrs9_stage_current",
+    "ifrs9_stage_previous",
+    "lgd_current",
+    "lgd_previous",
+    "pd_current",
+    "pd_previous",
+    "prior_principal_balances",
+    "risk_grade_current",
+    "risk_grade_previous",
+}
+
+# Event/recency attributes: neither metrics nor grouping dimensions — they
+# contextualise individual loans (staleness, recency of events).
+SUPPORTING_ATTRIBUTE_FIELDS = {
+    "current_valuation_date",
+    "date_last_in_arrears",
+    "date_of_restructuring",
+    "default_date",
+}
+
+# Values anchored to an origination/securitisation reference point, or
+# immutable physical facts: the loan-level value never updates, so a
+# period-change workflow must not expect movement (mix can still shift
+# through book composition).
+STATIC_BASELINE_FIELDS = {
+    "debt_service_coverage_ratio_at_the_securitisation_date",
+    "defaulted_underlying_exposure_purchase_price",
+    "deposit_amount",
+    "down_payment_amount",
+    "economic_occupancy_at_securitisation",
+    "interest_coverage_ratio_at_the_securitisation_date",
+    "interest_rate_at_the_securitisation_date",
+    "net_operating_income_at_securitisation",
+    "new_build",
+    "new_or_used",
+    "number_of_payments_before_securitisation",
+    "original_interest_rate",
+    "original_loan_to_value",
+    "original_principal_balance",
+    "original_residual_value_of_asset",
+    "original_term",
+    "original_valuation_amount",
+    "origination_date",
+    "physical_occupancy_at_securitisation",
+    "property_portfolio_value_at_securitisation_date",
+    "purchase_price",
+    "securitised_residual_value",
+    "vacant_possession_value_at_securitisation_date",
+    "valuation_at_securitisation",
+    "year_built",
+    "year_of_manufacture_construction",
+}
+
+# Running totals since origination/securitisation: a period-change workflow
+# must DIFFERENCE these before comparing periods.  allocated_losses is the
+# ESMA "allocated losses to date" cumulative.
+CUMULATIVE_FIELDS = {
+    "allocated_losses",
+    "cumulative_accrued_interest",
+    "cumulative_drawn_amount",
+    "cumulative_prepayments",
+    "cumulative_recoveries",
+}
+
+# Period flows that the "_in_period" name rule does not catch.
+PERIOD_FLOW_FIELDS = {
+    "actual_default_interest",
+    "payment_due",
+    "prepayment_fee",
+    "prepayment_interest_excess_shortfall",
+    "total_scheduled_principal_interest_due",
+    "total_scheduled_principal_interest_paid",
+    "unscheduled_principal_collections",
+}
+
+# Lender/servicer-specific scales and originator vocabularies: NOT
+# unconditionally comparable across portfolios — values need scale/label
+# alignment first (the M&A acquired-book comparison case).
+REQUIRES_SCALE_ALIGNMENT_FIELDS = {
+    "bank_internal_loss_given_default_lgd_estimate",
+    "bank_internal_loss_given_default_lgd_estimate_down_turn",
+    "bank_internal_rating",
+    "broker_channel",
+    "corporate_guarantor_bank_internal_1_year_probability_default",
+    "erm_product_type",
+    "erm_sub_product_type",
+    "guarantee_type",
+    "internal_risk_grade",
+    "internal_risk_score",
+    "internal_risk_stage",
+    "servicer_watchlist_code",
+    "special_scheme",
+}
+
+# Income-property lease/occupancy concepts typed portfolio_type=common in the
+# canonical registry but only meaningfully compared between portfolios of the
+# same asset class.
+WITHIN_ASSET_CLASS_ONLY_FIELDS = {
+    "contractual_annual_rental_income",
+    "economic_occupancy_at_securitisation",
+    "income_expiring_13_24_months",
+    "income_expiring_1_12_months",
+    "income_expiring_25_36_months",
+    "income_expiring_37_48_months",
+    "income_expiring_49_months",
+    "number_of_units",
+    "physical_occupancy_at_securitisation",
+}
+
+# Governed MI weighting convention (mi_agent default_weight_field).
+DEFAULT_WEIGHT_FIELD = "current_outstanding_balance"
+
+
+def _analytical_role(name: str, aggregation: str) -> str:
+    if name in DERIVED_INPUT_FIELDS:
+        return "derived_input"
+    if name in SUPPORTING_ATTRIBUTE_FIELDS:
+        return "supporting_attribute"
+    return "dimension" if aggregation == "distribution" else "measure"
+
+
+def _temporality(name: str) -> str:
+    if name in CUMULATIVE_FIELDS:
+        return "cumulative"
+    if name in STATIC_BASELINE_FIELDS:
+        return "static_baseline"
+    if name in PERIOD_FLOW_FIELDS or "_in_period" in name \
+            or "_in_current_period" in name:
+        return "period_flow"
+    return "point_in_time"
+
+
+def _portfolio_comparability(name: str) -> str:
+    if name in DERIVED_INPUT_FIELDS:
+        return "not_comparable"
+    if name in REQUIRES_SCALE_ALIGNMENT_FIELDS:
+        return "requires_scale_alignment"
+    if name in WITHIN_ASSET_CLASS_ONLY_FIELDS:
+        return "within_asset_class_only"
+    return "comparable"
+
 
 # --------------------------------------------------------------------------- #
 # UNCERTAIN ENTRIES (tracked, not forced into the registry)
@@ -1643,13 +1850,24 @@ def _validate_curated(name: str, cur: Dict[str, Any]) -> None:
     if cur["directionality"] not in tx["directionality"]:
         raise ValueError(f"{name}: invalid directionality "
                          f"{cur['directionality']!r}")
-    if cur["aggregation"] not in tx["aggregation_types"]:
-        raise ValueError(f"{name}: invalid aggregation_type "
+    if cur["aggregation"] not in tx["default_aggregations"]:
+        raise ValueError(f"{name}: invalid default_aggregation "
                          f"{cur['aggregation']!r}")
     if cur["confidence"] not in tx["confidence"]:
         raise ValueError(f"{name}: invalid confidence {cur['confidence']!r}")
     if not str(cur["rationale"]).strip():
         raise ValueError(f"{name}: rationale required")
+
+
+_V2_OVERRIDE_SETS = {
+    "DERIVED_INPUT_FIELDS": DERIVED_INPUT_FIELDS,
+    "SUPPORTING_ATTRIBUTE_FIELDS": SUPPORTING_ATTRIBUTE_FIELDS,
+    "STATIC_BASELINE_FIELDS": STATIC_BASELINE_FIELDS,
+    "CUMULATIVE_FIELDS": CUMULATIVE_FIELDS,
+    "PERIOD_FLOW_FIELDS": PERIOD_FLOW_FIELDS,
+    "REQUIRES_SCALE_ALIGNMENT_FIELDS": REQUIRES_SCALE_ALIGNMENT_FIELDS,
+    "WITHIN_ASSET_CLASS_ONLY_FIELDS": WITHIN_ASSET_CLASS_ONLY_FIELDS,
+}
 
 
 def build_registry(source: Path = DEFAULT_SOURCE) -> Dict[str, Any]:
@@ -1660,6 +1878,15 @@ def build_registry(source: Path = DEFAULT_SOURCE) -> Dict[str, Any]:
         raise ValueError(
             "Curated fields not found in the canonical registry: "
             + ", ".join(missing))
+
+    for set_name, override in _V2_OVERRIDE_SETS.items():
+        unknown = sorted(override - set(CURATION))
+        if unknown:
+            raise ValueError(
+                f"{set_name} references fields not in CURATION: {unknown}")
+    if DEFAULT_WEIGHT_FIELD not in fields:
+        raise ValueError(
+            f"weight field {DEFAULT_WEIGHT_FIELD!r} not in canonical registry")
 
     for name, info in UNCERTAIN.items():
         if name not in fields:
@@ -1685,15 +1912,30 @@ def build_registry(source: Path = DEFAULT_SOURCE) -> Dict[str, Any]:
         materiality = cur["materiality"]
         if materiality is None:
             materiality = cur["aggregation"] in _MATERIALITY_AGGREGATIONS
+        role = _analytical_role(name, cur["aggregation"])
+        temporality = _temporality(name)
+        comparability = _portfolio_comparability(name)
+        weight_field = (DEFAULT_WEIGHT_FIELD
+                        if cur["aggregation"] == "weighted_average" else None)
+        share_basis = "count" if cur["aggregation"] == "share" else None
+        for value, key in ((role, "analytical_roles"),
+                           (temporality, "temporality"),
+                           (comparability, "portfolio_comparability")):
+            if value not in TAXONOMY[key]:
+                raise ValueError(f"{name}: invalid {key} value {value!r}")
         out_fields[name] = {
             "source_field": name,
             "display_name": cur["display"] or _display_name(name),
             "analytical_concept": cur["concept"],
+            "analytical_role": role,
+            "temporality": temporality,
             "categories": list(cur["categories"]),
             "workflow_tags": list(cur["tags"]),
             "directionality": cur["directionality"],
-            "aggregation_type": cur["aggregation"],
-            "comparable_across_portfolios": bool(cur["comparable"]),
+            "default_aggregation": cur["aggregation"],
+            "weight_field": weight_field,
+            "share_basis": share_basis,
+            "portfolio_comparability": comparability,
             "supports_materiality_assessment": bool(materiality),
             "asset_applicability": assets,
             "confidence": cur["confidence"],
@@ -1701,6 +1943,7 @@ def build_registry(source: Path = DEFAULT_SOURCE) -> Dict[str, Any]:
         }
 
     metadata = {
+        "schema_version": SCHEMA_VERSION,
         "version": VERSION,
         "source_registry": "config/system/fields_registry.yaml",
         "generator": "scripts/build_business_semantics_registry.py",

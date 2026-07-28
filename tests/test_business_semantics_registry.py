@@ -110,9 +110,10 @@ def test_source_field_matches_key(registry):
 # --------------------------------------------------------------------------- #
 
 REQUIRED_ENTRY_KEYS = {
-    "source_field", "display_name", "analytical_concept", "categories",
-    "workflow_tags", "directionality", "aggregation_type",
-    "comparable_across_portfolios", "supports_materiality_assessment",
+    "source_field", "display_name", "analytical_concept", "analytical_role",
+    "temporality", "categories", "workflow_tags", "directionality",
+    "default_aggregation", "weight_field", "share_basis",
+    "portfolio_comparability", "supports_materiality_assessment",
     "asset_applicability", "confidence", "rationale",
 }
 
@@ -123,6 +124,16 @@ ALLOWED_DIRECTIONALITY = {
 ALLOWED_CONFIDENCE = {"high", "medium", "low"}
 ALLOWED_WORKFLOW_TAGS = {
     "period_change", "portfolio_comparison", "ranking", "monitoring",
+}
+ALLOWED_ANALYTICAL_ROLES = {
+    "measure", "dimension", "derived_input", "supporting_attribute",
+}
+ALLOWED_TEMPORALITY = {
+    "point_in_time", "period_flow", "cumulative", "static_baseline",
+}
+ALLOWED_PORTFOLIO_COMPARABILITY = {
+    "comparable", "requires_scale_alignment", "within_asset_class_only",
+    "not_comparable",
 }
 
 
@@ -148,7 +159,10 @@ def test_controlled_taxonomy_values_only(registry):
             assert c in tx["categories"], f"{name}: bad category {c!r}"
         for t in entry["workflow_tags"]:
             assert t in tx["workflow_tags"], f"{name}: bad tag {t!r}"
-        assert entry["aggregation_type"] in tx["aggregation_types"], name
+        assert entry["default_aggregation"] in tx["default_aggregations"], name
+        assert entry["analytical_role"] in tx["analytical_roles"], name
+        assert entry["temporality"] in tx["temporality"], name
+        assert entry["portfolio_comparability"] in tx["portfolio_comparability"], name
         for a in entry["asset_applicability"]:
             assert a in tx["asset_applicability"], f"{name}: bad asset {a!r}"
 
@@ -229,6 +243,181 @@ def test_uncertain_pending_review_fields_not_in_registry(registry, builder):
         else:
             assert name in registry["fields"], (
                 f"{name} is included_ambiguous but missing from registry")
+
+
+# --------------------------------------------------------------------------- #
+# Schema v2: versioning, analytical_role, temporality
+# --------------------------------------------------------------------------- #
+
+
+def test_schema_version_and_content_version_are_separate(registry):
+    meta = registry["metadata"]
+    assert meta["schema_version"] == 2
+    assert isinstance(meta["version"], str) and meta["version"], (
+        "content version must be retained alongside schema_version")
+
+
+def test_every_entry_has_valid_analytical_role(registry):
+    for name, entry in registry["fields"].items():
+        assert entry["analytical_role"] in ALLOWED_ANALYTICAL_ROLES, (
+            f"{name}: invalid analytical_role {entry['analytical_role']!r}")
+
+
+def test_every_entry_has_valid_temporality(registry):
+    for name, entry in registry["fields"].items():
+        assert entry["temporality"] in ALLOWED_TEMPORALITY, (
+            f"{name}: invalid temporality {entry['temporality']!r}")
+
+
+DERIVED_INPUT_FIELDS = [
+    "pd_previous", "pd_current", "lgd_previous", "lgd_current",
+    "risk_grade_previous", "risk_grade_current",
+    "ifrs9_stage_previous", "ifrs9_stage_current",
+    "days_in_arrears_prior", "prior_principal_balances",
+]
+
+
+def test_snapshot_pair_fields_are_derived_inputs(registry):
+    for name in DERIVED_INPUT_FIELDS:
+        entry = registry["fields"][name]
+        assert entry["analytical_role"] == "derived_input", (
+            f"{name}: migration/previous-period input must be derived_input, "
+            f"not a standalone {entry['analytical_role']}")
+
+
+def test_cumulative_fields_identified_as_cumulative(registry):
+    named_cumulative = [n for n in registry["fields"]
+                        if n.startswith("cumulative_")]
+    assert named_cumulative, "expected cumulative_* fields in the registry"
+    for name in named_cumulative + ["allocated_losses"]:
+        entry = registry["fields"][name]
+        assert entry["temporality"] == "cumulative", (
+            f"{name}: cumulative series must be marked cumulative so "
+            f"period-change workflows difference it first")
+
+
+def test_period_flows_are_not_marked_cumulative_or_static(registry):
+    for name, entry in registry["fields"].items():
+        if "_in_period" in name or "_in_current_period" in name:
+            assert entry["temporality"] == "period_flow", (
+                f"{name}: in-period flow must be period_flow")
+
+
+def test_original_and_securitisation_baselines_are_static(registry):
+    baselines = [n for n in registry["fields"]
+                 if n.startswith("original_") or "securitisation" in n]
+    assert baselines, "expected original_*/securitisation baseline fields"
+    for name in baselines:
+        entry = registry["fields"][name]
+        assert entry["temporality"] == "static_baseline", (
+            f"{name}: origination/securitisation-anchored value must be "
+            f"static_baseline")
+        assert "period_change" not in entry["workflow_tags"], (
+            f"{name}: a static baseline cannot support period-change")
+
+
+# --------------------------------------------------------------------------- #
+# Schema v2: weight_field / share_basis
+# --------------------------------------------------------------------------- #
+
+
+def test_weighted_averages_have_canonical_weight_field(registry, source_fields):
+    for name, entry in registry["fields"].items():
+        if entry["default_aggregation"] == "weighted_average":
+            weight = entry["weight_field"]
+            assert weight, f"{name}: weighted_average requires weight_field"
+            assert weight in source_fields, (
+                f"{name}: weight_field {weight!r} is not a canonical field")
+        else:
+            assert entry["weight_field"] is None, (
+                f"{name}: weight_field must be null for "
+                f"{entry['default_aggregation']}")
+
+
+def test_share_metrics_have_explicit_share_basis(registry, source_fields):
+    for name, entry in registry["fields"].items():
+        if entry["default_aggregation"] == "share":
+            basis = entry["share_basis"]
+            assert basis == "count" or basis in source_fields, (
+                f"{name}: share_basis must be 'count' or a canonical weight "
+                f"field, got {basis!r}")
+        else:
+            assert entry["share_basis"] is None, (
+                f"{name}: share_basis must be null for non-share entries")
+
+
+# --------------------------------------------------------------------------- #
+# Schema v2: portfolio comparability
+# --------------------------------------------------------------------------- #
+
+INTERNAL_SCALE_FIELDS = [
+    "internal_risk_grade", "internal_risk_score", "internal_risk_stage",
+    "bank_internal_rating",
+    "bank_internal_loss_given_default_lgd_estimate",
+    "bank_internal_loss_given_default_lgd_estimate_down_turn",
+    "corporate_guarantor_bank_internal_1_year_probability_default",
+    "servicer_watchlist_code",
+]
+
+
+def test_valid_portfolio_comparability_values(registry):
+    for name, entry in registry["fields"].items():
+        assert entry["portfolio_comparability"] in \
+            ALLOWED_PORTFOLIO_COMPARABILITY, (
+                f"{name}: invalid portfolio_comparability "
+                f"{entry['portfolio_comparability']!r}")
+        assert "comparable_across_portfolios" not in entry, (
+            f"{name}: legacy boolean must be replaced by "
+            f"portfolio_comparability")
+
+
+def test_internal_scales_require_alignment(registry):
+    for name in INTERNAL_SCALE_FIELDS:
+        entry = registry["fields"][name]
+        assert entry["portfolio_comparability"] == "requires_scale_alignment", (
+            f"{name}: lender-specific internal scale must not be marked "
+            f"unconditionally comparable")
+
+
+def test_derived_inputs_are_not_comparable(registry):
+    for name in DERIVED_INPUT_FIELDS:
+        entry = registry["fields"][name]
+        assert entry["portfolio_comparability"] == "not_comparable", (
+            f"{name}: derived inputs are not standalone comparables")
+
+
+# --------------------------------------------------------------------------- #
+# Schema v2: concentration re-homing
+# --------------------------------------------------------------------------- #
+
+FORMER_CONCENTRATION_DIMENSIONS = [
+    "geographic_region_obligor", "geographic_region_collateral",
+    "collateral_geography", "postcode", "borrower_jurisdiction",
+    "broker_channel", "origination_channel", "originator_name",
+    "servicer_name", "product_type", "erm_product_type",
+    "erm_sub_product_type", "debt_type", "asset_type", "purpose",
+    "exposure_currency_denomination", "source_portfolio_type",
+    "enterprise_size", "obligor_basel_iii_segment",
+    "borrower_basel_iii_segment", "nace_industry_code", "customer_type",
+]
+
+
+def test_concentration_is_not_a_primary_concept(registry):
+    assert "concentration" not in \
+        registry["metadata"]["taxonomy"]["analytical_concepts"]
+    offenders = [n for n, e in registry["fields"].items()
+                 if e["analytical_concept"] == "concentration"]
+    assert not offenders, (
+        f"concentration must not be a primary concept: {offenders}")
+
+
+def test_former_concentration_dimensions_rehomed(registry):
+    for name in FORMER_CONCENTRATION_DIMENSIONS:
+        entry = registry["fields"][name]
+        assert entry["analytical_concept"] != "concentration", name
+        assert entry["analytical_role"] == "dimension", (
+            f"{name}: concentration suitability must follow from "
+            f"analytical_role: dimension")
 
 
 # --------------------------------------------------------------------------- #
