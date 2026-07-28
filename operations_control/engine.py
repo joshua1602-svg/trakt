@@ -1,0 +1,846 @@
+"""operations_control.engine — the Workflow State Engine.
+
+Owns the operational lifecycle: register/classify deliveries, create persistent
+workflow runs, execute the existing orchestrator through governed adapters,
+park at review gates, persist approvals as scoped rules, rerun affected stages,
+gate publication behind explicit approval, and recover after restart.
+
+Everything is persisted through :class:`operations_control.stores.OpsStore`
+(the operations-control container) on every transition — API/UI/worker restarts
+never lose state. Execution itself delegates to the EXISTING
+``engine.orchestrator_agent.run_orchestration`` with ``RealAgentAdapters``;
+publication delegates to the EXISTING ``ProductionPersistence.persist_platform``
+and ``approvals.write_pending/approve/promote`` promotion path.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+import threading
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import yaml
+
+from . import language
+from .adapters import (
+    APPROVED_DECISIONS_FILE,
+    DECISIONS_FILE,
+    GovernedAdapters,
+    _find_artifact,
+    translate_run_state,
+)
+from .classification import Classification, classify_delivery, fingerprint_delivery
+from .contracts import (
+    DEC_APPROVED,
+    DEC_OPEN,
+    DEC_REJECTED,
+    Delivery,
+    GovernedAgentResult,
+    KIND_PUBLICATION,
+    KIND_VALIDATION_EXCEPTION,
+    OUTCOME_MI,
+    OUTCOME_MI_ANNEX2,
+    OUTCOMES,
+    RUN_AWAITING_PUBLICATION,
+    RUN_BLOCKED,
+    RUN_CANCELLED,
+    RUN_FAILED,
+    RUN_HELD,
+    RUN_NEEDS_REVIEW,
+    RUN_PUBLISHED,
+    RUN_RECEIVED,
+    RUN_RUNNING,
+    ST_APPROVED,
+    ST_COMPLETED,
+    ST_NEEDS_REVIEW,
+    ST_BLOCKED,
+    STAGE_MAPPING,
+    STAGE_PUBLICATION,
+    STAGE_VALIDATION,
+    WF_NEW_CLIENT,
+    WF_NEW_PORTFOLIO,
+    WORKFLOW_TYPES,
+    WorkflowRun,
+    new_id,
+    now_iso,
+    stable_hash,
+    transition,
+)
+from .rules import RuleRecord, RuleStore, project_rules_to_client_memory
+from .stores import OpsStore
+
+logger = logging.getLogger("trakt.operations_control.engine")
+
+STAGING_ROOT_ENV = "TRAKT_OPS_STAGING_ROOT"
+DEFAULT_STAGING_ROOT = ".ops_state/staging"
+
+
+class OpsError(Exception):
+    """Operational error with a machine code + operator-safe message."""
+
+    def __init__(self, code: str, message: str, http_status: int = 400):
+        self.code, self.message, self.http_status = code, message, http_status
+        super().__init__(f"{code}: {message}")
+
+
+class OpsEngine:
+    """The governed workflow engine. One instance per API process; all state is
+    in the OpsStore, so several instances (or restarts) converge on the same
+    persisted truth."""
+
+    def __init__(self, store: OpsStore, *, staging_root: Optional[str] = None,
+                 real_agents: bool = True,
+                 adapter_factory=None,
+                 source_registry_factory=None,
+                 persistence_factory=None):
+        from .rules import memory_root
+        self.store = store
+        self.rules = RuleStore(store)
+        self.staging_root = Path(staging_root or os.environ.get(
+            STAGING_ROOT_ENV, DEFAULT_STAGING_ROOT))
+        # Captured at construction so background threads never depend on the
+        # environment still being set when they finish.
+        self.memory_root = memory_root()
+        self.real_agents = real_agents
+        self._adapter_factory = adapter_factory
+        self._source_registry_factory = source_registry_factory
+        self._persistence_factory = persistence_factory
+        self._threads: Dict[str, threading.Thread] = {}
+        self._lock = threading.Lock()
+
+    # ------------------------------------------------------------------ #
+    # Deliveries + classification
+    # ------------------------------------------------------------------ #
+    def _source_registry(self):
+        if self._source_registry_factory is not None:
+            return self._source_registry_factory()
+        from .classification import open_source_registry
+        return open_source_registry(storage=self.store.storage)
+
+    def register_delivery(self, *, client_id: str, portfolio_id: str,
+                          input_path: str, dataset: str = "funded",
+                          frequency: str = "monthly",
+                          reporting_period: str = "",
+                          registered_by: str = "") -> Dict[str, Any]:
+        p = Path(input_path)
+        if not p.exists():
+            raise OpsError("OPS_DELIVERY_NOT_FOUND",
+                           "Those files could not be found. Check the location "
+                           "and try again.", 400)
+        files = ([{"name": p.name}] if p.is_file() else
+                 [{"name": f.name} for f in sorted(p.iterdir()) if f.is_file()])
+        fingerprint = fingerprint_delivery(input_path)
+        delivery = Delivery(
+            delivery_id=new_id("del"), client_id=client_id,
+            portfolio_id=portfolio_id, input_path=str(p),
+            dataset=dataset, frequency=frequency,
+            reporting_period=reporting_period, files=files,
+            schema_fingerprint=fingerprint, registered_by=registered_by)
+        cls = classify_delivery(
+            self._source_registry(), client_id=client_id,
+            portfolio_id=portfolio_id, dataset=dataset, frequency=frequency,
+            fingerprint=fingerprint, reporting_period=reporting_period)
+        doc = delivery.to_dict()
+        doc["classification"] = cls.to_dict()
+        self.store.save_delivery(doc)
+        self.store.append_audit(client_id, "delivery_registered",
+                                actor=registered_by or "system",
+                                detail={"delivery_id": delivery.delivery_id,
+                                        "classification": cls.to_dict()})
+        return doc
+
+    # ------------------------------------------------------------------ #
+    # Workflow creation (idempotent) + start
+    # ------------------------------------------------------------------ #
+    def create_workflow(self, *, client_id: str, delivery_id: str, outcome: str,
+                        workflow_type: Optional[str] = None,
+                        created_by: str = "",
+                        override_reason: str = "") -> WorkflowRun:
+        if outcome not in OUTCOMES:
+            raise OpsError("OPS_BAD_OUTCOME", "Choose what Trakt should prepare.", 400)
+        delivery = self.store.load_delivery(client_id, delivery_id)
+        if delivery is None:
+            raise OpsError("OPS_DELIVERY_NOT_FOUND",
+                           "That delivery could not be found.", 404)
+        suggested = (delivery.get("classification") or {}).get("suggested", WF_NEW_CLIENT)
+        final_type = workflow_type or suggested
+        if final_type not in WORKFLOW_TYPES:
+            raise OpsError("OPS_BAD_TYPE", "Choose a valid workflow type.", 400)
+
+        key = stable_hash(client_id, delivery.get("portfolio_id", ""),
+                          delivery.get("reporting_period", ""), outcome,
+                          delivery_id)
+        existing = self.store.find_by_idempotency_key(client_id, key)
+        if existing is not None:
+            run = self.store.load_workflow(client_id, existing["workflow_id"])
+            if run is not None:
+                return run
+
+        run = WorkflowRun(
+            workflow_id=new_id("wf"), client_id=client_id,
+            portfolio_id=delivery.get("portfolio_id", ""),
+            outcome=outcome, workflow_type=final_type, delivery=delivery,
+            reporting_period=delivery.get("reporting_period", ""),
+            classification_suggested=suggested,
+            classification_overridden=bool(workflow_type
+                                           and workflow_type != suggested),
+            classification_overridden_by=(created_by if workflow_type
+                                          and workflow_type != suggested else ""),
+            classification_reason=override_reason,
+            idempotency_key=key, created_by=created_by)
+        run.set_stage("received", ST_COMPLETED)
+        self.store.save_workflow(run)
+        self.store.append_event(run, "created", actor=created_by or "system",
+                                detail={"outcome": outcome,
+                                        "workflow_type": final_type})
+        self.store.append_audit(
+            client_id, "workflow_created", actor=created_by or "system",
+            workflow_id=run.workflow_id,
+            detail={"outcome": outcome,
+                    "classification_suggested": suggested,
+                    "classification_final": final_type,
+                    "classification_overridden": run.classification_overridden,
+                    "override_reason": override_reason})
+        return run
+
+    # -- execution ----------------------------------------------------- #
+    def start(self, run: WorkflowRun, *, actor: str = "system",
+              wait: bool = False) -> WorkflowRun:
+        """Start (or resume) execution. Idempotent: a run already executing in
+        this process is left alone; a run in a review state must go through
+        :meth:`rerun`."""
+        with self._lock:
+            t = self._threads.get(run.workflow_id)
+            if t is not None and t.is_alive():
+                return run
+            if run.status not in (RUN_RECEIVED, RUN_NEEDS_REVIEW, RUN_BLOCKED,
+                                  RUN_FAILED, RUN_HELD):
+                raise OpsError("OPS_ALREADY_RUNNING",
+                               "This workflow is already in progress.", 409)
+            transition(run, RUN_RUNNING)
+            run.interrupted = False
+            self.store.save_workflow(run)
+            self.store.write_lease(run)
+            self.store.append_event(run, "started", actor=actor)
+            thread = threading.Thread(
+                target=self._execute_safely, args=(run.client_id, run.workflow_id),
+                name=f"ops-{run.workflow_id}", daemon=True)
+            self._threads[run.workflow_id] = thread
+            thread.start()
+        if wait:
+            thread.join()
+            return self.store.load_workflow(run.client_id, run.workflow_id) or run
+        return run
+
+    def rerun(self, run: WorkflowRun, *, actor: str) -> WorkflowRun:
+        """Explicit rerun of the affected stage(s) — resumes the orchestrator
+        from persisted state; completed steps are never repeated."""
+        if run.status == RUN_RUNNING and self._is_executing(run.workflow_id):
+            raise OpsError("OPS_ALREADY_RUNNING",
+                           "This workflow is already in progress.", 409)
+        run.rerun_count += 1
+        self.store.append_audit(run.client_id, "workflow_rerun", actor=actor,
+                                workflow_id=run.workflow_id,
+                                detail={"rerun_count": run.rerun_count})
+        return self.start(run, actor=actor)
+
+    def cancel(self, run: WorkflowRun, *, actor: str, reason: str) -> WorkflowRun:
+        transition(run, RUN_CANCELLED)
+        self.store.save_workflow(run)
+        self.store.append_event(run, "cancelled", actor=actor,
+                                detail={"reason": reason})
+        self.store.append_audit(run.client_id, "workflow_cancelled", actor=actor,
+                                workflow_id=run.workflow_id,
+                                detail={"reason": reason})
+        return run
+
+    def _is_executing(self, workflow_id: str) -> bool:
+        t = self._threads.get(workflow_id)
+        return t is not None and t.is_alive()
+
+    # -- the actual execution ------------------------------------------ #
+    def _execute_safely(self, client_id: str, workflow_id: str) -> None:
+        try:
+            self._execute(client_id, workflow_id)
+        except Exception:
+            logger.exception("workflow execution failed: %s", workflow_id)
+            run = self.store.load_workflow(client_id, workflow_id)
+            if run is not None:
+                run.status = RUN_FAILED
+                run.blockers = [language.GENERIC_PROBLEM]
+                self.store.save_workflow(run)
+                self.store.clear_lease(run)
+                self.store.append_event(run, "execution_error")
+
+    def _staging_dir(self, run: WorkflowRun) -> Path:
+        return self.staging_root / run.client_id / run.workflow_id
+
+    def _orchestrator_target(self, run: WorkflowRun) -> str:
+        return "all" if run.outcome == OUTCOME_MI_ANNEX2 else "mi"
+
+    def _build_adapters(self, run: WorkflowRun, recorder) -> GovernedAdapters:
+        if self._adapter_factory is not None:
+            inner = self._adapter_factory(run)
+        else:
+            from engine.orchestrator_agent.adapters import RealAgentAdapters
+            approved = self._approved_decisions_path(run)
+            deterministic = approved is not None
+            inner = RealAgentAdapters(
+                client_name=run.client_id,
+                onboarding_mode=("mi_only" if run.outcome == OUTCOME_MI
+                                 else "regulatory_mi"),
+                processing_mode=("deterministic" if deterministic
+                                 else "source_onboarding"),
+                mapping_config_path=(str(approved) if approved else None),
+                dataset=run.delivery.get("dataset", "funded") if
+                run.delivery.get("dataset") == "pipeline" else "",
+                full_pipeline=(run.outcome == OUTCOME_MI_ANNEX2),
+                reporting_period=run.reporting_period,
+                managed_service=True)
+        return GovernedAdapters(inner, recorder)
+
+    def _execute(self, client_id: str, workflow_id: str) -> None:
+        from engine.orchestrator_agent.adapters import PortfolioSpec
+        from engine.orchestrator_agent.orchestrator import run_orchestration
+        from engine.orchestrator_agent.state import RunState
+
+        run = self.store.load_workflow(client_id, workflow_id)
+        if run is None:
+            return
+
+        staging = self._staging_dir(run)
+        staging.mkdir(parents=True, exist_ok=True)
+
+        # Materialise applicable approved rules into client memory (existing
+        # MappingMemoryStore artefact) before the agents run.
+        applicable = self.rules.applicable(
+            client_id=run.client_id, portfolio_id=run.portfolio_id,
+            file_ref=run.delivery.get("schema_fingerprint", ""))
+        if applicable:
+            project_rules_to_client_memory(
+                applicable, run.client_id,
+                memory_dir=self.memory_root / run.client_id / "client_memory")
+
+        # Resume from persisted orchestrator state when it exists.
+        resume_state: Optional[RunState] = None
+        orun_id = run.orchestrator_run_id or f"orun_{run.workflow_id}"
+        state_path = staging / orun_id / "run_state.json"
+        if state_path.exists():
+            resume_state = RunState.load(state_path)
+            for p in resume_state.portfolios:
+                for s in p.steps.values():
+                    if s.status in ("halted", "failed", "running"):
+                        s.status = "pending"
+                if p.status in ("halted", "failed", "running"):
+                    p.status = "pending"
+            for s in (resume_state.assemble, resume_state.route,
+                      resume_state.project):
+                if s.status in ("halted", "failed", "running"):
+                    s.status = "pending"
+            resume_state.force_publish = resume_state.force_publish or \
+                self._validation_exception_approved(run)
+
+        def recorder(step: str, result) -> None:
+            self._on_step(client_id, workflow_id, step, result)
+
+        adapters = self._build_adapters(run, recorder)
+        spec = PortfolioSpec(
+            source_portfolio_id=run.portfolio_id,
+            input=run.delivery.get("input_path", ""),
+            source_portfolio_type=("direct" if run.workflow_type == WF_NEW_CLIENT
+                                   else None),
+            allow_unknown_acquisition_date=True)
+
+        state = run_orchestration(
+            run.client_id, [spec],
+            target=self._orchestrator_target(run),
+            out_root=str(staging), adapters=adapters,
+            created_at=now_iso(), run_id=orun_id,
+            resume_state=resume_state,
+            full_pipeline=(run.outcome == OUTCOME_MI_ANNEX2),
+            force_publish=self._validation_exception_approved(run))
+
+        run = self.store.load_workflow(client_id, workflow_id) or run
+        run.orchestrator_run_id = state.run_id
+        run.staging_root = str(staging)
+        self._apply_run_state(run, state)
+
+    def _apply_run_state(self, run: WorkflowRun, state) -> None:
+        """Translate the final orchestrator state into stage results + the
+        workflow status, persist everything, and prepare publication if ready."""
+        work_dir = (Path(state.out_root) / state.run_id / "portfolios"
+                    / run.portfolio_id)
+        results = translate_run_state(run, state, work_dir)
+        open_blocking = False
+        blocked = False
+        for stage, gar in results.items():
+            self.store.save_result(run.client_id, gar)
+            run.set_stage(stage, gar.status, gar.result_id)
+            if gar.status == ST_NEEDS_REVIEW:
+                open_blocking = True
+            if gar.status == ST_BLOCKED:
+                blocked = True
+            self._sync_decisions(run, gar)
+
+        run.blockers = [b for g in results.values() for b in g.blockers]
+        if state.status == "done":
+            new_status = RUN_AWAITING_PUBLICATION
+        elif open_blocking:
+            new_status = RUN_NEEDS_REVIEW
+        elif blocked or state.status == "halted":
+            new_status = RUN_BLOCKED
+        else:
+            new_status = RUN_FAILED
+        if run.status != new_status:
+            try:
+                transition(run, new_status)
+            except Exception:
+                run.status = new_status
+        if new_status == RUN_AWAITING_PUBLICATION:
+            self._prepare_publication(run, state)
+        self.store.save_workflow(run)
+        self.store.clear_lease(run)
+        self.store.append_event(run, "execution_finished",
+                                detail={"status": run.status})
+
+    def _on_step(self, client_id: str, workflow_id: str, step: str, result) -> None:
+        """Live progress: persist a light stage-status update as each agent
+        step completes, so polling clients see movement mid-run."""
+        run = self.store.load_workflow(client_id, workflow_id)
+        if run is None:
+            return
+        from .adapters import STEP_TO_STAGE
+        stage = STEP_TO_STAGE.get(step)
+        if stage:
+            status = ST_COMPLETED if result.ok else (
+                ST_NEEDS_REVIEW if result.blocking else ST_BLOCKED)
+            run.set_stage(stage, status)
+            self.store.save_workflow(run)
+
+    # ------------------------------------------------------------------ #
+    # Decisions
+    # ------------------------------------------------------------------ #
+    def _sync_decisions(self, run: WorkflowRun, gar: GovernedAgentResult) -> None:
+        """Persist newly-surfaced decisions; keep already-resolved ones."""
+        for d in gar.decisions_required:
+            existing = self.store.load_decision(run.client_id, d.decision_id)
+            if existing is not None and existing.get("status") != DEC_OPEN:
+                continue
+            doc = d.to_dict()
+            doc.update({"status": DEC_OPEN, "workflow_id": run.workflow_id,
+                        "client_id": run.client_id, "stage": gar.stage,
+                        "created_at": existing.get("created_at") if existing
+                        else now_iso()})
+            self.store.save_decision(run.client_id, doc)
+
+    def resolve_decision(self, *, client_id: str, decision_id: str, action: str,
+                         actor: str, value: str = "", scope: str = "portfolio",
+                         reason: str = "") -> Dict[str, Any]:
+        """Approve / reject / amend one decision. Approvals become governed,
+        scoped rules; when no blocking decisions remain open, the affected
+        stage is rerun automatically. Duplicate resolutions are rejected."""
+        doc = self.store.load_decision(client_id, decision_id)
+        if doc is None:
+            raise OpsError("OPS_DECISION_NOT_FOUND",
+                           "That decision could not be found.", 404)
+        if doc.get("status") != DEC_OPEN:
+            raise OpsError("OPS_DECISION_ALREADY_RESOLVED",
+                           "This decision has already been resolved.", 409)
+        if action not in ("approve", "reject", "amend"):
+            raise OpsError("OPS_BAD_ACTION", "Choose approve, reject or amend.", 400)
+        run = self.store.load_workflow(client_id, doc.get("workflow_id", ""))
+        if run is None:
+            raise OpsError("OPS_WORKFLOW_NOT_FOUND",
+                           "The workflow for this decision no longer exists.", 404)
+
+        if action == "reject":
+            if not reason:
+                raise OpsError("OPS_REASON_REQUIRED",
+                               "Please say why you are rejecting this.", 400)
+            doc.update(status=DEC_REJECTED, resolved_by=actor,
+                       resolved_at=now_iso(), resolution_reason=reason)
+            self.store.save_decision(client_id, doc)
+            self.store.append_audit(client_id, "decision_rejected", actor=actor,
+                                    workflow_id=run.workflow_id,
+                                    decision_id=decision_id,
+                                    detail={"reason": reason})
+            return {"decision": doc, "rule": None, "rerun_scheduled": False}
+
+        chosen = value or (doc.get("recommendation") or {}).get("value", "")
+        if doc.get("kind") == KIND_PUBLICATION and not chosen:
+            chosen = "publish"
+        if not chosen:
+            raise OpsError("OPS_VALUE_REQUIRED",
+                           "Choose an option before approving.", 400)
+
+        # Publication decisions route through the explicit publication gate —
+        # they never persist a rule and never bypass the promote path.
+        if doc.get("kind") == KIND_PUBLICATION:
+            if chosen == "publish":
+                pub = self.approve_publication(client_id=client_id,
+                                               workflow_id=run.workflow_id,
+                                               actor=actor)
+                doc.update(status=DEC_APPROVED, resolved_by=actor,
+                           resolved_at=now_iso(), resolution_value=chosen)
+                self.store.save_decision(client_id, doc)
+                return {"decision": doc, "rule": None,
+                        "rerun_scheduled": False, "publication": pub}
+            pub = self.reject_publication(
+                client_id=client_id, workflow_id=run.workflow_id, actor=actor,
+                reason=reason or "Held by operator")
+            doc.update(status=DEC_REJECTED, resolved_by=actor,
+                       resolved_at=now_iso(), resolution_value=chosen,
+                       resolution_reason=reason)
+            self.store.save_decision(client_id, doc)
+            return {"decision": doc, "rule": None,
+                    "rerun_scheduled": False, "publication": pub}
+
+        rule = None
+        if doc.get("kind") in ("field_mapping", "alias", "enum", "transformation",
+                               KIND_VALIDATION_EXCEPTION):
+            rule = self._persist_rule(run, doc, chosen, scope, actor, reason)
+
+        doc.update(status=DEC_APPROVED, resolved_by=actor, resolved_at=now_iso(),
+                   resolution_action=action,
+                   resolution_value=chosen, resolution_scope=scope,
+                   resolution_reason=reason,
+                   rule_id=(rule.rule_id if rule else None),
+                   rule_version=(rule.version if rule else None))
+        self.store.save_decision(client_id, doc)
+        self.store.append_audit(client_id, "decision_approved", actor=actor,
+                                workflow_id=run.workflow_id,
+                                decision_id=decision_id,
+                                rule_id=(rule.rule_id if rule else ""),
+                                detail={"action": action, "value": chosen,
+                                        "scope": scope})
+
+        self._write_approved_decisions_file(run)
+
+        rerun_scheduled = False
+        # Rerun only when the whole review batch is resolved — never mid-batch,
+        # so a rerun cannot race decisions the operator is still making.
+        still_open = [d for d in self.store.open_decisions(client_id,
+                                                           run.workflow_id)
+                      if d.get("kind") != KIND_PUBLICATION]
+        if not still_open and run.status in (RUN_NEEDS_REVIEW, RUN_BLOCKED):
+            stage = doc.get("stage", "")
+            run.set_stage(stage or STAGE_MAPPING, ST_APPROVED)
+            self.store.save_workflow(run)
+            self.rerun(run, actor=actor)
+            rerun_scheduled = True
+        return {"decision": doc, "rule": (rule.to_dict() if rule else None),
+                "rerun_scheduled": rerun_scheduled}
+
+    def _persist_rule(self, run: WorkflowRun, doc: Dict[str, Any], value: str,
+                      scope: str, actor: str, reason: str) -> RuleRecord:
+        subject = doc.get("subject") or {}
+        kind = doc["kind"]
+        payload: Dict[str, Any]
+        if kind in ("field_mapping", "alias"):
+            payload = {"source_column": subject.get("source_column")
+                       or subject.get("target_field", ""),
+                       "canonical_field": value}
+            desc = (f"Treat '{subject.get('source_column') or subject.get('target_field')}' "
+                    f"as '{value.replace('_', ' ')}'.")
+        elif kind == "enum":
+            payload = {"field": subject.get("field", ""),
+                       "source_value": subject.get("source_value", ""),
+                       "canonical_value": value}
+            desc = (f"Read '{subject.get('source_value')}' as '{value}' for "
+                    f"{subject.get('field', 'this field')}.")
+        elif kind == KIND_VALIDATION_EXCEPTION:
+            payload = {"check": subject.get("artefact", "validation"),
+                       "disposition": value, "justification": reason}
+            desc = "Accepted flagged checks for this delivery."
+            scope = "file"      # validation exceptions never generalise silently
+        else:
+            payload = {"subject": subject.get("decision_id", ""),
+                       "selected_action": value}
+            desc = f"Approved treatment: {value.replace('_', ' ')}."
+        rec = (doc.get("recommendation") or {})
+        rule = RuleRecord(
+            rule_id="", version=0, kind=kind, scope=scope,
+            client_id=(run.client_id if scope != "global" else ""),
+            portfolio_id=(run.portfolio_id if scope in ("portfolio", "file") else ""),
+            file_ref=(run.delivery.get("schema_fingerprint", "")
+                      if scope == "file" else ""),
+            payload=payload, description=desc,
+            suggested_by=rec.get("source", "operator"),
+            confidence=rec.get("confidence"),
+            decision_id=doc["decision_id"], workflow_id=run.workflow_id,
+            approved_by=actor, reason=reason)
+        rule = self.rules.approve(rule)
+        if rule.kind in ("field_mapping", "alias", "enum") and scope != "file":
+            project_rules_to_client_memory(
+                [rule], run.client_id,
+                memory_dir=self.memory_root / run.client_id / "client_memory")
+        self.store.append_audit(run.client_id, "rule_persisted", actor=actor,
+                                workflow_id=run.workflow_id, rule_id=rule.rule_id,
+                                detail={"kind": rule.kind, "scope": rule.scope,
+                                        "version": rule.version})
+        return rule
+
+    def _write_approved_decisions_file(self, run: WorkflowRun) -> None:
+        """Merge operator approvals into the run's pending 34_ decisions
+        template, producing the approved YAML the onboarding agent applies
+        deterministically on rerun (the existing decisions-bridge contract)."""
+        work_dir = self._staging_dir(run)
+        pending = _find_artifact(work_dir, DECISIONS_FILE)
+        if pending is None:
+            return
+        try:
+            docy = yaml.safe_load(pending.read_text(encoding="utf-8")) or {}
+        except Exception:  # noqa: BLE001
+            return
+        resolved = {d.get("subject", {}).get("decision_id") or
+                    d.get("decision_id", ""): d
+                    for d in self.store.list_decisions(run.client_id,
+                                                       workflow_id=run.workflow_id)
+                    if d.get("status") == DEC_APPROVED}
+        changed = False
+        for entry in docy.get("decisions") or []:
+            if not isinstance(entry, dict):
+                continue
+            match = resolved.get(str(entry.get("decision_id", "")))
+            if match is None:
+                match = resolved.get(f"{run.workflow_id}_{entry.get('decision_id')}")
+            if match is None:
+                continue
+            entry["status"] = "approved"
+            sel = match.get("resolution_value") \
+                or entry.get("recommended_action") or entry.get("selected_action")
+            if match.get("resolution_action") == "amend":
+                # Operator supplied a custom value: record it as a configured
+                # static value (an action the apply step already supports).
+                entry["selected_action"] = "configure_static_value"
+                entry["configured_value"] = match.get("resolution_value")
+            else:
+                entry["selected_action"] = sel
+            # Per-action confirmation fields the deterministic apply requires.
+            if sel == "mark_not_applicable":
+                entry["not_applicable_confirmed"] = True
+            if sel in ("confirm_default_or_nd", "confirm_ND_code"):
+                entry["default_confirmed"] = True
+            entry["operator_note"] = match.get("resolution_reason") or None
+            entry["approved_by"] = match.get("resolved_by", "")
+            entry["approved_at"] = match.get("resolved_at", "")
+            changed = True
+        if not changed:
+            return
+        out = pending.parent / APPROVED_DECISIONS_FILE
+        out.write_text(yaml.safe_dump(docy, sort_keys=False), encoding="utf-8")
+        # Durable copy in the operations-control container.
+        self.store.storage.write_text(
+            f"blob://{self.store.layout.container}/{run.client_id}/workflow-runs/"
+            f"{run.workflow_id}/onboarding/{APPROVED_DECISIONS_FILE}",
+            out.read_text(encoding="utf-8"))
+
+    def _approved_decisions_path(self, run: WorkflowRun) -> Optional[Path]:
+        p = _find_artifact(self._staging_dir(run), APPROVED_DECISIONS_FILE)
+        return p
+
+    def _validation_exception_approved(self, run: WorkflowRun) -> bool:
+        for d in self.store.list_decisions(run.client_id,
+                                           workflow_id=run.workflow_id):
+            if (d.get("kind") == KIND_VALIDATION_EXCEPTION
+                    and d.get("status") == DEC_APPROVED
+                    and d.get("resolution_value") == "proceed"):
+                return True
+        return False
+
+    # ------------------------------------------------------------------ #
+    # Publication
+    # ------------------------------------------------------------------ #
+    def _prepare_publication(self, run: WorkflowRun, state) -> None:
+        period = run.reporting_period or "unspecified"
+        existing = self.store.load_publication(run.client_id, period)
+        version = 1
+        previous_id = None
+        if existing is not None:
+            if existing.get("workflow_id") == run.workflow_id \
+                    and existing.get("status") in ("prepared", "approved", "published"):
+                return
+            version = int(existing.get("version") or 0) + 1
+            previous_id = existing.get("publication_id")
+        rule_set = {r.rule_id: r.version for r in self.rules.applicable(
+            client_id=run.client_id, portfolio_id=run.portfolio_id,
+            file_ref=run.delivery.get("schema_fingerprint", ""))}
+        doc = {
+            "publication_id": new_id("pub"),
+            "client_id": run.client_id,
+            "workflow_id": run.workflow_id,
+            "workflow_type": run.workflow_type,
+            "reporting_period": period,
+            "status": "prepared",
+            "version": version,
+            "previous_publication_id": previous_id,
+            "rule_versions": rule_set,
+            "source_artefacts": {
+                "central_canonical": state.central_canonical_path,
+                "delivery_fingerprint": run.delivery.get("schema_fingerprint", ""),
+                "orchestrator_run_id": state.run_id,
+            },
+            "agent_versions": {"pipeline": "trakt-engine"},
+            "configuration_versions": {"outcome": run.outcome},
+            "prepared_at": now_iso(),
+            "approved_by": None, "approved_at": None,
+            "published_at": None, "rolled_back_by": None,
+        }
+        self.store.save_publication(run.client_id, doc)
+
+    def _persistence(self):
+        if self._persistence_factory is not None:
+            return self._persistence_factory()
+        from apps.blob_trigger_app.layout import Layout
+        from apps.blob_trigger_app.persistence import ProductionPersistence
+        return ProductionPersistence(storage=self.store.storage,
+                                     layout=Layout.from_env())
+
+    def approve_publication(self, *, client_id: str, workflow_id: str,
+                            actor: str) -> Dict[str, Any]:
+        """The ONLY path to production ``latest`` — explicit operator approval,
+        then the EXISTING promotion path publishes."""
+        run = self.store.load_workflow(client_id, workflow_id)
+        if run is None:
+            raise OpsError("OPS_WORKFLOW_NOT_FOUND",
+                           "That workflow could not be found.", 404)
+        if run.status != RUN_AWAITING_PUBLICATION:
+            raise OpsError("OPS_PUBLICATION_NOT_PREPARED",
+                           "This workflow is not ready to publish.", 409)
+        period = run.reporting_period or "unspecified"
+        pub = self.store.load_publication(client_id, period)
+        if pub is None or pub.get("workflow_id") != run.workflow_id:
+            raise OpsError("OPS_PUBLICATION_NOT_PREPARED",
+                           "This workflow is not ready to publish.", 409)
+        if pub.get("status") not in ("prepared",):
+            raise OpsError("OPS_ALREADY_PUBLISHED",
+                           "This report has already been published.", 409)
+
+        pub.update(status="approved", approved_by=actor, approved_at=now_iso())
+        self.store.save_publication(client_id, pub)
+
+        # Resolve any still-open publication decision for this workflow so it
+        # leaves the Review Centre whichever surface the operator used.
+        for d in self.store.open_decisions(client_id, workflow_id):
+            if d.get("kind") == KIND_PUBLICATION:
+                d.update(status=DEC_APPROVED, resolved_by=actor,
+                         resolved_at=now_iso(), resolution_value="publish")
+                self.store.save_decision(client_id, d)
+
+        # EXISTING promotion path: platform canonical -> processed latest+period.
+        persistence = self._persistence()
+        central = (pub.get("source_artefacts") or {}).get("central_canonical")
+        published = {}
+        if central and Path(str(central)).exists():
+            published = persistence.persist_platform(client_id, period, str(central))
+        pub.update(status="published", published_at=now_iso(),
+                   published_artefacts=published)
+        self.store.save_publication(client_id, pub)
+
+        # Onboarding workflows also promote the source record via the EXISTING
+        # approvals promote path, so future deliveries route deterministically.
+        if run.workflow_type in (WF_NEW_CLIENT, WF_NEW_PORTFOLIO):
+            try:
+                self._promote_source(run, actor)
+            except Exception:  # noqa: BLE001 — promotion failure must not lose publish
+                logger.exception("source promotion failed for %s", run.workflow_id)
+
+        try:
+            transition(run, RUN_PUBLISHED)
+        except Exception:
+            run.status = RUN_PUBLISHED
+        run.set_stage(STAGE_PUBLICATION, ST_COMPLETED)
+        self.store.save_workflow(run)
+        self.store.append_event(run, "published", actor=actor,
+                                detail={"publication_id": pub["publication_id"]})
+        self.store.append_audit(client_id, "publication_approved", actor=actor,
+                                workflow_id=run.workflow_id,
+                                detail={"publication_id": pub["publication_id"],
+                                        "version": pub.get("version")})
+        return pub
+
+    def _promote_source(self, run: WorkflowRun, actor: str) -> None:
+        from apps.blob_trigger_app import approvals as _approvals
+        from apps.blob_trigger_app.layout import Layout
+        layout = Layout.from_env()
+        registry = self._source_registry()
+        delivery = run.delivery
+        art = _approvals.write_pending(
+            self.store.storage, layout,
+            kind=_approvals.KIND_NEW_SOURCE,
+            client_id=run.client_id, source_book_type=None,
+            dataset=delivery.get("dataset", "funded"),
+            frequency=delivery.get("frequency", "monthly"),
+            source_portfolio_id=run.portfolio_id,
+            period=run.reporting_period or "unspecified",
+            schema_fingerprint=delivery.get("schema_fingerprint", ""),
+            detected_files=[f.get("name", "") for f in delivery.get("files", [])],
+            created_at=now_iso())
+        approved_path = self._approved_decisions_path(run)
+        _approvals.approve(self.store.storage, layout, art["approval_id"],
+                           mapping_id=f"ops_{run.workflow_id}",
+                           mapping_config_path=(str(approved_path)
+                                                if approved_path else None),
+                           decided_by=actor, decided_at=now_iso())
+        rec = _approvals.promote(self.store.storage, layout, registry,
+                                 art["approval_id"])
+        rec.last_successful_run_id = run.orchestrator_run_id
+        rec.last_successful_reporting_period = run.reporting_period or ""
+        registry.upsert(rec)
+
+    def reject_publication(self, *, client_id: str, workflow_id: str,
+                           actor: str, reason: str) -> Dict[str, Any]:
+        if not reason:
+            raise OpsError("OPS_REASON_REQUIRED",
+                           "Please say why you are holding this report.", 400)
+        run = self.store.load_workflow(client_id, workflow_id)
+        if run is None:
+            raise OpsError("OPS_WORKFLOW_NOT_FOUND",
+                           "That workflow could not be found.", 404)
+        if run.status != RUN_AWAITING_PUBLICATION:
+            raise OpsError("OPS_PUBLICATION_NOT_PREPARED",
+                           "This workflow is not awaiting publication.", 409)
+        period = run.reporting_period or "unspecified"
+        pub = self.store.load_publication(client_id, period)
+        if pub is not None and pub.get("workflow_id") == workflow_id:
+            pub.update(status="rejected", approved_by=actor,
+                       approved_at=now_iso(), reject_reason=reason)
+            self.store.save_publication(client_id, pub)
+        transition(run, RUN_HELD)
+        self.store.save_workflow(run)
+        self.store.append_audit(client_id, "publication_rejected", actor=actor,
+                                workflow_id=workflow_id,
+                                detail={"reason": reason})
+        return pub or {}
+
+    # ------------------------------------------------------------------ #
+    # Restart recovery
+    # ------------------------------------------------------------------ #
+    def recover_on_startup(self) -> List[str]:
+        """Reconcile persisted state after a process restart: any workflow left
+        in ``running`` with no live executor is marked interrupted and parked
+        as blocked (resumable via rerun). Returns affected workflow ids."""
+        recovered: List[str] = []
+        for client_id in self.store.known_clients():
+            for row in self.store.list_workflows(client_id):
+                if row.get("status") != RUN_RUNNING:
+                    continue
+                if self._is_executing(row["workflow_id"]):
+                    continue
+                run = self.store.load_workflow(client_id, row["workflow_id"])
+                if run is None:
+                    continue
+                run.interrupted = True
+                run.blockers = ["This run was interrupted. Choose 'Run again' "
+                                "to continue where it left off."]
+                try:
+                    transition(run, RUN_BLOCKED)
+                except Exception:
+                    run.status = RUN_BLOCKED
+                self.store.save_workflow(run)
+                self.store.clear_lease(run)
+                self.store.append_event(run, "interrupted_recovered")
+                recovered.append(run.workflow_id)
+        return recovered
