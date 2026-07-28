@@ -103,6 +103,42 @@ Tracked here so nothing is lost; each is verified before classification.
   as-of-latest not aggregated, narrowing disclosed, single-date unchanged/unwarned).
 * **status:** FIXED
 
+## ASSURE-006 — Silent mixed-currency monetary aggregation
+
+* **severity:** Critical
+* **component:** `mi_agent_api/mi_service.py` (default point-in-time route); ungoverned sum sites across `mi_agent/mi_query_executor.py`, `mi_agent_api/{snapshots,evolution,cohorts,geo,movement_summary}.py`
+* **fixture:** `assurance/fixtures/generated/mixed_currency.csv` (GBP + EUR)
+* **question_id:** `assurance/runners/test_currency_safety.py`
+* **observed_result:** On a GBP+EUR book, "total outstanding balance" returned
+  £37.3MM — the arithmetic sum across both currencies — formatted with the modal
+  (£) symbol, `status: success`, no warning. The independent oracle suppresses
+  the monetary total for the same population.
+* **expected_result:** Monetary totals over a mixed-currency population are
+  suppressed (not a single figure) with a disclosed limitation; count-based
+  measures continue.
+* **root_cause:** Only `mi_workflows/engine.py` and
+  `mi_agent/period_change/calculations.py` implement a mixed-currency guard;
+  9 of 11 sum implementations — including the default `/mi/query` point-in-time
+  path and every dashboard KPI/evolution/geo/cohort endpoint — add monetary
+  values with no guard. `currency.resolve_currency_code` selects the modal
+  currency and formats the cross-currency sum with that symbol.
+* **production_impact:** Materially wrong, misleadingly-labelled monetary totals
+  on any multi-currency book. Silent mixed-currency aggregation is a Critical /
+  automatic no-go for a multi-currency launch.
+* **fix (partial, primary route):** `_currency_limitation` detects a
+  mixed-currency point-in-time population and `_suppress_monetary_values` blanks
+  monetary KPI + reconciliation figures with a disclosed limitation and a
+  `currencyLimitation` metadata flag. No-op for single-currency frames (the base
+  fixture and standard single-currency deployments are byte-identical).
+* **residual:** The guard covers the governed `/mi/query` point-in-time route.
+  The dashboard GET routes and geo/cohort surfaces share the ungoverned sum sites
+  and are NOT covered. Full remediation is a shared-calculation consolidation
+  beyond a minimal isolated fix.
+* **tests_added:** `assurance/runners/test_currency_safety.py` (suppression,
+  disclosure, count-measure still answered, single-currency unchanged).
+* **status:** FIXED (primary route) / CONTAIN (launch recommended single-currency
+  until dashboard + geo/cohort sum sites are remediated)
+
 ### Remaining candidates pending verification
 * **ASSURE-005** (candidate Critical) — Weighted averages silently fall back to
   a simple mean on zero total weight in `analytics_lib/stratify.py` and

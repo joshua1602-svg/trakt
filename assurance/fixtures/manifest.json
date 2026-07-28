@@ -1,0 +1,134 @@
+{
+  "single_portfolio": {
+    "file": "generated/single_portfolio.csv",
+    "rows": 47,
+    "checksum": "4f5b26ade01d8213",
+    "purpose": "Total == the one book; scope resolution baseline."
+  },
+  "two_portfolios": {
+    "file": "generated/two_portfolios.csv",
+    "rows": 84,
+    "checksum": "d46af676509b4c0a",
+    "purpose": "Disjoint sub-scopes sum to the two-book total."
+  },
+  "three_portfolios": {
+    "file": "generated/three_portfolios.csv",
+    "rows": 118,
+    "checksum": "2a55641352eed8c6",
+    "purpose": "Full multibook; base numerical substrate."
+  },
+  "one_loan": {
+    "file": "generated/one_loan.csv",
+    "rows": 1,
+    "checksum": "b86f82bb13d542fd",
+    "purpose": "Single-name concentration == 100%; averages == that loan."
+  },
+  "empty_portfolio": {
+    "file": "generated/empty_portfolio.csv",
+    "rows": 0,
+    "checksum": "076d35a684b519b6",
+    "purpose": "No rows: controlled empty result, never a fabricated zero KPI."
+  },
+  "mixed_currency": {
+    "file": "generated/mixed_currency.csv",
+    "rows": 118,
+    "checksum": "b1e5da042458e5db",
+    "purpose": "Monetary totals suppressed; count shares still valid."
+  },
+  "missing_currency": {
+    "file": "generated/missing_currency.csv",
+    "rows": 118,
+    "checksum": "d1fd1f6496d641d0",
+    "purpose": "No currency field: totals allowed but flagged as unverified currency."
+  },
+  "null_currency": {
+    "file": "generated/null_currency.csv",
+    "rows": 118,
+    "checksum": "ec95a83f8b3c25c3",
+    "purpose": "Null currency values must not be treated as a distinct currency."
+  },
+  "duplicate_loan_ids_within": {
+    "file": "generated/duplicate_loan_ids_within.csv",
+    "rows": 47,
+    "checksum": "04eddf5f1452fdde",
+    "purpose": "Dedup / identity integrity within one book."
+  },
+  "duplicate_ids_across_portfolios": {
+    "file": "generated/duplicate_ids_across_portfolios.csv",
+    "rows": 84,
+    "checksum": "33909b0a98979e21",
+    "purpose": "Composite key needed; must not collapse two loans."
+  },
+  "missing_provenance": {
+    "file": "generated/missing_provenance.csv",
+    "rows": 118,
+    "checksum": "8e98394e6769aa3c",
+    "purpose": "No source_portfolio_id: lens scoping degrades to Total with disclosure."
+  },
+  "two_reporting_dates": {
+    "file": "generated/two_reporting_dates.csv",
+    "rows": 234,
+    "checksum": "461cd55b79911eda",
+    "purpose": "Point-in-time resolves as-of-latest, never aggregates both."
+  },
+  "stale_only": {
+    "file": "generated/stale_only.csv",
+    "rows": 116,
+    "checksum": "c37d2449d3bac456",
+    "purpose": "Requested date unavailable: adjust to prior and disclose the gap."
+  },
+  "zero_balances": {
+    "file": "generated/zero_balances.csv",
+    "rows": 118,
+    "checksum": "2588a98f62d65078",
+    "purpose": "Zero exposure: shares undefined, not divide-by-zero."
+  },
+  "zero_weights": {
+    "file": "generated/zero_weights.csv",
+    "rows": 118,
+    "checksum": "bf2c6ec09f7e86d0",
+    "purpose": "Weighted average must be None, never a simple-mean fallback."
+  },
+  "negative_weights": {
+    "file": "generated/negative_weights.csv",
+    "rows": 118,
+    "checksum": "ee3474da8d15d38e",
+    "purpose": "Negative weights excluded from the positive-weight denominator."
+  },
+  "all_null_measure": {
+    "file": "generated/all_null_measure.csv",
+    "rows": 118,
+    "checksum": "bf44bbea55787154",
+    "purpose": "All-null measure: no fabricated total."
+  },
+  "all_null_dimension": {
+    "file": "generated/all_null_dimension.csv",
+    "rows": 118,
+    "checksum": "a071141235b4a540",
+    "purpose": "All-null dimension: single (unknown) bucket == full population."
+  },
+  "unknown_categories": {
+    "file": "generated/unknown_categories.csv",
+    "rows": 118,
+    "checksum": "eccd9cc008b93fee",
+    "purpose": "Unknown bucket kept in the denominator; shares still sum to 1."
+  },
+  "high_cardinality_dimension": {
+    "file": "generated/high_cardinality_dimension.csv",
+    "rows": 118,
+    "checksum": "a482bac2d254d1b4",
+    "purpose": "One category per loan: deterministic ranking, no crash."
+  },
+  "conflicting_asset_class": {
+    "file": "generated/conflicting_asset_class.csv",
+    "rows": 118,
+    "checksum": "b53196b744c7c520",
+    "purpose": "Conflicting asset classes must not be silently merged."
+  },
+  "missing_asset_class": {
+    "file": "generated/missing_asset_class.csv",
+    "rows": 118,
+    "checksum": "2a55641352eed8c6",
+    "purpose": "No asset-class declaration: asset-specific fields not applied."
+  }
+}

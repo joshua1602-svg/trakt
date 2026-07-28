@@ -475,6 +475,63 @@ def _narrow_to_latest_reporting_date(df):
     return narrowed, note
 
 
+#: Currency fields scanned, in order. Mirrors ``datasets._REPORTING_DATE_COLUMNS``
+#: intent for currency: the first populated field defines the population currency.
+_CURRENCY_FIELDS = ("exposure_currency_denomination", "currency_denomination",
+                    "collateral_currency")
+
+#: Substrings identifying a monetary KPI / reconciliation field whose value must
+#: be suppressed when the population spans more than one currency.
+_MONETARY_LABEL_TOKENS = ("balance", "exposure", "amount", "value", "principal",
+                          "advance", "drawn", "outstanding")
+_MONETARY_RECON_KEYS = ("total_balance", "balance_after_filters", "balance_included",
+                        "balance_excluded_missing")
+
+
+def _currency_limitation(df) -> Optional[str]:
+    """A material limitation string when the point-in-time population is mixed
+    currency, else ``None``. Monetary totals over a mixed-currency population are
+    not meaningful and must not be presented as a single figure."""
+    if df is None or not hasattr(df, "columns"):
+        return None
+    for col in _CURRENCY_FIELDS:
+        if col in df.columns:
+            vals = df[col].dropna().astype(str).str.strip()
+            vals = vals[vals != ""]
+            distinct = sorted(vals.unique())
+            if len(distinct) > 1:
+                return (
+                    "This scope spans more than one currency "
+                    f"({', '.join(distinct)}); monetary totals are suppressed "
+                    "because amounts in different currencies cannot be added "
+                    "without governed FX conversion. Count-based measures remain "
+                    "valid.")
+            return None
+    return None
+
+
+def _suppress_monetary_values(result: Dict[str, Any]) -> None:
+    """Blank monetary KPI and reconciliation values in place. Count-based KPIs and
+    ratios are untouched. Applied only when :func:`_currency_limitation` fired, so
+    single-currency answers are never altered."""
+    if not isinstance(result, dict):
+        return
+    for art in result.get("artifacts") or []:
+        if not isinstance(art, dict):
+            continue
+        for kpi in art.get("kpis") or []:
+            label = str(kpi.get("label", "")).lower()
+            if any(tok in label for tok in _MONETARY_LABEL_TOKENS) and "count" not in label:
+                kpi["value"] = "n/a — mixed currency"
+                kpi["suppressed"] = True
+        recon = art.get("reconciliation")
+        if isinstance(recon, dict):
+            for key in _MONETARY_RECON_KEYS:
+                if key in recon:
+                    recon[key] = None
+            recon["monetary_suppressed_mixed_currency"] = True
+
+
 def _resolve_frame(ds, view: str, portfolio_id: Optional[str],
                    *, tenant_id: Optional[str] = None):
     """``(frame, error)`` for this request, resolved defensively.
@@ -598,6 +655,10 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
     # As-of-latest: never silently aggregate a KPI across incompatible reporting
     # dates on the default point-in-time route (no-op for single-date frames).
     df, reporting_date_note = _narrow_to_latest_reporting_date(df)
+    # Mixed currency: monetary totals over more than one currency are not a
+    # meaningful single figure and must be suppressed (no-op for single-currency
+    # frames, which is the common case and the whole of the base fixture).
+    currency_note = _currency_limitation(df)
 
     currency_mod.resolve_and_set(df)
 
@@ -641,6 +702,13 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
     # Disclose a reporting-date narrowing so the client sees which cut answered.
     if reporting_date_note and isinstance(result, dict):
         result.setdefault("warnings", []).append(reporting_date_note)
+    # Suppress monetary totals on a mixed-currency population and disclose why.
+    if currency_note and isinstance(result, dict):
+        _suppress_monetary_values(result)
+        result.setdefault("warnings", []).append(currency_note)
+        meta = result.setdefault("metadata", {})
+        if isinstance(meta, dict):
+            meta["currencyLimitation"] = "mixed_currency_monetary_suppressed"
     # A point-in-time answer is run-scoped only when a run was explicitly selected.
     return _governed_context(result, req=req, client_id=client_id, run_id=run_id,
                              view=view, run_required=bool(run_id))
