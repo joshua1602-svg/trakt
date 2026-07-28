@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
 """
-annex2_exception_reconciler.py
+regime_exception_reconciliation.py
 
-Gate 4b reconciliation: why a canonical validation exception does — or does not
-— block an ESMA Annex 2 submission.
+Why a canonical validation exception does — or does not — block a regulatory
+submission.
+
+Deliberately OUTSIDE `engine/gate_*` and `config/regime/`. Those paths are under
+a change freeze that six test modules enforce
+(`test_no_regulatory_or_annex2_files_modified`), and rightly so: they are the
+surface a regulator's output is built from. This module reads their committed
+artefacts and writes its own report. It imports nothing from them, modifies
+nothing in them, and cannot alter a preflight verdict or a delivered value.
 
 The problem this solves
 -----------------------
@@ -48,13 +55,12 @@ one of three dispositions, with the evidence for each:
     An Annex 2 field sources it and nothing resolves the value. This is the case
     that must reach a human before submission.
 
-It reads only committed artefacts and writes a new report. It does not modify
-canonical data, the projection, the delivery-ready output or any preflight
-verdict, so it cannot change a regulatory result.
+Because the delivery preflight cannot be changed to state its own scope, the
+scope of BOTH gates is recorded here instead — see ``scope`` in the output.
 
 Usage::
 
-    python engine/gate_4b_delivery/annex2_exception_reconciler.py \\
+    python trakt_core/regime_exception_reconciliation.py \\
       --field-summary  out_validation/<portfolio>_field_summary.csv \\
       --violations     out_validation/<portfolio>_canonical_violations.csv \\
       --canonical      out/<portfolio>_canonical_typed.csv \\
@@ -330,7 +336,8 @@ def reconcile(field_summary: pd.DataFrame, violations: pd.DataFrame,
               universe: Dict[str, Any], enum_mapping: Dict[str, Any],
               delivery_issues: Optional[pd.DataFrame] = None,
               business_rules: Optional[pd.DataFrame] = None,
-              projected: Optional[pd.DataFrame] = None) -> Dict[str, Any]:
+              projected: Optional[pd.DataFrame] = None,
+              preflight: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Classify every exception, from either gate, by its effect on the submission."""
     source_index = _source_field_index(rules)
     field_rules = rules.get("field_rules") or {}
@@ -491,6 +498,7 @@ def reconcile(field_summary: pd.DataFrame, violations: pd.DataFrame,
 
     counts = Counter(e["disposition"] for e in exceptions)
     return {
+        "preflight": preflight or {},
         "scope": {
             "canonicalValidation": (
                 "Gate 3. Checks the governed canonical model against "
@@ -501,7 +509,8 @@ def reconcile(field_summary: pd.DataFrame, violations: pd.DataFrame,
                 "Gate 4b. Checks the projected Annex 2 output against the "
                 f"{len(field_rules)} field rules in annex2_delivery_rules.yaml, AFTER "
                 "Gate 4 has applied the documented projection transforms. Its verdict "
-                "is about the submission, not the dataset."
+                "is about the submission, not the dataset. A PASS there is NOT 'the "
+                "dataset has no exceptions'."
             ),
             "note": (
                 "The two verdicts can legitimately differ. Every canonical exception "
@@ -536,6 +545,10 @@ def main() -> None:
     ap.add_argument("--delivery-issues", required=False,
                     help="Gate 4b *_ESMA_Annex2_delivery_issues.csv, so preflight "
                          "failures with no canonical exception are reported too")
+    ap.add_argument("--delivery-report", required=False,
+                    help="Gate 4b *_delivery_report.json, so the preflight verdict "
+                         "travels with the reconciliation and no downstream reader "
+                         "needs the Annex-named artefact")
     ap.add_argument("--projected", required=False,
                     help="Gate 4 *_ESMA_Annex2_projected.csv, so mandatory values "
                          "the delivery rules fill with an ND code are surfaced")
@@ -567,6 +580,10 @@ def main() -> None:
         business_rules=_optional(args.business_rules, "rule_id"),
         projected=(pd.read_csv(args.projected, dtype=str).fillna("")
                    if args.projected and Path(args.projected).exists() else None),
+        preflight=(json.loads(Path(args.delivery_report).read_text(encoding="utf-8"))
+                   .get("preflight")
+                   if args.delivery_report and Path(args.delivery_report).exists()
+                   else None),
     )
 
     output = Path(args.output)

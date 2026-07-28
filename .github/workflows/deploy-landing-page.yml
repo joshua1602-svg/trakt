@@ -74,9 +74,17 @@ jobs:
         working-directory: .
         run: python -m pip install pytest
 
+      # The dataset beneath the pack. The generator is seeded and pure stdlib,
+      # so a drift here means the committed extracts were edited by hand.
+      - name: Synthetic source extracts are reproducible
+        working-directory: .
+        run: python synthetic_demo/build_multibook_input.py --check
+
       # Proves the committed pack is exactly what the deterministic engine
       # produces from the committed synthetic dataset, and that the source
-      # identity guards fail closed on every axis.
+      # identity guards fail closed on every axis. On a mismatch the generator
+      # prints the leaf values that differ and the interpreter/pandas versions,
+      # so the log is diagnosable without reproducing the environment first.
       - name: Demo-pack reproducibility and source identity
         working-directory: .
         run: python -m pytest landing-page/tests/demo_pack_reproducible_test.py -q

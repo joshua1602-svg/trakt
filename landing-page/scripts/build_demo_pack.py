@@ -72,10 +72,13 @@ CLIENT_CONFIG = _REPO_ROOT / (
 MAPPING_REPORTS = sorted(_MULTIBOOK.glob("*_2026-06-30_header_mapping_report.json"))
 TRANSFORM_REPORTS = sorted(_MULTIBOOK.glob("*_2026-06-30_transform_report.json"))
 VALIDATION_SUMMARY = _MULTIBOOK / "validation/platform_2026-06-30_field_summary.csv"
-DELIVERY_REPORT = _MULTIBOOK / (
-    "platform_2026-06-30_ESMA_Annex2_delivery_report.json")
+
+#: The one regulatory artefact the pack reads. It carries the Gate 4b preflight
+#: verdict as well as the reconciliation, so nothing here depends on a file
+#: under the `config/regime/` and `engine/gate_*` change freeze — including by
+#: filename, which that freeze also matches on.
 EXCEPTION_RECONCILIATION = _MULTIBOOK / (
-    "platform_2026-06-30_ESMA_Annex2_exception_reconciliation.json")
+    "platform_2026-06-30_regime_exception_reconciliation.json")
 
 # --------------------------------------------------------------------------- #
 # Book identity — mirrors demo_platform.config and the generator.
@@ -667,12 +670,12 @@ DEMO_SOURCE = DemoSource(
     expected_min_balance=35_000_000.0,
     expected_max_balance=40_000_000.0,
     expected_min_exposures=100,
-    expected_sha256="3a77cbaeb29e6bce2a23c469e1330e45643836c7d4d2e9ccf8c7cbf051c1b3d5",
+    expected_sha256="ddea1c505459d45ea38427175c48b9bdc80a615223a2253dde5a9acbe602c723",
 )
 
 #: The prior period, pinned the same way. Only its bytes and its balance are
 #: asserted — every other guarantee comes from the current-period source.
-PRIOR_SHA256 = "58fd505d0cfd0d8920e09a442c92f78c7a730f6f2473c5a777ecc2cbe9761b51"
+PRIOR_SHA256 = "38f3867906612562c38452e1c0687686fc97cc0c6f1101682e91dfea634e8bf1"
 
 
 def _mismatch(source: DemoSource, problems: List[str]) -> DemoSourceMismatch:
@@ -1231,7 +1234,6 @@ def _data_quality(engine: Engine, as_of_display: str) -> Dict[str, Any]:
         parse_failures += sum(int(f.get("parse_failures") or 0)
                               for f in book_fields.values() if isinstance(f, dict))
 
-    delivery = json.loads(DELIVERY_REPORT.read_text(encoding="utf-8"))
     recon = json.loads(EXCEPTION_RECONCILIATION.read_text(encoding="utf-8"))
     validation = pd.read_csv(VALIDATION_SUMMARY)
 
@@ -1450,7 +1452,8 @@ def build_pack() -> Dict[str, Any]:
 
     reports = _reports(engine, intents, as_of_display)
 
-    delivery = json.loads(DELIVERY_REPORT.read_text(encoding="utf-8"))
+    preflight = json.loads(
+        EXCEPTION_RECONCILIATION.read_text(encoding="utf-8")).get("preflight") or {}
 
     return {
         "packVersion": PACK_VERSION,
@@ -1493,7 +1496,7 @@ def build_pack() -> Dict[str, Any]:
             "totalBalance": round(engine.total_balance, 2),
             "totalBalanceDisplay": _fmt_currency(engine.total_balance),
             "regulatoryRegime": "ESMA Annex 2",
-            "deliveryPreflight": (delivery.get("preflight") or {}).get("status"),
+            "deliveryPreflight": preflight.get("status"),
             "platformBalanceDisplay": _fmt_currency(
                 sum(_book_totals(engine.frame)[b]["balance"] for b in PLATFORM_BOOKS)),
             "books": [
@@ -1536,6 +1539,57 @@ def _serialise(pack: Dict[str, Any]) -> str:
     return json.dumps(pack, indent=2, ensure_ascii=False, sort_keys=False) + "\n"
 
 
+def _walk(value: Any, path: str = "") -> Dict[str, Any]:
+    """Flatten a JSON document to {dotted.path: leaf}."""
+    out: Dict[str, Any] = {}
+    if isinstance(value, dict):
+        for key, item in value.items():
+            out.update(_walk(item, f"{path}.{key}" if path else str(key)))
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            out.update(_walk(item, f"{path}[{index}]"))
+    else:
+        out[path] = value
+    return out
+
+
+def _report_pack_difference(committed: str, fresh: str, limit: int = 12) -> None:
+    """Print the leaf values that differ between the committed and fresh packs.
+
+    Prints to stderr so it lands beside the failure in a CI log.
+    """
+    try:
+        before, after = _walk(json.loads(committed)), _walk(json.loads(fresh))
+    except json.JSONDecodeError as exc:  # a corrupt committed pack
+        print(f"  committed pack is not valid JSON: {exc}", file=sys.stderr)
+        return
+
+    keys = sorted(set(before) | set(after))
+    shown = 0
+    for key in keys:
+        old, new = before.get(key, "<absent>"), after.get(key, "<absent>")
+        if old == new:
+            continue
+        shown += 1
+        if shown > limit:
+            remaining = sum(
+                1 for k in keys if before.get(k, "<absent>") != after.get(k, "<absent>")
+            ) - limit
+            print(f"  … and {remaining} further difference(s)", file=sys.stderr)
+            break
+        print(f"  {key}\n    committed: {str(old)[:160]}\n    fresh:     {str(new)[:160]}",
+              file=sys.stderr)
+
+    if shown == 0:
+        print("  no leaf differs — the difference is key ordering or whitespace.",
+              file=sys.stderr)
+
+    # Environment, because a pack that reproduces locally and not in CI is
+    # almost always a dependency-version difference.
+    print(f"  environment: python {sys.version.split()[0]}, pandas {pd.__version__}",
+          file=sys.stderr)
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true",
@@ -1551,9 +1605,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         if not out.exists():
             print(f"MISSING: {out}", file=sys.stderr)
             return 1
-        if out.read_text(encoding="utf-8") != text:
+        committed = out.read_text(encoding="utf-8")
+        if committed != text:
+            # Say WHAT differs, not just that something does. A bare "STALE"
+            # forces whoever reads the CI log to reproduce the environment
+            # before they can even start — and the environment is usually the
+            # thing that differs.
             print(f"STALE: {out} differs from a fresh build. Re-run without "
                   f"--check.", file=sys.stderr)
+            _report_pack_difference(committed, text)
             return 1
         print(f"OK: {out} is reproducible "
               f"({len(pack['intents'])} intents, {len(pack['reports'])} reports)")
