@@ -229,6 +229,32 @@ test.describe("Trakt landing page", () => {
     expect(serialised).not.toMatch(/@|\.csv|\/home\/|blob\.core/);
   });
 
+  test("publishes which demo pack it is serving, and it is the one on the page", async ({
+    page,
+    request,
+  }) => {
+    // The contract the post-deploy gate asserts against. Health and readiness
+    // both return 200 for a healthy server running an older bundle; this is
+    // what says *which dataset* is behind the figures.
+    const response = await request.get("/api/demo-identity");
+    expect(response.status()).toBe(200);
+    expect(response.headers()["cache-control"]).toContain("no-store");
+
+    const identity = await response.json();
+    expect(identity.sourceFingerprint).toMatch(/^[0-9a-f]{64}$/);
+    expect(identity.synthetic).toBe(true);
+
+    const marker = page.locator('meta[name="trakt:pack"]');
+    await expect(marker).toHaveAttribute(
+      "content",
+      [identity.clientId, identity.portfolioId, identity.reportingDate].join("/"),
+    );
+
+    await expect(
+      page.locator("#product").getByText(identity.totalBalanceDisplay).first(),
+    ).toBeVisible();
+  });
+
   test("the hero preview and the demo metadata agree on the portfolio", async ({
     page,
     request,
