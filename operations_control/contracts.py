@@ -141,8 +141,15 @@ class DecisionRequired:
     decision_id: str
     kind: str                                   # DECISION_KINDS
     title: str                                  # plain-language, short
-    question: str                               # one sentence
+    question: str                               # one sentence (the
+                                                # plain-English message)
     blocking: bool = False
+    # Structured decision-request fields (agent <-> OCC contract).
+    category: str = ""                          # e.g. unmapped_source_field
+    severity: str = ""                          # blocking | warning | info
+    observed_values: List[str] = field(default_factory=list)
+    affected_record_count: int = 0
+    source_file: str = ""
     # {source: llm|deterministic|memory|operator, value, confidence, checked: bool}
     recommendation: Dict[str, Any] = field(default_factory=dict)
     options: List[Dict[str, str]] = field(default_factory=list)  # [{value,label}]
@@ -260,6 +267,9 @@ class WorkflowRun:
     # XSD result, hashes, interventions ref, effective config). Provenance for
     # publication metadata; never rendered raw.
     annex2: Dict[str, Any] = field(default_factory=dict)
+    # Immutable effective-configuration pinning for this run:
+    # {effective_config_id, version, content_hash, status, package_versions}.
+    effective_config: Dict[str, Any] = field(default_factory=dict)
     # Set when the API restarted while this run was executing; cleared on rerun.
     interrupted: bool = False
     blockers: List[str] = field(default_factory=list)   # plain language

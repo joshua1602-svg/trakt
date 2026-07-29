@@ -32,6 +32,11 @@ OPERATORS_ENV = "TRAKT_OPS_OPERATORS"
 class Principal:
     name: str
     clients: tuple = field(default_factory=tuple)   # ("*",) = all clients
+    role: str = "operator"                          # operator | admin
+
+    @property
+    def is_admin(self) -> bool:
+        return self.role == "admin"
 
     def allows(self, client_id: str) -> bool:
         return "*" in self.clients or client_id in self.clients
@@ -55,7 +60,8 @@ def _load_operators() -> Dict[str, Principal]:
         if not isinstance(spec, dict):
             continue
         out[token] = Principal(name=str(spec.get("name") or "operator"),
-                               clients=tuple(spec.get("clients") or ()))
+                               clients=tuple(spec.get("clients") or ()),
+                               role=str(spec.get("role") or "operator"))
     return out
 
 
@@ -77,6 +83,14 @@ def authenticate(x_operator_token: Optional[str] = Header(default=None),
     raise HTTPException(status_code=401, detail={
         "errorCode": "OPS_UNAUTHENTICATED",
         "message": "Please sign in to continue."})
+
+
+def require_admin(principal: Principal) -> None:
+    """Administrator-only areas (system/regime/asset configuration)."""
+    if not principal.is_admin:
+        raise HTTPException(status_code=403, detail={
+            "errorCode": "OPS_ADMIN_REQUIRED",
+            "message": "This area is for administrators."})
 
 
 def require_client(principal: Principal, client_id: str) -> None:
