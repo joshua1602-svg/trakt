@@ -35,7 +35,7 @@ from ..contracts import (
 from ..engine import OpsEngine, OpsError
 from ..stores import OpsStore
 from . import presenters
-from .auth import Principal, authenticate, require_client
+from .auth import Principal, authenticate, require_admin, require_client
 
 logger = logging.getLogger("trakt.operations_control.api")
 
@@ -374,7 +374,8 @@ def decide(decision_id: str, body: DecisionBody, client: Optional[str] = None,
     result = eng.resolve_decision(
         client_id=doc["client_id"], decision_id=decision_id,
         action=body.action, actor=principal.name, value=body.value,
-        scope=body.scope, reason=body.reason)
+        scope=body.scope, reason=body.reason,
+        actor_is_admin=principal.is_admin)
     return {"ok": True,
             "review": presenters.present_decision(result["decision"]),
             "rule": (presenters.present_rule(result["rule"])
@@ -471,6 +472,127 @@ def history(client: Optional[str] = None,
         pubs.extend(presenters.present_publication(p)
                     for p in eng.store.list_publications(c))
     return {"ok": True, "history": pubs}
+
+
+# --------------------------------------------------------------------------- #
+# Administrator configuration area (system / regime / asset packages)
+# --------------------------------------------------------------------------- #
+
+class DraftBody(BaseModel):
+    from_version: Optional[int] = None
+    edits: Dict[str, str] = {}
+    notes: str = ""
+
+
+class RollbackBody(BaseModel):
+    to_version: int
+
+
+def _packages(eng: OpsEngine):
+    from ..configuration.packages import ConfigPackageStore
+    return ConfigPackageStore(eng.store)
+
+
+def _admin_audit(eng: OpsEngine, event: str, actor: str, detail: Dict[str, Any]):
+    eng.store.append_audit("_admin", event, actor=actor, detail=detail)
+
+
+@app.get("/ops/admin/config")
+def admin_config_overview(principal: Principal = Depends(authenticate)
+                          ) -> Dict[str, Any]:
+    require_admin(principal)
+    from ..configuration.packages import ADMIN_LAYERS, ASSET_MODEL
+    pkgs = _packages(get_engine())
+    layers = {}
+    for layer in ADMIN_LAYERS:
+        active = pkgs.ensure_seeded(layer, by=principal.name)
+        layers[layer] = {
+            "active_version": active["version"],
+            "activated_at": active.get("activated_at"),
+            "activated_by": active.get("activated_by"),
+            "file_count": len(active.get("files") or {}),
+            "versions": pkgs.list_versions(layer),
+        }
+    return {"ok": True, "layers": layers, "asset_model": ASSET_MODEL}
+
+
+@app.get("/ops/admin/config/{layer}/{version}")
+def admin_config_version(layer: str, version: int, file: Optional[str] = None,
+                         principal: Principal = Depends(authenticate)
+                         ) -> Dict[str, Any]:
+    require_admin(principal)
+    pkgs = _packages(get_engine())
+    doc = pkgs.get_version(layer, version)
+    if doc is None:
+        raise HTTPException(status_code=404, detail={
+            "errorCode": "OPS_NOT_FOUND", "message": "That could not be found."})
+    files = doc.get("files") or {}
+    out = {k: v for k, v in doc.items() if k != "files"}
+    out["files"] = {rel: {"sha256": f["sha256"],
+                          "size": len(f.get("content", ""))}
+                    for rel, f in files.items()}
+    if file and file in files:
+        out["file_content"] = files[file]["content"]
+    return {"ok": True, "version": out}
+
+
+@app.post("/ops/admin/config/{layer}/draft")
+def admin_config_draft(layer: str, body: DraftBody,
+                       principal: Principal = Depends(authenticate)
+                       ) -> Dict[str, Any]:
+    require_admin(principal)
+    eng = get_engine()
+    doc = _packages(eng).create_draft(layer, by=principal.name,
+                                      from_version=body.from_version,
+                                      edits=body.edits, notes=body.notes)
+    _admin_audit(eng, "config_draft_created", principal.name,
+                 {"layer": layer, "version": doc["version"],
+                  "based_on": doc.get("based_on_version"),
+                  "edited_files": sorted(body.edits)})
+    return {"ok": True, "version": doc["version"], "status": doc["status"]}
+
+
+@app.post("/ops/admin/config/{layer}/{version}/validate")
+def admin_config_validate(layer: str, version: int,
+                          principal: Principal = Depends(authenticate)
+                          ) -> Dict[str, Any]:
+    require_admin(principal)
+    eng = get_engine()
+    doc = _packages(eng).validate_version(layer, version)
+    _admin_audit(eng, "config_validated", principal.name,
+                 {"layer": layer, "version": version,
+                  "ok": doc["validation"]["ok"],
+                  "problems": doc["validation"]["problems"]})
+    return {"ok": True, "validation": doc["validation"]}
+
+
+@app.post("/ops/admin/config/{layer}/{version}/activate")
+def admin_config_activate(layer: str, version: int,
+                          principal: Principal = Depends(authenticate)
+                          ) -> Dict[str, Any]:
+    require_admin(principal)
+    eng = get_engine()
+    try:
+        doc = _packages(eng).activate_version(layer, version,
+                                              by=principal.name)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail={
+            "errorCode": "OPS_CONFIG_NOT_READY", "message": str(exc)})
+    _admin_audit(eng, "config_activated", principal.name,
+                 {"layer": layer, "version": version})
+    return {"ok": True, "active_version": doc["version"]}
+
+
+@app.post("/ops/admin/config/{layer}/rollback")
+def admin_config_rollback(layer: str, body: RollbackBody,
+                          principal: Principal = Depends(authenticate)
+                          ) -> Dict[str, Any]:
+    require_admin(principal)
+    eng = get_engine()
+    doc = _packages(eng).rollback(layer, body.to_version, by=principal.name)
+    _admin_audit(eng, "config_rolled_back", principal.name,
+                 {"layer": layer, "to_version": body.to_version})
+    return {"ok": True, "active_version": doc["version"]}
 
 
 @app.get("/ops/audit")

@@ -310,16 +310,64 @@ class OpsEngine:
         self._annex2_stages = Annex2Stages()
         return self._annex2_stages
 
-    def _build_adapters(self, run: WorkflowRun, recorder) -> GovernedAdapters:
+    def _config_resolver(self):
+        from .configuration.resolver import EffectiveConfigResolver
+        return EffectiveConfigResolver(self.store, self.rules,
+                                       client_config_path=self.client_config_path)
+
+    def _resolve_effective_config(self, run: WorkflowRun):
+        """Resolve + persist the immutable effective configuration for this
+        run (a NEW version on every execution attempt, so reruns after
+        decision approvals pin a fresh decision set while history remains)."""
+        resolver = self._config_resolver()
+        outcome = resolver.resolve(
+            client_id=run.client_id, portfolio_id=run.portfolio_id,
+            outcome=run.outcome, reporting_period=run.reporting_period,
+            workflow_id=run.workflow_id, created_by=run.created_by or "system",
+            version=run.rerun_count + 1)
+        eff = outcome.effective
+        if eff is not None:
+            run.effective_config = {
+                "effective_config_id": eff.effective_config_id,
+                "version": eff.version,
+                "content_hash": eff.content_hash,
+                "status": outcome.status,
+                "package_versions": {
+                    "system": eff.system_config_version,
+                    "regime": eff.regime_config_version,
+                    "asset": eff.asset_config_version,
+                },
+                "decision_set_version": eff.decision_set_version,
+            }
+            self.store.save_workflow(run)
+            self.store.append_audit(
+                run.client_id, "effective_config_resolved",
+                actor="system", workflow_id=run.workflow_id,
+                detail={"status": outcome.status,
+                        "effective_config_id": eff.effective_config_id,
+                        "version": eff.version,
+                        "content_hash": eff.content_hash,
+                        "decision_set_version": eff.decision_set_version,
+                        "conflicts": outcome.conflicts})
+        return resolver, outcome
+
+    def _build_adapters(self, run: WorkflowRun, recorder,
+                        snapshot: Optional[Dict[str, str]] = None
+                        ) -> GovernedAdapters:
         if self._adapter_factory is not None:
             inner = self._adapter_factory(run)
         else:
             from engine.orchestrator_agent.adapters import RealAgentAdapters
             approved = self._approved_decisions_path(run)
             deterministic = approved is not None
+            snap = snapshot or {}
             inner = RealAgentAdapters(
                 client_name=run.client_id,
                 onboarding_mode="mi_only",
+                # The agent consumes the immutable effective-configuration
+                # snapshot, never live repository YAML.
+                registry=snap.get("registry"),
+                aliases_dir=snap.get("aliases_dir", "config/system"),
                 processing_mode=("deterministic" if deterministic
                                  else "source_onboarding"),
                 mapping_config_path=(str(approved) if approved else None),
@@ -373,10 +421,22 @@ class OpsEngine:
             resume_state.force_publish = resume_state.force_publish or \
                 self._validation_exception_approved(run)
 
+        # Immutable effective configuration — resolved and persisted BEFORE
+        # the agents run; the run pins this version permanently.
+        resolver, cfg_outcome = self._resolve_effective_config(run)
+        if cfg_outcome.status == "BLOCKED":
+            self._park_config_blocked(run, cfg_outcome)
+            return
+        snapshot: Optional[Dict[str, str]] = None
+        if cfg_outcome.effective is not None and self._adapter_factory is None:
+            snapshot = resolver.materialise_snapshot(
+                cfg_outcome.effective,
+                staging / f"config_snapshot_v{cfg_outcome.effective.version:04d}")
+
         def recorder(step: str, result) -> None:
             self._on_step(client_id, workflow_id, step, result)
 
-        adapters = self._build_adapters(run, recorder)
+        adapters = self._build_adapters(run, recorder, snapshot)
         spec = PortfolioSpec(
             source_portfolio_id=run.portfolio_id,
             input=run.delivery.get("input_path", ""),
@@ -486,6 +546,37 @@ class OpsEngine:
         self.store.append_event(run, "execution_finished",
                                 detail={"status": run.status})
 
+    def _park_config_blocked(self, run: WorkflowRun, cfg_outcome) -> None:
+        """Configuration resolution blocked BEFORE any agent ran: park with
+        actionable client_rule decisions (the operator supplies the missing
+        regulatory details; approval regenerates the effective configuration
+        on rerun)."""
+        decisions = []
+        for c in cfg_outcome.missing:
+            decisions.append(DecisionRequired(
+                decision_id=f"{run.workflow_id}_cfg_{c['key']}",
+                kind=KIND_CLIENT_RULE,
+                title=f"Provide the {c['label'].lower()}",
+                question=f"{c['problem']} Please provide it.",
+                blocking=True, category="missing_required_client_value",
+                severity="blocking",
+                options=[], allowed_scopes=["client"], default_scope="client",
+                evidence=[{"label": "What was found", "kind": "text",
+                           "data": {"item": c["label"],
+                                    "found": c.get("found_value")
+                                    or "nothing configured"}}],
+                subject={"artefact": "regulatory_config",
+                         "setting": c["key"], "label": c["label"]}))
+        summary = (f"{len(decisions)} regulatory detail"
+                   f"{'s are' if len(decisions) != 1 else ' is'} needed "
+                   "before this run can start.")
+        self._save_stage_gar(
+            run, STAGE_REG_CONFIG, ST_NEEDS_REVIEW, summary,
+            why="These details identify your organisation to the regulator "
+                "and appear in every report.",
+            decisions=decisions, warnings=cfg_outcome.warnings)
+        self._park(run, RUN_NEEDS_REVIEW)
+
     def _run_annex2_chain(self, run: WorkflowRun, state) -> None:
         """Preflight -> projection -> delivery normalisation -> XML+XSD, each
         a governed stage over the UNMODIFIED authoritative components.
@@ -545,7 +636,12 @@ class OpsEngine:
             warnings=[c["problem"] for c in pf["needs_review"]],
             evidence=[{"label": "Details checked", "kind": "table",
                        "data": [{"item": c["label"], "status": c["status"]}
-                                for c in pf["checks"]]}])
+                                for c in pf["checks"]]},
+                      {"label": "Configuration versions used", "kind": "table",
+                       "data": {**(run.effective_config.get(
+                           "package_versions") or {}),
+                           "effective_configuration":
+                           run.effective_config.get("content_hash", "")[:23]}}])
 
         # ---- Stage: projection (proven projector via existing seam) ------ #
         if not done(STAGE_PROJECTION, "projected_csv"):
@@ -733,7 +829,21 @@ class OpsEngine:
 
     def resolve_decision(self, *, client_id: str, decision_id: str, action: str,
                          actor: str, value: str = "", scope: str = "portfolio",
-                         reason: str = "") -> Dict[str, Any]:
+                         reason: str = "",
+                         actor_is_admin: bool = False) -> Dict[str, Any]:
+        from .rules import ADMIN_ONLY_SCOPES
+        if scope in ADMIN_ONLY_SCOPES and not actor_is_admin:
+            raise OpsError("OPS_ADMIN_SCOPE",
+                           "Only an administrator can apply a decision at "
+                           "this level.", 403)
+        return self._resolve_decision_inner(
+            client_id=client_id, decision_id=decision_id, action=action,
+            actor=actor, value=value, scope=scope, reason=reason)
+
+    def _resolve_decision_inner(self, *, client_id: str, decision_id: str,
+                                action: str, actor: str, value: str = "",
+                                scope: str = "portfolio",
+                                reason: str = "") -> Dict[str, Any]:
         """Approve / reject / amend one decision. Approvals become governed,
         scoped rules; when no blocking decisions remain open, the affected
         stage is rerun automatically. Duplicate resolutions are rejected."""
@@ -863,10 +973,13 @@ class OpsEngine:
         rec = (doc.get("recommendation") or {})
         rule = RuleRecord(
             rule_id="", version=0, kind=kind, scope=scope,
-            client_id=(run.client_id if scope != "global" else ""),
-            portfolio_id=(run.portfolio_id if scope in ("portfolio", "file") else ""),
+            client_id=(run.client_id if scope not in ("global", "asset")
+                       else ""),
+            portfolio_id=(run.portfolio_id
+                          if scope in ("portfolio", "file", "run") else ""),
             file_ref=(run.delivery.get("schema_fingerprint", "")
                       if scope == "file" else ""),
+            run_ref=(run.workflow_id if scope == "run" else ""),
             payload=payload, description=desc,
             suggested_by=rec.get("source", "operator"),
             confidence=rec.get("confidence"),

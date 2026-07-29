@@ -26,11 +26,16 @@ from .contracts import SCHEMA_VERSION, new_id, now_iso
 from .stores import OpsStore
 
 SCOPE_FILE = "file"
+SCOPE_RUN = "run"
 SCOPE_PORTFOLIO = "portfolio"
 SCOPE_CLIENT = "client"
-SCOPE_GLOBAL = "global"
+SCOPE_ASSET = "asset"          # administrator-approved only
+SCOPE_GLOBAL = "global"        # administrator-approved only
 #: Most specific first — this is the precedence order.
-SCOPES = (SCOPE_FILE, SCOPE_PORTFOLIO, SCOPE_CLIENT, SCOPE_GLOBAL)
+SCOPES = (SCOPE_FILE, SCOPE_RUN, SCOPE_PORTFOLIO, SCOPE_CLIENT,
+          SCOPE_ASSET, SCOPE_GLOBAL)
+#: Scopes an ordinary operator may not promote decisions to.
+ADMIN_ONLY_SCOPES = (SCOPE_ASSET, SCOPE_GLOBAL)
 
 RULE_ACTIVE = "active"
 RULE_SUPERSEDED = "superseded"
@@ -50,9 +55,10 @@ class RuleRecord:
     version: int
     kind: str                       # contracts.DECISION_KINDS member
     scope: str                      # SCOPES member
-    client_id: str = ""             # "" for global scope
+    client_id: str = ""             # "" for global/asset scope
     portfolio_id: str = ""          # set for portfolio/file scope
     file_ref: str = ""              # delivery fingerprint for file scope
+    run_ref: str = ""               # workflow id for run scope
     status: str = RULE_ACTIVE
     payload: Dict[str, Any] = field(default_factory=dict)
     description: str = ""
@@ -104,7 +110,9 @@ class RuleStore:
 
     # -- persistence -------------------------------------------------------- #
     def _client_dir(self, rule: RuleRecord) -> Optional[str]:
-        return rule.client_id or None if rule.scope != SCOPE_GLOBAL else None
+        if rule.scope in (SCOPE_GLOBAL, SCOPE_ASSET):
+            return None
+        return rule.client_id or None
 
     def approve(self, rule: RuleRecord) -> RuleRecord:
         """Persist a newly-approved rule. If an active rule exists for the same
@@ -183,28 +191,32 @@ class RuleStore:
             if (cur.status == RULE_ACTIVE and cur.scope == rule.scope
                     and cur.subject_key() == rule.subject_key()
                     and cur.portfolio_id == rule.portfolio_id
-                    and cur.file_ref == rule.file_ref):
+                    and cur.file_ref == rule.file_ref
+                    and cur.run_ref == rule.run_ref):
                 return cur
         return None
 
     # -- precedence resolution ---------------------------------------------- #
     def applicable(self, *, client_id: str, portfolio_id: str = "",
-                   file_ref: str = "") -> List[RuleRecord]:
+                   file_ref: str = "", run_ref: str = "") -> List[RuleRecord]:
         """All active rules that apply to this run context, most specific kept
-        when the same subject is ruled at several scopes (file > portfolio >
-        client > global)."""
+        when the same subject is ruled at several scopes (file > run >
+        portfolio > client > asset > global)."""
         candidates: List[RuleRecord] = []
         for r in self.list_current(client_id):
             if r.status != RULE_ACTIVE:
                 continue
             if r.scope == SCOPE_FILE and (not file_ref or r.file_ref != file_ref):
                 continue
+            if r.scope == SCOPE_RUN and (not run_ref or r.run_ref != run_ref):
+                continue
             if r.scope == SCOPE_PORTFOLIO and (
                     not portfolio_id or r.portfolio_id != portfolio_id):
                 continue
             candidates.append(r)
         candidates.extend(r for r in self.list_current(None)
-                          if r.status == RULE_ACTIVE and r.scope == SCOPE_GLOBAL)
+                          if r.status == RULE_ACTIVE
+                          and r.scope in (SCOPE_GLOBAL, SCOPE_ASSET))
 
         rank = {s: i for i, s in enumerate(SCOPES)}   # file=0 (most specific)
         best: Dict[str, RuleRecord] = {}
