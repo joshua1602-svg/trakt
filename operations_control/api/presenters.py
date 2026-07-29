@@ -199,6 +199,78 @@ def present_publication(doc: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+BATCH_STATUS_LABELS = {
+    "receiving": "Waiting for files",
+    "incomplete": "Waiting for required input",
+    "classifying": "Identifying files",
+    "review_required": "Review required",
+    "configuration_required": "Configuration needed",
+    "ready": "Ready to process",
+    "running": "Processing",
+    "completed": "Completed",
+    "failed": "Needs attention",
+}
+
+
+def present_batch(doc: Dict[str, Any],
+                  role_labels: Dict[str, str]) -> Dict[str, Any]:
+    def label(role: str) -> str:
+        return role_labels.get(role, role.replace("_", " ").capitalize())
+
+    files = []
+    for f in doc.get("files") or []:
+        if f.get("superseded_status") != "current":
+            continue
+        status = f.get("recognition_status")
+        if status in ("recognised", "overridden"):
+            sentence = "Received and recognised"
+        elif status == "ambiguous":
+            sentence = "Needs identification"
+        elif status == "unsupported":
+            sentence = "Unsupported file"
+        else:
+            sentence = "Received"
+        files.append({
+            "source_file_id": f.get("source_file_id"),
+            "filename": f.get("original_filename"),
+            "role": f.get("recognised_file_type", ""),
+            "role_label": label(f.get("recognised_file_type", "")),
+            "status": status, "status_sentence": sentence,
+            "confidence": f.get("recognition_confidence"),
+        })
+    roles = []
+    expected = doc.get("expected_input_roles") or {}
+    received = set(doc.get("received_input_roles") or [])
+    for r in expected.get("required") or []:
+        roles.append({"role": r, "label": label(r), "required": True,
+                      "satisfied": r in received})
+    for r in expected.get("optional") or []:
+        roles.append({"role": r, "label": label(r), "required": False,
+                      "satisfied": r in received})
+    return {
+        "batch_id": doc.get("batch_id"),
+        "client_id": doc.get("client_id"),
+        "portfolio_id": doc.get("portfolio_id"),
+        "reporting_date": doc.get("reporting_date"),
+        "workflow_type": doc.get("workflow_type"),
+        "status": doc.get("status"),
+        "status_label": BATCH_STATUS_LABELS.get(doc.get("status", ""),
+                                                doc.get("status", "")),
+        "status_sentence": doc.get("status_reason", ""),
+        "auto_start_when_ready": bool(doc.get("auto_start_when_ready")),
+        "files": files,
+        "input_roles": roles,
+        "missing_roles": [label(r) for r in
+                          (doc.get("missing_input_roles") or [])],
+        "configuration_ready": doc.get("effective_config_status")
+        in ("READY", "READY_WITH_WARNINGS"),
+        "blocking_decisions": doc.get("blocking_decisions") or [],
+        "workflow_id": doc.get("workflow_id", ""),
+        "created_at": doc.get("created_at"),
+        "updated_at": doc.get("updated_at"),
+    }
+
+
 def present_delivery(doc: Dict[str, Any]) -> Dict[str, Any]:
     cls = doc.get("classification") or {}
     return {

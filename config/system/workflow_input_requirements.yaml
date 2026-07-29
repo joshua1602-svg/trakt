@@ -1,0 +1,36 @@
+# Workflow input requirements — administrator-governed (system package layer).
+#
+# Readiness is based on RECOGNISED SEMANTIC INPUT ROLES (the file_roles
+# classifier vocabulary), never on hard-coded filenames and never on a
+# _READY.json sentinel. The Operations Control Centre evaluates these
+# requirements after every file registration or recognition result.
+version: 1
+role_labels:
+  loan_extract: "Primary loan tape"
+  property_extract: "Property / valuation tape"
+  collateral_extract: "Collateral tape"
+  cashflow_extract: "Cash-flow tape"
+  funder_pi_extract: "Funder principal & interest tape"
+workflows:
+  mi:
+    required_roles:
+      - loan_extract
+    optional_roles:
+      - property_extract
+      - collateral_extract
+      - cashflow_extract
+      - funder_pi_extract
+  mi_annex2:
+    required_roles:
+      - loan_extract
+    optional_roles:
+      - property_extract
+      - collateral_extract
+      - cashflow_extract
+      - funder_pi_extract
+# Minimum recognition confidence for a file to SATISFY a required role without
+# operator confirmation. Below this, readiness parks as review_required.
+min_required_role_confidence: 0.4
+# Optional quiet period (seconds) before auto-start for automated sources —
+# readiness is still reassessed on every arrival; this only delays the start.
+auto_start_quiet_seconds: 0

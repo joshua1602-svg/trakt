@@ -31,8 +31,15 @@ _PATH_RE = re.compile(r"(/[\w.\-]+){2,}|[A-Za-z]:\\\S+|blob://\S+")
 _CODE_RE = re.compile(r"\b\d{2}[a-z]?_[a-z_]+\b")   # 24_onboarding_..., 28a_...
 
 
-def is_operator_safe(text: str) -> bool:
-    """True when ``text`` contains none of the forbidden technical vocabulary."""
+def is_operator_safe(text: str, allow: tuple = ()) -> bool:
+    """True when ``text`` contains none of the forbidden technical vocabulary.
+
+    ``allow`` masks user-supplied substrings (e.g. the operator's own file
+    names) before checking — user data is their vocabulary, not ours.
+    """
+    for a in allow:
+        if a:
+            text = (text or "").replace(str(a), "")
     low = (text or "").lower()
     if any(f.lower() in low for f in FORBIDDEN_FRAGMENTS):
         return False

@@ -21,7 +21,7 @@ changing them.
 | `TRAKT_BLOB_CONNECTION` | *(storage connection string)* | Durable storage for registry/approvals/canonicals. If unset in Azure, `AzureWebJobsStorage` is used as a fallback. |
 | `TRAKT_SOURCE_REGISTRY_URI` | `blob://trakt-state/registry/source_registry.yaml` | Durable registry — the single source of truth for known sources + pinned fingerprints. |
 | `TRAKT_TRIGGER_OUT` | `/tmp/trakt/blob_trigger` | Writable scratch root (Azure wwwroot is read-only). Ephemeral; final artifacts go to Blob. |
-| `TRAKT_PACK_MARKER` | `_READY.json` | Completion marker uploaded last; only this file starts the pipeline. |
+| `TRAKT_OPS_CONTAINER` | `operations-control` | OCC governance container. Readiness is OCC-owned: source-file arrivals are registered into input batches and start automatically when the pack is complete — **no sentinel file**. Legacy `_READY.json` uploads are ignored and audited. |
 | `TRAKT_STATE_CONTAINER` | `trakt-state` | State container (registry, approvals, events, run ledger). |
 | `TRAKT_PROCESSED_CONTAINER` | `processed-v2` | Output container (accepted + platform canonicals, regime, pipeline snapshots). |
 | `TRAKT_RAW_CONTAINER` | `raw-v2` | Raw container name used by the layout/backfill. |
@@ -74,7 +74,7 @@ package fails the build loudly instead of silently in production.
 ## 3. Event Grid subscription (BlobCreated → Function)
 
 The handler is an **Event Grid trigger** (`function_app.on_raw_blob_event`). Event
-Grid is **not retroactive** — blobs (and `_READY.json` markers) uploaded *before*
+Grid is **not retroactive** — blobs uploaded *before*
 the subscription existed never fire. Two things are required:
 
 1. **Create/confirm the subscription** on the storage account:
@@ -86,7 +86,7 @@ the subscription existed never fire. Two things are required:
    will not replay it. See §4.
 
 Confirm delivery under the subscription's **Metrics** (Delivered / Failed) after a
-test upload of a `_READY.json`.
+test upload of any source data file (readiness is assessed per arrival; `_READY.json` is no longer supported).
 
 ---
 

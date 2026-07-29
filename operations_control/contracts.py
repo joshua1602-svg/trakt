@@ -110,10 +110,11 @@ KIND_ENUM = "enum"
 KIND_TRANSFORMATION = "transformation"
 KIND_VALIDATION_EXCEPTION = "validation_exception"
 KIND_CLIENT_RULE = "client_rule"          # regulatory configuration setting
+KIND_FILE_ROLE = "file_role"              # identify an ambiguous input file
 KIND_PUBLICATION = "publication"
 DECISION_KINDS = (KIND_FIELD_MAPPING, KIND_ALIAS, KIND_ENUM,
                   KIND_TRANSFORMATION, KIND_VALIDATION_EXCEPTION,
-                  KIND_CLIENT_RULE, KIND_PUBLICATION)
+                  KIND_CLIENT_RULE, KIND_FILE_ROLE, KIND_PUBLICATION)
 
 
 def now_iso() -> str:
@@ -270,6 +271,8 @@ class WorkflowRun:
     # Immutable effective-configuration pinning for this run:
     # {effective_config_id, version, content_hash, status, package_versions}.
     effective_config: Dict[str, Any] = field(default_factory=dict)
+    # Input batch that produced this run (OCC-owned readiness; no sentinel).
+    batch_id: str = ""
     # Set when the API restarted while this run was executing; cleared on rerun.
     interrupted: bool = False
     blockers: List[str] = field(default_factory=list)   # plain language
