@@ -80,6 +80,6 @@ jobs:
         run: |
           az functionapp deployment source config-zip \
             --resource-group trakt \
-            --name trakt \
+            --name trakt-blob-trigger-v2 \
             --src deploy.zip \
             --build-remote true
