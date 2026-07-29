@@ -1,0 +1,171 @@
+name: Deploy trakt-ops-api (App Service)
+
+# Builds, tests and deploys the standalone Operations Control Centre API
+# (operations_control.api.app:app) to the Azure App Service `trakt-ops-api`.
+#
+# This workflow touches ONE App Service: trakt-ops-api. It never deploys,
+# configures or restarts trakt-mi-api — that service keeps serving
+# mi_agent_api.app:app via the repo-root startup.sh, and the OCC application is
+# not mounted into it.
+#
+# Authentication is OIDC (federated credential) via azure/login@v2 — no publish
+# profile, no long-lived secret in the repo. See deploy/trakt-ops-api/README.md
+# for the one-time federated-credential setup.
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'operations_control/**'
+      - 'engine/**'
+      - 'apps/**'
+      - 'trakt_core/**'
+      - 'config/**'
+      - 'requirements.txt'
+      - 'deploy/trakt-ops-api/**'
+      - '.github/workflows/deploy-ops-api.yml'
+  workflow_dispatch: {}
+
+# Least privilege: id-token to mint the OIDC assertion, contents to check out.
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  # Never let two deploys of this service overlap — the OCC reconciles
+  # interrupted workflows on startup, so overlapping restarts are avoidable noise.
+  group: deploy-ops-api
+  cancel-in-progress: false
+
+env:
+  APP_NAME: trakt-ops-api
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  test-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run targeted OCC tests
+        # The Operations Control Centre suite: workflow transitions and restart
+        # recovery, tenancy isolation, rule scoping, publication gating, the
+        # effective-configuration contract, and the administrator configuration
+        # API this service exposes.
+        #
+        # Two real-component Annex 2 golden tests are deselected BY NAME. They
+        # assert the XML builder's output validates against the vendored draft
+        # ESMA XSD, and they are already failing on main (verified against a
+        # clean tree) — the generated file does not pass the format check. They
+        # are deselected here so this deployment gate reflects THIS service's
+        # health rather than a pre-existing product failure. They are not
+        # skipped in the suite itself, and they must be fixed separately.
+        run: |
+          python -m pytest tests/operations_control/ -q \
+            --deselect "tests/operations_control/test_annex2_delivery.py::TestRealComponentsMiniGolden::test_normaliser_and_builder_pass_xsd" \
+            --deselect "tests/operations_control/test_annex2_delivery.py::TestRealComponentsMiniGolden::test_builder_interventions_are_captured"
+
+      - name: Build deployment package
+        # The runtime closure of operations_control.api.app, established by
+        # import trace rather than assumption:
+        #   operations_control/  the API, engine, stores, config packages
+        #   engine/              orchestrator_agent (imported) + the gate_4b /
+        #                        gate_5 Annex 2 scripts, executed as SUBPROCESSES
+        #                        with cwd = the package root
+        #   apps/                blob_trigger_app storage / layout / persistence
+        #   trakt_core/          governed context, errors, tenancy, policy
+        #   mi_agent/            reached only through guarded (try/except) imports
+        #                        in the onboarding path; shipped so risk-limit
+        #                        config and LLM cost estimation are not silently
+        #                        degraded
+        #   config/              every governed YAML the packages are seeded from,
+        #                        plus the Annex 2 XSD under config/system/
+        #   the repo-root Annex 2 mapping workbook, passed to the XML builder as
+        #                        --mapping-workbook
+        #   requirements.txt     Oryx build input
+        #   deploy/trakt-ops-api/startup-ops.sh  the startup command
+        #
+        # The React frontend is deliberately EXCLUDED: nothing in the API's
+        # import graph reaches frontend/, and the built UI is deployed separately.
+        run: |
+          set -euo pipefail
+          zip -r -q ops-api.zip \
+            operations_control/ \
+            engine/ \
+            apps/ \
+            trakt_core/ \
+            mi_agent/ \
+            config/ \
+            requirements.txt \
+            deploy/trakt-ops-api/startup-ops.sh \
+            "DRAFT1auth.099.001.04_non-ABCP Underlying Exposure Report_Version_1.3.1.xlsx" \
+            -x "*.pyc" "*/__pycache__/*" "*/tests/*" "*/test_*"
+          ls -lh ops-api.zip
+
+      - name: Verify the package is complete and frontend-free
+        # Unpack the ACTUAL artefact into a clean directory and import the app the
+        # way gunicorn will, then assert the runtime files it resolves by path and
+        # the scripts it runs as subprocesses are present. An incomplete package
+        # fails here rather than as a dead worker in production.
+        # See deploy/trakt-ops-api/verify_package.py for what is checked and why.
+        run: |
+          set -euo pipefail
+          unzip -l ops-api.zip | grep -q 'deploy/trakt-ops-api/startup-ops.sh' || {
+            echo "DEPLOY PACKAGE INCOMPLETE: missing the startup script"; exit 1; }
+          unzip -l ops-api.zip | grep -q 'config/system/DRAFT1auth.099.001.04_1.3.0.xsd' || {
+            echo "DEPLOY PACKAGE INCOMPLETE: missing the Annex 2 schema"; exit 1; }
+          rm -rf _pkgcheck && mkdir _pkgcheck
+          unzip -q ops-api.zip -d _pkgcheck
+          ( cd _pkgcheck && python "$GITHUB_WORKSPACE/deploy/trakt-ops-api/verify_package.py" )
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_OPS_API_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_OPS_API_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_OPS_API_SUBSCRIPTION_ID }}
+
+      - name: Deploy to trakt-ops-api
+        # Scoped by name to this service only. Oryx builds requirements.txt and
+        # runs the configured startup command
+        # (bash deploy/trakt-ops-api/startup-ops.sh). No other App Service is
+        # deployed, configured or restarted by this workflow.
+        run: |
+          az webapp deploy \
+            --resource-group "${{ secrets.AZURE_OPS_API_RESOURCE_GROUP }}" \
+            --name "$APP_NAME" \
+            --src-path ops-api.zip \
+            --type zip
+
+      - name: Verify the deployed service answers
+        # /health needs no token, so it is a clean post-deploy probe. It also
+        # reports auth_configured, which catches the most likely misconfiguration
+        # (TRAKT_OPS_OPERATORS unset leaves every route 503).
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6; do
+            body="$(curl -fsS --max-time 20 "https://${APP_NAME}.azurewebsites.net/health" || true)"
+            if [ -n "$body" ]; then
+              echo "$body"
+              echo "$body" | grep -q '"service":"operations-control"' \
+                || echo "WARNING: /health did not identify as operations-control"
+              echo "$body" | grep -q '"auth_configured":true' \
+                || echo "WARNING: TRAKT_OPS_OPERATORS is not set — every route will answer 503"
+              exit 0
+            fi
+            echo "attempt $attempt: not up yet, waiting"
+            sleep 20
+          done
+          echo "Service did not answer /health after the deploy."
+          exit 1

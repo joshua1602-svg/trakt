@@ -1,0 +1,34 @@
+[
+  { "_comment": "Storage. The OCC governance container holds workflows, decisions, rules, the audit chain and the versioned configuration packages (_global/config-packages/{layer}/…). Same storage account as the MI API's processed-v2; a DIFFERENT container.",
+    "name": "TRAKT_BLOB_CONNECTION", "value": "<storage-connection-string>" },
+  { "name": "TRAKT_STORAGE_BACKEND", "value": "blob" },
+  { "name": "TRAKT_OPS_CONTAINER", "value": "operations-control" },
+
+  { "_comment": "Writable scratch. App Service gives every app a writable /tmp; the defaults in operations_control are RELATIVE paths (.ops_state/…) which would land inside the read-only-ish deployment root, so set both explicitly.",
+    "name": "TRAKT_OPS_STAGING_ROOT", "value": "/tmp/trakt/ops_staging" },
+  { "name": "TRAKT_OPS_MEMORY_ROOT", "value": "/tmp/trakt/ops_memory" },
+
+  { "_comment": "Operator/administrator identity. FAIL-CLOSED: operations_control/api/auth.py returns HTTP 503 on EVERY route while this is unset or unparseable, so the service is unusable until it is set. JSON map of token -> {name, clients, role}. clients:[\"*\"] = all clients; role:\"admin\" grants the /ops/admin/config/* area (require_admin). Omit role for an ordinary operator. Use long random tokens and store this as a Key Vault reference, not a literal.",
+    "name": "TRAKT_OPS_OPERATORS", "value": "{\"<random-operator-token>\":{\"name\":\"Operator\",\"clients\":[\"ERE\"]},\"<random-admin-token>\":{\"name\":\"Administrator\",\"clients\":[\"*\"],\"role\":\"admin\"}}" },
+
+  { "_comment": "Browser origins allowed to call this API. Comma-separated, EXACT origins. There is deliberately no wildcard: operations_control/api/app.py feeds this straight into CORSMiddleware allow_origins, and '*' would let any site drive administrator configuration actions with a stolen token. Must list the deployed React OCC origin.",
+    "name": "TRAKT_OPS_CORS_ORIGINS", "value": "https://<deployed-react-occ-origin>" },
+
+  { "_comment": "App Service / Oryx.",
+    "name": "PORT", "value": "8000" },
+  { "name": "WEBSITES_PORT", "value": "8000" },
+  { "name": "SCM_DO_BUILD_DURING_DEPLOYMENT", "value": "true" },
+
+  { "_comment": "Serving. One worker: the OCC engine runs workflows on background threads and reconciles interrupted runs on startup, so each extra worker is another engine competing for the same blob leases. Timeout 300s covers a long governed stage (onboarding / Annex 2 XML build) without the worker being killed mid-run.",
+    "name": "OPS_API_WORKERS", "value": "1" },
+  { "name": "OPS_API_TIMEOUT", "value": "300" },
+
+  { "_comment": "Shared platform containers. The OCC resolves client/portfolio records through the source registry and publishes approved packs through the existing promotion path (apps.blob_trigger_app.layout.Layout.from_env + ProductionPersistence), so these must match the values the blob trigger and the MI API already use. Defaults shown; set them explicitly so both services cannot drift apart.",
+    "name": "TRAKT_SOURCE_REGISTRY_URI", "value": "blob://trakt-state/registry/source_registry.yaml" },
+  { "name": "TRAKT_STATE_CONTAINER", "value": "trakt-state" },
+  { "name": "TRAKT_PROCESSED_CONTAINER", "value": "processed-v2" },
+  { "name": "TRAKT_RAW_CONTAINER", "value": "raw-v2" },
+
+  { "_comment": "Governed runtime mode. Leave UNSET in production: trakt_core defaults to 'production', which is what refuses fixture/synthetic source data. Listed here only so nobody adds it by accident.",
+    "_do_not_set": "TRAKT_RUNTIME_MODE" }
+]
