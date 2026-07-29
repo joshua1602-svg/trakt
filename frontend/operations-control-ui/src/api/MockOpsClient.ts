@@ -1,19 +1,9 @@
 import { MockConfigAdmin } from "./MockConfigAdmin";
 import { OpsError, type OpsClient } from "./OpsClient";
 import type {
-  AuditTrail,
-  Comparison,
-  ConfigCatalogue,
-  ConfigLayer,
-  ConfigOverview,
-  ConfigVersion,
-  CreateDraftInput,
-  ImpactAnalysis,
-  Principal,
-  ValidationResult,
-  ValidationSummary,
-} from "./adminTypes";
-import type {
+  Batch,
+  BatchInputRole,
+  CreateBatchInput,
   Dashboard,
   DecisionInput,
   DecisionResult,
@@ -48,6 +38,13 @@ const SCOPE_EXPLANATIONS: Record<string, string> = {
   global: "Trakt will remember this answer for every client, everywhere.",
 };
 
+/** Expected inputs for an onboarding batch, in the order the mock assigns them. */
+const BATCH_ROLE_SPECS: { role: string; label: string; required: boolean }[] = [
+  { role: "holdings", label: "Holdings statement", required: true },
+  { role: "loan_tape", label: "Primary loan tape", required: true },
+  { role: "prior_period", label: "Prior period comparison", required: false },
+];
+
 function deepCopy<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
@@ -63,6 +60,9 @@ export class MockOpsClient implements OpsClient {
   private nextId = 6000;
   /** Counts reads of a running workflow so it visibly "finishes" while polling. */
   private runningTicks = new Map<string, number>();
+
+  /** Counts reads of a running batch so it visibly "finishes" while polling. */
+  private batchTicks = new Map<string, number>();
 
   private clients = ["Alpine Capital", "Birchwood Partners", "Cedar Rock Advisors"];
 
@@ -94,6 +94,53 @@ export class MockOpsClient implements OpsClient {
       classification_sentence:
         "This is the first time Trakt has seen the Nordic Bond portfolio for Alpine Capital, so it will treat this as onboarding a new portfolio.",
       registered_at: "2026-07-25T14:40:00Z",
+    },
+  ];
+
+  private batches: Batch[] = [
+    {
+      batch_id: "batch-7001",
+      client_id: "Alpine Capital",
+      portfolio_id: "Nordic Bond",
+      reporting_date: "2026-06-30",
+      workflow_type: "mi",
+      status: "review_required",
+      status_label: "Needs your review",
+      status_sentence:
+        "One of the files could be more than one thing. Confirm what it is so Trakt can continue.",
+      auto_start_when_ready: true,
+      files: [
+        {
+          source_file_id: "sf-101",
+          filename: "nordic-bond-loan-tape-june.xlsx",
+          role: "loan_tape",
+          role_label: "Primary loan tape",
+          status: "recognised",
+          status_sentence: "Received and recognised as the primary loan tape.",
+          confidence: 0.97,
+        },
+        {
+          source_file_id: "sf-102",
+          filename: "nordic-extract-06.csv",
+          role: "",
+          role_label: "Not yet decided",
+          status: "ambiguous",
+          status_sentence:
+            "This could be either the holdings statement or a transactions extract. Trakt needs your confirmation before it can continue.",
+          confidence: 0.52,
+        },
+      ],
+      input_roles: [
+        { role: "holdings", label: "Holdings statement", required: true, satisfied: false },
+        { role: "loan_tape", label: "Primary loan tape", required: true, satisfied: true },
+        { role: "prior_period", label: "Prior period comparison", required: false, satisfied: false },
+      ],
+      missing_roles: ["holdings"],
+      configuration_ready: true,
+      blocking_decisions: ["dec-9101"],
+      workflow_id: null,
+      created_at: "2026-07-27T08:20:00Z",
+      updated_at: "2026-07-27T08:24:00Z",
     },
   ];
 
@@ -586,6 +633,203 @@ export class MockOpsClient implements OpsClient {
       this.clients.push(input.client_id);
     }
     return deepCopy(delivery);
+  }
+
+  private findBatch(batchId: string): Batch {
+    const batch = this.batches.find((b) => b.batch_id === batchId);
+    if (!batch) {
+      throw new OpsError("That input pack could not be found.");
+    }
+    return batch;
+  }
+
+  /** Re-derives a not-yet-started batch's status from its files and roles. */
+  private refreshBatch(batch: Batch): void {
+    const missing = batch.input_roles.filter((r) => r.required && !r.satisfied);
+    batch.missing_roles = missing.map((r) => r.role);
+    batch.updated_at = new Date().toISOString();
+
+    if (batch.files.some((f) => f.status === "ambiguous")) {
+      batch.status = "review_required";
+      batch.status_label = "Needs your review";
+      batch.status_sentence =
+        "One of the files could be more than one thing. Confirm what it is so Trakt can continue.";
+    } else if (batch.files.length === 0) {
+      batch.status = "receiving";
+      batch.status_label = "Receiving files";
+      batch.status_sentence = "Trakt is watching for the files to arrive.";
+    } else if (missing.length > 0) {
+      batch.status = "incomplete";
+      batch.status_label = "Waiting for files";
+      batch.status_sentence = `Waiting for required input: ${missing
+        .map((r) => r.label)
+        .join(", ")}`;
+    } else {
+      batch.configuration_ready = true;
+      batch.status = "ready";
+      batch.status_label = "Ready to start";
+      batch.status_sentence =
+        "Everything Trakt needs has arrived. Start the onboarding when you're ready.";
+    }
+  }
+
+  private satisfyRole(batch: Batch, role: BatchInputRole, filename: string): void {
+    role.satisfied = true;
+    batch.files.push({
+      source_file_id: this.id("sf"),
+      filename,
+      role: role.role,
+      role_label: role.label,
+      status: "recognised",
+      status_sentence: `Received and recognised as the ${role.label.toLowerCase()}.`,
+      confidence: 0.95,
+    });
+  }
+
+  async createBatch(input: CreateBatchInput): Promise<Batch> {
+    await this.wait();
+    const now = new Date().toISOString();
+    const batch: Batch = {
+      batch_id: this.id("batch"),
+      client_id: input.client_id,
+      portfolio_id: input.portfolio_id,
+      reporting_date: input.reporting_date,
+      workflow_type: input.workflow_type,
+      status: "receiving",
+      status_label: "Receiving files",
+      status_sentence: "Trakt is watching for the files to arrive.",
+      auto_start_when_ready: input.auto_start_when_ready,
+      files: [],
+      input_roles: BATCH_ROLE_SPECS.map((spec) => ({
+        role: spec.role,
+        label: spec.label,
+        required: spec.required,
+        satisfied: false,
+      })),
+      missing_roles: BATCH_ROLE_SPECS.filter((s) => s.required).map((s) => s.role),
+      configuration_ready: false,
+      blocking_decisions: [],
+      workflow_id: null,
+      created_at: now,
+      updated_at: now,
+    };
+    this.batches.unshift(batch);
+    if (!this.clients.includes(input.client_id)) {
+      this.clients.push(input.client_id);
+    }
+    return deepCopy(batch);
+  }
+
+  async listBatches(client?: string): Promise<Batch[]> {
+    await this.wait();
+    return deepCopy(client ? this.batches.filter((b) => b.client_id === client) : this.batches);
+  }
+
+  async getBatch(batchId: string, _client?: string): Promise<Batch> {
+    await this.wait();
+    const batch = this.findBatch(batchId);
+    if (batch.status === "running") {
+      const ticks = (this.batchTicks.get(batchId) ?? 0) + 1;
+      this.batchTicks.set(batchId, ticks);
+      if (ticks >= 3) {
+        this.batchTicks.delete(batchId);
+        batch.status = "completed";
+        batch.status_label = "Done";
+        batch.status_sentence = "The onboarding run has finished. You can open the workflow to see the result.";
+        batch.updated_at = new Date().toISOString();
+      }
+    }
+    return deepCopy(batch);
+  }
+
+  async registerBatchFile(batchId: string, path: string, _client?: string): Promise<Batch> {
+    await this.wait();
+    const batch = this.findBatch(batchId);
+    if (batch.status === "running" || batch.status === "completed") {
+      throw new OpsError("This onboarding has already started, so new files can't be added to it.");
+    }
+
+    const name = path.replace(/\/+$/, "").split("/").pop() || path;
+    const isDirectory = !name.includes(".");
+    const unsatisfied = batch.input_roles.filter((r) => !r.satisfied);
+
+    if (isDirectory) {
+      // A directory registers every file inside it — enough to satisfy every remaining role.
+      for (const role of unsatisfied) {
+        this.satisfyRole(batch, role, `${role.role.replace(/_/g, "-")}.xlsx`);
+      }
+    } else {
+      const nextRequired = unsatisfied.find((r) => r.required) ?? unsatisfied[0];
+      if (nextRequired) {
+        this.satisfyRole(batch, nextRequired, name);
+      } else {
+        batch.files.push({
+          source_file_id: this.id("sf"),
+          filename: name,
+          role: "",
+          role_label: "Additional file",
+          status: "recognised",
+          status_sentence: "Received. Trakt will keep this alongside the pack.",
+          confidence: 0.9,
+        });
+      }
+    }
+
+    this.refreshBatch(batch);
+    return deepCopy(batch);
+  }
+
+  async startBatch(batchId: string, _client?: string): Promise<Batch> {
+    await this.wait();
+    const batch = this.findBatch(batchId);
+    if (batch.status !== "ready") {
+      throw new OpsError("This pack is not ready to start yet.");
+    }
+    const now = new Date().toISOString();
+    const workflow: Workflow = {
+      workflow_id: this.id("wf"),
+      client_id: batch.client_id,
+      portfolio_id: batch.portfolio_id,
+      reporting_period: batch.reporting_date,
+      outcome: batch.workflow_type,
+      workflow_type: "new_portfolio",
+      workflow_type_label: TYPE_LABELS.new_portfolio,
+      status: "running",
+      open_decisions: 0,
+      created_at: now,
+      updated_at: now,
+      outcome_label: OUTCOME_LABELS[batch.workflow_type],
+      status_sentence: "Trakt is working through the files now. This usually takes a few minutes.",
+      interrupted: false,
+      blockers: [],
+      rerun_count: 0,
+      stages: [
+        {
+          stage: "receive",
+          label: "Files received",
+          status: "completed",
+          status_label: "Done",
+          summary: `${batch.files.length} files were received.`,
+        },
+        {
+          stage: "understand",
+          label: "Understanding the files",
+          status: "running",
+          status_label: "In progress",
+        },
+        { stage: "check", label: "Checking the numbers", status: "waiting", status_label: "Waiting" },
+        { stage: "prepare", label: "Preparing the report", status: "waiting", status_label: "Waiting" },
+        { stage: "publish", label: "Publishing", status: "waiting", status_label: "Waiting" },
+      ],
+    };
+    this.workflows.unshift(workflow);
+    batch.workflow_id = workflow.workflow_id;
+    batch.status = "running";
+    batch.status_label = "In progress";
+    batch.status_sentence = "Trakt is working through the files now. This usually takes a few minutes.";
+    batch.updated_at = now;
+    this.batchTicks.set(batchId, 0);
+    return deepCopy(batch);
   }
 
   async startWorkflow(input: StartWorkflowInput): Promise<Workflow> {

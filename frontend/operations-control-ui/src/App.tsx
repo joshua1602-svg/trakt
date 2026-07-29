@@ -7,6 +7,7 @@ import { Shell } from "@/components/Shell";
 import { SignIn } from "@/components/SignIn";
 import { ToastProvider } from "@/components/Toast";
 import { getToken, saveToken, UNAUTHORIZED_EVENT } from "@/lib/token";
+import { BatchDetailScreen } from "@/screens/BatchDetail";
 import { HistoryScreen } from "@/screens/History";
 import { HomeScreen } from "@/screens/Home";
 import { NewWorkflowScreen } from "@/screens/NewWorkflow";
@@ -52,62 +53,19 @@ export default function App() {
     <OpsClientProvider client={client}>
       <ToastProvider>
         <AuthGate>
-          <SessionProvider>
-            <Shell>
-              <Routes>
-                <Route path="/" element={<HomeScreen />} />
-                <Route path="/new" element={<NewWorkflowScreen />} />
-                <Route path="/workflows" element={<WorkflowsScreen />} />
-                <Route path="/workflows/:id" element={<WorkflowDetailScreen />} />
-                <Route path="/reviews" element={<ReviewsScreen />} />
-                <Route path="/reviews/:id" element={<ReviewDetailScreen />} />
-                <Route path="/rules" element={<RulesScreen />} />
-                <Route path="/history" element={<HistoryScreen />} />
-                {/* Administrator area. The guard decides what to render; the
-                    backend decides what is allowed on every request. */}
-                <Route
-                  path="/admin/config"
-                  element={
-                    <AdminOnly>
-                      <ConfigOverviewScreen />
-                    </AdminOnly>
-                  }
-                />
-                <Route
-                  path="/admin/config/system"
-                  element={
-                    <AdminOnly>
-                      <ConfigSystemScreen />
-                    </AdminOnly>
-                  }
-                />
-                <Route
-                  path="/admin/config/assets"
-                  element={
-                    <AdminOnly>
-                      <ConfigAssetsScreen />
-                    </AdminOnly>
-                  }
-                />
-                <Route
-                  path="/admin/config/regimes"
-                  element={
-                    <AdminOnly>
-                      <ConfigRegimesScreen />
-                    </AdminOnly>
-                  }
-                />
-                <Route
-                  path="/admin/config/history"
-                  element={
-                    <AdminOnly>
-                      <ConfigHistoryScreen />
-                    </AdminOnly>
-                  }
-                />
-              </Routes>
-            </Shell>
-          </SessionProvider>
+          <Shell>
+            <Routes>
+              <Route path="/" element={<HomeScreen />} />
+              <Route path="/new" element={<NewWorkflowScreen />} />
+              <Route path="/batches/:id" element={<BatchDetailScreen />} />
+              <Route path="/workflows" element={<WorkflowsScreen />} />
+              <Route path="/workflows/:id" element={<WorkflowDetailScreen />} />
+              <Route path="/reviews" element={<ReviewsScreen />} />
+              <Route path="/reviews/:id" element={<ReviewDetailScreen />} />
+              <Route path="/rules" element={<RulesScreen />} />
+              <Route path="/history" element={<HistoryScreen />} />
+            </Routes>
+          </Shell>
         </AuthGate>
       </ToastProvider>
     </OpsClientProvider>

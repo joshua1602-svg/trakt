@@ -6,7 +6,6 @@
 
     "TRAKT_BLOB_CONNECTION": "<storage-connection-string>",
     "TRAKT_BLOB_CONTAINER": "raw-v2",
-    "TRAKT_PACK_MARKER": "_READY.json",
 
     "TRAKT_RAW_CONTAINER": "raw-v2",
     "TRAKT_STATE_CONTAINER": "trakt-state",

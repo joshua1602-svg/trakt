@@ -53,7 +53,7 @@ sources:
   # to source onboarding and stops before production. After approval, set
   # status: active + approved_mapping_id + expected_schema_fingerprint and routine
   # ad_hoc packs route deterministically. acquisition_date / seller_name are
-  # supplied per pack via _READY.json (or added here once known).
+  # supplied per pack via the OCC input-batch metadata (or added here once known).
   - client_id: ERE
     source_portfolio_id: acquired_001
     source_portfolio_type: acquired

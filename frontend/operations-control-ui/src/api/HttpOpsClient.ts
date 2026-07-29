@@ -2,19 +2,8 @@ import { copy } from "@/lib/copy";
 import { announceUnauthorized, clearToken, getToken } from "@/lib/token";
 import { OpsError, type OpsClient } from "./OpsClient";
 import type {
-  AuditTrail,
-  Comparison,
-  ConfigCatalogue,
-  ConfigLayer,
-  ConfigOverview,
-  ConfigVersion,
-  CreateDraftInput,
-  ImpactAnalysis,
-  Principal,
-  ValidationResult,
-  ValidationSummary,
-} from "./adminTypes";
-import type {
+  Batch,
+  CreateBatchInput,
   Dashboard,
   DecisionInput,
   DecisionResult,
@@ -123,6 +112,39 @@ export class HttpOpsClient implements OpsClient {
   async registerDelivery(input: RegisterDeliveryInput): Promise<Delivery> {
     const body = await this.post<{ delivery: Delivery }>("/ops/deliveries", input);
     return body.delivery;
+  }
+
+  async createBatch(input: CreateBatchInput): Promise<Batch> {
+    const body = await this.post<{ batch: Batch }>("/ops/batches", input);
+    return body.batch;
+  }
+
+  async listBatches(client?: string): Promise<Batch[]> {
+    const body = await this.request<{ batches: Batch[] }>(`/ops/batches${query({ client })}`);
+    return body.batches;
+  }
+
+  async getBatch(batchId: string, client?: string): Promise<Batch> {
+    const body = await this.request<{ batch: Batch }>(
+      `/ops/batches/${encodeURIComponent(batchId)}${query({ client })}`,
+    );
+    return body.batch;
+  }
+
+  async registerBatchFile(batchId: string, path: string, client?: string): Promise<Batch> {
+    const body = await this.post<{ batch: Batch }>(
+      `/ops/batches/${encodeURIComponent(batchId)}/files${query({ client })}`,
+      { path },
+    );
+    return body.batch;
+  }
+
+  async startBatch(batchId: string, client?: string): Promise<Batch> {
+    const body = await this.post<{ batch: Batch }>(
+      `/ops/batches/${encodeURIComponent(batchId)}/start${query({ client })}`,
+      {},
+    );
+    return body.batch;
   }
 
   async startWorkflow(input: StartWorkflowInput): Promise<Workflow> {

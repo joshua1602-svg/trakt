@@ -10,7 +10,7 @@ handler, which delegates to the Azure-free **router** here. It does
 Blob uploaded to raw-v2
    → Event Grid → root function_app.py (Event Grid handler)
    → apps/blob_trigger_app/router
-   → pack completeness (_READY.json) → source registry decision
+   → OCC input-batch readiness (semantic file roles — no sentinel) → source registry decision
    → Orchestrator Agent → Onboarding / deterministic processing
    → Assembler Agent → MI / Regime / All
 ```
@@ -39,7 +39,18 @@ setting (default `raw`; **production `raw-v2`**). The Event Grid handler reads i
 and **rejects only blobs outside that container** — there is no hardcoded
 `inbound` (the old skip-`raw-v2` bug).
 
-## Pack completion (`_READY.json` marker)
+## Pack completion — OCC-owned readiness (MIGRATION NOTE)
+
+**`_READY.json` is no longer supported on the production route.** The deployed
+Event Grid handler registers every source-file arrival with the Operations
+Control Centre intake service, which recognises semantic input roles,
+evaluates completeness + configuration readiness, writes an immutable internal
+run manifest and starts the governed run itself. Legacy sentinel uploads are
+ignored and audited (`legacy_sentinel_ignored`); they never trigger a run.
+The sections below describe the LEGACY marker mechanics still used by the
+offline CLI tooling (`ops`, `backfill`, `repin`) pending their migration.
+
+## Legacy pack completion (`_READY.json` marker — CLI tooling only)
 
 A reporting pack is usually several files (loan + property + funder …) and Event
 Grid fires **per blob**. To avoid starting on the first file (incomplete pack) or
@@ -304,8 +315,9 @@ uploaded alongside it.
 - **`TRAKT_BLOB_CONTAINER=raw-v2`** controls which container is accepted. The
   previous legacy root handler hardcoded the `inbound` container and silently
   skipped `raw-v2`; the accepted container is now configuration, not a constant.
-- **Upload data files first; upload `_READY.json` last** to trigger processing.
-  Use **one `_READY.json` per reporting pack**.
+- **Upload data files only** — processing starts automatically when the pack's
+  required input roles are recognised. Do **not** upload `_READY.json`; it is
+  ignored on the production route.
 - **Writable output root (Azure-safe).** Azure runs from a read-only package
   mount (`/home/site/wwwroot`), so all runtime output (event manifests,
   orchestrator state/run dirs, accepted + central platform canonicals) derives

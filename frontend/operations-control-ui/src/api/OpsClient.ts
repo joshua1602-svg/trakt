@@ -1,17 +1,6 @@
 import type {
-  Comparison,
-  ConfigCatalogue,
-  ConfigLayer,
-  ConfigOverview,
-  ConfigVersion,
-  CreateDraftInput,
-  ImpactAnalysis,
-  AuditTrail,
-  Principal,
-  ValidationSummary,
-  ValidationResult,
-} from "./adminTypes";
-import type {
+  Batch,
+  CreateBatchInput,
   Dashboard,
   DecisionInput,
   DecisionResult,
@@ -55,6 +44,11 @@ export interface OpsClient {
   getClients(): Promise<string[]>;
   getDeliveries(client?: string): Promise<Delivery[]>;
   registerDelivery(input: RegisterDeliveryInput): Promise<Delivery>;
+  createBatch(input: CreateBatchInput): Promise<Batch>;
+  listBatches(client?: string): Promise<Batch[]>;
+  getBatch(batchId: string, client?: string): Promise<Batch>;
+  registerBatchFile(batchId: string, path: string, client?: string): Promise<Batch>;
+  startBatch(batchId: string, client?: string): Promise<Batch>;
   startWorkflow(input: StartWorkflowInput): Promise<Workflow>;
   getWorkflows(params?: { client?: string; status?: string }): Promise<WorkflowRow[]>;
   getWorkflow(workflowId: string): Promise<Workflow>;

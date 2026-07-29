@@ -1,23 +1,15 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FileText, Sparkles } from "lucide-react";
 import clsx from "clsx";
 import { useOpsClient } from "@/api/context";
-import type { Delivery, WorkflowOutcome, WorkflowType } from "@/api/types";
+import type { Batch, WorkflowOutcome } from "@/api/types";
 import { Page } from "@/components/Page";
+import { StatusChip } from "@/components/StatusChip";
 import { useToast } from "@/components/Toast";
 import { copy } from "@/lib/copy";
-import { formatPeriod } from "@/lib/format";
 import { errorMessage } from "@/lib/useLoad";
 
 const NEW_CLIENT = "__new__";
-
-const TYPE_OPTIONS: { value: WorkflowType; label: string }[] = [
-  { value: "new_client", label: copy.newWorkflow.typeNewClient },
-  { value: "new_portfolio", label: copy.newWorkflow.typeNewPortfolio },
-  { value: "recurring", label: copy.newWorkflow.typeRecurring },
-  { value: "backfill", label: copy.newWorkflow.typeBackfill },
-];
 
 function SectionCard({ children }: { children: React.ReactNode }) {
   return <section className="rounded-2xl border border-stone-200 bg-white p-6">{children}</section>;
@@ -31,22 +23,18 @@ export function NewWorkflowScreen() {
   // Step a — outcome
   const [outcome, setOutcome] = useState<WorkflowOutcome>("mi");
 
-  // Step b — who and which files
+  // Step b — who is this for
   const [clients, setClients] = useState<string[]>([]);
   const [clientChoice, setClientChoice] = useState("");
   const [newClientName, setNewClientName] = useState("");
   const [portfolio, setPortfolio] = useState("");
   const [period, setPeriod] = useState("");
-  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
-  const [delivery, setDelivery] = useState<Delivery | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  // Step c — where are the files
+  const [batch, setBatch] = useState<Batch | null>(null);
   const [folder, setFolder] = useState("");
   const [registering, setRegistering] = useState(false);
-
-  // Step c — classification override
-  const [changeOpen, setChangeOpen] = useState(false);
-  const [overrideType, setOverrideType] = useState<WorkflowType | "">("");
-  const [overrideReason, setOverrideReason] = useState("");
-  const [starting, setStarting] = useState(false);
 
   const clientId = clientChoice === NEW_CLIENT ? newClientName.trim() : clientChoice;
 
@@ -57,60 +45,34 @@ export function NewWorkflowScreen() {
       .catch(() => setClients([]));
   }, [client]);
 
-  useEffect(() => {
-    setDelivery(null);
-    setChangeOpen(false);
-    setOverrideType("");
-    if (clientChoice && clientChoice !== NEW_CLIENT) {
-      client
-        .getDeliveries(clientChoice)
-        .then(setDeliveries)
-        .catch(() => setDeliveries([]));
-    } else {
-      setDeliveries([]);
-    }
-  }, [client, clientChoice]);
-
-  async function handleRegister() {
-    if (!clientId || !portfolio.trim() || !period || !folder.trim()) return;
-    setRegistering(true);
+  async function handleCreate() {
+    if (!clientId || !portfolio.trim() || !period) return;
+    setCreating(true);
     try {
-      const registered = await client.registerDelivery({
+      const created = await client.createBatch({
         client_id: clientId,
         portfolio_id: portfolio.trim(),
-        input_path: folder.trim(),
-        reporting_period: period,
+        reporting_date: period,
+        workflow_type: outcome,
+        auto_start_when_ready: false,
       });
-      setDelivery(registered);
-      setChangeOpen(false);
-      setOverrideType("");
+      setBatch(created);
     } catch (err) {
       toast.show(errorMessage(err), "error");
     } finally {
-      setRegistering(false);
+      setCreating(false);
     }
   }
 
-  async function handleStart() {
-    if (!clientId || !delivery) return;
-    setStarting(true);
+  async function handleAddFiles() {
+    if (!batch || !folder.trim()) return;
+    setRegistering(true);
     try {
-      const workflow = await client.startWorkflow({
-        client_id: clientId,
-        delivery_id: delivery.delivery_id,
-        outcome,
-        ...(overrideType
-          ? {
-              workflow_type: overrideType,
-              ...(overrideReason.trim() ? { override_reason: overrideReason.trim() } : {}),
-            }
-          : {}),
-        start: true,
-      });
-      navigate(`/workflows/${workflow.workflow_id}`);
+      await client.registerBatchFile(batch.batch_id, folder.trim(), batch.client_id);
+      navigate(`/batches/${batch.batch_id}?client=${encodeURIComponent(batch.client_id)}`);
     } catch (err) {
       toast.show(errorMessage(err), "error");
-      setStarting(false);
+      setRegistering(false);
     }
   }
 
@@ -136,7 +98,8 @@ export function NewWorkflowScreen() {
               <label
                 key={option.value}
                 className={clsx(
-                  "flex cursor-pointer flex-col gap-1 rounded-2xl border-2 p-5 transition-colors",
+                  "flex flex-col gap-1 rounded-2xl border-2 p-5 transition-colors",
+                  batch ? "cursor-default opacity-70" : "cursor-pointer",
                   outcome === option.value
                     ? "border-blue-600 bg-blue-50/50"
                     : "border-stone-200 bg-white hover:border-stone-300",
@@ -147,6 +110,7 @@ export function NewWorkflowScreen() {
                   name="outcome"
                   value={option.value}
                   checked={outcome === option.value}
+                  disabled={Boolean(batch)}
                   onChange={() => setOutcome(option.value)}
                   className="sr-only"
                 />
@@ -157,7 +121,7 @@ export function NewWorkflowScreen() {
           </div>
         </SectionCard>
 
-        {/* (b) Client, portfolio, period, files */}
+        {/* (b) Client, portfolio, period */}
         <SectionCard>
           <h2 className="mb-4 text-lg font-semibold text-stone-900">
             {copy.newWorkflow.detailsHeading}
@@ -170,8 +134,9 @@ export function NewWorkflowScreen() {
               <select
                 id="client"
                 value={clientChoice}
+                disabled={Boolean(batch)}
                 onChange={(event) => setClientChoice(event.target.value)}
-                className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:opacity-70"
               >
                 <option value="">{copy.newWorkflow.clientPlaceholder}</option>
                 {clients.map((name) => (
@@ -190,8 +155,9 @@ export function NewWorkflowScreen() {
                 <input
                   id="new-client"
                   value={newClientName}
+                  disabled={Boolean(batch)}
                   onChange={(event) => setNewClientName(event.target.value)}
-                  className="w-full rounded-xl border border-stone-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  className="w-full rounded-xl border border-stone-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:opacity-70"
                 />
               </div>
             )}
@@ -202,8 +168,9 @@ export function NewWorkflowScreen() {
               <input
                 id="portfolio"
                 value={portfolio}
+                disabled={Boolean(batch)}
                 onChange={(event) => setPortfolio(event.target.value)}
-                className="w-full rounded-xl border border-stone-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="w-full rounded-xl border border-stone-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:opacity-70"
               />
             </div>
             <div>
@@ -214,158 +181,55 @@ export function NewWorkflowScreen() {
                 id="period"
                 type="month"
                 value={period}
+                disabled={Boolean(batch)}
                 onChange={(event) => setPeriod(event.target.value)}
-                className="w-full rounded-xl border border-stone-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="w-full rounded-xl border border-stone-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:opacity-70"
               />
             </div>
           </div>
 
-          <h3 className="mb-3 mt-8 text-sm font-semibold text-stone-700">
-            {copy.newWorkflow.filesHeading}
-          </h3>
-          {clientChoice && clientChoice !== NEW_CLIENT && (
-            <div className="mb-5">
-              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-stone-400">
-                {copy.newWorkflow.pickDelivery}
-              </p>
-              {deliveries.length === 0 ? (
-                <p className="text-sm text-stone-400">{copy.newWorkflow.noDeliveries}</p>
-              ) : (
-                <div className="space-y-2">
-                  {deliveries.map((option) => (
-                    <label
-                      key={option.delivery_id}
-                      className={clsx(
-                        "flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition-colors",
-                        delivery?.delivery_id === option.delivery_id
-                          ? "border-blue-600 bg-blue-50/50"
-                          : "border-stone-200 hover:border-stone-300",
-                      )}
-                    >
-                      <input
-                        type="radio"
-                        name="delivery"
-                        checked={delivery?.delivery_id === option.delivery_id}
-                        onChange={() => {
-                          setDelivery(option);
-                          setChangeOpen(false);
-                          setOverrideType("");
-                        }}
-                        className="sr-only"
-                      />
-                      <FileText className="h-4 w-4 shrink-0 text-stone-400" aria-hidden />
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium text-stone-900">
-                          {option.portfolio_id} · {formatPeriod(option.reporting_period)}
-                        </span>
-                        <span className="block text-xs text-stone-500">
-                          {option.files.length} {copy.newWorkflow.filesReceived} · {option.dataset}
-                        </span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-stone-400">
-            {copy.newWorkflow.orRegister}
-          </p>
-          <label className="mb-1 block text-sm font-medium text-stone-700" htmlFor="folder">
-            {copy.newWorkflow.folderLabel}
-          </label>
-          <p className="mb-2 text-xs text-stone-500">{copy.newWorkflow.folderHelper}</p>
-          <div className="flex gap-2">
-            <input
-              id="folder"
-              value={folder}
-              onChange={(event) => setFolder(event.target.value)}
-              className="w-full rounded-xl border border-stone-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            />
+          {!batch && (
             <button
               type="button"
-              disabled={registering || !clientId || !portfolio.trim() || !period || !folder.trim()}
-              onClick={() => void handleRegister()}
-              className="shrink-0 rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={creating || !clientId || !portfolio.trim() || !period}
+              onClick={() => void handleCreate()}
+              className="mt-6 rounded-xl bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {copy.newWorkflow.registerButton}
+              {copy.newWorkflow.createButton}
             </button>
-          </div>
+          )}
         </SectionCard>
 
-        {/* (c) Classification + start */}
-        {delivery && (
+        {/* (c) Where are the files? */}
+        {batch && (
           <SectionCard>
-            <div className="rounded-2xl bg-blue-50/70 p-5">
-              <div className="mb-2 flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-blue-600" aria-hidden />
-                <span className="text-xs font-semibold uppercase tracking-wide text-blue-700">
-                  {overrideType
-                    ? TYPE_OPTIONS.find((t) => t.value === overrideType)?.label
-                    : delivery.classification_label}
-                </span>
-              </div>
-              <p className="text-base leading-relaxed text-stone-800">
-                {delivery.classification_sentence}
-              </p>
+            <h2 className="mb-2 text-lg font-semibold text-stone-900">
+              {copy.newWorkflow.filesHeading}
+            </h2>
+            <div className="mb-5 flex flex-wrap items-center gap-3">
+              <StatusChip status={batch.status} label={batch.status_label} />
+              <p className="text-sm leading-relaxed text-stone-600">{batch.status_sentence}</p>
+            </div>
+            <label className="mb-1 block text-sm font-medium text-stone-700" htmlFor="folder">
+              {copy.newWorkflow.folderLabel}
+            </label>
+            <p className="mb-2 text-xs text-stone-500">{copy.newWorkflow.folderHelper}</p>
+            <div className="flex gap-2">
+              <input
+                id="folder"
+                value={folder}
+                onChange={(event) => setFolder(event.target.value)}
+                className="w-full rounded-xl border border-stone-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
               <button
                 type="button"
-                onClick={() => setChangeOpen((open) => !open)}
-                className="mt-3 text-sm font-medium text-blue-700 hover:underline"
+                disabled={registering || !folder.trim()}
+                onClick={() => void handleAddFiles()}
+                className="shrink-0 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {copy.newWorkflow.changeLink}
+                {copy.newWorkflow.addFilesButton}
               </button>
             </div>
-
-            {changeOpen && (
-              <div className="mt-4 space-y-2">
-                {TYPE_OPTIONS.map((option) => (
-                  <label
-                    key={option.value}
-                    className={clsx(
-                      "flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-sm transition-colors",
-                      (overrideType || delivery.classification) === option.value
-                        ? "border-blue-600 bg-blue-50/50"
-                        : "border-stone-200 hover:border-stone-300",
-                    )}
-                  >
-                    <input
-                      type="radio"
-                      name="workflow-type"
-                      checked={(overrideType || delivery.classification) === option.value}
-                      onChange={() =>
-                        setOverrideType(option.value === delivery.classification ? "" : option.value)
-                      }
-                    />
-                    <span className="font-medium text-stone-800">{option.label}</span>
-                  </label>
-                ))}
-                <div>
-                  <label
-                    className="mb-1 mt-2 block text-sm font-medium text-stone-700"
-                    htmlFor="override-reason"
-                  >
-                    {copy.common.optionalReason}
-                  </label>
-                  <input
-                    id="override-reason"
-                    value={overrideReason}
-                    onChange={(event) => setOverrideReason(event.target.value)}
-                    className="w-full rounded-xl border border-stone-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                  />
-                </div>
-              </div>
-            )}
-
-            <button
-              type="button"
-              disabled={starting || !clientId}
-              onClick={() => void handleStart()}
-              className="mt-6 w-full rounded-xl bg-blue-600 px-4 py-3 text-base font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto sm:px-10"
-            >
-              {copy.newWorkflow.startButton}
-            </button>
           </SectionCard>
         )}
       </div>

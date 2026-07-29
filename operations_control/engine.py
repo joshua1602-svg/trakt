@@ -315,6 +315,209 @@ class OpsEngine:
         return EffectiveConfigResolver(self.store, self.rules,
                                        client_config_path=self.client_config_path)
 
+    @property
+    def intake(self):
+        from .intake import IntakeService
+        if getattr(self, "_intake", None) is None:
+            self._intake = IntakeService(self.store,
+                                         staging_root=self.staging_root)
+        return self._intake
+
+    # ------------------------------------------------------------------ #
+    # Input batches (OCC-owned readiness — no sentinel files)
+    # ------------------------------------------------------------------ #
+    def create_batch(self, *, client_id: str, portfolio_id: str,
+                     reporting_date: str, workflow_type: str,
+                     created_by: str,
+                     auto_start_when_ready: bool = False) -> Dict[str, Any]:
+        if workflow_type not in OUTCOMES:
+            raise OpsError("OPS_BAD_OUTCOME",
+                           "Choose what Trakt should prepare.", 400)
+        return self.intake.create_batch(
+            tenant_id=client_id, client_id=client_id,
+            portfolio_id=portfolio_id, reporting_date=reporting_date,
+            workflow_type=workflow_type, created_by=created_by,
+            auto_start_when_ready=auto_start_when_ready)
+
+    def register_batch_file(self, *, client_id: str, batch_id: str,
+                            source_path: str, received_by: str
+                            ) -> Dict[str, Any]:
+        batch = self.intake.load_batch(client_id, batch_id)
+        if batch is None:
+            raise OpsError("OPS_BATCH_NOT_FOUND",
+                           "That input pack could not be found.", 404)
+        p = Path(source_path)
+        if not p.exists():
+            raise OpsError("OPS_DELIVERY_NOT_FOUND",
+                           "Those files could not be found. Check the "
+                           "location and try again.", 400)
+        files = [p] if p.is_file() else sorted(
+            f for f in p.iterdir() if f.is_file())
+        for f in files:
+            batch = self.intake.register_file(
+                batch, f, received_by_or_source=received_by)
+        return self.assess_batch(client_id=client_id,
+                                 batch_id=batch["batch_id"])
+
+    def assess_batch(self, *, client_id: str, batch_id: str,
+                     actor: str = "system") -> Dict[str, Any]:
+        """Classify + reassess readiness; surface ambiguity decisions; start
+        automatically when configured. Idempotent — called on every change."""
+        batch = self.intake.load_batch(client_id, batch_id)
+        if batch is None:
+            raise OpsError("OPS_BATCH_NOT_FOUND",
+                           "That input pack could not be found.", 404)
+        if batch["status"] in ("running", "completed", "failed"):
+            return batch
+
+        # Role recognition using approved registry signatures when available.
+        role_schemas, aliases = None, None
+        try:
+            rec = self._source_registry().lookup(
+                batch["client_id"], batch["portfolio_id"], "funded", "monthly")
+            if rec is not None:
+                role_schemas = rec.file_role_schemas or None
+                aliases = rec.file_role_aliases or None
+        except Exception:  # noqa: BLE001
+            pass
+        batch = self.intake.classify(batch, role_schemas=role_schemas,
+                                     aliases=aliases)
+
+        # Configuration readiness (no persistence — the run pins its own).
+        cfg = self._config_resolver().resolve(
+            client_id=batch["client_id"], portfolio_id=batch["portfolio_id"],
+            outcome=batch["workflow_type"],
+            reporting_period=batch["reporting_date"], workflow_id="",
+            created_by=actor)
+        eff = cfg.effective
+
+        # Ambiguity -> operator decisions (Review Centre), keyed to the batch.
+        open_roles = self._sync_file_role_decisions(batch)
+        batch = self.intake.assess(
+            batch,
+            config_status=cfg.status,
+            config_id=(eff.effective_config_id if eff else ""),
+            config_hash=(eff.content_hash if eff else ""),
+            open_blocking_decisions=open_roles)
+
+        if batch["status"] == "ready" and batch.get("auto_start_when_ready") \
+                and not batch.get("workflow_id"):
+            return self.start_batch(client_id=client_id,
+                                    batch_id=batch["batch_id"], actor=actor)
+        return batch
+
+    def _sync_file_role_decisions(self, batch: Dict[str, Any]) -> List[str]:
+        from .contracts import KIND_FILE_ROLE
+        from .intake import load_requirements
+        labels = (load_requirements().get("role_labels") or {})
+        role_options = [{"value": r, "label": l} for r, l in labels.items()]
+        open_ids: List[str] = []
+        ambiguous = {f["original_filename"]: f for f in batch["files"]
+                     if f.get("recognition_status") == "ambiguous"
+                     and f.get("superseded_status") == "current"}
+        for name, f in ambiguous.items():
+            did = f"{batch['batch_id']}_role_{f['source_file_id']}"
+            existing = self.store.load_decision(batch["client_id"], did)
+            if existing is not None and existing.get("status") != DEC_OPEN:
+                continue
+            d = DecisionRequired(
+                decision_id=did, kind=KIND_FILE_ROLE,
+                title=f"Identify the file '{name}'",
+                question=f"Trakt could not identify '{name}' with confidence. "
+                         "What is it?",
+                blocking=True, category="ambiguous_schema",
+                severity="blocking", source_file=name,
+                options=role_options, allowed_scopes=["file"],
+                default_scope="file",
+                subject={"artefact": "input_batch",
+                         "batch_id": batch["batch_id"],
+                         "source_file_id": f["source_file_id"]})
+            doc = d.to_dict()
+            doc.update({"status": DEC_OPEN, "workflow_id": batch["batch_id"],
+                        "client_id": batch["client_id"], "stage": "received",
+                        "created_at": (existing or {}).get("created_at")
+                        or now_iso()})
+            self.store.save_decision(batch["client_id"], doc)
+            open_ids.append(did)
+        return open_ids
+
+    def start_batch(self, *, client_id: str, batch_id: str,
+                    actor: str) -> Dict[str, Any]:
+        """READY -> immutable internal run manifest -> governed execution.
+        Idempotent: a batch that already started returns its workflow."""
+        batch = self.intake.load_batch(client_id, batch_id)
+        if batch is None:
+            raise OpsError("OPS_BATCH_NOT_FOUND",
+                           "That input pack could not be found.", 404)
+        if batch.get("workflow_id"):
+            return batch                       # duplicate trigger suppressed
+        if batch["status"] != "ready":
+            raise OpsError("OPS_BATCH_NOT_READY",
+                           batch.get("status_reason") or
+                           "This input pack is not ready to process.", 409)
+        cfg = self._config_resolver().resolve(
+            client_id=batch["client_id"], portfolio_id=batch["portfolio_id"],
+            outcome=batch["workflow_type"],
+            reporting_period=batch["reporting_date"], workflow_id="",
+            created_by=actor)
+        eff = cfg.effective
+        manifest = self.intake.ensure_manifest(
+            batch,
+            effective_config={"effective_config_id":
+                              (eff.effective_config_id if eff else ""),
+                              "content_hash":
+                              (eff.content_hash if eff else "")},
+            approved_decisions=[d["decision_id"] for d in
+                                self.store.list_decisions(
+                                    client_id, workflow_id=batch_id)
+                                if d.get("status") == DEC_APPROVED],
+            expected_outputs=(["platform_canonical", "annex2_submission_xml"]
+                              if batch["workflow_type"] == OUTCOME_MI_ANNEX2
+                              else ["platform_canonical"]))
+        delivery = self.register_delivery(
+            client_id=client_id, portfolio_id=batch["portfolio_id"],
+            input_path=str(self.intake.batch_dir(batch)),
+            reporting_period=batch["reporting_date"], registered_by=actor)
+        run = self.create_workflow(
+            client_id=client_id, delivery_id=delivery["delivery_id"],
+            outcome=batch["workflow_type"], created_by=actor)
+        run.batch_id = batch["batch_id"]
+        self.store.save_workflow(run)
+        batch["workflow_id"] = run.workflow_id
+        batch["status"] = "running"
+        batch["status_reason"] = "Trakt is processing this input pack."
+        batch["started_at"] = now_iso()
+        self.intake.save_batch(batch)
+        self.store.append_audit(
+            client_id, "onboarding_started", actor=actor,
+            workflow_id=run.workflow_id,
+            detail={"batch_id": batch_id, "run_id": manifest["run_id"],
+                    "idempotency_key": manifest["idempotency_key"],
+                    "auto_start": batch.get("auto_start_when_ready", False)})
+        if run.status == RUN_RECEIVED:
+            self.start(run, actor=actor)
+        return self.intake.load_batch(client_id, batch_id)
+
+    def _update_batch_from_run(self, run: WorkflowRun) -> None:
+        if not run.batch_id:
+            return
+        batch = self.intake.load_batch(run.client_id, run.batch_id)
+        if batch is None:
+            return
+        mapping = {RUN_AWAITING_PUBLICATION: ("completed",
+                                              "Processing finished — awaiting "
+                                              "your approval to publish."),
+                   RUN_PUBLISHED: ("completed", "Published."),
+                   RUN_FAILED: ("failed", "Processing did not finish "
+                                          "cleanly.")}
+        new = mapping.get(run.status)
+        if new and (batch["status"] != new[0]
+                    or batch["status_reason"] != new[1]):
+            batch["status"], batch["status_reason"] = new
+            if new[0] == "completed" and not batch.get("completed_at"):
+                batch["completed_at"] = now_iso()
+            self.intake.save_batch(batch)
+
     def _resolve_effective_config(self, run: WorkflowRun):
         """Resolve + persist the immutable effective configuration for this
         run (a NEW version on every execution attempt, so reruns after
@@ -502,6 +705,7 @@ class OpsEngine:
         self.store.clear_lease(run)
         self.store.append_event(run, "execution_finished",
                                 detail={"status": run.status})
+        self._update_batch_from_run(run)
 
     # ------------------------------------------------------------------ #
     # Governed Annex 2 delivery chain (I1-I4)
@@ -545,6 +749,7 @@ class OpsEngine:
         self.store.clear_lease(run)
         self.store.append_event(run, "execution_finished",
                                 detail={"status": run.status})
+        self._update_batch_from_run(run)
 
     def _park_config_blocked(self, run: WorkflowRun, cfg_outcome) -> None:
         """Configuration resolution blocked BEFORE any agent ran: park with
@@ -856,6 +1061,38 @@ class OpsEngine:
                            "This decision has already been resolved.", 409)
         if action not in ("approve", "reject", "amend"):
             raise OpsError("OPS_BAD_ACTION", "Choose approve, reject or amend.", 400)
+
+        # Input-pack file identification: applies to the BATCH, not a workflow.
+        from .contracts import KIND_FILE_ROLE
+        if doc.get("kind") == KIND_FILE_ROLE:
+            if action == "reject":
+                if not reason:
+                    raise OpsError("OPS_REASON_REQUIRED",
+                                   "Please say why you are rejecting this.", 400)
+                doc.update(status=DEC_REJECTED, resolved_by=actor,
+                           resolved_at=now_iso(), resolution_reason=reason)
+                self.store.save_decision(client_id, doc)
+                return {"decision": doc, "rule": None, "rerun_scheduled": False}
+            if not value:
+                raise OpsError("OPS_VALUE_REQUIRED",
+                               "Choose what this file is.", 400)
+            subject = doc.get("subject") or {}
+            batch = self.intake.load_batch(client_id,
+                                           subject.get("batch_id", ""))
+            if batch is None:
+                raise OpsError("OPS_BATCH_NOT_FOUND",
+                               "That input pack could not be found.", 404)
+            self.intake.override_classification(
+                batch, subject.get("source_file_id", ""), value, actor=actor)
+            doc.update(status=DEC_APPROVED, resolved_by=actor,
+                       resolved_at=now_iso(), resolution_value=value,
+                       resolution_scope="file")
+            self.store.save_decision(client_id, doc)
+            batch = self.assess_batch(client_id=client_id,
+                                      batch_id=batch["batch_id"], actor=actor)
+            return {"decision": doc, "rule": None,
+                    "rerun_scheduled": batch.get("status") == "running"}
+
         run = self.store.load_workflow(client_id, doc.get("workflow_id", ""))
         if run is None:
             raise OpsError("OPS_WORKFLOW_NOT_FOUND",
@@ -1191,6 +1428,7 @@ class OpsEngine:
             run.status = RUN_PUBLISHED
         run.set_stage(STAGE_PUBLICATION, ST_COMPLETED)
         self.store.save_workflow(run)
+        self._update_batch_from_run(run)
         self.store.append_event(run, "published", actor=actor,
                                 detail={"publication_id": pub["publication_id"]})
         self.store.append_audit(client_id, "publication_approved", actor=actor,

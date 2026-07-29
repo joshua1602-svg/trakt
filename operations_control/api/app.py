@@ -244,6 +244,89 @@ def list_deliveries(client: str,
 
 
 # --------------------------------------------------------------------------- #
+# Input batches (OCC-owned readiness — replaces the _READY.json sentinel)
+# --------------------------------------------------------------------------- #
+
+class CreateBatch(BaseModel):
+    client_id: str
+    portfolio_id: str
+    reporting_date: str
+    workflow_type: str                 # mi | mi_annex2
+    auto_start_when_ready: bool = False
+
+
+class RegisterBatchFile(BaseModel):
+    path: str                          # file or directory to register
+
+
+def _role_labels() -> Dict[str, str]:
+    from ..intake import load_requirements
+    return load_requirements().get("role_labels") or {}
+
+
+@app.post("/ops/batches", status_code=201)
+def create_batch(body: CreateBatch,
+                 principal: Principal = Depends(authenticate)) -> Dict[str, Any]:
+    require_client(principal, body.client_id)
+    eng = get_engine()
+    batch = eng.create_batch(
+        client_id=body.client_id, portfolio_id=body.portfolio_id,
+        reporting_date=body.reporting_date, workflow_type=body.workflow_type,
+        created_by=principal.name,
+        auto_start_when_ready=body.auto_start_when_ready)
+    return {"ok": True, "batch": presenters.present_batch(batch,
+                                                          _role_labels())}
+
+
+@app.get("/ops/batches")
+def list_batches(client: str,
+                 principal: Principal = Depends(authenticate)) -> Dict[str, Any]:
+    require_client(principal, client)
+    eng = get_engine()
+    labels = _role_labels()
+    return {"ok": True,
+            "batches": [presenters.present_batch(b, labels)
+                        for b in eng.intake.list_batches(client)]}
+
+
+@app.get("/ops/batches/{batch_id}")
+def get_batch(batch_id: str, client: str,
+              principal: Principal = Depends(authenticate)) -> Dict[str, Any]:
+    require_client(principal, client)
+    eng = get_engine()
+    batch = eng.intake.load_batch(client, batch_id)
+    if batch is None:
+        raise HTTPException(status_code=404, detail={
+            "errorCode": "OPS_NOT_FOUND", "message": "That could not be found."})
+    return {"ok": True, "batch": presenters.present_batch(batch,
+                                                          _role_labels())}
+
+
+@app.post("/ops/batches/{batch_id}/files")
+def register_batch_file(batch_id: str, body: RegisterBatchFile, client: str,
+                        principal: Principal = Depends(authenticate)
+                        ) -> Dict[str, Any]:
+    require_client(principal, client)
+    eng = get_engine()
+    batch = eng.register_batch_file(client_id=client, batch_id=batch_id,
+                                    source_path=body.path,
+                                    received_by=principal.name)
+    return {"ok": True, "batch": presenters.present_batch(batch,
+                                                          _role_labels())}
+
+
+@app.post("/ops/batches/{batch_id}/start")
+def start_batch(batch_id: str, client: str,
+                principal: Principal = Depends(authenticate)) -> Dict[str, Any]:
+    require_client(principal, client)
+    eng = get_engine()
+    batch = eng.start_batch(client_id=client, batch_id=batch_id,
+                            actor=principal.name)
+    return {"ok": True, "batch": presenters.present_batch(batch,
+                                                          _role_labels())}
+
+
+# --------------------------------------------------------------------------- #
 # Workflows
 # --------------------------------------------------------------------------- #
 
