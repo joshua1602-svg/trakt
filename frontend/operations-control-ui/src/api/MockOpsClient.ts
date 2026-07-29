@@ -1,3 +1,4 @@
+import { MockConfigAdmin } from "./MockConfigAdmin";
 import { OpsError, type OpsClient } from "./OpsClient";
 import type {
   Batch,
@@ -54,6 +55,8 @@ function deepCopy<T>(value: T): T {
  */
 export class MockOpsClient implements OpsClient {
   private readonly delayMs: number;
+  private readonly principal: Principal;
+  private readonly config = new MockConfigAdmin();
   private nextId = 6000;
   /** Counts reads of a running workflow so it visibly "finishes" while polling. */
   private runningTicks = new Map<string, number>();
@@ -537,8 +540,23 @@ export class MockOpsClient implements OpsClient {
     },
   ];
 
-  constructor(delayMs = 120) {
+  constructor(delayMs = 120, role: "admin" | "operator" = "admin") {
     this.delayMs = delayMs;
+    this.principal = {
+      name: role === "admin" ? "Administrator" : "Operator",
+      role,
+      is_admin: role === "admin",
+      all_clients: true,
+      clients: [],
+    };
+  }
+
+  /** Every administrator call is refused for a non-administrator, exactly as
+   *  the backend refuses it — the browser is never the security boundary. */
+  private requireAdmin(): void {
+    if (!this.principal.is_admin) {
+      throw new OpsError("This area is for administrators.", "OPS_ADMIN_REQUIRED");
+    }
   }
 
   private async wait(): Promise<void> {
@@ -1104,5 +1122,86 @@ export class MockOpsClient implements OpsClient {
     return deepCopy(
       client ? this.publications.filter((p) => p.client_id === client) : this.publications,
     );
+  }
+
+  async getPrincipal(): Promise<Principal> {
+    await this.wait();
+    return deepCopy(this.principal);
+  }
+
+  async getConfigOverview(): Promise<ConfigOverview> {
+    await this.wait();
+    this.requireAdmin();
+    return deepCopy(this.config.overview());
+  }
+
+  async getConfigCatalogue(): Promise<ConfigCatalogue> {
+    await this.wait();
+    this.requireAdmin();
+    return deepCopy(this.config.catalogue());
+  }
+
+  async getConfigVersion(
+    layer: ConfigLayer,
+    version: number,
+    file?: string,
+  ): Promise<ConfigVersion> {
+    await this.wait();
+    this.requireAdmin();
+    return deepCopy(this.config.version(layer, version, file));
+  }
+
+  async compareConfigVersions(layer: ConfigLayer, from: number, to: number): Promise<Comparison> {
+    await this.wait();
+    this.requireAdmin();
+    return deepCopy(this.config.compare(layer, from, to));
+  }
+
+  async getConfigImpact(layer: ConfigLayer, version?: number): Promise<ImpactAnalysis> {
+    await this.wait();
+    this.requireAdmin();
+    return deepCopy(this.config.impact(layer, version));
+  }
+
+  async getConfigAudit(): Promise<AuditTrail> {
+    await this.wait();
+    this.requireAdmin();
+    return deepCopy(this.config.auditTrail());
+  }
+
+  async createConfigDraft(
+    layer: ConfigLayer,
+    input?: CreateDraftInput,
+  ): Promise<{ version: number; status: string }> {
+    await this.wait();
+    this.requireAdmin();
+    return this.config.createDraft(layer, input);
+  }
+
+  async validateConfigVersion(
+    layer: ConfigLayer,
+    version: number,
+  ): Promise<{ validation: ValidationResult; validation_summary: ValidationSummary }> {
+    await this.wait();
+    this.requireAdmin();
+    return deepCopy(this.config.validate(layer, version));
+  }
+
+  async activateConfigVersion(
+    layer: ConfigLayer,
+    version: number,
+  ): Promise<{ active_version: number }> {
+    await this.wait();
+    this.requireAdmin();
+    return this.config.activate(layer, version);
+  }
+
+  async rollbackConfig(
+    layer: ConfigLayer,
+    toVersion: number,
+  ): Promise<{ active_version: number }> {
+    await this.wait();
+    this.requireAdmin();
+    return this.config.rollback(layer, toVersion);
   }
 }

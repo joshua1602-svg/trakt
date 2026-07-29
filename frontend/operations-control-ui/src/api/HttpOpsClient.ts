@@ -18,6 +18,15 @@ import type {
   WorkflowRow,
 } from "./types";
 
+interface ErrorFields {
+  errorCode?: string;
+  message?: string;
+  blockers?: { kind: string; message: string }[];
+}
+
+type ApiEnvelope = { ok?: boolean; detail?: ErrorFields | string } & ErrorFields &
+  Record<string, unknown>;
+
 function query(params: Record<string, string | undefined>): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -55,7 +64,7 @@ export class HttpOpsClient implements OpsClient {
       throw new OpsError(copy.errors.signedOut);
     }
 
-    let body: { ok?: boolean; errorCode?: string; message?: string } & Record<string, unknown>;
+    let body: ApiEnvelope;
     try {
       body = await response.json();
     } catch {
@@ -63,7 +72,14 @@ export class HttpOpsClient implements OpsClient {
     }
 
     if (!response.ok || body.ok === false) {
-      throw new OpsError(body.message || copy.errors.generic, body.errorCode);
+      // FastAPI wraps `HTTPException(detail={...})` in a `detail` envelope;
+      // the OpsError handler returns the same fields at the top level.
+      const detail = typeof body.detail === "object" && body.detail !== null ? body.detail : body;
+      throw new OpsError(
+        detail.message || copy.errors.generic,
+        detail.errorCode,
+        Array.isArray(detail.blockers) ? detail.blockers : [],
+      );
     }
     return body as T;
   }
@@ -226,5 +242,86 @@ export class HttpOpsClient implements OpsClient {
   async getHistory(client?: string): Promise<Publication[]> {
     const body = await this.request<{ history: Publication[] }>(`/ops/history${query({ client })}`);
     return body.history;
+  }
+
+  async getPrincipal(): Promise<Principal> {
+    const body = await this.request<{ principal: Principal }>("/ops/me");
+    return body.principal;
+  }
+
+  async getConfigOverview(): Promise<ConfigOverview> {
+    return this.request<{ ok: true } & ConfigOverview>("/ops/admin/config");
+  }
+
+  async getConfigCatalogue(): Promise<ConfigCatalogue> {
+    return this.request<{ ok: true } & ConfigCatalogue>("/ops/admin/config/catalogue");
+  }
+
+  async getConfigVersion(
+    layer: ConfigLayer,
+    version: number,
+    file?: string,
+  ): Promise<ConfigVersion> {
+    const body = await this.request<{ version: ConfigVersion }>(
+      `/ops/admin/config/${layer}/${version}${query({ file })}`,
+    );
+    return body.version;
+  }
+
+  async compareConfigVersions(
+    layer: ConfigLayer,
+    from: number,
+    to: number,
+  ): Promise<Comparison> {
+    const body = await this.request<{ comparison: Comparison }>(
+      `/ops/admin/config/${layer}/compare?from_version=${from}&to_version=${to}`,
+    );
+    return body.comparison;
+  }
+
+  async getConfigImpact(layer: ConfigLayer, version?: number): Promise<ImpactAnalysis> {
+    const body = await this.request<{ impact: ImpactAnalysis }>(
+      `/ops/admin/config/${layer}/impact${query({ version: version?.toString() })}`,
+    );
+    return body.impact;
+  }
+
+  async getConfigAudit(): Promise<AuditTrail> {
+    return this.request<{ ok: true } & AuditTrail>("/ops/admin/config/audit");
+  }
+
+  async createConfigDraft(
+    layer: ConfigLayer,
+    input?: CreateDraftInput,
+  ): Promise<{ version: number; status: string }> {
+    return this.post<{ version: number; status: string }>(
+      `/ops/admin/config/${layer}/draft`,
+      {
+        from_version: input?.from_version ?? null,
+        edits: input?.edits ?? {},
+        notes: input?.notes ?? "",
+      },
+    );
+  }
+
+  async validateConfigVersion(
+    layer: ConfigLayer,
+    version: number,
+  ): Promise<{ validation: ValidationResult; validation_summary: ValidationSummary }> {
+    return this.post(`/ops/admin/config/${layer}/${version}/validate`, {});
+  }
+
+  async activateConfigVersion(
+    layer: ConfigLayer,
+    version: number,
+  ): Promise<{ active_version: number }> {
+    return this.post(`/ops/admin/config/${layer}/${version}/activate`, {});
+  }
+
+  async rollbackConfig(
+    layer: ConfigLayer,
+    toVersion: number,
+  ): Promise<{ active_version: number }> {
+    return this.post(`/ops/admin/config/${layer}/rollback`, { to_version: toVersion });
   }
 }

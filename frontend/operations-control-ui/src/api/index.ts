@@ -15,3 +15,4 @@ export { MockOpsClient } from "./MockOpsClient";
 export { OpsError } from "./OpsClient";
 export type { OpsClient } from "./OpsClient";
 export * from "./types";
+export * from "./adminTypes";

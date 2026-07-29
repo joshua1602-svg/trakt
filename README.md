@@ -329,6 +329,41 @@ instead writes a **companion** (`*_<regime>_provenance.csv` +
 original loan identifier — so IB / legal / rating-agency packs retain full
 traceability without contaminating the template.
 
+## Annex Delivery Agent
+
+The **Annex Delivery Agent** (`engine/annex_delivery_agent/`) governs the stage
+after projection — the path from projected regulatory data to a submission-ready
+artefact:
+
+```
+projected data → delivery normalisation → artefact generation → schema validation
+              → governed result → explicit approval → publication
+```
+
+It **wraps** the proven Annex 2 route (`regime_projector` →
+`annex2_delivery_normalizer` → `xml_builder_annex2` →
+`DRAFT1auth.099.001.04_1.3.0.xsd` → `lxml` validation) without changing any of
+that business logic, and adds what the route did not have: tenant binding,
+deterministic run identity, restart safety, an approval gate before publication,
+and **disclosure of everything the builder filled in, coerced or omitted** on the
+way to schema validity.
+
+Multi-annex by construction: everything report-specific lives behind an
+`AnnexProvider`, so Annex 3 or Annex 9 is a new provider plus one registration
+line — not a fork of the agent. Annex 3 and Annex 9 are deliberately *not*
+registered until authoritative components exist for them.
+
+```bash
+python -m engine.annex_delivery_agent.cli list-annexes
+python -m engine.annex_delivery_agent.cli prepare \
+    --tenant ERE --annex ESMA_Annex2 --reporting-date 2025-11-30 \
+    --projected-input out/ere_ESMA_Annex2_projected.csv
+```
+
+A passing XSD result means **prepared**, never published — publication requires an
+explicit operator approval. Full documentation, including the exact steps to add
+another annex: [`docs/annex_delivery_agent.md`](docs/annex_delivery_agent.md).
+
 ## Assembler Agent
 
 The **Assembler Agent** (`engine/assembler_agent.py`) sits between the Onboarding

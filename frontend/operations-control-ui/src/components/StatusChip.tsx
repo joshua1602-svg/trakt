@@ -26,6 +26,14 @@ const STYLES: Record<string, string> = {
   ready: "bg-violet-50 text-violet-700 border-violet-200",
   awaiting_publication: "bg-violet-50 text-violet-700 border-violet-200",
   prepared: "bg-violet-50 text-violet-700 border-violet-200",
+  // configuration package lifecycle
+  active: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  valid: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  passed: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  draft: "bg-amber-50 text-amber-800 border-amber-200 border-dashed",
+  not_checked: "bg-amber-50 text-amber-800 border-amber-200 border-dashed",
+  failed_checks: "bg-rose-50 text-rose-700 border-rose-200",
+  superseded: "bg-stone-100 text-stone-500 border-stone-200",
   // grey
   waiting: "bg-stone-100 text-stone-500 border-stone-200",
   received: "bg-stone-100 text-stone-600 border-stone-200",

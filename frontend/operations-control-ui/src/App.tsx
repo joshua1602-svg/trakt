@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Route, Routes } from "react-router-dom";
 import { createOpsClient, isMockMode } from "@/api";
 import { OpsClientProvider } from "@/api/context";
+import { SessionProvider } from "@/api/session";
 import { Shell } from "@/components/Shell";
 import { SignIn } from "@/components/SignIn";
 import { ToastProvider } from "@/components/Toast";
@@ -15,6 +16,12 @@ import { ReviewsScreen } from "@/screens/Reviews";
 import { RulesScreen } from "@/screens/Rules";
 import { WorkflowDetailScreen } from "@/screens/WorkflowDetail";
 import { WorkflowsScreen } from "@/screens/Workflows";
+import { AdminOnly } from "@/screens/admin/AdminLayout";
+import { ConfigAssetsScreen } from "@/screens/admin/ConfigAssets";
+import { ConfigHistoryScreen } from "@/screens/admin/ConfigHistory";
+import { ConfigOverviewScreen } from "@/screens/admin/ConfigOverview";
+import { ConfigRegimesScreen } from "@/screens/admin/ConfigRegimes";
+import { ConfigSystemScreen } from "@/screens/admin/ConfigSystem";
 
 /** Shows the sign-in card until an access key is stored; re-shows it on 401. */
 function AuthGate({ children }: { children: ReactNode }) {
