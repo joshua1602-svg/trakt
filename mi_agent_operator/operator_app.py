@@ -160,3 +160,23 @@ def api_edit(approval_id: str, body: EditBody,
         raise HTTPException(status_code=404, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+# --------------------------------------------------------------------------- #
+# Annex delivery (additive)
+# --------------------------------------------------------------------------- #
+# The regulatory delivery stages after projection — normalisation, XML
+# generation, XSD validation, operator review and publication. Mounted under
+# /api/annex-delivery and gated by the same fail-closed operator token above.
+# Imported late so a deployment missing the delivery dependencies (lxml, pandas)
+# still serves the source-approval queue rather than failing to start.
+
+try:  # pragma: no cover - import wiring
+    from .annex_delivery_routes import router as _annex_delivery_router
+except Exception:  # noqa: BLE001
+    import logging
+    logging.getLogger(__name__).warning(
+        "annex delivery routes unavailable; the source-approval console is unaffected",
+        exc_info=True)
+else:
+    app.include_router(_annex_delivery_router)
