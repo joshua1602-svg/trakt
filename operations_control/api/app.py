@@ -143,6 +143,23 @@ class ReasonBody(BaseModel):
 # Dashboard
 # --------------------------------------------------------------------------- #
 
+@app.get("/ops/me")
+def me(principal: Principal = Depends(authenticate)) -> Dict[str, Any]:
+    """Who is signed in, and what may they see.
+
+    The browser uses this only to decide what to OFFER — every administrator
+    route re-checks the role server-side, so hiding a link is never the
+    security boundary.
+    """
+    return {"ok": True, "principal": {
+        "name": principal.name,
+        "role": principal.role,
+        "is_admin": principal.is_admin,
+        "all_clients": "*" in principal.clients,
+        "clients": [c for c in principal.clients if c != "*"],
+    }}
+
+
 @app.get("/ops/dashboard")
 def dashboard(principal: Principal = Depends(authenticate)) -> Dict[str, Any]:
     eng = get_engine()
@@ -501,19 +518,69 @@ def _admin_audit(eng: OpsEngine, event: str, actor: str, detail: Dict[str, Any])
 def admin_config_overview(principal: Principal = Depends(authenticate)
                           ) -> Dict[str, Any]:
     require_admin(principal)
-    from ..configuration.packages import ADMIN_LAYERS, ASSET_MODEL
+    from ..configuration import admin_views
+    from ..configuration.packages import ASSET_MODEL
+    eng = get_engine()
+    view = admin_views.overview(eng.store, _packages(eng), by=principal.name)
+    return {"ok": True, "asset_model": ASSET_MODEL, **view}
+
+
+@app.get("/ops/admin/config/catalogue")
+def admin_config_catalogue(principal: Principal = Depends(authenticate)
+                           ) -> Dict[str, Any]:
+    """Asset and regime entities plus the compatibility matrix between them."""
+    require_admin(principal)
+    from ..configuration import admin_views
     pkgs = _packages(get_engine())
-    layers = {}
-    for layer in ADMIN_LAYERS:
-        active = pkgs.ensure_seeded(layer, by=principal.name)
-        layers[layer] = {
-            "active_version": active["version"],
-            "activated_at": active.get("activated_at"),
-            "activated_by": active.get("activated_by"),
-            "file_count": len(active.get("files") or {}),
-            "versions": pkgs.list_versions(layer),
-        }
-    return {"ok": True, "layers": layers, "asset_model": ASSET_MODEL}
+    assets = admin_views.describe_assets(pkgs)
+    regimes = admin_views.describe_regimes(pkgs, pkgs.repo)
+    return {"ok": True, "assets": assets, "regimes": regimes,
+            "compatibility": admin_views.compatibility_matrix(assets, regimes),
+            "issues": admin_views.compatibility_issues(assets, regimes)}
+
+
+@app.get("/ops/admin/config/audit")
+def admin_config_audit(limit: int = 200,
+                       principal: Principal = Depends(authenticate)
+                       ) -> Dict[str, Any]:
+    """The administrator configuration audit trail, in plain English."""
+    require_admin(principal)
+    from ..configuration import admin_views
+    trail = admin_views.audit_trail(get_engine().store,
+                                    limit=max(1, min(limit, 500)))
+    return {"ok": True, **trail}
+
+
+@app.get("/ops/admin/config/{layer}/compare")
+def admin_config_compare(layer: str, from_version: int, to_version: int,
+                         principal: Principal = Depends(authenticate)
+                         ) -> Dict[str, Any]:
+    """Structured comparison between two versions of one package layer."""
+    require_admin(principal)
+    from ..configuration import admin_views
+    pkgs = _packages(get_engine())
+    pkgs.ensure_seeded(layer, by=principal.name)
+    try:
+        comparison = admin_views.compare(pkgs, layer, from_version, to_version)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={
+            "errorCode": "OPS_NOT_FOUND", "message": "That could not be found."})
+    return {"ok": True, "comparison": comparison}
+
+
+@app.get("/ops/admin/config/{layer}/impact")
+def admin_config_impact(layer: str, version: Optional[int] = None,
+                        principal: Principal = Depends(authenticate)
+                        ) -> Dict[str, Any]:
+    """Clients, portfolios and workflows pinned to a package version."""
+    require_admin(principal)
+    from ..configuration import admin_views
+    eng = get_engine()
+    pkgs = _packages(eng)
+    if version is None:
+        version = pkgs.ensure_seeded(layer, by=principal.name)["version"]
+    return {"ok": True,
+            "impact": admin_views.impact(eng.store, layer, int(version))}
 
 
 @app.get("/ops/admin/config/{layer}/{version}")
@@ -522,17 +589,32 @@ def admin_config_version(layer: str, version: int, file: Optional[str] = None,
                          ) -> Dict[str, Any]:
     require_admin(principal)
     pkgs = _packages(get_engine())
+    pkgs.ensure_seeded(layer, by=principal.name)
     doc = pkgs.get_version(layer, version)
     if doc is None:
         raise HTTPException(status_code=404, detail={
             "errorCode": "OPS_NOT_FOUND", "message": "That could not be found."})
+    from ..configuration import admin_views
     files = doc.get("files") or {}
     out = {k: v for k, v in doc.items() if k != "files"}
     out["files"] = {rel: {"sha256": f["sha256"],
                           "size": len(f.get("content", ""))}
                     for rel, f in files.items()}
+    out["file_list"] = admin_views.describe_files(doc)
+    out["package_hash"] = admin_views.package_hash(doc)
+    out["dependencies"] = admin_views.LAYER_DEPENDENCIES.get(layer, [])
+    out["validation_summary"] = admin_views.explain_validation(
+        layer, doc.get("validation"))
+    out["activation_blockers"] = admin_views.activation_blockers(
+        pkgs, layer, version)
+    if doc.get("based_on_version"):
+        base = pkgs.get_version(layer, doc["based_on_version"])
+        out["changed_files"] = [
+            {"path": rel, "label": admin_views.friendly_file_name(rel)}
+            for rel in admin_views.changed_files(base, doc)]
     if file and file in files:
         out["file_content"] = files[file]["content"]
+        out["file_label"] = admin_views.friendly_file_name(file)
     return {"ok": True, "version": out}
 
 
@@ -558,12 +640,15 @@ def admin_config_validate(layer: str, version: int,
                           ) -> Dict[str, Any]:
     require_admin(principal)
     eng = get_engine()
+    from ..configuration import admin_views
     doc = _packages(eng).validate_version(layer, version)
     _admin_audit(eng, "config_validated", principal.name,
                  {"layer": layer, "version": version,
                   "ok": doc["validation"]["ok"],
                   "problems": doc["validation"]["problems"]})
-    return {"ok": True, "validation": doc["validation"]}
+    return {"ok": True, "validation": doc["validation"],
+            "validation_summary": admin_views.explain_validation(
+                layer, doc["validation"])}
 
 
 @app.post("/ops/admin/config/{layer}/{version}/activate")
@@ -571,13 +656,22 @@ def admin_config_activate(layer: str, version: int,
                           principal: Principal = Depends(authenticate)
                           ) -> Dict[str, Any]:
     require_admin(principal)
+    from ..configuration import admin_views
     eng = get_engine()
-    try:
-        doc = _packages(eng).activate_version(layer, version,
-                                              by=principal.name)
-    except ValueError as exc:
+    pkgs = _packages(eng)
+    blockers = admin_views.activation_blockers(pkgs, layer, version)
+    if blockers:
         raise HTTPException(status_code=409, detail={
-            "errorCode": "OPS_CONFIG_NOT_READY", "message": str(exc)})
+            "errorCode": "OPS_CONFIG_INCOMPATIBLE",
+            "message": blockers[0]["message"],
+            "blockers": blockers})
+    try:
+        doc = pkgs.activate_version(layer, version, by=principal.name)
+    except ValueError:
+        raise HTTPException(status_code=409, detail={
+            "errorCode": "OPS_CONFIG_NOT_READY",
+            "message": "This version has not passed its checks, so it cannot "
+                       "be activated. Check it first."})
     _admin_audit(eng, "config_activated", principal.name,
                  {"layer": layer, "version": version})
     return {"ok": True, "active_version": doc["version"]}
@@ -588,8 +682,16 @@ def admin_config_rollback(layer: str, body: RollbackBody,
                           principal: Principal = Depends(authenticate)
                           ) -> Dict[str, Any]:
     require_admin(principal)
+    from ..configuration import admin_views
     eng = get_engine()
-    doc = _packages(eng).rollback(layer, body.to_version, by=principal.name)
+    pkgs = _packages(eng)
+    blockers = admin_views.activation_blockers(pkgs, layer, body.to_version)
+    if blockers:
+        raise HTTPException(status_code=409, detail={
+            "errorCode": "OPS_CONFIG_INCOMPATIBLE",
+            "message": blockers[0]["message"],
+            "blockers": blockers})
+    doc = pkgs.rollback(layer, body.to_version, by=principal.name)
     _admin_audit(eng, "config_rolled_back", principal.name,
                  {"layer": layer, "to_version": body.to_version})
     return {"ok": True, "active_version": doc["version"]}

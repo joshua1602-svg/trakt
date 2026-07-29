@@ -27,11 +27,13 @@ from operations_control.stores import OpsLayout, OpsStore
 OP_ALL = "tok-all"
 OP_A = "tok-client-a"
 OP_B = "tok-client-b"
+OP_ADMIN = "tok-admin"
 
 OPERATORS = {
     OP_ALL: {"name": "Root Operator", "clients": ["*"]},
     OP_A: {"name": "Alice", "clients": ["client_a"]},
     OP_B: {"name": "Bob", "clients": ["client_b"]},
+    OP_ADMIN: {"name": "Administrator", "clients": ["*"], "role": "admin"},
 }
 
 

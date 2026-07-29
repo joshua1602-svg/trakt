@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { NavLink, Link } from "react-router-dom";
-import { Home, ListChecks, GitBranch, BookOpen, Clock, Plus } from "lucide-react";
+import { Home, ListChecks, GitBranch, BookOpen, Clock, Plus, SlidersHorizontal } from "lucide-react";
 import clsx from "clsx";
+import { useSession } from "@/api/session";
 import { copy } from "@/lib/copy";
 
 const NAV_ITEMS = [
@@ -12,10 +13,21 @@ const NAV_ITEMS = [
   { to: "/history", label: copy.nav.history, icon: Clock, end: false },
 ];
 
+/** Administrator-only entry. Hidden for ordinary operators — the backend still
+ *  refuses the route and every request behind it. */
+const ADMIN_ITEM = {
+  to: "/admin/config",
+  label: copy.nav.admin,
+  icon: SlidersHorizontal,
+  end: false,
+};
+
 function NavItems({ compact }: { compact?: boolean }) {
+  const { isAdmin } = useSession();
+  const items = isAdmin ? [...NAV_ITEMS, ADMIN_ITEM] : NAV_ITEMS;
   return (
     <>
-      {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
+      {items.map(({ to, label, icon: Icon, end }) => (
         <NavLink
           key={to}
           to={to}
