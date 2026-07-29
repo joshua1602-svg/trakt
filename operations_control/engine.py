@@ -15,6 +15,7 @@ and ``approvals.write_pending/approve/promote`` promotion path.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import threading
@@ -36,8 +37,10 @@ from .contracts import (
     DEC_APPROVED,
     DEC_OPEN,
     DEC_REJECTED,
+    DecisionRequired,
     Delivery,
     GovernedAgentResult,
+    KIND_CLIENT_RULE,
     KIND_PUBLICATION,
     KIND_VALIDATION_EXCEPTION,
     OUTCOME_MI,
@@ -56,9 +59,16 @@ from .contracts import (
     ST_COMPLETED,
     ST_NEEDS_REVIEW,
     ST_BLOCKED,
+    ST_READY,
+    ST_RUNNING,
+    ST_WAITING,
+    STAGE_DELIVERY_PREP,
     STAGE_MAPPING,
+    STAGE_PROJECTION,
     STAGE_PUBLICATION,
+    STAGE_REG_CONFIG,
     STAGE_VALIDATION,
+    STAGE_XML,
     WF_NEW_CLIENT,
     WF_NEW_PORTFOLIO,
     WORKFLOW_TYPES,
@@ -94,7 +104,9 @@ class OpsEngine:
                  real_agents: bool = True,
                  adapter_factory=None,
                  source_registry_factory=None,
-                 persistence_factory=None):
+                 persistence_factory=None,
+                 annex2_stages=None,
+                 client_config_path: Optional[str] = None):
         from .rules import memory_root
         self.store = store
         self.rules = RuleStore(store)
@@ -103,6 +115,11 @@ class OpsEngine:
         # Captured at construction so background threads never depend on the
         # environment still being set when they finish.
         self.memory_root = memory_root()
+        # Governed Annex 2 delivery chain (I1): real runners by default; tests
+        # substitute a stub with the same method signatures.
+        self._annex2_stages = annex2_stages
+        self.client_config_path = Path(client_config_path or os.environ.get(
+            "TRAKT_OPS_CLIENT_CONFIG", "config/client/config_client_ERM_UK.yaml"))
         self.real_agents = real_agents
         self._adapter_factory = adapter_factory
         self._source_registry_factory = source_registry_factory
@@ -278,7 +295,20 @@ class OpsEngine:
         return self.staging_root / run.client_id / run.workflow_id
 
     def _orchestrator_target(self, run: WorkflowRun) -> str:
-        return "all" if run.outcome == OUTCOME_MI_ANNEX2 else "mi"
+        # Both outcomes run the conductor on the MI target: the AUTHORITATIVE
+        # (and only XSD-proven) Annex 2 route projects from the assembled
+        # platform canonical; the regulatory delivery steps are the OCC's own
+        # governed chain (see _run_annex2_chain), mirroring the proven route
+        # exactly rather than the regulatory-onboarding path that cannot reach
+        # XML today.
+        return "mi"
+
+    def _annex2_runners(self):
+        if self._annex2_stages is not None:
+            return self._annex2_stages
+        from .annex2.stages import Annex2Stages
+        self._annex2_stages = Annex2Stages()
+        return self._annex2_stages
 
     def _build_adapters(self, run: WorkflowRun, recorder) -> GovernedAdapters:
         if self._adapter_factory is not None:
@@ -289,13 +319,14 @@ class OpsEngine:
             deterministic = approved is not None
             inner = RealAgentAdapters(
                 client_name=run.client_id,
-                onboarding_mode=("mi_only" if run.outcome == OUTCOME_MI
-                                 else "regulatory_mi"),
+                onboarding_mode="mi_only",
                 processing_mode=("deterministic" if deterministic
                                  else "source_onboarding"),
                 mapping_config_path=(str(approved) if approved else None),
                 dataset=run.delivery.get("dataset", "funded") if
                 run.delivery.get("dataset") == "pipeline" else "",
+                # Annex 2 runs the typed Gate 2/3 path over the MI contract,
+                # matching the proven route's canonical preparation.
                 full_pipeline=(run.outcome == OUTCOME_MI_ANNEX2),
                 reporting_period=run.reporting_period,
                 managed_service=True)
@@ -386,6 +417,13 @@ class OpsEngine:
 
         run.blockers = [b for g in results.values() for b in g.blockers]
         if state.status == "done":
+            if run.outcome == OUTCOME_MI_ANNEX2:
+                # Canonical preparation done — continue into the governed
+                # Annex 2 delivery chain (preflight -> projection ->
+                # normalisation -> XML+XSD). It sets the final status itself.
+                self.store.save_workflow(run)
+                self._run_annex2_chain(run, state)
+                return
             new_status = RUN_AWAITING_PUBLICATION
         elif open_blocking:
             new_status = RUN_NEEDS_REVIEW
@@ -404,6 +442,264 @@ class OpsEngine:
         self.store.clear_lease(run)
         self.store.append_event(run, "execution_finished",
                                 detail={"status": run.status})
+
+    # ------------------------------------------------------------------ #
+    # Governed Annex 2 delivery chain (I1-I4)
+    # ------------------------------------------------------------------ #
+    def _client_rule_overrides(self, run: WorkflowRun) -> Dict[str, Any]:
+        """Approved client_rule settings from the governed rule store."""
+        out: Dict[str, Any] = {}
+        for r in self.rules.applicable(client_id=run.client_id,
+                                       portfolio_id=run.portfolio_id):
+            if r.kind == KIND_CLIENT_RULE:
+                p = r.payload or {}
+                if p.get("setting"):
+                    out[str(p["setting"])] = p.get("value")
+        return out
+
+    def _save_stage_gar(self, run: WorkflowRun, stage: str, status: str,
+                        summary: str, *, why: str = "",
+                        warnings=None, blockers=None, decisions=None,
+                        evidence=None, inputs=None, outputs=None) -> None:
+        gar = GovernedAgentResult(
+            run_id=run.workflow_id, stage=stage, status=status,
+            summary=summary, why_it_matters=why,
+            decisions_required=decisions or [],
+            warnings=warnings or [], blockers=blockers or [],
+            evidence=evidence or [],
+            input_references=inputs or [], output_references=outputs or [],
+            agent_version="trakt-engine", started_at=now_iso(),
+            completed_at=now_iso())
+        self.store.save_result(run.client_id, gar)
+        run.set_stage(stage, status, gar.result_id)
+        self._sync_decisions(run, gar)
+        self.store.save_workflow(run)
+
+    def _park(self, run: WorkflowRun, status: str) -> None:
+        if run.status != status:
+            try:
+                transition(run, status)
+            except Exception:  # noqa: BLE001
+                run.status = status
+        self.store.save_workflow(run)
+        self.store.clear_lease(run)
+        self.store.append_event(run, "execution_finished",
+                                detail={"status": run.status})
+
+    def _run_annex2_chain(self, run: WorkflowRun, state) -> None:
+        """Preflight -> projection -> delivery normalisation -> XML+XSD, each
+        a governed stage over the UNMODIFIED authoritative components.
+        Idempotent: completed stages with intact artefacts are skipped."""
+        runners = self._annex2_runners()
+        chain_dir = self._staging_dir(run) / "annex2"
+        chain_dir.mkdir(parents=True, exist_ok=True)
+        a2 = dict(run.annex2 or {})
+
+        def done(stage: str, artefact_key: Optional[str] = None) -> bool:
+            if run.stage_status(stage) != ST_COMPLETED:
+                return False
+            if artefact_key:
+                p = a2.get(artefact_key)
+                return bool(p) and Path(str(p)).exists()
+            return True
+
+        # ---- Stage: regulatory details preflight (I3) -------------------- #
+        from .annex2 import preflight as _pf
+        overrides = self._client_rule_overrides(run)
+        pf = _pf.run_preflight(client_config_path=self.client_config_path,
+                               overrides=overrides,
+                               reporting_period=run.reporting_period)
+        if pf["status"] == "blocked":
+            decisions = []
+            for c in pf["blocked"]:
+                decisions.append(DecisionRequired(
+                    decision_id=f"{run.workflow_id}_cfg_{c['key']}",
+                    kind=KIND_CLIENT_RULE,
+                    title=f"Provide the {c['label'].lower()}",
+                    question=f"{c['problem']} Please provide it.",
+                    blocking=True,
+                    options=[],
+                    allowed_scopes=["client"], default_scope="client",
+                    evidence=[{"label": "What was found", "kind": "text",
+                               "data": {"item": c["label"],
+                                        "found": c.get("found_value") or
+                                        "nothing configured"}}],
+                    subject={"artefact": "regulatory_config",
+                             "setting": c["key"], "label": c["label"]}))
+            self._save_stage_gar(
+                run, STAGE_REG_CONFIG, ST_NEEDS_REVIEW, pf["summary"],
+                why="These details identify your organisation to the "
+                    "regulator and appear in every report.",
+                decisions=decisions,
+                warnings=[c["problem"] for c in pf["needs_review"]])
+            for s in (STAGE_PROJECTION, STAGE_DELIVERY_PREP, STAGE_XML):
+                if run.stage_status(s) == ST_WAITING:
+                    self._save_stage_gar(run, s, ST_WAITING,
+                                         "Waiting for the regulatory details.")
+            self._save_stage_gar(run, STAGE_PUBLICATION, ST_WAITING,
+                                 "Waiting for all steps to finish.")
+            self._park(run, RUN_NEEDS_REVIEW)
+            return
+        self._save_stage_gar(
+            run, STAGE_REG_CONFIG, ST_COMPLETED, pf["summary"],
+            warnings=[c["problem"] for c in pf["needs_review"]],
+            evidence=[{"label": "Details checked", "kind": "table",
+                       "data": [{"item": c["label"], "status": c["status"]}
+                                for c in pf["checks"]]}])
+
+        # ---- Stage: projection (proven projector via existing seam) ------ #
+        if not done(STAGE_PROJECTION, "projected_csv"):
+            self._save_stage_gar(run, STAGE_PROJECTION, ST_RUNNING,
+                                 "Projecting the regulatory data.")
+            effective_cfg = None
+            if overrides:
+                effective_cfg = _pf.materialise_effective_config(
+                    base_config_path=self.client_config_path,
+                    overrides=overrides,
+                    out_path=chain_dir / "effective_client_config.yaml")
+                a2["effective_config"] = str(effective_cfg)
+            out = runners.run_projection(
+                central_canonical=state.central_canonical_path,
+                out_dir=chain_dir / "projection",
+                client_config=effective_cfg)
+            # Population-path reconciliation (I2) — persisted evidence; only
+            # genuinely unsupported required outputs may block.
+            from .annex2 import population as _pop
+            recon = _pop.reconciliation_document()
+            recon_path = chain_dir / "population_reconciliation.json"
+            recon_path.write_text(json.dumps(recon, indent=2),
+                                  encoding="utf-8")
+            a2["population_reconciliation"] = str(recon_path)
+            self.store.append_audit(
+                run.client_id, "annex2_population_reconciliation",
+                actor="system", workflow_id=run.workflow_id,
+                detail={"blocking_count": recon["blocking_count"],
+                        "blocking_codes": recon["blocking_codes"],
+                        "mechanism_counts": recon["mechanism_counts"]})
+            if not out.ok:
+                self._save_stage_gar(run, STAGE_PROJECTION, ST_BLOCKED,
+                                     out.summary, blockers=out.blockers,
+                                     warnings=out.warnings)
+                run.annex2 = a2
+                self._park(run, RUN_BLOCKED)
+                return
+            recon_warn = ([] if recon["blocking_count"] == 0
+                          else [recon["summary_sentence"]])
+            a2["projected_csv"] = out.artefacts.get("projected_csv", "")
+            a2["projection_metrics"] = out.metrics
+            run.annex2 = a2
+            self._save_stage_gar(
+                run, STAGE_PROJECTION,
+                ST_BLOCKED if recon["blocking_count"] else ST_COMPLETED,
+                out.summary,
+                warnings=out.warnings + recon_warn,
+                blockers=([recon["summary_sentence"]]
+                          if recon["blocking_count"] else []),
+                evidence=[{"label": "How each regulatory field is filled",
+                           "kind": "table",
+                           "data": recon["mechanism_counts"]}],
+                inputs=[state.central_canonical_path or ""],
+                outputs=[a2["projected_csv"]])
+            if recon["blocking_count"]:
+                self._park(run, RUN_BLOCKED)
+                return
+
+        # ---- Stage: delivery normalisation (I1 stage 1) ------------------ #
+        if not done(STAGE_DELIVERY_PREP, "delivery_ready_csv"):
+            self._save_stage_gar(run, STAGE_DELIVERY_PREP, ST_RUNNING,
+                                 "Preparing the delivery data.")
+            out = runners.run_normalisation(
+                projected_csv=a2["projected_csv"],
+                out_dir=chain_dir / "delivery")
+            audit_detail = {"metrics": out.metrics,
+                            "warning_count": len(out.warnings),
+                            "blocker_count": len(out.blockers)}
+            self.store.append_audit(run.client_id, "annex2_delivery_prep",
+                                    actor="system",
+                                    workflow_id=run.workflow_id,
+                                    detail=audit_detail)
+            if not out.ok:
+                self._save_stage_gar(
+                    run, STAGE_DELIVERY_PREP, ST_BLOCKED, out.summary,
+                    why="Publishing figures that fail the delivery checks "
+                        "could mislead the regulator.",
+                    warnings=out.warnings, blockers=out.blockers,
+                    evidence=out.evidence,
+                    inputs=[a2.get("projected_csv", "")])
+                run.annex2 = a2
+                self._park(run, RUN_BLOCKED)
+                return
+            a2["delivery_ready_csv"] = out.artefacts.get("delivery_ready_csv", "")
+            a2["delivery_metrics"] = out.metrics
+            run.annex2 = a2
+            self._save_stage_gar(
+                run, STAGE_DELIVERY_PREP, ST_COMPLETED, out.summary,
+                warnings=out.warnings, evidence=out.evidence,
+                inputs=[a2.get("projected_csv", "")],
+                outputs=[a2["delivery_ready_csv"]])
+
+        # ---- Stage: XML generation + XSD validation (I1 stage 2, I4) ----- #
+        if not done(STAGE_XML, "xml"):
+            self._save_stage_gar(run, STAGE_XML, ST_RUNNING,
+                                 "Creating the XML and checking it against "
+                                 "the regulator's format.")
+            out = runners.run_xml(delivery_csv=a2["delivery_ready_csv"],
+                                  out_dir=chain_dir / "xml")
+            self.store.append_audit(
+                run.client_id, "annex2_xml_generation", actor="system",
+                workflow_id=run.workflow_id,
+                detail={"metrics": {k: v for k, v in out.metrics.items()
+                                    if k != "xml_sha256"},
+                        "xml_sha256": out.metrics.get("xml_sha256", ""),
+                        "interventions": out.report.get("interventions", [])})
+            if not out.ok:
+                self._save_stage_gar(run, STAGE_XML, ST_BLOCKED, out.summary,
+                                     blockers=out.blockers,
+                                     warnings=out.warnings)
+                run.annex2 = a2
+                self._park(run, RUN_BLOCKED)
+                return
+            a2.update({
+                "xml": out.artefacts.get("xml", ""),
+                "interventions": out.artefacts.get("interventions", ""),
+                "xml_metrics": out.metrics,
+                "xsd": out.metrics.get("xsd", ""),
+                "xsd_result": out.metrics.get("xsd_result", ""),
+                "xml_sha256": out.metrics.get("xml_sha256", ""),
+            })
+            run.annex2 = a2
+            self._save_stage_gar(
+                run, STAGE_XML, ST_COMPLETED, out.summary,
+                why="Nothing is sent to the regulator until you approve it.",
+                warnings=out.warnings, evidence=out.evidence,
+                inputs=[a2.get("delivery_ready_csv", "")],
+                outputs=[a2["xml"]])
+
+        # ---- Ready for approval ------------------------------------------ #
+        run.annex2 = a2
+        xml_warns = list((self.store.load_result(
+            run.client_id, run.workflow_id, STAGE_XML) or
+            GovernedAgentResult(run_id="", stage="", status="", summary="")
+        ).warnings)
+        self._save_stage_gar(
+            run, STAGE_PUBLICATION, ST_READY,
+            "The Annex 2 delivery is prepared and waiting for your approval "
+            "to publish.",
+            why="Nothing is published until you approve it.",
+            warnings=xml_warns,
+            decisions=[DecisionRequired(
+                decision_id=f"{run.workflow_id}_publish",
+                kind=KIND_PUBLICATION,
+                title="Approve publication",
+                question="Publish this Annex 2 delivery as the latest "
+                         "official version?",
+                blocking=True,
+                options=[{"value": "publish", "label": "Publish"},
+                         {"value": "hold", "label": "Hold — not yet"}],
+                default_scope="file",
+                subject={"artefact": "publication"})])
+        self._prepare_publication(run, state)
+        self._park(run, RUN_AWAITING_PUBLICATION)
 
     def _on_step(self, client_id: str, workflow_id: str, step: str, result) -> None:
         """Live progress: persist a light stage-status update as each agent
@@ -499,7 +795,7 @@ class OpsEngine:
 
         rule = None
         if doc.get("kind") in ("field_mapping", "alias", "enum", "transformation",
-                               KIND_VALIDATION_EXCEPTION):
+                               KIND_VALIDATION_EXCEPTION, KIND_CLIENT_RULE):
             rule = self._persist_rule(run, doc, chosen, scope, actor, reason)
 
         doc.update(status=DEC_APPROVED, resolved_by=actor, resolved_at=now_iso(),
@@ -555,6 +851,11 @@ class OpsEngine:
                        "disposition": value, "justification": reason}
             desc = "Accepted flagged checks for this delivery."
             scope = "file"      # validation exceptions never generalise silently
+        elif kind == KIND_CLIENT_RULE:
+            payload = {"setting": subject.get("setting", ""), "value": value}
+            desc = (f"Set {subject.get('label') or subject.get('setting')} "
+                    f"for this client.")
+            scope = "client"    # regulatory identity is client-scoped
         else:
             payload = {"subject": subject.get("decision_id", ""),
                        "selected_action": value}
@@ -682,8 +983,26 @@ class OpsEngine:
                 "delivery_fingerprint": run.delivery.get("schema_fingerprint", ""),
                 "orchestrator_run_id": state.run_id,
             },
-            "agent_versions": {"pipeline": "trakt-engine"},
-            "configuration_versions": {"outcome": run.outcome},
+            # Annex 2 delivery provenance (empty for MI-only outcomes):
+            # projected input, normalised delivery data, XML, XSD + result,
+            # intervention evidence, effective client configuration, hashes.
+            "annex2": dict(run.annex2 or {}),
+            "agent_versions": {
+                "pipeline": "trakt-engine",
+                "projector": "engine/gate_4_projection/regime_projector.py",
+                "normaliser": "engine/gate_4b_delivery/"
+                              "annex2_delivery_normalizer.py",
+                "xml_builder": "engine/gate_5_delivery/xml_builder_annex2.py",
+            } if run.outcome == OUTCOME_MI_ANNEX2 else
+            {"pipeline": "trakt-engine"},
+            "configuration_versions": {
+                "outcome": run.outcome,
+                "delivery_rules": (run.annex2 or {}).get(
+                    "delivery_metrics", {}).get("rules_version", ""),
+                "xsd": (run.annex2 or {}).get("xsd", ""),
+                "client_config": (run.annex2 or {}).get(
+                    "effective_config", "repository default"),
+            },
             "prepared_at": now_iso(),
             "approved_by": None, "approved_at": None,
             "published_at": None, "rolled_back_by": None,
@@ -729,12 +1048,18 @@ class OpsEngine:
                          resolved_at=now_iso(), resolution_value="publish")
                 self.store.save_decision(client_id, d)
 
-        # EXISTING promotion path: platform canonical -> processed latest+period.
+        # EXISTING promotion paths only: platform canonical -> processed
+        # latest+period; Annex 2 delivery artefacts -> the regime prefix.
         persistence = self._persistence()
         central = (pub.get("source_artefacts") or {}).get("central_canonical")
-        published = {}
+        published: Dict[str, Any] = {}
         if central and Path(str(central)).exists():
             published = persistence.persist_platform(client_id, period, str(central))
+        a2 = pub.get("annex2") or {}
+        if a2.get("xml") and Path(str(a2["xml"])).exists():
+            regime_dir = str(Path(str(a2["xml"])).parent)
+            published["regime"] = persistence.persist_regime_dir(
+                client_id, period, regime_dir)
         pub.update(status="published", published_at=now_iso(),
                    published_artefacts=published)
         self.store.save_publication(client_id, pub)

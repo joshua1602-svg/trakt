@@ -93,6 +93,9 @@ onboarding_output/
 !tests/fixtures/**/*.csv
 portfolio_test/
 
+# Operations Control Centre local runtime state (staging, projected client memory)
+.ops_state/
+
 # Stray root-level node_modules (e.g. vitest .vite cache)
 node_modules/
 

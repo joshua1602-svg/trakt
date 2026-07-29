@@ -51,7 +51,7 @@ def present_workflow(run: WorkflowRun,
         "portfolio_id": run.portfolio_id,
         "reporting_period": run.reporting_period,
         "outcome": run.outcome,
-        "outcome_label": ("MI Reporting + ESMA Annex 2"
+        "outcome_label": ("MI Reporting + ESMA Annex 2 delivery"
                           if run.outcome == "mi_annex2" else "MI Reporting"),
         "workflow_type": run.workflow_type,
         "workflow_type_label": WORKFLOW_TYPE_LABELS.get(run.workflow_type,

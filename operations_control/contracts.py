@@ -62,18 +62,28 @@ RUN_TRANSITIONS: Dict[str, tuple] = {
     RUN_CANCELLED: (),
 }
 
-# Stage keys, in operator display order. ``projection`` only applies to the
-# mi_annex2 outcome.
+# Stage keys, in operator display order. The regulatory delivery stages
+# (regulatory_config .. xml_delivery) apply only to the mi_annex2 outcome and
+# run AFTER assembly, mirroring the proven Annex 2 route: assembled canonical
+# -> projector -> delivery normaliser -> XML builder + XSD validation.
 STAGE_RECEIVED = "received"
 STAGE_UNDERSTANDING = "understanding"
 STAGE_MAPPING = "mapping"
 STAGE_VALIDATION = "validation"
-STAGE_PROJECTION = "projection"
 STAGE_ASSEMBLY = "assembly"
+STAGE_REG_CONFIG = "regulatory_config"
+STAGE_PROJECTION = "projection"
+STAGE_DELIVERY_PREP = "delivery_prep"
+STAGE_XML = "xml_delivery"
 STAGE_PUBLICATION = "publication"
 STAGE_ORDER = (STAGE_RECEIVED, STAGE_UNDERSTANDING, STAGE_MAPPING,
-               STAGE_VALIDATION, STAGE_PROJECTION, STAGE_ASSEMBLY,
+               STAGE_VALIDATION, STAGE_ASSEMBLY, STAGE_REG_CONFIG,
+               STAGE_PROJECTION, STAGE_DELIVERY_PREP, STAGE_XML,
                STAGE_PUBLICATION)
+#: Stages owned by the OCC's governed Annex 2 delivery chain (not by the
+#: orchestrator conductor).
+ANNEX2_STAGES = (STAGE_REG_CONFIG, STAGE_PROJECTION, STAGE_DELIVERY_PREP,
+                 STAGE_XML)
 
 # Stage statuses (the operator vocabulary).
 ST_WAITING = "waiting"
@@ -99,10 +109,11 @@ KIND_ALIAS = "alias"
 KIND_ENUM = "enum"
 KIND_TRANSFORMATION = "transformation"
 KIND_VALIDATION_EXCEPTION = "validation_exception"
+KIND_CLIENT_RULE = "client_rule"          # regulatory configuration setting
 KIND_PUBLICATION = "publication"
 DECISION_KINDS = (KIND_FIELD_MAPPING, KIND_ALIAS, KIND_ENUM,
                   KIND_TRANSFORMATION, KIND_VALIDATION_EXCEPTION,
-                  KIND_PUBLICATION)
+                  KIND_CLIENT_RULE, KIND_PUBLICATION)
 
 
 def now_iso() -> str:
@@ -245,6 +256,10 @@ class WorkflowRun:
     staging_root: str = ""
     idempotency_key: str = ""
     rerun_count: int = 0
+    # Annex 2 delivery-chain artefact references (projected/delivery/XML paths,
+    # XSD result, hashes, interventions ref, effective config). Provenance for
+    # publication metadata; never rendered raw.
+    annex2: Dict[str, Any] = field(default_factory=dict)
     # Set when the API restarted while this run was executing; cleared on rerun.
     interrupted: bool = False
     blockers: List[str] = field(default_factory=list)   # plain language
@@ -265,10 +280,9 @@ class WorkflowRun:
 
     @property
     def applicable_stages(self) -> List[str]:
-        out = [s for s in STAGE_ORDER if s != STAGE_PROJECTION]
         if self.outcome == OUTCOME_MI_ANNEX2:
-            out = list(STAGE_ORDER)
-        return out
+            return list(STAGE_ORDER)
+        return [s for s in STAGE_ORDER if s not in ANNEX2_STAGES]
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

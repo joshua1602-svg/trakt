@@ -176,13 +176,103 @@ class ScriptedAdapters(AgentAdapters):
         return StepResult(ok=True, output_path=str(out), message="projected")
 
 
+class StubAnnex2Stages:
+    """Stub for the governed Annex 2 delivery chain seam. Same method
+    signatures as operations_control.annex2.stages.Annex2Stages."""
+
+    def __init__(self, scenario: str = "happy"):
+        self.scenario = scenario
+        self.calls: list = []
+
+    def run_projection(self, *, central_canonical, out_dir, client_config=None):
+        from operations_control.annex2.stages import StageOutcome
+        self.calls.append(("projection", str(client_config or "")))
+        out_dir = Path(out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        p = out_dir / "annex2_ESMA_Annex2_projected.csv"
+        p.write_text("RREL1,RREL2\nSECID,L1\n", encoding="utf-8")
+        return StageOutcome(ok=True, summary="Regulatory data projected.",
+                            artefacts={"projected_csv": str(p)},
+                            metrics={"records": 1, "fields": 2})
+
+    def run_normalisation(self, *, projected_csv, out_dir, rules_path=None):
+        from operations_control.annex2.stages import StageOutcome
+        self.calls.append("normalisation")
+        out_dir = Path(out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        if self.scenario == "normalise_block":
+            return StageOutcome(
+                ok=False, blocking=True,
+                summary="Annex 2 preparation found problems that need your "
+                        "review.",
+                blockers=["A required value is missing from the data. "
+                          "(2 instances)"])
+        p = out_dir / "annex2_delivery_ready.csv"
+        p.write_text("RREL1,RREL2\nSECID,L1\n", encoding="utf-8")
+        return StageOutcome(
+            ok=True,
+            summary="Annex 2 data has been prepared for XML generation.",
+            artefacts={"delivery_ready_csv": str(p)},
+            metrics={"input_records": 1, "output_records": 1,
+                     "input_fields": 2, "output_fields": 2,
+                     "rules_version": "rules@test"})
+
+    def run_xml(self, *, delivery_csv, out_dir, xsd_path=None):
+        from operations_control.annex2.stages import StageOutcome
+        self.calls.append("xml")
+        out_dir = Path(out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        if self.scenario == "xsd_fail":
+            return StageOutcome(
+                ok=False, blocking=True,
+                summary="The Annex 2 XML could not be created or did not "
+                        "pass the regulator's format check.",
+                blockers=["The generated file did not pass the regulator's "
+                          "format check."])
+        p = out_dir / "annex2_submission.xml"
+        p.write_text("<Document/>", encoding="utf-8")
+        iv = out_dir / "builder_interventions.json"
+        iv.write_text('{"interventions": []}', encoding="utf-8")
+        return StageOutcome(
+            ok=True,
+            summary="Annex 2 XML passed schema validation, but automatic "
+                    "values require review.",
+            warnings=["Automatic values were inserted in 144 field "
+                      "instances. Review is required before publication."],
+            artefacts={"xml": str(p), "interventions": str(iv)},
+            metrics={"records": 1, "fields": 2, "xml_bytes": 11,
+                     "xsd": "xsd@test", "xsd_result": "PASSED",
+                     "xml_sha256": "sha256:stub",
+                     "nd_injected": 144, "review_required_instances": 144})
+
+
+def make_client_config(tmp_path: Path, *, valid: bool = True) -> Path:
+    p = tmp_path / "client_config.yaml"
+    lei = "STUBLEI0000000000042" if valid else "NOT_A_VALID_LEI"
+    p.write_text(
+        f"client:\n  country: GB\n  base_currency: GBP\n"
+        f"annex2:\n  originator_legal_entity_identifier: \"{lei}\"\n"
+        f"  originator_establishment_country: \"GB\"\n", encoding="utf-8")
+    return p
+
+
 def make_engine(store: OpsStore, source_registry: SourceRegistry,
                 scenario: str = "happy",
-                adapters: Optional[AgentAdapters] = None) -> OpsEngine:
+                adapters: Optional[AgentAdapters] = None,
+                annex2_scenario: str = "happy",
+                annex2_stages=None,
+                client_config: Optional[Path] = None) -> OpsEngine:
     shared = adapters or ScriptedAdapters(scenario)
+    a2 = annex2_stages or StubAnnex2Stages(annex2_scenario)
+    if client_config is None:
+        import tempfile
+        client_config = make_client_config(
+            Path(tempfile.mkdtemp(prefix="ops-cfg-")))
     return OpsEngine(store,
                      adapter_factory=lambda run: shared,
-                     source_registry_factory=lambda: source_registry)
+                     source_registry_factory=lambda: source_registry,
+                     annex2_stages=a2,
+                     client_config_path=str(client_config))
 
 
 @pytest.fixture()

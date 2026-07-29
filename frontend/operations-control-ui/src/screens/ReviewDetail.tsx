@@ -36,12 +36,17 @@ export function ReviewDetailScreen() {
 
   useEffect(() => {
     if (review) {
-      setChoice(review.recommendation?.value ?? "");
+      // Free-text kinds with no preset options (e.g. a regulatory detail)
+      // open straight into the text input.
+      const noOptions = (review.options?.length ?? 0) === 0;
+      setChoice(review.recommendation?.value ?? (noOptions ? OTHER : ""));
       setScope(review.default_scope);
     }
   }, [review]);
 
-  const isMapping = review?.kind.includes("mapping") ?? false;
+  const isMapping =
+    (review?.kind.includes("mapping") ?? false) ||
+    review?.kind === "client_rule";
   const valueToSend = choice === OTHER ? otherValue.trim() : choice;
   const canConfirm = Boolean(valueToSend && scope);
 

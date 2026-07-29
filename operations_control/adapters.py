@@ -505,21 +505,10 @@ def translate_run_state(workflow: WorkflowRun, state: RunState,
     else:
         gar(STAGE_VALIDATION, ST_WAITING, "Waiting for mapping to finish.")
 
-    # Projection (Annex 2 outcome only).
-    if workflow.outcome == OUTCOME_MI_ANNEX2:
-        pr = state.project
-        if pr.status == STEP_DONE:
-            gar(STAGE_PROJECTION, ST_COMPLETED,
-                "The regulatory report data was prepared.")
-        elif pr.status in (STEP_HALTED, STEP_FAILED):
-            gar(STAGE_PROJECTION, ST_BLOCKED,
-                "The regulatory report could not be prepared.",
-                blockers=language.humanise_blockers(pr.blockers))
-        elif pr.status == STEP_RUNNING:
-            gar(STAGE_PROJECTION, ST_RUNNING,
-                "Preparing the regulatory report data.")
-        else:
-            gar(STAGE_PROJECTION, ST_WAITING, "Waiting for checks to finish.")
+    # The regulatory delivery stages (regulatory_config, projection,
+    # delivery_prep, xml_delivery) are OWNED by the engine's governed Annex 2
+    # chain, which runs the proven route after assembly — they are not derived
+    # from orchestrator state and are not emitted here.
 
     # Assembly (stamp + assemble + route).
     st, asm = p.step("stamp"), state.assemble
@@ -540,7 +529,12 @@ def translate_run_state(workflow: WorkflowRun, state: RunState,
         gar(STAGE_ASSEMBLY, ST_WAITING, "Waiting for earlier steps.")
 
     # Publication — never automatic; READY only when everything upstream done.
-    if state.status == STEP_DONE:
+    # For the Annex 2 outcome the delivery chain (engine-owned) decides when
+    # publication becomes ready — orchestrator completion is not enough.
+    if workflow.outcome == OUTCOME_MI_ANNEX2:
+        gar(STAGE_PUBLICATION, ST_WAITING,
+            "Waiting for the regulatory delivery steps.")
+    elif state.status == STEP_DONE:
         gar(STAGE_PUBLICATION, ST_READY,
             "The report is prepared and waiting for your approval to publish.",
             why="Nothing is shared until you approve it.",

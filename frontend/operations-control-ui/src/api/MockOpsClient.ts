@@ -24,7 +24,7 @@ const TYPE_LABELS: Record<WorkflowType, string> = {
 
 const OUTCOME_LABELS = {
   mi: "MI Reporting",
-  mi_annex2: "MI Reporting + ESMA Annex 2",
+  mi_annex2: "MI Reporting + ESMA Annex 2 delivery",
 };
 
 const SCOPE_EXPLANATIONS: Record<string, string> = {

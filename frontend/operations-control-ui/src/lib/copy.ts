@@ -63,7 +63,7 @@ export const copy = {
     outcomeHeading: "What would you like Trakt to prepare?",
     outcomeMi: "MI Reporting",
     outcomeMiHelp: "The regular management information pack.",
-    outcomeAnnex: "MI Reporting + ESMA Annex 2",
+    outcomeAnnex: "MI Reporting + ESMA Annex 2 delivery",
     outcomeAnnexHelp: "The regular pack plus the regulatory annex.",
     detailsHeading: "Who is this for?",
     clientLabel: "Client",

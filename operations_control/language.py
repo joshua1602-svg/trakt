@@ -106,8 +106,11 @@ STAGE_LABELS = {
     "understanding": "Data understood",
     "mapping": "Mapping",
     "validation": "Validation",
-    "projection": "Regulatory report",
     "assembly": "Assembly",
+    "regulatory_config": "Regulatory details",
+    "projection": "Data projected",
+    "delivery_prep": "Delivery data prepared",
+    "xml_delivery": "XML created",
     "publication": "Publication",
 }
 
