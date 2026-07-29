@@ -104,6 +104,62 @@ export interface StartWorkflowInput {
   start: true;
 }
 
+export type BatchStatus =
+  | "receiving"
+  | "incomplete"
+  | "classifying"
+  | "review_required"
+  | "configuration_required"
+  | "ready"
+  | "running"
+  | "completed"
+  | "failed";
+
+export interface BatchFile {
+  source_file_id: string;
+  filename: string;
+  role: string;
+  role_label: string;
+  status: string;
+  status_sentence: string;
+  confidence: number;
+}
+
+export interface BatchInputRole {
+  role: string;
+  label: string;
+  required: boolean;
+  satisfied: boolean;
+}
+
+export interface Batch {
+  batch_id: string;
+  client_id: string;
+  portfolio_id: string;
+  reporting_date: string;
+  workflow_type: WorkflowOutcome;
+  status: BatchStatus;
+  status_label: string;
+  status_sentence: string;
+  auto_start_when_ready: boolean;
+  files: BatchFile[];
+  input_roles: BatchInputRole[];
+  missing_roles: string[];
+  configuration_ready: boolean;
+  blocking_decisions: string[];
+  workflow_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateBatchInput {
+  client_id: string;
+  portfolio_id: string;
+  reporting_date: string;
+  workflow_type: WorkflowOutcome;
+  auto_start_when_ready: boolean;
+}
+
 export type ReviewScope = "file" | "portfolio" | "client" | "global";
 
 export interface Recommendation {

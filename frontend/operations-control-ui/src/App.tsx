@@ -6,6 +6,7 @@ import { Shell } from "@/components/Shell";
 import { SignIn } from "@/components/SignIn";
 import { ToastProvider } from "@/components/Toast";
 import { getToken, saveToken, UNAUTHORIZED_EVENT } from "@/lib/token";
+import { BatchDetailScreen } from "@/screens/BatchDetail";
 import { HistoryScreen } from "@/screens/History";
 import { HomeScreen } from "@/screens/Home";
 import { NewWorkflowScreen } from "@/screens/NewWorkflow";
@@ -49,6 +50,7 @@ export default function App() {
             <Routes>
               <Route path="/" element={<HomeScreen />} />
               <Route path="/new" element={<NewWorkflowScreen />} />
+              <Route path="/batches/:id" element={<BatchDetailScreen />} />
               <Route path="/workflows" element={<WorkflowsScreen />} />
               <Route path="/workflows/:id" element={<WorkflowDetailScreen />} />
               <Route path="/reviews" element={<ReviewsScreen />} />

@@ -11,12 +11,17 @@ const STYLES: Record<string, string> = {
   // amber
   needs_review: "bg-amber-50 text-amber-800 border-amber-200",
   open: "bg-amber-50 text-amber-800 border-amber-200",
+  incomplete: "bg-amber-50 text-amber-800 border-amber-200",
+  review_required: "bg-amber-50 text-amber-800 border-amber-200",
+  configuration_required: "bg-amber-50 text-amber-800 border-amber-200",
   // red tint
   blocked: "bg-rose-50 text-rose-700 border-rose-200",
   failed: "bg-rose-50 text-rose-700 border-rose-200",
   rejected: "bg-rose-50 text-rose-700 border-rose-200",
   // blue pulse
   running: "bg-blue-50 text-blue-700 border-blue-200 animate-pulse",
+  receiving: "bg-blue-50 text-blue-700 border-blue-200 animate-pulse",
+  classifying: "bg-blue-50 text-blue-700 border-blue-200 animate-pulse",
   // violet
   ready: "bg-violet-50 text-violet-700 border-violet-200",
   awaiting_publication: "bg-violet-50 text-violet-700 border-violet-200",
