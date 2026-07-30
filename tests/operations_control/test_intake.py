@@ -586,3 +586,137 @@ class TestDatasetRouting:
             reporting_date="2026-06-30",
             workflow_type=batch["workflow_type"], dataset="funded")
         assert not successor["batch_id"].startswith(funded)
+
+
+class TestManualDatasetSelection:
+    """Operators choose the book when they open a pack by hand.
+
+    Automated arrivals get the dataset from the blob path. The OCC is the other
+    door into intake, and it defaulted every manual pack to the funded book —
+    so a pipeline delivery opened by hand joined the funded pack. The selection
+    closes that, and the engine refuses combinations that would route a delivery
+    into the wrong reporting.
+    """
+
+    def _api(self, store, source_registry, tmp_path):
+        from fastapi.testclient import TestClient
+        from operations_control.api import app as app_module
+        engine = _mk(store, source_registry, tmp_path)
+        app_module.set_engine(engine)
+        return engine, app_module, TestClient(app_module.app,
+                                              raise_server_exceptions=False)
+
+    @staticmethod
+    def _body(**kw):
+        body = {"client_id": "client_a", "portfolio_id": "pf1",
+                "reporting_date": "2026-06-30", "workflow_type": "mi"}
+        body.update(kw)
+        return body
+
+    # -- engine-level rules ------------------------------------------------- #
+
+    def test_unknown_dataset_is_refused(self, store, source_registry, tmp_path):
+        engine = _mk(store, source_registry, tmp_path)
+        with pytest.raises(OpsError) as exc:
+            engine.create_batch(client_id="client_a", portfolio_id="pf1",
+                                reporting_date="2026-06-30", workflow_type="mi",
+                                created_by="test", dataset="nonsense")
+        assert exc.value.code == "OPS_BAD_DATASET"
+
+    def test_pipeline_cannot_carry_a_regime_delivery(self, store,
+                                                     source_registry, tmp_path):
+        """The rule the blob trigger applies, enforced at the other door too."""
+        engine = _mk(store, source_registry, tmp_path)
+        with pytest.raises(OpsError) as exc:
+            engine.create_batch(client_id="client_a", portfolio_id="pf1",
+                                reporting_date="2026-06-30",
+                                workflow_type="mi_annex2",
+                                created_by="test", dataset="pipeline")
+        assert exc.value.code == "OPS_DATASET_NOT_REGIME_CAPABLE"
+
+    def test_funded_may_carry_a_regime_delivery(self, store, source_registry,
+                                                tmp_path):
+        engine = _mk(store, source_registry, tmp_path)
+        batch = engine.create_batch(client_id="client_a", portfolio_id="pf1",
+                                    reporting_date="2026-06-30",
+                                    workflow_type="mi_annex2",
+                                    created_by="test", dataset="funded")
+        assert batch["dataset"] == "funded"
+
+    # -- API ---------------------------------------------------------------- #
+
+    def test_api_accepts_a_dataset_and_records_it(self, store, source_registry,
+                                                  tmp_path):
+        engine, app_module, client = self._api(store, source_registry, tmp_path)
+        try:
+            r = client.post("/ops/batches", json=self._body(dataset="pipeline"),
+                            headers={"X-Operator-Token": OP_A})
+            assert r.status_code == 201, r.text
+            batch = r.json()["batch"]
+            assert batch["dataset"] == "pipeline"
+            assert batch["dataset_label"] == "Pipeline"
+        finally:
+            app_module.set_engine(None)
+
+    def test_api_without_a_dataset_still_works_and_means_funded(
+            self, store, source_registry, tmp_path):
+        """An older client that does not send the field must behave as before."""
+        engine, app_module, client = self._api(store, source_registry, tmp_path)
+        try:
+            r = client.post("/ops/batches", json=self._body(),
+                            headers={"X-Operator-Token": OP_A})
+            assert r.status_code == 201, r.text
+            assert r.json()["batch"]["dataset"] == "funded"
+        finally:
+            app_module.set_engine(None)
+
+    def test_api_refuses_pipeline_with_regime_and_explains_plainly(
+            self, store, source_registry, tmp_path):
+        engine, app_module, client = self._api(store, source_registry, tmp_path)
+        try:
+            r = client.post("/ops/batches",
+                            json=self._body(workflow_type="mi_annex2",
+                                            dataset="pipeline"),
+                            headers={"X-Operator-Token": OP_A})
+            assert r.status_code == 400
+            body = r.json()
+            assert body["ok"] is False
+            assert body["errorCode"] == "OPS_DATASET_NOT_REGIME_CAPABLE"
+            # Operator-facing: a plain sentence, no identifiers, no stack trace.
+            assert "funded book" in body["message"]
+            assert "pipeline" not in body["message"].lower()
+        finally:
+            app_module.set_engine(None)
+
+    def test_api_refuses_an_unknown_dataset(self, store, source_registry,
+                                            tmp_path):
+        engine, app_module, client = self._api(store, source_registry, tmp_path)
+        try:
+            r = client.post("/ops/batches", json=self._body(dataset="nonsense"),
+                            headers={"X-Operator-Token": OP_A})
+            assert r.status_code == 400
+            assert r.json()["errorCode"] == "OPS_BAD_DATASET"
+        finally:
+            app_module.set_engine(None)
+
+    def test_manual_pipeline_and_funded_packs_are_separate(
+            self, store, source_registry, tmp_path):
+        engine, app_module, client = self._api(store, source_registry, tmp_path)
+        try:
+            funded = client.post("/ops/batches", json=self._body(dataset="funded"),
+                                 headers={"X-Operator-Token": OP_A}).json()["batch"]
+            pipeline = client.post("/ops/batches",
+                                   json=self._body(dataset="pipeline"),
+                                   headers={"X-Operator-Token": OP_A}).json()["batch"]
+            assert funded["batch_id"] != pipeline["batch_id"]
+        finally:
+            app_module.set_engine(None)
+
+    def test_a_pack_created_before_this_change_reads_as_funded(
+            self, store, source_registry, tmp_path):
+        """Packs already on disk have no dataset field; they must not read blank."""
+        from operations_control.api import presenters
+        presented = presenters.present_batch(
+            {"batch_id": "b0", "status": "receiving"}, {})
+        assert presented["dataset"] == "funded"
+        assert presented["dataset_label"] == "Funded book"

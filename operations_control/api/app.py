@@ -253,6 +253,11 @@ class CreateBatch(BaseModel):
     reporting_date: str
     workflow_type: str                 # mi | mi_annex2
     auto_start_when_ready: bool = False
+    # Which book these files describe: funded | pipeline. Blank keeps the funded
+    # default, so a client that does not send the field behaves exactly as before.
+    # The engine refuses an unknown dataset, and refuses pipeline + mi_annex2 —
+    # a pipeline view never carries a regime delivery.
+    dataset: str = ""
 
 
 class RegisterBatchFile(BaseModel):
@@ -273,7 +278,8 @@ def create_batch(body: CreateBatch,
         client_id=body.client_id, portfolio_id=body.portfolio_id,
         reporting_date=body.reporting_date, workflow_type=body.workflow_type,
         created_by=principal.name,
-        auto_start_when_ready=body.auto_start_when_ready)
+        auto_start_when_ready=body.auto_start_when_ready,
+        dataset=body.dataset)
     return {"ok": True, "batch": presenters.present_batch(batch,
                                                           _role_labels())}
 

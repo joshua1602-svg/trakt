@@ -132,12 +132,18 @@ export interface BatchInputRole {
   satisfied: boolean;
 }
 
+/** Which book an input pack describes. Regime reporting is prepared from the
+ * funded book only; pipeline is a forward-looking MI view. */
+export type BatchDataset = "funded" | "pipeline";
+
 export interface Batch {
   batch_id: string;
   client_id: string;
   portfolio_id: string;
   reporting_date: string;
   workflow_type: WorkflowOutcome;
+  dataset: BatchDataset;
+  dataset_label: string;
   status: BatchStatus;
   status_label: string;
   status_sentence: string;
@@ -157,6 +163,7 @@ export interface CreateBatchInput {
   portfolio_id: string;
   reporting_date: string;
   workflow_type: WorkflowOutcome;
+  dataset: BatchDataset;
   auto_start_when_ready: boolean;
 }
 
