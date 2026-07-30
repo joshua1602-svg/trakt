@@ -162,9 +162,20 @@ if [ "$RUN_FROM_PKG" != "<unset>" ] && [ "$RUN_FROM_PKG" != "0" ]; then
   bad "that needs an Oryx build. Remove the setting, or deploy a pre-built package."
 fi
 
-if [ "$SCM_BUILD" != "true" ] && [ "$ORYX_BUILD" != "true" ]; then
-  bad "Neither SCM_DO_BUILD_DURING_DEPLOYMENT nor ENABLE_ORYX_BUILD is true, so"
-  bad "dependencies will not be installed and the worker will fail to import."
+# Azure accepts 1 as well as true for these flags, and the live site is currently
+# set to SCM_DO_BUILD_DURING_DEPLOYMENT=1. Comparing only against "true" would
+# report a correctly configured site as broken — this guard passed previously only
+# because ENABLE_ORYX_BUILD happened to be "true" as well.
+is_enabled() {
+  case "$1" in
+    true|True|TRUE|1) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+if ! is_enabled "$SCM_BUILD" && ! is_enabled "$ORYX_BUILD"; then
+  bad "Neither SCM_DO_BUILD_DURING_DEPLOYMENT nor ENABLE_ORYX_BUILD is enabled"
+  bad "(accepted values: true or 1), so dependencies will not be installed and"
+  bad "the worker will fail to import uvicorn."
 fi
 
 if [ "$FAILED" -eq 0 ]; then
