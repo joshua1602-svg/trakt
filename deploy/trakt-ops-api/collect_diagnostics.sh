@@ -12,9 +12,30 @@ set -uo pipefail
 
 RG="${1:?usage: collect_diagnostics.sh <resource-group> <app-name>}"
 APP="${2:?app name required}"
-SCM="https://${APP}.scm.azurewebsites.net"
 OUT="${DIAG_DIR:-_diagnostics}"
 mkdir -p "$OUT"
+
+# Hostnames come from the site resource, never from the app name — see
+# azure_hosts.sh. A diagnostics script that guesses the wrong hostname reports
+# "unreachable" for a perfectly healthy site, which is worse than no output.
+# shellcheck source=deploy/trakt-ops-api/azure_hosts.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/azure_hosts.sh"
+
+# Discovery is best-effort here: if it fails, the ARM-based sections must still
+# run, so record the failure and carry on rather than exiting.
+SCM_URL=""
+if SCM_HOST="$(discover_scm_host "$RG" "$APP" 2>"$OUT/scm_discovery_error")"; then
+  SCM_URL="https://${SCM_HOST}"
+else
+  SCM_HOST=""
+fi
+
+APP_URL=""
+if APP_HOST="$(discover_app_host "$RG" "$APP" 2>"$OUT/app_discovery_error")"; then
+  APP_URL="https://${APP_HOST}"
+else
+  APP_HOST=""
+fi
 
 section() {
   echo
@@ -37,13 +58,21 @@ TOKEN="$(az account get-access-token --resource https://management.azure.com/ \
 
 kudu() {
   # $1 = path under the SCM site
+  if [ -z "${SCM_URL:-}" ]; then
+    echo "  (SCM hostname could not be discovered — see section 0; skipping Kudu)"
+    return 0
+  fi
   if [ -z "${TOKEN:-}" ]; then
     echo "  (no access token — cannot reach Kudu)"
     return 0
   fi
   local code
+  # `-w '%{http_code}'` already prints 000 when the connection or DNS fails, so do
+  # NOT append a fallback with `|| echo 000` — that produced "HTTP 000000" and made
+  # the status unreadable. Capture what curl reports and default only if empty.
   code="$(curl -sS -H "Authorization: Bearer $TOKEN" --max-time 90 \
-          -o "$OUT/kudu_body" -w '%{http_code}' "$SCM$1" 2>/dev/null || echo "000")"
+          -o "$OUT/kudu_body" -w '%{http_code}' "${SCM_URL}$1" 2>/dev/null)"
+  code="${code:-000}"
   echo "  GET $1 -> HTTP $code"
   if [ -s "$OUT/kudu_body" ]; then
     # Pretty-print JSON when it is JSON; otherwise emit raw text.
@@ -62,6 +91,25 @@ except Exception:
     echo "        unreachable — use the ARM sources below instead."
   fi
 }
+
+section "0. DISCOVERED ENDPOINTS"
+# Printed first so every later "unreachable" line can be judged against the
+# hostname actually used. Neither hostname is constructed from the app name.
+echo "  app name            : $APP"
+echo "  resource group      : $RG"
+echo "  SCM (Kudu) hostname : ${SCM_HOST:-<discovery failed>}"
+echo "  public hostname     : ${APP_HOST:-<discovery failed>}"
+if [ -z "${SCM_HOST:-}" ] && [ -s "$OUT/scm_discovery_error" ]; then
+  echo "  --- SCM discovery error ---"
+  sed 's/^/  /' "$OUT/scm_discovery_error"
+fi
+if [ -z "${APP_HOST:-}" ] && [ -s "$OUT/app_discovery_error" ]; then
+  echo "  --- public hostname discovery error ---"
+  sed 's/^/  /' "$OUT/app_discovery_error"
+fi
+echo "  all enabled hostnames on the site:"
+az webapp show -g "$RG" -n "$APP" --query "enabledHostNames" -o tsv 2>/dev/null \
+  | sed 's/^/    /' || echo "    (could not read enabledHostNames)"
 
 section "A. DEPLOYMENT STATUS (ARM) — az webapp log deployment show"
 # ARM-side view. Independent of Kudu reachability.
@@ -83,9 +131,9 @@ kudu "/api/deployments"
 section "E. KUDU DEPLOYMENT LOG + NESTED DETAILS (Oryx build output)"
 # The Oryx build output is NOT in the top-level log; it hangs off log entries that
 # carry a details_url. Fetch both levels, or the build failure stays invisible.
-if [ -n "${TOKEN:-}" ]; then
+if [ -n "${TOKEN:-}" ] && [ -n "${SCM_URL:-}" ]; then
   LATEST_ID="$(curl -sS -H "Authorization: Bearer $TOKEN" --max-time 60 \
-    "$SCM/api/deployments/latest" 2>/dev/null \
+    "${SCM_URL}/api/deployments/latest" 2>/dev/null \
     | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || true)"
   if [ -n "${LATEST_ID:-}" ]; then
     echo "  latest deployment id: $LATEST_ID"
@@ -93,7 +141,7 @@ if [ -n "${TOKEN:-}" ]; then
     echo
     echo "  --- nested log details (this is where the Oryx build log lives) ---"
     curl -sS -H "Authorization: Bearer $TOKEN" --max-time 60 \
-      "$SCM/api/deployments/$LATEST_ID/log" 2>/dev/null \
+      "${SCM_URL}/api/deployments/$LATEST_ID/log" 2>/dev/null \
       | python3 -c "
 import json, sys
 try: entries = json.load(sys.stdin)
@@ -119,6 +167,8 @@ except Exception:
   else
     echo "  (no deployment id available)"
   fi
+else
+  echo "  (skipped: no access token, or the SCM hostname could not be discovered)"
 fi
 
 section "F. ORYX BUILD LOG FROM THE SITE FILESYSTEM"
@@ -183,10 +233,19 @@ for name in secret:
 " 2>/dev/null || echo "    (could not read app settings)"
 
 section "J. LIVE HEALTH PROBE"
-CODE="$(curl -sS -o "$OUT/health_body" -w '%{http_code}' --max-time 30 \
-        "https://${APP}.azurewebsites.net/health" 2>/dev/null || echo "000")"
-echo "  GET /health -> HTTP $CODE"
-[ -s "$OUT/health_body" ] && sed 's/^/  /' "$OUT/health_body" && echo
+# Uses the DISCOVERED public hostname. Constructing <app>.azurewebsites.net here
+# would fail DNS on a site with secure unique default hostnames and be misread as
+# "the app is down".
+if [ -n "${APP_URL:-}" ]; then
+  echo "  target: ${APP_URL}/health"
+  CODE="$(curl -sS -o "$OUT/health_body" -w '%{http_code}' --max-time 30 \
+          "${APP_URL}/health" 2>/dev/null)"
+  CODE="${CODE:-000}"
+  echo "  GET /health -> HTTP $CODE"
+  [ -s "$OUT/health_body" ] && sed 's/^/  /' "$OUT/health_body" && echo
+else
+  echo "  (skipped: the public hostname could not be discovered — see section 0)"
+fi
 
 section "K. HOW TO READ THIS"
 cat <<'GUIDE'

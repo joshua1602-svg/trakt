@@ -29,7 +29,18 @@ APP="${3:?app name required}"
 DEADLINE_SECONDS="${4:-1800}"
 POLL_SECONDS="${POLL_SECONDS:-15}"
 
-SCM="https://${APP}.scm.azurewebsites.net"
+# Discover the SCM hostname from the site resource. It is NEVER built from the
+# app name: a site with secure unique default hostnames lives at
+# <app>-<hash>.scm.<region>.azurewebsites.net, and the legacy guess
+# <app>.scm.azurewebsites.net does not resolve — which appears as
+# "curl: (6) Could not resolve host" and HTTP 000.
+# shellcheck source=deploy/trakt-ops-api/azure_hosts.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/azure_hosts.sh"
+
+echo ">> Discovering the SCM (Kudu) endpoint from the site resource"
+SCM_HOST="$(discover_scm_host "$RG" "$APP")" || exit 1
+SCM_URL="https://${SCM_HOST}"
+echo "   SCM hostname: $SCM_HOST"
 
 echo ">> Acquiring an AAD token for the SCM endpoint"
 # Kudu accepts an ARM-audience bearer token. This works whether or not SCM basic
@@ -43,7 +54,7 @@ if [ -z "${TOKEN:-}" ]; then
 fi
 
 echo ">> Starting asynchronous zip deployment"
-echo "   target: $SCM/api/zipdeploy?isAsync=true"
+echo "   target: ${SCM_URL}/api/zipdeploy?isAsync=true"
 HTTP_BODY_FILE="$(mktemp)"
 HTTP_HDR_FILE="$(mktemp)"
 STATUS="$(curl -sS -X POST \
@@ -54,7 +65,7 @@ STATUS="$(curl -sS -X POST \
   -D "$HTTP_HDR_FILE" \
   -o "$HTTP_BODY_FILE" \
   -w '%{http_code}' \
-  "$SCM/api/zipdeploy?isAsync=true")"
+  "${SCM_URL}/api/zipdeploy?isAsync=true")"
 
 echo "   HTTP $STATUS"
 echo "--- response headers ---"
@@ -88,7 +99,7 @@ while :; do
   fi
 
   LATEST="$(curl -sS -H "Authorization: Bearer $TOKEN" --max-time 60 \
-            "$SCM/api/deployments/latest" 2>/dev/null)"
+            "${SCM_URL}/api/deployments/latest" 2>/dev/null)"
 
   PARSED="$(printf '%s' "$LATEST" | python3 -c "
 import json, sys
@@ -118,7 +129,7 @@ print('|'.join([
   # than a silent wait.
   if [ -n "$ID" ] && [ "$ID" != "UNPARSEABLE" ]; then
     LOGS="$(curl -sS -H "Authorization: Bearer $TOKEN" --max-time 60 \
-            "$SCM/api/deployments/$ID/log" 2>/dev/null)"
+            "${SCM_URL}/api/deployments/$ID/log" 2>/dev/null)"
     COUNT="$(printf '%s' "$LOGS" | python3 -c "
 import json,sys
 try: print(len(json.load(sys.stdin)))

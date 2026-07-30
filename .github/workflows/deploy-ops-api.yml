@@ -76,6 +76,16 @@ jobs:
             --deselect "tests/operations_control/test_annex2_delivery.py::TestRealComponentsMiniGolden::test_normaliser_and_builder_pass_xsd" \
             --deselect "tests/operations_control/test_annex2_delivery.py::TestRealComponentsMiniGolden::test_builder_interventions_are_captured"
 
+      - name: Test App Service hostname discovery
+        # Runs before any Azure call and needs no Azure access: a stub `az`
+        # supplies fixture hostnames. Covers the legacy form
+        # (app.scm.azurewebsites.net), the secure-unique form
+        # (app-hash.scm.westeurope-01.azurewebsites.net), the rejection cases that
+        # protect the URL a bearer token is sent to, and a guard asserting that no
+        # deployment script assembles a hostname from the app name — the defect
+        # that produced "Could not resolve host" / HTTP 000.
+        run: bash deploy/trakt-ops-api/tests/test_host_discovery.sh
+
       - name: Build deployment package
         # The runtime closure of operations_control.api.app, established by
         # import trace rather than assumption:
@@ -136,6 +146,28 @@ jobs:
           tenant-id: ${{ secrets.AZURE_OPS_API_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_OPS_API_SUBSCRIPTION_ID }}
 
+      - name: Discover the App Service hostnames
+        # Hostnames are NEVER constructed from the app name. With secure unique
+        # default hostnames a site is reachable only at
+        #   <app>-<hash>.<region>.azurewebsites.net           (public)
+        #   <app>-<hash>.scm.<region>.azurewebsites.net       (SCM / Kudu)
+        # and the legacy <app>.scm.azurewebsites.net guess does not resolve —
+        # which is exactly the "curl: (6) Could not resolve host" / HTTP 000
+        # submission failure seen previously. Both are read from the site
+        # resource and exported for the later steps.
+        run: |
+          set -euo pipefail
+          . deploy/trakt-ops-api/azure_hosts.sh
+          SCM_HOST="$(discover_scm_host "${{ secrets.AZURE_OPS_API_RESOURCE_GROUP }}" "$APP_NAME")"
+          APP_HOST="$(discover_app_host "${{ secrets.AZURE_OPS_API_RESOURCE_GROUP }}" "$APP_NAME")"
+          echo "SCM (Kudu) hostname : $SCM_HOST"
+          echo "public hostname     : $APP_HOST"
+          echo "all enabled hostnames on the site:"
+          az webapp show -g "${{ secrets.AZURE_OPS_API_RESOURCE_GROUP }}" -n "$APP_NAME" \
+            --query "enabledHostNames" -o tsv | sed 's/^/  /'
+          echo "OPS_SCM_HOST=$SCM_HOST" >> "$GITHUB_ENV"
+          echo "OPS_APP_HOST=$APP_HOST" >> "$GITHUB_ENV"
+
       - name: Pre-flight — artefact listing and live App Service configuration
         # Runs AFTER login and BEFORE upload, so a failure can be attributed to
         # packaging or configuration without re-running anything. Prints the full
@@ -176,10 +208,15 @@ jobs:
         # /health needs no token, so it is a clean post-deploy probe. It also
         # reports auth_configured, which catches the most likely misconfiguration
         # (TRAKT_OPS_OPERATORS unset leaves every route 503).
+        #
+        # Uses the DISCOVERED public hostname from the earlier step. Building
+        # <app>.azurewebsites.net here would fail DNS on a site with secure unique
+        # default hostnames and be misreported as "the service did not start".
         run: |
           set -euo pipefail
+          echo "probing https://${OPS_APP_HOST}/health"
           for attempt in 1 2 3 4 5 6; do
-            body="$(curl -fsS --max-time 20 "https://${APP_NAME}.azurewebsites.net/health" || true)"
+            body="$(curl -fsS --max-time 20 "https://${OPS_APP_HOST}/health" || true)"
             if [ -n "$body" ]; then
               echo "$body"
               echo "$body" | grep -q '"service":"operations-control"' \
