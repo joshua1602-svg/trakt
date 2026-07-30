@@ -85,16 +85,27 @@ STEP_STATUS_LABELS = {
 
 #: Publication approval scopes offered on a delivery. The platform-wide scope is
 #: deliberately absent — see ``contracts.PUBLICATION_SCOPES``.
+#:
+#: The wording is deliberately narrow. Today the answer is RECORDED against the
+#: publication and the audit trail; nothing reads it back to approve a later
+#: delivery. So nothing here may suggest that a future delivery will publish
+#: itself — a promise the system does not keep would be worse than not asking.
 APPROVAL_SCOPES = (
     {"value": "delivery", "label": "No — this delivery only",
-     "explanation": "Trakt will ask again for the next delivery."},
+     "explanation": "Nothing is carried forward. Trakt will ask again next "
+                    "time."},
     {"value": "portfolio", "label": "Yes — future deliveries for this portfolio",
-     "explanation": "Trakt will apply this decision to this portfolio's future "
-                    "deliveries."},
+     "explanation": "Your answer is recorded against this portfolio. Someone "
+                    "still approves each delivery."},
     {"value": "client", "label": "Yes — future deliveries for this client",
-     "explanation": "Trakt will apply this decision to every portfolio "
-                    "belonging to this client."},
+     "explanation": "Your answer is recorded against this client. Someone "
+                    "still approves each delivery."},
 )
+
+#: Shown beneath the scope question, so what "remember" means is never guessed.
+APPROVAL_SCOPE_NOTE = ("Trakt records your answer so it is on the delivery's "
+                       "record. It does not publish anything on its own — every "
+                       "delivery is approved by a person.")
 
 
 def _fact(label: str, value: Any) -> Dict[str, str]:
@@ -401,15 +412,18 @@ def _approval_step(run: WorkflowRun, results: Dict[str, Dict[str, Any]],
             "question": "Publish this delivery as the latest official version?",
             "scope_question": "Should Trakt remember this decision for future "
                               "deliveries?",
+            "scope_note": APPROVAL_SCOPE_NOTE,
             "scopes": [dict(s) for s in APPROVAL_SCOPES],
             "default_scope": PUBLICATION_SCOPE_DEFAULT,
             "consequence": consequence,
             "scope_consequences": {
                 "delivery": "This decision applies only to this delivery.",
-                "portfolio": "This decision will also apply to future "
-                             f"deliveries for {run.portfolio_id}.",
-                "client": "This decision will also apply to future deliveries "
-                          f"for {run.client_id}.",
+                "portfolio": "Your answer is also recorded against future "
+                             f"deliveries for {run.portfolio_id}, which are "
+                             "still approved one at a time.",
+                "client": "Your answer is also recorded against future "
+                          f"deliveries for {run.client_id}, which are still "
+                          "approved one at a time.",
             },
             "version": (publication or {}).get("version"),
         },
@@ -438,9 +452,11 @@ def _published_step(run: WorkflowRun,
     if artefacts.get("regime"):
         outputs.append("ESMA Annex 2 delivery")
     scope = publication.get("approval_scope") or PUBLICATION_SCOPE_DEFAULT
+    # "Recorded for", not "applied to": the answer is on the record, and the
+    # next delivery is still approved by a person.
     scope_label = {"delivery": "This delivery only",
-                   "portfolio": "Future deliveries for this portfolio",
-                   "client": "Future deliveries for this client"}.get(scope, scope)
+                   "portfolio": "Noted for this portfolio",
+                   "client": "Noted for this client"}.get(scope, scope)
     return {
         "key": STEP_PUBLISHED,
         "status": COMPLETE,
@@ -451,7 +467,7 @@ def _published_step(run: WorkflowRun,
             _fact("Version", publication.get("version")),
             _fact("Became the latest version",
                   "Yes" if artefacts.get("latest") else "Yes"),
-            _fact("Decision applied to", scope_label),
+            _fact("Decision recorded for", scope_label),
             _fact("Audit reference", publication.get("publication_id")),
         ]),
         "outputs": outputs,

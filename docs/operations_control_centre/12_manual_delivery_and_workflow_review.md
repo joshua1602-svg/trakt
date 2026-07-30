@@ -91,6 +91,27 @@ The narrowest production-safe version of the intended flow:
    by the existing intake path. No business logic was duplicated.
 6. The screen redirects to the resulting workflow.
 
+### Both doors must agree on the delivery
+
+A manual delivery is filed where an automated one would be, so the Event Grid
+trigger sees it too. If the two routes identified that location as *different*
+deliveries, the same files would split across two input packs — each incomplete,
+neither publishable.
+
+`OpsEngine.automated_identity` replays the automated derivation on the exact
+location about to be written: the production path parser reads the location
+back, and `occ_intake.outcome_for_source` — the trigger's own workflow rule,
+promoted to a public name so there is one rule in one place — chooses the
+workflow. `_require_converged_identity` refuses the upload unless the resulting
+`deterministic_batch_id` is the pack the operator is uploading into. The check
+runs **before the first byte is written**, and the refusal is audited
+(`manual_delivery_refused`).
+
+In practice this catches the one real divergence: an operator asking for the
+ESMA Annex 2 delivery on a book the source registry does not flag as
+regime-required (or the reverse). The operator is told which one the automated
+route would prepare, in plain language, and nothing is left half-written.
+
 The old free-text path route is kept for server-side tooling but is now
 **fail-closed**: administrator-only, and refused unless the location resolves
 inside a directory an administrator has allow-listed
@@ -137,9 +158,16 @@ confirmation.
 
 Approval scope is `delivery | portfolio | client`
 (`contracts.PUBLICATION_SCOPES`); the platform-wide scope is absent from the
-screen **and** refused by `OpsEngine.approve_publication`. The scope is recorded
-on the publication and in the hash-chained audit trail; it does not widen what
-the call publishes.
+screen **and** refused by `OpsEngine.approve_publication`.
+
+**The scope is recorded, not enforced.** It is written to the publication and
+the hash-chained audit trail, and nothing reads it back to approve a later
+delivery. The wording says exactly that — "Trakt records your answer so it is on
+the delivery's record. It does not publish anything on its own — every delivery
+is approved by a person." A test asserts that no option explanation or
+consequence sentence promises automatic future approval, so the wording cannot
+drift ahead of the behaviour. If enforcement is added later, that test is where
+the promise should be updated.
 
 A queue item now opens the delivery it belongs to. `/reviews/{id}` still works:
 it forwards to the workflow when the question belongs to one, and answers the

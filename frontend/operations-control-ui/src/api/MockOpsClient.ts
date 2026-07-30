@@ -814,23 +814,28 @@ export class MockOpsClient implements OpsClient {
             ],
             question: "Publish this delivery as the latest official version?",
             scope_question: "Should Trakt remember this decision for future deliveries?",
+            scope_note:
+              "Trakt records your answer so it is on the delivery's record. It does not " +
+              "publish anything on its own — every delivery is approved by a person.",
             scopes: [
               {
                 value: "delivery",
                 label: "No — this delivery only",
-                explanation: "Trakt will ask again for the next delivery.",
+                explanation: "Nothing is carried forward. Trakt will ask again next time.",
               },
               {
                 value: "portfolio",
                 label: "Yes — future deliveries for this portfolio",
                 explanation:
-                  "Trakt will apply this decision to this portfolio's future deliveries.",
+                  "Your answer is recorded against this portfolio. Someone still approves " +
+                  "each delivery.",
               },
               {
                 value: "client",
                 label: "Yes — future deliveries for this client",
                 explanation:
-                  "Trakt will apply this decision to every portfolio belonging to this client.",
+                  "Your answer is recorded against this client. Someone still approves " +
+                  "each delivery.",
               },
             ],
             default_scope: "delivery",
@@ -840,8 +845,12 @@ export class MockOpsClient implements OpsClient {
               "official version.",
             scope_consequences: {
               delivery: "This decision applies only to this delivery.",
-              portfolio: `This decision will also apply to future deliveries for ${workflow.portfolio_id}.`,
-              client: `This decision will also apply to future deliveries for ${workflow.client_id}.`,
+              portfolio:
+                `Your answer is also recorded against future deliveries for ` +
+                `${workflow.portfolio_id}, which are still approved one at a time.`,
+              client:
+                `Your answer is also recorded against future deliveries for ` +
+                `${workflow.client_id}, which are still approved one at a time.`,
             },
             version: publication?.version ?? null,
           },
@@ -861,12 +870,12 @@ export class MockOpsClient implements OpsClient {
                 { label: "Published", value: publication?.published_at ?? "" },
                 { label: "Published by", value: publication?.approved_by ?? "" },
                 {
-                  label: "Decision applied to",
+                  label: "Decision recorded for",
                   value:
                     this.approvalScopes.get(workflow.workflow_id) === "portfolio"
-                      ? "Future deliveries for this portfolio"
+                      ? "Noted for this portfolio"
                       : this.approvalScopes.get(workflow.workflow_id) === "client"
-                        ? "Future deliveries for this client"
+                        ? "Noted for this client"
                         : "This delivery only",
                 },
                 { label: "Audit reference", value: publication?.publication_id ?? "" },

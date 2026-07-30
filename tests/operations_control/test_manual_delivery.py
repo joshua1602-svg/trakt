@@ -233,6 +233,120 @@ class TestDuplicates:
         assert exc.value.code == "OPS_BATCH_ALREADY_STARTED"
 
 
+class TestBothDoorsAgreeOnTheDelivery:
+    """A manual delivery is filed where an automated one would be, so the
+    trigger sees it too. If the two routes would call it different deliveries
+    the pack splits in half — so the upload is refused before anything is
+    written, not reconciled afterwards."""
+
+    @staticmethod
+    def _register(source_registry, portfolio, *, regime):
+        from apps.blob_trigger_app.source_registry import SourceRecord
+        source_registry.upsert(SourceRecord(
+            client_id="client_a", source_portfolio_id=portfolio,
+            dataset="funded", frequency="monthly", regime_required=regime))
+
+    def test_the_two_routes_derive_the_same_identity(self, store,
+                                                     source_registry, tmp_path):
+        engine = _mk(store, source_registry, tmp_path)
+        batch = _batch(engine)
+        prefix = manual_intake.derive_raw_prefix(
+            client_id="client_a", portfolio_id="direct_001",
+            reporting_period="2026-06-30", container="raw-v2")
+        automated = engine.automated_identity(prefix, "raw-v2")
+        assert automated["batch_id"] == batch["batch_id"]
+        assert automated["client_id"] == "client_a"
+        assert automated["portfolio_id"] == "direct_001"
+        assert automated["reporting_period"] == "2026-06-30"
+        assert automated["dataset"] == "funded"
+        assert automated["workflow_type"] == batch["workflow_type"]
+
+    def test_the_same_agreement_holds_for_a_pipeline_delivery(
+            self, store, source_registry, tmp_path):
+        engine = _mk(store, source_registry, tmp_path)
+        batch = engine.create_batch(
+            client_id="client_a", portfolio_id="direct_001",
+            reporting_date="2026-06-30", workflow_type="mi",
+            created_by="alice", auto_start_when_ready=True, dataset="pipeline")
+        prefix = manual_intake.derive_raw_prefix(
+            client_id="client_a", portfolio_id="direct_001",
+            reporting_period="2026-06-30", dataset="pipeline",
+            container="raw-v2")
+        assert engine.automated_identity(prefix, "raw-v2")["batch_id"] == \
+            batch["batch_id"]
+
+    def test_asking_for_the_annex_on_a_book_that_does_not_report_it_is_refused(
+            self, store, source_registry, tmp_path):
+        """The automated route would prepare management information for this
+        book, so an Annex 2 pack created by hand would never be joined by the
+        files the trigger registers."""
+        engine = _mk(store, source_registry, tmp_path)
+        self._register(source_registry, "direct_001", regime=False)
+        batch = _batch(engine, workflow_type="mi_annex2")
+        with pytest.raises(OpsError) as exc:
+            engine.upload_batch_files(
+                client_id="client_a", batch_id=batch["batch_id"],
+                uploads=[("loan_tape_2026.csv", TAPE)], received_by="alice")
+        assert exc.value.code == "OPS_IDENTITY_DIVERGENCE"
+        assert "management information only" in exc.value.message
+
+    def test_a_regime_book_refuses_a_management_information_only_pack(
+            self, store, source_registry, tmp_path):
+        engine = _mk(store, source_registry, tmp_path)
+        self._register(source_registry, "direct_001", regime=True)
+        batch = _batch(engine, workflow_type="mi")
+        with pytest.raises(OpsError) as exc:
+            engine.upload_batch_files(
+                client_id="client_a", batch_id=batch["batch_id"],
+                uploads=[("loan_tape_2026.csv", TAPE)], received_by="alice")
+        assert exc.value.code == "OPS_IDENTITY_DIVERGENCE"
+        assert "ESMA Annex 2" in exc.value.message
+
+    def test_a_refusal_writes_nothing_and_is_audited(self, store,
+                                                     source_registry, tmp_path):
+        engine = _mk(store, source_registry, tmp_path)
+        self._register(source_registry, "direct_001", regime=True)
+        batch = _batch(engine, workflow_type="mi")
+        with pytest.raises(OpsError):
+            engine.upload_batch_files(
+                client_id="client_a", batch_id=batch["batch_id"],
+                uploads=[("loan_tape_2026.csv", TAPE)], received_by="alice")
+
+        # Nothing reached storage, nothing reached the pack, and the refusal is
+        # on the record.
+        assert store.storage.list("blob://raw-v2") == []
+        reloaded = engine.intake.load_batch("client_a", batch["batch_id"])
+        assert reloaded["files"] == []
+        assert reloaded["source_prefix"] == ""
+        events = [a for a in store.list_audit("client_a")
+                  if a["event"] == "manual_delivery_refused"]
+        assert events and events[0]["detail"]["reason"] == "identity_divergence"
+        assert store.verify_audit_chain("client_a")
+
+    def test_a_matching_choice_still_goes_through(self, store, source_registry,
+                                                  tmp_path):
+        engine = _mk(store, source_registry, tmp_path)
+        self._register(source_registry, "direct_001", regime=True)
+        batch = _batch(engine, workflow_type="mi_annex2")
+        result = engine.upload_batch_files(
+            client_id="client_a", batch_id=batch["batch_id"],
+            uploads=[("loan_tape_2026.csv", TAPE)], received_by="alice")
+        assert result["files"], "an agreed delivery must not be refused"
+
+    def test_the_operator_message_never_leaks_a_location(self, store,
+                                                         source_registry,
+                                                         tmp_path):
+        from operations_control.language import is_operator_safe
+        engine = _mk(store, source_registry, tmp_path)
+        self._register(source_registry, "direct_001", regime=True)
+        batch = _batch(engine, workflow_type="mi")
+        with pytest.raises(OpsError) as exc:
+            engine.upload_batch_files(
+                client_id="client_a", batch_id=batch["batch_id"],
+                uploads=[("loan_tape_2026.csv", TAPE)], received_by="alice")
+        assert is_operator_safe(exc.value.message)
+
+
 # --------------------------------------------------------------------------- #
 # The HTTP surface
 # --------------------------------------------------------------------------- #

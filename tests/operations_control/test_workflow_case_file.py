@@ -128,6 +128,26 @@ class TestApprovalStep:
         assert "global" not in values
         assert not any("All of Trakt" in s["label"] for s in approval["scopes"])
 
+    def test_the_wording_promises_only_what_the_system_does(self, ready):
+        """``remember_scope`` is RECORDED, not enforced: nothing reads it back
+        to approve a later delivery. Until something does, no wording here may
+        suggest a future delivery will publish itself."""
+        approval = next(s for s in _workflow(ready)["steps"]
+                        if s["key"] == "publication_approval")["approval"]
+        assert "does not publish anything on its own" in approval["scope_note"]
+        assert "approved by a person" in approval["scope_note"]
+
+        text = " ".join([approval["scope_note"],
+                         *(s["explanation"] for s in approval["scopes"]),
+                         *approval["scope_consequences"].values()])
+        for promise in ("will apply this decision", "automatically",
+                        "will be approved", "without asking"):
+            assert promise not in text.lower(), (
+                f"the approval wording promises {promise!r}, which the system "
+                "does not do")
+        for wider in ("portfolio", "client"):
+            assert "still approved" in approval["scope_consequences"][wider]
+
     def test_the_consequence_is_stated_before_confirming(self, ready):
         approval = next(s for s in _workflow(ready)["steps"]
                         if s["key"] == "publication_approval")["approval"]
@@ -191,7 +211,7 @@ class TestPublishedStep:
         assert published["status"] == "complete"
         facts = {f["label"]: f["value"] for f in published["facts"]}
         assert facts["Published by"] == "Alice"
-        assert facts["Decision applied to"] == "Future deliveries for this client"
+        assert facts["Decision recorded for"] == "Noted for this client"
         assert facts["Audit reference"].startswith("pub_")
         assert steps["publication_approval"]["status"] == "complete"
 

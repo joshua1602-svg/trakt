@@ -171,8 +171,13 @@ function ApprovalPanel({
           </h4>
 
           <div>
-            <h5 className="mb-2 text-sm font-semibold text-stone-700">{approval.scope_question}</h5>
-            <div className="space-y-2">
+            <h5 className="text-sm font-semibold text-stone-700">{approval.scope_question}</h5>
+            {approval.scope_note && (
+              <p className="mb-2 mt-1 text-xs leading-relaxed text-stone-500">
+                {approval.scope_note}
+              </p>
+            )}
+            <div className="mt-2 space-y-2">
               {approval.scopes.map((option) => (
                 <label
                   key={option.value}

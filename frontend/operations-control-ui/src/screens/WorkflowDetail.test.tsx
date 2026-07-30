@@ -143,6 +143,23 @@ describe("publication approval inside the workflow", () => {
     expect(chosen.checked).toBe(true);
   });
 
+  it("does not promise automatic approval it cannot deliver", async () => {
+    renderWorkflow(new MockOpsClient(0), "/workflows/wf-1002");
+    const approval = await approvalStep();
+
+    // The answer is recorded; it does not publish anything by itself, and the
+    // wording says so rather than implying a future delivery approves itself.
+    expect(
+      within(approval).getByText(/does not publish anything on its own/),
+    ).toBeInTheDocument();
+    expect(
+      within(approval).getByText(/every delivery is approved by a person/i),
+    ).toBeInTheDocument();
+    expect(within(approval).getAllByText(/Someone still approves each delivery/).length).toBe(2);
+    expect(within(approval).queryByText(/will apply this decision/i)).toBeNull();
+    expect(within(approval).queryByText(/automatically/i)).toBeNull();
+  });
+
   it("never offers a platform-wide scope on a single delivery", async () => {
     renderWorkflow(new MockOpsClient(0), "/workflows/wf-1002");
 
@@ -163,7 +180,9 @@ describe("publication approval inside the workflow", () => {
       within(approval).getByRole("radio", { name: /future deliveries for this portfolio/i }),
     );
     // The consequence updates with the scope, before anything is confirmed.
-    expect(within(approval).getByText(/also apply to future deliveries for/)).toBeInTheDocument();
+    expect(
+      within(approval).getByText(/also recorded against future deliveries for/),
+    ).toBeInTheDocument();
 
     await user.click(within(approval).getByRole("button", { name: "Approve and publish" }));
     await user.click(await screen.findByRole("button", { name: "Publish this delivery" }));

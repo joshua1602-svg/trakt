@@ -39,9 +39,14 @@ def _engine():
     return OpsEngine(OpsStore.from_env())
 
 
-def _outcome_for(engine, client_id: str, portfolio_id: str,
-                 dataset: str) -> str:
+def outcome_for_source(engine, client_id: str, portfolio_id: str,
+                       dataset: str) -> str:
     """Workflow selection for automated arrivals.
+
+    Public because it is the SHARED rule: the Operations Control Centre's manual
+    delivery route replays it to prove that a pack an operator creates by hand
+    would be identified the same way if the same files arrived automatically.
+    There is one rule, in one place.
 
     Two rules, in this order:
 
@@ -104,8 +109,8 @@ def handle_arrival(container: str, blob_path: str, *,
 
     engine = _engine()
     client_id = parsed.client_id
-    outcome = _outcome_for(engine, client_id, parsed.source_portfolio_id,
-                           parsed.dataset)
+    outcome = outcome_for_source(engine, client_id,
+                                 parsed.source_portfolio_id, parsed.dataset)
     # `dataset` keeps a pipeline arrival in its own input pack. Without it the
     # pack is keyed on client + portfolio + period + workflow only, so a pipeline
     # file and a funded file for the same portfolio and period that both resolve

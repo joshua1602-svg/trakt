@@ -128,6 +128,8 @@ export interface ApprovalPanel {
   evidence_lines: string[];
   question: string;
   scope_question: string;
+  /** What "remember" actually means today. Recorded, not acted on. */
+  scope_note?: string;
   scopes: ApprovalScopeOption[];
   default_scope: string;
   consequence: string;
