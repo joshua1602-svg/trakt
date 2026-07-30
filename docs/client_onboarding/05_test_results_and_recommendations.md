@@ -21,6 +21,36 @@ Both fail with "The generated file did not pass the regulator's format check"
 in the Annex 2 XML builder against the real XSD. They fail identically before
 and after this change.
 
+## Whole repository
+
+The repository suite has a substantial pre-existing failure population, so a
+count on its own proves nothing. The suite was run twice — once on a worktree at
+`a945c0f` (the commit before this work) and once on the branch — and the failure
+lists compared:
+
+```
+$ python -m pytest tests/ -q --tb=no          # baseline a945c0f
+165 failed, 3021 passed, 32 skipped, 10 errors
+
+$ python -m pytest tests/ -q --tb=no          # branch
+165 failed, 3080 passed, 32 skipped, 10 errors
+
+$ comm -13 baseline_failures branch_failures  # regressions
+(empty)
+$ comm -23 baseline_failures branch_failures  # newly fixed
+(empty)
+```
+
+The 175 failing/erroring tests are **identical sets**. Not one test fails on the
+branch that passed before it. The only difference is +59 passing — the new
+onboarding tests.
+
+Those 165 pre-existing failures are outside this work. A traced example:
+`tests/test_delivery_xml_agent_review.py` errors with `KeyError: 'preview_policy'`
+because `config/delivery/xml_preview_policy.yaml` does not carry that key —
+a file neither commit touches. They are worth their own investigation, but they
+are not this change.
+
 ### What the new tests cover
 
 | Area | Tests | Notable assertions |
