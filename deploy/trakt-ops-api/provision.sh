@@ -116,9 +116,21 @@ echo ">> Restart to apply startup command + settings"
 az webapp restart -g "$RESOURCE_GROUP" -n "$APP_NAME" -o none
 
 echo ">> Done."
-echo "   Health:  https://${APP_NAME}.azurewebsites.net/health"
-echo "   Who am I: curl -H 'X-Operator-Token: <admin-token>' \\"
-echo "               https://${APP_NAME}.azurewebsites.net/ops/me"
-echo "   React:   build the OCC UI with"
-echo "               VITE_OPS_API_URL=https://${APP_NAME}.azurewebsites.net"
+# Read the real hostname rather than assembling <app>.azurewebsites.net: a site
+# created with secure unique default hostnames answers only at
+# <app>-<hash>.<region>.azurewebsites.net, so a guessed URL printed here would
+# send the operator to a name that does not resolve.
+APP_HOST="$(az webapp show -g "$RESOURCE_GROUP" -n "$APP_NAME" \
+             --query defaultHostName -o tsv 2>/dev/null || true)"
+if [ -z "${APP_HOST:-}" ]; then
+  echo "   WARNING: could not read the site's hostname. Find it with:"
+  echo "     az webapp show -g $RESOURCE_GROUP -n $APP_NAME --query defaultHostName -o tsv"
+else
+  echo "   Public hostname: $APP_HOST"
+  echo "   Health:   https://${APP_HOST}/health"
+  echo "   Who am I: curl -H 'X-Operator-Token: <admin-token>' \\"
+  echo "               https://${APP_HOST}/ops/me"
+  echo "   React:    build the OCC UI with"
+  echo "               VITE_OPS_API_URL=https://${APP_HOST}"
+fi
 echo "   trakt-mi-api was NOT touched by this script."
