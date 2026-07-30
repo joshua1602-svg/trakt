@@ -41,7 +41,7 @@ export function BatchDetailScreen() {
     [id, clientParam],
   );
 
-  const [folder, setFolder] = useState("");
+  const [chosen, setChosen] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
 
   // Poll while the server is still receiving, classifying or running.
@@ -65,9 +65,9 @@ export function BatchDetailScreen() {
   }
 
   async function handleAddFiles(current: Batch) {
-    if (!folder.trim()) return;
-    await run(() => client.registerBatchFile(current.batch_id, folder.trim(), clientParam));
-    setFolder("");
+    if (chosen.length === 0) return;
+    await run(() => client.uploadBatchFiles(current.batch_id, chosen, clientParam));
+    setChosen([]);
   }
 
   const canStart = batch?.status === "ready" && !batch.auto_start_when_ready;
@@ -198,17 +198,21 @@ export function BatchDetailScreen() {
             <h2 className="mb-1 text-sm font-semibold text-stone-700">
               {copy.batch.addFilesHeading}
             </h2>
-            <p className="mb-2 text-xs text-stone-500">{copy.newWorkflow.folderHelper}</p>
-            <div className="flex gap-2">
+            <p className="mb-2 text-xs leading-relaxed text-stone-500">
+              {copy.newWorkflow.uploadHelper}
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row">
               <input
-                aria-label={copy.newWorkflow.folderLabel}
-                value={folder}
-                onChange={(event) => setFolder(event.target.value)}
-                className="w-full rounded-xl border border-stone-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                aria-label={copy.newWorkflow.uploadLabel}
+                type="file"
+                multiple
+                accept=".csv,.xlsx,.xls,.xlsm"
+                onChange={(event) => setChosen(Array.from(event.target.files ?? []))}
+                className="block w-full rounded-xl border border-stone-300 px-3 py-2.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-stone-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-stone-700 hover:file:bg-stone-200"
               />
               <button
                 type="button"
-                disabled={busy || !folder.trim()}
+                disabled={busy || chosen.length === 0}
                 onClick={() => void handleAddFiles(batch)}
                 className="shrink-0 rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40"
               >

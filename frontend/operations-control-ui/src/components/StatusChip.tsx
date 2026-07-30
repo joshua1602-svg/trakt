@@ -34,6 +34,11 @@ const STYLES: Record<string, string> = {
   not_checked: "bg-amber-50 text-amber-800 border-amber-200 border-dashed",
   failed_checks: "bg-rose-50 text-rose-700 border-rose-200",
   superseded: "bg-stone-100 text-stone-500 border-stone-200",
+  // delivery workflow steps
+  complete: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  current: "bg-blue-50 text-blue-700 border-blue-200",
+  pending: "bg-stone-100 text-stone-500 border-stone-200",
+  not_applicable: "bg-stone-50 text-stone-400 border-stone-200 border-dashed",
   // grey
   waiting: "bg-stone-100 text-stone-500 border-stone-200",
   received: "bg-stone-100 text-stone-600 border-stone-200",

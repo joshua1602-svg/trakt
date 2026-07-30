@@ -12,7 +12,7 @@ export const copy = {
     rules: "Rules",
     history: "History",
     admin: "Platform configuration",
-    startNew: "Start something new",
+    startNew: "Create a manual delivery",
   },
 
   signIn: {
@@ -60,20 +60,25 @@ export const copy = {
   },
 
   newWorkflow: {
-    title: "Start something new",
-    outcomeHeading: "What would you like Trakt to prepare?",
+    title: "Create a manual delivery",
+    intro:
+      "Use this when files are not arriving through the normal automated intake process, " +
+      "or when you need an ad hoc, backdated or replacement delivery.",
+    stepLabel: "Step",
+    outcomeHeading: "What should Trakt prepare?",
     outcomeMi: "MI Reporting",
     outcomeMiHelp: "The regular management information pack.",
     outcomeAnnex: "MI Reporting + ESMA Annex 2 delivery",
     outcomeAnnexHelp: "The regular pack plus the regulatory annex.",
-    bookHeading: "Which book are these files for?",
+    bookHeading: "Which book?",
     bookFunded: "Funded book",
     bookFundedHelp: "Loans already advanced. Regulatory reporting is prepared from this book.",
     bookPipeline: "Pipeline",
     bookPipelineHelp: "Cases not yet funded. Management information only — never a regulatory delivery.",
     bookPipelineLocksMi:
       "Pipeline is management information only, so the regulatory annex is not available for it.",
-    detailsHeading: "Who is this for?",
+    detailsHeading: "Who is it for?",
+    periodHeading: "Which reporting period?",
     clientLabel: "Client",
     clientPlaceholder: "Choose a client",
     newClientOption: "New client…",
@@ -81,10 +86,18 @@ export const copy = {
     portfolioLabel: "Portfolio",
     periodLabel: "Reporting period",
     createButton: "Continue",
-    filesHeading: "Which files should Trakt use?",
-    folderLabel: "Where are the files?",
-    folderHelper: "Paste the location your files were saved to — a single file or a whole folder.",
-    addFilesButton: "Add the files",
+    filesHeading: "Upload files",
+    uploadLabel: "Choose the files to send",
+    uploadHelper:
+      "Send spreadsheets or comma-separated files. Trakt decides where they are filed, " +
+      "and only starts once the whole set has arrived safely.",
+    chosenFiles: "Ready to send",
+    noFilesChosen: "No files chosen yet.",
+    destinationHeading: "Where Trakt will file this",
+    confirmHeading: "Confirm and submit",
+    uploadButton: "Send the files",
+    uploading: "Sending…",
+    removeFile: "Remove",
   },
 
   batch: {
@@ -119,6 +132,8 @@ export const copy = {
   },
 
   workflow: {
+    caseFile: "Delivery workflow",
+    stepsHeading: "Where this delivery has got to",
     reviewDecisions: "Review decisions",
     runAgain: "Run again",
     approvePublish: "Approve and publish",
@@ -130,6 +145,25 @@ export const copy = {
     warningsHeading: "Worth knowing",
     blockersHeading: "What's in the way",
     notFound: "That workflow could not be found.",
+    filesHeading: "Files received",
+    fileSize: "Size",
+    fileArrived: "Arrived",
+    fileCheck: "Version check",
+    fileKind: "Recognised as",
+    answered: "Answers already given",
+    stillOpen: "Still to answer",
+    answeredBy: "Answered by",
+    outputsHeading: "What was produced",
+    noOutputs: "No outputs were recorded.",
+    openStep: "Open",
+    collapseStep: "Hide",
+    whatHappensNext: "What happens next",
+    nextPending: "This step has not started yet.",
+    nextNotApplicable: "This step does not apply to this delivery.",
+    approveHeading: "Ready to publish",
+    approveScopeHeading: "Should Trakt remember this decision for future deliveries?",
+    approveConfirm: "Publish this delivery",
+    evidenceHeading: "What Trakt is publishing",
   },
 
   reviews: {
@@ -352,6 +386,20 @@ export const copy = {
       subtitle: "The platform-wide settings every client shares.",
     },
 
+    // The operator-first view of an asset package. The administrative and
+    // technical detail is still here — it is one disclosure away, not gone.
+    readiness: {
+      heading: "Can this configuration safely process a delivery?",
+      state: "Readiness",
+      warnings: "Worth knowing before you rely on this",
+      noWarnings: "Nothing to flag.",
+      technicalHeading: "Administration and technical details",
+      show: "Show administration and technical details",
+      hide: "Hide administration and technical details",
+      configurationSuffix: "configuration",
+      identifier: "Package identifier",
+    },
+
     assets: {
       title: "Asset configuration",
       subtitle: "The product settings that describe how each asset type behaves.",
@@ -359,6 +407,7 @@ export const copy = {
       sourceSemantics: "How source data is read",
       mappingDefaults: "Default settings",
       taxonomies: "Groupings",
+      issuePolicy: "Issue handling rules",
       profiles: "Product profiles",
       settings: "Settings",
       empty: "No asset packages are configured.",
@@ -410,6 +459,11 @@ export const copy = {
     classifying: "Looking at the files",
     review_required: "Needs review",
     configuration_required: "Configuration needed",
+    // Delivery workflow steps.
+    complete: "Complete",
+    current: "Current",
+    pending: "Pending",
+    not_applicable: "Not applicable",
     // Configuration package lifecycle (the administrator area).
     draft: "Draft",
     active: "Active",

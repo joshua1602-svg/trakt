@@ -409,7 +409,7 @@ class TestDatasetRouting:
         engine, occ_intake = self._bridge(store, source_registry, tmp_path,
                                           monkeypatch)
         source_registry.upsert(self._record(portfolio, "funded", "monthly", True))
-        assert occ_intake._outcome_for(engine, "client_a", portfolio,
+        assert occ_intake.outcome_for_source(engine, "client_a", portfolio,
                                        "funded") == "mi_annex2"
 
     def test_acquired_registered_ad_hoc_keeps_annex2_when_reported_monthly(
@@ -421,7 +421,7 @@ class TestDatasetRouting:
         source_registry.upsert(
             self._record("acquired_001", "funded", "ad_hoc", True))
         # The monthly delivery that follows must still be Annex 2.
-        assert occ_intake._outcome_for(engine, "client_a", "acquired_001",
+        assert occ_intake.outcome_for_source(engine, "client_a", "acquired_001",
                                        "funded") == "mi_annex2"
 
     def test_funded_book_not_flagged_is_mi(self, store, source_registry,
@@ -430,14 +430,14 @@ class TestDatasetRouting:
                                           monkeypatch)
         source_registry.upsert(
             self._record("direct_001", "funded", "monthly", False))
-        assert occ_intake._outcome_for(engine, "client_a", "direct_001",
+        assert occ_intake.outcome_for_source(engine, "client_a", "direct_001",
                                        "funded") == "mi"
 
     def test_unknown_portfolio_falls_back_to_mi(self, store, source_registry,
                                                 tmp_path, monkeypatch):
         engine, occ_intake = self._bridge(store, source_registry, tmp_path,
                                           monkeypatch)
-        assert occ_intake._outcome_for(engine, "client_a", "unknown_001",
+        assert occ_intake.outcome_for_source(engine, "client_a", "unknown_001",
                                        "funded") == "mi"
 
     # -- pipeline is strictly MI ------------------------------------------ #
@@ -451,7 +451,7 @@ class TestDatasetRouting:
             self._record("direct_001", "pipeline", "weekly", True))
         source_registry.upsert(
             self._record("direct_001", "funded", "monthly", True))
-        assert occ_intake._outcome_for(engine, "client_a", "direct_001",
+        assert occ_intake.outcome_for_source(engine, "client_a", "direct_001",
                                        "pipeline") == "mi"
 
     def test_forecast_is_also_mi_only(self, store, source_registry, tmp_path,
@@ -460,7 +460,7 @@ class TestDatasetRouting:
                                           monkeypatch)
         source_registry.upsert(
             self._record("direct_001", "funded", "monthly", True))
-        assert occ_intake._outcome_for(engine, "client_a", "direct_001",
+        assert occ_intake.outcome_for_source(engine, "client_a", "direct_001",
                                        "forecast") == "mi"
 
     # -- pack identity ------------------------------------------------------ #

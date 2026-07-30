@@ -58,11 +58,14 @@ export class HttpOpsClient implements OpsClient {
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
     let response: Response;
+    // A multipart body carries its own boundary — setting Content-Type here
+    // would corrupt it, so the browser is left to set it.
+    const isForm = typeof FormData !== "undefined" && init?.body instanceof FormData;
     try {
       response = await fetch(`${this.baseUrl}${path}`, {
         ...init,
         headers: {
-          "Content-Type": "application/json",
+          ...(isForm ? {} : { "Content-Type": "application/json" }),
           "X-Operator-Token": getToken() ?? "",
           ...(init?.headers ?? {}),
         },
@@ -144,10 +147,14 @@ export class HttpOpsClient implements OpsClient {
     return body.batch;
   }
 
-  async registerBatchFile(batchId: string, path: string, client?: string): Promise<Batch> {
-    const body = await this.post<{ batch: Batch }>(
-      `/ops/batches/${encodeURIComponent(batchId)}/files${query({ client })}`,
-      { path },
+  /** Multipart upload. The destination is the server's decision, not ours. */
+  async uploadBatchFiles(batchId: string, files: File[], client?: string): Promise<Batch> {
+    const form = new FormData();
+    for (const file of files) form.append("files", file, file.name);
+    // No Content-Type header: the browser sets the multipart boundary itself.
+    const body = await this.request<{ batch: Batch }>(
+      `/ops/batches/${encodeURIComponent(batchId)}/upload${query({ client })}`,
+      { method: "POST", body: form },
     );
     return body.batch;
   }
@@ -195,10 +202,10 @@ export class HttpOpsClient implements OpsClient {
     return body.workflow;
   }
 
-  async publishWorkflow(workflowId: string): Promise<Publication> {
+  async publishWorkflow(workflowId: string, rememberScope?: string): Promise<Publication> {
     const body = await this.post<{ publication: Publication }>(
       `/ops/workflows/${encodeURIComponent(workflowId)}/publish`,
-      {},
+      { remember_scope: rememberScope ?? "delivery" },
     );
     return body.publication;
   }

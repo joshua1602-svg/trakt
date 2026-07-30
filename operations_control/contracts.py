@@ -44,6 +44,17 @@ BATCH_DATASET_DEFAULT = "funded"
 #: backwards compatibility, but it is not something to start a new delivery as.
 BATCH_DATASETS = (BATCH_DATASET_DEFAULT, "pipeline")
 
+#: How far a publication approval is recorded as reaching. Deliberately does NOT
+#: include a platform-wide option: approving one delivery is not an occasion to
+#: set policy for every client, and any such mechanism belongs to the governed
+#: administrator area, not to a delivery screen.
+PUBLICATION_SCOPE_DEFAULT = "delivery"
+PUBLICATION_SCOPES = (PUBLICATION_SCOPE_DEFAULT, "portfolio", "client")
+
+#: How often a delivery arrives, when nothing says otherwise. Used only to derive
+#: the governed source location — never part of the input pack's identity.
+BATCH_FREQUENCY_DEFAULT = "monthly"
+
 #: Datasets that can carry a regime (ESMA Annex 2) delivery. Everything else is
 #: an MI view. Declared here so both doors into intake — the blob trigger and the
 #: OCC — answer the regime question the same way.

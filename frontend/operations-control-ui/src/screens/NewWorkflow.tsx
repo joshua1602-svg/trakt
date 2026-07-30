@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { FileText, Info, X } from "lucide-react";
 import clsx from "clsx";
 import { useOpsClient } from "@/api/context";
 import type { Batch, BatchDataset, WorkflowOutcome } from "@/api/types";
@@ -11,8 +12,31 @@ import { errorMessage } from "@/lib/useLoad";
 
 const NEW_CLIENT = "__new__";
 
-function SectionCard({ children }: { children: React.ReactNode }) {
-  return <section className="rounded-2xl border border-stone-200 bg-white p-6">{children}</section>;
+/**
+ * One numbered step of the guided initiation flow. The numbers are the
+ * operator's map of the task, not a wizard: every step stays on screen and
+ * stays readable once it has been answered.
+ */
+function SectionCard({
+  step,
+  heading,
+  children,
+}: {
+  step: number;
+  heading: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-2xl border border-stone-200 bg-white p-6">
+      <div className="mb-4 flex items-baseline gap-3">
+        <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-stone-400">
+          {copy.newWorkflow.stepLabel} {step}
+        </span>
+        <h2 className="text-lg font-semibold text-stone-900">{heading}</h2>
+      </div>
+      {children}
+    </section>
+  );
 }
 
 export function NewWorkflowScreen() {
@@ -20,17 +44,17 @@ export function NewWorkflowScreen() {
   const navigate = useNavigate();
   const toast = useToast();
 
-  // Step a — outcome
+  // Step 1 — what should Trakt prepare?
   const [outcome, setOutcome] = useState<WorkflowOutcome>("mi");
 
-  // Step a2 — which book. Regime reporting is prepared from the funded book
+  // Step 2 — which book. Regime reporting is prepared from the funded book
   // only, so choosing Pipeline forces MI and disables the annex option. The
   // backend refuses the combination as well — this is convenience, not the
   // control.
   const [dataset, setDataset] = useState<BatchDataset>("funded");
   const regimeAvailable = dataset === "funded";
 
-  // Step b — who is this for
+  // Steps 3 and 4 — who is it for, and which reporting period
   const [clients, setClients] = useState<string[]>([]);
   const [clientChoice, setClientChoice] = useState("");
   const [newClientName, setNewClientName] = useState("");
@@ -38,10 +62,13 @@ export function NewWorkflowScreen() {
   const [period, setPeriod] = useState("");
   const [creating, setCreating] = useState(false);
 
-  // Step c — where are the files
+  // Steps 5 and 6 — upload the files, then confirm. The browser sends file
+  // CONTENT only; the destination is derived by the server from the fields
+  // above, so there is nowhere here to type a storage location.
   const [batch, setBatch] = useState<Batch | null>(null);
-  const [folder, setFolder] = useState("");
-  const [registering, setRegistering] = useState(false);
+  const [chosen, setChosen] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   const clientId = clientChoice === NEW_CLIENT ? newClientName.trim() : clientChoice;
 
@@ -67,7 +94,9 @@ export function NewWorkflowScreen() {
         reporting_date: period,
         workflow_type: outcome,
         dataset,
-        auto_start_when_ready: false,
+        // Sending the files IS the operator's confirmation, so the pack starts
+        // as soon as the existing intake path judges it complete.
+        auto_start_when_ready: true,
       });
       setBatch(created);
     } catch (err) {
@@ -77,26 +106,46 @@ export function NewWorkflowScreen() {
     }
   }
 
-  async function handleAddFiles() {
-    if (!batch || !folder.trim()) return;
-    setRegistering(true);
+  function addFiles(list: FileList | null) {
+    if (!list) return;
+    const incoming = Array.from(list);
+    setChosen((current) => [
+      ...current,
+      ...incoming.filter((f) => !current.some((c) => c.name === f.name && c.size === f.size)),
+    ]);
+    if (fileInput.current) fileInput.current.value = "";
+  }
+
+  async function handleUpload() {
+    if (!batch || chosen.length === 0) return;
+    setUploading(true);
     try {
-      await client.registerBatchFile(batch.batch_id, folder.trim(), batch.client_id);
-      navigate(`/batches/${batch.batch_id}?client=${encodeURIComponent(batch.client_id)}`);
+      const updated = await client.uploadBatchFiles(batch.batch_id, chosen, batch.client_id);
+      setBatch(updated);
+      setChosen([]);
+      // The intake path decides whether the pack is complete. When it is, a
+      // workflow already exists — go straight to it.
+      if (updated.workflow_id) {
+        navigate(`/workflows/${updated.workflow_id}`);
+      } else {
+        navigate(`/batches/${updated.batch_id}?client=${encodeURIComponent(updated.client_id)}`);
+      }
     } catch (err) {
       toast.show(errorMessage(err), "error");
-      setRegistering(false);
+      setUploading(false);
     }
   }
 
   return (
     <Page title={copy.newWorkflow.title}>
       <div className="space-y-6">
-        {/* (a) Outcome */}
-        <SectionCard>
-          <h2 className="mb-4 text-lg font-semibold text-stone-900">
-            {copy.newWorkflow.outcomeHeading}
-          </h2>
+        <p className="flex items-start gap-2 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm leading-relaxed text-stone-600">
+          <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          {copy.newWorkflow.intro}
+        </p>
+
+        {/* 1 — What should Trakt prepare? */}
+        <SectionCard step={1} heading={copy.newWorkflow.outcomeHeading}>
           <div className="grid gap-3 sm:grid-cols-2">
             {(
               [
@@ -138,11 +187,8 @@ export function NewWorkflowScreen() {
           )}
         </SectionCard>
 
-        {/* (a2) Which book */}
-        <SectionCard>
-          <h2 className="mb-4 text-lg font-semibold text-stone-900">
-            {copy.newWorkflow.bookHeading}
-          </h2>
+        {/* 2 — Which book? */}
+        <SectionCard step={2} heading={copy.newWorkflow.bookHeading}>
           <div className="grid gap-3 sm:grid-cols-2">
             {(
               [
@@ -181,11 +227,8 @@ export function NewWorkflowScreen() {
           </div>
         </SectionCard>
 
-        {/* (b) Client, portfolio, period */}
-        <SectionCard>
-          <h2 className="mb-4 text-lg font-semibold text-stone-900">
-            {copy.newWorkflow.detailsHeading}
-          </h2>
+        {/* 3 and 4 — who is it for, and which reporting period */}
+        <SectionCard step={3} heading={copy.newWorkflow.detailsHeading}>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium text-stone-700" htmlFor="client">
@@ -233,6 +276,11 @@ export function NewWorkflowScreen() {
                 className="w-full rounded-xl border border-stone-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:opacity-70"
               />
             </div>
+          </div>
+        </SectionCard>
+
+        <SectionCard step={4} heading={copy.newWorkflow.periodHeading}>
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium text-stone-700" htmlFor="period">
                 {copy.newWorkflow.periodLabel}
@@ -260,37 +308,90 @@ export function NewWorkflowScreen() {
           )}
         </SectionCard>
 
-        {/* (c) Where are the files? */}
+        {/* 5 and 6 — upload, then confirm and submit */}
         {batch && (
-          <SectionCard>
-            <h2 className="mb-2 text-lg font-semibold text-stone-900">
-              {copy.newWorkflow.filesHeading}
-            </h2>
-            <div className="mb-5 flex flex-wrap items-center gap-3">
-              <StatusChip status={batch.status} label={batch.status_label} />
-              <p className="text-sm leading-relaxed text-stone-600">{batch.status_sentence}</p>
-            </div>
-            <label className="mb-1 block text-sm font-medium text-stone-700" htmlFor="folder">
-              {copy.newWorkflow.folderLabel}
-            </label>
-            <p className="mb-2 text-xs text-stone-500">{copy.newWorkflow.folderHelper}</p>
-            <div className="flex gap-2">
+          <>
+            <SectionCard step={5} heading={copy.newWorkflow.filesHeading}>
+              <div className="mb-5 flex flex-wrap items-center gap-3">
+                <StatusChip status={batch.status} label={batch.status_label} />
+                <p className="text-sm leading-relaxed text-stone-600">{batch.status_sentence}</p>
+              </div>
+
+              <label className="mb-1 block text-sm font-medium text-stone-700" htmlFor="files">
+                {copy.newWorkflow.uploadLabel}
+              </label>
+              <p className="mb-2 text-xs leading-relaxed text-stone-500">
+                {copy.newWorkflow.uploadHelper}
+              </p>
               <input
-                id="folder"
-                value={folder}
-                onChange={(event) => setFolder(event.target.value)}
-                className="w-full rounded-xl border border-stone-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                id="files"
+                ref={fileInput}
+                type="file"
+                multiple
+                accept=".csv,.xlsx,.xls,.xlsm"
+                onChange={(event) => addFiles(event.target.files)}
+                className="block w-full rounded-xl border border-stone-300 px-3 py-2.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-stone-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-stone-700 hover:file:bg-stone-200"
               />
+
+              <h3 className="mb-2 mt-5 text-sm font-semibold text-stone-700">
+                {copy.newWorkflow.chosenFiles}
+              </h3>
+              {chosen.length === 0 ? (
+                <p className="text-sm text-stone-400">{copy.newWorkflow.noFilesChosen}</p>
+              ) : (
+                <ul className="space-y-2">
+                  {chosen.map((file) => (
+                    <li
+                      key={`${file.name}-${file.size}`}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-4 py-2.5"
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <FileText className="h-4 w-4 shrink-0 text-stone-400" aria-hidden />
+                        <span className="truncate text-sm text-stone-800">{file.name}</span>
+                      </span>
+                      <button
+                        type="button"
+                        aria-label={`${copy.newWorkflow.removeFile} ${file.name}`}
+                        onClick={() => setChosen((c) => c.filter((f) => f !== file))}
+                        className="shrink-0 rounded-lg p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+                      >
+                        <X className="h-4 w-4" aria-hidden />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </SectionCard>
+
+            <SectionCard step={6} heading={copy.newWorkflow.confirmHeading}>
+              <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <div>
+                  <dt className="text-xs text-stone-500">{copy.newWorkflow.clientLabel}</dt>
+                  <dd className="mt-0.5 text-sm text-stone-900">{batch.client_id}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-stone-500">{copy.newWorkflow.portfolioLabel}</dt>
+                  <dd className="mt-0.5 text-sm text-stone-900">{batch.portfolio_id}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-stone-500">{copy.newWorkflow.periodLabel}</dt>
+                  <dd className="mt-0.5 text-sm text-stone-900">{batch.reporting_date}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-stone-500">{copy.newWorkflow.bookHeading}</dt>
+                  <dd className="mt-0.5 text-sm text-stone-900">{batch.dataset_label}</dd>
+                </div>
+              </dl>
               <button
                 type="button"
-                disabled={registering || !folder.trim()}
-                onClick={() => void handleAddFiles()}
-                className="shrink-0 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={uploading || chosen.length === 0}
+                onClick={() => void handleUpload()}
+                className="mt-6 rounded-xl bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {copy.newWorkflow.addFilesButton}
+                {uploading ? copy.newWorkflow.uploading : copy.newWorkflow.uploadButton}
               </button>
-            </div>
-          </SectionCard>
+            </SectionCard>
+          </>
         )}
       </div>
     </Page>

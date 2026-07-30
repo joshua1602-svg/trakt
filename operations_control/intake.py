@@ -24,8 +24,8 @@ import yaml
 
 from apps.blob_trigger_app.file_roles import classify_pack
 
-from .contracts import (BATCH_DATASET_DEFAULT, new_id, now_iso,
-                        stable_hash)
+from .contracts import (BATCH_DATASET_DEFAULT, BATCH_FREQUENCY_DEFAULT,
+                        new_id, now_iso, stable_hash)
 from .stores import OpsStore, _read_json, _write_json
 
 
@@ -60,6 +60,11 @@ class InputFileRecord:
     size: int
     received_at: str
     received_by_or_source: str
+    #: Governed source location this file arrived at (the raw container path for
+    #: both automated arrivals and manual uploads). Provenance only — it is
+    #: presented as the delivery's source location, never as a path the browser
+    #: may choose.
+    source_uri: str = ""
     recognised_file_type: str = ""    # semantic role
     recognised_schema: str = ""       # header-columns digest
     recognition_confidence: Optional[float] = None
@@ -134,7 +139,8 @@ class IntakeService:
                      workflow_type: str, created_by: str,
                      auto_start_when_ready: bool = False,
                      batch_id: Optional[str] = None,
-                     dataset: str = "") -> Dict[str, Any]:
+                     dataset: str = "",
+                     frequency: str = "") -> Dict[str, Any]:
         """Create (or return the existing open) batch for this context."""
         bid = batch_id or self.deterministic_batch_id(
             client_id=client_id, portfolio_id=portfolio_id,
@@ -165,6 +171,13 @@ class IntakeService:
             # by the identifier. Defaults to the funded book for packs created
             # without one (manual creation from the OCC).
             "dataset": dataset or BATCH_DATASET_DEFAULT,
+            # How often this delivery arrives. Recorded (not part of the pack
+            # identity) so the governed source location can be derived without
+            # the browser ever supplying one.
+            "frequency": frequency or BATCH_FREQUENCY_DEFAULT,
+            #: Governed source prefix files for this pack are filed under. Set
+            #: on first arrival; shown as the delivery's source location.
+            "source_prefix": "",
             "status": B_RECEIVING,
             "status_reason": "Files are still arriving.",
             "files": [],
@@ -200,8 +213,8 @@ class IntakeService:
     # -- file registration --------------------------------------------------- #
     def register_file(self, batch: Dict[str, Any], source_path: Path, *,
                       received_by_or_source: str,
-                      original_filename: Optional[str] = None
-                      ) -> Dict[str, Any]:
+                      original_filename: Optional[str] = None,
+                      source_uri: str = "") -> Dict[str, Any]:
         """Register one received file: stage, hash, dedupe. Legacy sentinel
         files are recorded as unsupported legacy artefacts and NEVER trigger
         anything."""
@@ -229,7 +242,8 @@ class IntakeService:
                 # Carry the dataset, or a late pipeline file would open its
                 # successor in the funded pack's key space — reintroducing the
                 # very collision the dataset key exists to prevent.
-                dataset=batch.get("dataset", ""))
+                dataset=batch.get("dataset", ""),
+                frequency=batch.get("frequency", ""))
         data = Path(source_path).read_bytes()
         digest = "sha256:" + hashlib.sha256(data).hexdigest()
         for f in batch["files"]:
@@ -255,7 +269,8 @@ class IntakeService:
             source_file_id=new_id("file"), original_filename=name,
             storage_reference=str(staged), sha256=digest, size=len(data),
             received_at=now_iso(),
-            received_by_or_source=received_by_or_source)
+            received_by_or_source=received_by_or_source,
+            source_uri=source_uri)
         batch["files"].append(rec.to_dict())
         self.save_batch(batch)
         self.store.append_audit(

@@ -18,9 +18,10 @@ from __future__ import annotations
 import json
 import logging
 import os
+import tempfile
 import threading
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
@@ -34,7 +35,9 @@ from .adapters import (
 )
 from .classification import Classification, classify_delivery, fingerprint_delivery
 from .contracts import (
+    BATCH_DATASET_DEFAULT,
     BATCH_DATASETS,
+    BATCH_FREQUENCY_DEFAULT,
     DEC_APPROVED,
     DEC_OPEN,
     DEC_REJECTED,
@@ -47,6 +50,8 @@ from .contracts import (
     OUTCOME_MI,
     OUTCOME_MI_ANNEX2,
     OUTCOMES,
+    PUBLICATION_SCOPE_DEFAULT,
+    PUBLICATION_SCOPES,
     REGIME_CAPABLE_DATASETS,
     RUN_AWAITING_PUBLICATION,
     RUN_BLOCKED,
@@ -87,6 +92,13 @@ logger = logging.getLogger("trakt.operations_control.engine")
 
 STAGING_ROOT_ENV = "TRAKT_OPS_STAGING_ROOT"
 DEFAULT_STAGING_ROOT = ".ops_state/staging"
+
+#: What each outcome is called when an operator has to be told the two intake
+#: routes disagree. Plain sentences — never the internal outcome key.
+OUTCOME_SENTENCES = {
+    OUTCOME_MI: "management information only",
+    OUTCOME_MI_ANNEX2: "management information and the ESMA Annex 2 delivery",
+}
 
 
 class OpsError(Exception):
@@ -332,7 +344,7 @@ class OpsEngine:
                      reporting_date: str, workflow_type: str,
                      created_by: str,
                      auto_start_when_ready: bool = False,
-                     dataset: str = "") -> Dict[str, Any]:
+                     dataset: str = "", frequency: str = "") -> Dict[str, Any]:
         """``dataset`` separates a non-funded delivery (pipeline) into its own
         input pack. Omitted or ``"funded"`` reproduces the existing pack identity
         exactly, so nothing already in flight is disturbed."""
@@ -357,11 +369,12 @@ class OpsEngine:
             tenant_id=client_id, client_id=client_id,
             portfolio_id=portfolio_id, reporting_date=reporting_date,
             workflow_type=workflow_type, created_by=created_by,
-            auto_start_when_ready=auto_start_when_ready, dataset=dataset)
+            auto_start_when_ready=auto_start_when_ready, dataset=dataset,
+            frequency=frequency)
 
     def register_batch_file(self, *, client_id: str, batch_id: str,
-                            source_path: str, received_by: str
-                            ) -> Dict[str, Any]:
+                            source_path: str, received_by: str,
+                            source_uri: str = "") -> Dict[str, Any]:
         batch = self.intake.load_batch(client_id, batch_id)
         if batch is None:
             raise OpsError("OPS_BATCH_NOT_FOUND",
@@ -375,9 +388,164 @@ class OpsEngine:
             f for f in p.iterdir() if f.is_file())
         for f in files:
             batch = self.intake.register_file(
-                batch, f, received_by_or_source=received_by)
+                batch, f, received_by_or_source=received_by,
+                source_uri=source_uri)
         return self.assess_batch(client_id=client_id,
                                  batch_id=batch["batch_id"])
+
+    # -- manual delivery: upload through the API, never a browser path ----- #
+    def automated_identity(self, prefix: str, container: str) -> Dict[str, Any]:
+        """What the AUTOMATED route would call a delivery filed at ``prefix``.
+
+        The derivation is not re-implemented: the production path parser reads
+        the location back, and the automated route's own workflow rule
+        (:func:`apps.blob_trigger_app.occ_intake.outcome_for_source`) chooses the
+        workflow. One rule, replayed — so the answer cannot drift from the
+        trigger's answer as either side changes.
+        """
+        from apps.blob_trigger_app.occ_intake import outcome_for_source
+        from apps.blob_trigger_app.path_parser import parse_blob_path
+
+        parsed = parse_blob_path(f"{prefix}/probe.csv", container)
+        outcome = outcome_for_source(self, parsed.client_id,
+                                     parsed.source_portfolio_id, parsed.dataset)
+        return {
+            "client_id": parsed.client_id,
+            "portfolio_id": parsed.source_portfolio_id,
+            "reporting_period": parsed.reporting_period,
+            "dataset": parsed.dataset,
+            "workflow_type": outcome,
+            "batch_id": self.intake.deterministic_batch_id(
+                client_id=parsed.client_id,
+                portfolio_id=parsed.source_portfolio_id,
+                reporting_date=parsed.reporting_period,
+                workflow_type=outcome, dataset=parsed.dataset),
+        }
+
+    def _require_converged_identity(self, batch: Dict[str, Any], prefix: str,
+                                    container: str) -> None:
+        """Refuse a manual upload the automated route would identify differently.
+
+        A manual delivery is filed where an automated one would be, so both
+        doors will see it. If they disagree about which delivery it is, the same
+        files end up split across two input packs — each incomplete, neither
+        publishable. That has to be caught before a byte is written, because
+        after the write the trigger has already acted on it.
+        """
+        try:
+            automated = self.automated_identity(prefix, container)
+        except Exception as exc:  # noqa: BLE001 — unreadable location = refuse
+            raise OpsError(
+                "OPS_IDENTITY_UNVERIFIABLE",
+                "Trakt could not confirm where this delivery belongs. Check "
+                "the client, portfolio and reporting period.", 400) from exc
+        if automated["batch_id"] == batch["batch_id"]:
+            return
+
+        chosen = OUTCOME_SENTENCES.get(batch.get("workflow_type", ""), "")
+        expected = OUTCOME_SENTENCES.get(automated["workflow_type"], "")
+        if chosen and expected and chosen != expected:
+            message = (
+                f"Files arriving on their own for this book are prepared as "
+                f"{expected}, but you have asked for {chosen}. Sending them "
+                "would leave the same delivery split in two. Choose "
+                f"{expected}, or ask an administrator to change what this book "
+                "reports before sending the files.")
+        else:
+            message = ("Trakt would treat these files as a different delivery "
+                       "from the one you started. Check the client, portfolio "
+                       "and reporting period, and start again.")
+        self.store.append_audit(
+            batch["client_id"], "manual_delivery_refused", actor="system",
+            detail={"batch_id": batch["batch_id"],
+                    "reason": "identity_divergence",
+                    "automated_batch_id": automated["batch_id"],
+                    "chosen_workflow_type": batch.get("workflow_type", ""),
+                    "automated_workflow_type": automated["workflow_type"]})
+        raise OpsError("OPS_IDENTITY_DIVERGENCE", message, 409)
+
+    def upload_batch_files(self, *, client_id: str, batch_id: str,
+                           uploads: List[Tuple[str, bytes]],
+                           received_by: str) -> Dict[str, Any]:
+        """Take files uploaded by an operator into the SAME governed intake the
+        blob trigger uses.
+
+        The destination is derived here from the batch's own controlled fields —
+        the browser sends file content and a name, never a location. Every
+        source file is written to its governed location and registered BEFORE
+        readiness is assessed, so the internal run manifest (the governed
+        replacement for the ``_READY.json`` sentinel) can only ever be written
+        after the whole pack is safely present.
+        """
+        from .manual_intake import (ManualIntakeError, derive_blob_uri,
+                                    derive_raw_prefix, raw_container,
+                                    sanitise_filename)
+
+        batch = self.intake.load_batch(client_id, batch_id)
+        if batch is None:
+            raise OpsError("OPS_BATCH_NOT_FOUND",
+                           "That input pack could not be found.", 404)
+        if batch.get("workflow_id"):
+            raise OpsError(
+                "OPS_BATCH_ALREADY_STARTED",
+                "Trakt has already started this delivery. Start a new one to "
+                "send replacement files.", 409)
+        if not uploads:
+            raise OpsError("OPS_NO_FILES", "Choose at least one file to send.",
+                           400)
+
+        # 1. Derive the governed destination server-side (fail closed).
+        container = raw_container()
+        try:
+            prefix = derive_raw_prefix(
+                client_id=batch["client_id"],
+                portfolio_id=batch["portfolio_id"],
+                reporting_period=batch["reporting_date"],
+                dataset=batch.get("dataset") or BATCH_DATASET_DEFAULT,
+                frequency=batch.get("frequency") or BATCH_FREQUENCY_DEFAULT,
+                container=container)
+            named = [(sanitise_filename(name), data) for name, data in uploads]
+        except ManualIntakeError as exc:
+            raise OpsError("OPS_UPLOAD_REFUSED", str(exc), 400) from exc
+        for name, data in named:
+            if not data:
+                raise OpsError("OPS_UPLOAD_REFUSED",
+                               f"'{name}' is empty. Send the file again.", 400)
+
+        # 2. Prove the two doors agree BEFORE anything is written. Files placed
+        #    here are also seen by the automated route, so if that route would
+        #    identify this location as a different delivery the result is two
+        #    half-packs for one delivery. Refuse instead — nothing is written,
+        #    so there is nothing to unpick.
+        self._require_converged_identity(batch, prefix, container)
+
+        # 3. Place every source file, then register every source file. Both
+        #    complete before anything downstream is told the pack is ready.
+        with tempfile.TemporaryDirectory(prefix="ops_upload_") as td:
+            staged: List[Tuple[Path, str]] = []
+            for name, data in named:
+                uri = derive_blob_uri(prefix, name)
+                self.store.storage.write_bytes(uri, data)
+                local = Path(td) / name
+                local.write_bytes(data)
+                staged.append((local, uri))
+                self.store.append_audit(
+                    client_id, "manual_delivery_file_placed", actor=received_by,
+                    detail={"batch_id": batch["batch_id"], "filename": name,
+                            "size": len(data)})
+            for local, uri in staged:
+                batch = self.intake.register_file(
+                    batch, local, received_by_or_source=received_by,
+                    source_uri=uri)
+
+        batch["source_prefix"] = prefix
+        self.intake.save_batch(batch)
+
+        # 4. Only now assess readiness. The existing intake path decides from
+        #    there — including whether to write the run manifest and open the
+        #    workflow — exactly as it does for an automated arrival.
+        return self.assess_batch(client_id=client_id,
+                                 batch_id=batch["batch_id"], actor=received_by)
 
     def assess_batch(self, *, client_id: str, batch_id: str,
                      actor: str = "system") -> Dict[str, Any]:
@@ -1388,9 +1556,20 @@ class OpsEngine:
                                      layout=Layout.from_env())
 
     def approve_publication(self, *, client_id: str, workflow_id: str,
-                            actor: str) -> Dict[str, Any]:
+                            actor: str,
+                            remember_scope: str = PUBLICATION_SCOPE_DEFAULT
+                            ) -> Dict[str, Any]:
         """The ONLY path to production ``latest`` — explicit operator approval,
-        then the EXISTING promotion path publishes."""
+        then the EXISTING promotion path publishes.
+
+        ``remember_scope`` records how far the operator intended this approval
+        to reach. It is recorded and audited; it never widens what this call
+        publishes, and the platform-wide scope is not reachable from here — a
+        single delivery approval is not the place to set global policy.
+        """
+        if remember_scope not in PUBLICATION_SCOPES:
+            raise OpsError("OPS_BAD_SCOPE",
+                           "Choose how far this decision should apply.", 400)
         run = self.store.load_workflow(client_id, workflow_id)
         if run is None:
             raise OpsError("OPS_WORKFLOW_NOT_FOUND",
@@ -1407,7 +1586,8 @@ class OpsEngine:
             raise OpsError("OPS_ALREADY_PUBLISHED",
                            "This report has already been published.", 409)
 
-        pub.update(status="approved", approved_by=actor, approved_at=now_iso())
+        pub.update(status="approved", approved_by=actor, approved_at=now_iso(),
+                   approval_scope=remember_scope)
         self.store.save_publication(client_id, pub)
 
         # Resolve any still-open publication decision for this workflow so it
@@ -1454,7 +1634,8 @@ class OpsEngine:
         self.store.append_audit(client_id, "publication_approved", actor=actor,
                                 workflow_id=run.workflow_id,
                                 detail={"publication_id": pub["publication_id"],
-                                        "version": pub.get("version")})
+                                        "version": pub.get("version"),
+                                        "approval_scope": remember_scope})
         return pub
 
     def _promote_source(self, run: WorkflowRun, actor: str) -> None:
