@@ -572,9 +572,11 @@ class TestDatasetRouting:
         assert batch["dataset"] == "pipeline"
 
         # Force the started-batch path, then register a late file directly.
+        # The late file must carry DIFFERENT content: a pack ignores content it
+        # already holds, so a byte-identical file is a duplicate, not a late one.
         batch["status"] = "running"
         engine.intake.save_batch(batch)
-        _tape(src, name="late_addition.csv")
+        _tape(src, name="late_addition.csv", body="loan_id,balance\nL9,5\n")
         successor = engine.intake.register_file(
             batch, src / "late_addition.csv", received_by_or_source="test")
         assert successor["batch_id"] != batch["batch_id"]

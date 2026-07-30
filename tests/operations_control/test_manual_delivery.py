@@ -347,6 +347,118 @@ class TestBothDoorsAgreeOnTheDelivery:
         assert is_operator_safe(exc.value.message)
 
 
+class TestTheStorageEventTheUploadRaises:
+    """A manual delivery is filed where an automated one would be, so the
+    storage event fires and offers Trakt the very files it has just processed.
+    That echo must change nothing: no second copy of the delivery, and above all
+    no second run of it."""
+
+    @staticmethod
+    def _replay_arrival(engine, monkeypatch, blob_path, local: Path):
+        """Drive the real automated handler for a blob the operator uploaded."""
+        from apps.blob_trigger_app import occ_intake
+        monkeypatch.setattr(occ_intake, "_engine", lambda: engine)
+
+        def download(_container, _blob_path, dest_dir):
+            dest = Path(dest_dir) / Path(blob_path).name
+            dest.write_bytes(local.read_bytes())
+            return dest
+
+        return occ_intake.handle_arrival("raw-v2", blob_path, download=download)
+
+    def test_the_echo_does_not_start_a_second_run(self, store, source_registry,
+                                                  tmp_path, monkeypatch):
+        engine = _mk(store, source_registry, tmp_path)
+        batch = _batch(engine)
+        uploaded = engine.upload_batch_files(
+            client_id="client_a", batch_id=batch["batch_id"],
+            uploads=[("loan_tape_2026.csv", TAPE)], received_by="alice")
+        workflow_id = uploaded["workflow_id"]
+        assert workflow_id
+
+        local = tmp_path / "echo.csv"
+        local.write_bytes(TAPE)
+        result = self._replay_arrival(
+            engine, monkeypatch,
+            "client_a/direct/funded/monthly/direct_001/2026-06-30/"
+            "loan_tape_2026.csv", local)
+
+        # The pack that ran is untouched, and no second workflow exists.
+        assert result["batch_id"].startswith(batch["batch_id"])
+        runs = {b.get("workflow_id") for b in
+                engine.intake.list_batches("client_a") if b.get("workflow_id")}
+        assert runs == {workflow_id}, (
+            "the storage event raised by the operator's own upload started a "
+            "second run of the same delivery")
+
+    def test_the_echo_does_not_add_a_second_copy_of_the_delivery(
+            self, store, source_registry, tmp_path, monkeypatch):
+        engine = _mk(store, source_registry, tmp_path)
+        batch = _batch(engine, auto=False)
+        engine.upload_batch_files(
+            client_id="client_a", batch_id=batch["batch_id"],
+            uploads=[("loan_tape_2026.csv", TAPE)], received_by="alice")
+
+        local = tmp_path / "echo.csv"
+        local.write_bytes(TAPE)
+        self._replay_arrival(
+            engine, monkeypatch,
+            "client_a/direct/funded/monthly/direct_001/2026-06-30/"
+            "loan_tape_2026.csv", local)
+
+        packs = engine.intake.pack_family("client_a", batch["batch_id"])
+        registered = [f for p in packs for f in p["files"]]
+        assert len(registered) == 1, "the same file was taken twice"
+        entries = [a for a in store.list_audit("client_a")
+                   if a["event"] == "file_registered"
+                   and a["detail"].get("duplicate_status") == "duplicate_ignored"]
+        assert entries, "the echo was not recorded as a duplicate"
+
+    def test_content_already_in_an_earlier_version_of_the_pack_is_a_duplicate(
+            self, store, source_registry, tmp_path):
+        """The check spans pack VERSIONS, not one document — otherwise an echo
+        arriving after the pack started would open a successor for itself."""
+        engine = _mk(store, source_registry, tmp_path)
+        batch = _batch(engine)
+        engine.upload_batch_files(
+            client_id="client_a", batch_id=batch["batch_id"],
+            uploads=[("loan_tape_2026.csv", TAPE)], received_by="alice")
+
+        started = engine.intake.load_batch("client_a", batch["batch_id"])
+        assert started["status"] == "running"
+        echo = tmp_path / "echo.csv"
+        echo.write_bytes(TAPE)
+        same = engine.intake.register_file(started, echo,
+                                           received_by_or_source="blob-trigger")
+        assert same["batch_id"] == batch["batch_id"], (
+            "an echo of a file the pack already holds opened a successor pack")
+        assert engine.intake.load_batch("client_a",
+                                        f"{batch['batch_id']}_v2") is None
+
+    def test_a_genuinely_late_file_still_opens_a_successor(self, store,
+                                                           source_registry,
+                                                           tmp_path):
+        engine = _mk(store, source_registry, tmp_path)
+        batch = _batch(engine)
+        engine.upload_batch_files(
+            client_id="client_a", batch_id=batch["batch_id"],
+            uploads=[("loan_tape_2026.csv", TAPE)], received_by="alice")
+
+        started = engine.intake.load_batch("client_a", batch["batch_id"])
+        late = tmp_path / "late.csv"
+        late.write_bytes(b"loan_id,balance\nL9,5\n")
+        successor = engine.intake.register_file(started, late,
+                                                received_by_or_source="alice")
+        assert successor["batch_id"] == f"{batch['batch_id']}_v2"
+
+    def test_pack_versions_are_recognised_as_one_pack(self, store,
+                                                      source_registry,
+                                                      tmp_path):
+        engine = _mk(store, source_registry, tmp_path)
+        assert engine.intake.base_batch_id("batch_abc123_v4") == "batch_abc123"
+        assert engine.intake.base_batch_id("batch_abc123") == "batch_abc123"
+
+
 # --------------------------------------------------------------------------- #
 # The HTTP surface
 # --------------------------------------------------------------------------- #

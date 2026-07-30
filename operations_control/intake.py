@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -44,6 +45,11 @@ B_FAILED = "failed"
 
 DATA_EXTS = {".csv", ".xlsx", ".xls", ".xlsm"}
 LEGACY_SENTINEL = "_READY.json"
+
+#: How many versions of one input pack are probed when asking whether its
+#: content has already been seen. Far above any real delivery; a bound only so a
+#: corrupt identifier cannot turn the lookup into an unbounded scan.
+MAX_PACK_VERSIONS = 50
 
 
 def load_requirements(path: Path = REQUIREMENTS_PATH) -> Dict[str, Any]:
@@ -210,6 +216,48 @@ class IntakeService:
         return (self.staging_root / batch["client_id"] / "batches"
                 / batch["batch_id"] / "files")
 
+    # -- pack versions ------------------------------------------------------- #
+    @staticmethod
+    def base_batch_id(batch_id: str) -> str:
+        """The first version of a pack — ``…_v3`` and ``…`` are one pack."""
+        return re.sub(r"_v\d+$", "", batch_id or "")
+
+    def pack_family(self, client_id: str, batch_id: str) -> List[Dict[str, Any]]:
+        """Every version of one input pack, oldest first."""
+        base = self.base_batch_id(batch_id)
+        out: List[Dict[str, Any]] = []
+        first = self.load_batch(client_id, base)
+        if first is not None:
+            out.append(first)
+        for version in range(2, MAX_PACK_VERSIONS + 1):
+            doc = self.load_batch(client_id, f"{base}_v{version}")
+            if doc is None:
+                break
+            out.append(doc)
+        return out
+
+    def find_registered(self, client_id: str, batch_id: str, digest: str
+                        ) -> Optional[Dict[str, Any]]:
+        """The pack version already holding this exact content, if any.
+
+        Identity is the CONTENT, across every version of the pack — not the
+        filename, and not one version in isolation. A delivery uploaded by hand
+        is filed where an automated one would be, so the same bytes are offered
+        to intake twice: once by the operator and once by the storage event that
+        their upload raises. The second offer is the same file, not a late one,
+        and must not open a successor pack (which would collect a duplicate copy
+        of the delivery and start a second run for it).
+
+        This also makes the automated route idempotent against the at-least-once
+        redelivery its own event source is entitled to perform.
+        """
+        for pack in self.pack_family(client_id, batch_id):
+            for f in pack.get("files") or []:
+                if f.get("sha256") == digest and \
+                        f.get("superseded_status") == "current":
+                    return {"batch_id": pack["batch_id"], "file": f}
+        return None
+
     # -- file registration --------------------------------------------------- #
     def register_file(self, batch: Dict[str, Any], source_path: Path, *,
                       received_by_or_source: str,
@@ -230,6 +278,25 @@ class IntakeService:
                         "note": "_READY.json is no longer supported and does "
                                 "not trigger processing"})
             return batch
+        data = Path(source_path).read_bytes()
+        digest = "sha256:" + hashlib.sha256(data).hexdigest()
+
+        # Content this pack already holds is not a new file, whichever version
+        # of the pack holds it and whichever door offered it. Checked BEFORE the
+        # successor branch, so an echo of a file this pack has already processed
+        # cannot open a successor pack for itself.
+        seen = self.find_registered(batch["client_id"], batch["batch_id"],
+                                    digest)
+        if seen is not None:
+            self.store.append_audit(
+                batch["client_id"], "file_registered",
+                actor=received_by_or_source,
+                detail={"batch_id": batch["batch_id"], "filename": name,
+                        "duplicate_of": seen["file"]["source_file_id"],
+                        "duplicate_of_batch_id": seen["batch_id"],
+                        "duplicate_status": "duplicate_ignored"})
+            return batch
+
         if batch.get("status") in (B_RUNNING, B_COMPLETED):
             # Never mutate a started batch — route into a successor version.
             batch = self.create_batch(
@@ -244,17 +311,6 @@ class IntakeService:
                 # very collision the dataset key exists to prevent.
                 dataset=batch.get("dataset", ""),
                 frequency=batch.get("frequency", ""))
-        data = Path(source_path).read_bytes()
-        digest = "sha256:" + hashlib.sha256(data).hexdigest()
-        for f in batch["files"]:
-            if f["sha256"] == digest and f["superseded_status"] == "current":
-                self.store.append_audit(
-                    batch["client_id"], "file_registered",
-                    actor=received_by_or_source,
-                    detail={"batch_id": batch["batch_id"], "filename": name,
-                            "duplicate_of": f["source_file_id"],
-                            "duplicate_status": "duplicate_ignored"})
-                return batch
         dest = self.batch_dir(batch)
         dest.mkdir(parents=True, exist_ok=True)
         staged = dest / name

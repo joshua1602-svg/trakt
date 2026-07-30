@@ -112,6 +112,28 @@ ESMA Annex 2 delivery on a book the source registry does not flag as
 regime-required (or the reverse). The operator is told which one the automated
 route would prepare, in plain language, and nothing is left half-written.
 
+### The storage event the upload raises
+
+Filing a manual delivery where an automated one would go means the storage event
+fires and offers Trakt the very files it has just processed. Before this change
+that echo did real damage: `create_batch` sees the pack already RUNNING, mints a
+`_v2` successor, and `register_file` — which computed its content digest only
+AFTER routing to the successor, and compared it only within that one document —
+registered the same file into the empty successor. With the trigger's
+`auto_start_when_ready=True`, the successor reached ready and **started a second
+run of the same delivery**.
+
+`IntakeService.find_registered` now asks whether the pack already holds this
+content, across every version of the pack, and it runs BEFORE the successor
+branch. Content the pack already holds is a duplicate, whichever door offered it
+and whichever version holds it — so an echo opens nothing and starts nothing,
+while a genuinely late file with different content still opens its successor as
+before.
+
+This also makes the automated route idempotent against the at-least-once
+redelivery its own event source is entitled to perform, which was a latent
+defect on that path independently of this work.
+
 The old free-text path route is kept for server-side tooling but is now
 **fail-closed**: administrator-only, and refused unless the location resolves
 inside a directory an administrator has allow-listed
@@ -142,6 +164,23 @@ dependencies, profile versions and issue-policy counts moved behind
 impact, comparison, drafts and rollback moved behind the same disclosure at page
 level. Nothing was removed, and the detailed heading is now named for the asset
 ("Equity Release configuration").
+
+### Deployment notes
+
+* `python-multipart` is required for the upload route and is added to
+  `requirements.txt`. `deploy/trakt-ops-api/verify_package.py` imports the app
+  from the built artefact, and FastAPI raises at route-definition time when it is
+  missing — so a package without it fails the build rather than the worker.
+* `TRAKT_RAW_CONTAINER` already appears in `app_settings.example.json`, and the
+  default (`raw-v2`) matches production, so an unset value is still correct.
+* The service now WRITES to the raw container. It uses the account-scoped
+  `TRAKT_BLOB_CONNECTION`, so no new credential is needed — but the identity
+  behind that connection string must be able to write to `raw-v2`, which it did
+  not previously need to do.
+* One upload request is capped at `TRAKT_OPS_MAX_UPLOAD_MB` (default 64). The
+  body is held in memory by the single worker that also runs workflows, and the
+  App Service front end has its own request timeout, so raise this only against a
+  measured real delivery.
 
 ## 3. The delivery workflow
 

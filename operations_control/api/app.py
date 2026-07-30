@@ -316,9 +316,12 @@ def get_batch(batch_id: str, client: str,
 #: server-side from controlled fields.
 SERVER_PATH_ROOTS_ENV = "TRAKT_OPS_SERVER_PATH_ROOTS"
 
-#: Total bytes one upload request may carry.
+#: Total bytes one upload request may carry. Deliberately modest: the request
+#: body is held in memory by the single worker that also runs governed workflows
+#: on background threads, and the platform in front of this service enforces its
+#: own request timeout. Raise it only with a real delivery to measure against.
 MAX_UPLOAD_MB_ENV = "TRAKT_OPS_MAX_UPLOAD_MB"
-DEFAULT_MAX_UPLOAD_MB = 200
+DEFAULT_MAX_UPLOAD_MB = 64
 
 
 def _allowed_server_path(path: str) -> bool:
