@@ -58,7 +58,9 @@ describe("App composition", () => {
   it("routes each administrator configuration page", async () => {
     for (const [route, heading] of [
       ["/admin/config/system", copy.admin.system.title],
-      ["/admin/config/assets", copy.admin.assets.title],
+      // The assets page leads with the operational question; the lifecycle
+      // workspace sits behind the administration disclosure below it.
+      ["/admin/config/assets", copy.admin.readiness.heading],
       ["/admin/config/regimes", copy.admin.regimes.title],
       ["/admin/config/history", copy.admin.audit.subtitle],
     ] as const) {

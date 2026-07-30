@@ -108,9 +108,19 @@ export interface RegimeReference {
   label: string;
 }
 
+/** The operational answer: can this configuration safely process a delivery? */
+export interface PackageReadiness {
+  state: "ready" | "attention" | "blocked";
+  label: string;
+  statement: string;
+  can_process: boolean;
+  warnings: string[];
+}
+
 export interface AssetPackage {
   id: string;
   label: string;
+  readiness?: PackageReadiness;
   layer: ConfigLayer;
   active_version: number;
   status: PackageStatus;

@@ -60,14 +60,19 @@ export interface OpsClient {
   createBatch(input: CreateBatchInput): Promise<Batch>;
   listBatches(client?: string): Promise<Batch[]>;
   getBatch(batchId: string, client?: string): Promise<Batch>;
-  registerBatchFile(batchId: string, path: string, client?: string): Promise<Batch>;
+  /**
+   * Send the files themselves. There is deliberately no way to name a storage
+   * location from the browser — the server derives the governed destination
+   * from the input pack's own client, portfolio, book and reporting period.
+   */
+  uploadBatchFiles(batchId: string, files: File[], client?: string): Promise<Batch>;
   startBatch(batchId: string, client?: string): Promise<Batch>;
   startWorkflow(input: StartWorkflowInput): Promise<Workflow>;
   getWorkflows(params?: { client?: string; status?: string }): Promise<WorkflowRow[]>;
   getWorkflow(workflowId: string): Promise<Workflow>;
   rerunWorkflow(workflowId: string): Promise<Workflow>;
   cancelWorkflow(workflowId: string, reason: string): Promise<Workflow>;
-  publishWorkflow(workflowId: string): Promise<Publication>;
+  publishWorkflow(workflowId: string, rememberScope?: string): Promise<Publication>;
   holdWorkflow(workflowId: string, reason: string): Promise<Publication>;
   getReviews(params?: { client?: string; workflow_id?: string }): Promise<Review[]>;
   getReview(decisionId: string): Promise<Review>;

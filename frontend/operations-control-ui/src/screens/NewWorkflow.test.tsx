@@ -109,7 +109,7 @@ describe("NewWorkflow — choosing the book", () => {
 
   it("explains each book in operator language, not dataset identifiers", async () => {
     renderScreen();
-    expect(screen.getByText("Which book are these files for?")).toBeTruthy();
+    expect(screen.getByText("Which book?")).toBeTruthy();
     expect(
       screen.getByText(/Loans already advanced\. Regulatory reporting is prepared from this book\./),
     ).toBeTruthy();

@@ -32,9 +32,12 @@ describe("BatchDetail", () => {
       dataset: "funded",
       auto_start_when_ready: false,
     });
-    // Two single-file registrations satisfy both required inputs.
-    await mock.registerBatchFile(batch.batch_id, "/incoming/holdings-june.xlsx");
-    await mock.registerBatchFile(batch.batch_id, "/incoming/loan-tape-june.xlsx");
+    // Two uploads satisfy both required inputs. The browser sends file
+    // content only — there is no location to name.
+    await mock.uploadBatchFiles(batch.batch_id, [
+      new File(["a"], "holdings-june.xlsx"),
+      new File(["b"], "loan-tape-june.xlsx"),
+    ]);
 
     renderBatch(mock, batch.batch_id);
 
@@ -56,6 +59,10 @@ describe("BatchDetail", () => {
     // Ready + not auto-starting → the operator gets the start button.
     expect(screen.getByRole("button", { name: "Start onboarding" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add files" })).toBeInTheDocument();
+
+    // The only way to add files is to send them; no path field exists.
+    expect(screen.getByLabelText("Choose the files to send")).toHaveAttribute("type", "file");
+    expect(screen.queryByLabelText(/where are the files/i)).not.toBeInTheDocument();
   });
 
   it("shows the waiting role, highlights the unclear file and links to its decisions", async () => {

@@ -4,6 +4,7 @@ import { useOpsClient } from "@/api/context";
 import { ErrorNote, Loading } from "@/components/ErrorNote";
 import { Page } from "@/components/Page";
 import { copy } from "@/lib/copy";
+import { decisionHref } from "@/lib/ids";
 import { useLoad } from "@/lib/useLoad";
 
 export function ReviewsScreen() {
@@ -29,10 +30,13 @@ export function ReviewsScreen() {
               {copy.reviews.empty}
             </p>
           )}
+          {/* A queue item opens the delivery it belongs to, at the step that
+              owns the question. A question raised before a delivery exists —
+              a file still to be identified — is still answered on its own. */}
           {open.map((review) => (
             <Link
               key={review.decision_id}
-              to={`/reviews/${review.decision_id}`}
+              to={decisionHref(review.decision_id, review.workflow_id)}
               className="flex items-center justify-between gap-4 rounded-xl border border-stone-200 bg-white px-4 py-4 transition-colors hover:border-stone-300 hover:bg-stone-50"
             >
               <div className="min-w-0">

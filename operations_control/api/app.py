@@ -19,13 +19,14 @@ import os
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from ..contracts import (
     DEC_OPEN,
+    PUBLICATION_SCOPE_DEFAULT,
     RUN_AWAITING_PUBLICATION,
     RUN_BLOCKED,
     RUN_NEEDS_REVIEW,
@@ -34,7 +35,7 @@ from ..contracts import (
 )
 from ..engine import OpsEngine, OpsError
 from ..stores import OpsStore
-from . import presenters
+from . import presenters, workflow_view
 from .auth import Principal, authenticate, require_admin, require_client
 
 logger = logging.getLogger("trakt.operations_control.api")
@@ -308,15 +309,94 @@ def get_batch(batch_id: str, client: str,
                                                           _role_labels())}
 
 
+#: Server-side directories the deprecated path-registration route may read from.
+#: EMPTY BY DEFAULT — a browser cannot name a location on the server unless an
+#: administrator has explicitly opted a directory in. Manual deliveries go
+#: through ``/ops/batches/{id}/upload`` instead, where the destination is derived
+#: server-side from controlled fields.
+SERVER_PATH_ROOTS_ENV = "TRAKT_OPS_SERVER_PATH_ROOTS"
+
+#: Total bytes one upload request may carry.
+MAX_UPLOAD_MB_ENV = "TRAKT_OPS_MAX_UPLOAD_MB"
+DEFAULT_MAX_UPLOAD_MB = 200
+
+
+def _allowed_server_path(path: str) -> bool:
+    """True when ``path`` resolves inside an explicitly allow-listed root."""
+    roots = [r.strip() for r in
+             os.environ.get(SERVER_PATH_ROOTS_ENV, "").split(os.pathsep)
+             if r.strip()]
+    if not roots:
+        return False
+    try:
+        resolved = os.path.realpath(path)
+    except (OSError, ValueError):
+        return False
+    for root in roots:
+        real_root = os.path.realpath(root)
+        if resolved == real_root or resolved.startswith(real_root + os.sep):
+            return True
+    return False
+
+
 @app.post("/ops/batches/{batch_id}/files")
 def register_batch_file(batch_id: str, body: RegisterBatchFile, client: str,
                         principal: Principal = Depends(authenticate)
                         ) -> Dict[str, Any]:
+    """Deprecated: register files already sitting on the server's own disk.
+
+    Kept for server-side operational tooling only, and fail-closed — the caller
+    must be an administrator AND the location must be inside a directory an
+    administrator has allow-listed. The Operations Control Centre itself uploads
+    through ``/ops/batches/{batch_id}/upload``, where the browser never names a
+    location at all.
+    """
     require_client(principal, client)
+    require_admin(principal)
+    if not _allowed_server_path(body.path):
+        raise HTTPException(status_code=403, detail={
+            "errorCode": "OPS_PATH_NOT_ALLOWED",
+            "message": "Trakt does not take files from a location you type in. "
+                       "Send the files themselves."})
     eng = get_engine()
     batch = eng.register_batch_file(client_id=client, batch_id=batch_id,
                                     source_path=body.path,
                                     received_by=principal.name)
+    return {"ok": True, "batch": presenters.present_batch(batch,
+                                                          _role_labels())}
+
+
+@app.post("/ops/batches/{batch_id}/upload")
+async def upload_batch_files(batch_id: str, client: str,
+                             files: List[UploadFile] = File(...),
+                             principal: Principal = Depends(authenticate)
+                             ) -> Dict[str, Any]:
+    """Send the files for a manually created delivery.
+
+    The request carries file CONTENT only. The governed destination is derived
+    on the server from the input pack's own client, portfolio, book, frequency
+    and reporting period, and every source file is placed and registered before
+    readiness is assessed — so the run manifest that authorises processing is
+    always written last.
+    """
+    require_client(principal, client)
+    limit_mb = int(os.environ.get(MAX_UPLOAD_MB_ENV, DEFAULT_MAX_UPLOAD_MB))
+    limit = max(1, limit_mb) * 1024 * 1024
+    uploads: List[tuple] = []
+    total = 0
+    for upload in files:
+        data = await upload.read()
+        total += len(data)
+        if total > limit:
+            raise HTTPException(status_code=413, detail={
+                "errorCode": "OPS_UPLOAD_TOO_LARGE",
+                "message": f"That is more than Trakt accepts in one go "
+                           f"({limit_mb} MB). Send fewer files at a time."})
+        uploads.append((upload.filename or "", data))
+    eng = get_engine()
+    batch = eng.upload_batch_files(client_id=client, batch_id=batch_id,
+                                   uploads=uploads,
+                                   received_by=principal.name)
     return {"ok": True, "batch": presenters.present_batch(batch,
                                                           _role_labels())}
 
@@ -395,8 +475,26 @@ def _full_workflow(eng: OpsEngine, client_id: str,
         gar = eng.store.load_result(client_id, workflow_id, stage)
         if gar is not None:
             results[stage] = gar.to_dict()
-    n_open = len(eng.store.open_decisions(client_id, workflow_id))
-    return presenters.present_workflow(run, results, n_open)
+    decisions = eng.store.list_decisions(client_id, workflow_id=workflow_id)
+    n_open = len([d for d in decisions if d.get("status") == DEC_OPEN])
+    out = presenters.present_workflow(run, results, n_open)
+
+    # The durable case file: the stages already completed, the stage the
+    # delivery is at, and what happens next. Built from the same persisted
+    # documents; it decides nothing.
+    batch = (eng.intake.load_batch(client_id, run.batch_id)
+             if run.batch_id else None)
+    publication = eng.store.load_publication(
+        client_id, run.reporting_period or "unspecified")
+    if publication is not None and publication.get("workflow_id") != workflow_id:
+        publication = None
+    steps = workflow_view.build_steps(
+        run, results, batch=batch,
+        decisions=[presenters.present_decision(d) for d in decisions],
+        publication=publication, role_labels=_role_labels())
+    out["steps"] = steps
+    out["current_step"] = workflow_view.current_step(steps)
+    return out
 
 
 @app.get("/ops/workflows/{workflow_id}")
@@ -542,14 +640,23 @@ def rule_history(rule_id: str, client: Optional[str] = None,
 # Publication + history
 # --------------------------------------------------------------------------- #
 
+class PublishBody(BaseModel):
+    #: How far the operator intended this approval to reach. Recorded and
+    #: audited; the platform-wide scope is not reachable from a delivery.
+    remember_scope: str = PUBLICATION_SCOPE_DEFAULT
+
+
 @app.post("/ops/workflows/{workflow_id}/publish")
-def approve_publication(workflow_id: str, client: Optional[str] = None,
+def approve_publication(workflow_id: str, body: Optional[PublishBody] = None,
+                        client: Optional[str] = None,
                         principal: Principal = Depends(authenticate)) -> Dict[str, Any]:
     eng = get_engine()
     run = _load_owned_workflow(eng, principal, workflow_id, client)
     pub = eng.approve_publication(client_id=run.client_id,
                                   workflow_id=workflow_id,
-                                  actor=principal.name)
+                                  actor=principal.name,
+                                  remember_scope=(body.remember_scope if body
+                                                  else PUBLICATION_SCOPE_DEFAULT))
     return {"ok": True, "publication": presenters.present_publication(pub)}
 
 
@@ -621,8 +728,9 @@ def admin_config_catalogue(principal: Principal = Depends(authenticate)
     require_admin(principal)
     from ..configuration import admin_views
     pkgs = _packages(get_engine())
-    assets = admin_views.describe_assets(pkgs)
     regimes = admin_views.describe_regimes(pkgs, pkgs.repo)
+    assets = admin_views.with_readiness(admin_views.describe_assets(pkgs),
+                                        regimes)
     return {"ok": True, "assets": assets, "regimes": regimes,
             "compatibility": admin_views.compatibility_matrix(assets, regimes),
             "issues": admin_views.compatibility_issues(assets, regimes)}

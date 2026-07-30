@@ -27,10 +27,21 @@ import type {
   Rule,
   RulesQuery,
   StartWorkflowInput,
+  StepDecision,
   Workflow,
   WorkflowRow,
+  WorkflowStep,
   WorkflowType,
 } from "./types";
+
+/** Plain labels for the delivery workflow step states. */
+const STEP_STATUS_LABELS: Record<WorkflowStep["status"], string> = {
+  complete: "Complete",
+  current: "Current",
+  pending: "Pending",
+  blocked: "Blocked",
+  not_applicable: "Not applicable",
+};
 
 const TYPE_LABELS: Record<WorkflowType, string> = {
   new_client: "New client onboarding",
@@ -57,6 +68,17 @@ const BATCH_ROLE_SPECS: { role: string; label: string; required: boolean }[] = [
   { role: "loan_tape", label: "Primary loan tape", required: true },
   { role: "prior_period", label: "Prior period comparison", required: false },
 ];
+
+/** `2026-06-30` -> `June 2026`, mirroring the backend's own wording. */
+function periodWords(period: string): string {
+  const [year, month] = (period ?? "").split("-");
+  const names = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ];
+  const index = Number(month) - 1;
+  return names[index] ? `${names[index]} ${year}` : period;
+}
 
 function deepCopy<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -153,9 +175,56 @@ export class MockOpsClient implements OpsClient {
       missing_roles: ["holdings"],
       configuration_ready: true,
       blocking_decisions: ["dec-9101"],
+      source_prefix: "",
       workflow_id: null,
       created_at: "2026-07-27T08:20:00Z",
       updated_at: "2026-07-27T08:24:00Z",
+    },
+    {
+      // The pack behind wf-1002, so its workflow can show the files it ran on.
+      batch_id: "batch-7002",
+      client_id: "Birchwood Partners",
+      portfolio_id: "Global Credit",
+      reporting_date: "2026-06-30",
+      workflow_type: "mi",
+      dataset: "funded",
+      dataset_label: "Funded book",
+      status: "completed",
+      status_label: "Done",
+      status_sentence: "Trakt has finished with this input pack.",
+      auto_start_when_ready: true,
+      files: [
+        {
+          source_file_id: "sf-201",
+          filename: "global-credit-loan-tape-june.xlsx",
+          role: "loan_tape",
+          role_label: "Primary loan tape",
+          status: "recognised",
+          status_sentence: "Received and recognised as the primary loan tape.",
+          confidence: 0.98,
+        },
+        {
+          source_file_id: "sf-202",
+          filename: "global-credit-holdings-june.xlsx",
+          role: "holdings",
+          role_label: "Holdings statement",
+          status: "recognised",
+          status_sentence: "Received and recognised as the holdings statement.",
+          confidence: 0.96,
+        },
+      ],
+      input_roles: [
+        { role: "holdings", label: "Holdings statement", required: true, satisfied: true },
+        { role: "loan_tape", label: "Primary loan tape", required: true, satisfied: true },
+        { role: "prior_period", label: "Prior period comparison", required: false, satisfied: false },
+      ],
+      missing_roles: [],
+      configuration_ready: true,
+      blocking_decisions: [],
+      source_prefix: "Birchwood Partners/direct/funded/monthly/Global Credit/2026-06-30",
+      workflow_id: "wf-1002",
+      created_at: "2026-07-26T07:10:00Z",
+      updated_at: "2026-07-26T07:40:00Z",
     },
   ];
 
@@ -585,6 +654,229 @@ export class MockOpsClient implements OpsClient {
     return `${prefix}-${this.nextId}`;
   }
 
+  /** How far each published approval was recorded as reaching. */
+  private readonly approvalScopes = new Map<string, string>();
+
+  /**
+   * The delivery case file, in the same shape the backend serves: completed
+   * steps stay visible, the current step is where the operator acts, and the
+   * approval decision lives inside the workflow rather than beside it.
+   */
+  private caseFile(workflow: Workflow): WorkflowStep[] {
+    const batch = this.batches.find((b) => b.workflow_id === workflow.workflow_id);
+    const decisions = this.reviews.filter((d) => d.workflow_id === workflow.workflow_id);
+    const openDecisions = decisions.filter((d) => !d.resolved_at && d.status !== "resolved");
+    const resolved = decisions.filter((d) => Boolean(d.resolved_at) || d.status === "resolved");
+    const publication = this.publications.find((p) => p.workflow_id === workflow.workflow_id);
+    const published = workflow.status === "published";
+    const awaiting = workflow.status === "awaiting_publication";
+    const blocked = workflow.status === "blocked";
+
+    const toDecision = (d: Review): StepDecision => ({
+      decision_id: d.decision_id,
+      title: d.title,
+      question: d.question,
+      blocking: d.blocking,
+      status: d.status,
+      answer: "",
+      scope: "",
+      actor: d.resolved_by ?? "",
+      at: d.resolved_at ?? "",
+      overridden: false,
+    });
+
+    const files = (batch?.files ?? []).map((f) => ({
+      filename: f.filename,
+      size: "24.0 KB",
+      received_at: batch?.created_at ?? workflow.created_at,
+      received_from: "You",
+      checksum: f.source_file_id,
+      role_label: f.role_label,
+    }));
+
+    const step = (
+      key: string,
+      label: string,
+      status: WorkflowStep["status"],
+      summary: string,
+      extra: Partial<WorkflowStep> = {},
+    ): WorkflowStep => ({
+      key,
+      label,
+      status,
+      status_label: STEP_STATUS_LABELS[status],
+      summary,
+      facts: [],
+      warnings: [],
+      blockers: [],
+      ...extra,
+    });
+
+    return [
+      step(
+        "files_received",
+        "Files received",
+        files.length > 0 ? "complete" : "pending",
+        files.length > 0
+          ? `${files.length} files received. The pack was complete.`
+          : "No files have been received yet.",
+        {
+          files,
+          facts: [
+            { label: "Files received", value: String(files.length) },
+            { label: "Source location", value: batch?.source_prefix ?? "" },
+          ].filter((f) => f.value),
+        },
+      ),
+      step(
+        "delivery_identified",
+        "Delivery identified",
+        "complete",
+        `${workflow.workflow_type_label} for ${workflow.client_id} — ${workflow.portfolio_id}.`,
+        {
+          facts: [
+            { label: "Client", value: workflow.client_id },
+            { label: "Portfolio", value: workflow.portfolio_id },
+            { label: "Reporting period", value: workflow.reporting_period },
+            { label: "Book", value: batch?.dataset_label ?? "Funded book" },
+            { label: "Delivery type", value: workflow.workflow_type_label },
+          ],
+        },
+      ),
+      step(
+        "configuration_selected",
+        "Configuration selected",
+        "complete",
+        "The configuration for this delivery was selected and locked to it.",
+        {
+          facts: [
+            { label: "Asset package", value: "v1" },
+            {
+              label: "Regime",
+              value:
+                workflow.outcome === "mi_annex2"
+                  ? "ESMA Annex 2"
+                  : "Management information only",
+            },
+          ],
+        },
+      ),
+      step(
+        "data_assessed",
+        "Data assessed",
+        blocked ? "blocked" : published || awaiting ? "complete" : "current",
+        "1,284 loans were read and checked against the approved rules.",
+        {
+          warnings: workflow.stages.flatMap((s) => s.warnings ?? []),
+          blockers: workflow.blockers,
+          facts: [
+            { label: "Loans assessed", value: "1,284" },
+            {
+              label: "Output eligibility",
+              value: blocked ? "Held by a blocking problem" : "Ready for publication",
+            },
+          ],
+        },
+      ),
+      step(
+        "issues_reviewed",
+        "Issues reviewed",
+        openDecisions.length > 0 ? "current" : resolved.length > 0 ? "complete" : "not_applicable",
+        openDecisions.length > 0
+          ? `${openDecisions.length} questions still need an answer.`
+          : resolved.length > 0
+            ? `${resolved.length} questions answered.`
+            : "Trakt had no questions about this delivery.",
+        {
+          resolved: resolved.map(toDecision),
+          unresolved: openDecisions.map(toDecision),
+        },
+      ),
+      step(
+        "publication_approval",
+        "Publication approval",
+        published ? "complete" : awaiting ? "current" : "pending",
+        published
+          ? "Published."
+          : awaiting
+            ? "The delivery is ready. It will only be published when you approve it."
+            : "Nothing is waiting for your approval yet.",
+        {
+          approval: {
+            available: awaiting,
+            headline: "Ready to publish",
+            evidence_lines: [
+              `${files.length} files received`,
+              "1,284 loans assessed",
+              "0 blocking issues",
+              "Asset configuration v1 applied",
+              ...(workflow.outcome === "mi_annex2" ? ["ESMA Annex 2 enabled"] : []),
+            ],
+            question: "Publish this delivery as the latest official version?",
+            scope_question: "Should Trakt remember this decision for future deliveries?",
+            scopes: [
+              {
+                value: "delivery",
+                label: "No — this delivery only",
+                explanation: "Trakt will ask again for the next delivery.",
+              },
+              {
+                value: "portfolio",
+                label: "Yes — future deliveries for this portfolio",
+                explanation:
+                  "Trakt will apply this decision to this portfolio's future deliveries.",
+              },
+              {
+                value: "client",
+                label: "Yes — future deliveries for this client",
+                explanation:
+                  "Trakt will apply this decision to every portfolio belonging to this client.",
+              },
+            ],
+            default_scope: "delivery",
+            consequence:
+              `This will publish the ${periodWords(workflow.reporting_period)} ` +
+              `${workflow.client_id} ${workflow.portfolio_id} delivery as the latest ` +
+              "official version.",
+            scope_consequences: {
+              delivery: "This decision applies only to this delivery.",
+              portfolio: `This decision will also apply to future deliveries for ${workflow.portfolio_id}.`,
+              client: `This decision will also apply to future deliveries for ${workflow.client_id}.`,
+            },
+            version: publication?.version ?? null,
+          },
+        },
+      ),
+      step(
+        "published",
+        "Published",
+        published ? "complete" : "pending",
+        published
+          ? "Published. This is now the latest official version."
+          : "Nothing has been published for this delivery yet.",
+        {
+          outputs: published ? ["Management information (latest)"] : [],
+          facts: published
+            ? [
+                { label: "Published", value: publication?.published_at ?? "" },
+                { label: "Published by", value: publication?.approved_by ?? "" },
+                {
+                  label: "Decision applied to",
+                  value:
+                    this.approvalScopes.get(workflow.workflow_id) === "portfolio"
+                      ? "Future deliveries for this portfolio"
+                      : this.approvalScopes.get(workflow.workflow_id) === "client"
+                        ? "Future deliveries for this client"
+                        : "This delivery only",
+                },
+                { label: "Audit reference", value: publication?.publication_id ?? "" },
+              ]
+            : [],
+        },
+      ),
+    ];
+  }
+
   private findWorkflow(workflowId: string): Workflow {
     const workflow = this.workflows.find((w) => w.workflow_id === workflowId);
     if (!workflow) {
@@ -726,6 +1018,7 @@ export class MockOpsClient implements OpsClient {
       missing_roles: BATCH_ROLE_SPECS.filter((s) => s.required).map((s) => s.role),
       configuration_ready: false,
       blocking_decisions: [],
+      source_prefix: "",
       workflow_id: null,
       created_at: now,
       updated_at: now,
@@ -759,30 +1052,30 @@ export class MockOpsClient implements OpsClient {
     return deepCopy(batch);
   }
 
-  async registerBatchFile(batchId: string, path: string, _client?: string): Promise<Batch> {
+  /** Mirrors the real route: content in, server-derived destination, no path. */
+  async uploadBatchFiles(batchId: string, files: File[], _client?: string): Promise<Batch> {
     await this.wait();
     const batch = this.findBatch(batchId);
     if (batch.status === "running" || batch.status === "completed") {
       throw new OpsError("This onboarding has already started, so new files can't be added to it.");
     }
+    if (files.length === 0) {
+      throw new OpsError("Choose at least one file to send.");
+    }
 
-    const name = path.replace(/\/+$/, "").split("/").pop() || path;
-    const isDirectory = !name.includes(".");
-    const unsatisfied = batch.input_roles.filter((r) => !r.satisfied);
+    batch.source_prefix =
+      `${batch.client_id}/direct/${batch.dataset}/monthly/` +
+      `${batch.portfolio_id}/${batch.reporting_date}`;
 
-    if (isDirectory) {
-      // A directory registers every file inside it — enough to satisfy every remaining role.
-      for (const role of unsatisfied) {
-        this.satisfyRole(batch, role, `${role.role.replace(/_/g, "-")}.xlsx`);
-      }
-    } else {
+    for (const file of files) {
+      const unsatisfied = batch.input_roles.filter((r) => !r.satisfied);
       const nextRequired = unsatisfied.find((r) => r.required) ?? unsatisfied[0];
       if (nextRequired) {
-        this.satisfyRole(batch, nextRequired, name);
+        this.satisfyRole(batch, nextRequired, file.name);
       } else {
         batch.files.push({
           source_file_id: this.id("sf"),
-          filename: name,
+          filename: file.name,
           role: "",
           role_label: "Additional file",
           status: "recognised",
@@ -793,6 +1086,11 @@ export class MockOpsClient implements OpsClient {
     }
 
     this.refreshBatch(batch);
+    // The intake path opens the workflow itself once a pack set to start on
+    // its own is complete — the same rule an automated arrival follows.
+    if (batch.status === "ready" && batch.auto_start_when_ready) {
+      return this.startBatch(batchId);
+    }
     return deepCopy(batch);
   }
 
@@ -932,7 +1230,15 @@ export class MockOpsClient implements OpsClient {
         }
       }
     }
-    return deepCopy(workflow);
+    const full = deepCopy(workflow);
+    full.steps = this.caseFile(workflow);
+    // A blocked step wins; otherwise the furthest step still in progress.
+    full.current_step =
+      full.steps.find((s) => s.status === "blocked")?.key ??
+      [...full.steps].reverse().find((s) => s.status === "current")?.key ??
+      [...full.steps].reverse().find((s) => s.status === "complete")?.key ??
+      full.steps[0].key;
+    return full;
   }
 
   async rerunWorkflow(workflowId: string): Promise<Workflow> {
@@ -964,12 +1270,13 @@ export class MockOpsClient implements OpsClient {
     return deepCopy(workflow);
   }
 
-  async publishWorkflow(workflowId: string): Promise<Publication> {
+  async publishWorkflow(workflowId: string, rememberScope?: string): Promise<Publication> {
     await this.wait();
     const workflow = this.findWorkflow(workflowId);
     if (workflow.status !== "awaiting_publication") {
       throw new OpsError("This report is not ready to publish yet.");
     }
+    this.approvalScopes.set(workflowId, rememberScope ?? "delivery");
     workflow.status = "published";
     workflow.status_sentence = "This report has been published.";
     workflow.updated_at = new Date().toISOString();

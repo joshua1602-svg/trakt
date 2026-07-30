@@ -279,6 +279,10 @@ def present_batch(doc: Dict[str, Any],
         "configuration_ready": doc.get("effective_config_status")
         in ("READY", "READY_WITH_WARNINGS"),
         "blocking_decisions": doc.get("blocking_decisions") or [],
+        # Where this pack's files were filed. Derived by the server from the
+        # pack's own controlled fields; shown so the operator can see the
+        # delivery's source, never so the browser can choose one.
+        "source_prefix": doc.get("source_prefix", ""),
         "workflow_id": doc.get("workflow_id", ""),
         "created_at": doc.get("created_at"),
         "updated_at": doc.get("updated_at"),

@@ -114,7 +114,7 @@ def handle_arrival(container: str, blob_path: str, *,
         client_id=client_id, portfolio_id=parsed.source_portfolio_id,
         reporting_date=parsed.reporting_period, workflow_type=outcome,
         created_by="blob-trigger", auto_start_when_ready=True,
-        dataset=parsed.dataset)
+        dataset=parsed.dataset, frequency=parsed.frequency)
 
     if filename == LEGACY_SENTINEL:
         # Sentinel is unsupported: recorded + audited, never triggers a run.
@@ -131,11 +131,23 @@ def handle_arrival(container: str, blob_path: str, *,
         return {"registered": False, "reason": "legacy_sentinel_ignored",
                 "batch_id": batch["batch_id"]}
 
+    # The governed location this file actually arrived at. Recorded as
+    # provenance so the delivery's source is visible in the Operations Control
+    # Centre without anyone having to guess it.
+    inner = blob_path.lstrip("/")
+    if inner.startswith(f"{container}/"):
+        inner = inner[len(container) + 1:]
+    source_uri = f"blob://{container}/{inner}"
+    if not batch.get("source_prefix"):
+        batch["source_prefix"] = f"{container}/{inner.rsplit('/', 1)[0]}"
+        engine.intake.save_batch(batch)
+
     with tempfile.TemporaryDirectory(prefix="occ_intake_") as td:
         local = download(container, blob_path, Path(td))
         batch = engine.register_batch_file(
             client_id=client_id, batch_id=batch["batch_id"],
-            source_path=str(local), received_by="blob-trigger")
+            source_path=str(local), received_by="blob-trigger",
+            source_uri=source_uri)
     logger.info("intake: registered %s -> batch %s status=%s",
                 blob_path, batch["batch_id"], batch["status"])
     return {"registered": True, "batch_id": batch["batch_id"],

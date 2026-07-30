@@ -305,6 +305,15 @@ export class MockConfigAdmin {
       {
         id: "equity_release",
         label: "Equity Release",
+        readiness: {
+          state: "attention",
+          label: "Usable, with things to know",
+          statement:
+            `Equity Release v${assetActive.version} is active and valid for MI reporting ` +
+            "and ESMA Annex 2. There is something to know before you rely on it.",
+          can_process: true,
+          warnings: ["ESMA Annex 2 uses a draft schema published by the regulator."],
+        },
         layer: "asset",
         active_version: assetActive.version,
         status: assetActive.status,

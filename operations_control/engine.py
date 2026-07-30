@@ -18,9 +18,10 @@ from __future__ import annotations
 import json
 import logging
 import os
+import tempfile
 import threading
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
@@ -34,7 +35,9 @@ from .adapters import (
 )
 from .classification import Classification, classify_delivery, fingerprint_delivery
 from .contracts import (
+    BATCH_DATASET_DEFAULT,
     BATCH_DATASETS,
+    BATCH_FREQUENCY_DEFAULT,
     DEC_APPROVED,
     DEC_OPEN,
     DEC_REJECTED,
@@ -47,6 +50,8 @@ from .contracts import (
     OUTCOME_MI,
     OUTCOME_MI_ANNEX2,
     OUTCOMES,
+    PUBLICATION_SCOPE_DEFAULT,
+    PUBLICATION_SCOPES,
     REGIME_CAPABLE_DATASETS,
     RUN_AWAITING_PUBLICATION,
     RUN_BLOCKED,
@@ -332,7 +337,7 @@ class OpsEngine:
                      reporting_date: str, workflow_type: str,
                      created_by: str,
                      auto_start_when_ready: bool = False,
-                     dataset: str = "") -> Dict[str, Any]:
+                     dataset: str = "", frequency: str = "") -> Dict[str, Any]:
         """``dataset`` separates a non-funded delivery (pipeline) into its own
         input pack. Omitted or ``"funded"`` reproduces the existing pack identity
         exactly, so nothing already in flight is disturbed."""
@@ -357,11 +362,12 @@ class OpsEngine:
             tenant_id=client_id, client_id=client_id,
             portfolio_id=portfolio_id, reporting_date=reporting_date,
             workflow_type=workflow_type, created_by=created_by,
-            auto_start_when_ready=auto_start_when_ready, dataset=dataset)
+            auto_start_when_ready=auto_start_when_ready, dataset=dataset,
+            frequency=frequency)
 
     def register_batch_file(self, *, client_id: str, batch_id: str,
-                            source_path: str, received_by: str
-                            ) -> Dict[str, Any]:
+                            source_path: str, received_by: str,
+                            source_uri: str = "") -> Dict[str, Any]:
         batch = self.intake.load_batch(client_id, batch_id)
         if batch is None:
             raise OpsError("OPS_BATCH_NOT_FOUND",
@@ -375,9 +381,84 @@ class OpsEngine:
             f for f in p.iterdir() if f.is_file())
         for f in files:
             batch = self.intake.register_file(
-                batch, f, received_by_or_source=received_by)
+                batch, f, received_by_or_source=received_by,
+                source_uri=source_uri)
         return self.assess_batch(client_id=client_id,
                                  batch_id=batch["batch_id"])
+
+    # -- manual delivery: upload through the API, never a browser path ----- #
+    def upload_batch_files(self, *, client_id: str, batch_id: str,
+                           uploads: List[Tuple[str, bytes]],
+                           received_by: str) -> Dict[str, Any]:
+        """Take files uploaded by an operator into the SAME governed intake the
+        blob trigger uses.
+
+        The destination is derived here from the batch's own controlled fields —
+        the browser sends file content and a name, never a location. Every
+        source file is written to its governed location and registered BEFORE
+        readiness is assessed, so the internal run manifest (the governed
+        replacement for the ``_READY.json`` sentinel) can only ever be written
+        after the whole pack is safely present.
+        """
+        from .manual_intake import (ManualIntakeError, derive_blob_uri,
+                                    derive_raw_prefix, sanitise_filename)
+
+        batch = self.intake.load_batch(client_id, batch_id)
+        if batch is None:
+            raise OpsError("OPS_BATCH_NOT_FOUND",
+                           "That input pack could not be found.", 404)
+        if batch.get("workflow_id"):
+            raise OpsError(
+                "OPS_BATCH_ALREADY_STARTED",
+                "Trakt has already started this delivery. Start a new one to "
+                "send replacement files.", 409)
+        if not uploads:
+            raise OpsError("OPS_NO_FILES", "Choose at least one file to send.",
+                           400)
+
+        # 1. Derive the governed destination server-side (fail closed).
+        try:
+            prefix = derive_raw_prefix(
+                client_id=batch["client_id"],
+                portfolio_id=batch["portfolio_id"],
+                reporting_period=batch["reporting_date"],
+                dataset=batch.get("dataset") or BATCH_DATASET_DEFAULT,
+                frequency=batch.get("frequency") or BATCH_FREQUENCY_DEFAULT)
+            named = [(sanitise_filename(name), data) for name, data in uploads]
+        except ManualIntakeError as exc:
+            raise OpsError("OPS_UPLOAD_REFUSED", str(exc), 400) from exc
+        for name, data in named:
+            if not data:
+                raise OpsError("OPS_UPLOAD_REFUSED",
+                               f"'{name}' is empty. Send the file again.", 400)
+
+        # 2. Place every source file, then register every source file. Both
+        #    complete before anything downstream is told the pack is ready.
+        with tempfile.TemporaryDirectory(prefix="ops_upload_") as td:
+            staged: List[Tuple[Path, str]] = []
+            for name, data in named:
+                uri = derive_blob_uri(prefix, name)
+                self.store.storage.write_bytes(uri, data)
+                local = Path(td) / name
+                local.write_bytes(data)
+                staged.append((local, uri))
+                self.store.append_audit(
+                    client_id, "manual_delivery_file_placed", actor=received_by,
+                    detail={"batch_id": batch["batch_id"], "filename": name,
+                            "size": len(data)})
+            for local, uri in staged:
+                batch = self.intake.register_file(
+                    batch, local, received_by_or_source=received_by,
+                    source_uri=uri)
+
+        batch["source_prefix"] = prefix
+        self.intake.save_batch(batch)
+
+        # 3. Only now assess readiness. The existing intake path decides from
+        #    there — including whether to write the run manifest and open the
+        #    workflow — exactly as it does for an automated arrival.
+        return self.assess_batch(client_id=client_id,
+                                 batch_id=batch["batch_id"], actor=received_by)
 
     def assess_batch(self, *, client_id: str, batch_id: str,
                      actor: str = "system") -> Dict[str, Any]:
@@ -1388,9 +1469,20 @@ class OpsEngine:
                                      layout=Layout.from_env())
 
     def approve_publication(self, *, client_id: str, workflow_id: str,
-                            actor: str) -> Dict[str, Any]:
+                            actor: str,
+                            remember_scope: str = PUBLICATION_SCOPE_DEFAULT
+                            ) -> Dict[str, Any]:
         """The ONLY path to production ``latest`` — explicit operator approval,
-        then the EXISTING promotion path publishes."""
+        then the EXISTING promotion path publishes.
+
+        ``remember_scope`` records how far the operator intended this approval
+        to reach. It is recorded and audited; it never widens what this call
+        publishes, and the platform-wide scope is not reachable from here — a
+        single delivery approval is not the place to set global policy.
+        """
+        if remember_scope not in PUBLICATION_SCOPES:
+            raise OpsError("OPS_BAD_SCOPE",
+                           "Choose how far this decision should apply.", 400)
         run = self.store.load_workflow(client_id, workflow_id)
         if run is None:
             raise OpsError("OPS_WORKFLOW_NOT_FOUND",
@@ -1407,7 +1499,8 @@ class OpsEngine:
             raise OpsError("OPS_ALREADY_PUBLISHED",
                            "This report has already been published.", 409)
 
-        pub.update(status="approved", approved_by=actor, approved_at=now_iso())
+        pub.update(status="approved", approved_by=actor, approved_at=now_iso(),
+                   approval_scope=remember_scope)
         self.store.save_publication(client_id, pub)
 
         # Resolve any still-open publication decision for this workflow so it
@@ -1454,7 +1547,8 @@ class OpsEngine:
         self.store.append_audit(client_id, "publication_approved", actor=actor,
                                 workflow_id=run.workflow_id,
                                 detail={"publication_id": pub["publication_id"],
-                                        "version": pub.get("version")})
+                                        "version": pub.get("version"),
+                                        "approval_scope": remember_scope})
         return pub
 
     def _promote_source(self, run: WorkflowRun, actor: str) -> None:

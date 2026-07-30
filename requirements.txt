@@ -21,6 +21,9 @@ fastapi>=0.110
 uvicorn[standard]>=0.27
 gunicorn>=21.2
 uvicorn-worker>=0.2
+# Multipart form parsing — required by FastAPI for the Operations Control
+# manual-delivery upload route (operations_control/api/app.py).
+python-multipart>=0.0.9
 # Entra ID bearer-token validation for the Microsoft 365 Copilot action routes
 # (mi_agent_api/copilot_auth.py). [crypto] pulls the RS256 signature backend.
 PyJWT[crypto]>=2.8

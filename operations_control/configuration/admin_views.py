@@ -382,6 +382,92 @@ def _leaf_count(node: Any) -> int:
     return 1
 
 
+#: Readiness states, most to least usable. The operational question an asset
+#: package must answer at a glance is "can this safely process a delivery?".
+READINESS_READY = "ready"
+READINESS_ATTENTION = "attention"
+READINESS_BLOCKED = "blocked"
+
+READINESS_LABELS = {
+    READINESS_READY: "Ready for use",
+    READINESS_ATTENTION: "Usable, with things to know",
+    READINESS_BLOCKED: "Not ready for use",
+}
+
+
+def _sentence_list(items: List[str]) -> str:
+    if not items:
+        return ""
+    if len(items) == 1:
+        return items[0]
+    return ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def describe_readiness(asset: Dict[str, Any],
+                       regimes: List[Dict[str, Any]],
+                       issues: Optional[List[Dict[str, Any]]] = None
+                       ) -> Dict[str, Any]:
+    """The operational answer for one asset package, in plain language.
+
+    Everything an operator needs to decide whether a delivery can be processed
+    with this configuration — and nothing an operator does not. The
+    administrative detail stays in the package read models beside it.
+    """
+    by_id = {r["id"]: r for r in regimes}
+    warnings: List[str] = []
+    for issue in issues or []:
+        if issue.get("asset") in (None, asset["id"]):
+            warnings.append(issue["message"])
+
+    supported = asset.get("supported_regimes") or []
+    for ref in supported:
+        regime = by_id.get(ref["id"]) or {}
+        if (regime.get("schema") or {}).get("is_draft"):
+            warnings.append(
+                f"{ref['label']} uses a draft schema published by the "
+                "regulator.")
+        if regime and not regime.get("validated"):
+            warnings.append(f"{ref['label']} has not passed its checks.")
+
+    active = bool(asset.get("status") == STATUS_ACTIVE)
+    valid = bool(asset.get("validated"))
+    if not active or not valid:
+        state = READINESS_BLOCKED
+    elif warnings:
+        state = READINESS_ATTENTION
+    else:
+        state = READINESS_READY
+
+    uses = ["MI reporting"] + [r["label"] for r in supported]
+    version = f"v{asset.get('active_version')}"
+    active_and_valid = (f"{asset['label']} {version} is active and valid for "
+                        f"{_sentence_list(uses)}.")
+    if state == READINESS_BLOCKED:
+        statement = (f"{asset['label']} {version} is not active and valid, so "
+                     "it cannot be used to process a delivery yet.")
+    elif state == READINESS_ATTENTION:
+        statement = (f"{active_and_valid} There is something to know before "
+                     "you rely on it.")
+    else:
+        statement = f"Ready for use. {active_and_valid}"
+    return {
+        "state": state,
+        "label": READINESS_LABELS[state],
+        "statement": statement,
+        "can_process": state != READINESS_BLOCKED,
+        "warnings": warnings,
+    }
+
+
+def with_readiness(assets: List[Dict[str, Any]],
+                   regimes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Attach the operator readiness view to every asset package."""
+    issues = compatibility_issues(assets, regimes)
+    for asset in assets:
+        asset["readiness"] = describe_readiness(asset, regimes, issues)
+    return assets
+
+
 def compatibility_matrix(assets: List[Dict[str, Any]],
                          regimes: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Only real, backend-declared relationships. Nothing is inferred from a
@@ -800,8 +886,8 @@ def overview(store: OpsStore, pkgs: ConfigPackageStore, *,
              ) -> Dict[str, Any]:
     layers = {layer: describe_layer(pkgs, layer, by=by)
               for layer in ADMIN_LAYERS}
-    assets = describe_assets(pkgs)
     regimes = describe_regimes(pkgs, repo or pkgs.repo)
+    assets = with_readiness(describe_assets(pkgs), regimes)
     issues = compatibility_issues(assets, regimes)
 
     drafts = [{"layer": layer, "label": info["label"],

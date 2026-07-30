@@ -1,102 +1,332 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { AlertTriangle, OctagonAlert, RefreshCw } from "lucide-react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  AlertTriangle,
+  Check,
+  ChevronDown,
+  FileText,
+  OctagonAlert,
+  RefreshCw,
+} from "lucide-react";
 import clsx from "clsx";
 import { useOpsClient } from "@/api/context";
-import type { Stage, Workflow } from "@/api/types";
+import type { StepDecision, WorkflowStep } from "@/api/types";
+import { DecisionPanel } from "@/components/DecisionPanel";
 import { ErrorNote, Loading } from "@/components/ErrorNote";
 import { EvidenceView } from "@/components/EvidenceView";
 import { Page } from "@/components/Page";
 import { StatusChip } from "@/components/StatusChip";
 import { useToast } from "@/components/Toast";
-import { copy, decisionsLabel } from "@/lib/copy";
-import { formatPeriod } from "@/lib/format";
+import { copy } from "@/lib/copy";
+import { formatDate, formatPeriod } from "@/lib/format";
 import { errorMessage, useLoad } from "@/lib/useLoad";
 
-const STAGE_CHIP_STYLES: Record<string, string> = {
-  completed: "border-emerald-200 bg-emerald-50 text-emerald-800",
-  approved: "border-emerald-400 bg-white text-emerald-700",
-  needs_review: "border-amber-200 bg-amber-50 text-amber-800",
-  blocked: "border-rose-200 bg-rose-50 text-rose-800",
-  running: "border-blue-200 bg-blue-50 text-blue-800 animate-pulse",
-  waiting: "border-stone-200 bg-stone-100 text-stone-500",
-  ready: "border-violet-200 bg-violet-50 text-violet-800",
-  rejected: "border-rose-200 bg-rose-50 text-rose-800",
-};
+const APPROVAL_STEP = "publication_approval";
+const ISSUES_STEP = "issues_reviewed";
 
 function Modal({ children }: { children: ReactNode }) {
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-stone-900/30 px-6">
-      <div className="w-full max-w-md rounded-2xl border border-stone-200 bg-white p-6 shadow-xl">
+      <div className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl border border-stone-200 bg-white p-6 shadow-xl">
         {children}
       </div>
     </div>
   );
 }
 
-function StagePanel({ stage, workflowId }: { stage: Stage; workflowId: string }) {
+function Facts({ step }: { step: WorkflowStep }) {
+  if (step.facts.length === 0) return null;
   return (
-    <div className="rounded-2xl border border-stone-200 bg-white p-6">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h3 className="text-base font-semibold text-stone-900">{stage.label}</h3>
-        <StatusChip status={stage.status} label={stage.status_label} />
-      </div>
-      {stage.summary && <p className="text-lg leading-relaxed text-stone-800">{stage.summary}</p>}
-      {stage.why_it_matters && (
-        <p className="mt-2 text-sm leading-relaxed text-stone-500">{stage.why_it_matters}</p>
-      )}
-      {stage.warnings && stage.warnings.length > 0 && (
-        <div className="mt-4 space-y-2">
-          {stage.warnings.map((warning, i) => (
-            <p
-              key={i}
-              className="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900"
-            >
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-              {warning}
-            </p>
-          ))}
+    <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {step.facts.map((fact) => (
+        <div key={fact.label}>
+          <dt className="text-xs text-stone-500">{fact.label}</dt>
+          <dd className="mt-0.5 text-sm leading-relaxed text-stone-900">{fact.value}</dd>
         </div>
-      )}
-      {stage.blockers && stage.blockers.length > 0 && (
-        <div className="mt-4 space-y-2">
-          {stage.blockers.map((blocker, i) => (
-            <p
-              key={i}
-              className="flex items-start gap-2 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-900"
-            >
-              <OctagonAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-              {blocker}
-            </p>
-          ))}
-        </div>
-      )}
-      {typeof stage.decision_count === "number" && stage.decision_count > 0 && (
-        <p className="mt-4 text-sm text-stone-600">
-          <Link
-            to={`/reviews?workflow=${workflowId}`}
-            className="font-medium text-blue-700 hover:underline"
+      ))}
+    </dl>
+  );
+}
+
+function FileList({ step }: { step: WorkflowStep }) {
+  if (!step.files || step.files.length === 0) return null;
+  return (
+    <div>
+      <h4 className="mb-2 text-sm font-semibold text-stone-700">{copy.workflow.filesHeading}</h4>
+      <ul className="space-y-2">
+        {step.files.map((file) => (
+          <li
+            key={`${file.filename}-${file.checksum}`}
+            className="flex items-start gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3"
           >
-            {decisionsLabel(stage.decision_count)}
-          </Link>
+            <FileText className="mt-0.5 h-4 w-4 shrink-0 text-stone-400" aria-hidden />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-stone-900">{file.filename}</p>
+              <p className="mt-0.5 text-xs text-stone-500">
+                {[
+                  file.role_label,
+                  file.size && `${copy.workflow.fileSize} ${file.size}`,
+                  file.received_at && `${copy.workflow.fileArrived} ${formatDate(file.received_at)}`,
+                  file.checksum && `${copy.workflow.fileCheck} ${file.checksum}`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function DecisionSummary({ decisions, heading }: { decisions: StepDecision[]; heading: string }) {
+  if (decisions.length === 0) return null;
+  return (
+    <div>
+      <h4 className="mb-2 text-sm font-semibold text-stone-700">{heading}</h4>
+      <ul className="space-y-2">
+        {decisions.map((decision) => (
+          <li
+            key={decision.decision_id}
+            className="rounded-xl border border-stone-200 bg-white px-4 py-3"
+          >
+            <p className="text-sm font-medium text-stone-900">{decision.title}</p>
+            {decision.answer && (
+              <p className="mt-0.5 text-sm text-stone-700">{decision.answer}</p>
+            )}
+            {(decision.actor || decision.at) && (
+              <p className="mt-0.5 text-xs text-stone-500">
+                {copy.workflow.answeredBy} {decision.actor || "—"}
+                {decision.at ? ` · ${formatDate(decision.at)}` : ""}
+              </p>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function Notes({ items, tone }: { items: string[]; tone: "warning" | "blocker" }) {
+  if (items.length === 0) return null;
+  const Icon = tone === "warning" ? AlertTriangle : OctagonAlert;
+  return (
+    <div className="space-y-2">
+      {items.map((text, i) => (
+        <p
+          key={i}
+          className={clsx(
+            "flex items-start gap-2 rounded-xl px-3 py-2 text-sm",
+            tone === "warning" ? "bg-amber-50 text-amber-900" : "bg-rose-50 text-rose-900",
+          )}
+        >
+          <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          {text}
         </p>
+      ))}
+    </div>
+  );
+}
+
+/** The approval decision, inside the delivery's own context. */
+function ApprovalPanel({
+  step,
+  busy,
+  onPublish,
+  onHold,
+}: {
+  step: WorkflowStep;
+  busy: boolean;
+  onPublish: (scope: string) => void;
+  onHold: () => void;
+}) {
+  const approval = step.approval;
+  const [scope, setScope] = useState(approval?.default_scope ?? "delivery");
+  const [confirming, setConfirming] = useState(false);
+  if (!approval) return null;
+
+  const consequence = [approval.consequence, approval.scope_consequences[scope]]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-violet-200 bg-violet-50/50 p-5">
+        <p className="text-base font-semibold text-stone-900">{approval.headline}</p>
+        <ul className="mt-2 space-y-1">
+          {approval.evidence_lines.map((line, i) => (
+            <li key={i} className="flex items-start gap-2 text-sm text-stone-700">
+              <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-600" aria-hidden />
+              {line}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {approval.available && (
+        <>
+          <h4 className="text-base font-semibold leading-relaxed text-stone-900">
+            {approval.question}
+          </h4>
+
+          <div>
+            <h5 className="mb-2 text-sm font-semibold text-stone-700">{approval.scope_question}</h5>
+            <div className="space-y-2">
+              {approval.scopes.map((option) => (
+                <label
+                  key={option.value}
+                  className={clsx(
+                    "flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-colors",
+                    scope === option.value
+                      ? "border-blue-600 bg-blue-50/50"
+                      : "border-stone-200 bg-white hover:border-stone-300",
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="approval-scope"
+                    value={option.value}
+                    checked={scope === option.value}
+                    onChange={() => setScope(option.value)}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-stone-800">{option.label}</span>
+                    <span className="mt-0.5 block text-xs text-stone-500">
+                      {option.explanation}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <p className="rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm leading-relaxed text-stone-700">
+            {consequence}
+          </p>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setConfirming(true)}
+              className="rounded-xl bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-40"
+            >
+              {copy.workflow.approvePublish}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onHold}
+              className="rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-50 disabled:opacity-40"
+            >
+              {copy.workflow.hold}
+            </button>
+          </div>
+        </>
       )}
-      {stage.evidence && stage.evidence.length > 0 && (
-        <div className="mt-5">
-          <EvidenceView items={stage.evidence} />
-        </div>
+
+      {confirming && (
+        <Modal>
+          <p className="text-base font-semibold text-stone-900">{approval.question}</p>
+          <p className="mt-3 text-sm leading-relaxed text-stone-700">{consequence}</p>
+          <div className="mt-6 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setConfirming(false)}
+              className="rounded-xl border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
+            >
+              {copy.common.cancel}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setConfirming(false);
+                onPublish(scope);
+              }}
+              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-40"
+            >
+              {copy.workflow.approveConfirm}
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   );
 }
 
-function pickActiveStage(workflow: Workflow): string {
-  const active = workflow.stages.find((s) =>
-    ["needs_review", "blocked", "running", "ready"].includes(s.status),
+function StepBody({
+  step,
+  busy,
+  onPublish,
+  onHold,
+  onDecisionResolved,
+}: {
+  step: WorkflowStep;
+  busy: boolean;
+  onPublish: (scope: string) => void;
+  onHold: () => void;
+  onDecisionResolved: () => void;
+}) {
+  return (
+    <div className="space-y-5">
+      {step.summary && <p className="text-base leading-relaxed text-stone-800">{step.summary}</p>}
+      {step.status === "pending" && (
+        <p className="text-sm text-stone-500">{copy.workflow.nextPending}</p>
+      )}
+      {step.status === "not_applicable" && (
+        <p className="text-sm text-stone-500">{copy.workflow.nextNotApplicable}</p>
+      )}
+      <Facts step={step} />
+      <FileList step={step} />
+      <Notes items={step.blockers} tone="blocker" />
+      <Notes items={step.warnings} tone="warning" />
+
+      {step.key === ISSUES_STEP && (
+        <>
+          <DecisionSummary decisions={step.resolved ?? []} heading={copy.workflow.answered} />
+          {(step.unresolved ?? []).length > 0 && (
+            <div className="space-y-3">
+              <h4 className="text-sm font-semibold text-stone-700">{copy.workflow.stillOpen}</h4>
+              {(step.unresolved ?? []).map((decision) => (
+                <DecisionPanel
+                  key={decision.decision_id}
+                  decisionId={decision.decision_id}
+                  onResolved={onDecisionResolved}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {step.key === APPROVAL_STEP && (
+        <ApprovalPanel step={step} busy={busy} onPublish={onPublish} onHold={onHold} />
+      )}
+
+      {step.outputs && step.outputs.length > 0 && (
+        <div>
+          <h4 className="mb-2 text-sm font-semibold text-stone-700">
+            {copy.workflow.outputsHeading}
+          </h4>
+          <ul className="flex flex-wrap gap-2">
+            {step.outputs.map((output) => (
+              <li
+                key={output}
+                className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700"
+              >
+                {output}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {step.evidence && step.evidence.length > 0 && <EvidenceView items={step.evidence} />}
+    </div>
   );
-  if (active) return active.stage;
-  const lastDone = [...workflow.stages].reverse().find((s) => s.status !== "waiting");
-  return (lastDone ?? workflow.stages[0])?.stage ?? "";
 }
 
 export function WorkflowDetailScreen() {
@@ -104,10 +334,10 @@ export function WorkflowDetailScreen() {
   const client = useOpsClient();
   const navigate = useNavigate();
   const toast = useToast();
+  const [searchParams] = useSearchParams();
 
   const { data: workflow, error, loading, reload } = useLoad(() => client.getWorkflow(id), [id]);
-  const [selectedStage, setSelectedStage] = useState<string | null>(null);
-  const [confirmPublish, setConfirmPublish] = useState(false);
+  const [openStep, setOpenStep] = useState<string | null>(null);
   const [holdOpen, setHoldOpen] = useState(false);
   const [holdReason, setHoldReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -119,8 +349,18 @@ export function WorkflowDetailScreen() {
     return () => clearInterval(timer);
   }, [workflow?.status, reload]);
 
-  const activeStage = useMemo(() => (workflow ? pickActiveStage(workflow) : ""), [workflow]);
-  const shownStage = workflow?.stages.find((s) => s.stage === (selectedStage ?? activeStage));
+  const steps = useMemo<WorkflowStep[]>(() => workflow?.steps ?? [], [workflow]);
+  // Deep links land on a step: ?step= names one directly, ?decision= (an
+  // existing approval/review link) lands on the step that owns the question.
+  const requestedStep = searchParams.get("step");
+  const requestedDecision = searchParams.get("decision");
+  const landingStep =
+    (requestedStep && steps.some((s) => s.key === requestedStep) && requestedStep) ||
+    (requestedDecision ? ISSUES_STEP : "") ||
+    workflow?.current_step ||
+    steps[0]?.key ||
+    "";
+  const shown = openStep ?? landingStep;
 
   async function run(action: () => Promise<unknown>, successMessage?: string) {
     setBusy(true);
@@ -138,11 +378,10 @@ export function WorkflowDetailScreen() {
   const canRerun =
     workflow &&
     (["blocked", "failed", "held"].includes(workflow.status) || workflow.interrupted);
-  const canPublish = workflow?.status === "awaiting_publication";
 
   return (
     <Page
-      title={workflow ? `${workflow.client_id} · ${workflow.portfolio_id}` : copy.workflows.title}
+      title={workflow ? `${workflow.client_id} · ${workflow.portfolio_id}` : copy.workflow.caseFile}
       subtitle={
         workflow
           ? `${workflow.outcome_label} · ${formatPeriod(workflow.reporting_period)}`
@@ -179,60 +418,91 @@ export function WorkflowDetailScreen() {
             </div>
           )}
 
-          {/* Stage tracker */}
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {workflow.stages.map((stage) => (
-              <button
-                key={stage.stage}
-                type="button"
-                onClick={() => setSelectedStage(stage.stage)}
-                className={clsx(
-                  "flex shrink-0 flex-col items-start gap-0.5 rounded-xl border px-4 py-2.5 text-left transition-shadow",
-                  STAGE_CHIP_STYLES[stage.status] ?? STAGE_CHIP_STYLES.waiting,
-                  (selectedStage ?? activeStage) === stage.stage
-                    ? "ring-2 ring-stone-900/20"
-                    : "hover:shadow-sm",
-                )}
-              >
-                <span className="text-sm font-medium">{stage.label}</span>
-                <span className="text-xs opacity-75">{stage.status_label}</span>
-              </button>
-            ))}
-          </div>
+          {/* The case file. Every stage stays visible and expandable, including
+              the ones already behind us. */}
+          <section>
+            <h2 className="mb-3 text-sm font-semibold text-stone-700">
+              {copy.workflow.stepsHeading}
+            </h2>
+            <ol className="space-y-2">
+              {steps.map((step, index) => {
+                const expanded = shown === step.key;
+                return (
+                  <li
+                    key={step.key}
+                    data-step={step.key}
+                    data-step-status={step.status}
+                    className={clsx(
+                      "rounded-2xl border bg-white transition-colors",
+                      expanded ? "border-stone-300 shadow-sm" : "border-stone-200",
+                    )}
+                  >
+                    <button
+                      type="button"
+                      aria-expanded={expanded}
+                      onClick={() => setOpenStep(expanded ? "" : step.key)}
+                      className="flex w-full items-center gap-3 px-4 py-3.5 text-left sm:px-6"
+                    >
+                      <span
+                        className={clsx(
+                          "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                          step.status === "complete"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : step.status === "current"
+                              ? "bg-blue-600 text-white"
+                              : step.status === "blocked"
+                                ? "bg-rose-100 text-rose-700"
+                                : "bg-stone-100 text-stone-400",
+                        )}
+                      >
+                        {step.status === "complete" ? (
+                          <Check className="h-4 w-4" aria-hidden />
+                        ) : (
+                          index + 1
+                        )}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        {/* The step name always reads in full — it wraps on a
+                            narrow screen rather than being cut off. */}
+                        <span className="block text-sm font-semibold text-stone-900">
+                          {step.label}
+                        </span>
+                        {!expanded && step.summary && (
+                          <span className="mt-0.5 block truncate text-xs text-stone-500">
+                            {step.summary}
+                          </span>
+                        )}
+                      </span>
+                      <StatusChip status={step.status} label={step.status_label} />
+                      <ChevronDown
+                        className={clsx(
+                          "h-4 w-4 shrink-0 text-stone-400 transition-transform",
+                          expanded && "rotate-180",
+                        )}
+                        aria-hidden
+                      />
+                    </button>
+                    {expanded && (
+                      <div className="border-t border-stone-100 px-4 py-5 sm:px-6">
+                        <StepBody
+                          step={step}
+                          busy={busy}
+                          onPublish={(scope) =>
+                            void run(() => client.publishWorkflow(workflow.workflow_id, scope))
+                          }
+                          onHold={() => setHoldOpen(true)}
+                          onDecisionResolved={() => void reload({ quiet: true })}
+                        />
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+          </section>
 
-          {shownStage && <StagePanel stage={shownStage} workflowId={workflow.workflow_id} />}
-
-          {/* Contextual actions */}
-          <div className="flex flex-wrap items-center gap-3">
-            {workflow.open_decisions > 0 && (
-              <Link
-                to={`/reviews?workflow=${workflow.workflow_id}`}
-                className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
-              >
-                {copy.workflow.reviewDecisions}
-              </Link>
-            )}
-            {canPublish && (
-              <>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => setConfirmPublish(true)}
-                  className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-40"
-                >
-                  {copy.workflow.approvePublish}
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => setHoldOpen(true)}
-                  className="rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-50 disabled:opacity-40"
-                >
-                  {copy.workflow.hold}
-                </button>
-              </>
-            )}
-            {canRerun && (
+          {canRerun && (
+            <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
                 disabled={busy}
@@ -242,35 +512,9 @@ export function WorkflowDetailScreen() {
                 <RefreshCw className="h-4 w-4" aria-hidden />
                 {copy.workflow.runAgain}
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
-      )}
-
-      {confirmPublish && workflow && (
-        <Modal>
-          <p className="mb-6 text-base text-stone-800">{copy.workflow.publishConfirm}</p>
-          <div className="flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => setConfirmPublish(false)}
-              className="rounded-xl border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
-            >
-              {copy.common.cancel}
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => {
-                setConfirmPublish(false);
-                void run(() => client.publishWorkflow(workflow.workflow_id));
-              }}
-              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-40"
-            >
-              {copy.workflow.publishButton}
-            </button>
-          </div>
-        </Modal>
       )}
 
       {holdOpen && workflow && (

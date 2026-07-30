@@ -86,12 +86,83 @@ export interface Stage {
   decision_count?: number;
 }
 
+/** How far a delivery has got through its governed workflow. */
+export type StepStatus = "complete" | "current" | "pending" | "blocked" | "not_applicable";
+
+export interface StepFact {
+  label: string;
+  value: string;
+}
+
+export interface StepFile {
+  filename: string;
+  size: string;
+  received_at: string;
+  received_from: string;
+  checksum: string;
+  role_label: string;
+}
+
+export interface StepDecision {
+  decision_id: string;
+  title: string;
+  question: string;
+  blocking: boolean;
+  status: string;
+  answer: string;
+  scope: string;
+  actor: string;
+  at: string;
+  overridden: boolean;
+}
+
+export interface ApprovalScopeOption {
+  value: string;
+  label: string;
+  explanation: string;
+}
+
+export interface ApprovalPanel {
+  available: boolean;
+  headline: string;
+  evidence_lines: string[];
+  question: string;
+  scope_question: string;
+  scopes: ApprovalScopeOption[];
+  default_scope: string;
+  consequence: string;
+  scope_consequences: Record<string, string>;
+  version: number | null;
+}
+
+/** One step of the durable delivery case file. */
+export interface WorkflowStep {
+  key: string;
+  label: string;
+  status: StepStatus;
+  status_label: string;
+  summary: string;
+  facts: StepFact[];
+  warnings: string[];
+  blockers: string[];
+  detail?: string[];
+  files?: StepFile[];
+  resolved?: StepDecision[];
+  unresolved?: StepDecision[];
+  evidence?: EvidenceItem[];
+  approval?: ApprovalPanel;
+  outputs?: string[];
+}
+
 export interface Workflow extends WorkflowRow {
   outcome_label: string;
   status_sentence: string;
   interrupted: boolean;
   blockers: string[];
   stages: Stage[];
+  /** The governed case file. Present from every backend that serves steps. */
+  steps?: WorkflowStep[];
+  current_step?: string;
   rerun_count: number;
 }
 
@@ -153,6 +224,8 @@ export interface Batch {
   missing_roles: string[];
   configuration_ready: boolean;
   blocking_decisions: string[];
+  /** Where the server filed this pack. Read-only — the browser never sets it. */
+  source_prefix: string;
   workflow_id: string | null;
   created_at: string;
   updated_at: string;
