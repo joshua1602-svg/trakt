@@ -78,6 +78,14 @@ app.add_middleware(CORSMiddleware, allow_origins=_cors,
                                   "Content-Type"])
 
 
+#: Client Onboarding — the governed standing-configuration capability. It sits
+#: alongside Operations: Operations processes deliveries, Onboarding creates the
+#: configuration those deliveries resolve with.
+from . import onboarding_routes  # noqa: E402  (router needs `app` above)
+
+app.include_router(onboarding_routes.router)
+
+
 @app.exception_handler(OpsError)
 async def _ops_error(request: Request, exc: OpsError):
     return JSONResponse(status_code=exc.http_status,

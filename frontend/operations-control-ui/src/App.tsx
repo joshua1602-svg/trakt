@@ -16,6 +16,9 @@ import { ReviewsScreen } from "@/screens/Reviews";
 import { RulesScreen } from "@/screens/Rules";
 import { WorkflowDetailScreen } from "@/screens/WorkflowDetail";
 import { WorkflowsScreen } from "@/screens/Workflows";
+import { OnboardingClientScreen } from "@/screens/onboarding/ClientEditor";
+import { OnboardingHomeScreen } from "@/screens/onboarding/Home";
+import { OnboardingWizardScreen } from "@/screens/onboarding/Wizard";
 import { AdminOnly } from "@/screens/admin/AdminLayout";
 import { ConfigAssetsScreen } from "@/screens/admin/ConfigAssets";
 import { ConfigHistoryScreen } from "@/screens/admin/ConfigHistory";
@@ -68,6 +71,12 @@ export default function App() {
                 <Route path="/reviews/:id" element={<ReviewDetailScreen />} />
                 <Route path="/rules" element={<RulesScreen />} />
                 <Route path="/history" element={<HistoryScreen />} />
+                {/* Client Onboarding — standing configuration. It sits beside
+                    Operations: Operations processes deliveries, Onboarding
+                    creates the configuration those deliveries resolve with. */}
+                <Route path="/onboarding" element={<OnboardingHomeScreen />} />
+                <Route path="/onboarding/drafts/:id" element={<OnboardingWizardScreen />} />
+                <Route path="/onboarding/clients/:id" element={<OnboardingClientScreen />} />
                 {/* Administrator area. The guard decides what to render; the
                     backend decides what is allowed on every request. */}
                 <Route

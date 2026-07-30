@@ -60,11 +60,38 @@ would leave an asset reporting under a regulatory package the candidate does
 not carry. Running workflows stay pinned to the version they resolved with;
 activation only changes what future runs resolve.
 
+## Client Onboarding
+
+A governed capability alongside Operations: it creates and maintains a client's
+STANDING configuration, and is not part of the monthly reporting cycle. The
+operator answers business questions; `onboarding/generation.py` writes the
+artefacts Trakt already reads — the client configuration YAML, the Annex 12
+overlay, portfolio metadata and the source registry — rather than a parallel
+set. Design pack: `docs/client_onboarding/`.
+
+| Endpoint | Returns |
+|---|---|
+| `GET /ops/onboarding/vocabularies` | Every governed option list, with the module that owns it, plus the standing-field declaration |
+| `GET /ops/onboarding/clients` | Clients the operator can see, onboarded or not |
+| `GET /ops/onboarding/clients/{id}` | General, portfolios, reporting, regimes, live source registrations, history |
+| `GET /ops/onboarding/clients/{id}/versions/{n}` | One immutable prior version |
+| `POST /ops/onboarding/drafts` | Open a draft; `adopt: true` populates it from the client's existing configuration |
+| `GET|PUT /ops/onboarding/drafts/{id}` | Resume, or save one step |
+| `GET /ops/onboarding/drafts/{id}/review` | Exactly what approval would create or change, with the current content alongside |
+| `POST /ops/onboarding/drafts/{id}/approve` | Write it. Administrator only, and a reason is required |
+
+Approval creates a new immutable version carrying who, when, what changed,
+before, after and why, and appends to the same hash-chained audit trail.
+`EffectiveConfigResolver.client_config_for()` then resolves that client's
+deliveries against the generated configuration; a client with no approved
+profile resolves the repository file exactly as before.
+
 ## Tests
 
 ```bash
 python -m pytest tests/operations_control/ -q
 python -m pytest tests/operations_control/test_admin_config_api.py -q   # admin config API
+python -m pytest tests/operations_control/test_onboarding.py -q         # client onboarding
 ```
 
 Covers workflow transitions, restart recovery, all four delivery

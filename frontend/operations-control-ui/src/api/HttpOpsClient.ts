@@ -15,6 +15,16 @@ import type {
   ValidationSummary,
 } from "./adminTypes";
 import type {
+  ApprovalResult,
+  OnboardingClientDetail,
+  OnboardingClientRow,
+  OnboardingDraft,
+  OnboardingReference,
+  OnboardingReview,
+  OnboardingStep,
+  ProfileVersionRow,
+} from "./onboardingTypes";
+import type {
   Batch,
   CreateBatchInput,
   Dashboard,
@@ -343,5 +353,91 @@ export class HttpOpsClient implements OpsClient {
     toVersion: number,
   ): Promise<{ active_version: number }> {
     return this.post(`/ops/admin/config/${layer}/rollback`, { to_version: toVersion });
+  }
+
+  // -- Client Onboarding ---------------------------------------------------- //
+
+  async getOnboardingReference(): Promise<OnboardingReference> {
+    return this.request<OnboardingReference>("/ops/onboarding/vocabularies");
+  }
+
+  async getOnboardingClients(): Promise<OnboardingClientRow[]> {
+    const body = await this.request<{ clients: OnboardingClientRow[] }>(
+      "/ops/onboarding/clients",
+    );
+    return body.clients;
+  }
+
+  async getOnboardingClient(clientId: string): Promise<OnboardingClientDetail> {
+    const body = await this.request<{ client: OnboardingClientDetail }>(
+      `/ops/onboarding/clients/${encodeURIComponent(clientId)}`,
+    );
+    return body.client;
+  }
+
+  async getOnboardingClientVersion(
+    clientId: string,
+    version: number,
+  ): Promise<ProfileVersionRow> {
+    const body = await this.request<{ version: ProfileVersionRow }>(
+      `/ops/onboarding/clients/${encodeURIComponent(clientId)}/versions/${version}`,
+    );
+    return body.version;
+  }
+
+  async startOnboardingDraft(input: {
+    client_id?: string;
+    adopt?: boolean;
+  }): Promise<OnboardingDraft> {
+    const body = await this.post<{ draft: OnboardingDraft }>("/ops/onboarding/drafts", {
+      client_id: input.client_id ?? "",
+      adopt: input.adopt ?? false,
+    });
+    return body.draft;
+  }
+
+  async getOnboardingDraft(draftId: string, client?: string): Promise<OnboardingDraft> {
+    const body = await this.request<{ draft: OnboardingDraft }>(
+      `/ops/onboarding/drafts/${encodeURIComponent(draftId)}${query({ client })}`,
+    );
+    return body.draft;
+  }
+
+  async saveOnboardingStep(
+    draftId: string,
+    step: OnboardingStep,
+    payload: Record<string, unknown>,
+    client?: string,
+  ): Promise<OnboardingDraft> {
+    const body = await this.request<{ draft: OnboardingDraft }>(
+      `/ops/onboarding/drafts/${encodeURIComponent(draftId)}${query({ client })}`,
+      { method: "PUT", body: JSON.stringify({ step, payload }) },
+    );
+    return body.draft;
+  }
+
+  async reviewOnboardingDraft(draftId: string, client?: string): Promise<OnboardingReview> {
+    const body = await this.request<{ review: OnboardingReview }>(
+      `/ops/onboarding/drafts/${encodeURIComponent(draftId)}/review${query({ client })}`,
+    );
+    return body.review;
+  }
+
+  async approveOnboardingDraft(
+    draftId: string,
+    reason: string,
+    client?: string,
+  ): Promise<ApprovalResult> {
+    return this.post<ApprovalResult>(
+      `/ops/onboarding/drafts/${encodeURIComponent(draftId)}/approve${query({ client })}`,
+      { reason },
+    );
+  }
+
+  async discardOnboardingDraft(draftId: string, reason: string, client?: string): Promise<void> {
+    await this.post(
+      `/ops/onboarding/drafts/${encodeURIComponent(draftId)}/discard${query({ client })}`,
+      { reason },
+    );
   }
 }

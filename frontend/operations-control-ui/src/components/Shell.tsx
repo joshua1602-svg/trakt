@@ -1,6 +1,15 @@
 import type { ReactNode } from "react";
 import { NavLink, Link } from "react-router-dom";
-import { Home, ListChecks, GitBranch, BookOpen, Clock, Plus, SlidersHorizontal } from "lucide-react";
+import {
+  Home,
+  ListChecks,
+  GitBranch,
+  BookOpen,
+  Clock,
+  Plus,
+  SlidersHorizontal,
+  Building2,
+} from "lucide-react";
 import clsx from "clsx";
 import { useSession } from "@/api/session";
 import { copy } from "@/lib/copy";
@@ -11,6 +20,8 @@ const NAV_ITEMS = [
   { to: "/workflows", label: copy.nav.workflows, icon: GitBranch, end: false },
   { to: "/rules", label: copy.nav.rules, icon: BookOpen, end: false },
   { to: "/history", label: copy.nav.history, icon: Clock, end: false },
+  // A governed capability of its own, not a step of the delivery workflow.
+  { to: "/onboarding", label: copy.nav.onboarding, icon: Building2, end: false },
 ];
 
 /** Administrator-only entry. Hidden for ordinary operators — the backend still

@@ -44,6 +44,10 @@ LAYER_FILES: Dict[str, List[str]] = {
     LAYER_REGIME: [
         "config/regime/annex2_field_universe.yaml",
         "config/regime/annex2_delivery_rules.yaml",
+        # Which fields of each reporting product are STANDING (client
+        # onboarding) rather than delivery-specific. Governed here so a future
+        # regime becomes available to onboarding as a configuration change.
+        "config/regime/onboarding_standing_fields.yaml",
     ],
     LAYER_ASSET: [
         "config/asset/product_profiles.yaml",

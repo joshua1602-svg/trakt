@@ -12,6 +12,16 @@ import type {
   ValidationSummary,
 } from "./adminTypes";
 import type {
+  ApprovalResult,
+  OnboardingClientDetail,
+  OnboardingClientRow,
+  OnboardingDraft,
+  OnboardingReference,
+  OnboardingReview,
+  OnboardingStep,
+  ProfileVersionRow,
+} from "./onboardingTypes";
+import type {
   Batch,
   CreateBatchInput,
   Dashboard,
@@ -101,4 +111,23 @@ export interface OpsClient {
   ): Promise<{ validation: ValidationResult; validation_summary: ValidationSummary }>;
   activateConfigVersion(layer: ConfigLayer, version: number): Promise<{ active_version: number }>;
   rollbackConfig(layer: ConfigLayer, toVersion: number): Promise<{ active_version: number }>;
+
+  // -- Client Onboarding (standing configuration) --------------------------- //
+  /** Every governed option list and standing-field declaration the wizard renders. */
+  getOnboardingReference(): Promise<OnboardingReference>;
+  getOnboardingClients(): Promise<OnboardingClientRow[]>;
+  getOnboardingClient(clientId: string): Promise<OnboardingClientDetail>;
+  getOnboardingClientVersion(clientId: string, version: number): Promise<ProfileVersionRow>;
+  /** `adopt` populates the draft from the client's existing configuration. */
+  startOnboardingDraft(input: { client_id?: string; adopt?: boolean }): Promise<OnboardingDraft>;
+  getOnboardingDraft(draftId: string, client?: string): Promise<OnboardingDraft>;
+  saveOnboardingStep(
+    draftId: string,
+    step: OnboardingStep,
+    payload: Record<string, unknown>,
+    client?: string,
+  ): Promise<OnboardingDraft>;
+  reviewOnboardingDraft(draftId: string, client?: string): Promise<OnboardingReview>;
+  approveOnboardingDraft(draftId: string, reason: string, client?: string): Promise<ApprovalResult>;
+  discardOnboardingDraft(draftId: string, reason: string, client?: string): Promise<void>;
 }

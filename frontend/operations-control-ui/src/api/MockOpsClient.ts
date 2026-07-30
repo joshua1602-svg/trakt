@@ -1,4 +1,5 @@
 import { MockConfigAdmin } from "./MockConfigAdmin";
+import { MockOnboarding } from "./MockOnboarding";
 import { OpsError, type OpsClient } from "./OpsClient";
 import type {
   AuditTrail,
@@ -13,6 +14,16 @@ import type {
   ValidationResult,
   ValidationSummary,
 } from "./adminTypes";
+import type {
+  ApprovalResult,
+  OnboardingClientDetail,
+  OnboardingClientRow,
+  OnboardingDraft,
+  OnboardingReference,
+  OnboardingReview,
+  OnboardingStep,
+  ProfileVersionRow,
+} from "./onboardingTypes";
 import type {
   Batch,
   BatchInputRole,
@@ -92,6 +103,7 @@ export class MockOpsClient implements OpsClient {
   private readonly delayMs: number;
   private readonly principal: Principal;
   private readonly config = new MockConfigAdmin();
+  private readonly onboarding = new MockOnboarding();
   private nextId = 6000;
   /** Counts reads of a running workflow so it visibly "finishes" while polling. */
   private runningTicks = new Map<string, number>();
@@ -1536,5 +1548,71 @@ export class MockOpsClient implements OpsClient {
     await this.wait();
     this.requireAdmin();
     return this.config.rollback(layer, toVersion);
+  }
+
+  // -- Client Onboarding ---------------------------------------------------- //
+
+  async getOnboardingReference(): Promise<OnboardingReference> {
+    await this.wait();
+    return this.onboarding.reference();
+  }
+
+  async getOnboardingClients(): Promise<OnboardingClientRow[]> {
+    await this.wait();
+    return this.onboarding.clients();
+  }
+
+  async getOnboardingClient(clientId: string): Promise<OnboardingClientDetail> {
+    await this.wait();
+    return this.onboarding.client(clientId);
+  }
+
+  async getOnboardingClientVersion(
+    clientId: string,
+    version: number,
+  ): Promise<ProfileVersionRow> {
+    await this.wait();
+    return this.onboarding.version(clientId, version);
+  }
+
+  async startOnboardingDraft(input: {
+    client_id?: string;
+    adopt?: boolean;
+  }): Promise<OnboardingDraft> {
+    await this.wait();
+    return this.onboarding.startDraft(input, this.principal.name);
+  }
+
+  async getOnboardingDraft(draftId: string): Promise<OnboardingDraft> {
+    await this.wait();
+    return this.onboarding.draft(draftId);
+  }
+
+  async saveOnboardingStep(
+    draftId: string,
+    step: OnboardingStep,
+    payload: Record<string, unknown>,
+  ): Promise<OnboardingDraft> {
+    await this.wait();
+    return this.onboarding.saveStep(draftId, step, payload);
+  }
+
+  async reviewOnboardingDraft(draftId: string): Promise<OnboardingReview> {
+    await this.wait();
+    return this.onboarding.review(draftId);
+  }
+
+  async approveOnboardingDraft(draftId: string, reason: string): Promise<ApprovalResult> {
+    await this.wait();
+    this.requireAdmin();
+    if (!reason.trim()) {
+      throw new OpsError("Please say why this configuration is changing.", "OPS_REASON_REQUIRED");
+    }
+    return this.onboarding.approve(draftId, reason, this.principal.name);
+  }
+
+  async discardOnboardingDraft(draftId: string): Promise<void> {
+    await this.wait();
+    this.onboarding.discard(draftId);
   }
 }

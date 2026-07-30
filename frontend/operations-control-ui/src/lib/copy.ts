@@ -12,7 +12,43 @@ export const copy = {
     rules: "Rules",
     history: "History",
     admin: "Platform configuration",
+    onboarding: "Client onboarding",
     startNew: "Create a manual delivery",
+  },
+
+  onboarding: {
+    title: "Client onboarding",
+    subtitle:
+      "Set up what stays true about a client between deliveries. Answer the business questions; Trakt writes the configuration.",
+    newClient: "Onboard a new client",
+    existingHeading: "Existing clients",
+    legacyBadge: "Not yet onboarded",
+    onboardedBadge: "Onboarded",
+    adopt: "Adopt current configuration",
+    open: "Open",
+    empty: "No clients yet. Onboard the first one to get started.",
+    unavailable: "Client onboarding could not be loaded just now.",
+    wizardTitle: "New client",
+    wizardSubtitle: "Seven steps. Nothing is written until you approve it at the end.",
+    back: "Back",
+    next: "Next",
+    saving: "Saving…",
+    reviewTitle: "Review",
+    reviewIntro:
+      "This is everything that will be created or changed. Nothing has been written yet.",
+    approve: "Approve and write configuration",
+    approveReason: "Why is this configuration changing?",
+    approved: "Configuration saved.",
+    editorSubtitle: "The configuration in force for this client, and how it got there.",
+    tabs: {
+      general: "General",
+      portfolios: "Portfolios",
+      reporting: "Reporting",
+      regimes: "Regimes",
+      sources: "Source registrations",
+      history: "History",
+    },
+    edit: "Edit configuration",
   },
 
   signIn: {

@@ -59,6 +59,39 @@ class EffectiveConfigResolver:
         self.packages = packages or ConfigPackageStore(store)
         self.client_config_path = Path(client_config_path
                                        or "config/client/config_client_ERM_UK.yaml")
+        self._generated_cache: Dict[str, Path] = {}
+
+    # ------------------------------------------------------------------ #
+    def client_config_for(self, client_id: str) -> Path:
+        """The client configuration in force for ``client_id``.
+
+        A client that has been through Client Onboarding is governed by the
+        configuration onboarding GENERATED for it — same format, same layer,
+        same readers, but versioned and attributable. A client that has not is
+        governed by the repository file exactly as before, so adopting a client
+        is a decision, never a side effect of this code shipping.
+        """
+        if not client_id:
+            return self.client_config_path
+        cached = self._generated_cache.get(client_id)
+        try:
+            from ..onboarding.generation import client_config_rel
+            from ..onboarding.store import OnboardingStore
+            text = OnboardingStore(self.store).read_artefact(
+                client_id, client_config_rel(client_id))
+        except Exception:      # noqa: BLE001 — never break a delivery over this
+            return cached or self.client_config_path
+        if not text:
+            return self.client_config_path
+        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+        if cached is not None and cached.name.startswith(digest):
+            return cached
+        import tempfile
+        path = (Path(tempfile.mkdtemp(prefix="trakt-client-config-"))
+                / f"{digest}-config_client_{client_id}.yaml")
+        path.write_text(text, encoding="utf-8")
+        self._generated_cache[client_id] = path
+        return path
 
     # ------------------------------------------------------------------ #
     def resolve(self, *, client_id: str, portfolio_id: str,
@@ -69,6 +102,9 @@ class EffectiveConfigResolver:
         blockers: List[str] = []
         warnings: List[str] = []
         conflicts: List[Dict[str, Any]] = []
+        # The client layer: onboarding-generated where the client has been
+        # onboarded, the repository file otherwise.
+        client_config_path = self.client_config_for(client_id)
 
         # 1-4. Identify asset + applicable regime(s) via the support model.
         asset = ASSET_MODEL.get(asset_type)
@@ -125,8 +161,8 @@ class EffectiveConfigResolver:
                 ("system", None),
                 ("regime", None),
                 ("asset", self._as_temp_yaml(asset_defaults, "asset")),
-                ("client", self.client_config_path
-                 if self.client_config_path.exists() else None),
+                ("client", client_config_path
+                 if client_config_path.exists() else None),
             ],
             runtime_overrides=None)
         # Client-rule / portfolio / run overrides applied in precedence order
@@ -156,7 +192,7 @@ class EffectiveConfigResolver:
 
         # 8-9. Missing values / client completeness (operator-safe preflight).
         pf = _preflight.run_preflight(
-            client_config_path=self.client_config_path,
+            client_config_path=client_config_path,
             overrides={**client_overrides, **portfolio_overrides,
                        **run_overrides},
             reporting_period=reporting_period)
@@ -187,7 +223,7 @@ class EffectiveConfigResolver:
             system_config_version=f"v{pkg_system['version']}",
             regime_config_version=f"v{pkg_regime['version']}",
             asset_config_version=f"v{pkg_asset['version']}",
-            client_config_version=self._file_version(self.client_config_path),
+            client_config_version=self._file_version(client_config_path),
             portfolio_config_version=decision_set_version,
             decision_set_version=decision_set_version,
             layer_files={
@@ -212,7 +248,10 @@ class EffectiveConfigResolver:
                 "system": f"config package v{pkg_system['version']}",
                 "regime": f"config package v{pkg_regime['version']}",
                 "asset": f"config package v{pkg_asset['version']}",
-                "client": str(self.client_config_path),
+                "client": ("Client Onboarding (generated client "
+                           "configuration)"
+                           if client_config_path != self.client_config_path
+                           else str(self.client_config_path)),
                 "portfolio": "OCC rule store (portfolio scope)",
                 "run_decisions": "OCC rule store (run scope + approved "
                                  "workflow decisions)",
