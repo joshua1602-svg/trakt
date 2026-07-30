@@ -33,6 +33,22 @@ OUTCOME_MI = "mi"
 OUTCOME_MI_ANNEX2 = "mi_annex2"
 OUTCOMES = (OUTCOME_MI, OUTCOME_MI_ANNEX2)
 
+# Which book an input pack describes.
+#: The dataset a pack describes unless told otherwise. Only a dataset OTHER than
+#: this extends the pack identifier, so every funded pack keeps the identity it
+#: has always had.
+BATCH_DATASET_DEFAULT = "funded"
+
+#: Datasets an operator may choose when opening a pack by hand. Deliberately the
+#: production structure only: ``forecast`` is still accepted from a blob path for
+#: backwards compatibility, but it is not something to start a new delivery as.
+BATCH_DATASETS = (BATCH_DATASET_DEFAULT, "pipeline")
+
+#: Datasets that can carry a regime (ESMA Annex 2) delivery. Everything else is
+#: an MI view. Declared here so both doors into intake — the blob trigger and the
+#: OCC — answer the regime question the same way.
+REGIME_CAPABLE_DATASETS = (BATCH_DATASET_DEFAULT,)
+
 # Workflow-run statuses.
 RUN_RECEIVED = "received"
 RUN_RUNNING = "running"

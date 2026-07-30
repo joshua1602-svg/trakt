@@ -117,6 +117,8 @@ export class MockOpsClient implements OpsClient {
       portfolio_id: "Nordic Bond",
       reporting_date: "2026-06-30",
       workflow_type: "mi",
+      dataset: "funded",
+      dataset_label: "Funded book",
       status: "review_required",
       status_label: "Needs your review",
       status_sentence:
@@ -708,6 +710,8 @@ export class MockOpsClient implements OpsClient {
       portfolio_id: input.portfolio_id,
       reporting_date: input.reporting_date,
       workflow_type: input.workflow_type,
+      dataset: input.dataset,
+      dataset_label: input.dataset === "pipeline" ? "Pipeline" : "Funded book",
       status: "receiving",
       status_label: "Receiving files",
       status_sentence: "Trakt is watching for the files to arrive.",

@@ -34,6 +34,7 @@ from .adapters import (
 )
 from .classification import Classification, classify_delivery, fingerprint_delivery
 from .contracts import (
+    BATCH_DATASETS,
     DEC_APPROVED,
     DEC_OPEN,
     DEC_REJECTED,
@@ -46,6 +47,7 @@ from .contracts import (
     OUTCOME_MI,
     OUTCOME_MI_ANNEX2,
     OUTCOMES,
+    REGIME_CAPABLE_DATASETS,
     RUN_AWAITING_PUBLICATION,
     RUN_BLOCKED,
     RUN_CANCELLED,
@@ -337,6 +339,20 @@ class OpsEngine:
         if workflow_type not in OUTCOMES:
             raise OpsError("OPS_BAD_OUTCOME",
                            "Choose what Trakt should prepare.", 400)
+        if dataset and dataset not in BATCH_DATASETS:
+            raise OpsError("OPS_BAD_DATASET",
+                           "Choose which book these files describe.", 400)
+        # A pipeline view can never produce a regime delivery. Refusing the
+        # combination here means an operator cannot route a delivery into regime
+        # reporting by accident — the same rule the blob trigger applies to
+        # automated arrivals, enforced at the one other door into intake.
+        if (workflow_type == OUTCOME_MI_ANNEX2
+                and dataset and dataset not in REGIME_CAPABLE_DATASETS):
+            raise OpsError(
+                "OPS_DATASET_NOT_REGIME_CAPABLE",
+                "Regulatory reporting is prepared from the funded book. "
+                "Choose the funded book, or prepare management information "
+                "instead.", 400)
         return self.intake.create_batch(
             tenant_id=client_id, client_id=client_id,
             portfolio_id=portfolio_id, reporting_date=reporting_date,

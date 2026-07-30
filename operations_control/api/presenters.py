@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from ..contracts import WorkflowRun
+from ..contracts import BATCH_DATASET_DEFAULT, WorkflowRun
 from ..language import (
     SCOPE_EXPLANATIONS,
     STAGE_LABELS,
@@ -211,6 +211,14 @@ BATCH_STATUS_LABELS = {
     "failed": "Needs attention",
 }
 
+#: Plain names for the book a pack describes. Operators think in books, not in
+#: dataset identifiers.
+DATASET_LABELS = {
+    "funded": "Funded book",
+    "pipeline": "Pipeline",
+    "forecast": "Forecast",
+}
+
 
 def present_batch(doc: Dict[str, Any],
                   role_labels: Dict[str, str]) -> Dict[str, Any]:
@@ -253,6 +261,12 @@ def present_batch(doc: Dict[str, Any],
         "portfolio_id": doc.get("portfolio_id"),
         "reporting_date": doc.get("reporting_date"),
         "workflow_type": doc.get("workflow_type"),
+        # Which book the pack describes. Older packs predate the field, so fall
+        # back to the funded default rather than showing a blank.
+        "dataset": doc.get("dataset") or BATCH_DATASET_DEFAULT,
+        "dataset_label": DATASET_LABELS.get(
+            doc.get("dataset") or BATCH_DATASET_DEFAULT,
+            doc.get("dataset") or BATCH_DATASET_DEFAULT),
         "status": doc.get("status"),
         "status_label": BATCH_STATUS_LABELS.get(doc.get("status", ""),
                                                 doc.get("status", "")),

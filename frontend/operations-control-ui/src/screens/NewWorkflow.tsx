@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import clsx from "clsx";
 import { useOpsClient } from "@/api/context";
-import type { Batch, WorkflowOutcome } from "@/api/types";
+import type { Batch, BatchDataset, WorkflowOutcome } from "@/api/types";
 import { Page } from "@/components/Page";
 import { StatusChip } from "@/components/StatusChip";
 import { useToast } from "@/components/Toast";
@@ -23,6 +23,13 @@ export function NewWorkflowScreen() {
   // Step a — outcome
   const [outcome, setOutcome] = useState<WorkflowOutcome>("mi");
 
+  // Step a2 — which book. Regime reporting is prepared from the funded book
+  // only, so choosing Pipeline forces MI and disables the annex option. The
+  // backend refuses the combination as well — this is convenience, not the
+  // control.
+  const [dataset, setDataset] = useState<BatchDataset>("funded");
+  const regimeAvailable = dataset === "funded";
+
   // Step b — who is this for
   const [clients, setClients] = useState<string[]>([]);
   const [clientChoice, setClientChoice] = useState("");
@@ -37,6 +44,11 @@ export function NewWorkflowScreen() {
   const [registering, setRegistering] = useState(false);
 
   const clientId = clientChoice === NEW_CLIENT ? newClientName.trim() : clientChoice;
+
+  function chooseDataset(next: BatchDataset) {
+    setDataset(next);
+    if (next !== "funded") setOutcome("mi");
+  }
 
   useEffect(() => {
     client
@@ -54,6 +66,7 @@ export function NewWorkflowScreen() {
         portfolio_id: portfolio.trim(),
         reporting_date: period,
         workflow_type: outcome,
+        dataset,
         auto_start_when_ready: false,
       });
       setBatch(created);
@@ -103,6 +116,7 @@ export function NewWorkflowScreen() {
                   outcome === option.value
                     ? "border-blue-600 bg-blue-50/50"
                     : "border-stone-200 bg-white hover:border-stone-300",
+                  option.value === "mi_annex2" && !regimeAvailable && "opacity-50",
                 )}
               >
                 <input
@@ -110,8 +124,54 @@ export function NewWorkflowScreen() {
                   name="outcome"
                   value={option.value}
                   checked={outcome === option.value}
-                  disabled={Boolean(batch)}
+                  disabled={Boolean(batch) || (option.value === "mi_annex2" && !regimeAvailable)}
                   onChange={() => setOutcome(option.value)}
+                  className="sr-only"
+                />
+                <span className="text-base font-semibold text-stone-900">{option.label}</span>
+                <span className="text-sm text-stone-500">{option.help}</span>
+              </label>
+            ))}
+          </div>
+          {!regimeAvailable && (
+            <p className="mt-3 text-sm text-stone-500">{copy.newWorkflow.bookPipelineLocksMi}</p>
+          )}
+        </SectionCard>
+
+        {/* (a2) Which book */}
+        <SectionCard>
+          <h2 className="mb-4 text-lg font-semibold text-stone-900">
+            {copy.newWorkflow.bookHeading}
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {(
+              [
+                { value: "funded", label: copy.newWorkflow.bookFunded, help: copy.newWorkflow.bookFundedHelp },
+                {
+                  value: "pipeline",
+                  label: copy.newWorkflow.bookPipeline,
+                  help: copy.newWorkflow.bookPipelineHelp,
+                },
+              ] as const
+            ).map((option) => (
+              <label
+                key={option.value}
+                data-dataset={option.value}
+                className={clsx(
+                  "flex flex-col gap-1 rounded-2xl border-2 p-5 transition-colors",
+                  batch ? "cursor-default opacity-70" : "cursor-pointer",
+                  dataset === option.value
+                    ? "border-blue-600 bg-blue-50/50"
+                    : "border-stone-200 bg-white hover:border-stone-300",
+                )}
+              >
+                <input
+                  type="radio"
+                  name="dataset"
+                  value={option.value}
+                  checked={dataset === option.value}
+                  disabled={Boolean(batch)}
+                  onChange={() => chooseDataset(option.value)}
                   className="sr-only"
                 />
                 <span className="text-base font-semibold text-stone-900">{option.label}</span>

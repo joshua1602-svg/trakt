@@ -66,6 +66,13 @@ export const copy = {
     outcomeMiHelp: "The regular management information pack.",
     outcomeAnnex: "MI Reporting + ESMA Annex 2 delivery",
     outcomeAnnexHelp: "The regular pack plus the regulatory annex.",
+    bookHeading: "Which book are these files for?",
+    bookFunded: "Funded book",
+    bookFundedHelp: "Loans already advanced. Regulatory reporting is prepared from this book.",
+    bookPipeline: "Pipeline",
+    bookPipelineHelp: "Cases not yet funded. Management information only — never a regulatory delivery.",
+    bookPipelineLocksMi:
+      "Pipeline is management information only, so the regulatory annex is not available for it.",
     detailsHeading: "Who is this for?",
     clientLabel: "Client",
     clientPlaceholder: "Choose a client",

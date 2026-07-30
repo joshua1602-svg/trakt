@@ -24,13 +24,10 @@ import yaml
 
 from apps.blob_trigger_app.file_roles import classify_pack
 
-from .contracts import new_id, now_iso, stable_hash
+from .contracts import (BATCH_DATASET_DEFAULT, new_id, now_iso,
+                        stable_hash)
 from .stores import OpsStore, _read_json, _write_json
 
-#: The dataset an input pack describes unless told otherwise. Only a dataset
-#: OTHER than this extends the pack identifier, so every funded pack keeps the
-#: identity it has always had.
-BATCH_DATASET_DEFAULT = "funded"
 
 REPO = Path(__file__).resolve().parents[1]
 REQUIREMENTS_PATH = REPO / "config/system/workflow_input_requirements.yaml"

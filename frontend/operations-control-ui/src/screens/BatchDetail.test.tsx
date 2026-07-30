@@ -29,6 +29,7 @@ describe("BatchDetail", () => {
       portfolio_id: "European Growth",
       reporting_date: "2026-06",
       workflow_type: "mi",
+      dataset: "funded",
       auto_start_when_ready: false,
     });
     // Two single-file registrations satisfy both required inputs.
