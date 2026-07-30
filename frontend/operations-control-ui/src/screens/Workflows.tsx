@@ -16,6 +16,8 @@ const FILTERS: { label: string; status: string }[] = [
   { label: copy.workflows.filterBlocked, status: "blocked" },
   { label: copy.workflows.filterReady, status: "awaiting_publication" },
   { label: copy.workflows.filterPublished, status: "published" },
+  // Withdrawn deliveries leave every actionable queue but stay findable here.
+  { label: copy.workflows.filterWithdrawn, status: "withdrawn" },
 ];
 
 export function WorkflowsScreen() {

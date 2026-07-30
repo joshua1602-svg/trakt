@@ -18,12 +18,14 @@ import type {
   DecisionInput,
   DecisionResult,
   Delivery,
+  PortfolioOption,
   Publication,
   RegisterDeliveryInput,
   Review,
   Rule,
   RulesQuery,
   StartWorkflowInput,
+  WithdrawalReason,
   Workflow,
   WorkflowRow,
 } from "./types";
@@ -55,6 +57,10 @@ export interface OpsClient {
   health(): Promise<void>;
   getDashboard(): Promise<Dashboard>;
   getClients(): Promise<string[]>;
+  /** Portfolios registered to one client. Server-scoped: another client's
+   *  portfolios are never returned, whatever the browser asks for. */
+  getPortfolios(client: string): Promise<PortfolioOption[]>;
+  getWithdrawalReasons(): Promise<WithdrawalReason[]>;
   getDeliveries(client?: string): Promise<Delivery[]>;
   registerDelivery(input: RegisterDeliveryInput): Promise<Delivery>;
   createBatch(input: CreateBatchInput): Promise<Batch>;
@@ -72,6 +78,8 @@ export interface OpsClient {
   getWorkflow(workflowId: string): Promise<Workflow>;
   rerunWorkflow(workflowId: string): Promise<Workflow>;
   cancelWorkflow(workflowId: string, reason: string): Promise<Workflow>;
+  /** Take a delivery out of active work without publishing it. */
+  withdrawWorkflow(workflowId: string, reasonCode: string, note: string): Promise<Workflow>;
   publishWorkflow(workflowId: string, rememberScope?: string): Promise<Publication>;
   holdWorkflow(workflowId: string, reason: string): Promise<Publication>;
   getReviews(params?: { client?: string; workflow_id?: string }): Promise<Review[]>;

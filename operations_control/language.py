@@ -132,6 +132,11 @@ STATUS_LABELS = {
     "completed": "Completed",
 }
 
+#: Operator names for the workflow-run statuses that reach the browser.
+RUN_STATUS_LABELS = {
+    "withdrawn": "Withdrawn",
+}
+
 WORKFLOW_TYPE_LABELS = {
     "new_client": "New client onboarding",
     "new_portfolio": "New portfolio onboarding",

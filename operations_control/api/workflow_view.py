@@ -35,6 +35,7 @@ from ..contracts import (
     RUN_FAILED,
     RUN_HELD,
     RUN_PUBLISHED,
+    RUN_WITHDRAWN,
     STAGE_ASSEMBLY,
     STAGE_MAPPING,
     STAGE_PUBLICATION,
@@ -364,7 +365,9 @@ def _approval_step(run: WorkflowRun, results: Dict[str, Dict[str, Any]],
                    issues: Dict[str, Any],
                    publication: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     gar = results.get(STAGE_PUBLICATION) or {}
-    if run.status == RUN_PUBLISHED:
+    if run.status == RUN_WITHDRAWN:
+        status = NOT_APPLICABLE
+    elif run.status == RUN_PUBLISHED:
         status = COMPLETE
     elif run.status == RUN_AWAITING_PUBLICATION:
         status = CURRENT
@@ -397,7 +400,9 @@ def _approval_step(run: WorkflowRun, results: Dict[str, Dict[str, Any]],
     return {
         "key": STEP_APPROVAL,
         "status": status,
-        "summary": (gar.get("summary") or
+        "summary": (_withdrawn_summary(run) if status == NOT_APPLICABLE
+                    and run.status == RUN_WITHDRAWN else
+                    gar.get("summary") or
                     ("Published." if status == COMPLETE else
                      "The delivery is ready. It will only be published when "
                      "you approve it." if status == CURRENT else
@@ -427,10 +432,28 @@ def _approval_step(run: WorkflowRun, results: Dict[str, Dict[str, Any]],
             },
             "version": (publication or {}).get("version"),
         },
-        "facts": _kept([
+        "facts": _kept(_withdrawal_facts(run) or [
             _fact("Open questions", len(issues.get("unresolved") or []) or ""),
         ]),
     }
+
+
+def _withdrawn_summary(run: WorkflowRun) -> str:
+    w = run.withdrawn or {}
+    return (f"This delivery was withdrawn and will not be published. Its "
+            f"files, assessment results and audit history remain available.")
+
+
+def _withdrawal_facts(run: WorkflowRun) -> List[Optional[Dict[str, str]]]:
+    if run.status != RUN_WITHDRAWN:
+        return []
+    w = run.withdrawn or {}
+    return [
+        _fact("Withdrawn by", w.get("by")),
+        _fact("Withdrawn", w.get("at")),
+        _fact("Reason", w.get("reason_label")),
+        _fact("Note", w.get("note")),
+    ]
 
 
 def _published_step(run: WorkflowRun,
@@ -494,9 +517,9 @@ def build_steps(run: WorkflowRun, results: Dict[str, Dict[str, Any]], *,
 
     steps = [files, identified, configuration, assessed, issues, approval,
              published]
-    if run.status in (RUN_CANCELLED,):
+    if run.status in (RUN_CANCELLED, RUN_WITHDRAWN):
         for step in steps:
-            if step["status"] == PENDING:
+            if step["status"] in (PENDING, CURRENT):
                 step["status"] = NOT_APPLICABLE
     for step in steps:
         step["label"] = STEP_LABELS[step["key"]]

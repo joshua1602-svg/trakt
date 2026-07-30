@@ -65,25 +65,47 @@ export const copy = {
       "Use this when files are not arriving through the normal automated intake process, " +
       "or when you need an ad hoc, backdated or replacement delivery.",
     stepLabel: "Step",
-    outcomeHeading: "What should Trakt prepare?",
+    detailsHeading: "Who is it for?",
+    portfolioLabel: "Portfolio",
+    portfolioPlaceholder: "Choose a portfolio",
+    portfolioHelp: "The book these files describe.",
+    newPortfolioOption: "New portfolio…",
+    newPortfolioLabel: "New portfolio identifier",
+    newPortfolioHelp:
+      "Only for a book Trakt has never seen. Trakt will prepare management information " +
+      "for it until it is registered for regulatory reporting.",
+    noPortfolios: "Trakt has no portfolios registered for this client yet.",
+    assetClass: "Asset class",
+    reportingRequirement: "Reporting requirement",
+    availableBooks: "Books delivered",
+    outcomeHeading: "What will Trakt prepare?",
+    outcomeDerived:
+      "Trakt decides this from what this book is registered to report, so the automated " +
+      "and manual routes always agree.",
     outcomeMi: "MI Reporting",
     outcomeMiHelp: "The regular management information pack.",
     outcomeAnnex: "MI Reporting + ESMA Annex 2 delivery",
     outcomeAnnexHelp: "The regular pack plus the regulatory annex.",
     bookHeading: "Which book?",
+    bookNote:
+      "Funded and pipeline are separate deliveries with their own files, workflow and " +
+      "approval. To send both for the same month, do this once for each.",
     bookFunded: "Funded book",
-    bookFundedHelp: "Loans already advanced. Regulatory reporting is prepared from this book.",
+    bookFundedHelp:
+      "Prepare the monthly delivery for funded loans. Regulatory reporting is prepared " +
+      "from this book.",
     bookPipeline: "Pipeline",
-    bookPipelineHelp: "Cases not yet funded. Management information only — never a regulatory delivery.",
+    bookPipelineHelp:
+      "Prepare the monthly delivery for pipeline cases. Management information only — " +
+      "never a regulatory delivery.",
+    bookUnavailable: "This book is not registered for this portfolio.",
     bookPipelineLocksMi:
       "Pipeline is management information only, so the regulatory annex is not available for it.",
-    detailsHeading: "Who is it for?",
     periodHeading: "Which reporting period?",
     clientLabel: "Client",
     clientPlaceholder: "Choose a client",
     newClientOption: "New client…",
     newClientLabel: "New client name",
-    portfolioLabel: "Portfolio",
     periodLabel: "Reporting period",
     createButton: "Continue",
     filesHeading: "Upload files",
@@ -94,6 +116,7 @@ export const copy = {
     chosenFiles: "Ready to send",
     noFilesChosen: "No files chosen yet.",
     destinationHeading: "Where Trakt will file this",
+    destinationHelp: "Trakt chooses this. It is shown so you can check it.",
     confirmHeading: "Confirm and submit",
     uploadButton: "Send the files",
     uploading: "Sending…",
@@ -128,6 +151,7 @@ export const copy = {
     filterBlocked: "Blocked",
     filterReady: "Ready to publish",
     filterPublished: "Published",
+    filterWithdrawn: "Withdrawn",
     empty: "No workflows here yet.",
   },
 
@@ -164,6 +188,21 @@ export const copy = {
     approveScopeHeading: "Should Trakt remember this decision for future deliveries?",
     approveConfirm: "Publish this delivery",
     evidenceHeading: "What Trakt is publishing",
+    withdraw: "Withdraw delivery",
+    withdrawHeading: "Withdraw this delivery?",
+    withdrawBody:
+      "It will be removed from active work and will not be published. Its files, " +
+      "assessment results and audit history will remain available.",
+    withdrawReason: "Why is it being withdrawn?",
+    withdrawNote: "Anything worth recording (optional)",
+    withdrawNoteRequired: "Say briefly why",
+    withdrawKeep: "Keep delivery",
+    withdrawConfirm: "Withdraw delivery",
+    withdrawn: "This delivery was withdrawn and will not be published.",
+    withdrawnBy: "Withdrawn by",
+    withdrawnAt: "Withdrawn",
+    withdrawnReason: "Reason",
+    withdrawnNote: "Note",
   },
 
   reviews: {
@@ -445,6 +484,7 @@ export const copy = {
     published: "Published",
     held: "On hold",
     cancelled: "Cancelled",
+    withdrawn: "Withdrawn",
     failed: "Did not finish",
     waiting: "Waiting",
     ready: "Ready",

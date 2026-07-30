@@ -21,6 +21,7 @@ import type {
   DecisionInput,
   DecisionResult,
   Delivery,
+  PortfolioOption,
   Publication,
   RegisterDeliveryInput,
   Review,
@@ -28,6 +29,7 @@ import type {
   RulesQuery,
   StartWorkflowInput,
   StepDecision,
+  WithdrawalReason,
   Workflow,
   WorkflowRow,
   WorkflowStep,
@@ -100,6 +102,70 @@ export class MockOpsClient implements OpsClient {
   private batchTicks = new Map<string, number>();
 
   private clients = ["Alpine Capital", "Birchwood Partners", "Cedar Rock Advisors"];
+
+  /**
+   * Portfolios as the source registry holds them: a governed identifier per
+   * book, the datasets it delivers, and whether the funded book is required to
+   * report under a regime. Deliberately NOT a portfolio per client name — a
+   * client has books, and a book belongs to exactly one client.
+   */
+  private portfolios: Record<string, PortfolioOption[]> = {
+    "Alpine Capital": [
+      {
+        portfolio_id: "direct_001",
+        display_name: "Alpine Direct Originations",
+        book_type: "direct",
+        book_type_label: "Direct originations",
+        datasets: ["funded", "pipeline"],
+        dataset_labels: ["Funded book", "Pipeline"],
+        frequencies: { funded: "monthly", pipeline: "weekly" },
+        regime_required: true,
+        outcome: "mi_annex2",
+        outcome_label: "MI Reporting + ESMA Annex 2 delivery",
+        reporting_requirement: "Management information and the ESMA Annex 2 delivery",
+        asset_id: "equity_release",
+        asset_label: "Equity Release",
+        statuses: ["active"],
+        registered: true,
+      },
+      {
+        portfolio_id: "acquired_002",
+        display_name: "Nordic Bond Acquisition",
+        book_type: "acquired",
+        book_type_label: "Acquired book",
+        datasets: ["funded"],
+        dataset_labels: ["Funded book"],
+        frequencies: { funded: "monthly" },
+        regime_required: false,
+        outcome: "mi",
+        outcome_label: "MI Reporting",
+        reporting_requirement: "Management information only",
+        asset_id: "equity_release",
+        asset_label: "Equity Release",
+        statuses: ["active"],
+        registered: true,
+      },
+    ],
+    "Birchwood Partners": [
+      {
+        portfolio_id: "direct_010",
+        display_name: "Birchwood Global Credit",
+        book_type: "direct",
+        book_type_label: "Direct originations",
+        datasets: ["funded"],
+        dataset_labels: ["Funded book"],
+        frequencies: { funded: "monthly" },
+        regime_required: true,
+        outcome: "mi_annex2",
+        outcome_label: "MI Reporting + ESMA Annex 2 delivery",
+        reporting_requirement: "Management information and the ESMA Annex 2 delivery",
+        asset_id: "equity_release",
+        asset_label: "Equity Release",
+        statuses: ["active"],
+        registered: true,
+      },
+    ],
+  };
 
   private deliveries: Delivery[] = [
     {
@@ -671,6 +737,7 @@ export class MockOpsClient implements OpsClient {
     const published = workflow.status === "published";
     const awaiting = workflow.status === "awaiting_publication";
     const blocked = workflow.status === "blocked";
+    const withdrawn = workflow.status === "withdrawn";
 
     const toDecision = (d: Review): StepDecision => ({
       decision_id: d.decision_id,
@@ -764,7 +831,13 @@ export class MockOpsClient implements OpsClient {
       step(
         "data_assessed",
         "Data assessed",
-        blocked ? "blocked" : published || awaiting ? "complete" : "current",
+        withdrawn
+          ? "not_applicable"
+          : blocked
+            ? "blocked"
+            : published || awaiting
+              ? "complete"
+              : "current",
         "1,284 loans were read and checked against the approved rules.",
         {
           warnings: workflow.stages.flatMap((s) => s.warnings ?? []),
@@ -781,7 +854,13 @@ export class MockOpsClient implements OpsClient {
       step(
         "issues_reviewed",
         "Issues reviewed",
-        openDecisions.length > 0 ? "current" : resolved.length > 0 ? "complete" : "not_applicable",
+        withdrawn
+          ? "not_applicable"
+          : openDecisions.length > 0
+            ? "current"
+            : resolved.length > 0
+              ? "complete"
+              : "not_applicable",
         openDecisions.length > 0
           ? `${openDecisions.length} questions still need an answer.`
           : resolved.length > 0
@@ -795,15 +874,26 @@ export class MockOpsClient implements OpsClient {
       step(
         "publication_approval",
         "Publication approval",
-        published ? "complete" : awaiting ? "current" : "pending",
-        published
-          ? "Published."
-          : awaiting
-            ? "The delivery is ready. It will only be published when you approve it."
-            : "Nothing is waiting for your approval yet.",
+        withdrawn ? "not_applicable" : published ? "complete" : awaiting ? "current" : "pending",
+        withdrawn
+          ? "This delivery was withdrawn and will not be published. Its files, assessment " +
+            "results and audit history remain available."
+          : published
+            ? "Published."
+            : awaiting
+              ? "The delivery is ready. It will only be published when you approve it."
+              : "Nothing is waiting for your approval yet.",
         {
+          facts: withdrawn
+            ? [
+                { label: "Withdrawn by", value: workflow.withdrawn?.by ?? "" },
+                { label: "Withdrawn", value: workflow.withdrawn?.at ?? "" },
+                { label: "Reason", value: workflow.withdrawn?.reason_label ?? "" },
+                { label: "Note", value: workflow.withdrawn?.note ?? "" },
+              ].filter((f) => f.value)
+            : [],
           approval: {
-            available: awaiting,
+            available: awaiting && !withdrawn,
             headline: "Ready to publish",
             evidence_lines: [
               `${files.length} files received`,
@@ -859,7 +949,7 @@ export class MockOpsClient implements OpsClient {
       step(
         "published",
         "Published",
-        published ? "complete" : "pending",
+        published ? "complete" : withdrawn ? "not_applicable" : "pending",
         published
           ? "Published. This is now the latest official version."
           : "Nothing has been published for this delivery yet.",
@@ -919,6 +1009,25 @@ export class MockOpsClient implements OpsClient {
   async getClients(): Promise<string[]> {
     await this.wait();
     return [...this.clients];
+  }
+
+  async getPortfolios(client: string): Promise<PortfolioOption[]> {
+    await this.wait();
+    // Scoped on the way out, exactly as the API scopes it: a portfolio is only
+    // ever returned for the client that owns it.
+    return deepCopy(this.portfolios[client] ?? []);
+  }
+
+  async getWithdrawalReasons(): Promise<WithdrawalReason[]> {
+    await this.wait();
+    return [
+      { value: "test_delivery", label: "Test delivery" },
+      { value: "duplicate_delivery", label: "Duplicate delivery" },
+      { value: "uploaded_in_error", label: "Uploaded in error" },
+      { value: "incorrect_files", label: "Incorrect files" },
+      { value: "no_longer_required", label: "No longer required" },
+      { value: "other", label: "Other" },
+    ];
   }
 
   async getDeliveries(client?: string): Promise<Delivery[]> {
@@ -1276,6 +1385,56 @@ export class MockOpsClient implements OpsClient {
     workflow.status = "cancelled";
     workflow.status_sentence = "This workflow was cancelled.";
     workflow.updated_at = new Date().toISOString();
+    return deepCopy(workflow);
+  }
+
+  async withdrawWorkflow(
+    workflowId: string,
+    reasonCode: string,
+    note: string,
+  ): Promise<Workflow> {
+    await this.wait();
+    const workflow = this.findWorkflow(workflowId);
+    if (workflow.status === "published") {
+      throw new OpsError(
+        "This delivery has already been published, so it cannot be withdrawn.",
+      );
+    }
+    if (!reasonCode) throw new OpsError("Choose why this delivery is being withdrawn.");
+    if (reasonCode === "other" && !note.trim()) {
+      throw new OpsError("Say briefly why this delivery is being withdrawn.");
+    }
+    const labels: Record<string, string> = {
+      test_delivery: "Test delivery",
+      duplicate_delivery: "Duplicate delivery",
+      uploaded_in_error: "Uploaded in error",
+      incorrect_files: "Incorrect files",
+      no_longer_required: "No longer required",
+      other: "Other",
+    };
+    workflow.status = "withdrawn";
+    workflow.blockers = [];
+    workflow.open_decisions = 0;
+    workflow.withdrawn = {
+      by: "You",
+      at: new Date().toISOString(),
+      reason_code: reasonCode,
+      reason_label: labels[reasonCode] ?? reasonCode,
+      note,
+    };
+    workflow.status_sentence =
+      "You withdrew this delivery (" +
+      (labels[reasonCode] ?? reasonCode).toLowerCase() +
+      "). It was not published, and everything about it is still on the record.";
+    workflow.updated_at = workflow.withdrawn.at;
+    // Its questions leave the queue with it.
+    for (const review of this.reviews) {
+      if (review.workflow_id === workflowId && !review.resolved_at) {
+        review.status = "resolved";
+        review.resolved_at = workflow.withdrawn.at;
+        review.resolved_by = "You";
+      }
+    }
     return deepCopy(workflow);
   }
 

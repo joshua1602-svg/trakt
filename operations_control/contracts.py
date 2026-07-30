@@ -70,23 +70,53 @@ RUN_PUBLISHED = "published"
 RUN_HELD = "held"
 RUN_CANCELLED = "cancelled"
 RUN_FAILED = "failed"
+#: Taken out of active work by an operator, on the record and with a reason —
+#: a test, a duplicate, a mistake, or simply no longer wanted. Terminal: the
+#: delivery keeps its files, its assessment and its whole audit trail, and can
+#: never become the latest published version.
+RUN_WITHDRAWN = "withdrawn"
 RUN_STATUSES = (RUN_RECEIVED, RUN_RUNNING, RUN_NEEDS_REVIEW, RUN_BLOCKED,
                 RUN_AWAITING_PUBLICATION, RUN_PUBLISHED, RUN_HELD,
-                RUN_CANCELLED, RUN_FAILED)
-RUN_TERMINAL = (RUN_PUBLISHED, RUN_CANCELLED)
+                RUN_CANCELLED, RUN_FAILED, RUN_WITHDRAWN)
+RUN_TERMINAL = (RUN_PUBLISHED, RUN_CANCELLED, RUN_WITHDRAWN)
+
+#: Statuses that still want an operator's attention. A delivery outside this set
+#: is not in anybody's queue — which is exactly what withdrawing one is for.
+RUN_ACTIVE = (RUN_RECEIVED, RUN_RUNNING, RUN_NEEDS_REVIEW, RUN_BLOCKED,
+              RUN_AWAITING_PUBLICATION, RUN_HELD, RUN_FAILED)
+
+#: Why a delivery was withdrawn. A controlled list so withdrawals can be counted
+#: and explained later; ``other`` requires a note.
+WITHDRAWAL_REASONS = (
+    ("test_delivery", "Test delivery"),
+    ("duplicate_delivery", "Duplicate delivery"),
+    ("uploaded_in_error", "Uploaded in error"),
+    ("incorrect_files", "Incorrect files"),
+    ("no_longer_required", "No longer required"),
+    ("other", "Other"),
+)
+WITHDRAWAL_REASON_CODES = tuple(code for code, _ in WITHDRAWAL_REASONS)
+WITHDRAWAL_REASON_LABELS = dict(WITHDRAWAL_REASONS)
+#: The one reason that cannot stand on its own.
+WITHDRAWAL_REASON_NEEDS_NOTE = "other"
 
 #: Legal workflow-run transitions (enforced by the engine, not the UI).
 RUN_TRANSITIONS: Dict[str, tuple] = {
-    RUN_RECEIVED: (RUN_RUNNING, RUN_CANCELLED),
+    RUN_RECEIVED: (RUN_RUNNING, RUN_CANCELLED, RUN_WITHDRAWN),
     RUN_RUNNING: (RUN_NEEDS_REVIEW, RUN_BLOCKED, RUN_AWAITING_PUBLICATION,
-                  RUN_FAILED, RUN_CANCELLED),
-    RUN_NEEDS_REVIEW: (RUN_RUNNING, RUN_CANCELLED),
-    RUN_BLOCKED: (RUN_RUNNING, RUN_CANCELLED),
-    RUN_AWAITING_PUBLICATION: (RUN_PUBLISHED, RUN_HELD, RUN_RUNNING, RUN_CANCELLED),
-    RUN_HELD: (RUN_AWAITING_PUBLICATION, RUN_RUNNING, RUN_CANCELLED),
-    RUN_FAILED: (RUN_RUNNING, RUN_CANCELLED),
+                  RUN_FAILED, RUN_CANCELLED, RUN_WITHDRAWN),
+    RUN_NEEDS_REVIEW: (RUN_RUNNING, RUN_CANCELLED, RUN_WITHDRAWN),
+    RUN_BLOCKED: (RUN_RUNNING, RUN_CANCELLED, RUN_WITHDRAWN),
+    RUN_AWAITING_PUBLICATION: (RUN_PUBLISHED, RUN_HELD, RUN_RUNNING,
+                               RUN_CANCELLED, RUN_WITHDRAWN),
+    RUN_HELD: (RUN_AWAITING_PUBLICATION, RUN_RUNNING, RUN_CANCELLED,
+               RUN_WITHDRAWN),
+    RUN_FAILED: (RUN_RUNNING, RUN_CANCELLED, RUN_WITHDRAWN),
     RUN_PUBLISHED: (),
     RUN_CANCELLED: (),
+    # Terminal on purpose. Bringing a withdrawn delivery back is a governed
+    # decision of its own, not something an ordinary action may do by accident.
+    RUN_WITHDRAWN: (),
 }
 
 # Stage keys, in operator display order. The regulatory delivery stages
@@ -300,6 +330,10 @@ class WorkflowRun:
     effective_config: Dict[str, Any] = field(default_factory=dict)
     # Input batch that produced this run (OCC-owned readiness; no sentinel).
     batch_id: str = ""
+    # Set when an operator takes this delivery out of active work:
+    # {by, at, reason_code, reason_label, note}. Never cleared — the record of a
+    # withdrawal outlives the withdrawal.
+    withdrawn: Dict[str, Any] = field(default_factory=dict)
     # Set when the API restarted while this run was executing; cleared on rerun.
     interrupted: bool = False
     blockers: List[str] = field(default_factory=list)   # plain language

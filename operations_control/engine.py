@@ -41,6 +41,7 @@ from .contracts import (
     DEC_APPROVED,
     DEC_OPEN,
     DEC_REJECTED,
+    DEC_SUPERSEDED,
     DecisionRequired,
     Delivery,
     GovernedAgentResult,
@@ -52,6 +53,9 @@ from .contracts import (
     OUTCOMES,
     PUBLICATION_SCOPE_DEFAULT,
     PUBLICATION_SCOPES,
+    WITHDRAWAL_REASON_CODES,
+    WITHDRAWAL_REASON_LABELS,
+    WITHDRAWAL_REASON_NEEDS_NOTE,
     REGIME_CAPABLE_DATASETS,
     RUN_AWAITING_PUBLICATION,
     RUN_BLOCKED,
@@ -62,6 +66,7 @@ from .contracts import (
     RUN_PUBLISHED,
     RUN_RECEIVED,
     RUN_RUNNING,
+    RUN_WITHDRAWN,
     ST_APPROVED,
     ST_COMPLETED,
     ST_NEEDS_REVIEW,
@@ -242,6 +247,11 @@ class OpsEngine:
         """Start (or resume) execution. Idempotent: a run already executing in
         this process is left alone; a run in a review state must go through
         :meth:`rerun`."""
+        if run.status == RUN_WITHDRAWN:
+            raise OpsError(
+                "OPS_WORKFLOW_WITHDRAWN",
+                "This delivery was withdrawn, so Trakt will not work on it "
+                "again.", 409)
         with self._lock:
             t = self._threads.get(run.workflow_id)
             if t is not None and t.is_alive():
@@ -285,6 +295,67 @@ class OpsEngine:
         self.store.append_audit(run.client_id, "workflow_cancelled", actor=actor,
                                 workflow_id=run.workflow_id,
                                 detail={"reason": reason})
+        return run
+
+    def withdraw(self, run: WorkflowRun, *, actor: str, reason_code: str,
+                 note: str = "") -> WorkflowRun:
+        """Take a delivery out of active work, on the record.
+
+        A test, a duplicate, a mistake, or simply no longer wanted. Nothing is
+        deleted: the files, the run manifest, the assessment results and the
+        whole audit trail stay exactly where they are. What changes is that the
+        delivery leaves every queue, can no longer be published, and carries who
+        withdrew it, when and why.
+        """
+        if run.status == RUN_PUBLISHED:
+            raise OpsError("OPS_ALREADY_PUBLISHED",
+                           "This delivery has already been published, so it "
+                           "cannot be withdrawn.", 409)
+        if run.status == RUN_WITHDRAWN:
+            return run
+        if run.status == RUN_CANCELLED:
+            raise OpsError("OPS_WORKFLOW_CLOSED",
+                           "This delivery is already closed.", 409)
+        if reason_code not in WITHDRAWAL_REASON_CODES:
+            raise OpsError("OPS_BAD_REASON",
+                           "Choose why this delivery is being withdrawn.", 400)
+        note = (note or "").strip()
+        if reason_code == WITHDRAWAL_REASON_NEEDS_NOTE and not note:
+            raise OpsError("OPS_REASON_NOTE_REQUIRED",
+                           "Say briefly why this delivery is being withdrawn.",
+                           400)
+
+        withdrawn = {"by": actor, "at": now_iso(), "reason_code": reason_code,
+                     "reason_label": WITHDRAWAL_REASON_LABELS[reason_code],
+                     "note": note}
+        transition(run, RUN_WITHDRAWN)
+        run.withdrawn = withdrawn
+        run.blockers = []
+        self.store.save_workflow(run)
+        self.store.clear_lease(run)
+
+        # Its questions leave the review queue with it — they are questions
+        # ABOUT this delivery, and there is no longer a delivery to answer for.
+        for d in self.store.open_decisions(run.client_id, run.workflow_id):
+            d.update(status=DEC_SUPERSEDED, resolved_by=actor,
+                     resolved_at=now_iso(),
+                     resolution_reason="the delivery was withdrawn")
+            self.store.save_decision(run.client_id, d)
+
+        # A prepared publication is stood down so it can never be promoted.
+        period = run.reporting_period or "unspecified"
+        pub = self.store.load_publication(run.client_id, period)
+        if pub is not None and pub.get("workflow_id") == run.workflow_id \
+                and pub.get("status") == "prepared":
+            pub.update(status="withdrawn", withdrawn_by=actor,
+                       withdrawn_at=withdrawn["at"])
+            self.store.save_publication(run.client_id, pub)
+
+        self.store.append_event(run, "withdrawn", actor=actor,
+                                detail=dict(withdrawn))
+        self.store.append_audit(run.client_id, "workflow_withdrawn", actor=actor,
+                                workflow_id=run.workflow_id,
+                                detail=dict(withdrawn))
         return run
 
     def _is_executing(self, workflow_id: str) -> bool:
@@ -1574,6 +1645,10 @@ class OpsEngine:
         if run is None:
             raise OpsError("OPS_WORKFLOW_NOT_FOUND",
                            "That workflow could not be found.", 404)
+        if run.status == RUN_WITHDRAWN:
+            raise OpsError(
+                "OPS_WORKFLOW_WITHDRAWN",
+                "This delivery was withdrawn, so it cannot be published.", 409)
         if run.status != RUN_AWAITING_PUBLICATION:
             raise OpsError("OPS_PUBLICATION_NOT_PREPARED",
                            "This workflow is not ready to publish.", 409)

@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { useOpsClient } from "@/api/context";
-import type { StepDecision, WorkflowStep } from "@/api/types";
+import type { StepDecision, WithdrawalReason, WorkflowStep } from "@/api/types";
 import { DecisionPanel } from "@/components/DecisionPanel";
 import { ErrorNote, Loading } from "@/components/ErrorNote";
 import { EvidenceView } from "@/components/EvidenceView";
@@ -129,17 +129,114 @@ function Notes({ items, tone }: { items: string[]; tone: "warning" | "blocker" }
   );
 }
 
+/**
+ * Taking a delivery out of active work.
+ *
+ * Deliberately not called "Cancel": cancelling reads as closing the dialog
+ * without doing anything, and this does something. It is a tertiary action —
+ * quiet next to "Approve and publish" until it is chosen, then destructive,
+ * because withdrawing is the end of the road for this delivery.
+ */
+function WithdrawDialog({
+  busy,
+  reasons,
+  onCancel,
+  onConfirm,
+}: {
+  busy: boolean;
+  reasons: WithdrawalReason[];
+  onCancel: () => void;
+  onConfirm: (reasonCode: string, note: string) => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [note, setNote] = useState("");
+  const noteRequired = reason === "other";
+  const ready = Boolean(reason) && (!noteRequired || note.trim().length > 0);
+
+  return (
+    <Modal>
+      <h2 className="text-lg font-semibold text-stone-900">
+        {copy.workflow.withdrawHeading}
+      </h2>
+      <p className="mt-2 text-sm leading-relaxed text-stone-600">
+        {copy.workflow.withdrawBody}
+      </p>
+
+      <fieldset className="mt-5">
+        <legend className="mb-2 text-sm font-semibold text-stone-700">
+          {copy.workflow.withdrawReason}
+        </legend>
+        <div className="space-y-2">
+          {reasons.map((option) => (
+            <label
+              key={option.value}
+              className={clsx(
+                "flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-sm transition-colors",
+                reason === option.value
+                  ? "border-stone-900 bg-stone-50"
+                  : "border-stone-200 bg-white hover:border-stone-300",
+              )}
+            >
+              <input
+                type="radio"
+                name="withdraw-reason"
+                value={option.value}
+                checked={reason === option.value}
+                onChange={() => setReason(option.value)}
+              />
+              <span className="font-medium text-stone-800">{option.label}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      <label className="mt-4 block text-sm font-medium text-stone-700" htmlFor="withdraw-note">
+        {noteRequired ? copy.workflow.withdrawNoteRequired : copy.workflow.withdrawNote}
+      </label>
+      <textarea
+        id="withdraw-note"
+        rows={2}
+        value={note}
+        onChange={(event) => setNote(event.target.value)}
+        className="mt-1 w-full rounded-xl border border-stone-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+      />
+
+      <div className="mt-6 flex flex-wrap justify-end gap-3">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-xl border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
+        >
+          {copy.workflow.withdrawKeep}
+        </button>
+        <button
+          type="button"
+          disabled={busy || !ready}
+          onClick={() => onConfirm(reason, note.trim())}
+          className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-40"
+        >
+          {copy.workflow.withdrawConfirm}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 /** The approval decision, inside the delivery's own context. */
 function ApprovalPanel({
   step,
   busy,
   onPublish,
   onHold,
+  onWithdraw,
+  canWithdraw,
 }: {
   step: WorkflowStep;
   busy: boolean;
   onPublish: (scope: string) => void;
   onHold: () => void;
+  onWithdraw: () => void;
+  canWithdraw: boolean;
 }) {
   const approval = step.approval;
   const [scope, setScope] = useState(approval?.default_scope ?? "delivery");
@@ -232,6 +329,21 @@ function ApprovalPanel({
         </>
       )}
 
+      {/* Tertiary, and outside the approval block so it is reachable at every
+          active stage — a test delivery rarely gets as far as approval. */}
+      {canWithdraw && (
+        <div className="border-t border-stone-100 pt-4">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onWithdraw}
+            className="rounded-xl px-3 py-2 text-sm font-medium text-stone-500 underline-offset-4 transition-colors hover:text-rose-700 hover:underline disabled:opacity-40"
+          >
+            {copy.workflow.withdraw}
+          </button>
+        </div>
+      )}
+
       {confirming && (
         <Modal>
           <p className="text-base font-semibold text-stone-900">{approval.question}</p>
@@ -267,12 +379,16 @@ function StepBody({
   busy,
   onPublish,
   onHold,
+  onWithdraw,
+  canWithdraw,
   onDecisionResolved,
 }: {
   step: WorkflowStep;
   busy: boolean;
   onPublish: (scope: string) => void;
   onHold: () => void;
+  onWithdraw: () => void;
+  canWithdraw: boolean;
   onDecisionResolved: () => void;
 }) {
   return (
@@ -308,7 +424,14 @@ function StepBody({
       )}
 
       {step.key === APPROVAL_STEP && (
-        <ApprovalPanel step={step} busy={busy} onPublish={onPublish} onHold={onHold} />
+        <ApprovalPanel
+          step={step}
+          busy={busy}
+          onPublish={onPublish}
+          onHold={onHold}
+          onWithdraw={onWithdraw}
+          canWithdraw={canWithdraw}
+        />
       )}
 
       {step.outputs && step.outputs.length > 0 && (
@@ -345,7 +468,16 @@ export function WorkflowDetailScreen() {
   const [openStep, setOpenStep] = useState<string | null>(null);
   const [holdOpen, setHoldOpen] = useState(false);
   const [holdReason, setHoldReason] = useState("");
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [withdrawReasons, setWithdrawReasons] = useState<WithdrawalReason[]>([]);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    client
+      .getWithdrawalReasons()
+      .then(setWithdrawReasons)
+      .catch(() => setWithdrawReasons([]));
+  }, [client]);
 
   // Poll while running.
   useEffect(() => {
@@ -383,6 +515,11 @@ export function WorkflowDetailScreen() {
   const canRerun =
     workflow &&
     (["blocked", "failed", "held"].includes(workflow.status) || workflow.interrupted);
+  // A delivery that has been published, cancelled or already withdrawn is
+  // finished; there is nothing left to take out of active work.
+  const canWithdraw = Boolean(
+    workflow && !["published", "cancelled", "withdrawn"].includes(workflow.status),
+  );
 
   return (
     <Page
@@ -496,6 +633,8 @@ export function WorkflowDetailScreen() {
                             void run(() => client.publishWorkflow(workflow.workflow_id, scope))
                           }
                           onHold={() => setHoldOpen(true)}
+                          onWithdraw={() => setWithdrawOpen(true)}
+                          canWithdraw={canWithdraw}
                           onDecisionResolved={() => void reload({ quiet: true })}
                         />
                       </div>
@@ -520,6 +659,18 @@ export function WorkflowDetailScreen() {
             </div>
           )}
         </div>
+      )}
+
+      {withdrawOpen && workflow && (
+        <WithdrawDialog
+          busy={busy}
+          reasons={withdrawReasons}
+          onCancel={() => setWithdrawOpen(false)}
+          onConfirm={(reasonCode, note) => {
+            setWithdrawOpen(false);
+            void run(() => client.withdrawWorkflow(workflow.workflow_id, reasonCode, note));
+          }}
+        />
       )}
 
       {holdOpen && workflow && (

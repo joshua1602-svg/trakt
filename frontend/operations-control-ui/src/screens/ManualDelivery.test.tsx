@@ -27,9 +27,13 @@ function renderScreen(client = new MockOpsClient(0)) {
 
 async function fillDetails(user: ReturnType<typeof userEvent.setup>) {
   await waitFor(() => expect(screen.getByLabelText("Client")).toBeTruthy());
-  const clientSelect = screen.getByLabelText("Client") as HTMLSelectElement;
-  await user.selectOptions(clientSelect, clientSelect.options[1].value);
-  await user.type(screen.getByLabelText("Portfolio"), "European Growth");
+  await user.selectOptions(screen.getByLabelText("Client"), "Alpine Capital");
+  await waitFor(() =>
+    expect(
+      (screen.getByLabelText("Portfolio") as HTMLSelectElement).options.length,
+    ).toBeGreaterThan(2),
+  );
+  await user.selectOptions(screen.getByLabelText("Portfolio"), "direct_001");
   const period = screen.getByLabelText("Reporting period") as HTMLInputElement;
   await user.clear(period);
   await user.type(period, "2026-06");
@@ -45,16 +49,19 @@ describe("manual delivery", () => {
     ).toBeInTheDocument();
   });
 
-  it("walks the operator through the six governed steps", () => {
+  it("asks for the governing facts first and derives the outcome after", () => {
     renderScreen();
-    for (const heading of [
-      copy.newWorkflow.outcomeHeading,
-      copy.newWorkflow.bookHeading,
+    // The order is the dependency order: who, which book, what Trakt will
+    // prepare (derived), which period.
+    const headings = Array.from(document.querySelectorAll("section h2")).map(
+      (h) => h.textContent,
+    );
+    expect(headings).toEqual([
       copy.newWorkflow.detailsHeading,
+      copy.newWorkflow.bookHeading,
+      copy.newWorkflow.outcomeHeading,
       copy.newWorkflow.periodHeading,
-    ]) {
-      expect(screen.getByText(heading)).toBeInTheDocument();
-    }
+    ]);
   });
 
   it("never offers a place to type a storage location", async () => {
@@ -83,8 +90,10 @@ describe("manual delivery", () => {
       new File(["b"], "loan-tape-june.xlsx"),
     ]);
 
-    // The chosen files are listed before anything is sent.
-    const chosen = screen.getByText(copy.newWorkflow.chosenFiles).parentElement as HTMLElement;
+    // The chosen files are listed before anything is sent. (The confirm step
+    // also counts them, so scope to the upload step's own heading.)
+    const chosen = screen.getAllByText(copy.newWorkflow.chosenFiles)[0]
+      .parentElement as HTMLElement;
     expect(within(chosen).getByText("holdings-june.xlsx")).toBeInTheDocument();
     expect(within(chosen).getByText("loan-tape-june.xlsx")).toBeInTheDocument();
 
@@ -102,9 +111,16 @@ describe("manual delivery", () => {
     const confirm = (await screen.findByText(copy.newWorkflow.confirmHeading)).closest(
       "section",
     ) as HTMLElement;
-    expect(within(confirm).getByText("European Growth")).toBeInTheDocument();
+    // Everything that governs the delivery, restated before it is sent.
+    expect(within(confirm).getByText("Alpine Capital")).toBeInTheDocument();
+    expect(within(confirm).getByText("Alpine Direct Originations")).toBeInTheDocument();
+    expect(within(confirm).getByText("direct_001")).toBeInTheDocument();
+    expect(within(confirm).getByText("Equity Release")).toBeInTheDocument();
     expect(within(confirm).getByText("2026-06")).toBeInTheDocument();
     expect(within(confirm).getByText("Funded book")).toBeInTheDocument();
+    expect(
+      within(confirm).getByText(copy.newWorkflow.outcomeAnnex),
+    ).toBeInTheDocument();
     // Nothing can be sent until files are chosen.
     expect(screen.getByRole("button", { name: copy.newWorkflow.uploadButton })).toBeDisabled();
   });

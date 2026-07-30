@@ -27,12 +27,15 @@ from pydantic import BaseModel
 from ..contracts import (
     DEC_OPEN,
     PUBLICATION_SCOPE_DEFAULT,
+    WITHDRAWAL_REASONS,
+    WITHDRAWAL_REASON_NEEDS_NOTE,
     RUN_AWAITING_PUBLICATION,
     RUN_BLOCKED,
     RUN_NEEDS_REVIEW,
     RUN_PUBLISHED,
     RUN_RECEIVED,
 )
+from .. import catalogue
 from ..engine import OpsEngine, OpsError
 from ..stores import OpsStore
 from . import presenters, workflow_view
@@ -222,6 +225,27 @@ def clients(principal: Principal = Depends(authenticate)) -> Dict[str, Any]:
     return {"ok": True, "clients": sorted(known)}
 
 
+@app.get("/ops/portfolios")
+def list_portfolios(client: str,
+                    principal: Principal = Depends(authenticate)
+                    ) -> Dict[str, Any]:
+    """The portfolios registered to one client.
+
+    Read from the SAME source registry the automated intake route consults, and
+    scoped to the requested client — so a portfolio belonging to somebody else
+    is neither listed nor selectable.
+    """
+    require_client(principal, client)
+    eng = get_engine()
+    try:
+        registry = eng._source_registry()
+    except Exception:  # noqa: BLE001 — an unreadable registry is "none known"
+        logger.exception("source registry unavailable")
+        return {"ok": True, "portfolios": []}
+    return {"ok": True,
+            "portfolios": catalogue.list_portfolios(registry, client)}
+
+
 @app.post("/ops/deliveries")
 def register_delivery(body: RegisterDelivery,
                       principal: Principal = Depends(authenticate)) -> Dict[str, Any]:
@@ -259,6 +283,11 @@ class CreateBatch(BaseModel):
     # The engine refuses an unknown dataset, and refuses pipeline + mi_annex2 —
     # a pipeline view never carries a regime delivery.
     dataset: str = ""
+    # The operator's explicit assertion that this book is new to Trakt. Without
+    # it an unknown portfolio is refused, so a typo cannot quietly open a
+    # delivery under a portfolio that does not exist. The automated route is
+    # unaffected: it calls the engine directly and onboards new books as before.
+    new_portfolio: bool = False
 
 
 class RegisterBatchFile(BaseModel):
@@ -270,11 +299,44 @@ def _role_labels() -> Dict[str, str]:
     return load_requirements().get("role_labels") or {}
 
 
+def _resolve_portfolio(eng: OpsEngine, client_id: str, portfolio_id: str,
+                       new_portfolio: bool) -> Dict[str, Any]:
+    """The governed portfolio this delivery is for, or a refusal.
+
+    Validated on the SERVER against the same registry the picker is populated
+    from — the browser's filtering is a convenience, never the control. A
+    portfolio registered to another client is simply not this client's, and is
+    refused with the same words as one that does not exist: telling them apart
+    would reveal another client's portfolio names.
+    """
+    if not (portfolio_id or "").strip():
+        raise HTTPException(status_code=400, detail={
+            "errorCode": "OPS_PORTFOLIO_REQUIRED",
+            "message": "Choose which portfolio this delivery is for."})
+    try:
+        registry = eng._source_registry()
+    except Exception:  # noqa: BLE001
+        logger.exception("source registry unavailable")
+        registry = None
+    known = (catalogue.find_portfolio(registry, client_id, portfolio_id)
+             if registry is not None else None)
+    if known is not None:
+        return known
+    if not new_portfolio:
+        raise HTTPException(status_code=400, detail={
+            "errorCode": "OPS_PORTFOLIO_UNKNOWN",
+            "message": "Trakt does not have that portfolio for this client. "
+                       "Choose one from the list, or say it is a new one."})
+    return catalogue.unregistered_portfolio(portfolio_id.strip())
+
+
 @app.post("/ops/batches", status_code=201)
 def create_batch(body: CreateBatch,
                  principal: Principal = Depends(authenticate)) -> Dict[str, Any]:
     require_client(principal, body.client_id)
     eng = get_engine()
+    _resolve_portfolio(eng, body.client_id, body.portfolio_id,
+                       body.new_portfolio)
     batch = eng.create_batch(
         client_id=body.client_id, portfolio_id=body.portfolio_id,
         reporting_date=body.reporting_date, workflow_type=body.workflow_type,
@@ -515,6 +577,40 @@ def rerun_workflow(workflow_id: str, client: Optional[str] = None,
     eng = get_engine()
     run = _load_owned_workflow(eng, principal, workflow_id, client)
     eng.rerun(run, actor=principal.name)
+    return {"ok": True, "workflow": _full_workflow(eng, run.client_id,
+                                                   run.workflow_id)}
+
+
+class WithdrawBody(BaseModel):
+    reason_code: str = ""
+    note: str = ""
+
+
+@app.get("/ops/withdrawal-reasons")
+def withdrawal_reasons(principal: Principal = Depends(authenticate)
+                       ) -> Dict[str, Any]:
+    """The controlled reasons a delivery may be withdrawn for."""
+    return {"ok": True,
+            "reasons": [{"value": code, "label": label}
+                        for code, label in WITHDRAWAL_REASONS],
+            "note_required_for": WITHDRAWAL_REASON_NEEDS_NOTE}
+
+
+@app.post("/ops/workflows/{workflow_id}/withdraw")
+def withdraw_workflow(workflow_id: str, body: WithdrawBody,
+                      client: Optional[str] = None,
+                      principal: Principal = Depends(authenticate)
+                      ) -> Dict[str, Any]:
+    """Take a delivery out of active work without publishing it.
+
+    Nothing is deleted. The files, the run manifest, the assessment results and
+    the audit trail all remain; the delivery simply leaves every queue and can
+    never become the latest published version.
+    """
+    eng = get_engine()
+    run = _load_owned_workflow(eng, principal, workflow_id, client)
+    eng.withdraw(run, actor=principal.name, reason_code=body.reason_code,
+                 note=body.note)
     return {"ok": True, "workflow": _full_workflow(eng, run.client_id,
                                                    run.workflow_id)}
 

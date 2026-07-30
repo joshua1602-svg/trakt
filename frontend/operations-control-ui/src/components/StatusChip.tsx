@@ -44,6 +44,7 @@ const STYLES: Record<string, string> = {
   received: "bg-stone-100 text-stone-600 border-stone-200",
   held: "bg-stone-100 text-stone-600 border-stone-200",
   cancelled: "bg-stone-100 text-stone-500 border-stone-200",
+  withdrawn: "bg-stone-100 text-stone-600 border-stone-300 border-dashed",
   resolved: "bg-stone-100 text-stone-600 border-stone-200",
 };
 

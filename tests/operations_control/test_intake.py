@@ -602,8 +602,17 @@ class TestManualDatasetSelection:
 
     def _api(self, store, source_registry, tmp_path):
         from fastapi.testclient import TestClient
+        from apps.blob_trigger_app.source_registry import SourceRecord
         from operations_control.api import app as app_module
         engine = _mk(store, source_registry, tmp_path)
+        # These tests are about DATASET routing for a portfolio the client
+        # already has, so register it. The manual route refuses a portfolio the
+        # client does not own unless it is declared new — that rule has its own
+        # tests in test_portfolio_selection.py.
+        for dataset, frequency in (("funded", "monthly"), ("pipeline", "weekly")):
+            source_registry.upsert(SourceRecord(
+                client_id="client_a", source_portfolio_id="pf1",
+                dataset=dataset, frequency=frequency, regime_required=False))
         app_module.set_engine(engine)
         return engine, app_module, TestClient(app_module.app,
                                               raise_server_exceptions=False)

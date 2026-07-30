@@ -67,6 +67,7 @@ def present_workflow(run: WorkflowRun,
             "effective_version": run.effective_config.get("version"),
             "content_hash": str(run.effective_config.get("content_hash", ""))[:23],
         } if run.effective_config else None),
+        "withdrawn": (dict(run.withdrawn) if run.withdrawn else None),
         "open_decisions": open_decisions,
         "rerun_count": run.rerun_count,
         "created_at": run.created_at,
@@ -115,6 +116,12 @@ def _status_sentence(run: WorkflowRun, open_decisions: int) -> str:
     if s == "failed":
         return ("Something did not go as expected on our side. Nothing has "
                 "been lost. You can try running it again.")
+    if s == "withdrawn":
+        w = run.withdrawn or {}
+        who = w.get("by") or "someone"
+        why = w.get("reason_label") or "no longer required"
+        return (f"{who} withdrew this delivery ({why.lower()}). It was not "
+                "published, and everything about it is still on the record.")
     if s == "cancelled":
         return "This workflow was cancelled."
     return "Received and ready to start."

@@ -21,12 +21,14 @@ import type {
   DecisionInput,
   DecisionResult,
   Delivery,
+  PortfolioOption,
   Publication,
   RegisterDeliveryInput,
   Review,
   Rule,
   RulesQuery,
   StartWorkflowInput,
+  WithdrawalReason,
   Workflow,
   WorkflowRow,
 } from "./types";
@@ -118,6 +120,20 @@ export class HttpOpsClient implements OpsClient {
     return body.clients;
   }
 
+  async getPortfolios(client: string): Promise<PortfolioOption[]> {
+    const body = await this.request<{ portfolios: PortfolioOption[] }>(
+      `/ops/portfolios${query({ client })}`,
+    );
+    return body.portfolios;
+  }
+
+  async getWithdrawalReasons(): Promise<WithdrawalReason[]> {
+    const body = await this.request<{ reasons: WithdrawalReason[] }>(
+      "/ops/withdrawal-reasons",
+    );
+    return body.reasons;
+  }
+
   async getDeliveries(client?: string): Promise<Delivery[]> {
     const body = await this.request<{ deliveries: Delivery[] }>(
       `/ops/deliveries${query({ client })}`,
@@ -198,6 +214,18 @@ export class HttpOpsClient implements OpsClient {
     const body = await this.post<{ workflow: Workflow }>(
       `/ops/workflows/${encodeURIComponent(workflowId)}/cancel`,
       { reason },
+    );
+    return body.workflow;
+  }
+
+  async withdrawWorkflow(
+    workflowId: string,
+    reasonCode: string,
+    note: string,
+  ): Promise<Workflow> {
+    const body = await this.post<{ workflow: Workflow }>(
+      `/ops/workflows/${encodeURIComponent(workflowId)}/withdraw`,
+      { reason_code: reasonCode, note },
     );
     return body.workflow;
   }

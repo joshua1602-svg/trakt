@@ -209,3 +209,86 @@ describe("workflow layout on a small screen", () => {
     expect(header.className).toContain("sm:px-6");
   });
 });
+
+describe("withdrawing a delivery", () => {
+  it("offers withdrawal as a tertiary action, not a rival to publishing", async () => {
+    renderWorkflow(new MockOpsClient(0), "/workflows/wf-1002");
+    const approval = await approvalStep();
+
+    const publish = within(approval).getByRole("button", { name: "Approve and publish" });
+    const withdraw = within(approval).getByRole("button", { name: "Withdraw delivery" });
+    // The primary action is solid; withdrawal is quiet until it is chosen.
+    expect(publish.className).toContain("bg-blue-600");
+    expect(withdraw.className).not.toContain("bg-");
+    // Never labelled "Cancel" — that reads as closing the screen.
+    expect(within(approval).queryByRole("button", { name: /^Cancel$/ })).toBeNull();
+  });
+
+  it("states the consequence and requires a reason before confirming", async () => {
+    const user = userEvent.setup();
+    renderWorkflow(new MockOpsClient(0), "/workflows/wf-1002");
+    const approval = await approvalStep();
+    await user.click(within(approval).getByRole("button", { name: "Withdraw delivery" }));
+
+    expect(await screen.findByText("Withdraw this delivery?")).toBeInTheDocument();
+    expect(
+      screen.getByText(/removed from active work and will not be published/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/files, assessment results and audit history will remain available/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Keep delivery" })).toBeInTheDocument();
+
+    // Nothing can be withdrawn until a reason is chosen.
+    const dialogConfirm = screen
+      .getAllByRole("button", { name: "Withdraw delivery" })
+      .find((b) => b.className.includes("bg-rose-600")) as HTMLButtonElement;
+    expect(dialogConfirm).toBeDisabled();
+
+    await user.click(screen.getByRole("radio", { name: "Test delivery" }));
+    expect(dialogConfirm).not.toBeDisabled();
+  });
+
+  it("demands a note when the reason is Other", async () => {
+    const user = userEvent.setup();
+    renderWorkflow(new MockOpsClient(0), "/workflows/wf-1002");
+    const approval = await approvalStep();
+    await user.click(within(approval).getByRole("button", { name: "Withdraw delivery" }));
+    await user.click(await screen.findByRole("radio", { name: "Other" }));
+
+    const dialogConfirm = screen
+      .getAllByRole("button", { name: "Withdraw delivery" })
+      .find((b) => b.className.includes("bg-rose-600")) as HTMLButtonElement;
+    expect(dialogConfirm).toBeDisabled();
+    await user.type(screen.getByLabelText("Say briefly why"), "wrong quarter");
+    expect(dialogConfirm).not.toBeDisabled();
+  });
+
+  it("sends the reason and shows the withdrawn record afterwards", async () => {
+    const user = userEvent.setup();
+    const client = new MockOpsClient(0);
+    const withdraw = vi.spyOn(client, "withdrawWorkflow");
+    renderWorkflow(client, "/workflows/wf-1002");
+    const approval = await approvalStep();
+    await user.click(within(approval).getByRole("button", { name: "Withdraw delivery" }));
+    await user.click(await screen.findByRole("radio", { name: "Duplicate delivery" }));
+    await user.click(
+      screen
+        .getAllByRole("button", { name: "Withdraw delivery" })
+        .find((b) => b.className.includes("bg-rose-600")) as HTMLButtonElement,
+    );
+
+    await waitFor(() =>
+      expect(withdraw).toHaveBeenCalledWith("wf-1002", "duplicate_delivery", ""),
+    );
+    // The delivery now reads as withdrawn, and says so without being opened.
+    expect(await screen.findByText(/withdrew this delivery/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(step("publication_approval").getAttribute("data-step-status")).toBe(
+        "not_applicable",
+      ),
+    );
+    // Nothing is left to approve.
+    expect(screen.queryByRole("button", { name: "Approve and publish" })).toBeNull();
+  });
+});

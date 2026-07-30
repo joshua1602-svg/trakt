@@ -13,7 +13,8 @@ export type WorkflowStatus =
   | "published"
   | "held"
   | "cancelled"
-  | "failed";
+  | "failed"
+  | "withdrawn";
 
 export type StageStatus =
   | "waiting"
@@ -162,6 +163,8 @@ export interface Workflow extends WorkflowRow {
   interrupted: boolean;
   blockers: string[];
   stages: Stage[];
+  /** Set once an operator has taken this delivery out of active work. */
+  withdrawn?: WithdrawalRecord | null;
   /** The governed case file. Present from every backend that serves steps. */
   steps?: WorkflowStep[];
   current_step?: string;
@@ -240,6 +243,46 @@ export interface CreateBatchInput {
   workflow_type: WorkflowOutcome;
   dataset: BatchDataset;
   auto_start_when_ready: boolean;
+  /** Explicit assertion that this book is new. The API refuses an unknown
+   *  portfolio without it, so a typo cannot open a delivery under a portfolio
+   *  the client does not have. */
+  new_portfolio?: boolean;
+}
+
+/**
+ * A portfolio (source book) registered to a client, as the source registry
+ * holds it. `portfolio_id` is the governed identifier — `direct_001` — and is
+ * never free text on the way in.
+ */
+export interface PortfolioOption {
+  portfolio_id: string;
+  display_name: string;
+  book_type: string;
+  book_type_label: string;
+  datasets: string[];
+  dataset_labels: string[];
+  frequencies: Record<string, string>;
+  regime_required: boolean;
+  outcome: WorkflowOutcome;
+  outcome_label: string;
+  reporting_requirement: string;
+  asset_id: string;
+  asset_label: string;
+  statuses: string[];
+  registered: boolean;
+}
+
+export interface WithdrawalReason {
+  value: string;
+  label: string;
+}
+
+export interface WithdrawalRecord {
+  by: string;
+  at: string;
+  reason_code: string;
+  reason_label: string;
+  note: string;
 }
 
 export type ReviewScope = "file" | "portfolio" | "client" | "global";
