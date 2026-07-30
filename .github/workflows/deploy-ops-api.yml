@@ -94,6 +94,7 @@ jobs:
           bash deploy/trakt-ops-api/tests/test_host_discovery.sh
           bash deploy/trakt-ops-api/tests/test_kudu_status.sh
           bash deploy/trakt-ops-api/tests/test_deploy_async_replay.sh
+          bash deploy/trakt-ops-api/tests/test_oryx_manifest.sh
 
       - name: Build deployment package
         # The runtime closure of operations_control.api.app, established by
@@ -192,20 +193,25 @@ jobs:
             "$APP_NAME"
 
       - name: Settle after the ARM calls, before deploying
-        # Azure killed a 1052-second Oryx build mid-flight and said exactly why:
+        # A HISTORICAL incident, not a description of current deployments. On one
+        # occasion Azure stopped a 1052-second Oryx build and said exactly why:
         #
         #   status=3 (failed) "Deployment has been stopped due to SCM container
         #   restart. The restart can happen due to a management operation on site.
         #   Do not perform a management operation and a deployment operation in
         #   quick succession. Adding a small delay can help avoid any conflicts."
         #
-        # Oryx builds straight into /home/site/wwwroot (PreDeployment:
-        # context.OutputPath /home/site/wwwroot, CleanOutputPath False), so a
-        # mid-build kill leaves the application files in place with NO
-        # oryx-manifest.toml, NO antenv and NO __oryx_packages__ — and the worker
-        # then dies with "ModuleNotFoundError: No module named 'uvicorn'".
-        # Restarting only replays that broken startup; only a completed build fixes
-        # it.
+        # Oryx publishes into /home/site/wwwroot (PreDeployment:
+        # context.OutputPath /home/site/wwwroot, CleanOutputPath False), so a build
+        # stopped part-way leaves the application files in place with no
+        # oryx-manifest.toml — and the worker then dies with
+        # "ModuleNotFoundError: No module named 'uvicorn'". Restarting only replays
+        # that broken startup; only a completed build fixes it.
+        #
+        # Note this is about a build that did NOT complete. A build that reports
+        # complete=true / status=4 (Success) has completed, whatever layout it
+        # published — do not read a later verification failure as evidence of an
+        # interrupted build.
         #
         # The steps above only READ from ARM (webapp show / config show /
         # appsettings list), but they are still control-plane calls against this
@@ -232,7 +238,9 @@ jobs:
         # "HTTP_504 GatewayTimeout after ~4 minutes" signature. Submitting with
         # isAsync=true returns 202 in seconds; the script then polls
         # /api/deployments/latest and streams the log until the record completes,
-        # and distinguishes status 4 (Failed) from 5 (Success).
+        # and classifies the terminal status via
+        # deploy/trakt-ops-api/kudu_status.sh — Kudu's DeployStatus is
+        # Pending=0, Building=1, Deploying=2, Failed=3, Success=4.
         env:
           POLL_SECONDS: '15'
         run: |
@@ -242,53 +250,36 @@ jobs:
             "$APP_NAME" \
             1800
 
-      - name: Assert the Oryx build left a usable Python environment
-        # A deployment that reports Success but produced no virtual environment is
-        # the exact state that broke this service: application files present in
-        # /home/site/wwwroot, but no oryx-manifest.toml, no antenv and no
-        # __oryx_packages__, so gunicorn dies with
-        # "ModuleNotFoundError: No module named 'uvicorn'".
+      - name: Inspect the Oryx build output (evidence, not the gate)
+        # NOT the deployment gate — the runtime check below is. This step makes a
+        # startup failure attributable, and asserts only what the manifest itself
+        # declares.
         #
-        # Assert the build artefacts exist rather than inferring their absence from
-        # a later startup failure. Read-only VFS reads against Kudu.
-        run: |
-          set -euo pipefail
-          TOKEN="$(az account get-access-token --resource https://management.azure.com/ \
-                    --query accessToken -o tsv)"
-          probe() {
-            curl -sS -o /dev/null -w '%{http_code}' --max-time 60 \
-              -H "Authorization: Bearer $TOKEN" \
-              "https://${OPS_SCM_HOST}/api/vfs/site/wwwroot/$1" 2>/dev/null
-          }
-          MISSING=0
-          # antenv/ and __oryx_packages__/ are directories: VFS needs a trailing
-          # slash, and either may be used depending on the Oryx version.
-          MANIFEST="$(probe oryx-manifest.toml)"
-          echo "oryx-manifest.toml   -> HTTP ${MANIFEST:-000}"
-          [ "${MANIFEST:-000}" = "200" ] || MISSING=1
+        # The previous version of this step required `antenv/` or
+        # `__oryx_packages__/` to be readable over Kudu VFS and failed the job
+        # when neither was. That assumes the uncompressed layout. This service
+        # builds with --compress-destination-dir:
+        #
+        #     Copied the compressed output to '/home/site/wwwroot'
+        #     Direct compression with zstd done
+        #     Manifest file created
+        #
+        # In that mode wwwroot holds one compressed artefact plus
+        # oryx-manifest.toml and the runtime extracts it at startup, so no
+        # expanded directory is published. The assertion therefore reported a
+        # successful build — 91 packages installed including pyyaml==6.0.3,
+        # complete=true, status=4 (Success) — as a hard failure.
+        #
+        # Read-only VFS reads against Kudu. See
+        # deploy/trakt-ops-api/verify_oryx_output.sh.
+        run: bash deploy/trakt-ops-api/verify_oryx_output.sh "$OPS_SCM_HOST"
 
-          ANTENV="$(probe 'antenv/')"
-          PKGS="$(probe '__oryx_packages__/')"
-          echo "antenv/              -> HTTP ${ANTENV:-000}"
-          echo "__oryx_packages__/   -> HTTP ${PKGS:-000}"
-          if [ "${ANTENV:-000}" != "200" ] && [ "${PKGS:-000}" != "200" ]; then
-            MISSING=1
-          fi
-
-          if [ "$MISSING" -ne 0 ]; then
-            echo
-            echo "FAIL: the deployment reported success but /home/site/wwwroot has no"
-            echo "      Oryx build output. The dependency install did not complete, so"
-            echo "      the worker will fail with ModuleNotFoundError. Restarting the"
-            echo "      App Service will NOT fix this — only a completed build will."
-            echo "      Most likely the build was killed mid-flight by an SCM container"
-            echo "      restart (a management operation landing on the site during the"
-            echo "      build); re-run this workflow, which now settles first."
-            exit 1
-          fi
-          echo "OK: the Oryx build output is present in /home/site/wwwroot"
-
-      - name: Verify the deployed service answers
+      - name: Verify the deployed service answers (THE DEPLOYMENT GATE)
+        # This is the definitive gate. Build artefacts on the site are evidence;
+        # this is the thing that actually matters — whether the deployed service
+        # serves. It supersedes any filesystem-layout assertion: if the app answers
+        # on /health, its dependencies imported, whatever layout Oryx published.
+        #
         # /health needs no token, so it is a clean post-deploy probe. It also
         # reports auth_configured, which catches the most likely misconfiguration
         # (TRAKT_OPS_OPERATORS unset leaves every route 503).
@@ -314,8 +305,25 @@ jobs:
 
           if [ "$CODE" != "200" ]; then
             echo "FAIL: /health returned HTTP $CODE, not 200. The service is not"
-            echo "      serving after this deployment. Diagnostics follow."
+            echo "      serving after this deployment."
             [ -s health.json ] && sed 's/^/      /' health.json
+            echo
+            echo "--- application startup log (most recent container output) ---"
+            # Read the startup log HERE, next to the failure, rather than leaving
+            # it to the diagnostics step: the import error that explains a
+            # non-serving worker is in this stream.
+            TOKEN="$(az account get-access-token --resource https://management.azure.com/ \
+                      --query accessToken -o tsv 2>/dev/null || true)"
+            if [ -n "${TOKEN:-}" ]; then
+              curl -sS --max-time 90 -H "Authorization: Bearer $TOKEN" \
+                "https://${OPS_SCM_HOST}/api/logs/docker" 2>/dev/null \
+                | tail -c 20000 | sed 's/^/      /' \
+                || echo "      (could not read the container log stream)"
+            else
+              echo "      (no token; the diagnostics step below prints the logs)"
+            fi
+            echo
+            echo "      Full diagnostics follow in the next step."
             exit 1
           fi
 
@@ -326,6 +334,51 @@ jobs:
             || echo "WARNING: TRAKT_OPS_OPERATORS is not set — every route will answer 503"
           echo "OK: /health returned 200 and the service identifies correctly"
           rm -f health.json
+
+      - name: Verify an authenticated route answers
+        # Optional by design: it needs a real operator token, so it only runs when
+        # one is configured as a secret. /ops/me is the lightest authenticated
+        # route — it reads the principal and touches no configuration state.
+        #
+        # This proves the auth path works end to end, which /health cannot: /health
+        # only reports whether TRAKT_OPS_OPERATORS is set, not whether a token in it
+        # is accepted.
+        #
+        # The token is passed via env and never echoed; only status codes are
+        # printed.
+        env:
+          OPS_SMOKE_TOKEN: ${{ secrets.OPS_SMOKE_OPERATOR_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${OPS_SMOKE_TOKEN:-}" ]; then
+            echo "SKIPPED: no OPS_SMOKE_OPERATOR_TOKEN secret is configured, so the"
+            echo "         authenticated probe cannot run. /health already gated this"
+            echo "         deployment. Add the secret to enable this check."
+            exit 0
+          fi
+          CODE="$(curl -sS -o me.json -w '%{http_code}' --max-time 20 \
+                   -H "X-Operator-Token: ${OPS_SMOKE_TOKEN}" \
+                   "https://${OPS_APP_HOST}/ops/me" 2>/dev/null)"
+          echo "GET /ops/me -> HTTP ${CODE:-000}"
+          case "${CODE:-000}" in
+            # One line on purpose: an un-indented multi-line script inside a YAML
+            # block scalar terminates the scalar and breaks the workflow file.
+            # Prints the role only — nothing token-shaped is echoed.
+            200) python3 -c "import json; d=json.load(open('me.json')); p=d.get('principal',{}); print('  authenticated as role:', p.get('role'), '| admin:', p.get('is_admin')); assert d.get('ok') is True, 'ops/me did not return ok'"
+                 echo "OK: the authenticated route answers"
+                 ;;
+            401|403) echo "FAIL: the token in OPS_SMOKE_OPERATOR_TOKEN was rejected"
+                     echo "      (HTTP $CODE). It is not present in TRAKT_OPS_OPERATORS"
+                     echo "      on the App Service, or its role is insufficient."
+                     exit 1 ;;
+            503) echo "FAIL: HTTP 503 — TRAKT_OPS_OPERATORS is not set on the App"
+                 echo "      Service, so every authenticated route refuses."
+                 exit 1 ;;
+            *) echo "FAIL: unexpected status $CODE from /ops/me"
+               [ -s me.json ] && sed 's/^/      /' me.json
+               exit 1 ;;
+          esac
+          rm -f me.json
 
       # ------------------------------------------------------------------ #
       # Self-diagnosis. Runs on ANY failure above, including a deploy that
