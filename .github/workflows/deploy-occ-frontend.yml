@@ -105,7 +105,28 @@ jobs:
         run: |
           set -euo pipefail
           test -f dist/index.html || { echo "no dist/index.html — the build produced nothing"; exit 1; }
-          test -f staticwebapp.config.json || { echo "no staticwebapp.config.json — SPA deep links would 404"; exit 1; }
+
+          # The artefact that gets uploaded is dist/, so every check below runs
+          # against dist/ — not against the project directory. Deploying the
+          # project directory by mistake serves the UNBUILT index.html, which
+          # still contains <div id="root"> and so looks healthy to a naive probe.
+          if grep -q '/src/main.tsx' dist/index.html; then
+            echo "FAIL: dist/index.html references /src/main.tsx — this is the"
+            echo "      unbuilt source page, not a build output."
+            exit 1
+          fi
+          if ! grep -qE '/assets/[A-Za-z0-9._-]+\.js' dist/index.html; then
+            echo "FAIL: dist/index.html references no hashed /assets/*.js bundle."
+            exit 1
+          fi
+          # staticwebapp.config.json must be INSIDE the uploaded root. It lives in
+          # public/ so Vite copies it to dist/; at the project root it would be
+          # left behind and SPA deep links would 404.
+          test -f dist/staticwebapp.config.json || {
+            echo "FAIL: dist/staticwebapp.config.json is missing — SPA deep links"
+            echo "      such as /admin/config/system would 404. Keep the file in"
+            echo "      public/ so the build copies it into dist/."
+            exit 1; }
           if grep -rqF "$VITE_OPS_API_URL" dist/assets/*.js; then
             echo "OK: the bundle is built against $VITE_OPS_API_URL"
           else
@@ -137,11 +158,14 @@ jobs:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_OCC }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: upload
-          app_location: ${{ env.APP_LOCATION }}
+          # With skip_app_build, the action treats app_location as the ALREADY
+          # BUILT content root and IGNORES output_location. Pointing it at the
+          # project directory uploaded the source tree instead of the build: the
+          # served index.html was the unbuilt one referencing /src/main.tsx, so no
+          # /assets/* existed and the app never booted. Point it at dist.
+          app_location: ${{ env.APP_LOCATION }}/dist
           api_location: ''
-          # Upload the already-built output rather than letting Oryx rebuild it:
-          # the build above is the one whose wiring was just verified.
-          output_location: dist
+          output_location: ''
           skip_app_build: true
 
       - name: Report the deployed hostname
