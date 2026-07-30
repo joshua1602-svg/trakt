@@ -34,6 +34,7 @@ from ..contracts import (
     RUN_RECEIVED,
 )
 from ..engine import OpsEngine, OpsError
+from ..onboarding.case import CaseError as _CaseError
 from ..stores import OpsStore
 from . import presenters, workflow_view
 from .auth import Principal, authenticate, require_admin, require_client
@@ -88,6 +89,14 @@ app.include_router(onboarding_routes.router)
 
 @app.exception_handler(OpsError)
 async def _ops_error(request: Request, exc: OpsError):
+    return JSONResponse(status_code=exc.http_status,
+                        content={"ok": False, "errorCode": exc.code,
+                                 "message": exc.message})
+
+
+@app.exception_handler(_CaseError)
+async def _case_error(request: Request, exc: _CaseError):
+    """An illegal onboarding transition is an operator mistake, not a fault."""
     return JSONResponse(status_code=exc.http_status,
                         content={"ok": False, "errorCode": exc.code,
                                  "message": exc.message})

@@ -12,14 +12,14 @@ import type {
   ValidationSummary,
 } from "./adminTypes";
 import type {
-  ApprovalResult,
+  ActivationResult,
+  CasePreview,
+  ChecklistRow,
+  ConfigurationVersionRow,
+  OnboardingCase,
   OnboardingClientDetail,
-  OnboardingClientRow,
-  OnboardingDraft,
+  OnboardingHome,
   OnboardingReference,
-  OnboardingReview,
-  OnboardingStep,
-  ProfileVersionRow,
 } from "./onboardingTypes";
 import type {
   Batch,
@@ -112,22 +112,39 @@ export interface OpsClient {
   activateConfigVersion(layer: ConfigLayer, version: number): Promise<{ active_version: number }>;
   rollbackConfig(layer: ConfigLayer, toVersion: number): Promise<{ active_version: number }>;
 
-  // -- Client Onboarding (standing configuration) --------------------------- //
-  /** Every governed option list and standing-field declaration the wizard renders. */
+  // -- Client Onboarding ---------------------------------------------------- //
+  /** The governed information model the wizard renders. */
   getOnboardingReference(): Promise<OnboardingReference>;
-  getOnboardingClients(): Promise<OnboardingClientRow[]>;
+  getOnboardingHome(): Promise<OnboardingHome>;
+  /** Start a new client. Blank: no client is selected and nothing is read. */
+  startNewClientCase(): Promise<OnboardingCase>;
+  /** Secondary: bring an existing client's configuration into the same model. */
+  startMigrationCase(clientId: string): Promise<OnboardingCase>;
+  /** Change an active client, starting from the version in force. */
+  startAmendmentCase(clientId: string): Promise<OnboardingCase>;
+  getCase(caseId: string): Promise<OnboardingCase>;
+  saveCaseStep(caseId: string, step: string, payload: Record<string, unknown>): Promise<OnboardingCase>;
+  addPipelineBook(caseId: string, portfolioId: string): Promise<OnboardingCase>;
+  removeSource(caseId: string, portfolioId: string, dataset: string): Promise<OnboardingCase>;
+  getCaseChecklist(caseId: string): Promise<ChecklistRow[]>;
+  createInformationRequest(
+    caseId: string,
+    items: ChecklistRow[],
+    options?: { responsible_party?: string; due_date?: string; note?: string },
+  ): Promise<OnboardingCase>;
+  markRequestSent(caseId: string, requestId: string): Promise<OnboardingCase>;
+  recordRequestResponse(
+    caseId: string,
+    requestId: string,
+    body: { note?: string; answers?: Record<string, unknown>; evidence?: { name: string; reference: string }[] },
+  ): Promise<OnboardingCase>;
+  addCaseQuestion(caseId: string, question: string): Promise<OnboardingCase>;
+  resolveCaseQuestion(caseId: string, questionId: string, resolution: string): Promise<OnboardingCase>;
+  getCasePreview(caseId: string): Promise<CasePreview>;
+  submitCase(caseId: string): Promise<OnboardingCase>;
+  approveCase(caseId: string, reason: string): Promise<OnboardingCase>;
+  activateCase(caseId: string): Promise<ActivationResult>;
+  withdrawCase(caseId: string, reason: string): Promise<OnboardingCase>;
   getOnboardingClient(clientId: string): Promise<OnboardingClientDetail>;
-  getOnboardingClientVersion(clientId: string, version: number): Promise<ProfileVersionRow>;
-  /** `adopt` populates the draft from the client's existing configuration. */
-  startOnboardingDraft(input: { client_id?: string; adopt?: boolean }): Promise<OnboardingDraft>;
-  getOnboardingDraft(draftId: string, client?: string): Promise<OnboardingDraft>;
-  saveOnboardingStep(
-    draftId: string,
-    step: OnboardingStep,
-    payload: Record<string, unknown>,
-    client?: string,
-  ): Promise<OnboardingDraft>;
-  reviewOnboardingDraft(draftId: string, client?: string): Promise<OnboardingReview>;
-  approveOnboardingDraft(draftId: string, reason: string, client?: string): Promise<ApprovalResult>;
-  discardOnboardingDraft(draftId: string, reason: string, client?: string): Promise<void>;
+  getOnboardingClientVersion(clientId: string, version: number): Promise<ConfigurationVersionRow>;
 }

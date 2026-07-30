@@ -1,70 +1,95 @@
 # Client Onboarding
 
-A governed capability inside the Operations Control Centre for creating and
-maintaining a client's **standing configuration** — the facts that stay true
-between deliveries.
+A governed capability inside the Operations Control Centre for bringing a client
+Trakt has never met into Trakt, and for maintaining what Trakt holds about them
+afterwards.
 
-It sits alongside Operations. Operations processes deliveries; Client Onboarding
-creates the configuration those deliveries resolve with. It is not part of the
-monthly reporting cycle.
+## The product
 
-## The idea in one line
+```
+Start new client onboarding      ← blank. No client selected. Nothing read.
+        ↓
+Ask the business questions       ← rendered from the governed field catalogue
+        ↓
+Request what the client owes     ← derived, not maintained by hand
+        ↓
+Validate continuously            ← as answers arrive, not only at the end
+        ↓
+Preview the configuration        ← exactly what will be written
+        ↓
+Approve                          ← records the decision. Writes nothing.
+        ↓
+Activate                         ← the only place configuration is created
+```
 
-The operator answers business questions; Trakt writes the technical
-configuration — into the artefacts it already reads, not into a parallel set.
+It works for a client with no existing YAML, no source registrations, no
+portfolio metadata, no prior delivery and no prior workflow.
+
+## Three workflows, one model
+
+| | Where answers start | Status |
+|---|---|---|
+| **New client** | Blank | **The product** |
+| **Legacy migration** | An existing client's files | Secondary and optional |
+| **Amendment** | The version in force | Ongoing change |
+
+Only the entry point differs. Validation, requests, generation and approval are
+identical, so a migrated client and a newly onboarded one are the same client
+afterwards.
 
 ## Documents
 
 | Document | Contents |
 |---|---|
-| [01 — Current architecture findings](01_current_architecture_findings.md) | How client configuration is assembled today, traced to file and function. Mandatory vs optional fields, operational vs reporting metadata, the source registry, every Annex/regime standing field, and everything else maintained by hand. |
-| [02 — Mapping and gaps](02_mapping_and_gaps.md) | Every onboarding answer and the legacy artefact it reads from and writes to. The fields that cannot currently be represented, with reasons. Why one new configuration file was genuinely required. |
-| [03 — Implementation ledger](03_implementation_ledger.md) | File by file: what is new, what changed, what was deliberately left alone. API surface and storage layout. |
-| [04 — Migration strategy](04_migration_strategy.md) | How an existing client is adopted without re-entering anything, what adoption preserves, and how to roll back. |
-| [05 — Test results and recommendations](05_test_results_and_recommendations.md) | What the tests cover and what they prove. Eight remaining architectural recommendations. |
+| [01 — Gap analysis](01_gap_analysis.md) | The first implementation traced against the corrected requirement: what supported blank onboarding, what assumed an existing client, and what was missing entirely. |
+| [02 — Domain model and catalogue](02_domain_model_and_catalogue.md) | The case, its statuses, entities with reusable roles, information requests; and the client-agnostic field catalogue with its two classifications. |
+| [03 — Generation mapping](03_generation_mapping.md) | Every answer and the artefact it becomes. Determinism, idempotency, and the fields no existing artefact can represent. |
+| [04 — Implementation ledger](04_implementation_ledger.md) | File by file, plus the API surface and storage layout. |
+| [05 — Test results](05_test_results.md) | What the tests prove, the 390px measurements, and the baseline comparison. |
 
 Screenshots: [`docs/screenshots/client_onboarding/`](../screenshots/client_onboarding/).
 
-## What it generates
+## What activation generates
 
 | Artefact | Existing home |
 |---|---|
 | Client configuration | `config/client/config_client_{CLIENT}.yaml` |
 | Investor report configuration | `config/client/config_client_{CLIENT}_annex12.yaml` |
 | Portfolio metadata | `config/client/portfolio_registry_{CLIENT}.yaml` |
+| Client index | `config/client/client_index_{CLIENT}.yaml` |
 | Source registrations | the durable source registry |
 
-Same formats, same layers, same readers. What onboarding adds is authorship,
-versioning and an audit trail.
+Same formats, same layers, same readers. No parallel configuration stack.
 
 ## Design commitments
 
-- **No duplicate configuration.** Every answer lands in an artefact that already
-  exists. The mapping is declared once, in
-  `config/regime/onboarding_standing_fields.yaml`, and used in both directions.
-- **Generation is a merge.** Blocks onboarding does not own — enrichment,
-  transformations, deal-structure triggers — are carried through untouched. An
-  existing source registration keeps the mapping and fingerprint a real delivery
-  earned it.
-- **Nothing is written before approval.** The review screen shows every artefact
-  that will be created or changed, with the current content alongside.
-- **Versioning over overwrite.** Every approval creates a new immutable version
-  carrying who, when, what changed, before, after and why, and appends to the
-  existing hash-chained audit trail.
-- **No hard-coded regime or asset class.** The wizard renders whatever the
-  governed standing-field declaration contains, and offers whatever the asset
-  support model allows. Adding a regime is a configuration change.
-- **Shipping this adopts no one.** A client without an approved profile resolves
-  the repository file exactly as before.
+- **It starts blank.** The existing ERE configuration informed the schema; it is
+  not required to run onboarding, and is only ever read by the optional
+  migration path.
+- **The catalogue is the model.** Adding a field is a change to
+  `config/onboarding/field_catalogue.yaml`, not to a form component. Vocabularies
+  are read from the modules that own them; regime fields come from the governed
+  regime declaration, so a future regime needs no code.
+- **Approval and activation are different acts.** Approval records a decision.
+  Activation writes configuration. Nothing active exists before it.
+- **Portfolios and sources exist before the first delivery.** A portfolio is not
+  created by a publication; it is created by an approved onboarding.
+- **Generation is deterministic and idempotent**, merges rather than replaces,
+  and never clears what a real delivery earned a source record.
+- **Migration is secondary.** It is offered at the foot of the home page, it
+  changes nothing before approval, and a legacy value today's rules refuse is
+  raised as an issue rather than carried across quietly.
 
 ## Relationship to Operations
 
-After a client is onboarded the manual delivery workflow asks only:
+Operations processes deliveries. Onboarding creates the configuration those
+deliveries resolve against. After a client is activated, the delivery workflow
+asks only:
 
 ```
 Client → Portfolio → Reporting period → Files
 ```
 
-Everything else is derived: the reporting products from the client's profile,
-the regime scope from the source registration, the standing regime values from
-the generated client configuration.
+Everything else is derived from the approved onboarding: which reporting
+products apply, which book carries regulatory scope, and every standing
+regulatory value.

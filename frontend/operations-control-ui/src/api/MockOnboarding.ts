@@ -1,554 +1,1275 @@
 /**
- * In-memory Client Onboarding, for demonstration and for the browser tests.
+ * In-memory Client Onboarding, for demonstration and browser tests.
  *
- * It mirrors the real service closely enough to exercise the screens — the same
- * governed vocabularies, the same standing-field declaration, the same
- * derivation rules, the same immutable versioning — but it is a fixture, not a
- * second implementation: the real decisions live in
- * `operations_control/onboarding/`, and the HTTP client talks to those.
+ * A fixture, not a second implementation: the governed decisions live in
+ * `operations_control/onboarding/`, and the HTTP client talks to those. What is
+ * mirrored here is only enough to exercise the screens — the same catalogue
+ * shape, the same statuses, the same conditional requirements, the same
+ * blank-start behaviour.
+ *
+ * It carries NO client values. A new case starts empty, exactly as the product
+ * requires; the legacy fixture used by the migration path is a deliberately
+ * synthetic client, not a real one.
  */
 
 import type {
-  ApprovalResult,
+  ActivationResult,
+  CaseAnswers,
+  CaseKind,
+  CasePreview,
+  CaseProblem,
+  CaseRow,
+  CaseStatus,
+  CatalogueField,
+  ChecklistRow,
+  ConfigurationVersionRow,
+  InformationRequest,
+  OnboardingCase,
   OnboardingClientDetail,
-  OnboardingClientRow,
-  OnboardingDraft,
-  OnboardingProblem,
-  OnboardingProfile,
+  OnboardingHome,
   OnboardingReference,
-  OnboardingReview,
-  OnboardingStep,
+  OpenQuestion,
   PlannedArtefact,
-  ProfileChange,
-  ProfileVersionRow,
-  SourceRegistrationStanding,
-  StandingProduct,
-  UnrepresentedField,
 } from "./onboardingTypes";
+import { CATALOGUE, STEPS, STATUS_LABELS, KIND_LABELS } from "./mockCatalogue";
 
-const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
-
-const STEPS: { key: OnboardingStep; label: string }[] = [
-  { key: "client", label: "Client" },
-  { key: "portfolio", label: "Portfolios" },
-  { key: "reporting", label: "Reporting" },
-  { key: "regime", label: "Regime configuration" },
-  { key: "static_reporting", label: "Investor and static reporting" },
-  { key: "sources", label: "Source registration" },
-  { key: "review", label: "Review" },
-];
-
-const PRODUCTS: Record<string, StandingProduct> = {
-  mi: {
-    label: "Management Information",
-    always_applies: true,
-    derived_from:
-      "Every governed delivery produces MI. The workflow outcome vocabulary has no MI-less option.",
-    fields: [],
-  },
-  esma_annex2: {
-    label: "ESMA Annex 2",
-    requires_dataset: "funded",
-    supported_by_assets_declaring: "ESMA_Annex2",
-    fields: [
-      {
-        key: "originator_name",
-        label: "Originator name",
-        regime_code: "RREL82",
-        classification: "standing_client",
-        required: true,
-        format: "text",
-        max_length: 100,
-        help: "The full legal name of the originator. Must match the name held against the LEI in the GLEIF database.",
-        writes_to: "client_config:defaults.originator_name",
-      },
-      {
-        key: "originator_legal_entity_identifier",
-        label: "Originator LEI",
-        regime_code: "RREL83",
-        classification: "standing_client",
-        required: true,
-        format: "lei",
-        help: "The originator's 20-character Legal Entity Identifier.",
-        writes_to: "client_config:defaults.originator_legal_entity_identifier",
-      },
-      {
-        key: "originator_establishment_country",
-        label: "Originator country of establishment",
-        regime_code: "RREL84",
-        classification: "standing_client",
-        required: true,
-        format: "country",
-        writes_to: "client_config:defaults.originator_establishment_country",
-      },
-      {
-        key: "original_lender_legal_entity_identifier",
-        label: "Original lender LEI",
-        regime_code: "RREL80",
-        classification: "standing_client",
-        required: false,
-        format: "lei",
-        help: "Only where the original lender differs from the originator and is the same for the whole book. Left blank, the delivery rules apply ND5.",
-        writes_to: "client_config:defaults.original_lender_legal_entity_identifier",
-      },
-      {
-        key: "original_lender_establishment_country",
-        label: "Original lender country of establishment",
-        regime_code: "RREL81",
-        classification: "standing_client",
-        required: false,
-        format: "country",
-        writes_to: "client_config:defaults.original_lender_establishment_country",
-      },
-      {
-        key: "nuts_classification_year",
-        label: "NUTS classification year",
-        classification: "standing_portfolio",
-        required: false,
-        format: "enum",
-        options: ["2021", "2024"],
-        help: "The NUTS vintage used for the regulatory geographic region fields.",
-        writes_to: "client_config:nuts_classification_year",
-      },
-      {
-        key: "uk_geography_override",
-        label: "Report UK geography as GBZZZ",
-        classification: "standing_portfolio",
-        required: false,
-        format: "boolean",
-        help: "Delivers GBZZZ for UK obligor and collateral region (RREL11 / RREC6) while retaining granular ITL3 in canonical for MI.",
-        writes_to: "client_config:regime_overrides.ESMA_Annex2.uk_geography.enabled",
-      },
-    ],
-    unrepresented: [
-      {
-        key: "sponsor_name",
-        label: "Sponsor",
-        reason:
-          "Annex 2 is the underlying-exposure report; it carries no sponsor field. Sponsor appears only as a risk-retention holder value in Annex 12.",
-      },
-      {
-        key: "sspe_name",
-        label: "SSPE",
-        reason:
-          "No SSPE field exists in the Annex 2 field universe. The securitisation entity is named in Annex 12.",
-      },
-      {
-        key: "national_competent_authority",
-        label: "National competent authority",
-        reason: "Trakt produces the report; it does not file it. No NCA field exists.",
-      },
-      {
-        key: "sts_status",
-        label: "STS status and notification identifier",
-        reason:
-          "No STS fields exist in the current Annex 2 model. Adding them extends the field universe, which is an administrator change.",
-      },
-      {
-        key: "servicer_name",
-        label: "Servicer",
-        reason:
-          "A source registration records who supplies the data. There is no regulatory servicer field in the Annex 2 model.",
-      },
-      {
-        key: "calculation_conventions",
-        label: "Calculation conventions",
-        reason:
-          "Day-count and payment-frequency conventions are captured as static reporting information, but they are not Annex 2 fields.",
-      },
-    ],
-  },
-  investor_reporting: {
-    label: "Investor Reporting",
-    regime_id: "ESMA_Annex12",
-    fields: [
-      {
-        key: "IVSS3",
-        label: "Securitisation name",
-        classification: "standing_client",
-        format: "text",
-        writes_to: "annex12_config:annex12.deal.IVSS3",
-      },
-      {
-        key: "IVSS4",
-        label: "Reporting entity name",
-        classification: "standing_client",
-        format: "text",
-        writes_to: "annex12_config:annex12.deal.IVSS4",
-      },
-      {
-        key: "IVSS5",
-        label: "Reporting entity contact person",
-        classification: "standing_client",
-        required: true,
-        format: "text",
-        writes_to: "annex12_config:annex12.deal.IVSS5",
-      },
-      {
-        key: "IVSS6",
-        label: "Reporting entity contact telephone",
-        classification: "standing_client",
-        required: true,
-        format: "text",
-        writes_to: "annex12_config:annex12.deal.IVSS6",
-      },
-      {
-        key: "IVSS7",
-        label: "Reporting entity contact email",
-        classification: "standing_client",
-        required: true,
-        format: "email",
-        writes_to: "annex12_config:annex12.deal.IVSS7",
-      },
-      {
-        key: "IVSS8",
-        label: "Risk retention method",
-        classification: "standing_client",
-        required: true,
-        format: "enum",
-        options: [
-          { value: "VSLC", label: "Vertical slice" },
-          { value: "SLLS", label: "Seller's share" },
-          { value: "RSEX", label: "Randomly-selected exposures" },
-          { value: "FLTR", label: "First loss tranche" },
-          { value: "FLEX", label: "First loss exposure in each asset" },
-          { value: "NCOM", label: "No compliance" },
-          { value: "OTHR", label: "Other" },
-        ],
-        writes_to: "annex12_config:annex12.deal.IVSS8",
-      },
-      {
-        key: "IVSS9",
-        label: "Risk retention holder",
-        classification: "standing_client",
-        required: true,
-        format: "enum",
-        options: [
-          { value: "ORIG", label: "Originator" },
-          { value: "SPON", label: "Sponsor" },
-          { value: "OLND", label: "Original lender" },
-          { value: "SELL", label: "Seller" },
-          { value: "NCOM", label: "No compliance" },
-          { value: "OTHR", label: "Other" },
-        ],
-        writes_to: "annex12_config:annex12.deal.IVSS9",
-      },
-      {
-        key: "IVSS10",
-        label: "Underlying exposure type",
-        classification: "standing_portfolio",
-        required: true,
-        format: "enum",
-        options: [
-          { value: "RMRT", label: "Residential mortgage" },
-          { value: "CMRT", label: "Commercial mortgage" },
-          { value: "CONL", label: "Consumer loan" },
-          { value: "ALOL", label: "Automobile loan or lease" },
-          { value: "SMEL", label: "SME" },
-          { value: "MIXD", label: "Mixed" },
-          { value: "OTHR", label: "Other" },
-        ],
-        writes_to: "annex12_config:annex12.deal.IVSS10",
-      },
-      {
-        key: "IVSS11",
-        label: "Risk transfer method applied",
-        classification: "standing_client",
-        format: "yes_no",
-        writes_to: "annex12_config:annex12.deal.IVSS11",
-      },
-      {
-        key: "IVSS13",
-        label: "Revolving / ramp-up end date",
-        classification: "standing_client",
-        format: "date_or_nd",
-        help: "A date where one applies, otherwise ND5.",
-        writes_to: "annex12_config:annex12.deal.IVSS13",
-      },
-    ],
-    unrepresented: [
-      {
-        key: "trustee_name",
-        label: "Trustee",
-        reason:
-          "Captured as static reporting information, but Annex 12 has no trustee field, so it is not written into the regime configuration.",
-      },
-      {
-        key: "IVSR_triggers",
-        label: "Trigger definitions (IVSR1-IVSR10)",
-        reason:
-          "Deal-structure information, not client standing information. Left where it is until a governed trigger model exists.",
-      },
-    ],
-  },
-  static_pools: {
-    label: "Static Pools",
-    requires_dataset: "funded",
-    fields: [],
-    unrepresented: [
-      {
-        key: "cohort_definition",
-        label: "Cohort definition",
-        reason:
-          "Held as asset configuration and administered through the governed asset package, not per client.",
-      },
-    ],
-  },
-};
-
-const REFERENCE: OnboardingReference = {
-  vocabularies: {
-    asset_classes: [
-      { value: "equity_release", label: "Equity Release", supports_regimes: ["ESMA_Annex2"] },
-    ],
-    portfolio_types: ["direct", "acquired"],
-    portfolio_structures: ["on_balance_sheet", "warehouse", "spv", "managed"],
-    datasets: ["funded", "pipeline"],
-    regime_capable_datasets: ["funded"],
-    cadences: ["monthly", "weekly", "daily", "adhoc", "ad_hoc"],
-    registration_statuses: ["pending_review", "active"],
-    products: Object.entries(PRODUCTS).map(([key, product]) => ({
-      key,
-      label: product.label,
-      selectable: key !== "mi",
-      always_applies: Boolean(product.always_applies),
-      derived_from: product.derived_from ?? "",
-      requires_dataset: product.requires_dataset ?? "",
-      supported_by_assets_declaring: product.supported_by_assets_declaring ?? "",
-      field_count: product.fields.length,
-      unrepresented: product.unrepresented ?? [],
-    })),
-    sources: {
-      asset_classes: "operations_control.configuration.packages.ASSET_MODEL",
-      portfolio_types: "apps.blob_trigger_app.source_registry.SourceRecord",
-      datasets: "operations_control.contracts.BATCH_DATASETS",
-      cadences: "apps.blob_trigger_app.path_parser.VALID_FREQUENCIES",
-      products: "config/regime/onboarding_standing_fields.yaml",
-    },
-  },
-  standing_fields: { version: 1, products: PRODUCTS },
-};
-
-function emptyProfile(clientId = ""): OnboardingProfile {
-  return {
-    client_id: clientId,
-    client: {
-      client_id: clientId,
-      client_name: "",
-      legal_entity_name: "",
-      lei: "",
-      jurisdiction: "",
-      reporting_currency: "",
-      time_zone: "Europe/London",
-      environment: "production",
-      primary_reporting_contact: "",
-      reporting_email: "",
-      operational_contact: "",
-      operational_email: "",
-    },
-    portfolios: [],
-    reporting: { products: [], derivation: {} },
-    regime: {},
-    static_reporting: {
-      app_title: "",
-      primary_color: "",
-      logo_uri: "",
-      disclaimer: "",
-      investor_contact: "",
-      investor_email: "",
-      trustee_name: "",
-      warehouse_lender: "",
-      payment_convention: "",
-      day_count_convention: "",
-      reporting_convention: "",
-    },
-    sources: [],
-  };
-}
-
-/** The ERE client as it exists today, before onboarding has adopted it. */
-function adoptedEreProfile(): OnboardingProfile {
-  const profile = emptyProfile("ERE");
-  profile.client = {
-    client_id: "ERE",
-    client_name: "ERE Funding - Equity Release Mortgages",
-    legal_entity_name: "ERE Funding Limited",
-    lei: "213800ABCDE123456701",
-    jurisdiction: "GB",
-    reporting_currency: "GBP",
-    time_zone: "Europe/London",
-    environment: "production",
-    primary_reporting_contact: "",
-    reporting_email: "",
-    operational_contact: "",
-    operational_email: "",
-  };
-  profile.portfolios = [
-    {
-      portfolio_id: "direct_001",
-      display_name: "ERE Direct Originations",
-      portfolio_type: "direct",
-      asset_class: "equity_release",
-      structure: "on_balance_sheet",
-      funded_cadence: "monthly",
-      pipeline_cadence: "weekly",
-      originates: true,
-      warehouse_lender: "",
-      source_system: "ERE core lending platform",
-    },
-    {
-      portfolio_id: "acquired_001",
-      display_name: "BigBank Legacy Book",
-      portfolio_type: "acquired",
-      asset_class: "equity_release",
-      structure: "spv",
-      funded_cadence: "ad_hoc",
-      pipeline_cadence: "",
-      originates: false,
-      warehouse_lender: "",
-      source_system: "BigBank plc (seller)",
-    },
-  ];
-  profile.reporting = {
-    products: ["esma_annex2"],
-    derivation: {
-      esma_annex2:
-        "pipeline.esma_enabled / supported_regimes in the client configuration, and regime_required source registrations",
-    },
-  };
-  profile.regime = {
-    esma_annex2: {
-      originator_name: "ERE Funding Limited",
-      originator_legal_entity_identifier: "213800ABCDE123456701",
-      originator_establishment_country: "GB",
-      nuts_classification_year: "2021",
-      uk_geography_override: true,
-    },
-  };
-  profile.static_reporting = {
-    ...profile.static_reporting,
-    app_title: "Portfolio MI Dashboard",
-    primary_color: "#0B1F3B",
-    day_count_convention: "ACT365",
-    payment_convention: "QUARTERLY",
-  };
-  profile.sources = deriveSources(profile);
-  return profile;
-}
-
-function deriveSources(profile: OnboardingProfile): SourceRegistrationStanding[] {
-  const annex2 = profile.reporting.products.includes("esma_annex2");
-  const out: SourceRegistrationStanding[] = [];
-  for (const p of profile.portfolios) {
-    const supports = REFERENCE.vocabularies.asset_classes
-      .find((a) => a.value === p.asset_class)
-      ?.supports_regimes.includes("ESMA_Annex2");
-    out.push({
-      portfolio_id: p.portfolio_id,
-      dataset: "funded",
-      frequency: p.funded_cadence,
-      source_system: p.source_system,
-      expected_files: [],
-      regime_required: Boolean(annex2 && supports),
-      status: "pending_review",
-      blob_prefix: "",
-    });
-    if (p.pipeline_cadence) {
-      out.push({
-        portfolio_id: p.portfolio_id,
-        dataset: "pipeline",
-        frequency: p.pipeline_cadence,
-        source_system: p.source_system,
-        expected_files: [],
-        regime_required: false,
-        status: "pending_review",
-        blob_prefix: "",
-      });
-    }
-  }
-  return out;
-}
+const clone = <T,>(value: T): T =>
+  value === undefined ? (undefined as T) : (JSON.parse(JSON.stringify(value)) as T);
 
 const LEI_RE = /^[A-Z0-9]{18}[0-9]{2}$/;
 const CCY_RE = /^[A-Z]{3}$/;
 const COUNTRY_RE = /^[A-Z]{2}$/;
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+const IDENT_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{1,63}$/;
+const COLOUR_RE = /^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/;
 
-function validate(profile: OnboardingProfile): OnboardingProblem[] {
-  const out: OnboardingProblem[] = [];
-  const push = (step: string, field: string, message: string) =>
-    out.push({ step, field, message });
-  const c = profile.client;
-  if (!c.client_id.trim()) push("client", "client_id", "The client needs an identifier.");
-  if (!c.client_name.trim()) push("client", "client_name", "The client needs a name.");
-  if (!c.legal_entity_name.trim())
-    push("client", "legal_entity_name", "The legal entity name has not been given.");
-  if (!c.lei.trim()) push("client", "lei", "The legal entity identifier has not been given.");
-  else if (!LEI_RE.test(c.lei.trim().toUpperCase()))
-    push("client", "lei", "That is not a valid 20-character LEI.");
-  if (!COUNTRY_RE.test(c.jurisdiction.trim().toUpperCase()))
-    push("client", "jurisdiction", "Give the jurisdiction as a two-letter country code.");
-  if (!CCY_RE.test(c.reporting_currency.trim().toUpperCase()))
-    push("client", "reporting_currency", "Give the reporting currency as a three-letter code.");
-  if (!c.time_zone.trim())
-    push("client", "time_zone", "The reporting time zone has not been given.");
-  if (!c.primary_reporting_contact.trim())
-    push("client", "primary_reporting_contact", "The primary reporting contact has not been named.");
-  if (!EMAIL_RE.test(c.reporting_email.trim()))
-    push("client", "reporting_email", "The reporting email address has not been given.");
-  if (!c.operational_contact.trim())
-    push("client", "operational_contact", "The operational contact has not been named.");
-  if (!EMAIL_RE.test(c.operational_email.trim()))
-    push("client", "operational_email", "The operational email address has not been given.");
+function present(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "boolean") return true;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") return Object.keys(value).length > 0;
+  return String(value).trim() !== "";
+}
 
-  if (profile.portfolios.length === 0)
-    push("portfolio", "portfolios", "A client needs at least one portfolio.");
-  for (const p of profile.portfolios) {
-    const where = p.portfolio_id || "this portfolio";
-    if (!p.portfolio_id.trim())
-      push("portfolio", "portfolio_id", "Every portfolio needs an identifier.");
-    if (!p.display_name.trim())
-      push("portfolio", "display_name", `${where} needs a display name.`);
-    if (!REFERENCE.vocabularies.asset_classes.some((a) => a.value === p.asset_class))
-      push("portfolio", "asset_class", `${where} has no recognised asset class.`);
+/** The same tiny conditional grammar the backend evaluates. */
+export function evaluate(
+  expression: string,
+  answers: CaseAnswers,
+  item?: Record<string, unknown>,
+): boolean {
+  const text = (expression ?? "").trim();
+  if (!text) return false;
+  if (text === "always") return true;
+  const m = /^\s*([\w.]+)\s+(==|!=|in|contains)\s+(.+?)\s*$/.exec(text);
+  if (!m) return false;
+  const [, path, op, rawValue] = m;
+  const actual = resolvePath(path, answers, item);
+  const expected = literal(rawValue);
+  const scalar = (v: unknown) => (typeof v === "boolean" ? v : String(v ?? "").trim());
+  if (op === "==") return scalar(actual) === scalar(expected);
+  if (op === "!=") return scalar(actual) !== scalar(expected);
+  if (op === "in") {
+    const values = Array.isArray(expected) ? expected : [expected];
+    return values.map(scalar).includes(scalar(actual));
   }
+  if (op === "contains") {
+    if (Array.isArray(actual)) return actual.map(scalar).includes(scalar(expected));
+    return String(actual ?? "").includes(String(expected));
+  }
+  return false;
+}
 
-  for (const key of profile.reporting.products) {
-    const product = PRODUCTS[key];
-    if (!product) continue;
-    const answers = profile.regime[key] ?? {};
-    for (const field of product.fields) {
-      const value = answers[field.key];
-      const text = value === undefined || value === null ? "" : String(value).trim();
-      if (!text) {
-        if (field.required)
-          push("regime", `${key}.${field.key}`, `${field.label} is needed for ${product.label}.`);
-        continue;
-      }
-      if (field.format === "lei" && !LEI_RE.test(text.toUpperCase()))
-        push("regime", `${key}.${field.key}`, `${field.label} is not a valid 20-character LEI.`);
-      if (field.format === "country" && !COUNTRY_RE.test(text.toUpperCase()))
-        push("regime", `${key}.${field.key}`, `${field.label} must be a two-letter country code.`);
-      if (field.format === "email" && !EMAIL_RE.test(text))
-        push("regime", `${key}.${field.key}`, `${field.label} does not look like an email address.`);
+function resolvePath(path: string, answers: CaseAnswers, item?: Record<string, unknown>) {
+  if (!path.includes(".") && item && path in item) return item[path];
+  let node: unknown = answers;
+  for (const part of path.split(".")) {
+    if (node && typeof node === "object") node = (node as Record<string, unknown>)[part];
+    else return undefined;
+  }
+  return node;
+}
+
+function literal(raw: string): unknown {
+  const text = raw.trim();
+  if (text.startsWith("[") && text.endsWith("]")) {
+    return text
+      .slice(1, -1)
+      .split(",")
+      .map((p) => p.trim().replace(/^['"]|['"]$/g, ""))
+      .filter(Boolean);
+  }
+  if (text.toLowerCase() === "true") return true;
+  if (text.toLowerCase() === "false") return false;
+  return text.replace(/^['"]|['"]$/g, "");
+}
+
+export function isRequired(
+  field: CatalogueField,
+  answers: CaseAnswers,
+  item?: Record<string, unknown>,
+): boolean {
+  if (field.required) return true;
+  if (!field.required_when) return false;
+  return evaluate(field.required_when, answers, item);
+}
+
+function validateValue(field: CatalogueField, value: unknown): string {
+  if (!present(value)) return "";
+  const text = String(value).trim();
+  const rule = field.validation || field.type;
+  if (rule === "lei" && !LEI_RE.test(text.toUpperCase()))
+    return `${field.label} is not a valid 20-character identifier.`;
+  if (rule === "country" && !COUNTRY_RE.test(text.toUpperCase()))
+    return `${field.label} must be a two-letter country code.`;
+  if (rule === "currency" && !CCY_RE.test(text.toUpperCase()))
+    return `${field.label} must be a three-letter currency code.`;
+  if (rule === "email" && !EMAIL_RE.test(text))
+    return `${field.label} does not look like an email address.`;
+  if (rule === "identifier" && !IDENT_RE.test(text))
+    return `${field.label} may use letters, numbers, hyphens and underscores only, and must start with a letter or number.`;
+  if (rule === "colour" && !COLOUR_RE.test(text))
+    return `${field.label} must be a colour such as #1F3B5C.`;
+  if (field.max_length && text.length > field.max_length)
+    return `${field.label} is longer than ${field.max_length} characters.`;
+  if (rule === "enum" && field.options.length) {
+    const allowed = new Set(field.options.map((o) => o.value));
+    const chosen = Array.isArray(value) ? value : [value];
+    for (const item of chosen) {
+      if (String(item).trim() && !allowed.has(String(item).trim()))
+        return `${field.label} is not one of the accepted values.`;
     }
   }
-  return out;
+  return "";
+}
+
+interface StoredCase {
+  case_id: string;
+  kind: CaseKind;
+  status: CaseStatus;
+  client_id: string;
+  client_name: string;
+  answers: CaseAnswers;
+  information_requests: InformationRequest[];
+  open_questions: OpenQuestion[];
+  provenance: Record<string, string>;
+  based_on_version: number | null;
+  events: OnboardingCase["events"];
+  created_by: string;
+  updated_by: string;
+  updated_at: string;
+  approved_by: string;
+  approved_at: string;
+  approval_reason: string;
+  activated_version: number | null;
+  withdrawal_reason: string;
+}
+
+const TRANSITIONS: Record<CaseStatus, CaseStatus[]> = {
+  draft: ["information_requested", "in_review", "ready_for_approval", "withdrawn"],
+  information_requested: ["awaiting_client", "draft", "in_review", "withdrawn"],
+  awaiting_client: ["in_review", "draft", "changes_required", "withdrawn"],
+  in_review: ["changes_required", "ready_for_approval", "draft", "withdrawn"],
+  changes_required: ["draft", "in_review", "information_requested", "withdrawn"],
+  ready_for_approval: ["approved", "changes_required", "draft", "withdrawn"],
+  approved: ["activated", "changes_required", "withdrawn"],
+  activated: [],
+  withdrawn: [],
+};
+
+export class MockOnboardingError extends Error {
+  constructor(
+    message: string,
+    readonly errorCode: string,
+  ) {
+    super(message);
+  }
+}
+
+export class MockOnboarding {
+  private cases = new Map<string, StoredCase>();
+  private versions = new Map<string, ConfigurationVersionRow[]>();
+  private active = new Map<string, CaseAnswers>();
+  private artefactStore = new Map<string, Map<string, string>>();
+  private sequence = 0;
+
+  /** A synthetic legacy client, so the migration path is demonstrable without
+   *  making any real client part of the product. */
+  private legacy = new Map<string, CaseAnswers>([
+    [
+      "LEGACYCO",
+      {
+        client: {
+          client_id: "LEGACYCO",
+          client_name: "Legacy Lending",
+          jurisdiction: "GB",
+          reporting_currency: "GBP",
+          environment: "production",
+        },
+        entities: [
+          {
+            entity_id: "ent_legacy_1",
+            legal_name: "Legacy Lending Limited",
+            roles: ["originator", "reporting_entity"],
+            lei: "213800ABCDE123456701N202501",
+            country_of_establishment: "GB",
+          },
+        ],
+        contacts: {},
+        portfolios: [
+          {
+            portfolio_id: "direct_001",
+            display_name: "Legacy Direct",
+            portfolio_type: "direct",
+            asset_class: "equity_release",
+            owning_entity: "ent_legacy_1",
+          },
+        ],
+        sources: [
+          {
+            source_key: "direct_001/funded",
+            portfolio_id: "direct_001",
+            dataset: "funded",
+            cadence: "monthly",
+            source_party: "Legacy core",
+            regime_required: true,
+          },
+        ],
+        reporting: { products: ["esma_annex2"] },
+        regime: {
+          esma_annex2: {
+            originator_name: "Legacy Lending Limited",
+            originator_legal_entity_identifier: "213800ABCDE123456701N202501",
+            originator_establishment_country: "GB",
+          },
+        },
+        presentation: { report_title: "Legacy MI" },
+      },
+    ],
+  ]);
+
+  reference(): OnboardingReference {
+    return {
+      catalogue: clone(CATALOGUE),
+      steps: STEPS.map((s) => ({ ...s })),
+      statuses: (Object.keys(STATUS_LABELS) as CaseStatus[]).map((key) => ({
+        key,
+        label: STATUS_LABELS[key],
+      })),
+      kinds: (Object.keys(KIND_LABELS) as CaseKind[]).map((key) => ({
+        key,
+        label: KIND_LABELS[key],
+      })),
+    };
+  }
+
+  // -- opening ------------------------------------------------------------ //
+
+  private open(kind: CaseKind, answers: CaseAnswers, by: string, extra?: Partial<StoredCase>) {
+    this.sequence += 1;
+    const stored: StoredCase = {
+      case_id: `ONB-2026-${String(this.sequence).padStart(4, "0")}`,
+      kind,
+      status: "draft",
+      client_id: String((answers.client as Record<string, string>)?.client_id ?? ""),
+      client_name: String((answers.client as Record<string, string>)?.client_name ?? ""),
+      answers,
+      information_requests: [],
+      open_questions: [],
+      provenance: {},
+      based_on_version: null,
+      events: [],
+      created_by: by,
+      updated_by: by,
+      updated_at: new Date().toISOString(),
+      approved_by: "",
+      approved_at: "",
+      approval_reason: "",
+      activated_version: null,
+      withdrawal_reason: "",
+      ...extra,
+    };
+    this.syncDerived(stored);
+    this.record(stored, "opened", by, {});
+    this.cases.set(stored.case_id, stored);
+    return stored;
+  }
+
+  startNewClient(by: string): OnboardingCase {
+    return this.present(this.open("new_client", { sources: [] }, by));
+  }
+
+  startMigration(clientId: string, by: string): OnboardingCase {
+    const answers = clone(this.legacy.get(clientId) ?? { sources: [] });
+    const stored = this.open("migration", answers, by, {
+      provenance: {
+        "client.client_name": "the client configuration",
+        "entities.originator": "the originator defaults in the client configuration (RREL82/83/84)",
+        sources: "the durable source registrations",
+      },
+    });
+    // Legacy values today's rules refuse surface immediately as questions.
+    for (const problem of this.validate(stored)) {
+      if (problem.message.includes("not a valid")) {
+        stored.open_questions.push({
+          question_id: `q_${stored.open_questions.length + 1}`,
+          question: `${problem.message} (carried over from the existing configuration)`,
+          origin: "migration",
+          raised_at: new Date().toISOString(),
+          raised_by: "Trakt",
+        });
+      }
+    }
+    return this.present(stored);
+  }
+
+  startAmendment(clientId: string, by: string): OnboardingCase {
+    const current = this.active.get(clientId);
+    if (!current) {
+      throw new MockOnboardingError(
+        "This client has no approved configuration to amend.",
+        "OPS_CLIENT_NOT_ONBOARDED",
+      );
+    }
+    const history = this.versions.get(clientId) ?? [];
+    return this.present(
+      this.open("amendment", clone(current), by, {
+        based_on_version: history[0]?.version ?? null,
+      }),
+    );
+  }
+
+  // -- answering ---------------------------------------------------------- //
+
+  saveStep(caseId: string, step: string, payload: Record<string, unknown>): OnboardingCase {
+    const stored = this.require(caseId);
+    this.requireEditable(stored);
+    const section = CATALOGUE.sections.find((s) => s.key === step);
+    const before = clone(stored.answers[step]);
+
+    if (section?.from_regime) {
+      const held = (stored.answers.regime ?? {}) as Record<string, Record<string, unknown>>;
+      for (const [product, answers] of Object.entries(
+        (payload.regime ?? {}) as Record<string, Record<string, unknown>>,
+      )) {
+        held[product] = { ...(held[product] ?? {}), ...answers };
+      }
+      stored.answers.regime = held;
+    } else if (section?.repeatable) {
+      stored.answers[step] = (payload[section.key] ?? payload.items ?? []) as unknown[];
+    } else if (section) {
+      stored.answers[step] = { ...((stored.answers[step] ?? {}) as object), ...payload };
+    }
+
+    if (step === "client") {
+      const client = (stored.answers.client ?? {}) as Record<string, string>;
+      stored.client_id = client.client_id ?? "";
+      stored.client_name = client.client_name ?? "";
+    }
+    this.syncDerived(stored);
+    this.record(stored, `answered_${step}`, stored.updated_by, {
+      before: { [step]: before },
+      after: { [step]: clone(stored.answers[step]) },
+    });
+    return this.present(stored);
+  }
+
+  addPipelineBook(caseId: string, portfolioId: string): OnboardingCase {
+    const stored = this.require(caseId);
+    this.requireEditable(stored);
+    const sources = (stored.answers.sources ?? []) as Record<string, unknown>[];
+    if (!sources.some((s) => s.portfolio_id === portfolioId && s.dataset === "pipeline")) {
+      sources.push({
+        source_key: `${portfolioId}/pipeline`,
+        portfolio_id: portfolioId,
+        dataset: "pipeline",
+        cadence: "",
+        source_party: "",
+        regime_required: false,
+      });
+    }
+    stored.answers.sources = sources;
+    this.syncDerived(stored);
+    return this.present(stored);
+  }
+
+  removeSource(caseId: string, portfolioId: string, dataset: string): OnboardingCase {
+    const stored = this.require(caseId);
+    this.requireEditable(stored);
+    stored.answers.sources = ((stored.answers.sources ?? []) as Record<string, unknown>[]).filter(
+      (s) => !(s.portfolio_id === portfolioId && s.dataset === dataset),
+    );
+    return this.present(stored);
+  }
+
+  private syncDerived(stored: StoredCase) {
+    const entities = (stored.answers.entities ?? []) as Record<string, unknown>[];
+    entities.forEach((e, i) => {
+      if (!e.entity_id) e.entity_id = `ent_${stored.case_id}_${i + 1}`;
+    });
+    const portfolios = (stored.answers.portfolios ?? []) as Record<string, unknown>[];
+    portfolios.forEach((p) => {
+      if (p.originates === undefined || p.originates === null) {
+        p.originates = p.portfolio_type === "direct";
+      }
+    });
+    const existing = (stored.answers.sources ?? []) as Record<string, unknown>[];
+    const annex2 = this.products(stored).includes("esma_annex2");
+    const kept: Record<string, unknown>[] = [];
+    for (const p of portfolios) {
+      const pid = String(p.portfolio_id ?? "");
+      if (!pid) continue;
+      for (const dataset of ["funded", "pipeline"]) {
+        const previous = existing.find((s) => s.portfolio_id === pid && s.dataset === dataset);
+        if (dataset === "pipeline" && !previous) continue;
+        kept.push({
+          ...(previous ?? {}),
+          source_key: `${pid}/${dataset}`,
+          portfolio_id: pid,
+          dataset,
+          cadence: previous?.cadence ?? "",
+          source_party: previous?.source_party ?? "",
+          regime_required: dataset === "funded" && annex2,
+          expected_location:
+            `raw-v2/${stored.client_id || "{client}"}/${p.portfolio_type ?? "direct"}/` +
+            `${dataset}/${previous?.cadence || "{cadence}"}/${pid}/{reporting_period}/`,
+        });
+      }
+    }
+    stored.answers.sources = kept;
+  }
+
+  private products(stored: StoredCase): string[] {
+    return ((stored.answers.reporting ?? {}) as { products?: string[] }).products ?? [];
+  }
+
+  // -- information requests ----------------------------------------------- //
+
+  checklist(caseId: string): ChecklistRow[] {
+    const stored = this.require(caseId);
+    const already = new Set(
+      stored.information_requests.flatMap((r) =>
+        r.items.map((i) => `${i.section}/${i.field}/${i.index}`),
+      ),
+    );
+    return this.outstandingForClient(stored).filter(
+      (row) => !already.has(`${row.section}/${row.field}/${row.index}`),
+    );
+  }
+
+  private outstandingForClient(stored: StoredCase): ChecklistRow[] {
+    const chosen = new Set(this.products(stored));
+    const out: ChecklistRow[] = [];
+    for (const section of CATALOGUE.sections) {
+      if (section.repeatable) {
+        const items = (stored.answers[section.key] ?? []) as Record<string, unknown>[];
+        items.forEach((item, index) => {
+          for (const field of section.fields) {
+            if (field.source !== "client_supplied") continue;
+            if (!isRequired(field, stored.answers, item)) continue;
+            if (present(item[field.key])) continue;
+            const name = String(item[section.item_label_field] ?? "").trim();
+            out.push({
+              section: section.key,
+              section_label: section.label,
+              field: field.key,
+              label: `${field.label} — ${name || `item ${index + 1}`}`,
+              help: field.help,
+              index,
+              scope: field.scope,
+              evidence_required: field.evidence_required,
+              sensitive: field.sensitive,
+            });
+          }
+        });
+        continue;
+      }
+      const block = (stored.answers[section.key] ?? {}) as Record<string, unknown>;
+      for (const field of section.fields) {
+        if (field.source !== "client_supplied") continue;
+        if (section.from_regime && field.product && !chosen.has(field.product)) continue;
+        const value = section.from_regime
+          ? ((block[field.product] ?? {}) as Record<string, unknown>)[field.key]
+          : block[field.key];
+        if (!isRequired(field, stored.answers, block)) continue;
+        if (present(value)) continue;
+        out.push({
+          section: section.key,
+          section_label: section.label,
+          field: field.key,
+          label: field.label,
+          help: field.help,
+          index: null,
+          scope: field.scope,
+          evidence_required: field.evidence_required,
+          sensitive: field.sensitive,
+        });
+      }
+    }
+    return out;
+  }
+
+  createRequest(
+    caseId: string,
+    items: ChecklistRow[],
+    options?: { responsible_party?: string; due_date?: string; note?: string },
+  ): OnboardingCase {
+    const stored = this.require(caseId);
+    if (!items.length) {
+      throw new MockOnboardingError(
+        "Choose at least one item to ask for.",
+        "OPS_NOTHING_TO_REQUEST",
+      );
+    }
+    stored.information_requests.push({
+      request_id: `req_${stored.information_requests.length + 1}`,
+      items,
+      responsible_party: options?.responsible_party ?? "client",
+      status: "open",
+      requested_by: stored.updated_by,
+      requested_at: new Date().toISOString(),
+      sent_at: "",
+      due_date: options?.due_date ?? "",
+      response_note: "",
+      responded_at: "",
+      responded_by: "",
+      evidence: [],
+      reviewed_by: "",
+      reviewed_at: "",
+      review_note: options?.note ?? "",
+    });
+    this.transition(stored, "information_requested");
+    return this.present(stored);
+  }
+
+  markSent(caseId: string, requestId: string): OnboardingCase {
+    const stored = this.require(caseId);
+    const request = stored.information_requests.find((r) => r.request_id === requestId);
+    if (request) {
+      request.status = "sent";
+      request.sent_at = new Date().toISOString();
+    }
+    this.transition(stored, "awaiting_client");
+    return this.present(stored);
+  }
+
+  recordResponse(
+    caseId: string,
+    requestId: string,
+    body: {
+      note?: string;
+      answers?: Record<string, unknown>;
+      evidence?: { name: string; reference: string }[];
+    },
+  ): OnboardingCase {
+    const stored = this.require(caseId);
+    const request = stored.information_requests.find((r) => r.request_id === requestId);
+    if (request) {
+      request.status = "answered";
+      request.response_note = body.note ?? "";
+      request.responded_at = new Date().toISOString();
+      request.evidence.push(
+        ...(body.evidence ?? []).map((e) => ({ ...e, received_at: new Date().toISOString() })),
+      );
+    }
+    for (const [section, values] of Object.entries(body.answers ?? {})) {
+      if (Array.isArray(values)) stored.answers[section] = values;
+      else
+        stored.answers[section] = {
+          ...((stored.answers[section] ?? {}) as object),
+          ...(values as object),
+        };
+    }
+    this.syncDerived(stored);
+    this.transition(stored, "in_review");
+    return this.present(stored);
+  }
+
+  addQuestion(caseId: string, question: string): OnboardingCase {
+    const stored = this.require(caseId);
+    stored.open_questions.push({
+      question_id: `q_${stored.open_questions.length + 1}`,
+      question,
+      origin: "operator",
+      raised_at: new Date().toISOString(),
+      raised_by: stored.updated_by,
+    });
+    return this.present(stored);
+  }
+
+  resolveQuestion(caseId: string, questionId: string, resolution: string): OnboardingCase {
+    const stored = this.require(caseId);
+    for (const q of stored.open_questions) {
+      if (q.question_id === questionId) {
+        q.resolved_at = new Date().toISOString();
+        q.resolution = resolution;
+      }
+    }
+    return this.present(stored);
+  }
+
+  // -- approval ------------------------------------------------------------ //
+
+  preview(caseId: string): CasePreview {
+    const stored = this.require(caseId);
+    const current = this.active.get(stored.client_id) ?? null;
+    const history = this.versions.get(stored.client_id) ?? [];
+    return {
+      ...this.present(stored),
+      artefacts: this.plan(stored),
+      changes: diff(current, stored.answers),
+      current_version: history[0]?.version ?? 0,
+      next_version: (history[0]?.version ?? 0) + 1,
+      unrepresented: this.unrepresented(stored),
+      generated_identifiers: this.generatedIdentifiers(stored),
+      defaults_used: this.defaultsUsed(stored),
+    };
+  }
+
+  submit(caseId: string): OnboardingCase {
+    const stored = this.require(caseId);
+    this.requireReady(stored);
+    this.transition(stored, "ready_for_approval");
+    return this.present(stored);
+  }
+
+  approve(caseId: string, reason: string, by: string): OnboardingCase {
+    const stored = this.require(caseId);
+    if (stored.status === "activated" || stored.status === "withdrawn") {
+      throw new MockOnboardingError(
+        `This onboarding is ${STATUS_LABELS[stored.status].toLowerCase()} and can no longer be approved.`,
+        "OPS_ONBOARDING_BAD_TRANSITION",
+      );
+    }
+    if (!reason.trim()) {
+      throw new MockOnboardingError(
+        "Please say why this is being approved.",
+        "OPS_REASON_REQUIRED",
+      );
+    }
+    this.requireReady(stored);
+    this.transition(stored, "ready_for_approval");
+    stored.approved_by = by;
+    stored.approved_at = new Date().toISOString();
+    stored.approval_reason = reason;
+    this.transition(stored, "approved");
+    return this.present(stored);
+  }
+
+  activate(caseId: string, by: string): ActivationResult {
+    const stored = this.require(caseId);
+    if (stored.status !== "approved") {
+      throw new MockOnboardingError(
+        "This onboarding has not been approved yet.",
+        "OPS_ONBOARDING_NOT_APPROVED",
+      );
+    }
+    const clientId = stored.client_id;
+    const history = this.versions.get(clientId) ?? [];
+    const previous = this.active.get(clientId) ?? null;
+    const planned = this.plan(stored);
+    const store = this.artefactStore.get(clientId) ?? new Map<string, string>();
+    for (const artefact of planned) if (artefact.text) store.set(artefact.rel, artefact.text);
+    this.artefactStore.set(clientId, store);
+
+    const version: ConfigurationVersionRow = {
+      version: (history[0]?.version ?? 0) + 1,
+      status: "active",
+      approved_by: stored.approved_by,
+      approved_at: stored.approved_at,
+      activated_by: by,
+      activated_at: new Date().toISOString(),
+      reason: stored.approval_reason,
+      case_id: stored.case_id,
+      case_kind: stored.kind,
+      based_on_version: history[0]?.version ?? null,
+      change_count: diff(previous, stored.answers).length,
+      changes: diff(previous, stored.answers),
+      artefacts: planned.map((a) => ({ kind: a.kind, target: a.rel, action: a.action })),
+      content_hash: `sha256:mock${JSON.stringify(stored.answers).length}`,
+    };
+    for (const row of history) row.status = "superseded";
+    this.versions.set(clientId, [version, ...history]);
+    this.active.set(clientId, clone(stored.answers));
+    stored.activated_version = version.version;
+    this.transition(stored, "activated");
+    return {
+      case_id: stored.case_id,
+      client_id: clientId,
+      version: version.version,
+      artefacts: version.artefacts,
+      changes: version.changes,
+    };
+  }
+
+  withdraw(caseId: string, reason: string): OnboardingCase {
+    const stored = this.require(caseId);
+    if (!reason.trim()) {
+      throw new MockOnboardingError(
+        "Please say why this is being withdrawn.",
+        "OPS_REASON_REQUIRED",
+      );
+    }
+    stored.withdrawal_reason = reason;
+    this.transition(stored, "withdrawn");
+    return this.present(stored);
+  }
+
+  // -- views --------------------------------------------------------------- //
+
+  home(): OnboardingHome {
+    const all = [...this.cases.values()].sort((a, b) => b.case_id.localeCompare(a.case_id));
+    const rows = (...statuses: CaseStatus[]) =>
+      all.filter((c) => statuses.includes(c.status)).map((c) => this.row(c));
+    const activeClients = [...this.active.entries()].map(([clientId, answers]) => {
+      const history = this.versions.get(clientId) ?? [];
+      const client = (answers.client ?? {}) as Record<string, string>;
+      return {
+        client_id: clientId,
+        display_name: client.client_name || clientId,
+        version: history[0]?.version ?? 0,
+        portfolios: ((answers.portfolios ?? []) as unknown[]).length,
+        products: ((answers.reporting ?? {}) as { products?: string[] }).products ?? [],
+        activated_at: history[0]?.activated_at ?? "",
+        activated_by: history[0]?.activated_by ?? "",
+      };
+    });
+    return {
+      drafts: rows("draft", "changes_required"),
+      awaiting_client: rows("information_requested", "awaiting_client"),
+      in_review: rows("in_review", "ready_for_approval"),
+      approved: rows("approved"),
+      active_clients: activeClients,
+      legacy_clients: [...this.legacy.keys()]
+        .filter((id) => !this.active.has(id))
+        .map((id) => ({ client_id: id, display_name: id })),
+      recently_completed: rows("activated", "withdrawn").slice(0, 10),
+    };
+  }
+
+  case(caseId: string): OnboardingCase {
+    return this.present(this.require(caseId));
+  }
+
+  client(clientId: string): OnboardingClientDetail {
+    const answers = this.active.get(clientId);
+    const history = this.versions.get(clientId) ?? [];
+    const cases = [...this.cases.values()]
+      .filter((c) => c.client_id === clientId)
+      .map((c) => this.row(c));
+    if (!answers) {
+      return {
+        client_id: clientId,
+        status: "not_onboarded",
+        version: 0,
+        answers: null,
+        live_source_registrations: [],
+        cases,
+        history: [],
+        summary: "This client has no approved configuration in Trakt.",
+      };
+    }
+    return {
+      client_id: clientId,
+      status: "active",
+      version: history[0]?.version ?? 0,
+      activated_by: history[0]?.activated_by,
+      activated_at: history[0]?.activated_at,
+      reason: history[0]?.reason,
+      answers: clone(answers),
+      live_source_registrations: ((answers.sources ?? []) as Record<string, unknown>[]).map(
+        (s) => ({
+          client_id: clientId,
+          source_portfolio_id: s.portfolio_id,
+          dataset: s.dataset,
+          frequency: s.cadence,
+          source_system: s.source_party,
+          regime_required: s.regime_required,
+          status: "pending_review",
+        }),
+      ),
+      artefacts: history[0]?.artefacts ?? [],
+      cases,
+      history,
+    };
+  }
+
+  version(clientId: string, version: number): ConfigurationVersionRow {
+    const row = (this.versions.get(clientId) ?? []).find((v) => v.version === version);
+    if (!row) throw new MockOnboardingError("That could not be found.", "OPS_NOT_FOUND");
+    return clone(row);
+  }
+
+  // -- internals ----------------------------------------------------------- //
+
+  private require(caseId: string): StoredCase {
+    const stored = this.cases.get(caseId);
+    if (!stored) throw new MockOnboardingError("That could not be found.", "OPS_NOT_FOUND");
+    return stored;
+  }
+
+  private requireEditable(stored: StoredCase) {
+    if (["activated", "withdrawn", "approved"].includes(stored.status)) {
+      throw new MockOnboardingError(
+        `This onboarding is ${STATUS_LABELS[stored.status].toLowerCase()} and can no longer be edited.`,
+        "OPS_ONBOARDING_LOCKED",
+      );
+    }
+  }
+
+  private requireReady(stored: StoredCase) {
+    const blocking = this.validate(stored).filter((p) => p.severity === "blocking");
+    const outstanding = stored.information_requests.filter((r) =>
+      ["open", "sent"].includes(r.status),
+    );
+    if (blocking.length || outstanding.length) {
+      throw new MockOnboardingError(
+        blocking[0]?.message ?? "Information is still outstanding from the client.",
+        "OPS_ONBOARDING_INCOMPLETE",
+      );
+    }
+  }
+
+  private transition(stored: StoredCase, to: CaseStatus) {
+    if (stored.status === to) return;
+    if (!TRANSITIONS[stored.status].includes(to)) {
+      throw new MockOnboardingError(
+        `This onboarding cannot move from ${STATUS_LABELS[stored.status].toLowerCase()} to ${STATUS_LABELS[to].toLowerCase()}.`,
+        "OPS_ONBOARDING_BAD_TRANSITION",
+      );
+    }
+    const before = stored.status;
+    stored.status = to;
+    this.record(stored, `status_${to}`, stored.updated_by, {
+      before: { status: before },
+      after: { status: to },
+    });
+  }
+
+  private record(
+    stored: StoredCase,
+    event: string,
+    actor: string,
+    detail: { before?: Record<string, unknown>; after?: Record<string, unknown> },
+  ) {
+    stored.events.push({
+      event,
+      actor,
+      at: new Date().toISOString(),
+      reason: "",
+      before: detail.before ?? {},
+      after: detail.after ?? {},
+      detail: {},
+    });
+    stored.updated_at = new Date().toISOString();
+  }
+
+  private validate(stored: StoredCase): CaseProblem[] {
+    const out: CaseProblem[] = [];
+    const chosen = new Set(this.products(stored));
+    const push = (
+      section: string,
+      field: string,
+      message: string,
+      severity: "blocking" | "advisory" = "blocking",
+      index: number | null = null,
+    ) => out.push({ section, field, message, severity, index, owner: "operator" });
+
+    for (const section of CATALOGUE.sections) {
+      if (section.repeatable) {
+        const items = (stored.answers[section.key] ?? []) as Record<string, unknown>[];
+        if (section.min_items && items.length < section.min_items) {
+          push(section.key, section.key, `At least one entry is needed under ${section.label.toLowerCase()}.`);
+        }
+        items.forEach((item, index) => {
+          for (const field of section.fields) {
+            if (!["client_supplied", "operator_supplied", "trakt_default"].includes(field.source))
+              continue;
+            const value = item[field.key];
+            const name = String(item[section.item_label_field] ?? "").trim();
+            const where = name ? ` for ${name}` : "";
+            if (!present(value)) {
+              if (isRequired(field, stored.answers, item))
+                push(section.key, field.key, `${field.label}${where} is needed.`, "blocking", index);
+              continue;
+            }
+            const problem = validateValue(field, value);
+            if (problem) push(section.key, field.key, problem, "blocking", index);
+          }
+        });
+        continue;
+      }
+      const block = (stored.answers[section.key] ?? {}) as Record<string, unknown>;
+      for (const field of section.fields) {
+        if (!["client_supplied", "operator_supplied", "trakt_default"].includes(field.source))
+          continue;
+        if (section.from_regime && field.product && !chosen.has(field.product)) continue;
+        const value = section.from_regime
+          ? ((block[field.product] ?? {}) as Record<string, unknown>)[field.key]
+          : block[field.key];
+        const key = section.from_regime ? `${field.product}.${field.key}` : field.key;
+        if (!present(value)) {
+          if (isRequired(field, stored.answers, block))
+            push(section.key, key, `${field.label} is needed.`);
+          continue;
+        }
+        const problem = validateValue(field, value);
+        if (problem) push(section.key, key, problem);
+      }
+    }
+
+    // Structural rules.
+    const clientId = String(((stored.answers.client ?? {}) as Record<string, string>).client_id ?? "");
+    if (
+      clientId &&
+      stored.kind === "new_client" &&
+      stored.based_on_version === null &&
+      this.active.has(clientId)
+    ) {
+      push("client", "client_id", `'${clientId}' is already in use by another client.`);
+    }
+    const seen = new Set<string>();
+    ((stored.answers.portfolios ?? []) as Record<string, unknown>[]).forEach((p, index) => {
+      const pid = String(p.portfolio_id ?? "");
+      if (!pid) return;
+      if (seen.has(pid)) push("portfolios", "portfolio_id", `'${pid}' is listed twice.`, "blocking", index);
+      seen.add(pid);
+    });
+    if (chosen.has("esma_annex2")) {
+      const entities = (stored.answers.entities ?? []) as Record<string, unknown>[];
+      if (!entities.some((e) => ((e.roles ?? []) as string[]).includes("originator"))) {
+        push(
+          "entities",
+          "roles",
+          "Regulatory reporting names an originator. Give one entity the originator role.",
+        );
+      }
+    }
+    for (const q of stored.open_questions.filter((q) => !q.resolved_at)) {
+      push("review", "open_questions", `An open question is unanswered: ${q.question}`, "advisory");
+    }
+    return out;
+  }
+
+  private present(stored: StoredCase): OnboardingCase {
+    const problems = this.validate(stored);
+    const blocking = problems.filter((p) => p.severity === "blocking");
+    const byStep: Record<string, CaseProblem[]> = {};
+    for (const step of STEPS) byStep[step.key] = [];
+    for (const p of problems) (byStep[p.section] ??= []).push(p);
+    const outstanding = stored.information_requests.filter((r) =>
+      ["open", "sent"].includes(r.status),
+    );
+    return {
+      ...this.row(stored),
+      answers: clone(stored.answers),
+      provenance: stored.provenance,
+      based_on_version: stored.based_on_version,
+      information_requests: stored.information_requests,
+      open_questions: stored.open_questions,
+      events: stored.events,
+      product_eligibility: this.eligibility(stored),
+      steps: STEPS.map((s) => ({ ...s, problems: (byStep[s.key] ?? []).length })),
+      problems,
+      blocking,
+      by_step: byStep,
+      client_checklist: this.checklist(stored.case_id),
+      outstanding_requests: outstanding,
+      unresolved_questions: stored.open_questions.filter((q) => !q.resolved_at),
+      ready: blocking.length === 0 && outstanding.length === 0,
+      approved_by: stored.approved_by,
+      approved_at: stored.approved_at,
+      approval_reason: stored.approval_reason,
+      activated_version: stored.activated_version,
+      withdrawal_reason: stored.withdrawal_reason,
+    };
+  }
+
+  private row(stored: StoredCase): CaseRow {
+    return {
+      case_id: stored.case_id,
+      kind: stored.kind,
+      kind_label: KIND_LABELS[stored.kind],
+      status: stored.status,
+      status_label: STATUS_LABELS[stored.status],
+      client_id: stored.client_id,
+      client_name: stored.client_name || stored.client_id || "Not yet named",
+      portfolios: ((stored.answers.portfolios ?? []) as unknown[]).length,
+      outstanding_requests: stored.information_requests.filter((r) =>
+        ["open", "sent"].includes(r.status),
+      ).length,
+      unresolved_questions: stored.open_questions.filter((q) => !q.resolved_at).length,
+      updated_at: stored.updated_at,
+      updated_by: stored.updated_by,
+      created_by: stored.created_by,
+    };
+  }
+
+  private eligibility(stored: StoredCase) {
+    const chosen = new Set(this.products(stored));
+    const portfolios = (stored.answers.portfolios ?? []) as Record<string, unknown>[];
+    const out: OnboardingCase["product_eligibility"] = {};
+    for (const [key, product] of Object.entries(CATALOGUE.regime_products)) {
+      if (product.always_applies) {
+        out[key] = {
+          label: product.label,
+          applies: true,
+          eligible: true,
+          derived: true,
+          reason: product.derived_from ?? "",
+        };
+        continue;
+      }
+      const eligible = portfolios.length > 0;
+      out[key] = {
+        label: product.label,
+        applies: chosen.has(key),
+        eligible,
+        derived: false,
+        reason: eligible
+          ? `Supported by ${portfolios.map((p) => p.portfolio_id).join(", ")}.`
+          : "No portfolio has been added yet.",
+      };
+    }
+    return out;
+  }
+
+  private unrepresented(stored: StoredCase) {
+    const out: CasePreview["unrepresented"] = [];
+    for (const section of CATALOGUE.sections) {
+      for (const field of section.fields) {
+        if (field.writes_to !== "onboarding_record") continue;
+        if (!["client_supplied", "operator_supplied", "trakt_default"].includes(field.source))
+          continue;
+        out.push({
+          key: field.key,
+          label: field.label,
+          reason:
+            "Held in the governed onboarding record. No existing configuration artefact represents it.",
+        });
+      }
+    }
+    for (const key of this.products(stored)) {
+      for (const entry of CATALOGUE.regime_products[key]?.unrepresented ?? []) {
+        out.push({ ...entry, product: CATALOGUE.regime_products[key].label });
+      }
+    }
+    return out;
+  }
+
+  private generatedIdentifiers(stored: StoredCase) {
+    const out = [{ label: "Onboarding reference", value: stored.case_id }];
+    for (const e of (stored.answers.entities ?? []) as Record<string, unknown>[]) {
+      out.push({
+        label: `Entity reference — ${String(e.legal_name ?? "")}`,
+        value: String(e.entity_id ?? ""),
+      });
+    }
+    for (const s of (stored.answers.sources ?? []) as Record<string, unknown>[]) {
+      if (s.expected_location)
+        out.push({
+          label: `Delivery location — ${String(s.portfolio_id)} ${String(s.dataset)}`,
+          value: String(s.expected_location),
+        });
+    }
+    return out;
+  }
+
+  private defaultsUsed(stored: StoredCase) {
+    const out: CasePreview["defaults_used"] = [];
+    for (const section of CATALOGUE.sections) {
+      if (section.repeatable || section.from_regime) continue;
+      const block = (stored.answers[section.key] ?? {}) as Record<string, unknown>;
+      for (const field of section.fields) {
+        if (field.default === null || field.default === undefined) continue;
+        if (!present(block[field.key]))
+          out.push({ label: field.label, value: String(field.default), section: section.label });
+      }
+    }
+    return out;
+  }
+
+  private plan(stored: StoredCase): PlannedArtefact[] {
+    const clientId = stored.client_id || "CLIENT";
+    const store = this.artefactStore.get(clientId);
+    const products = this.products(stored);
+    const out: PlannedArtefact[] = [];
+
+    const add = (kind: string, rel: string, label: string, text: string, summary: string[]) => {
+      const previous = store?.get(rel);
+      out.push({
+        kind,
+        rel,
+        label,
+        action: previous === undefined ? "create" : previous === text ? "unchanged" : "update",
+        text,
+        previous_text: previous ?? "",
+        records: [],
+        summary,
+      });
+    };
+
+    add(
+      "client_config",
+      `config/client/config_client_${clientId}.yaml`,
+      "Client configuration",
+      renderClientConfig(stored.answers, products),
+      [
+        `Client identity for ${stored.client_name || clientId}.`,
+        "Portfolio jurisdiction and reporting currency.",
+        `Reporting products: ${products.join(", ") || "management information only"}.`,
+      ],
+    );
+    if (products.includes("investor_reporting")) {
+      add(
+        "annex12_config",
+        `config/client/config_client_${clientId}_annex12.yaml`,
+        "Investor report configuration",
+        "# GENERATED\nannex12:\n  deal: {}\n",
+        ["Standing investor-report fields."],
+      );
+    }
+    add(
+      "portfolio_registry",
+      `config/client/portfolio_registry_${clientId}.yaml`,
+      "Portfolio metadata",
+      renderPortfolios(stored.answers, clientId),
+      [`${((stored.answers.portfolios ?? []) as unknown[]).length} portfolios described.`],
+    );
+    add(
+      "tenancy",
+      `config/client/client_index_${clientId}.yaml`,
+      "Client index",
+      renderIndex(stored.answers, clientId),
+      ["Client index entry."],
+    );
+
+    const records = ((stored.answers.sources ?? []) as Record<string, unknown>[]).map((s) => {
+      const portfolio = ((stored.answers.portfolios ?? []) as Record<string, unknown>[]).find(
+        (p) => p.portfolio_id === s.portfolio_id,
+      );
+      return {
+        client_id: clientId,
+        source_portfolio_id: String(s.portfolio_id),
+        dataset: String(s.dataset),
+        frequency: String(s.cadence ?? ""),
+        source_system: String(s.source_party ?? ""),
+        regime_required: Boolean(s.regime_required),
+        status: "pending_review",
+        action: "create",
+        portfolio_label: String(portfolio?.display_name ?? ""),
+        expected_location: String(s.expected_location ?? ""),
+      };
+    });
+    out.push({
+      kind: "source_registry",
+      rel: "source registrations",
+      label: "Source registrations",
+      action: records.length ? "create" : "unchanged",
+      text: "",
+      previous_text: "",
+      records,
+      summary: records.map(
+        (r) =>
+          `${clientId}/${r.source_portfolio_id}/${r.dataset}/${r.frequency} registered, awaiting its first pack.`,
+      ),
+    });
+    return out;
+  }
+}
+
+// --------------------------------------------------------------------------- //
+
+const BANNER = `# GENERATED by the Trakt Operations Control Centre — Client Onboarding.
+# This file is a governed artefact. Change it through Client Onboarding,
+# not by hand: a hand edit is not versioned, not attributed and not
+# audited, and the next approved change will overwrite it.
+`;
+
+function renderClientConfig(answers: CaseAnswers, products: string[]): string {
+  const client = (answers.client ?? {}) as Record<string, string>;
+  const contacts = (answers.contacts ?? {}) as Record<string, string>;
+  const portfolios = (answers.portfolios ?? []) as Record<string, unknown>[];
+  const regime = ((answers.regime ?? {}) as Record<string, Record<string, string>>).esma_annex2 ?? {};
+  const lines = [
+    BANNER,
+    "client:",
+    `  display_name: ${client.client_name ?? ""}`,
+    `  client_id: ${client.client_id ?? ""}`,
+    `  time_zone: ${client.time_zone ?? ""}`,
+    `  environment: ${client.environment ?? "production"}`,
+    "  reporting_contact:",
+    `    name: ${contacts.reporting_contact_name ?? ""}`,
+    `    email: ${contacts.reporting_contact_email ?? ""}`,
+    "  operational_contact:",
+    `    name: ${contacts.operational_contact_name ?? ""}`,
+    `    email: ${contacts.operational_contact_email ?? ""}`,
+    "portfolio:",
+    `  country: ${client.jurisdiction ?? ""}`,
+    `  base_currency: ${client.reporting_currency ?? ""}`,
+    `  asset_class: ${String(portfolios[0]?.asset_class ?? "")}`,
+  ];
+  if (Object.keys(regime).length) {
+    lines.push("defaults:");
+    for (const [key, value] of Object.entries(regime)) lines.push(`  ${key}: ${value}`);
+  }
+  if (products.includes("esma_annex2")) {
+    lines.push("supported_regimes:", "  - ESMA_Annex2", "default_regime: ESMA_Annex2", "regime: ESMA_Annex2");
+  }
+  lines.push(
+    "pipeline:",
+    "  loan_engine_enabled: false",
+    "  mi_enabled: true",
+    `  esma_enabled: ${products.includes("esma_annex2")}`,
+  );
+  return lines.join("\n") + "\n";
+}
+
+function renderPortfolios(answers: CaseAnswers, clientId: string): string {
+  const lines = [BANNER, "clients:", `  ${clientId}:`, "    portfolios:"];
+  for (const p of (answers.portfolios ?? []) as Record<string, unknown>[]) {
+    lines.push(
+      `      - source_portfolio_id: ${String(p.portfolio_id)}`,
+      `        source_portfolio_type: ${String(p.portfolio_type ?? "")}`,
+      `        source_portfolio_label: ${String(p.display_name ?? "")}`,
+      `        originates: ${String(p.originates ?? "")}`,
+    );
+  }
+  return lines.join("\n") + "\n";
+}
+
+function renderIndex(answers: CaseAnswers, clientId: string): string {
+  const client = (answers.client ?? {}) as Record<string, string>;
+  const portfolios = (answers.portfolios ?? []) as Record<string, unknown>[];
+  return (
+    [
+      BANNER,
+      "tenants:",
+      `  ${clientId}:`,
+      `    display_name: ${client.client_name ?? ""}`,
+      `    default_portfolio: ${clientId}`,
+      "    portfolios:",
+      `      - ${clientId}`,
+      ...portfolios.map((p) => `      - ${String(p.portfolio_id)}`),
+    ].join("\n") + "\n"
+  );
 }
 
 function flatten(node: unknown, prefix = "", out: Record<string, string> = {}) {
   if (Array.isArray(node)) {
-    if (node.every((v) => typeof v !== "object" || v === null)) {
-      out[prefix] = node.join(", ");
-    } else {
+    if (node.every((v) => typeof v !== "object" || v === null)) out[prefix] = node.join(", ");
+    else
       node.forEach((v, i) => {
         const key =
-          v && typeof v === "object" && "portfolio_id" in (v as object)
-            ? String((v as { portfolio_id: string }).portfolio_id)
+          v && typeof v === "object"
+            ? String(
+                (v as Record<string, unknown>).portfolio_id ??
+                  (v as Record<string, unknown>).source_key ??
+                  (v as Record<string, unknown>).legal_name ??
+                  i,
+              )
             : String(i);
         flatten(v, `${prefix}[${key}]`, out);
       });
-    }
   } else if (node && typeof node === "object") {
     for (const [k, v] of Object.entries(node)) flatten(v, prefix ? `${prefix}.${k}` : k, out);
   } else {
@@ -557,601 +1278,34 @@ function flatten(node: unknown, prefix = "", out: Record<string, string> = {}) {
   return out;
 }
 
-const FIELD_LABELS: Record<string, string> = {
+const SUPPRESSED = ["entity_id", "source_key", "expected_location"];
+
+const LABELS: Record<string, string> = {
   "client.client_name": "Client name",
-  "client.legal_entity_name": "Legal entity name",
-  "client.lei": "Legal entity identifier",
+  "client.client_id": "Client identifier",
   "client.jurisdiction": "Jurisdiction",
   "client.reporting_currency": "Reporting currency",
-  "client.time_zone": "Time zone",
-  "client.primary_reporting_contact": "Primary reporting contact",
-  "client.reporting_email": "Reporting email",
-  "client.operational_contact": "Operational contact",
-  "client.operational_email": "Operational email",
   "reporting.products": "Reporting products",
 };
 
-/** Paths that restate another path — the root client id mirrors client.client_id. */
-const MIRRORED_PATHS = new Set(["client_id"]);
-
-function diff(before: OnboardingProfile | null, after: OnboardingProfile): ProfileChange[] {
+export function diff(before: CaseAnswers | null, after: CaseAnswers) {
   const old = before ? flatten(before) : {};
   const now = flatten(after);
   const paths = Array.from(new Set([...Object.keys(old), ...Object.keys(now)]))
-    .filter((path) => !MIRRORED_PATHS.has(path))
+    .filter((p) => !SUPPRESSED.some((s) => p === s || p.endsWith(`.${s}`)))
     .sort();
-  const changes: ProfileChange[] = [];
+  const changes = [];
   for (const path of paths) {
     const was = old[path] ?? "";
     const next = now[path] ?? "";
     if (was === next || (!was && !next)) continue;
     changes.push({
       path,
-      label: FIELD_LABELS[path] ?? path.replace(/_/g, " ").replace(/\./g, " → "),
+      label: LABELS[path] ?? path.replace(/_/g, " ").replace(/\./g, " → "),
       before: was,
       after: next,
       action: !was ? "added" : !next ? "removed" : "changed",
     });
   }
   return changes;
-}
-
-interface StoredDraft {
-  draft_id: string;
-  client_id: string;
-  origin: string;
-  based_on_version: number | null;
-  step: OnboardingStep;
-  profile: OnboardingProfile;
-  provenance: Record<string, string>;
-  gaps: OnboardingDraft["gaps"];
-  sources_read: string[];
-  created_by: string;
-  created_at: string;
-}
-
-export class MockOnboarding {
-  private drafts = new Map<string, StoredDraft>();
-  private versions = new Map<string, ProfileVersionRow[]>();
-  private profiles = new Map<string, OnboardingProfile>();
-  private artefacts = new Map<string, Map<string, string>>();
-  private counter = 0;
-
-  reference(): OnboardingReference {
-    return clone(REFERENCE);
-  }
-
-  clients(): OnboardingClientRow[] {
-    const rows: OnboardingClientRow[] = [];
-    const known = new Set<string>(["ERE", ...this.profiles.keys()]);
-    for (const clientId of Array.from(known).sort()) {
-      const profile = this.profiles.get(clientId);
-      const history = this.versions.get(clientId) ?? [];
-      if (!profile) {
-        rows.push({
-          client_id: clientId,
-          status: "legacy",
-          display_name: clientId,
-          version: 0,
-          portfolios: 0,
-          products: [],
-          updated_at: "",
-          updated_by: "",
-          open_drafts: 0,
-          summary:
-            "Configured before Client Onboarding existed. Its current values can be adopted without re-entering them.",
-        });
-        continue;
-      }
-      rows.push({
-        client_id: clientId,
-        status: "onboarded",
-        display_name: profile.client.client_name || clientId,
-        version: history[0]?.version ?? 0,
-        portfolios: profile.portfolios.length,
-        products: [...profile.reporting.products],
-        updated_at: history[0]?.approved_at ?? "",
-        updated_by: history[0]?.approved_by ?? "",
-        open_drafts: 0,
-        summary: "",
-      });
-    }
-    return rows;
-  }
-
-  startDraft(input: { client_id?: string; adopt?: boolean }, by: string): OnboardingDraft {
-    const clientId = input.client_id ?? "";
-    const existing = clientId ? this.profiles.get(clientId) : undefined;
-    let profile: OnboardingProfile;
-    let origin = "new";
-    let gaps: OnboardingDraft["gaps"] = [];
-    let provenance: Record<string, string> = {};
-    let sourcesRead: string[] = [];
-    if (existing) {
-      profile = clone(existing);
-      origin = "current";
-    } else if (input.adopt && clientId === "ERE") {
-      profile = adoptedEreProfile();
-      origin = "adopted";
-      provenance = {
-        "client.client_name": "client.display_name in the client configuration",
-        "client.legal_entity_name": "defaults.originator_name (RREL82) in the client configuration",
-        "client.lei":
-          "defaults.originator_legal_entity_identifier (RREL83) in the client configuration",
-        "client.jurisdiction": "portfolio.country",
-        "client.reporting_currency": "portfolio.base_currency",
-        sources: "the durable source registry",
-        "static_reporting.branding": "mi.branding in the client configuration",
-      };
-      sourcesRead = [
-        "config/client/config_client_ERM_UK.yaml",
-        "config/client/portfolio_registry.yaml",
-        "config/tenancy.yaml",
-        "source registry",
-      ];
-      gaps = [
-        {
-          step: "client",
-          field: "reporting_contact",
-          label: "Primary reporting contact",
-          why: "The client configuration has never carried reporting contacts.",
-        },
-        {
-          step: "client",
-          field: "operational_contact",
-          label: "Operational contact",
-          why: "The client configuration has never carried operational contacts.",
-        },
-      ];
-    } else {
-      profile = emptyProfile(clientId);
-    }
-    const draft: StoredDraft = {
-      draft_id: `onb_${++this.counter}`,
-      client_id: profile.client_id,
-      origin,
-      based_on_version: (this.versions.get(clientId) ?? [])[0]?.version ?? null,
-      step: "client",
-      profile,
-      provenance,
-      gaps,
-      sources_read: sourcesRead,
-      created_by: by,
-      created_at: new Date().toISOString(),
-    };
-    this.drafts.set(draft.draft_id, draft);
-    return this.present(draft);
-  }
-
-  draft(draftId: string): OnboardingDraft {
-    return this.present(this.require(draftId));
-  }
-
-  saveStep(draftId: string, step: OnboardingStep, payload: Record<string, unknown>) {
-    const draft = this.require(draftId);
-    const profile = draft.profile;
-    if (step === "client") {
-      profile.client = { ...profile.client, ...(payload as Partial<OnboardingProfile["client"]>) };
-      profile.client_id = profile.client.client_id;
-      draft.client_id = profile.client_id;
-    } else if (step === "portfolio") {
-      profile.portfolios = (payload.portfolios ?? []) as OnboardingProfile["portfolios"];
-      profile.sources = deriveSources(profile);
-    } else if (step === "reporting") {
-      profile.reporting = {
-        products: (payload.products ?? []) as string[],
-        derivation: profile.reporting.derivation,
-      };
-      profile.sources = deriveSources(profile);
-    } else if (step === "regime") {
-      const incoming = (payload.regime ?? {}) as Record<string, Record<string, string | boolean>>;
-      for (const [key, answers] of Object.entries(incoming)) {
-        profile.regime[key] = { ...(profile.regime[key] ?? {}), ...answers };
-      }
-    } else if (step === "static_reporting") {
-      profile.static_reporting = {
-        ...profile.static_reporting,
-        ...(payload as Partial<OnboardingProfile["static_reporting"]>),
-      };
-    } else if (step === "sources") {
-      profile.sources = (payload.sources ?? []) as SourceRegistrationStanding[];
-    }
-    draft.step = step;
-    return this.present(draft);
-  }
-
-  review(draftId: string): OnboardingReview {
-    const draft = this.require(draftId);
-    const profile = draft.profile;
-    const current = this.profiles.get(profile.client_id) ?? null;
-    const history = this.versions.get(profile.client_id) ?? [];
-    const unrepresented: UnrepresentedField[] = [];
-    for (const key of profile.reporting.products) {
-      for (const entry of PRODUCTS[key]?.unrepresented ?? []) {
-        unrepresented.push({ ...entry, product: PRODUCTS[key].label });
-      }
-    }
-    return {
-      draft_id: draftId,
-      client_id: profile.client_id,
-      profile: clone(profile),
-      artefacts: this.plan(profile),
-      changes: diff(current, profile),
-      problems: validate(profile),
-      ready: validate(profile).length === 0,
-      current_version: history[0]?.version ?? 0,
-      next_version: (history[0]?.version ?? 0) + 1,
-      unrepresented,
-    };
-  }
-
-  approve(draftId: string, reason: string, by: string): ApprovalResult {
-    const draft = this.require(draftId);
-    const profile = draft.profile;
-    const clientId = profile.client_id;
-    const history = this.versions.get(clientId) ?? [];
-    const previous = this.profiles.get(clientId) ?? null;
-    const artefacts = this.plan(profile);
-    const store = this.artefacts.get(clientId) ?? new Map<string, string>();
-    for (const artefact of artefacts) {
-      if (artefact.text) store.set(artefact.rel, artefact.text);
-    }
-    this.artefacts.set(clientId, store);
-    const version: ProfileVersionRow = {
-      version: (history[0]?.version ?? 0) + 1,
-      status: "active",
-      approved_by: by,
-      approved_at: new Date().toISOString(),
-      reason,
-      based_on_version: history[0]?.version ?? null,
-      changes: diff(previous, profile),
-      change_count: diff(previous, profile).length,
-      artefacts: artefacts.map((a) => ({
-        kind: a.kind,
-        target: a.rel,
-        action: a.action,
-        detail: {},
-      })),
-      content_hash: `sha256:mock${version_hash(profile)}`,
-    };
-    for (const row of history) row.status = "superseded";
-    this.versions.set(clientId, [version, ...history]);
-    this.profiles.set(clientId, clone(profile));
-    this.drafts.delete(draftId);
-    return {
-      version: version.version,
-      client_id: clientId,
-      artefacts: version.artefacts,
-      changes: version.changes,
-    };
-  }
-
-  discard(draftId: string) {
-    this.drafts.delete(draftId);
-  }
-
-  client(clientId: string): OnboardingClientDetail {
-    const profile = this.profiles.get(clientId);
-    const history = this.versions.get(clientId) ?? [];
-    if (!profile) {
-      return {
-        client_id: clientId,
-        status: "legacy",
-        version: 0,
-        profile: null,
-        live_source_registrations: [],
-        artefacts: [],
-        history: [],
-        summary:
-          "This client has not been through Client Onboarding. Adopt it to manage its configuration here.",
-      };
-    }
-    const unrepresented: UnrepresentedField[] = [];
-    for (const key of profile.reporting.products) {
-      for (const entry of PRODUCTS[key]?.unrepresented ?? []) {
-        unrepresented.push({ ...entry, product: PRODUCTS[key].label });
-      }
-    }
-    return {
-      client_id: clientId,
-      status: "onboarded",
-      version: history[0]?.version ?? 0,
-      approved_by: history[0]?.approved_by,
-      approved_at: history[0]?.approved_at,
-      reason: history[0]?.reason,
-      content_hash: history[0]?.content_hash,
-      profile: clone(profile),
-      derived_reporting: this.derived(profile),
-      live_source_registrations: profile.sources.map((s) => ({
-        client_id: clientId,
-        source_portfolio_id: s.portfolio_id,
-        dataset: s.dataset,
-        frequency: s.frequency,
-        source_system: s.source_system,
-        regime_required: s.regime_required,
-        status: s.status,
-      })),
-      artefacts: history[0]?.artefacts ?? [],
-      unrepresented,
-      history,
-    };
-  }
-
-  version(clientId: string, version: number): ProfileVersionRow {
-    const row = (this.versions.get(clientId) ?? []).find((v) => v.version === version);
-    if (!row) throw new Error("That could not be found.");
-    return clone(row);
-  }
-
-  // -- internals ---------------------------------------------------------- //
-
-  private require(draftId: string): StoredDraft {
-    const draft = this.drafts.get(draftId);
-    if (!draft) throw new Error("That could not be found.");
-    return draft;
-  }
-
-  private derived(profile: OnboardingProfile): Record<string, DerivedShape> {
-    const out: Record<string, DerivedShape> = {};
-    for (const [key, product] of Object.entries(PRODUCTS)) {
-      if (product.always_applies) {
-        out[key] = {
-          applies: true,
-          eligible: true,
-          derived: true,
-          reason: product.derived_from ?? "",
-        };
-        continue;
-      }
-      const needs = product.supported_by_assets_declaring;
-      let eligible: boolean;
-      let reason: string;
-      if (needs) {
-        const supporting = profile.portfolios
-          .filter((p) =>
-            REFERENCE.vocabularies.asset_classes
-              .find((a) => a.value === p.asset_class)
-              ?.supports_regimes.includes(needs),
-          )
-          .map((p) => p.portfolio_id);
-        eligible = supporting.length > 0;
-        reason = eligible
-          ? `Supported by ${supporting.join(", ")}.`
-          : "No portfolio's asset class declares support for this regime.";
-      } else {
-        eligible = profile.portfolios.length > 0;
-        reason = eligible ? "Available for the funded book." : "No portfolio has been added yet.";
-      }
-      out[key] = {
-        applies: profile.reporting.products.includes(key),
-        eligible,
-        derived: false,
-        reason,
-      };
-    }
-    return out;
-  }
-
-  private plan(profile: OnboardingProfile): PlannedArtefact[] {
-    const clientId = profile.client_id || "CLIENT";
-    const stored = this.artefacts.get(clientId);
-    const artefacts: PlannedArtefact[] = [];
-
-    const clientRel = `config/client/config_client_${clientId}.yaml`;
-    const clientText = renderClientConfig(profile);
-    artefacts.push({
-      kind: "client_config",
-      rel: clientRel,
-      label: "Client configuration",
-      action: action(stored?.get(clientRel), clientText),
-      text: clientText,
-      previous_text: stored?.get(clientRel) ?? "",
-      records: [],
-      summary: [
-        `Client identity for ${profile.client.client_name || clientId}.`,
-        "Portfolio jurisdiction and reporting currency.",
-        `Reporting products: ${profile.reporting.products.join(", ") || "MI only"}.`,
-        ...(profile.regime.esma_annex2
-          ? ["Annex 2 standing values injected into every reported row."]
-          : []),
-      ],
-    });
-
-    if (profile.reporting.products.includes("investor_reporting")) {
-      const rel = `config/client/config_client_${clientId}_annex12.yaml`;
-      const text = renderAnnex12Config(profile);
-      artefacts.push({
-        kind: "annex12_config",
-        rel,
-        label: "Investor report configuration",
-        action: action(stored?.get(rel), text),
-        text,
-        previous_text: stored?.get(rel) ?? "",
-        records: [],
-        summary: [
-          `${Object.keys(profile.regime.investor_reporting ?? {}).length} standing investor-report fields.`,
-        ],
-      });
-    }
-
-    const pfRel = `config/client/portfolio_registry_${clientId}.yaml`;
-    const pfText = renderPortfolioRegistry(profile);
-    artefacts.push({
-      kind: "portfolio_registry",
-      rel: pfRel,
-      label: "Portfolio metadata",
-      action: action(stored?.get(pfRel), pfText),
-      text: pfText,
-      previous_text: stored?.get(pfRel) ?? "",
-      records: [],
-      summary: [`${profile.portfolios.length} portfolios described.`],
-    });
-
-    const records = profile.sources.map((s) => {
-      const portfolio = profile.portfolios.find((p) => p.portfolio_id === s.portfolio_id);
-      return {
-        ...s,
-        client_id: clientId,
-        source_portfolio_id: s.portfolio_id,
-        action: "create",
-        portfolio_label: portfolio?.display_name ?? "",
-        expected_location: `raw-v2/${clientId}/${portfolio?.portfolio_type ?? "direct"}/${s.dataset}/${s.frequency}/${s.portfolio_id}/{reporting_period}/`,
-      };
-    });
-    artefacts.push({
-      kind: "source_registry",
-      rel: "source registry",
-      label: "Source registrations",
-      action: records.length ? "create" : "unchanged",
-      text: "",
-      previous_text: "",
-      records,
-      summary: records.map(
-        (r) => `${clientId}/${r.portfolio_id}/${r.dataset}/${r.frequency} registered, awaiting its first pack.`,
-      ),
-    });
-    return artefacts;
-  }
-
-  private present(draft: StoredDraft): OnboardingDraft {
-    const problems = validate(draft.profile);
-    const byStep: Record<string, OnboardingProblem[]> = {};
-    for (const step of STEPS) byStep[step.key] = [];
-    for (const problem of problems) (byStep[problem.step] ??= []).push(problem);
-    return {
-      draft_id: draft.draft_id,
-      client_id: draft.client_id,
-      origin: draft.origin,
-      based_on_version: draft.based_on_version,
-      step: draft.step,
-      steps: STEPS.map((s) => ({ ...s, problems: (byStep[s.key] ?? []).length })),
-      profile: clone(draft.profile),
-      derived_reporting: this.derived(draft.profile),
-      derived_sources: deriveSources(draft.profile),
-      provenance: draft.provenance,
-      gaps: draft.gaps,
-      sources_read: draft.sources_read,
-      problems,
-      problems_by_step: byStep,
-      ready: problems.length === 0,
-      created_by: draft.created_by,
-      created_at: draft.created_at,
-    };
-  }
-}
-
-type DerivedShape = { applies: boolean; eligible: boolean; derived: boolean; reason: string };
-
-function action(previous: string | undefined, text: string): string {
-  if (previous === undefined) return "create";
-  return previous === text ? "unchanged" : "update";
-}
-
-function version_hash(profile: OnboardingProfile): string {
-  return String(JSON.stringify(profile).length);
-}
-
-const BANNER = `# GENERATED by the Trakt Operations Control Centre — Client Onboarding.
-# This file is a governed artefact. Change it through Client Onboarding,
-# not by hand: a hand edit is not versioned, not attributed and not
-# audited, and the next approved change will overwrite it.
-`;
-
-function renderClientConfig(profile: OnboardingProfile): string {
-  const c = profile.client;
-  const annex2 = (profile.regime.esma_annex2 ?? {}) as Record<string, string | boolean>;
-  const lines = [
-    BANNER,
-    "client:",
-    `  client_id: ${c.client_id}`,
-    `  display_name: ${c.client_name}`,
-    `  environment: ${c.environment}`,
-    `  legal_entity_name: ${c.legal_entity_name}`,
-    `  time_zone: ${c.time_zone}`,
-    "  reporting_contact:",
-    `    name: ${c.primary_reporting_contact}`,
-    `    email: ${c.reporting_email}`,
-    "  operational_contact:",
-    `    name: ${c.operational_contact}`,
-    `    email: ${c.operational_email}`,
-    "portfolio:",
-    `  asset_class: ${profile.portfolios[0]?.asset_class ?? ""}`,
-    `  country: ${c.jurisdiction}`,
-    `  base_currency: ${c.reporting_currency}`,
-  ];
-  if (profile.reporting.products.includes("esma_annex2")) {
-    lines.push("supported_regimes:", "  - ESMA_Annex2", "default_regime: ESMA_Annex2", "regime: ESMA_Annex2");
-  }
-  lines.push(
-    "pipeline:",
-    "  loan_engine_enabled: false",
-    "  mi_enabled: true",
-    `  esma_enabled: ${profile.reporting.products.includes("esma_annex2")}`,
-  );
-  if (Object.keys(annex2).length) {
-    lines.push("defaults:");
-    if (annex2.originator_name) lines.push(`  originator_name: ${annex2.originator_name}`);
-    if (annex2.originator_legal_entity_identifier)
-      lines.push(
-        `  originator_legal_entity_identifier: ${annex2.originator_legal_entity_identifier}`,
-      );
-    if (annex2.originator_establishment_country)
-      lines.push(`  originator_establishment_country: ${annex2.originator_establishment_country}`);
-    if (annex2.nuts_classification_year)
-      lines.push(`nuts_classification_year: ${annex2.nuts_classification_year}`);
-    if (annex2.uk_geography_override) {
-      lines.push(
-        "regime_overrides:",
-        "  ESMA_Annex2:",
-        "    uk_geography:",
-        "      enabled: true",
-        "      override_value: GBZZZ",
-        "      target_fields:",
-        "        - geographic_region_obligor",
-        "        - geographic_region_collateral",
-      );
-    }
-  }
-  const sr = profile.static_reporting;
-  if (sr.app_title || sr.primary_color) {
-    lines.push("mi:", "  branding:");
-    if (sr.app_title) lines.push(`    app_title: ${sr.app_title}`);
-    if (sr.primary_color) lines.push("    theme:", `      primary_color: '${sr.primary_color}'`);
-  }
-  if (sr.day_count_convention || sr.payment_convention) {
-    lines.push("loan_engine:");
-    if (sr.day_count_convention) lines.push(`  day_count_convention: ${sr.day_count_convention}`);
-    if (sr.payment_convention)
-      lines.push(`  interest_payment_frequency: ${sr.payment_convention}`);
-  }
-  return lines.join("\n") + "\n";
-}
-
-function renderAnnex12Config(profile: OnboardingProfile): string {
-  const answers = (profile.regime.investor_reporting ?? {}) as Record<string, string>;
-  const lines = [
-    BANNER,
-    "annex12:",
-    "  meta:",
-    "    template: ESMA Annex 12 (Investor Report)",
-    "  assumptions:",
-    `    reporting_currency: ${profile.client.reporting_currency}`,
-    "  deal:",
-  ];
-  for (const [key, value] of Object.entries(answers)) lines.push(`    ${key}: ${value}`);
-  return lines.join("\n") + "\n";
-}
-
-function renderPortfolioRegistry(profile: OnboardingProfile): string {
-  const lines = [BANNER, "clients:", `  ${profile.client_id}:`, "    portfolios:"];
-  for (const p of profile.portfolios) {
-    lines.push(
-      `      - source_portfolio_id: ${p.portfolio_id}`,
-      `        source_portfolio_type: ${p.portfolio_type}`,
-      `        source_portfolio_label: ${p.display_name}`,
-      `        originates: ${p.originates ?? p.portfolio_type === "direct"}`,
-      `        pipeline_data_available: ${Boolean(p.pipeline_cadence)}`,
-    );
-  }
-  return lines.join("\n") + "\n";
 }

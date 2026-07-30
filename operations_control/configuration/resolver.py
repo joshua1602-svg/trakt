@@ -75,7 +75,7 @@ class EffectiveConfigResolver:
             return self.client_config_path
         cached = self._generated_cache.get(client_id)
         try:
-            from ..onboarding.generation import client_config_rel
+            from ..onboarding.artefacts import client_config_rel
             from ..onboarding.store import OnboardingStore
             text = OnboardingStore(self.store).read_artefact(
                 client_id, client_config_rel(client_id))

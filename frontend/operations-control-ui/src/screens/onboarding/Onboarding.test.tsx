@@ -1,14 +1,14 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { MockOpsClient } from "@/api/MockOpsClient";
 import { OpsClientProvider } from "@/api/context";
 import type { OpsClient } from "@/api/OpsClient";
 import { ToastProvider } from "@/components/Toast";
-import { OnboardingClientScreen } from "./ClientEditor";
+import { OnboardingCaseScreen } from "./CaseWizard";
+import { OnboardingClientScreen } from "./ClientView";
 import { OnboardingHomeScreen } from "./Home";
-import { OnboardingWizardScreen } from "./Wizard";
 
 function renderAt(client: OpsClient, path: string) {
   return render(
@@ -17,7 +17,7 @@ function renderAt(client: OpsClient, path: string) {
         <MemoryRouter initialEntries={[path]}>
           <Routes>
             <Route path="/onboarding" element={<OnboardingHomeScreen />} />
-            <Route path="/onboarding/drafts/:id" element={<OnboardingWizardScreen />} />
+            <Route path="/onboarding/cases/:id" element={<OnboardingCaseScreen />} />
             <Route path="/onboarding/clients/:id" element={<OnboardingClientScreen />} />
           </Routes>
         </MemoryRouter>
@@ -26,225 +26,359 @@ function renderAt(client: OpsClient, path: string) {
   );
 }
 
-describe("Client Onboarding home", () => {
-  it("lists a client that predates onboarding and offers to adopt it", async () => {
-    renderAt(new MockOpsClient(0), "/onboarding");
+const VALID_LEI = "549300ABCDE123456702";
 
-    expect(await screen.findByText("ERE")).toBeInTheDocument();
-    expect(screen.getByText("Not yet onboarded")).toBeInTheDocument();
+/** Answer a blank case end to end, exactly as an operator would. */
+async function completeCase(client: MockOpsClient) {
+  const created = await client.startNewClientCase();
+  const id = created.case_id;
+  await client.saveCaseStep(id, "client", {
+    client_id: "NORDIC",
+    client_name: "Nordic Lending",
+    jurisdiction: "SE",
+    reporting_currency: "SEK",
+    time_zone: "Europe/Stockholm",
+  });
+  const withEntities = await client.saveCaseStep(id, "entities", {
+    entities: [
+      {
+        legal_name: "Nordic Lending AB",
+        roles: ["originator", "servicer"],
+        lei: VALID_LEI,
+        country_of_establishment: "SE",
+      },
+    ],
+  });
+  const entityId = String(
+    ((withEntities.answers.entities ?? []) as Record<string, unknown>[])[0].entity_id,
+  );
+  await client.saveCaseStep(id, "contacts", {
+    reporting_contact_name: "Rae Reporter",
+    reporting_contact_email: "reporting@nordic.example",
+    operational_contact_name: "Ola Ops",
+    operational_contact_email: "ops@nordic.example",
+  });
+  await client.saveCaseStep(id, "portfolios", {
+    portfolios: [
+      {
+        portfolio_id: "direct_001",
+        display_name: "Nordic Direct",
+        portfolio_type: "direct",
+        asset_class: "equity_release",
+        structure: "spv",
+        owning_entity: entityId,
+        period_convention: "calendar_month_end",
+      },
+    ],
+  });
+  await client.saveCaseStep(id, "reporting", { products: ["esma_annex2"] });
+  await client.saveCaseStep(id, "sources", {
+    sources: [
+      {
+        source_key: "direct_001/funded",
+        portfolio_id: "direct_001",
+        dataset: "funded",
+        cadence: "monthly",
+        source_party: "Nordic core",
+        delivery_channel: "sftp",
+        file_format: "csv",
+      },
+    ],
+  });
+  await client.saveCaseStep(id, "regime", {
+    regime: {
+      esma_annex2: {
+        originator_name: "Nordic Lending AB",
+        originator_legal_entity_identifier: VALID_LEI,
+        originator_establishment_country: "SE",
+      },
+    },
+  });
+  return id;
+}
+
+describe("Client Onboarding home", () => {
+  it("leads with starting a new client, not with importing one", async () => {
+    renderAt(new MockOpsClient(0), "/onboarding");
+    const start = await screen.findByRole("button", { name: /Start new client onboarding/ });
+    expect(start).toBeInTheDocument();
+    // The primary action does not ask which client — there isn't one yet.
+    expect(screen.queryByText(/Adopt current configuration/)).not.toBeInTheDocument();
+  });
+
+  it("shows the working queues", async () => {
+    renderAt(new MockOpsClient(0), "/onboarding");
+    expect(await screen.findByText("In progress")).toBeInTheDocument();
+    expect(screen.getByText("Waiting on the client")).toBeInTheDocument();
+    expect(screen.getByText("Ready for review")).toBeInTheDocument();
+    expect(screen.getByText("Active clients")).toBeInTheDocument();
+  });
+
+  it("offers legacy migration separately and secondarily", async () => {
+    renderAt(new MockOpsClient(0), "/onboarding");
+    const heading = await screen.findByText("Bring in an existing client");
+    expect(heading).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Adopt current configuration" }),
+      screen.getByText(/Clients Trakt already serves whose configuration predates onboarding/),
     ).toBeInTheDocument();
-    // Adoption is an offer, not a demand — the client still works untouched.
-    expect(
-      screen.getByText(/Configured before Client Onboarding existed/),
-    ).toBeInTheDocument();
+    // It appears after the primary action in the document, not before it.
+    const start = screen.getByRole("button", { name: /Start new client onboarding/ });
+    expect(start.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
 
-describe("the wizard", () => {
-  it("shows a new client every step, with nothing answered yet", async () => {
+describe("the blank new-client case", () => {
+  it("opens with a generated reference and no client", async () => {
     const client = new MockOpsClient(0);
-    const draft = await client.startOnboardingDraft({});
-    renderAt(client, `/onboarding/drafts/${draft.draft_id}`);
+    const created = await client.startNewClientCase();
+    renderAt(client, `/onboarding/cases/${created.case_id}`);
+    expect(await screen.findByText(new RegExp(created.case_id))).toBeInTheDocument();
+    expect(screen.getByText(/New client · Draft/)).toBeInTheDocument();
+  });
 
+  it("renders its questions from the governed catalogue", async () => {
+    const client = new MockOpsClient(0);
+    const created = await client.startNewClientCase();
+    renderAt(client, `/onboarding/cases/${created.case_id}`);
+    // Fields nobody hard-coded in a component: they come from the catalogue.
+    expect(await screen.findByText("Client name")).toBeInTheDocument();
+    expect(screen.getByText("Client identifier")).toBeInTheDocument();
+    expect(screen.getByText("Jurisdiction")).toBeInTheDocument();
+    // System-generated values are not questions.
+    expect(screen.queryByText("Onboarding reference")).not.toBeInTheDocument();
+  });
+
+  it("walks every step of the journey", async () => {
+    const client = new MockOpsClient(0);
+    const created = await client.startNewClientCase();
+    renderAt(client, `/onboarding/cases/${created.case_id}`);
     for (const step of [
-      "Client",
+      "About the client",
+      "Legal and reporting entities",
+      "Contacts and distribution",
       "Portfolios",
-      "Reporting",
-      "Regime configuration",
-      "Source registration",
-      "Review",
+      "Expected deliveries",
+      "Reporting requirements",
+      "Regulatory information",
+      "Review and activate",
     ]) {
       expect(await screen.findByRole("button", { name: new RegExp(step) })).toBeInTheDocument();
     }
-    expect(await screen.findByText("Who is the client?")).toBeInTheDocument();
   });
 
-  it("fills an adopted client's current values in and says where they came from", async () => {
+  it("lets one entity hold several roles", async () => {
     const client = new MockOpsClient(0);
-    const draft = await client.startOnboardingDraft({ client_id: "ERE", adopt: true });
-    renderAt(client, `/onboarding/drafts/${draft.draft_id}`);
-
-    expect(
-      await screen.findByDisplayValue("ERE Funding - Equity Release Mortgages"),
-    ).toBeInTheDocument();
-    expect(screen.getByDisplayValue("213800ABCDE123456701")).toBeInTheDocument();
-    expect(
-      screen.getByText(/Taken from defaults.originator_legal_entity_identifier/),
-    ).toBeInTheDocument();
-    // What the legacy files could not answer is named, not guessed.
-    expect(screen.getByText(/Still needed: Primary reporting contact/)).toBeInTheDocument();
+    const created = await client.startNewClientCase();
+    await client.saveCaseStep(created.case_id, "entities", {
+      entities: [{ legal_name: "Nordic Lending AB", roles: ["originator"] }],
+    });
+    renderAt(client, `/onboarding/cases/${created.case_id}`);
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Legal and reporting entities/ }),
+    );
+    const card = (await screen.findByText("Nordic Lending AB")).closest("section")!;
+    await userEvent.click(within(card).getByRole("button", { name: "Servicer" }));
+    await waitFor(async () => {
+      const updated = await client.getCase(created.case_id);
+      const roles = ((updated.answers.entities ?? []) as Record<string, unknown>[])[0]
+        .roles as string[];
+      expect(roles).toEqual(["originator", "servicer"]);
+    });
   });
 
   it("does not offer management information as a choice", async () => {
     const client = new MockOpsClient(0);
-    const draft = await client.startOnboardingDraft({ client_id: "ERE", adopt: true });
-    renderAt(client, `/onboarding/drafts/${draft.draft_id}`);
-
-    await userEvent.click(await screen.findByRole("button", { name: /Reporting/ }));
+    const id = await completeCase(client);
+    renderAt(client, `/onboarding/cases/${id}`);
+    await userEvent.click(await screen.findByRole("button", { name: /Reporting requirements/ }));
     const mi = await screen.findByText("Management Information");
     const toggle = mi.closest("label")!.querySelector("input")!;
     expect(toggle).toBeDisabled();
     expect(toggle).toBeChecked();
-    expect(screen.getByText(/Always prepared/)).toBeInTheDocument();
   });
 
-  it("asks regime questions in business terms and names the reported field", async () => {
+  it("derives deliveries and shows where they will arrive", async () => {
     const client = new MockOpsClient(0);
-    const draft = await client.startOnboardingDraft({ client_id: "ERE", adopt: true });
-    renderAt(client, `/onboarding/drafts/${draft.draft_id}`);
-
-    await userEvent.click(await screen.findByRole("button", { name: /Regime configuration/ }));
-    expect(await screen.findByText("Originator LEI")).toBeInTheDocument();
-    expect(screen.getByText(/Reported as RREL83/)).toBeInTheDocument();
-    // What the regime asks for that Trakt cannot hold is stated, not hidden.
-    expect(screen.getByText("Not held here")).toBeInTheDocument();
-    expect(screen.getByText("Sponsor")).toBeInTheDocument();
+    const id = await completeCase(client);
+    renderAt(client, `/onboarding/cases/${id}`);
+    await userEvent.click(await screen.findByRole("button", { name: /Expected deliveries/ }));
+    expect(await screen.findByText(/Nordic Direct — Funded/)).toBeInTheDocument();
+    expect(screen.getByText(/raw-v2\/NORDIC\/direct\/funded\/monthly\/direct_001/)).toBeInTheDocument();
   });
 
-  it("derives source registrations rather than asking for them", async () => {
+  it("builds the client checklist from what is still outstanding", async () => {
     const client = new MockOpsClient(0);
-    const draft = await client.startOnboardingDraft({ client_id: "ERE", adopt: true });
-    renderAt(client, `/onboarding/drafts/${draft.draft_id}`);
-
-    await userEvent.click(await screen.findByRole("button", { name: /Source registration/ }));
-    expect(await screen.findByText(/Trakt creates them for you/)).toBeInTheDocument();
-    expect(screen.getByText("ERE Direct Originations — Funded")).toBeInTheDocument();
-    expect(screen.getByText("ERE Direct Originations — Pipeline")).toBeInTheDocument();
-    expect(screen.getByText("BigBank Legacy Book — Funded")).toBeInTheDocument();
+    const created = await client.startNewClientCase();
+    await client.saveCaseStep(created.case_id, "client", { client_id: "NEWCO" });
+    renderAt(client, `/onboarding/cases/${created.case_id}`);
+    await userEvent.click(await screen.findByRole("button", { name: /Contacts and distribution/ }));
+    const panel = (await screen.findByText("What the client still needs to tell us")).closest(
+      "section",
+    )!;
+    expect(within(panel).getByText("Client name")).toBeInTheDocument();
+    // The identifier is the operator's decision, so it is never asked of the client.
+    expect(within(panel).queryByText("Client identifier")).not.toBeInTheDocument();
   });
 
-  it("shows everything that will be written before anything is written", async () => {
+  it("raises an information request from the checklist", async () => {
     const client = new MockOpsClient(0);
-    const draft = await client.startOnboardingDraft({ client_id: "ERE", adopt: true });
-    renderAt(client, `/onboarding/drafts/${draft.draft_id}`);
+    const created = await client.startNewClientCase();
+    await client.saveCaseStep(created.case_id, "client", { client_id: "NEWCO" });
+    renderAt(client, `/onboarding/cases/${created.case_id}`);
+    await userEvent.click(await screen.findByRole("button", { name: /Contacts and distribution/ }));
+    const panel = (await screen.findByText("What the client still needs to tell us")).closest(
+      "section",
+    )!;
+    await userEvent.click(within(panel).getAllByRole("checkbox")[0]);
+    await userEvent.click(within(panel).getByRole("button", { name: /Ask the client for these/ }));
+    await waitFor(async () => {
+      const updated = await client.getCase(created.case_id);
+      expect(updated.information_requests).toHaveLength(1);
+      expect(updated.status).toBe("information_requested");
+    });
+  });
 
-    await userEvent.click(await screen.findByRole("button", { name: /Review/ }));
-    expect(await screen.findByText("What will be written")).toBeInTheDocument();
+  it("shows everything that will be created before anything is created", async () => {
+    const client = new MockOpsClient(0);
+    const id = await completeCase(client);
+    renderAt(client, `/onboarding/cases/${id}`);
+    await userEvent.click(await screen.findByRole("button", { name: /Review and activate/ }));
+    expect(await screen.findByText("What will be created")).toBeInTheDocument();
     expect(screen.getByText("Client configuration")).toBeInTheDocument();
     expect(screen.getByText("Portfolio metadata")).toBeInTheDocument();
     expect(screen.getByText("Source registrations")).toBeInTheDocument();
-    expect(screen.getAllByText("Will be created").length).toBeGreaterThan(0);
+    expect(screen.getByText("Client index")).toBeInTheDocument();
+    // And what Trakt itself generated.
+    expect(screen.getByText("What Trakt has generated")).toBeInTheDocument();
+    // Still nothing active.
+    const detail = await client.getOnboardingClient("NORDIC");
+    expect(detail.status).toBe("not_onboarded");
   });
 
-  it("refuses to approve until the outstanding answers are given", async () => {
+  it("refuses approval until the answers are complete", async () => {
     const client = new MockOpsClient(0);
-    const draft = await client.startOnboardingDraft({ client_id: "ERE", adopt: true });
-    renderAt(client, `/onboarding/drafts/${draft.draft_id}`);
-
-    await userEvent.click(await screen.findByRole("button", { name: /Review/ }));
-    const approve = await screen.findByRole("button", {
-      name: "Approve and write configuration",
-    });
-    expect(approve).toBeDisabled();
-    expect(screen.getByText(/answers still needed/)).toBeInTheDocument();
+    const created = await client.startNewClientCase();
+    renderAt(client, `/onboarding/cases/${created.case_id}`);
+    await userEvent.click(await screen.findByRole("button", { name: /Review and activate/ }));
+    expect(await screen.findByRole("button", { name: "Approve" })).toBeDisabled();
+    expect(screen.getByText(/still needed before this can be approved/)).toBeInTheDocument();
   });
 
-  it("approves once the profile is complete, and records the reason", async () => {
+  it("approves, then activates, and only then is the client configured", async () => {
     const client = new MockOpsClient(0);
-    const draft = await client.startOnboardingDraft({ client_id: "ERE", adopt: true });
-    await client.saveOnboardingStep(draft.draft_id, "client", {
-      ...draft.profile.client,
-      primary_reporting_contact: "Ada Reporter",
-      reporting_email: "reporting@ere.example",
-      operational_contact: "Ola Ops",
-      operational_email: "ops@ere.example",
-    });
-    renderAt(client, `/onboarding/drafts/${draft.draft_id}`);
-
-    await userEvent.click(await screen.findByRole("button", { name: /Review/ }));
-    const approve = await screen.findByRole("button", {
-      name: "Approve and write configuration",
-    });
-    await waitFor(() => expect(approve).toBeDisabled()); // no reason given yet
+    const id = await completeCase(client);
+    renderAt(client, `/onboarding/cases/${id}`);
+    await userEvent.click(await screen.findByRole("button", { name: /Review and activate/ }));
     await userEvent.type(
-      screen.getByPlaceholderText("A short note for the record"),
-      "Adopting the existing client",
+      await screen.findByPlaceholderText("A short note for the record"),
+      "New client onboarded",
     );
-    await waitFor(() => expect(approve).toBeEnabled());
-    await userEvent.click(approve);
+    await userEvent.click(screen.getByRole("button", { name: "Approve" }));
 
+    // Approved is not activated: no configuration exists yet.
     await waitFor(async () => {
-      const detail = await client.getOnboardingClient("ERE");
-      expect(detail.status).toBe("onboarded");
-      expect(detail.history[0].reason).toBe("Adopting the existing client");
+      expect((await client.getCase(id)).status).toBe("approved");
+    });
+    expect((await client.getOnboardingClient("NORDIC")).status).toBe("not_onboarded");
+
+    await userEvent.click(await screen.findByRole("button", { name: "Activate client" }));
+    await waitFor(async () => {
+      const detail = await client.getOnboardingClient("NORDIC");
+      expect(detail.status).toBe("active");
+      expect(detail.version).toBe(1);
     });
   });
 });
 
-describe("the existing-client editor", () => {
-  async function onboardEre(client: MockOpsClient) {
-    const draft = await client.startOnboardingDraft({ client_id: "ERE", adopt: true });
-    await client.saveOnboardingStep(draft.draft_id, "client", {
-      ...draft.profile.client,
-      primary_reporting_contact: "Ada Reporter",
-      reporting_email: "reporting@ere.example",
-      operational_contact: "Ola Ops",
-      operational_email: "ops@ere.example",
-    });
-    await client.approveOnboardingDraft(draft.draft_id, "Adopting the existing client");
+describe("legacy migration", () => {
+  it("pre-populates the same model and flags what today's rules refuse", async () => {
+    const client = new MockOpsClient(0);
+    const created = await client.startMigrationCase("LEGACYCO");
+    renderAt(client, `/onboarding/cases/${created.case_id}`);
+    expect(await screen.findByDisplayValue("Legacy Lending")).toBeInTheDocument();
+    expect(screen.getByText(/Trakt has filled in what it already holds/)).toBeInTheDocument();
+    // The invalid legacy identifier is raised, not carried silently.
+    const raised = (await client.getCase(created.case_id)).open_questions;
+    expect(raised.some((q) => q.question.includes("20-character identifier"))).toBe(true);
+  });
+
+  it("changes no active configuration before approval", async () => {
+    const client = new MockOpsClient(0);
+    await client.startMigrationCase("LEGACYCO");
+    expect((await client.getOnboardingClient("LEGACYCO")).status).toBe("not_onboarded");
+  });
+});
+
+describe("amendments", () => {
+  async function activated(client: MockOpsClient) {
+    const id = await completeCase(client);
+    await client.approveCase(id, "New client onboarded");
+    await client.activateCase(id);
     return client;
   }
 
-  it("shows the configuration in force across every tab", async () => {
-    const client = await onboardEre(new MockOpsClient(0));
-    renderAt(client, "/onboarding/clients/ERE");
-
-    expect(await screen.findByText("Version 1 in force")).toBeInTheDocument();
-    expect(screen.getByText("213800ABCDE123456701")).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: "Portfolios" }));
-    expect(await screen.findByText("ERE Direct Originations")).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: "Regimes" }));
-    expect(await screen.findByText("Esma annex2")).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: "Source registrations" }));
-    expect(await screen.findByText(/What Trakt expects to receive/)).toBeInTheDocument();
+  it("start from the version in force", async () => {
+    const client = await activated(new MockOpsClient(0));
+    const amendment = await client.startAmendmentCase("NORDIC");
+    expect(amendment.kind).toBe("amendment");
+    expect(amendment.based_on_version).toBe(1);
+    expect((amendment.answers.client as Record<string, string>).client_name).toBe("Nordic Lending");
   });
 
-  it("keeps an immutable history with who, when, why and what changed", async () => {
-    const client = await onboardEre(new MockOpsClient(0));
-    const second = await client.startOnboardingDraft({ client_id: "ERE" });
-    await client.saveOnboardingStep(second.draft_id, "client", {
-      ...second.profile.client,
-      reporting_email: "newreporting@ere.example",
+  it("create a new version and keep the old one readable", async () => {
+    const client = await activated(new MockOpsClient(0));
+    const amendment = await client.startAmendmentCase("NORDIC");
+    await client.saveCaseStep(amendment.case_id, "client", {
+      client_name: "Nordic Lending Group",
     });
-    await client.approveOnboardingDraft(second.draft_id, "Reporting contact changed");
+    await client.approveCase(amendment.case_id, "Rebranded");
+    await client.activateCase(amendment.case_id);
 
-    renderAt(client, "/onboarding/clients/ERE");
+    renderAt(client, "/onboarding/clients/NORDIC");
     await userEvent.click(await screen.findByRole("button", { name: "History" }));
-
     const versions = await screen.findAllByText(/^Version [12]$/);
     expect(versions).toHaveLength(2);
-    expect(screen.getByText("Reporting contact changed")).toBeInTheDocument();
+    expect(screen.getByText("Rebranded")).toBeInTheDocument();
     expect(screen.getByText("In force")).toBeInTheDocument();
     expect(screen.getByText("Replaced")).toBeInTheDocument();
-    // Before and after are both shown. The old address appears twice — as
-    // version 1's value and as version 2's "before" — which is the point:
-    // history is additive, so the earlier version still reads as it did.
-    expect(screen.getAllByText("reporting@ere.example").length).toBe(2);
-    expect(screen.getByText("newreporting@ere.example")).toBeInTheDocument();
   });
 
-  it("offers adoption for a client that has not been onboarded", async () => {
-    renderAt(new MockOpsClient(0), "/onboarding/clients/ERE");
-    expect(
-      await screen.findByText(/This client has not been through Client Onboarding/),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Adopt current configuration" }),
-    ).toBeInTheDocument();
+  it("are offered from the active client, not as a fresh onboarding", async () => {
+    const client = await activated(new MockOpsClient(0));
+    renderAt(client, "/onboarding/clients/NORDIC");
+    expect(await screen.findByRole("button", { name: /Amend/ })).toBeInTheDocument();
+    expect(screen.getByText("Version 1 in force")).toBeInTheDocument();
   });
 });
 
 describe("an ordinary operator", () => {
-  it("is refused when approving, by the same rule the server applies", async () => {
+  it("may work a case but not approve it", async () => {
     const client = new MockOpsClient(0, "operator");
-    const draft = await client.startOnboardingDraft({ client_id: "ERE", adopt: true });
-    await expect(
-      client.approveOnboardingDraft(draft.draft_id, "trying"),
-    ).rejects.toThrow(/administrator/i);
+    const id = await completeCase(client);
+    await expect(client.approveCase(id, "trying")).rejects.toThrow(/administrator/i);
+  });
+});
+
+describe("at 390px", () => {
+  beforeEach(() => {
+    Object.defineProperty(window, "innerWidth", { writable: true, value: 390 });
+  });
+
+  it("keeps long generated values inside the page", async () => {
+    const client = new MockOpsClient(0);
+    const id = await completeCase(client);
+    renderAt(client, `/onboarding/cases/${id}`);
+    await userEvent.click(await screen.findByRole("button", { name: /Review and activate/ }));
+    const location = await screen.findByText(/raw-v2\/NORDIC\/direct\/funded/);
+    // A long storage path must wrap rather than push the page sideways.
+    expect(location.className).toMatch(/break-all/);
+  });
+
+  it("lets the step rail scroll instead of overflowing", async () => {
+    const client = new MockOpsClient(0);
+    const created = await client.startNewClientCase();
+    renderAt(client, `/onboarding/cases/${created.case_id}`);
+    const rail = (await screen.findByRole("button", { name: /About the client/ })).closest("ol")!;
+    expect(rail.className).toMatch(/overflow-x-auto/);
   });
 });

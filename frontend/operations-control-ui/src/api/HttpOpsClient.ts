@@ -15,14 +15,14 @@ import type {
   ValidationSummary,
 } from "./adminTypes";
 import type {
-  ApprovalResult,
+  ActivationResult,
+  CasePreview,
+  ChecklistRow,
+  ConfigurationVersionRow,
+  OnboardingCase,
   OnboardingClientDetail,
-  OnboardingClientRow,
-  OnboardingDraft,
+  OnboardingHome,
   OnboardingReference,
-  OnboardingReview,
-  OnboardingStep,
-  ProfileVersionRow,
 } from "./onboardingTypes";
 import type {
   Batch,
@@ -358,14 +358,158 @@ export class HttpOpsClient implements OpsClient {
   // -- Client Onboarding ---------------------------------------------------- //
 
   async getOnboardingReference(): Promise<OnboardingReference> {
-    return this.request<OnboardingReference>("/ops/onboarding/vocabularies");
+    return this.request<OnboardingReference>("/ops/onboarding/reference");
   }
 
-  async getOnboardingClients(): Promise<OnboardingClientRow[]> {
-    const body = await this.request<{ clients: OnboardingClientRow[] }>(
-      "/ops/onboarding/clients",
+  async getOnboardingHome(): Promise<OnboardingHome> {
+    const body = await this.request<{ home: OnboardingHome }>("/ops/onboarding/home");
+    return body.home;
+  }
+
+  private async caseCall(path: string, payload?: unknown): Promise<OnboardingCase> {
+    const body = await this.post<{ case: OnboardingCase }>(path, payload ?? {});
+    return body.case;
+  }
+
+  async startNewClientCase(): Promise<OnboardingCase> {
+    return this.caseCall("/ops/onboarding/cases");
+  }
+
+  async startMigrationCase(clientId: string): Promise<OnboardingCase> {
+    return this.caseCall("/ops/onboarding/cases/migration", { client_id: clientId });
+  }
+
+  async startAmendmentCase(clientId: string): Promise<OnboardingCase> {
+    return this.caseCall("/ops/onboarding/cases/amendment", { client_id: clientId });
+  }
+
+  async getCase(caseId: string): Promise<OnboardingCase> {
+    const body = await this.request<{ case: OnboardingCase }>(
+      `/ops/onboarding/cases/${encodeURIComponent(caseId)}`,
     );
-    return body.clients;
+    return body.case;
+  }
+
+  async saveCaseStep(
+    caseId: string,
+    step: string,
+    payload: Record<string, unknown>,
+  ): Promise<OnboardingCase> {
+    const body = await this.request<{ case: OnboardingCase }>(
+      `/ops/onboarding/cases/${encodeURIComponent(caseId)}`,
+      { method: "PUT", body: JSON.stringify({ step, payload }) },
+    );
+    return body.case;
+  }
+
+  async addPipelineBook(caseId: string, portfolioId: string): Promise<OnboardingCase> {
+    return this.caseCall(`/ops/onboarding/cases/${encodeURIComponent(caseId)}/pipeline-book`, {
+      portfolio_id: portfolioId,
+    });
+  }
+
+  async removeSource(
+    caseId: string,
+    portfolioId: string,
+    dataset: string,
+  ): Promise<OnboardingCase> {
+    const body = await this.request<{ case: OnboardingCase }>(
+      `/ops/onboarding/cases/${encodeURIComponent(caseId)}/sources/` +
+        `${encodeURIComponent(portfolioId)}/${encodeURIComponent(dataset)}`,
+      { method: "DELETE" },
+    );
+    return body.case;
+  }
+
+  async getCaseChecklist(caseId: string): Promise<ChecklistRow[]> {
+    const body = await this.request<{ checklist: ChecklistRow[] }>(
+      `/ops/onboarding/cases/${encodeURIComponent(caseId)}/checklist`,
+    );
+    return body.checklist;
+  }
+
+  async createInformationRequest(
+    caseId: string,
+    items: ChecklistRow[],
+    options?: { responsible_party?: string; due_date?: string; note?: string },
+  ): Promise<OnboardingCase> {
+    return this.caseCall(`/ops/onboarding/cases/${encodeURIComponent(caseId)}/requests`, {
+      items,
+      responsible_party: options?.responsible_party ?? "client",
+      due_date: options?.due_date ?? "",
+      note: options?.note ?? "",
+    });
+  }
+
+  async markRequestSent(caseId: string, requestId: string): Promise<OnboardingCase> {
+    return this.caseCall(
+      `/ops/onboarding/cases/${encodeURIComponent(caseId)}/requests/` +
+        `${encodeURIComponent(requestId)}/sent`,
+    );
+  }
+
+  async recordRequestResponse(
+    caseId: string,
+    requestId: string,
+    body: {
+      note?: string;
+      answers?: Record<string, unknown>;
+      evidence?: { name: string; reference: string }[];
+    },
+  ): Promise<OnboardingCase> {
+    return this.caseCall(
+      `/ops/onboarding/cases/${encodeURIComponent(caseId)}/requests/` +
+        `${encodeURIComponent(requestId)}/response`,
+      body,
+    );
+  }
+
+  async addCaseQuestion(caseId: string, question: string): Promise<OnboardingCase> {
+    return this.caseCall(`/ops/onboarding/cases/${encodeURIComponent(caseId)}/questions`, {
+      question,
+    });
+  }
+
+  async resolveCaseQuestion(
+    caseId: string,
+    questionId: string,
+    resolution: string,
+  ): Promise<OnboardingCase> {
+    return this.caseCall(
+      `/ops/onboarding/cases/${encodeURIComponent(caseId)}/questions/` +
+        `${encodeURIComponent(questionId)}/resolve`,
+      { resolution },
+    );
+  }
+
+  async getCasePreview(caseId: string): Promise<CasePreview> {
+    const body = await this.request<{ preview: CasePreview }>(
+      `/ops/onboarding/cases/${encodeURIComponent(caseId)}/preview`,
+    );
+    return body.preview;
+  }
+
+  async submitCase(caseId: string): Promise<OnboardingCase> {
+    return this.caseCall(`/ops/onboarding/cases/${encodeURIComponent(caseId)}/submit`);
+  }
+
+  async approveCase(caseId: string, reason: string): Promise<OnboardingCase> {
+    return this.caseCall(`/ops/onboarding/cases/${encodeURIComponent(caseId)}/approve`, {
+      reason,
+    });
+  }
+
+  async activateCase(caseId: string): Promise<ActivationResult> {
+    return this.post<ActivationResult>(
+      `/ops/onboarding/cases/${encodeURIComponent(caseId)}/activate`,
+      {},
+    );
+  }
+
+  async withdrawCase(caseId: string, reason: string): Promise<OnboardingCase> {
+    return this.caseCall(`/ops/onboarding/cases/${encodeURIComponent(caseId)}/withdraw`, {
+      reason,
+    });
   }
 
   async getOnboardingClient(clientId: string): Promise<OnboardingClientDetail> {
@@ -378,66 +522,10 @@ export class HttpOpsClient implements OpsClient {
   async getOnboardingClientVersion(
     clientId: string,
     version: number,
-  ): Promise<ProfileVersionRow> {
-    const body = await this.request<{ version: ProfileVersionRow }>(
+  ): Promise<ConfigurationVersionRow> {
+    const body = await this.request<{ version: ConfigurationVersionRow }>(
       `/ops/onboarding/clients/${encodeURIComponent(clientId)}/versions/${version}`,
     );
     return body.version;
-  }
-
-  async startOnboardingDraft(input: {
-    client_id?: string;
-    adopt?: boolean;
-  }): Promise<OnboardingDraft> {
-    const body = await this.post<{ draft: OnboardingDraft }>("/ops/onboarding/drafts", {
-      client_id: input.client_id ?? "",
-      adopt: input.adopt ?? false,
-    });
-    return body.draft;
-  }
-
-  async getOnboardingDraft(draftId: string, client?: string): Promise<OnboardingDraft> {
-    const body = await this.request<{ draft: OnboardingDraft }>(
-      `/ops/onboarding/drafts/${encodeURIComponent(draftId)}${query({ client })}`,
-    );
-    return body.draft;
-  }
-
-  async saveOnboardingStep(
-    draftId: string,
-    step: OnboardingStep,
-    payload: Record<string, unknown>,
-    client?: string,
-  ): Promise<OnboardingDraft> {
-    const body = await this.request<{ draft: OnboardingDraft }>(
-      `/ops/onboarding/drafts/${encodeURIComponent(draftId)}${query({ client })}`,
-      { method: "PUT", body: JSON.stringify({ step, payload }) },
-    );
-    return body.draft;
-  }
-
-  async reviewOnboardingDraft(draftId: string, client?: string): Promise<OnboardingReview> {
-    const body = await this.request<{ review: OnboardingReview }>(
-      `/ops/onboarding/drafts/${encodeURIComponent(draftId)}/review${query({ client })}`,
-    );
-    return body.review;
-  }
-
-  async approveOnboardingDraft(
-    draftId: string,
-    reason: string,
-    client?: string,
-  ): Promise<ApprovalResult> {
-    return this.post<ApprovalResult>(
-      `/ops/onboarding/drafts/${encodeURIComponent(draftId)}/approve${query({ client })}`,
-      { reason },
-    );
-  }
-
-  async discardOnboardingDraft(draftId: string, reason: string, client?: string): Promise<void> {
-    await this.post(
-      `/ops/onboarding/drafts/${encodeURIComponent(draftId)}/discard${query({ client })}`,
-      { reason },
-    );
   }
 }

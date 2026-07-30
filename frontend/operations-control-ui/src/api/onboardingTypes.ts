@@ -1,216 +1,234 @@
 /**
- * Client Onboarding — the governed standing-configuration capability.
+ * Client Onboarding — types mirroring `operations_control/onboarding/`.
  *
- * These types mirror `operations_control/onboarding/`. Nothing here is a
- * decision: every option list arrives from the backend (`vocabularies`), and
- * every validation message is the backend's wording. React renders; it does not
- * decide what is valid, what applies, or what will be written.
+ * The browser renders the information model the backend serves; it does not
+ * hold one. Adding a field to the governed catalogue reaches the wizard without
+ * a change in this file.
  */
 
-export type OnboardingStep =
-  | "client"
-  | "portfolio"
-  | "reporting"
-  | "regime"
-  | "static_reporting"
-  | "sources"
-  | "review";
+export type CaseKind = "new_client" | "migration" | "amendment";
 
-export interface ClientStanding {
-  client_id: string;
-  client_name: string;
-  legal_entity_name: string;
-  lei: string;
-  jurisdiction: string;
-  reporting_currency: string;
-  time_zone: string;
-  environment: string;
-  primary_reporting_contact: string;
-  reporting_email: string;
-  operational_contact: string;
-  operational_email: string;
+export type CaseStatus =
+  | "draft"
+  | "information_requested"
+  | "awaiting_client"
+  | "in_review"
+  | "changes_required"
+  | "ready_for_approval"
+  | "approved"
+  | "activated"
+  | "withdrawn";
+
+export type FieldSource =
+  | "client_supplied"
+  | "operator_supplied"
+  | "inferred"
+  | "derived"
+  | "trakt_default"
+  | "system_generated"
+  | "delivery_specific";
+
+export interface FieldOption {
+  value: string;
+  label: string;
 }
 
-export interface PortfolioStanding {
-  portfolio_id: string;
-  display_name: string;
-  portfolio_type: string;
-  asset_class: string;
-  structure: string;
-  funded_cadence: string;
-  pipeline_cadence: string;
-  originates: boolean | null;
-  warehouse_lender: string;
-  source_system: string;
-}
-
-export interface ReportingStanding {
-  products: string[];
-  derivation: Record<string, string>;
-}
-
-export interface StaticReportingStanding {
-  app_title: string;
-  primary_color: string;
-  logo_uri: string;
-  disclaimer: string;
-  investor_contact: string;
-  investor_email: string;
-  trustee_name: string;
-  warehouse_lender: string;
-  payment_convention: string;
-  day_count_convention: string;
-  reporting_convention: string;
-}
-
-export interface SourceRegistrationStanding {
-  portfolio_id: string;
-  dataset: string;
-  frequency: string;
-  source_system: string;
-  expected_files: string[];
-  regime_required: boolean;
-  status: string;
-  blob_prefix: string;
-}
-
-export interface OnboardingProfile {
-  client_id: string;
-  client: ClientStanding;
-  portfolios: PortfolioStanding[];
-  reporting: ReportingStanding;
-  regime: Record<string, Record<string, string | boolean>>;
-  static_reporting: StaticReportingStanding;
-  sources: SourceRegistrationStanding[];
-}
-
-/** One field of one reporting product, as declared by the governed spec. */
-export interface StandingField {
+/** One question, exactly as the governed catalogue declares it. */
+export interface CatalogueField {
   key: string;
   label: string;
-  regime_code?: string;
-  classification: string;
-  required?: boolean;
-  format: string;
-  help?: string;
-  max_length?: number;
-  options?: (string | { value: string; label: string })[];
-  writes_to?: string;
+  scope: string;
+  source: FieldSource;
+  type: string;
+  help: string;
+  required: boolean;
+  required_when: string;
+  validation: string;
+  options: FieldOption[];
+  options_from: string;
+  default: unknown;
+  derived_default: string;
+  max_length: number | null;
+  unique_across: string;
+  consumers: string[];
+  writes_to: string;
+  evidence_required: boolean;
+  sensitive: boolean;
+  amendable: boolean;
+  regime_code: string;
+  /** Set for regime fields: which reporting product they belong to. */
+  product: string;
 }
 
-export interface UnrepresentedField {
+export interface CatalogueSection {
   key: string;
   label: string;
-  reason: string;
-  product?: string;
+  help: string;
+  repeatable: boolean;
+  repeatable_key: string;
+  item_label_field: string;
+  min_items: number;
+  derived_from: string;
+  from_regime: boolean;
+  fields: CatalogueField[];
 }
 
-export interface StandingProduct {
+export interface Vocabulary {
+  label: string;
+  help: string;
+  owner: string;
+  values: FieldOption[];
+}
+
+export interface RegimeProduct {
   label: string;
   regime_id?: string;
   always_applies?: boolean;
   derived_from?: string;
   requires_dataset?: string;
   supported_by_assets_declaring?: string;
-  fields: StandingField[];
-  unrepresented?: UnrepresentedField[];
+  fields: Record<string, unknown>[];
+  unrepresented?: { key: string; label: string; reason: string }[];
 }
 
-export interface StandingFieldSpec {
+export interface Catalogue {
   version: number;
-  products: Record<string, StandingProduct>;
-}
-
-export interface AssetChoice {
-  value: string;
-  label: string;
-  supports_regimes: string[];
-}
-
-export interface ProductChoice {
-  key: string;
-  label: string;
-  selectable: boolean;
-  always_applies: boolean;
-  derived_from: string;
-  requires_dataset: string;
-  supported_by_assets_declaring: string;
-  field_count: number;
-  unrepresented: UnrepresentedField[];
-}
-
-export interface Vocabularies {
-  asset_classes: AssetChoice[];
-  portfolio_types: string[];
-  portfolio_structures: string[];
-  datasets: string[];
-  regime_capable_datasets: string[];
-  cadences: string[];
-  registration_statuses: string[];
-  products: ProductChoice[];
-  sources: Record<string, string>;
+  sections: CatalogueSection[];
+  vocabularies: Record<string, Vocabulary>;
+  not_collected: { key: string; label: string; source: string; reason: string }[];
+  regime_products: Record<string, RegimeProduct>;
 }
 
 export interface OnboardingReference {
-  vocabularies: Vocabularies;
-  standing_fields: StandingFieldSpec;
+  catalogue: Catalogue;
+  steps: { key: string; label: string }[];
+  statuses: { key: CaseStatus; label: string }[];
+  kinds: { key: CaseKind; label: string }[];
 }
 
-export interface OnboardingProblem {
-  step: string;
+export interface CaseProblem {
+  section: string;
   field: string;
   message: string;
+  severity: "blocking" | "advisory";
+  index: number | null;
+  owner: "client" | "operator";
 }
 
-export interface DerivedProduct {
+export interface ChecklistRow {
+  section: string;
+  section_label: string;
+  field: string;
+  label: string;
+  help: string;
+  index: number | null;
+  scope: string;
+  evidence_required: boolean;
+  sensitive: boolean;
+}
+
+export interface InformationRequest {
+  request_id: string;
+  items: ChecklistRow[];
+  responsible_party: string;
+  status: string;
+  requested_by: string;
+  requested_at: string;
+  sent_at: string;
+  due_date: string;
+  response_note: string;
+  responded_at: string;
+  responded_by: string;
+  evidence: { name: string; reference: string; received_at?: string }[];
+  reviewed_by: string;
+  reviewed_at: string;
+  review_note: string;
+}
+
+export interface OpenQuestion {
+  question_id: string;
+  question: string;
+  origin: string;
+  raised_at: string;
+  raised_by: string;
+  resolved_at?: string;
+  resolved_by?: string;
+  resolution?: string;
+}
+
+export interface CaseEvent {
+  event: string;
+  actor: string;
+  at: string;
+  reason: string;
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
+  detail: Record<string, unknown>;
+}
+
+export interface ProductEligibility {
+  label: string;
   applies: boolean;
   eligible: boolean;
   derived: boolean;
   reason: string;
 }
 
-export interface AdoptionGap {
-  step: string;
-  field: string;
-  label: string;
-  why: string;
-}
+/** Answers are shaped by the catalogue: a block per section, a list per
+ *  repeatable section, and regime answers nested per product. */
+export type CaseAnswers = Record<string, unknown>;
 
-export interface OnboardingDraft {
-  draft_id: string;
+export interface OnboardingCase {
+  case_id: string;
+  kind: CaseKind;
+  kind_label: string;
+  status: CaseStatus;
+  status_label: string;
   client_id: string;
-  /** new | adopted | current */
-  origin: string;
-  based_on_version: number | null;
-  step: OnboardingStep;
-  steps: { key: OnboardingStep; label: string; problems: number }[];
-  profile: OnboardingProfile;
-  derived_reporting: Record<string, DerivedProduct>;
-  derived_sources: SourceRegistrationStanding[];
-  /** Where an adopted value came from, in operator wording. */
-  provenance: Record<string, string>;
-  gaps: AdoptionGap[];
-  sources_read: string[];
-  problems: OnboardingProblem[];
-  problems_by_step: Record<string, OnboardingProblem[]>;
-  ready: boolean;
+  client_name: string;
+  portfolios: number;
+  outstanding_requests: InformationRequest[] | number;
+  unresolved_questions: OpenQuestion[] | number;
+  updated_at: string;
+  updated_by: string;
   created_by: string;
-  created_at: string;
+  answers: CaseAnswers;
+  provenance: Record<string, string>;
+  based_on_version: number | null;
+  information_requests: InformationRequest[];
+  open_questions: OpenQuestion[];
+  events: CaseEvent[];
+  product_eligibility: Record<string, ProductEligibility>;
+  steps: { key: string; label: string; problems: number }[];
+  problems: CaseProblem[];
+  blocking: CaseProblem[];
+  by_step: Record<string, CaseProblem[]>;
+  client_checklist: ChecklistRow[];
+  ready: boolean;
+  approved_by: string;
+  approved_at: string;
+  approval_reason: string;
+  activated_version: number | null;
+  withdrawal_reason: string;
 }
 
-export interface PlannedSourceRecord extends SourceRegistrationStanding {
-  action: string;
-  expected_location: string;
-  portfolio_label: string;
+export interface PlannedSourceRecord {
   client_id: string;
   source_portfolio_id: string;
+  dataset: string;
+  frequency: string;
+  source_system: string | null;
+  regime_required: boolean;
+  status: string;
+  action: string;
+  portfolio_label: string;
+  expected_location: string;
 }
 
 export interface PlannedArtefact {
   kind: string;
   rel: string;
   label: string;
-  /** create | update | unchanged */
   action: string;
   text: string;
   previous_text: string;
@@ -218,7 +236,7 @@ export interface PlannedArtefact {
   summary: string[];
 }
 
-export interface ProfileChange {
+export interface AnswerChange {
   path: string;
   label: string;
   before: string;
@@ -226,50 +244,67 @@ export interface ProfileChange {
   action: string;
 }
 
-export interface OnboardingReview {
-  draft_id: string;
-  client_id: string;
-  profile: OnboardingProfile;
+export interface CasePreview extends Omit<OnboardingCase, "answers"> {
   artefacts: PlannedArtefact[];
-  changes: ProfileChange[];
-  problems: OnboardingProblem[];
-  ready: boolean;
+  changes: AnswerChange[];
   current_version: number;
   next_version: number;
-  unrepresented: UnrepresentedField[];
+  unrepresented: { key?: string; label: string; reason: string; product?: string }[];
+  generated_identifiers: { label: string; value: string }[];
+  defaults_used: { label: string; value: string; section: string }[];
+  answers: CaseAnswers;
 }
 
-export interface OnboardingClientRow {
+export interface CaseRow {
+  case_id: string;
+  kind: CaseKind;
+  kind_label: string;
+  status: CaseStatus;
+  status_label: string;
   client_id: string;
-  /** onboarded | legacy */
-  status: string;
+  client_name: string;
+  portfolios: number;
+  outstanding_requests: number;
+  unresolved_questions: number;
+  updated_at: string;
+  updated_by: string;
+  created_by: string;
+}
+
+export interface ActiveClientRow {
+  client_id: string;
   display_name: string;
   version: number;
   portfolios: number;
   products: string[];
-  updated_at: string;
-  updated_by: string;
-  open_drafts: number;
-  summary: string;
+  activated_at: string;
+  activated_by: string;
 }
 
-export interface WrittenArtefact {
-  kind: string;
-  target: string;
-  action: string;
-  detail: Record<string, unknown>;
+export interface OnboardingHome {
+  drafts: CaseRow[];
+  awaiting_client: CaseRow[];
+  in_review: CaseRow[];
+  approved: CaseRow[];
+  active_clients: ActiveClientRow[];
+  legacy_clients: { client_id: string; display_name: string }[];
+  recently_completed: CaseRow[];
 }
 
-export interface ProfileVersionRow {
+export interface ConfigurationVersionRow {
   version: number;
   status: string;
   approved_by: string;
   approved_at: string;
+  activated_by: string;
+  activated_at: string;
   reason: string;
+  case_id: string;
+  case_kind: string;
   based_on_version: number | null;
   change_count: number;
-  changes: ProfileChange[];
-  artefacts: WrittenArtefact[];
+  changes: AnswerChange[];
+  artefacts: { kind: string; target: string; action: string }[];
   content_hash: string;
 }
 
@@ -277,22 +312,21 @@ export interface OnboardingClientDetail {
   client_id: string;
   status: string;
   version: number;
-  approved_by?: string;
-  approved_at?: string;
+  activated_by?: string;
+  activated_at?: string;
   reason?: string;
-  content_hash?: string;
-  profile: OnboardingProfile | null;
-  derived_reporting?: Record<string, DerivedProduct>;
+  answers: CaseAnswers | null;
   live_source_registrations: Record<string, unknown>[];
-  artefacts: WrittenArtefact[];
-  unrepresented?: UnrepresentedField[];
-  history: ProfileVersionRow[];
+  artefacts?: { kind: string; target: string; action: string }[];
+  cases: CaseRow[];
+  history: ConfigurationVersionRow[];
   summary?: string;
 }
 
-export interface ApprovalResult {
-  version: number;
+export interface ActivationResult {
+  case_id: string;
   client_id: string;
-  artefacts: WrittenArtefact[];
-  changes: ProfileChange[];
+  version: number;
+  artefacts: { kind: string; target: string; action: string }[];
+  changes: AnswerChange[];
 }
