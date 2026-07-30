@@ -25,6 +25,13 @@ logger = logging.getLogger("trakt.blob_trigger.occ_intake")
 
 LEGACY_SENTINEL = "_READY.json"
 
+#: The only dataset in scope for regime (ESMA Annex 2) reporting. Everything else
+#: — pipeline, forecast — is an MI view and is separated from the funded delivery.
+DATASET_FUNDED = "funded"
+
+OUTCOME_MI = "mi"
+OUTCOME_MI_ANNEX2 = "mi_annex2"
+
 
 def _engine():
     from operations_control.engine import OpsEngine
@@ -32,17 +39,51 @@ def _engine():
     return OpsEngine(OpsStore.from_env())
 
 
-def _outcome_for(engine, client_id: str, portfolio_id: str) -> str:
-    """Workflow selection for automated arrivals: regime-required sources get
-    the full Annex 2 delivery workflow, everything else MI."""
+def _outcome_for(engine, client_id: str, portfolio_id: str,
+                 dataset: str) -> str:
+    """Workflow selection for automated arrivals.
+
+    Two rules, in this order:
+
+    1. Only the FUNDED book is ever in scope for regime reporting. Pipeline is a
+       forward-looking MI view and must never produce an ESMA Annex 2 delivery,
+       whatever the registry says — so it short-circuits before any lookup and no
+       flag can pull it in.
+    2. A funded book — direct OR acquired — gets the full Annex 2 delivery
+       workflow when its source is flagged ``regime_required``. Acquired is not a
+       second-class book; whether it is in scope is the registry's decision, not
+       the book type's.
+
+    The lookup matches on dataset only, never frequency: an acquired book is
+    registered at the frequency of its first delivery (commonly ad hoc) and is
+    reported monthly thereafter, so a frequency-keyed lookup would find it once
+    and miss it forever after.
+    """
+    if dataset != DATASET_FUNDED:
+        logger.info("intake: dataset %r is MI-only by rule (regime reporting "
+                    "applies to the funded book)", dataset)
+        return OUTCOME_MI
     try:
-        rec = engine._source_registry().lookup(client_id, portfolio_id,
-                                               "funded", "monthly")
-        if rec is not None and rec.regime_required:
-            return "mi_annex2"
+        records = engine._source_registry().records_for_dataset(
+            client_id, portfolio_id, DATASET_FUNDED)
     except Exception:  # noqa: BLE001
-        pass
-    return "mi"
+        # Never let a registry problem silently decide a regime question.
+        logger.exception(
+            "intake: could not read the source registry for %s/%s; defaulting "
+            "to %s. If this book is regime-required its Annex 2 delivery has "
+            "NOT been produced.", client_id, portfolio_id, OUTCOME_MI)
+        return OUTCOME_MI
+
+    if not records:
+        logger.warning(
+            "intake: no funded source record for %s/%s, so regime scope is "
+            "unknown; defaulting to %s", client_id, portfolio_id, OUTCOME_MI)
+        return OUTCOME_MI
+    if any(r.regime_required for r in records):
+        logger.info("intake: %s/%s is regime-required -> %s",
+                    client_id, portfolio_id, OUTCOME_MI_ANNEX2)
+        return OUTCOME_MI_ANNEX2
+    return OUTCOME_MI
 
 
 def handle_arrival(container: str, blob_path: str, *,
@@ -63,11 +104,17 @@ def handle_arrival(container: str, blob_path: str, *,
 
     engine = _engine()
     client_id = parsed.client_id
-    outcome = _outcome_for(engine, client_id, parsed.source_portfolio_id)
+    outcome = _outcome_for(engine, client_id, parsed.source_portfolio_id,
+                           parsed.dataset)
+    # `dataset` keeps a pipeline arrival in its own input pack. Without it the
+    # pack is keyed on client + portfolio + period + workflow only, so a pipeline
+    # file and a funded file for the same portfolio and period that both resolve
+    # to MI would be assessed as one delivery.
     batch = engine.create_batch(
         client_id=client_id, portfolio_id=parsed.source_portfolio_id,
         reporting_date=parsed.reporting_period, workflow_type=outcome,
-        created_by="blob-trigger", auto_start_when_ready=True)
+        created_by="blob-trigger", auto_start_when_ready=True,
+        dataset=parsed.dataset)
 
     if filename == LEGACY_SENTINEL:
         # Sentinel is unsupported: recorded + audited, never triggers a run.

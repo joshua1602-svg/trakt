@@ -329,7 +329,11 @@ class OpsEngine:
     def create_batch(self, *, client_id: str, portfolio_id: str,
                      reporting_date: str, workflow_type: str,
                      created_by: str,
-                     auto_start_when_ready: bool = False) -> Dict[str, Any]:
+                     auto_start_when_ready: bool = False,
+                     dataset: str = "") -> Dict[str, Any]:
+        """``dataset`` separates a non-funded delivery (pipeline) into its own
+        input pack. Omitted or ``"funded"`` reproduces the existing pack identity
+        exactly, so nothing already in flight is disturbed."""
         if workflow_type not in OUTCOMES:
             raise OpsError("OPS_BAD_OUTCOME",
                            "Choose what Trakt should prepare.", 400)
@@ -337,7 +341,7 @@ class OpsEngine:
             tenant_id=client_id, client_id=client_id,
             portfolio_id=portfolio_id, reporting_date=reporting_date,
             workflow_type=workflow_type, created_by=created_by,
-            auto_start_when_ready=auto_start_when_ready)
+            auto_start_when_ready=auto_start_when_ready, dataset=dataset)
 
     def register_batch_file(self, *, client_id: str, batch_id: str,
                             source_path: str, received_by: str

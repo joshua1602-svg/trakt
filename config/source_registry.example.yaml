@@ -45,6 +45,10 @@ sources:
     mapping_config_path: config/client/mappings/ere_direct_pipeline_weekly.yaml
     expected_schema_fingerprint: null   # PIN via `python -m apps.blob_trigger_app.repin`
     expected_columns: []
+    # Pipeline is MI-only by RULE, not by this flag: the intake short-circuits
+    # every non-funded dataset to the MI workflow before it reads the registry,
+    # so setting this to true here would have no effect. Regime scope is a
+    # question only the funded book can answer.
     regime_required: false       # pipeline → MI-only, never Regime/ESMA
     status: active
 
@@ -64,5 +68,9 @@ sources:
     mapping_config_path: null
     expected_schema_fingerprint: null
     expected_columns: []
+    # Frequency does NOT affect regime scope. An acquired book is registered at
+    # the frequency of its first delivery (ad hoc here) and reported monthly
+    # afterwards; the intake matches on client/portfolio/dataset only, so this
+    # record governs every later monthly delivery too.
     regime_required: true        # acquired funded book in scope for ESMA → target=all
     status: pending_review

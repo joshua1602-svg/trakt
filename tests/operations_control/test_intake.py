@@ -371,3 +371,218 @@ class TestSentinelRemoval:
         assert "PACK_MARKER" not in src
         assert "handle_blob_event" not in src
         assert "occ_intake" in src
+
+class TestDatasetRouting:
+    """Which workflow an automated arrival gets, and which pack it joins.
+
+    The business rules these encode:
+      * the FUNDED book — direct or acquired — is regime-reportable when the
+        registry says so; acquired is not a second-class book;
+      * an acquired book is registered at the frequency of its first delivery and
+        reported monthly thereafter, so frequency must not decide scope;
+      * PIPELINE is strictly an MI view and is never regime-reportable;
+      * a pipeline delivery is its own input pack, not part of the funded one.
+
+    Before this, the registry lookup was hardcoded to ("funded", "monthly"), so an
+    acquired funded book registered ad hoc silently lost its Annex 2 delivery.
+    """
+
+    def _bridge(self, store, source_registry, tmp_path, monkeypatch):
+        from apps.blob_trigger_app import occ_intake
+        engine = _mk(store, source_registry, tmp_path)
+        monkeypatch.setattr(occ_intake, "_engine", lambda: engine)
+        return engine, occ_intake
+
+    @staticmethod
+    def _record(portfolio, dataset, frequency, regime):
+        from apps.blob_trigger_app.source_registry import SourceRecord
+        return SourceRecord(client_id="client_a", source_portfolio_id=portfolio,
+                            dataset=dataset, frequency=frequency,
+                            regime_required=regime)
+
+    # -- funded: direct and acquired are treated alike -------------------- #
+
+    @pytest.mark.parametrize("book,portfolio", [("direct", "direct_001"),
+                                                ("acquired", "acquired_001")])
+    def test_regime_required_funded_book_gets_annex2(
+            self, store, source_registry, tmp_path, monkeypatch, book, portfolio):
+        engine, occ_intake = self._bridge(store, source_registry, tmp_path,
+                                          monkeypatch)
+        source_registry.upsert(self._record(portfolio, "funded", "monthly", True))
+        assert occ_intake._outcome_for(engine, "client_a", portfolio,
+                                       "funded") == "mi_annex2"
+
+    def test_acquired_registered_ad_hoc_keeps_annex2_when_reported_monthly(
+            self, store, source_registry, tmp_path, monkeypatch):
+        """THE REGRESSION. Registered on its first (ad hoc) delivery, reported
+        monthly afterwards — scope must not depend on the frequency."""
+        engine, occ_intake = self._bridge(store, source_registry, tmp_path,
+                                          monkeypatch)
+        source_registry.upsert(
+            self._record("acquired_001", "funded", "ad_hoc", True))
+        # The monthly delivery that follows must still be Annex 2.
+        assert occ_intake._outcome_for(engine, "client_a", "acquired_001",
+                                       "funded") == "mi_annex2"
+
+    def test_funded_book_not_flagged_is_mi(self, store, source_registry,
+                                           tmp_path, monkeypatch):
+        engine, occ_intake = self._bridge(store, source_registry, tmp_path,
+                                          monkeypatch)
+        source_registry.upsert(
+            self._record("direct_001", "funded", "monthly", False))
+        assert occ_intake._outcome_for(engine, "client_a", "direct_001",
+                                       "funded") == "mi"
+
+    def test_unknown_portfolio_falls_back_to_mi(self, store, source_registry,
+                                                tmp_path, monkeypatch):
+        engine, occ_intake = self._bridge(store, source_registry, tmp_path,
+                                          monkeypatch)
+        assert occ_intake._outcome_for(engine, "client_a", "unknown_001",
+                                       "funded") == "mi"
+
+    # -- pipeline is strictly MI ------------------------------------------ #
+
+    def test_pipeline_is_mi_even_when_the_registry_flags_regime(
+            self, store, source_registry, tmp_path, monkeypatch):
+        """No registry flag may pull a pipeline view into regime reporting."""
+        engine, occ_intake = self._bridge(store, source_registry, tmp_path,
+                                          monkeypatch)
+        source_registry.upsert(
+            self._record("direct_001", "pipeline", "weekly", True))
+        source_registry.upsert(
+            self._record("direct_001", "funded", "monthly", True))
+        assert occ_intake._outcome_for(engine, "client_a", "direct_001",
+                                       "pipeline") == "mi"
+
+    def test_forecast_is_also_mi_only(self, store, source_registry, tmp_path,
+                                      monkeypatch):
+        engine, occ_intake = self._bridge(store, source_registry, tmp_path,
+                                          monkeypatch)
+        source_registry.upsert(
+            self._record("direct_001", "funded", "monthly", True))
+        assert occ_intake._outcome_for(engine, "client_a", "direct_001",
+                                       "forecast") == "mi"
+
+    # -- pack identity ------------------------------------------------------ #
+
+    def test_funded_pack_id_is_unchanged_by_the_new_parameter(
+            self, store, source_registry, tmp_path):
+        """No existing pack may be re-keyed: packs part-way through collection
+        must not be stranded by this change."""
+        engine = _mk(store, source_registry, tmp_path)
+        args = dict(client_id="client_a", portfolio_id="pf1",
+                    reporting_date="2026-06-30", workflow_type="mi")
+        before = engine.intake.deterministic_batch_id(**args)
+        assert engine.intake.deterministic_batch_id(**args, dataset="") == before
+        assert engine.intake.deterministic_batch_id(
+            **args, dataset="funded") == before
+
+    def test_pipeline_gets_its_own_pack(self, store, source_registry, tmp_path):
+        engine = _mk(store, source_registry, tmp_path)
+        args = dict(client_id="client_a", portfolio_id="pf1",
+                    reporting_date="2026-06-30", workflow_type="mi")
+        funded = engine.intake.deterministic_batch_id(**args, dataset="funded")
+        pipeline = engine.intake.deterministic_batch_id(**args,
+                                                        dataset="pipeline")
+        assert pipeline != funded
+
+    def test_pipeline_and_funded_same_period_do_not_share_a_pack(
+            self, store, source_registry, tmp_path):
+        """Same portfolio, same period, both resolving to MI: previously one pack,
+        so a pipeline file was assessed as part of the funded delivery."""
+        engine = _mk(store, source_registry, tmp_path)
+        common = dict(client_id="client_a", portfolio_id="pf1",
+                      reporting_date="2026-06-30", workflow_type="mi",
+                      created_by="test")
+        funded = engine.create_batch(**common, dataset="funded")
+        pipeline = engine.create_batch(**common, dataset="pipeline")
+        assert funded["batch_id"] != pipeline["batch_id"]
+        assert funded["dataset"] == "funded"
+        assert pipeline["dataset"] == "pipeline"
+
+    def test_batch_created_without_a_dataset_records_the_funded_default(
+            self, store, source_registry, tmp_path):
+        engine = _mk(store, source_registry, tmp_path)
+        batch = _batch(engine)
+        assert batch["dataset"] == "funded"
+
+    # -- end to end through the real trigger path --------------------------- #
+
+    @staticmethod
+    def _download_from(local_dir: Path):
+        def _dl(container: str, path: str, dest_dir: Path) -> Path:
+            name = path.rsplit("/", 1)[-1]
+            dest = dest_dir / name
+            dest.write_bytes((local_dir / name).read_bytes())
+            return dest
+        return _dl
+
+    @pytest.mark.parametrize("blob_path,portfolio,expect_dataset", [
+        ("client_a/direct/funded/monthly/pf1/2026-06-30/loan_tape_2026.csv",
+         "pf1", "funded"),
+        ("client_a/acquired/funded/ad_hoc/pf1/2026-06-30/loan_tape_2026.csv",
+         "pf1", "funded"),
+        ("client_a/direct/pipeline/weekly/pf1/2026-06-30/loan_tape_2026.csv",
+         "pf1", "pipeline"),
+    ])
+    def test_all_three_categories_register(
+            self, store, source_registry, tmp_path, monkeypatch,
+            blob_path, portfolio, expect_dataset):
+        """Pipeline, Funded–Direct and Funded–Acquired all reach OCC intake.
+        Only Funded–Direct–monthly was covered before."""
+        engine, occ_intake = self._bridge(store, source_registry, tmp_path,
+                                          monkeypatch)
+        src = tmp_path / "blobs"
+        _tape(src, name="loan_tape_2026.csv")
+        result = occ_intake.handle_arrival(
+            "raw-v2", blob_path, download=self._download_from(src))
+        assert result["registered"] is True
+        batch = engine.intake.load_batch("client_a", result["batch_id"])
+        assert batch["dataset"] == expect_dataset
+
+    def test_pipeline_and_funded_arrivals_land_in_different_packs(
+            self, store, source_registry, tmp_path, monkeypatch):
+        engine, occ_intake = self._bridge(store, source_registry, tmp_path,
+                                          monkeypatch)
+        src = tmp_path / "blobs"
+        _tape(src, name="loan_tape_2026.csv")
+        funded = occ_intake.handle_arrival(
+            "raw-v2",
+            "client_a/direct/funded/monthly/pf1/2026-06-30/loan_tape_2026.csv",
+            download=self._download_from(src))
+        pipeline = occ_intake.handle_arrival(
+            "raw-v2",
+            "client_a/direct/pipeline/weekly/pf1/2026-06-30/loan_tape_2026.csv",
+            download=self._download_from(src))
+        assert funded["batch_id"] != pipeline["batch_id"]
+
+    def test_late_pipeline_file_stays_in_the_pipeline_pack(
+            self, store, source_registry, tmp_path, monkeypatch):
+        """A file arriving after the run started opens a successor pack. That
+        successor must stay in the pipeline key space, not fall back to funded."""
+        engine, occ_intake = self._bridge(store, source_registry, tmp_path,
+                                          monkeypatch)
+        src = tmp_path / "blobs"
+        _tape(src, name="loan_tape_2026.csv")
+        first = occ_intake.handle_arrival(
+            "raw-v2",
+            "client_a/direct/pipeline/weekly/pf1/2026-06-30/loan_tape_2026.csv",
+            download=self._download_from(src))
+        batch = engine.intake.load_batch("client_a", first["batch_id"])
+        assert batch["dataset"] == "pipeline"
+
+        # Force the started-batch path, then register a late file directly.
+        batch["status"] = "running"
+        engine.intake.save_batch(batch)
+        _tape(src, name="late_addition.csv")
+        successor = engine.intake.register_file(
+            batch, src / "late_addition.csv", received_by_or_source="test")
+        assert successor["batch_id"] != batch["batch_id"]
+        assert successor["dataset"] == "pipeline"
+
+        # And it must not collide with the funded pack for the same period.
+        funded = engine.intake.deterministic_batch_id(
+            client_id="client_a", portfolio_id="pf1",
+            reporting_date="2026-06-30",
+            workflow_type=batch["workflow_type"], dataset="funded")
+        assert not successor["batch_id"].startswith(funded)
