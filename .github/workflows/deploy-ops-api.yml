@@ -191,6 +191,35 @@ jobs:
             "${{ secrets.AZURE_OPS_API_RESOURCE_GROUP }}" \
             "$APP_NAME"
 
+      - name: Settle after the ARM calls, before deploying
+        # Azure killed a 1052-second Oryx build mid-flight and said exactly why:
+        #
+        #   status=3 (failed) "Deployment has been stopped due to SCM container
+        #   restart. The restart can happen due to a management operation on site.
+        #   Do not perform a management operation and a deployment operation in
+        #   quick succession. Adding a small delay can help avoid any conflicts."
+        #
+        # Oryx builds straight into /home/site/wwwroot (PreDeployment:
+        # context.OutputPath /home/site/wwwroot, CleanOutputPath False), so a
+        # mid-build kill leaves the application files in place with NO
+        # oryx-manifest.toml, NO antenv and NO __oryx_packages__ — and the worker
+        # then dies with "ModuleNotFoundError: No module named 'uvicorn'".
+        # Restarting only replays that broken startup; only a completed build fixes
+        # it.
+        #
+        # The steps above only READ from ARM (webapp show / config show /
+        # appsettings list), but they are still control-plane calls against this
+        # site immediately before a deployment, which is precisely the pattern the
+        # message warns about. Wait before submitting the zip.
+        env:
+          OPS_SETTLE_SECONDS: '60'
+        run: |
+          set -euo pipefail
+          echo "Waiting ${OPS_SETTLE_SECONDS}s so the SCM container is not restarted"
+          echo "by a management operation while the Oryx build is running."
+          sleep "${OPS_SETTLE_SECONDS}"
+          echo "Settled. Submitting the deployment."
+
       - name: Deploy to trakt-ops-api (asynchronous, polled)
         # Scoped by name to this service only. No other App Service is deployed,
         # configured or restarted by this workflow.
@@ -213,6 +242,52 @@ jobs:
             "$APP_NAME" \
             1800
 
+      - name: Assert the Oryx build left a usable Python environment
+        # A deployment that reports Success but produced no virtual environment is
+        # the exact state that broke this service: application files present in
+        # /home/site/wwwroot, but no oryx-manifest.toml, no antenv and no
+        # __oryx_packages__, so gunicorn dies with
+        # "ModuleNotFoundError: No module named 'uvicorn'".
+        #
+        # Assert the build artefacts exist rather than inferring their absence from
+        # a later startup failure. Read-only VFS reads against Kudu.
+        run: |
+          set -euo pipefail
+          TOKEN="$(az account get-access-token --resource https://management.azure.com/ \
+                    --query accessToken -o tsv)"
+          probe() {
+            curl -sS -o /dev/null -w '%{http_code}' --max-time 60 \
+              -H "Authorization: Bearer $TOKEN" \
+              "https://${OPS_SCM_HOST}/api/vfs/site/wwwroot/$1" 2>/dev/null
+          }
+          MISSING=0
+          # antenv/ and __oryx_packages__/ are directories: VFS needs a trailing
+          # slash, and either may be used depending on the Oryx version.
+          MANIFEST="$(probe oryx-manifest.toml)"
+          echo "oryx-manifest.toml   -> HTTP ${MANIFEST:-000}"
+          [ "${MANIFEST:-000}" = "200" ] || MISSING=1
+
+          ANTENV="$(probe 'antenv/')"
+          PKGS="$(probe '__oryx_packages__/')"
+          echo "antenv/              -> HTTP ${ANTENV:-000}"
+          echo "__oryx_packages__/   -> HTTP ${PKGS:-000}"
+          if [ "${ANTENV:-000}" != "200" ] && [ "${PKGS:-000}" != "200" ]; then
+            MISSING=1
+          fi
+
+          if [ "$MISSING" -ne 0 ]; then
+            echo
+            echo "FAIL: the deployment reported success but /home/site/wwwroot has no"
+            echo "      Oryx build output. The dependency install did not complete, so"
+            echo "      the worker will fail with ModuleNotFoundError. Restarting the"
+            echo "      App Service will NOT fix this — only a completed build will."
+            echo "      Most likely the build was killed mid-flight by an SCM container"
+            echo "      restart (a management operation landing on the site during the"
+            echo "      build); re-run this workflow, which now settles first."
+            exit 1
+          fi
+          echo "OK: the Oryx build output is present in /home/site/wwwroot"
+
       - name: Verify the deployed service answers
         # /health needs no token, so it is a clean post-deploy probe. It also
         # reports auth_configured, which catches the most likely misconfiguration
@@ -221,24 +296,36 @@ jobs:
         # Uses the DISCOVERED public hostname from the earlier step. Building
         # <app>.azurewebsites.net here would fail DNS on a site with secure unique
         # default hostnames and be misreported as "the service did not start".
+        #
+        # The job must not pass unless this returns exactly 200: assert the status
+        # code explicitly rather than inferring success from a non-empty body.
         run: |
           set -euo pipefail
           echo "probing https://${OPS_APP_HOST}/health"
-          for attempt in 1 2 3 4 5 6; do
-            body="$(curl -fsS --max-time 20 "https://${OPS_APP_HOST}/health" || true)"
-            if [ -n "$body" ]; then
-              echo "$body"
-              echo "$body" | grep -q '"service":"operations-control"' \
-                || echo "WARNING: /health did not identify as operations-control"
-              echo "$body" | grep -q '"auth_configured":true' \
-                || echo "WARNING: TRAKT_OPS_OPERATORS is not set — every route will answer 503"
-              exit 0
-            fi
-            echo "attempt $attempt: not up yet, waiting"
+          CODE=000
+          for attempt in 1 2 3 4 5 6 7 8; do
+            CODE="$(curl -sS -o health.json -w '%{http_code}' --max-time 20 \
+                     "https://${OPS_APP_HOST}/health" 2>/dev/null)"
+            CODE="${CODE:-000}"
+            echo "attempt $attempt: HTTP $CODE"
+            [ "$CODE" = "200" ] && break
             sleep 20
           done
-          echo "Service did not answer /health after the deploy."
-          exit 1
+
+          if [ "$CODE" != "200" ]; then
+            echo "FAIL: /health returned HTTP $CODE, not 200. The service is not"
+            echo "      serving after this deployment. Diagnostics follow."
+            [ -s health.json ] && sed 's/^/      /' health.json
+            exit 1
+          fi
+
+          cat health.json; echo
+          grep -q '"service":"operations-control"' health.json || {
+            echo "FAIL: /health did not identify as operations-control."; exit 1; }
+          grep -q '"auth_configured":true' health.json \
+            || echo "WARNING: TRAKT_OPS_OPERATORS is not set — every route will answer 503"
+          echo "OK: /health returned 200 and the service identifies correctly"
+          rm -f health.json
 
       # ------------------------------------------------------------------ #
       # Self-diagnosis. Runs on ANY failure above, including a deploy that
