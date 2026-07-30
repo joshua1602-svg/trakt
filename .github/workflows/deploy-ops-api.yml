@@ -136,17 +136,41 @@ jobs:
           tenant-id: ${{ secrets.AZURE_OPS_API_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_OPS_API_SUBSCRIPTION_ID }}
 
-      - name: Deploy to trakt-ops-api
-        # Scoped by name to this service only. Oryx builds requirements.txt and
-        # runs the configured startup command
-        # (bash deploy/trakt-ops-api/startup-ops.sh). No other App Service is
-        # deployed, configured or restarted by this workflow.
+      - name: Pre-flight — artefact listing and live App Service configuration
+        # Runs AFTER login and BEFORE upload, so a failure can be attributed to
+        # packaging or configuration without re-running anything. Prints the full
+        # `unzip -l`, proves requirements.txt is at the ARCHIVE ROOT (not nested),
+        # reports .deployment presence, and queries the live values of
+        # SCM_DO_BUILD_DURING_DEPLOYMENT / ENABLE_ORYX_BUILD /
+        # WEBSITE_RUN_FROM_PACKAGE / linuxFxVersion / appCommandLine.
+        # Fails fast only on combinations known to break a build-on-deploy.
         run: |
-          az webapp deploy \
-            --resource-group "${{ secrets.AZURE_OPS_API_RESOURCE_GROUP }}" \
-            --name "$APP_NAME" \
-            --src-path ops-api.zip \
-            --type zip
+          bash deploy/trakt-ops-api/preflight_checks.sh \
+            ops-api.zip \
+            "${{ secrets.AZURE_OPS_API_RESOURCE_GROUP }}" \
+            "$APP_NAME"
+
+      - name: Deploy to trakt-ops-api (asynchronous, polled)
+        # Scoped by name to this service only. No other App Service is deployed,
+        # configured or restarted by this workflow.
+        #
+        # ASYNCHRONOUS ON PURPOSE. A synchronous `az webapp deploy` holds one HTTP
+        # request open to the SCM front end for the whole Oryx build. App Service's
+        # front end enforces a fixed ~230-second idle timeout that cannot be raised,
+        # so a build that outlives it returns 502/504 to the caller even when the
+        # build is still running or ultimately succeeds — which is exactly the
+        # "HTTP_504 GatewayTimeout after ~4 minutes" signature. Submitting with
+        # isAsync=true returns 202 in seconds; the script then polls
+        # /api/deployments/latest and streams the log until the record completes,
+        # and distinguishes status 4 (Failed) from 5 (Success).
+        env:
+          POLL_SECONDS: '15'
+        run: |
+          bash deploy/trakt-ops-api/deploy_async.sh \
+            ops-api.zip \
+            "${{ secrets.AZURE_OPS_API_RESOURCE_GROUP }}" \
+            "$APP_NAME" \
+            1800
 
       - name: Verify the deployed service answers
         # /health needs no token, so it is a clean post-deploy probe. It also
@@ -169,3 +193,33 @@ jobs:
           done
           echo "Service did not answer /health after the deploy."
           exit 1
+
+      # ------------------------------------------------------------------ #
+      # Self-diagnosis. Runs on ANY failure above, including a deploy that
+      # timed out, so the job never ends with only an opaque HTTP status.
+      # ------------------------------------------------------------------ #
+      - name: Collect deployment diagnostics
+        if: failure()
+        # Prints: az webapp log deployment show / list, the latest Kudu deployment
+        # record (the decisive "did it fail, or did my call just time out?"), the
+        # Kudu deployment log INCLUDING the nested details that carry the Oryx build
+        # output, the Oryx build log from the site filesystem, the container/runtime
+        # docker log, the downloaded runtime log bundle, the current site config and
+        # deployment-relevant app settings, and a live /health probe. Best-effort
+        # per source and never masks the failure it is reporting on.
+        continue-on-error: true
+        run: |
+          bash deploy/trakt-ops-api/collect_diagnostics.sh \
+            "${{ secrets.AZURE_OPS_API_RESOURCE_GROUP }}" \
+            "$APP_NAME"
+
+      - name: Upload diagnostics artefact
+        if: failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: ops-api-deployment-diagnostics
+          path: |
+            _diagnostics/
+          retention-days: 14
+          if-no-files-found: warn
