@@ -22,6 +22,8 @@ Options:
     --no-cors-token-header omit X-Operator-Token from allow-headers
     --omit-api-url         build a bundle WITHOUT the API base URL inlined
     --embed-token          embed the operator token in the bundle (must be caught)
+    --unbuilt-index        serve the UNBUILT project index.html (the project
+                           directory was uploaded instead of dist/)
 """
 
 from __future__ import annotations
@@ -54,23 +56,36 @@ INDEX_HTML = (
     "</head><body><div id=\"root\"></div></body></html>"
 ).encode()
 
+#: The UNBUILT project index.html, byte-for-byte in the shape that matters: it
+#: has the same root element (so a naive probe passes) but points at the dev
+#: module entry and references no hashed asset. Uploading the project directory
+#: instead of dist/ serves exactly this.
+SOURCE_INDEX_HTML = (
+    "<!doctype html><html lang=\"en\"><head><title>Trakt Operations</title>"
+    "</head><body><div id=\"root\"></div>"
+    '<script type="module" src="/src/main.tsx"></script>'
+    "</body></html>"
+).encode()
 
-def make_frontend_handler(bundle: bytes):
+
+def make_frontend_handler(bundle: bytes, *, unbuilt: bool = False):
+    index = SOURCE_INDEX_HTML if unbuilt else INDEX_HTML
+
     class FrontendHandler(BaseHTTPRequestHandler):
         def log_message(self, *args):  # silence
             pass
 
         def do_GET(self):
             if self.path == "/" or self.path == "/index.html":
-                self._send(200, INDEX_HTML, "text/html")
-            elif self.path == f"/assets/{ASSET_NAME}":
+                self._send(200, index, "text/html")
+            elif self.path == f"/assets/{ASSET_NAME}" and not unbuilt:
                 self._send(200, bundle, "text/javascript")
             elif self.path == "/health":
                 # Excluded from navigationFallback, so it must NOT return the app.
                 self._send(404, b"not found", "text/plain")
             else:
                 # navigationFallback: any other route serves the app shell.
-                self._send(200, INDEX_HTML, "text/html")
+                self._send(200, index, "text/html")
 
         def _send(self, code, body, ctype):
             self.send_response(code)
@@ -151,8 +166,9 @@ def main() -> None:
         embed_token="--embed-token" in flags,
     )
 
-    frontend = ThreadingHTTPServer(("127.0.0.1", frontend_port),
-                                  make_frontend_handler(bundle))
+    frontend = ThreadingHTTPServer(
+        ("127.0.0.1", frontend_port),
+        make_frontend_handler(bundle, unbuilt="--unbuilt-index" in flags))
     api = ThreadingHTTPServer(("127.0.0.1", api_port), make_api_handler(opts))
     threading.Thread(target=frontend.serve_forever, daemon=True).start()
     threading.Thread(target=api.serve_forever, daemon=True).start()

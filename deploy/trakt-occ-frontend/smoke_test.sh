@@ -51,10 +51,21 @@ if [ "$CODE" = "200" ]; then ok "GET / -> 200"; else bad "GET / -> $CODE (expect
 cp "$WORK/body" "$WORK/index.html" 2>/dev/null || true
 
 if grep -q '<div id="root"' "$WORK/index.html" 2>/dev/null; then
-  ok "the served page is the OCC application shell"
+  ok "the served page contains the application root element"
 else
   bad "the served page does not contain the application root element" \
       "the SWA may be serving a placeholder instead of the built app"
+fi
+
+# The UNBUILT source index.html also contains <div id="root">, so the check above
+# passes for it. It is distinguishable by the dev-server module entry, which no
+# build output ever contains. Naming this precisely matters: it means the wrong
+# directory was uploaded, not that the build or the API is broken.
+if grep -q '/src/main.tsx' "$WORK/index.html" 2>/dev/null; then
+  bad "the served page is the UNBUILT source index.html" \
+      "it references /src/main.tsx, so the project directory was uploaded instead of dist/ — the app cannot boot"
+else
+  ok "the served page is a build output, not the source page"
 fi
 
 echo "=== 2. Frontend assets load ==="

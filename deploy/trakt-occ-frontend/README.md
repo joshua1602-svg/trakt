@@ -36,10 +36,30 @@ separate workflows. That existing workflow is untouched.
 
 | File | Purpose |
 |---|---|
-| `frontend/operations-control-ui/staticwebapp.config.json` | SPA fallback + security headers |
+| `frontend/operations-control-ui/public/staticwebapp.config.json` | SPA fallback + security headers |
 | `.github/workflows/deploy-occ-frontend.yml` | build, verify, deploy, smoke test |
 | `deploy/trakt-occ-frontend/smoke_test.sh` | post-deployment verification |
 | `deploy/trakt-occ-frontend/tests/` | tests for the smoke test, with a fixture frontend + API |
+
+### What gets uploaded, and why `app_location` points at `dist`
+
+The workflow builds locally and deploys with `skip_app_build: true`, so the
+artefact that ships is the one whose wiring was just verified. With that flag the
+deploy action treats **`app_location` as the already-built content root and
+ignores `output_location`** — so `app_location` must be
+`frontend/operations-control-ui/dist`, not the project directory.
+
+Pointing it at the project directory uploads the source tree, and the served
+`index.html` is then the unbuilt one that references `/src/main.tsx`. That page
+still contains `<div id="root">`, so it looks healthy to a probe that only checks
+for the root element, but no `/assets/*` exists and the app never boots. The
+build step now fails if `dist/index.html` references `/src/main.tsx` or no hashed
+bundle, and the smoke test names this case explicitly.
+
+Because the uploaded root is `dist/`, `staticwebapp.config.json` lives in
+`public/` — Vite copies `publicDir` contents to the output root, so it lands at
+`dist/staticwebapp.config.json`. At the project root it would be left behind and
+SPA deep links would 404. The build step asserts it is present in `dist/`.
 
 ### Why `staticwebapp.config.json` was needed
 

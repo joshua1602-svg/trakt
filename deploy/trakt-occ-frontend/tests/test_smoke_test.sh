@@ -100,6 +100,18 @@ start_fixture --embed-token
 expect_fail "operator token in the bundle -> failure demanding rotation" \
   "$(run_smoke)" "rotate it"
 
+echo "=== 6b. The UNBUILT source page is caught, not passed as healthy ==="
+# This is what a real deployment served: the project directory was uploaded
+# instead of dist/, so index.html referenced /src/main.tsx. It still has
+# <div id="root">, so a root-element check alone reports a healthy shell.
+start_fixture --unbuilt-index
+RC="$(run_smoke)"
+expect_fail "unbuilt index.html -> failure naming the source page" \
+  "$RC" "UNBUILT source index.html"
+grep -q "the project directory was uploaded instead of dist/" "$WORK/out" \
+  && { PASS=$((PASS+1)); echo "  PASS  the failure names the wrong upload directory"; } \
+  || { FAIL=$((FAIL+1)); echo "  FAIL  the failure did not explain the cause"; }
+
 echo "=== 7. A missing smoke token is reported, not silently skipped ==="
 start_fixture
 SMOKE_TOKEN="" expect_fail "no OPS_SMOKE_OPERATOR_TOKEN -> failure naming the secret" \
