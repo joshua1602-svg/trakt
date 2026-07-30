@@ -36,6 +36,8 @@ POLL_SECONDS="${POLL_SECONDS:-15}"
 # "curl: (6) Could not resolve host" and HTTP 000.
 # shellcheck source=deploy/trakt-ops-api/azure_hosts.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/azure_hosts.sh"
+# shellcheck source=deploy/trakt-ops-api/kudu_status.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/kudu_status.sh"
 
 echo ">> Discovering the SCM (Kudu) endpoint from the site resource"
 SCM_HOST="$(discover_scm_host "$RG" "$APP")" || exit 1
@@ -107,8 +109,8 @@ try:
     d = json.load(sys.stdin)
 except Exception:
     print('UNPARSEABLE|||'); raise SystemExit(0)
-# Kudu status codes: 0/1=Pending, 2=Building, 3=Deploying, 4=Failed, 5=Success.
-# 'complete' is the field to branch on; 'status_text'/'progress' carry detail.
+# Status codes are interpreted by classify_deploy_status (kudu_status.sh), which
+# owns the DeployStatus enum. 'status_text'/'progress' carry the human detail.
 print('|'.join([
     str(d.get('id', '')),
     str(d.get('status', '')),
@@ -122,8 +124,9 @@ print('|'.join([
   COMPLETE="$(printf '%s' "$PARSED" | cut -d'|' -f3)"
   DETAIL="$(printf '%s' "$PARSED" | cut -d'|' -f4)"
 
-  printf '   [%4ds] status=%s complete=%s %s\n' \
-    "$ELAPSED" "${STATUS_CODE:-?}" "${COMPLETE:-?}" "${DETAIL:-}"
+  printf '   [%4ds] status=%s (%s) complete=%s %s\n' \
+    "$ELAPSED" "${STATUS_CODE:-?}" "$(deploy_status_label "${STATUS_CODE:-}")" \
+    "${COMPLETE:-?}" "${DETAIL:-}"
 
   # Stream new log lines as they appear, so a long build is observable rather
   # than a silent wait.
@@ -148,18 +151,27 @@ for e in entries[skip:]:
     fi
   fi
 
-  if [ "$COMPLETE" = "True" ] || [ "$COMPLETE" = "true" ]; then
-    # 4 = Failed, 5 = Success in Kudu's DeployStatus enum.
-    if [ "$STATUS_CODE" = "4" ]; then
+  case "$(classify_deploy_status "${STATUS_CODE:-}" "${COMPLETE:-}")" in
+    success)
       echo
-      echo "FAIL: the deployment completed with status 4 (Failed) after ${ELAPSED}s."
-      echo "      This is a genuine BUILD/DEPLOY failure, not a timeout."
+      echo ">> Deployment SUCCEEDED after ${ELAPSED}s (status ${STATUS_CODE})."
+      exit 0
+      ;;
+    failed)
+      echo
+      echo "FAIL: the deployment completed with status ${STATUS_CODE} (Failed)"
+      echo "      after ${ELAPSED}s. This is a genuine BUILD/DEPLOY failure,"
+      echo "      not a timeout. Diagnostics follow."
       exit 1
-    fi
-    echo
-    echo ">> Deployment completed after ${ELAPSED}s (status $STATUS_CODE)."
-    exit 0
-  fi
+      ;;
+    unexpected)
+      echo
+      echo "FAIL: the deployment reported complete=${COMPLETE} with an"
+      echo "      unrecognised status '${STATUS_CODE}'. Failing closed rather"
+      echo "      than assuming success. Diagnostics follow."
+      exit 1
+      ;;
+  esac
 
   sleep "$POLL_SECONDS"
 done

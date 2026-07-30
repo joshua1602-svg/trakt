@@ -76,15 +76,24 @@ jobs:
             --deselect "tests/operations_control/test_annex2_delivery.py::TestRealComponentsMiniGolden::test_normaliser_and_builder_pass_xsd" \
             --deselect "tests/operations_control/test_annex2_delivery.py::TestRealComponentsMiniGolden::test_builder_interventions_are_captured"
 
-      - name: Test App Service hostname discovery
-        # Runs before any Azure call and needs no Azure access: a stub `az`
-        # supplies fixture hostnames. Covers the legacy form
-        # (app.scm.azurewebsites.net), the secure-unique form
-        # (app-hash.scm.westeurope-01.azurewebsites.net), the rejection cases that
-        # protect the URL a bearer token is sent to, and a guard asserting that no
-        # deployment script assembles a hostname from the app name — the defect
-        # that produced "Could not resolve host" / HTTP 000.
-        run: bash deploy/trakt-ops-api/tests/test_host_discovery.sh
+      - name: Test the deployment scripts
+        # All three suites run with stubbed `az`/`curl` and need no Azure access.
+        #
+        #  * host discovery — the legacy form (app.scm.azurewebsites.net), the
+        #    secure-unique form (app-hash.scm.westeurope-01.azurewebsites.net),
+        #    the rejection cases that protect the URL a bearer token is sent to,
+        #    and a guard that no script assembles a hostname from the app name
+        #    (that defect produced "Could not resolve host" / HTTP 000).
+        #  * Kudu status — the DeployStatus enum pinned to the codes observed in a
+        #    real run (0=Pending, 1=Building, 2=Deploying, 3=Failed, 4=Success).
+        #    An off-by-one here reported a SUCCESSFUL deployment as a failure.
+        #  * replay — drives the real deploy script through that run's status
+        #    sequence end to end, plus a genuine failure and a never-completing
+        #    build, so the classifier AND its wiring are both covered.
+        run: |
+          bash deploy/trakt-ops-api/tests/test_host_discovery.sh
+          bash deploy/trakt-ops-api/tests/test_kudu_status.sh
+          bash deploy/trakt-ops-api/tests/test_deploy_async_replay.sh
 
       - name: Build deployment package
         # The runtime closure of operations_control.api.app, established by

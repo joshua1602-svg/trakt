@@ -122,7 +122,8 @@ try "az webapp log deployment list" \
 
 section "C. LATEST KUDU DEPLOYMENT RECORD — /api/deployments/latest"
 # The authoritative answer to "did it actually fail, or did only my HTTP call
-# time out?". status 5 = Success, 4 = Failed; complete=false means STILL RUNNING.
+# time out?". Kudu DeployStatus: 0=Pending, 1=Building, 2=Deploying, 3=Failed,
+# 4=Success. complete=false means STILL RUNNING.
 kudu "/api/deployments/latest"
 
 section "D. ALL KUDU DEPLOYMENTS — /api/deployments"
@@ -251,17 +252,19 @@ section "K. HOW TO READ THIS"
 cat <<'GUIDE'
   Section C is decisive. Match it to one of these:
 
-    complete=false, status=2 (Building)      -> the build is STILL RUNNING. Your
+  Kudu DeployStatus: 0=Pending, 1=Building, 2=Deploying, 3=Failed, 4=Success.
+
+    complete=false, status=1 (Building)      -> the build is STILL RUNNING. Your
                                                 deploy call timed out; the
                                                 deployment did not fail. Fix by
                                                 deploying asynchronously (this
                                                 repo now does) or by shrinking
                                                 the Oryx build.
-    complete=true,  status=5 (Success)       -> the deployment SUCCEEDED after the
-                                                client gave up. Same conclusion:
-                                                the 504 was a client-side wait,
-                                                not a failure.
-    complete=true,  status=4 (Failed)        -> a genuine failure. Section E's
+    complete=true,  status=4 (Success)       -> the deployment SUCCEEDED, possibly
+                                                after the client gave up. Any 504
+                                                was a client-side wait, not a
+                                                failure.
+    complete=true,  status=3 (Failed)        -> a genuine failure. Section E's
                                                 nested details carry the Oryx
                                                 build output and the reason.
     no deployment record at all              -> the upload never reached Kudu.
