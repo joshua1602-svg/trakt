@@ -29,6 +29,15 @@ jobs:
         # Every runtime package the trigger can import MUST ship, or the Function
         # host cannot register the trigger. Keep this list in sync with .funcignore
         # (which serves the same intent for `func azure functionapp publish`).
+        #
+        # operations_control/ is required by the OCC intake path:
+        #   function_app.py:107        from apps.blob_trigger_app import occ_intake
+        #   occ_intake.py:30-31        from operations_control.engine import OpsEngine
+        # Both imports are INSIDE functions, so the host starts and the trigger
+        # registers without them — the omission only surfaces on the first blob
+        # arrival. .funcignore never excluded operations_control/, so a
+        # `func azure functionapp publish` shipped it while this workflow did not:
+        # the two deployment paths had drifted apart.
         run: |
           zip -r deploy.zip \
             function_app.py \
@@ -36,6 +45,7 @@ jobs:
             requirements.txt \
             apps/ \
             engine/ \
+            operations_control/ \
             mi_agent/ \
             mi_agent_api/ \
             mi_agent_pptx/ \
@@ -54,20 +64,22 @@ jobs:
         # artifact into a clean dir, install azure-functions, and import
         # function_app the way the Functions host does — so an incomplete package
         # fails the build here, not silently in production.
+        # See deploy/trakt-function-app/verify_package.py for what is checked and
+        # why. In short: the manifest must contain the packages reached by LAZY
+        # imports inside the handler, requirements.txt must DECLARE every
+        # third-party module that closure needs (the old check pip-installed a
+        # hardcoded list, so a missing declaration was invisible), and the import
+        # probe must walk the whole lazy chain rather than stopping at
+        # `import function_app` — which succeeds even when operations_control is
+        # absent.
         run: |
           set -euo pipefail
-          unzip -l deploy.zip | grep -E 'function_app.py|host.json|requirements.txt'
-          # Every runtime package the entrypoint imports must be present.
-          for pkg in apps/blob_trigger_app/__init__.py engine/__init__.py \
-                     mi_agent_api/__init__.py; do
-            unzip -l deploy.zip | grep -q "$pkg" || {
-              echo "DEPLOY PACKAGE INCOMPLETE: missing $pkg"; exit 1; }
-          done
-          rm -rf _pkgcheck && mkdir _pkgcheck
-          unzip -q deploy.zip -d _pkgcheck
-          python -m pip install --quiet "azure-functions>=1.17" pyyaml \
-            "pandas>=1.5,<3.0" openpyxl
-          ( cd _pkgcheck && python -c "import function_app; print('import function_app OK')" )
+          # Manifest + declaration checks first: they need no dependencies, and
+          # they emit the exact requirement lines to install for the import probe.
+          python deploy/trakt-function-app/verify_package.py deploy.zip \
+            --skip-imports --emit-requirements _check_reqs.txt
+          python -m pip install --quiet -r _check_reqs.txt
+          python deploy/trakt-function-app/verify_package.py deploy.zip
 
       - name: Login to Azure
         uses: azure/login@v2
