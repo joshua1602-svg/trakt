@@ -1,7 +1,17 @@
-# Docs for the Azure Web Apps Deploy action: https://github.com/azure/functions-action
-# More GitHub Actions for Azure: https://github.com/Azure/actions
-# More info on Python, GitHub Actions, and Azure Functions: https://aka.ms/python-webapps-actions
-
+# Sole deployment workflow for the Function App trakt-blob-trigger-v2
+# (Flex Consumption plan).
+#
+# main_trakt.yml previously deployed this SAME app on every push to main. The two
+# raced, and the loser reported:
+#   "ERROR: Deployment was cancelled and another deployment is in progress."
+# The winner was consistently this workflow, which ran with remote-build
+# defaulting to false — so Azure installed nothing from requirements.txt and the
+# Event Grid trigger died on its first lazy import with
+# `ModuleNotFoundError: No module named 'yaml'`. main_trakt.yml has been retired;
+# verify_flex_workflow.py now fails the build if a second deploying workflow
+# reappears.
+#
+# Docs for the Azure Functions Deploy action: https://github.com/azure/functions-action
 name: Build and deploy Python project to Azure Function App - trakt-blob-trigger-v2
 
 on:
@@ -10,15 +20,21 @@ on:
       - main
   workflow_dispatch:
 
+# One deployment of this app at a time. Each Flex Consumption deployment
+# overwrites the current package, and overlapping runs cancel each other.
+concurrency:
+  group: deploy-trakt-blob-trigger-v2
+  cancel-in-progress: false
+
 env:
-  AZURE_FUNCTIONAPP_PACKAGE_PATH: '.' # set this to the path to your web app project, defaults to the repository root
-  PYTHON_VERSION: '3.11' # set this to the python version to use (supports 3.6, 3.7, 3.8)
+  PYTHON_VERSION: '3.11'
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     permissions:
-      contents: read #This is required for actions/checkout
+      id-token: write # required for requesting the OIDC JWT
+      contents: read  # required for actions/checkout
 
     steps:
       - name: Checkout repository
@@ -29,45 +45,73 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Create and start virtual environment
+      # No venv, no `pip install -r requirements.txt`, no .python_packages: with
+      # remote-build: true the platform resolves dependencies. The previous
+      # attempt at a local build did not work anyway — `source venv/bin/activate`
+      # ran in its own step (each `run:` is a separate shell), so pip installed
+      # into the runner's system Python rather than
+      # ./.python_packages/lib/site-packages where the worker looks.
+
+      - name: Assert exactly one workflow deploys this app, with Flex-correct inputs
+        # The architecture fault, encoded. Static: no Azure, no network.
         run: |
-          python -m venv venv
-          source venv/bin/activate
+          set -euo pipefail
+          python -m pip install --quiet pyyaml
+          python deploy/trakt-function-app/verify_flex_workflow.py workflow
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      # Optional: Add step to run tests here
-
-      - name: Zip artifact for deployment
-        run: zip release.zip ./* -r
-
-      - name: Upload artifact for deployment job
-        uses: actions/upload-artifact@v4
-        with:
-          name: python-app
-          path: |
-            release.zip
-            !venv/
-
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
-    permissions:
-      id-token: write #This is required for requesting the JWT
-      contents: read #This is required for actions/checkout
-
-    steps:
-      - name: Download artifact from build job
-        uses: actions/download-artifact@v4
-        with:
-          name: python-app
-
-      - name: Unzip artifact for deployment
+      - name: Create deployment package
+        # A curated archive, not `zip release.zip ./* -r`. That glob silently
+        # dropped every dotfile — including .funcignore, so nothing was excluded —
+        # while shipping the entire repository and a useless venv/. Package size
+        # matters here: remote build has a 60-second timeout.
+        #
+        # operations_control/ is required by the OCC intake path:
+        #   function_app.py:107        from apps.blob_trigger_app import occ_intake
+        #   occ_intake.py:30-31        from operations_control.engine import OpsEngine
+        # Both imports are INSIDE functions, so the host starts and the trigger
+        # registers without them — the omission only surfaces on the first blob.
         run: |
-          unzip release.zip
-          rm release.zip
-        
+          zip -r deploy.zip \
+            function_app.py \
+            host.json \
+            requirements.txt \
+            apps/ \
+            engine/ \
+            operations_control/ \
+            mi_agent/ \
+            mi_agent_api/ \
+            mi_agent_pptx/ \
+            analytics_lib/ \
+            config/ \
+            -x "*.pyc" "*/__pycache__/*" "*/tests/*" "*/test_*"
+
+      - name: Show package size
+        run: ls -lh deploy.zip
+
+      - name: Verify the package
+        # Remote build installs exactly what requirements.txt DECLARES, so both
+        # halves are checked against the real artefact: the lazily imported
+        # packages are in the archive, and every third-party module that closure
+        # needs is declared. The import probe then walks the whole lazy chain
+        # rather than stopping at `import function_app`, which succeeds even when
+        # operations_control is absent. See deploy/trakt-function-app/README.md.
+        #
+        # The pip install here is for CI's import probe only; nothing installed
+        # on the runner is shipped.
+        run: |
+          set -euo pipefail
+          python deploy/trakt-function-app/verify_flex_workflow.py package deploy.zip
+          python deploy/trakt-function-app/verify_package.py deploy.zip \
+            --skip-imports --emit-requirements _check_reqs.txt
+          python -m pip install --quiet -r _check_reqs.txt
+          python deploy/trakt-function-app/verify_package.py deploy.zip
+
+      - name: Test the deployment verification scripts
+        run: |
+          set -euo pipefail
+          python deploy/trakt-function-app/tests/test_verify_flex_workflow.py
+          bash deploy/trakt-function-app/tests/test_verify_flex_app.sh
+
       - name: Login to Azure
         uses: azure/login@v2
         with:
@@ -75,11 +119,36 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_3C63C5B751A04788894B7099C6C581AB }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_18370BCB59144E92901AC8C175A66691 }}
 
+      - name: Verify the app is on a Flex Consumption plan
+        # remote-build is the FLEX control. If this app were moved to Dedicated or
+        # Elastic Premium the parameter would stop having any effect and the
+        # deployment would install nothing — silently, exactly as before.
+        run: bash deploy/trakt-function-app/verify_flex_app.sh plan trakt trakt-blob-trigger-v2
+
       - name: 'Deploy to Azure Functions'
         uses: Azure/functions-action@v1
         id: deploy-to-function
         with:
           app-name: 'trakt-blob-trigger-v2'
-          slot-name: 'Production'
-          package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
-          
+          package: 'deploy.zip'
+          # THE FIX. Without this the action defaults to false, meaning "the
+          # packages were resolved in the workflow" — and the platform installs
+          # nothing. On Flex Consumption an Oryx build is always performed during
+          # a remote build, so a failed dependency install fails this step.
+          remote-build: true
+          # Deliberately NOT set:
+          #   slot-name                      — not supported in Flex Consumption
+          #   sku                            — only needed with publish-profile;
+          #                                    the action resolves it from RBAC
+          #   scm-do-build-during-deployment — Dedicated/Elastic-Premium controls;
+          #   enable-oryx-build                Microsoft's Flex guidance is
+          #                                    explicitly not to set them
+
+      - name: Verify the deployed package was loaded and the trigger registered
+        # The deploy step succeeding with remote-build: true is what proves the
+        # dependencies installed. This proves the resulting package is what the
+        # host is actually running.
+        run: |
+          set -euo pipefail
+          sleep 30
+          bash deploy/trakt-function-app/verify_flex_app.sh indexed trakt trakt-blob-trigger-v2
