@@ -1,0 +1,197 @@
+name: Deploy OCC frontend (Static Web App)
+
+# Builds and deploys the Operations Control Centre React app
+# (frontend/operations-control-ui) to its OWN Azure Static Web App.
+#
+# This is a SEPARATE Static Web App from the MI dashboard. The existing workflow
+# azure-static-web-apps-nice-smoke-067ac7603.yml deploys frontend/mi-agent-ui
+# with VITE_AGENT_API_URL and is not touched here — the two apps have different
+# API base URLs, different authentication models and independent release
+# cadences.
+#
+# It also touches no backend: trakt-ops-api, trakt-mi-api, the blob trigger and
+# the ops-api OIDC deployment identity are all unchanged. Static Web Apps deploy
+# with their own deployment token, which is that service's mechanism.
+#
+# The OCC calls the API CROSS-ORIGIN with an absolute base URL, so two settings
+# must agree:
+#   * this build's VITE_OPS_API_URL  -> where the browser sends requests
+#   * the API's TRAKT_OPS_CORS_ORIGINS -> which origins the API answers
+# The smoke test fails loudly if either is wrong.
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'frontend/operations-control-ui/**'
+      - '.github/workflows/deploy-occ-frontend.yml'
+      - 'deploy/trakt-occ-frontend/**'
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches: [ main ]
+    paths:
+      - 'frontend/operations-control-ui/**'
+      - '.github/workflows/deploy-occ-frontend.yml'
+      - 'deploy/trakt-occ-frontend/**'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pull-requests: write   # the SWA action posts the preview URL on PRs
+
+concurrency:
+  group: deploy-occ-frontend-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  APP_LOCATION: frontend/operations-control-ui
+  # The deployed trakt-ops-api. This belongs to the FRONTEND BUILD — Vite inlines
+  # it into the bundle at build time. It is deliberately NOT an App Service
+  # setting: the API never reads it.
+  VITE_OPS_API_URL: https://trakt-ops-api-bveyecbeh6ebarfa.westeurope-01.azurewebsites.net
+
+jobs:
+  build_and_deploy:
+    if: github.event_name != 'pull_request' || github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    name: Build and deploy the OCC frontend
+    outputs:
+      frontend_url: ${{ steps.builddeploy.outputs.static_web_app_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/operations-control-ui/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ env.APP_LOCATION }}
+        run: npm ci
+
+      - name: Type-check and test
+        # The same gates the app already defines: `lint` is tsc --noEmit and
+        # `test` is the vitest suite, including the administrator-area coverage.
+        working-directory: ${{ env.APP_LOCATION }}
+        run: |
+          npm run lint
+          npm run test
+
+      - name: Test the smoke test
+        # The post-deployment check runs against a local fixture frontend + API to
+        # prove it passes a correct deployment and FAILS each likely
+        # misconfiguration — missing CORS origin, wildcard CORS, an auth header the
+        # API will not accept, a bundle built without the API URL, and a token
+        # embedded in the public bundle. A smoke test that cannot fail is
+        # decoration.
+        run: bash deploy/trakt-occ-frontend/tests/test_smoke_test.sh
+
+      - name: Build
+        working-directory: ${{ env.APP_LOCATION }}
+        run: npm run build
+
+      - name: Verify the build is wired to the API and carries no secret
+        # Vite inlines import.meta.env.VITE_OPS_API_URL at build time
+        # (src/api/HttpOpsClient.ts). If it were missing, baseUrl falls back to ""
+        # and the app would silently call its own origin — a blank dashboard with
+        # no error pointing at the cause. Assert it landed, and assert the bundle
+        # ships no token.
+        working-directory: ${{ env.APP_LOCATION }}
+        run: |
+          set -euo pipefail
+          test -f dist/index.html || { echo "no dist/index.html — the build produced nothing"; exit 1; }
+          test -f staticwebapp.config.json || { echo "no staticwebapp.config.json — SPA deep links would 404"; exit 1; }
+          if grep -rqF "$VITE_OPS_API_URL" dist/assets/*.js; then
+            echo "OK: the bundle is built against $VITE_OPS_API_URL"
+          else
+            echo "FAIL: VITE_OPS_API_URL was not inlined into the bundle."
+            echo "      The app would call its own origin, which serves no API."
+            exit 1
+          fi
+          if grep -rqF "X-Operator-Token" dist/assets/*.js; then
+            echo "OK: the bundle sends the X-Operator-Token header"
+          else
+            echo "FAIL: the bundle does not reference X-Operator-Token."
+            exit 1
+          fi
+          # The operator token is typed in at runtime and held in localStorage;
+          # it must never be compiled in. The storage KEY name is expected.
+          if [ -n "${OPS_SMOKE_OPERATOR_TOKEN:-}" ] \
+             && grep -rqF "${OPS_SMOKE_OPERATOR_TOKEN}" dist/; then
+            echo "FAIL: an operator token is embedded in the build output. Rotate it."
+            exit 1
+          fi
+          echo "OK: no operator token in the build output"
+        env:
+          OPS_SMOKE_OPERATOR_TOKEN: ${{ secrets.OPS_SMOKE_OPERATOR_TOKEN }}
+
+      - name: Deploy to Azure Static Web Apps
+        id: builddeploy
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_OCC }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: ${{ env.APP_LOCATION }}
+          api_location: ''
+          # Upload the already-built output rather than letting Oryx rebuild it:
+          # the build above is the one whose wiring was just verified.
+          output_location: dist
+          skip_app_build: true
+
+      - name: Report the deployed hostname
+        # Taken from the deploy action's own output, so it is the real hostname
+        # (including a PR preview environment) rather than an assumed one.
+        run: |
+          set -euo pipefail
+          URL="${{ steps.builddeploy.outputs.static_web_app_url }}"
+          if [ -z "$URL" ]; then
+            echo "The deploy action did not report a hostname."
+            exit 1
+          fi
+          echo "OCC frontend deployed to: $URL"
+          echo "API base URL in the bundle: $VITE_OPS_API_URL"
+          echo
+          echo "The API must allow this exact origin. On trakt-ops-api set:"
+          echo "  TRAKT_OPS_CORS_ORIGINS=$URL"
+          {
+            echo "### OCC frontend deployed"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Frontend | $URL |"
+            echo "| API | $VITE_OPS_API_URL |"
+            echo ""
+            echo "Required on \`trakt-ops-api\`:"
+            echo ""
+            echo '```'
+            echo "TRAKT_OPS_CORS_ORIGINS=$URL"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Post-deployment smoke test
+        # Frontend 200, assets load, bundle wired and secret-free, API /health,
+        # unauthenticated /ops/me refused, authenticated /ops/me and
+        # /ops/dashboard, and CORS for this exact origin.
+        env:
+          OPS_SMOKE_OPERATOR_TOKEN: ${{ secrets.OPS_SMOKE_OPERATOR_TOKEN }}
+        run: |
+          bash deploy/trakt-occ-frontend/smoke_test.sh \
+            "${{ steps.builddeploy.outputs.static_web_app_url }}" \
+            "$VITE_OPS_API_URL"
+
+  close_pull_request:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    name: Close the preview environment
+    steps:
+      - name: Close
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_OCC }}
+          action: close
