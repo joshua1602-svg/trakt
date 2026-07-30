@@ -28,6 +28,13 @@ coupling MI's worker count to the OCC's concurrency requirement.
 | `deploy/trakt-ops-api/provision.sh` | one-shot `az` provision + deploy; refuses to target `trakt-mi-api` |
 | `deploy/trakt-ops-api/app_settings.example.json` | the app settings, with no real secrets |
 | `deploy/trakt-ops-api/verify_package.py` | proves an unpacked artefact can import the app and has the files it resolves at runtime |
+| `deploy/trakt-ops-api/azure_hosts.sh` | discovers the SCM and public hostnames (never constructs them — secure unique default hostnames carry a hash) |
+| `deploy/trakt-ops-api/kudu_status.sh` | the single copy of Kudu's `DeployStatus` enum: `Pending=0, Building=1, Deploying=2, Failed=3, Success=4` |
+| `deploy/trakt-ops-api/preflight_checks.sh` | artefact listing plus live App Service configuration, before any upload |
+| `deploy/trakt-ops-api/deploy_async.sh` | submits with `isAsync=true` and polls, so the ~230s SCM front-end timeout cannot mask a long build |
+| `deploy/trakt-ops-api/oryx_manifest.py` | reads `oryx-manifest.toml` and reports the build mode and which artefact should exist |
+| `deploy/trakt-ops-api/verify_oryx_output.sh` | post-deploy evidence: manifest present and its declared output on the site. **Not** the gate |
+| `deploy/trakt-ops-api/collect_diagnostics.sh` | runs on any failure: deployment record, Oryx build log, container logs, site config |
 | `.github/workflows/deploy-ops-api.yml` | test + build + OIDC deploy, scoped to `trakt-ops-api` |
 | `requirements.txt` (repo root) | Oryx install set — already carries `fastapi` / `uvicorn[standard]` / `gunicorn` / `uvicorn-worker` / `PyYAML` / `pandas` / `lxml` |
 
@@ -196,10 +203,66 @@ Repository secrets required:
 | `AZURE_OPS_API_SUBSCRIPTION_ID` | subscription containing `trakt-ops-api` |
 | `AZURE_OPS_API_RESOURCE_GROUP` | resource group of `trakt-ops-api` |
 
-Steps: install deps → run targeted OCC tests → build the artefact → verify the
-artefact imports and is frontend-free → OIDC login → `az webapp deploy --name
-trakt-ops-api` → probe `/health`. No other App Service is deployed, configured or
-restarted.
+Steps: install deps → run targeted OCC tests → run the deployment-script tests →
+build the artefact → verify the artefact imports and is frontend-free → OIDC login
+→ discover hostnames → pre-flight → settle → asynchronous deploy (polled) →
+inspect the Oryx build output → **probe `/health`** → optional authenticated probe.
+No other App Service is deployed, configured or restarted.
+
+### Post-deployment verification: what is the gate
+
+**`/health` returning `200` is the gate.** If the app serves, its dependencies
+imported — whatever layout Oryx published. Everything on the filesystem is
+evidence for attributing a failure, not a pass/fail condition.
+
+`verify_oryx_output.sh` asserts only what the manifest itself declares:
+
+1. `oryx-manifest.toml` must exist — the runtime needs it to locate the build
+   output.
+2. It is parsed (`oryx_manifest.py`) to determine the build mode, and then the
+   artefact **that manifest declares** must exist.
+3. `antenv/` and `__oryx_packages__/` are printed as observations and are **never
+   required**.
+
+Point 3 is a correction. The earlier version asserted:
+
+```bash
+if antenv != 200 && __oryx_packages__ != 200; then fail   # WRONG
+```
+
+which assumes the uncompressed layout. This service builds with
+`--compress-destination-dir`:
+
+```
+Copied the compressed output to '/home/site/wwwroot'
+Direct compression with zstd done
+Manifest file created
+Total execution done
+```
+
+In that mode `/home/site/wwwroot` holds a single compressed artefact
+(`output.tar.zst`) plus `oryx-manifest.toml`, and the runtime extracts it at
+startup. No expanded directory is published, so the assertion reported a build
+that had installed 91 packages — including `pyyaml==6.0.3`, with the deployment
+record showing `complete=true` and `status=4` (Success) — as a hard failure.
+
+A completed deployment (`complete=true`, `status=4`) has completed. A verification
+failure after it is a fault in the verification until proven otherwise, and is not
+evidence that the build was interrupted. The separate "settle" step addresses a
+genuine historical incident in which Azure *did* stop a build part-way and said so
+in the deployment record; that is a different condition, distinguishable because
+the record reports `status=3`.
+
+Optional authenticated probe: when the repository secret
+`OPS_SMOKE_OPERATOR_TOKEN` is set, the workflow also calls `/ops/me` with it and
+requires `200`. This is the one thing `/health` cannot tell you — `/health` reports
+only whether `TRAKT_OPS_OPERATORS` is *set*, not whether a token in it is
+accepted. Without the secret the step reports SKIPPED; the token is passed by
+environment and never echoed.
+
+If `/health` fails, the step dumps the container log stream (`/api/logs/docker`)
+inline before exiting, so the import error is next to the failure rather than only
+in the diagnostics artefact.
 
 Two real-component Annex 2 golden tests are **deselected by name** in the test
 step (`TestRealComponentsMiniGolden::test_normaliser_and_builder_pass_xsd` and
