@@ -403,6 +403,14 @@ export const copy = {
     classifying: "Looking at the files",
     review_required: "Needs review",
     configuration_required: "Configuration needed",
+    // Configuration package lifecycle (the administrator area).
+    draft: "Draft",
+    active: "Active",
+    superseded: "Replaced",
+    valid: "Valid",
+    not_checked: "Not checked",
+    passed: "Valid",
+    failed_checks: "Not valid",
   } as Record<string, string>,
 };
 

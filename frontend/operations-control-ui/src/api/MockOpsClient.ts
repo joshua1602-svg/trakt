@@ -1,6 +1,19 @@
 import { MockConfigAdmin } from "./MockConfigAdmin";
 import { OpsError, type OpsClient } from "./OpsClient";
 import type {
+  AuditTrail,
+  Comparison,
+  ConfigCatalogue,
+  ConfigLayer,
+  ConfigOverview,
+  ConfigVersion,
+  CreateDraftInput,
+  ImpactAnalysis,
+  Principal,
+  ValidationResult,
+  ValidationSummary,
+} from "./adminTypes";
+import type {
   Batch,
   BatchInputRole,
   CreateBatchInput,
