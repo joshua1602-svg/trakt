@@ -84,8 +84,12 @@ jobs:
       - name: Test the deployment verification scripts
         # These scripts are the only thing standing between a silently-empty
         # remote build and production, so their own logic is tested. No Azure
-        # access needed — the app-settings fixture is injected.
-        run: bash deploy/trakt-function-app/tests/test_verify_remote_build.sh
+        # access needed — fixtures are injected for the app settings, the Kudu
+        # responses and the script that runs on the site.
+        run: |
+          set -euo pipefail
+          bash deploy/trakt-function-app/tests/test_verify_remote_build.sh
+          python3 deploy/trakt-function-app/tests/test_kudu_probe.py
 
       - name: Login to Azure
         uses: azure/login@v2
@@ -110,6 +114,21 @@ jobs:
             --src deploy.zip \
             --build-remote true
 
+      - name: Let the SCM container settle
+        # The build completes inside the deploy command, but site-packages is
+        # written by the SCM container; give the file system a moment before
+        # probing it over VFS. On the Ops API a management operation restarting
+        # the SCM container mid-build was the actual cause of a dead site, so the
+        # gap between "the command returned" and "the site is readable" is not
+        # theoretical.
+        run: sleep 30
+
+      - name: Verify Kudu reports the deployment succeeded
+        # `az ... config-zip` exiting 0 is not the same as Kudu classifying the
+        # deployment as Success. Read the deployment record and say which it is,
+        # dumping the deployment log when it is not.
+        run: bash deploy/trakt-function-app/verify_remote_build.sh deployed trakt trakt-blob-trigger-v2
+
       - name: Verify the dependencies were installed on the Function App
         # The observed production failure was NOT a broken host: the trigger
         # fired and then died on `import yaml` inside
@@ -119,10 +138,18 @@ jobs:
         # packages installed from requirements.txt. Nothing downstream of the
         # deploy command checked, so a successful-looking deployment shipped an
         # unusable site. This step is that missing check.
-        run: |
-          set -euo pipefail
-          # The build completes inside the deploy command, but site-packages is
-          # written by the SCM container; give the file system a moment to settle
-          # before probing it over VFS.
-          sleep 20
-          bash deploy/trakt-function-app/verify_remote_build.sh installed trakt trakt-blob-trigger-v2
+        run: bash deploy/trakt-function-app/verify_remote_build.sh installed trakt trakt-blob-trigger-v2
+
+      - name: Verify the OCC intake import chain works on the deployed site
+        # The last gate: run the real import chain against the real
+        # /home/site/wwwroot with the worker's site-packages on PYTHONPATH, so
+        # the exact failing statement (engine.py:25 `import yaml`) is executed
+        # and the installed binary wheels are actually loaded — which a directory
+        # listing cannot prove.
+        #
+        # This is not an Event Grid invocation, and deliberately so: a synthetic
+        # invocation cannot be side-effect-free, because
+        # occ_intake.handle_arrival calls engine.create_batch(...) BEFORE it
+        # downloads anything, so a probe event would write a real OCC input batch
+        # and audit entries. A deployment gate must not mutate governance state.
+        run: bash deploy/trakt-function-app/verify_remote_build.sh imports trakt trakt-blob-trigger-v2

@@ -93,6 +93,53 @@ expect "values are printed" 0 \
   "$(settings SCM_DO_BUILD_DURING_DEPLOYMENT=1 ENABLE_ORYX_BUILD=true)" \
   "SCM_DO_BUILD_DURING_DEPLOYMENT = 1"
 
+echo "--- the script that runs ON the deployed site ---"
+# It is sent to Kudu inside a JSON payload, where a shell or Python typo would
+# come back only as an opaque non-zero exit code. Check it here instead.
+REMOTE="$(VERIFY_LINUXFX='Python|3.11' VERIFY_DUMP_REMOTE=1 \
+          bash "$SCRIPT" imports rg app 2>&1)"
+
+check() {
+  if eval "$2" >/dev/null 2>&1; then
+    echo "pass: $1"; PASS=$((PASS + 1))
+  else
+    echo "FAIL: $1"; FAIL=$((FAIL + 1))
+  fi
+}
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+# Strip this script's own progress lines; the remote script starts at WANT_PY=.
+printf '%s\n' "$REMOTE" | sed -n '/^WANT_PY=/,$p' > "$TMP/remote.sh"
+
+check "the remote shell script is syntactically valid" \
+      'bash -n "$TMP/remote.sh"'
+check "it targets the interpreter matching linuxFxVersion" \
+      'grep -q "WANT_PY=.3\.11." "$TMP/remote.sh"'
+check "it puts the worker site-packages on PYTHONPATH" \
+      'grep -q "\.python_packages/lib/site-packages" "$TMP/remote.sh"'
+check "it does NOT import function_app (needs the Azure worker bindings)" \
+      '! grep -q "import function_app" "$TMP/remote.sh"'
+
+# The embedded Python must compile too — extract the heredoc body.
+sed -n "/<<'PY'/,/^PY$/p" "$TMP/remote.sh" | sed '1d;$d' > "$TMP/remote.py"
+check "the embedded Python is non-empty" '[ -s "$TMP/remote.py" ]'
+check "the embedded Python compiles" \
+      'python3 -m py_compile "$TMP/remote.py"'
+check "it imports the exact chain that failed in production" \
+      'grep -q "^import yaml, pandas, numpy, openpyxl$" "$TMP/remote.py" &&
+       grep -q "from operations_control.engine import OpsEngine" "$TMP/remote.py" &&
+       grep -q "from apps.blob_trigger_app import occ_intake" "$TMP/remote.py"'
+
+# The payload is assembled with json.dumps, so quoting cannot break it. Prove the
+# round trip rather than assuming it.
+check "the remote script survives JSON encoding intact" \
+      'python3 -c "
+import json, pathlib, sys
+src = pathlib.Path(sys.argv[1]).read_text()
+assert json.loads(json.dumps({\"command\": src}))[\"command\"] == src
+" "$TMP/remote.sh"'
+
 echo "--- usage ---"
 if bash "$SCRIPT" nonsense rg app >/dev/null 2>&1; then
   echo "FAIL: an unknown mode should exit non-zero"
