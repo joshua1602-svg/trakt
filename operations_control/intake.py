@@ -27,6 +27,11 @@ from apps.blob_trigger_app.file_roles import classify_pack
 from .contracts import new_id, now_iso, stable_hash
 from .stores import OpsStore, _read_json, _write_json
 
+#: The dataset an input pack describes unless told otherwise. Only a dataset
+#: OTHER than this extends the pack identifier, so every funded pack keeps the
+#: identity it has always had.
+BATCH_DATASET_DEFAULT = "funded"
+
 REPO = Path(__file__).resolve().parents[1]
 REQUIREMENTS_PATH = REPO / "config/system/workflow_input_requirements.yaml"
 
@@ -111,19 +116,33 @@ class IntakeService:
 
     # -- batch lifecycle ----------------------------------------------------- #
     def deterministic_batch_id(self, *, client_id: str, portfolio_id: str,
-                               reporting_date: str, workflow_type: str) -> str:
-        return "batch_" + stable_hash(client_id, portfolio_id, reporting_date,
-                                      workflow_type)
+                               reporting_date: str, workflow_type: str,
+                               dataset: str = "") -> str:
+        """Identity of an input pack.
+
+        ``dataset`` extends the key ONLY when it is something other than the
+        funded book. The funded delivery is the pack this system has always
+        described, so its identifier stays byte-identical — no existing pack is
+        re-keyed and nothing part-way through collection is stranded. A pipeline
+        delivery, which is a separate MI view rather than part of the funded pack,
+        gets its own identifier from the first upload.
+        """
+        parts = [client_id, portfolio_id, reporting_date, workflow_type]
+        if dataset and dataset != BATCH_DATASET_DEFAULT:
+            parts.append(dataset)
+        return "batch_" + stable_hash(*parts)
 
     def create_batch(self, *, tenant_id: str, client_id: str,
                      portfolio_id: str, reporting_date: str,
                      workflow_type: str, created_by: str,
                      auto_start_when_ready: bool = False,
-                     batch_id: Optional[str] = None) -> Dict[str, Any]:
+                     batch_id: Optional[str] = None,
+                     dataset: str = "") -> Dict[str, Any]:
         """Create (or return the existing open) batch for this context."""
         bid = batch_id or self.deterministic_batch_id(
             client_id=client_id, portfolio_id=portfolio_id,
-            reporting_date=reporting_date, workflow_type=workflow_type)
+            reporting_date=reporting_date, workflow_type=workflow_type,
+            dataset=dataset)
         existing = self.load_batch(client_id, bid)
         if existing is not None and existing.get("status") not in (
                 B_RUNNING, B_COMPLETED, B_FAILED):
@@ -145,6 +164,10 @@ class IntakeService:
             "tenant_id": tenant_id, "client_id": client_id,
             "portfolio_id": portfolio_id, "reporting_date": reporting_date,
             "workflow_type": workflow_type,
+            # Recorded so the separation is visible in the OCC rather than implied
+            # by the identifier. Defaults to the funded book for packs created
+            # without one (manual creation from the OCC).
+            "dataset": dataset or BATCH_DATASET_DEFAULT,
             "status": B_RECEIVING,
             "status_reason": "Files are still arriving.",
             "files": [],
@@ -205,7 +228,11 @@ class IntakeService:
                 reporting_date=batch["reporting_date"],
                 workflow_type=batch["workflow_type"],
                 created_by=received_by_or_source,
-                auto_start_when_ready=batch.get("auto_start_when_ready", False))
+                auto_start_when_ready=batch.get("auto_start_when_ready", False),
+                # Carry the dataset, or a late pipeline file would open its
+                # successor in the funded pack's key space — reintroducing the
+                # very collision the dataset key exists to prevent.
+                dataset=batch.get("dataset", ""))
         data = Path(source_path).read_bytes()
         digest = "sha256:" + hashlib.sha256(data).hexdigest()
         for f in batch["files"]:

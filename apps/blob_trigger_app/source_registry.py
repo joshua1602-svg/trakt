@@ -141,6 +141,21 @@ class SourceRegistry:
         return any(r.client_id == client_id and r.source_portfolio_id == source_portfolio_id
                    for r in self._records.values())
 
+    def records_for_dataset(self, client_id: str, source_portfolio_id: str,
+                            dataset: str) -> List[SourceRecord]:
+        """Every record for one portfolio and dataset, AT ANY FREQUENCY.
+
+        Frequency is deliberately not part of the match. An acquired book is
+        registered at the frequency of its first delivery — commonly ad hoc — and
+        is then reported monthly. Keying on frequency would find the record for
+        the first upload and miss it for every one after, silently downgrading a
+        regime-required book to MI-only from the second delivery onwards.
+        """
+        return [r for r in self._records.values()
+                if r.client_id == client_id
+                and r.source_portfolio_id == source_portfolio_id
+                and r.dataset == dataset]
+
     def records_for_portfolio(self, client_id: str,
                               source_portfolio_id: str) -> List[SourceRecord]:
         """Every record for one portfolio (it may have several dataset/frequency
