@@ -44,7 +44,14 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  APP_LOCATION: frontend/operations-control-ui
+  # DO NOT name this APP_LOCATION. The Azure/static-web-apps-deploy action reads
+  # APP_LOCATION from the ENVIRONMENT, and the environment value overrides the
+  # `app_location:` input. A job-level `env: APP_LOCATION` added purely as a YAML
+  # convenience therefore silently won over `app_location: …/dist`, and the action
+  # uploaded the project directory — serving the unbuilt index.html that
+  # references /src/main.tsx. Any name the action does not read is safe; this one
+  # is prefixed to make the collision impossible.
+  OCC_APP_DIR: frontend/operations-control-ui
   # The deployed trakt-ops-api. This belongs to the FRONTEND BUILD — Vite inlines
   # it into the bundle at build time. It is deliberately NOT an App Service
   # setting: the API never reads it.
@@ -71,13 +78,13 @@ jobs:
           cache-dependency-path: frontend/operations-control-ui/package-lock.json
 
       - name: Install dependencies
-        working-directory: ${{ env.APP_LOCATION }}
+        working-directory: ${{ env.OCC_APP_DIR }}
         run: npm ci
 
       - name: Type-check and test
         # The same gates the app already defines: `lint` is tsc --noEmit and
         # `test` is the vitest suite, including the administrator-area coverage.
-        working-directory: ${{ env.APP_LOCATION }}
+        working-directory: ${{ env.OCC_APP_DIR }}
         run: |
           npm run lint
           npm run test
@@ -92,7 +99,7 @@ jobs:
         run: bash deploy/trakt-occ-frontend/tests/test_smoke_test.sh
 
       - name: Build
-        working-directory: ${{ env.APP_LOCATION }}
+        working-directory: ${{ env.OCC_APP_DIR }}
         run: npm run build
 
       - name: Verify the build is wired to the API and carries no secret
@@ -101,7 +108,7 @@ jobs:
         # and the app would silently call its own origin — a blank dashboard with
         # no error pointing at the cause. Assert it landed, and assert the bundle
         # ships no token.
-        working-directory: ${{ env.APP_LOCATION }}
+        working-directory: ${{ env.OCC_APP_DIR }}
         run: |
           set -euo pipefail
           test -f dist/index.html || { echo "no dist/index.html — the build produced nothing"; exit 1; }
@@ -151,6 +158,41 @@ jobs:
         env:
           OPS_SMOKE_OPERATOR_TOKEN: ${{ secrets.OPS_SMOKE_OPERATOR_TOKEN }}
 
+      - name: Show exactly what will be uploaded
+        # The deploy action zips its content root silently, so nothing in the log
+        # used to reveal WHICH directory shipped. That is how a correct build and a
+        # wrong upload coexisted invisibly for two deployments. Print the resolved
+        # path and a full listing, and fail if anything in the environment could
+        # override the app_location input.
+        run: |
+          set -euo pipefail
+          UPLOAD_DIR="${OCC_APP_DIR}/dist"
+          echo "app_location input will be : $UPLOAD_DIR"
+          echo "absolute path              : $(cd "$UPLOAD_DIR" && pwd)"
+          echo
+          echo "--- ls -R of the directory to be uploaded ---"
+          ls -R "$UPLOAD_DIR"
+          echo
+          echo "--- the index.html that will be served ---"
+          cat "$UPLOAD_DIR/index.html"
+          echo
+          echo "--- entry point referenced by that index.html ---"
+          grep -oE '/assets/[A-Za-z0-9._-]+\.(js|css)' "$UPLOAD_DIR/index.html" | sort -u
+
+          # Guard against the exact defect this replaced: an environment variable
+          # the action reads, silently overriding the input.
+          for reserved in APP_LOCATION APP_ARTIFACT_LOCATION OUTPUT_LOCATION \
+                          APP_BUILD_COMMAND SKIP_APP_BUILD ROUTES_LOCATION; do
+            if [ -n "$(printenv "$reserved" || true)" ]; then
+              echo "FAIL: the environment sets $reserved=$(printenv "$reserved")."
+              echo "      The Static Web Apps action reads that variable and it"
+              echo "      overrides the matching input, so the wrong directory"
+              echo "      would be uploaded. Rename it (see OCC_APP_DIR)."
+              exit 1
+            fi
+          done
+          echo "OK: no reserved Static Web Apps variable is set in the environment"
+
       - name: Deploy to Azure Static Web Apps
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
@@ -163,7 +205,7 @@ jobs:
           # project directory uploaded the source tree instead of the build: the
           # served index.html was the unbuilt one referencing /src/main.tsx, so no
           # /assets/* existed and the app never booted. Point it at dist.
-          app_location: ${{ env.APP_LOCATION }}/dist
+          app_location: ${{ env.OCC_APP_DIR }}/dist
           api_location: ''
           output_location: ''
           skip_app_build: true
@@ -197,6 +239,59 @@ jobs:
             echo "TRAKT_OPS_CORS_ORIGINS=$URL"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Assert the deployed page is the compiled build
+        # Compares what is SERVED against what was BUILT, which is the check that
+        # was missing: the build was verified and the upload was not, so a mismatch
+        # between them could not be seen. Runs before the wider smoke test so this
+        # specific failure is attributed precisely rather than surfacing as four
+        # downstream symptoms.
+        run: |
+          set -euo pipefail
+          URL="${{ steps.builddeploy.outputs.static_web_app_url }}"
+          BUILT="${OCC_APP_DIR}/dist/index.html"
+
+          # Static Web Apps serves the new content within seconds of the deploy
+          # reporting Succeeded, but not always instantly; retry briefly rather
+          # than reporting a propagation lag as a wrong upload.
+          for attempt in 1 2 3 4 5 6; do
+            curl -fsS --max-time 20 "$URL/" -o served.html && break
+            echo "attempt $attempt: no response yet"; sleep 10
+          done
+          test -s served.html || { echo "FAIL: the site did not respond"; exit 1; }
+
+          echo "--- served index.html ---"; cat served.html; echo
+
+          if grep -q '/src/main.tsx' served.html; then
+            echo "FAIL: the served page references /src/main.tsx, so the UNBUILT"
+            echo "      source index.html was uploaded, not dist/. The app cannot"
+            echo "      boot. Check the 'Show exactly what will be uploaded' step"
+            echo "      and the app_location the deploy step reported using."
+            exit 1
+          fi
+
+          # The built page names a content-hashed bundle. Requiring the SERVED page
+          # to name the same one proves the deployed artefact is this build — not an
+          # older successful deploy left in place after a later failed run.
+          BUILT_ENTRY="$(grep -oE '/assets/[A-Za-z0-9._-]+\.js' "$BUILT" | head -1)"
+          test -n "$BUILT_ENTRY" || { echo "FAIL: the built page names no bundle"; exit 1; }
+          if grep -qF "$BUILT_ENTRY" served.html; then
+            echo "OK: the served page references this build's bundle ($BUILT_ENTRY)"
+          else
+            echo "FAIL: the served page does not reference $BUILT_ENTRY."
+            echo "      It is serving different content from the build just made —"
+            echo "      most likely a previous deployment that was never replaced."
+            exit 1
+          fi
+
+          CODE="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$URL$BUILT_ENTRY")"
+          if [ "${CODE:-000}" = "200" ]; then
+            echo "OK: $BUILT_ENTRY is served (HTTP 200)"
+          else
+            echo "FAIL: $BUILT_ENTRY -> HTTP ${CODE:-000}; the bundle is not reachable"
+            exit 1
+          fi
+          rm -f served.html
 
       - name: Post-deployment smoke test
         # Frontend 200, assets load, bundle wired and secret-free, API /health,
