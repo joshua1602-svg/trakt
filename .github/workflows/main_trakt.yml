@@ -81,12 +81,26 @@ jobs:
           python -m pip install --quiet -r _check_reqs.txt
           python deploy/trakt-function-app/verify_package.py deploy.zip
 
+      - name: Test the deployment verification scripts
+        # These scripts are the only thing standing between a silently-empty
+        # remote build and production, so their own logic is tested. No Azure
+        # access needed — the app-settings fixture is injected.
+        run: bash deploy/trakt-function-app/tests/test_verify_remote_build.sh
+
       - name: Login to Azure
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_B782B4EF4C084DB68754745782B83A82 }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_EB5C7CA419CB478A891B392422373A3D }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_E4CB93E6899E4A55B8EA48212ABC8295 }}
+
+      - name: Verify the Function App will actually run a remote build
+        # `--build-remote true` asks Kudu to build, but whether Oryx installs
+        # anything is decided by the app settings on the target. If the build
+        # flags are off (or a read-only run-from-package mount is in the way) the
+        # deployment still reports SUCCESS and installs nothing. Gate before
+        # uploading, so a no-op deployment is never mistaken for a good one.
+        run: bash deploy/trakt-function-app/verify_remote_build.sh prereqs trakt trakt-blob-trigger-v2
 
       - name: Deploy to Azure Functions with remote build
         run: |
@@ -95,3 +109,20 @@ jobs:
             --name trakt-blob-trigger-v2 \
             --src deploy.zip \
             --build-remote true
+
+      - name: Verify the dependencies were installed on the Function App
+        # The observed production failure was NOT a broken host: the trigger
+        # fired and then died on `import yaml` inside
+        # operations_control/engine.py. The module-level closure of the deployed
+        # function_app.py needs only azure.functions, which the Python worker
+        # image provides, so the host starts and the trigger registers with zero
+        # packages installed from requirements.txt. Nothing downstream of the
+        # deploy command checked, so a successful-looking deployment shipped an
+        # unusable site. This step is that missing check.
+        run: |
+          set -euo pipefail
+          # The build completes inside the deploy command, but site-packages is
+          # written by the SCM container; give the file system a moment to settle
+          # before probing it over VFS.
+          sleep 20
+          bash deploy/trakt-function-app/verify_remote_build.sh installed trakt trakt-blob-trigger-v2
