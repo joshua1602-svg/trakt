@@ -408,6 +408,15 @@ export class HttpOpsClient implements OpsClient {
     });
   }
 
+  async registerSample(
+    caseId: string,
+    files: { name: string; headers?: string[] }[],
+  ): Promise<OnboardingCase> {
+    return this.caseCall(`/ops/onboarding/cases/${encodeURIComponent(caseId)}/sample`, {
+      files,
+    });
+  }
+
   async removeSource(
     caseId: string,
     portfolioId: string,

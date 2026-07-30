@@ -27,7 +27,7 @@ from ..contracts import new_id, now_iso
 from ..engine import OpsError
 from ..stores import OpsStore
 from . import artefacts as _artefacts
-from . import derivation, migration
+from . import derivation, inference, migration
 from .case import (
     ACTIVATED,
     APPROVED,
@@ -230,25 +230,48 @@ class OnboardingService:
             block = case.block(step)
             block.update({k: v for k, v in (payload or {}).items()})
 
+        # Inference runs FIRST: it may propose the client identifier, and the
+        # case has to take its identity from the answers as they finally stand,
+        # not as they arrived.
+        # Anything the operator just sent is theirs, including a deliberate
+        # blank; inference must not overwrite it on this pass.
+        self._sync_derived(case, touched={step: set((payload or {}).keys())})
         if step == "client":
             client = case.block("client")
             case.client_id = str(client.get("client_id") or "")
             case.client_name = str(client.get("client_name") or "")
-
-        self._sync_derived(case)
         case.record(f"answered_{step}", actor=by,
                     before={step: before},
                     after={step: _deep_copy(case.answers.get(step))})
         self.cases.save_case(case)
         return case
 
-    def _sync_derived(self, case: OnboardingCase) -> None:
-        """Keep everything Trakt works out for itself in step with the answers."""
+    def _sync_derived(self, case: OnboardingCase,
+                      touched: Optional[Dict[str, set]] = None) -> None:
+        """Keep everything Trakt works out for itself in step with the answers.
+
+        Runs on every save, so an answer given late still reaches the values
+        that follow from it — naming a jurisdiction fills in the currency and
+        time zone, adding the originator entity fills the Annex 2 originator
+        block, and choosing a cadence sets the period convention.
+        """
         derivation.apply_derived_defaults(case, self.catalogue)
         for entity in case.items("entities"):
             if not entity.get("entity_id"):
                 entity["entity_id"] = new_entity_id()
         case.answers["sources"] = derivation.derive_sources(case)
+        inference.apply(case, self.catalogue,
+                        existing_clients=self._identifiers_in_use(),
+                        touched=touched)
+
+    def _identifiers_in_use(self) -> set:
+        """Client identifiers already taken, so a proposal never collides."""
+        taken = set(self.store.known_clients()) | set(
+            self.cases.onboarded_clients())
+        registry = self._registry()
+        if registry is not None:
+            taken |= {r.client_id for r in registry.records()}
+        return taken
 
     def add_pipeline_source(self, *, case_id: str, portfolio_id: str,
                             by: str) -> OnboardingCase:
@@ -261,6 +284,28 @@ class OnboardingService:
         self._sync_derived(case)
         case.record("pipeline_book_added", actor=by,
                     detail={"portfolio_id": portfolio_id})
+        self.cases.save_case(case)
+        return case
+
+    def register_sample(self, *, case_id: str, files: List[Dict[str, Any]],
+                        by: str) -> OnboardingCase:
+        """Record a sample pack the client has supplied.
+
+        ``files`` is ``[{"name": ..., "headers": [...]}]`` — what the existing
+        intake already extracts when it reads a pack. Registering one lets Trakt
+        answer the file format, the expected file names and often the asset
+        class, instead of asking for them.
+        """
+        case = self.load_case(case_id)
+        self._require_editable(case)
+        case.answers["sample"] = {"files": files,
+                                  "registered_by": by,
+                                  "registered_at": now_iso()}
+        self._sync_derived(case)
+        inferred = inference.infer_from_sample(case.answers["sample"])
+        case.record("sample_registered", actor=by,
+                    detail={"files": [f.get("name") for f in files],
+                            "inferred": sorted(inferred)})
         self.cases.save_case(case)
         return case
 
@@ -499,18 +544,32 @@ class OnboardingService:
         return out
 
     def _defaults_used(self, case: OnboardingCase) -> List[Dict[str, str]]:
-        """Values nobody supplied, where a governed default applied."""
+        """Where the value in force is the governed default.
+
+        Reported by comparing the answer to the declaration rather than by
+        looking for a gap: defaults are filled in as the case is answered, so by
+        the time anyone previews it there is no gap left to find. What the
+        approver needs to know is which values nobody chose.
+        """
         out: List[Dict[str, str]] = []
         for section in self.catalogue.sections:
-            if section.repeatable or section.from_regime:
-                continue
             block = case.answers.get(section.key) or {}
             for f in section.fields:
                 if f.default is None:
                     continue
-                if not str(block.get(f.key) or "").strip():
-                    out.append({"label": f.label, "value": str(f.default),
-                                "section": section.label})
+                if section.repeatable:
+                    holders = [(item, section.label)
+                               for item in case.items(section.key)]
+                elif section.from_regime:
+                    if f.product and f.product not in case.products:
+                        continue
+                    holders = [(block.get(f.product) or {}, section.label)]
+                else:
+                    holders = [(block, section.label)]
+                for holder, label in holders:
+                    if str(holder.get(f.key) or "") == str(f.default):
+                        out.append({"label": f.label, "value": str(f.default),
+                                    "section": label})
         return out
 
     def approve(self, *, case_id: str, by: str, reason: str) -> OnboardingCase:

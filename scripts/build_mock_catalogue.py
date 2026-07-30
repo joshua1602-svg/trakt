@@ -18,6 +18,7 @@ import json
 from pathlib import Path
 
 from operations_control.onboarding.catalogue import load
+from operations_control.onboarding.inference import rules as inference_rules
 from operations_control.onboarding.case import KIND_LABELS, STATUS_LABELS
 from operations_control.onboarding.service import STEPS, STEP_LABELS
 
@@ -54,7 +55,10 @@ def main() -> None:
         + f"export const CATALOGUE = {body} as unknown as Catalogue;\n\n"
         + f"export const STEPS: {{ key: string; label: string }}[] = {steps};\n\n"
         + f"export const STATUS_LABELS: Record<CaseStatus, string> = {statuses};\n\n"
-        + f"export const KIND_LABELS: Record<CaseKind, string> = {kinds};\n",
+        + f"export const KIND_LABELS: Record<CaseKind, string> = {kinds};\n\n"
+        + "export const INFERENCE_RULES = "
+        + json.dumps(inference_rules(), indent=2, ensure_ascii=False)
+        + " as Record<string, any>;\n",
         encoding="utf-8")
     print(f"wrote {OUT.relative_to(REPO)} "
           f"({len(doc['sections'])} sections)")

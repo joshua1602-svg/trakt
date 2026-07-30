@@ -1,0 +1,150 @@
+# =========================================================================
+# Onboarding inference — what Trakt works out instead of asking.
+# =========================================================================
+#
+# Every entry here removes a question. The test of whether something belongs
+# in this file is not "could we guess it?" but "would a wrong guess be caught?"
+# — each inferred value is shown to the operator with where it came from, and
+# every one of them can be overridden. Nothing here is silent.
+#
+# Three kinds of rule:
+#
+#   lookups     a table keyed on an answer already given (jurisdiction, asset
+#               class). High confidence, overridable.
+#   from_sample derived from a sample pack the client has supplied — file
+#               extensions, column headers, file names. Only fires once a
+#               sample is registered against the case.
+#   proposals   Trakt suggests, the operator confirms. Used where the value is
+#               an operator decision but there is an obvious right answer
+#               (identifiers), so the operator edits rather than invents.
+#
+# Rules that follow from ANOTHER ANSWER by a fixed relationship — the
+# originator entity's name becoming the Annex 2 originator name, the reporting
+# contact becoming IVSS5 — are not here. Those are `derived` in the field
+# catalogue: they are never asked at all and cannot be overridden independently,
+# because two copies of one fact is exactly the duplication onboarding exists to
+# remove.
+
+version: 1
+
+# ---------------------------------------------------------------------------
+# Jurisdiction implies the money and the clock.
+#
+# Currency and time zone are asked in most onboarding processes and answered
+# the same way every time. The country is the real question; these follow.
+# ---------------------------------------------------------------------------
+jurisdiction:
+  GB: {reporting_currency: GBP, time_zone: Europe/London, uk_geography: true}
+  IE: {reporting_currency: EUR, time_zone: Europe/Dublin}
+  SE: {reporting_currency: SEK, time_zone: Europe/Stockholm}
+  NO: {reporting_currency: NOK, time_zone: Europe/Oslo}
+  DK: {reporting_currency: DKK, time_zone: Europe/Copenhagen}
+  DE: {reporting_currency: EUR, time_zone: Europe/Berlin}
+  FR: {reporting_currency: EUR, time_zone: Europe/Paris}
+  NL: {reporting_currency: EUR, time_zone: Europe/Amsterdam}
+  ES: {reporting_currency: EUR, time_zone: Europe/Madrid}
+  IT: {reporting_currency: EUR, time_zone: Europe/Rome}
+  PT: {reporting_currency: EUR, time_zone: Europe/Lisbon}
+  BE: {reporting_currency: EUR, time_zone: Europe/Brussels}
+  AT: {reporting_currency: EUR, time_zone: Europe/Vienna}
+  FI: {reporting_currency: EUR, time_zone: Europe/Helsinki}
+  LU: {reporting_currency: EUR, time_zone: Europe/Luxembourg}
+  PL: {reporting_currency: PLN, time_zone: Europe/Warsaw}
+  CH: {reporting_currency: CHF, time_zone: Europe/Zurich}
+  US: {reporting_currency: USD, time_zone: America/New_York}
+  CA: {reporting_currency: CAD, time_zone: America/Toronto}
+  AU: {reporting_currency: AUD, time_zone: Australia/Sydney}
+
+#: Used when the jurisdiction is not in the table above. The operator is shown
+#: that no rule matched, so a blank here is visible rather than assumed.
+jurisdiction_fallback:
+  time_zone: UTC
+
+# ---------------------------------------------------------------------------
+# Asset class implies the product's conventions and its regulatory exposure
+# type. The conventions come from the governed asset package where one exists
+# (config/asset/product_defaults_ERM.yaml); the exposure type is the Annex 12
+# IVSS10 enumeration.
+# ---------------------------------------------------------------------------
+asset_class:
+  equity_release:
+    underlying_exposure_type: RMRT      # residential mortgage
+    day_count_convention: ACT365
+    payment_frequency: AT_REDEMPTION    # ERMs roll up; no borrower payments
+  rre:
+    underlying_exposure_type: RMRT
+    day_count_convention: ACT365
+    payment_frequency: MONTHLY
+  cre:
+    underlying_exposure_type: CMRT
+    day_count_convention: ACT360
+    payment_frequency: QUARTERLY
+  auto:
+    underlying_exposure_type: ALOL
+    day_count_convention: ACT365
+    payment_frequency: MONTHLY
+  consumer:
+    underlying_exposure_type: CONL
+    day_count_convention: ACT365
+    payment_frequency: MONTHLY
+  sme:
+    underlying_exposure_type: SMEL
+    day_count_convention: ACT360
+    payment_frequency: QUARTERLY
+
+# ---------------------------------------------------------------------------
+# An entity's ROLE implies the Annex 12 risk-retention holder code. The
+# operator has already said who holds the retention; asking again in regulator
+# vocabulary is asking the same question twice.
+# ---------------------------------------------------------------------------
+risk_retention_holder_by_role:
+  originator: ORIG
+  sponsor: SPON
+  original_lender: OLND
+  seller: SELL
+
+# ---------------------------------------------------------------------------
+# Cadence implies the period convention. A monthly book reports to month end
+# unless someone says otherwise; that "otherwise" is rare enough to be an
+# override rather than a question.
+# ---------------------------------------------------------------------------
+cadence:
+  monthly: calendar_month_end
+  weekly: calendar_month_end
+  daily: calendar_month_end
+  quarterly: calendar_quarter_end
+
+# ---------------------------------------------------------------------------
+# From a sample pack. Fires only once the operator registers a sample against
+# the case; until then these stay questions.
+# ---------------------------------------------------------------------------
+from_sample:
+  file_format:
+    by_extension:
+      csv: csv
+      txt: csv
+      xlsx: xlsx
+      xls: xlsx
+      parquet: parquet
+  #: Column-header signals per asset class. The same signal set the existing
+  #: bootstrap agent uses (agents/config_bootstrap_agent.py), so onboarding and
+  #: that agent cannot disagree about what a tape looks like.
+  asset_class_signals_from: agents.config_bootstrap_agent._ASSET_CLASS_SIGNALS
+  #: How many signal hits before Trakt fills the asset class in rather than
+  #: leaving it as a question.
+  asset_class_min_hits: 2
+
+# ---------------------------------------------------------------------------
+# Identifier proposals. Trakt suggests; the operator confirms or edits. Never
+# silently accepted, because an identifier is permanent and appears in every
+# storage location.
+# ---------------------------------------------------------------------------
+proposals:
+  client_id:
+    from: client.client_name
+    transform: upper_slug
+    max_length: 12
+  portfolio_id:
+    #: `direct_001`, `acquired_002` — the convention already in the source
+    #: registry and the storage layout.
+    pattern: "{portfolio_type}_{sequence:03d}"

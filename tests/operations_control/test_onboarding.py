@@ -1058,3 +1058,242 @@ class TestApi:
                            json={"reason": "Changed my mind"}, headers=ADMIN)
         assert refused.status_code == 409
         assert "withdrawn" in refused.json()["message"].lower()
+
+
+# --------------------------------------------------------------------------- #
+# Inference — the questions Trakt answers for itself
+# --------------------------------------------------------------------------- #
+
+class TestInference:
+    """Every rule here removes a question. Each is overridable, and each records
+    where the value came from."""
+
+    def test_jurisdiction_supplies_the_currency_and_the_clock(self, service):
+        case = service.start_new_client(by="Operator")
+        case = service.save_step(case_id=case.case_id, step="client",
+                                 by="Operator",
+                                 payload={"client_name": "Nordic Lending",
+                                          "jurisdiction": "SE"})
+        client = case.block("client")
+        assert client["reporting_currency"] == "SEK"
+        assert client["time_zone"] == "Europe/Stockholm"
+        assert "SE" in case.provenance["client.reporting_currency"]
+
+    def test_an_unlisted_jurisdiction_does_not_guess_a_currency(self, service):
+        """A country with no rule leaves the currency as a question rather than
+        inventing one."""
+        case = service.start_new_client(by="Operator")
+        case = service.save_step(case_id=case.case_id, step="client",
+                                 by="Operator",
+                                 payload={"client_name": "Somewhere",
+                                          "jurisdiction": "ZZ"})
+        assert not case.block("client").get("reporting_currency")
+        assert case.block("client")["time_zone"] == "UTC"
+
+    def test_an_answer_the_operator_gave_is_never_overwritten(self, service):
+        case = service.start_new_client(by="Operator")
+        case = service.save_step(case_id=case.case_id, step="client",
+                                 by="Operator",
+                                 payload={"client_name": "Nordic Lending",
+                                          "jurisdiction": "SE",
+                                          "reporting_currency": "EUR"})
+        assert case.block("client")["reporting_currency"] == "EUR"
+
+    def test_the_client_identifier_is_proposed_not_demanded(self, service):
+        case = service.start_new_client(by="Operator")
+        case = service.save_step(case_id=case.case_id, step="client",
+                                 by="Operator",
+                                 payload={"client_name": "Nordic Lending AB",
+                                          "jurisdiction": "SE"})
+        # Whole words only — an identifier is permanent.
+        assert case.block("client")["client_id"] == "NORDIC"
+        assert "already in use" in case.provenance["client.client_id"]
+
+    def test_a_proposed_identifier_avoids_one_already_taken(self, service):
+        first = complete(service, client_id="NORDIC")
+        activate(service, first)
+        case = service.start_new_client(by="Operator")
+        case = service.save_step(case_id=case.case_id, step="client",
+                                 by="Operator",
+                                 payload={"client_name": "Nordic Lending AB",
+                                          "jurisdiction": "SE"})
+        assert case.block("client")["client_id"] == "NORDIC2"
+
+    def test_portfolio_identifiers_follow_the_platform_convention(self, service):
+        case = service.start_new_client(by="Operator")
+        service.save_step(case_id=case.case_id, step="client", by="Operator",
+                          payload={"client_name": "Nordic", "jurisdiction": "SE"})
+        case = service.save_step(
+            case_id=case.case_id, step="portfolios", by="Operator", payload={
+                "portfolios": [{"display_name": "Direct", "portfolio_type": "direct"},
+                               {"display_name": "Bought", "portfolio_type": "acquired"},
+                               {"display_name": "More", "portfolio_type": "direct"}]})
+        assert [p["portfolio_id"] for p in case.items("portfolios")] == [
+            "direct_001", "acquired_001", "direct_002"]
+
+    def test_a_single_entity_owns_every_portfolio_without_asking(self, service):
+        case = service.start_new_client(by="Operator")
+        service.save_step(case_id=case.case_id, step="client", by="Operator",
+                          payload={"client_name": "Nordic", "jurisdiction": "SE"})
+        case = service.save_step(case_id=case.case_id, step="entities",
+                                 by="Operator", payload={"entities": [
+                                     {"legal_name": "Nordic AB",
+                                      "roles": ["originator"],
+                                      "lei": VALID_LEI,
+                                      "country_of_establishment": "SE"}]})
+        entity_id = case.items("entities")[0]["entity_id"]
+        case = service.save_step(case_id=case.case_id, step="portfolios",
+                                 by="Operator", payload={"portfolios": [
+                                     {"display_name": "Direct",
+                                      "portfolio_type": "direct"}]})
+        assert case.items("portfolios")[0]["owning_entity"] == entity_id
+
+    def test_a_sample_pack_answers_format_files_and_asset_class(self, service):
+        case = service.start_new_client(by="Operator")
+        service.save_step(case_id=case.case_id, step="client", by="Operator",
+                          payload={"client_name": "Nordic", "jurisdiction": "SE"})
+        service.save_step(case_id=case.case_id, step="portfolios",
+                          by="Operator", payload={"portfolios": [
+                              {"display_name": "Direct",
+                               "portfolio_type": "direct"}]})
+        case = service.register_sample(
+            case_id=case.case_id, by="Operator",
+            files=[{"name": "LoanExtract.csv",
+                    "headers": ["loan_id", "no_negative_equity", "roll_up",
+                                "drawdown_facility"]}])
+        assert case.items("portfolios")[0]["asset_class"] == "equity_release"
+        source = case.items("sources")[0]
+        assert source["file_format"] == "csv"
+        assert source["expected_files"] == ["LoanExtract.csv"]
+
+    def test_an_ambiguous_tape_is_left_as_a_question(self, service):
+        """Two asset classes scoring equally is exactly when a human should
+        look."""
+        from operations_control.onboarding import inference
+        assert inference.infer_from_sample(
+            {"files": [{"name": "x.csv", "headers": ["loan_id", "balance"]}]}
+        ).get("asset_class") is None
+
+    def test_the_annex_2_originator_block_is_never_asked_for(self, service):
+        """It is the originator entity, restated in regulator vocabulary."""
+        case = complete(service)
+        annex2 = case.block("regime")["esma_annex2"]
+        assert annex2["originator_name"] == "Nordic Lending AB"
+        assert annex2["originator_legal_entity_identifier"] == VALID_LEI
+        assert annex2["originator_establishment_country"] == "SE"
+        # And it tracks the entity: rename the company, the regime block follows.
+        service.save_step(case_id=case.case_id, step="entities", by="Operator",
+                          payload={"entities": [
+                              {**case.items("entities")[0],
+                               "legal_name": "Nordic Lending Group AB"},
+                              case.items("entities")[1]]})
+        case = service.load_case(case.case_id)
+        assert case.block("regime")["esma_annex2"]["originator_name"] \
+            == "Nordic Lending Group AB"
+
+    def test_the_investor_report_contacts_come_from_the_contacts_step(self,
+                                                                      service):
+        case = complete(service, products=("esma_annex2", "investor_reporting"))
+        annex12 = case.block("regime")["investor_reporting"]
+        assert annex12["IVSS5"] == "Rae Reporter"
+        assert annex12["IVSS7"] == "reporting@nordic.example"
+        assert annex12["IVSS3"] == "Nordic Lending AB"
+
+    def test_the_risk_retention_holder_code_comes_from_the_role(self, service):
+        case = complete(service, products=("esma_annex2", "investor_reporting"))
+        service.save_step(case_id=case.case_id, step="entities", by="Operator",
+                          payload={"entities": [
+                              {**case.items("entities")[0],
+                               "roles": ["originator", "reporting_entity",
+                                         "risk_retention_holder"]},
+                              case.items("entities")[1]]})
+        case = service.load_case(case.case_id)
+        assert case.block("regime")["investor_reporting"]["IVSS9"] == "ORIG"
+
+    def test_the_exposure_type_comes_from_the_asset_class(self, service):
+        case = complete(service, products=("esma_annex2", "investor_reporting"))
+        assert case.block("regime")["investor_reporting"]["IVSS10"] == "RMRT"
+
+    def test_a_uk_book_reports_geography_as_gbzzz_without_being_asked(self,
+                                                                      service):
+        case = service.start_new_client(by="Operator")
+        service.save_step(case_id=case.case_id, step="client", by="Operator",
+                          payload={"client_name": "British", "jurisdiction": "GB"})
+        service.save_step(case_id=case.case_id, step="reporting", by="Operator",
+                          payload={"products": ["esma_annex2"]})
+        case = service.load_case(case.case_id)
+        assert case.block("regime")["esma_annex2"]["uk_geography_override"] is True
+
+    def test_a_declared_default_fills_a_field_nobody_answered(self, service):
+        """Including in the regime blocks, which is where most of them live."""
+        case = complete(service)
+        assert case.block("client")["environment"] == "production"
+        assert case.items("sources")[0]["cadence"] == "monthly"
+        assert case.block("regime")["esma_annex2"]["nuts_classification_year"] \
+            == "2021"
+
+    def test_a_default_never_displaces_something_better_known(self, service):
+        """Defaults are applied last. A jurisdiction knows the time zone; the
+        catalogue does not."""
+        case = service.start_new_client(by="Operator")
+        case = service.save_step(case_id=case.case_id, step="client",
+                                 by="Operator",
+                                 payload={"client_name": "Nordic Lending",
+                                          "jurisdiction": "SE",
+                                          "environment": "uat"})
+        assert case.block("client")["time_zone"] == "Europe/Stockholm"
+        assert case.block("client")["environment"] == "uat"
+
+    def test_a_case_nobody_has_touched_holds_no_defaults(self, service):
+        """A default belongs to a question that would otherwise be asked, so it
+        arrives when the operator reaches that part of the form — not before."""
+        case = service.start_new_client(by="Operator")
+        assert case.answers.get("client", {}) == {}
+        assert case.answers.get("presentation", {}) == {}
+
+    def test_conventions_come_from_the_asset_class(self, service):
+        case = complete(service)
+        presentation = case.block("presentation")
+        assert presentation["day_count_convention"] == "ACT365"
+        assert presentation["payment_frequency"] == "AT_REDEMPTION"
+        assert presentation["report_title"] == "Nordic Lending Portfolio MI"
+
+    def test_a_minimal_case_reaches_a_complete_configuration(self, service,
+                                                             store):
+        """The whole point: name the client, its country, its entity, its
+        contacts, one portfolio and the products — everything else follows."""
+        case = service.start_new_client(by="Operator")
+        cid = case.case_id
+        service.save_step(case_id=cid, step="client", by="Operator",
+                          payload={"client_name": "Nordic Lending",
+                                   "jurisdiction": "SE"})
+        service.save_step(case_id=cid, step="entities", by="Operator", payload={
+            "entities": [{"legal_name": "Nordic Lending AB",
+                          "roles": ["originator", "reporting_entity"],
+                          "lei": VALID_LEI,
+                          "country_of_establishment": "SE"}]})
+        service.save_step(case_id=cid, step="contacts", by="Operator", payload={
+            "reporting_contact_name": "Rae", "reporting_contact_email": "r@n.example",
+            "operational_contact_name": "Ola", "operational_contact_email": "o@n.example"})
+        service.register_sample(case_id=cid, by="Operator", files=[
+            {"name": "LoanExtract.csv",
+             "headers": ["loan_id", "no_negative_equity", "roll_up"]}])
+        service.save_step(case_id=cid, step="portfolios", by="Operator", payload={
+            "portfolios": [{"display_name": "Nordic Direct",
+                            "portfolio_type": "direct"}]})
+        service.save_step(case_id=cid, step="reporting", by="Operator",
+                          payload={"products": ["esma_annex2"]})
+
+        case = service.load_case(cid)
+        assert service.readiness(case)["ready"] is True, [
+            p["message"] for p in service.readiness(case)["blocking"]]
+
+        activate(service, case)
+        doc = yaml.safe_load(OnboardingStore(store).read_artefact(
+            "NORDIC", artefacts.client_config_rel("NORDIC")))
+        # A complete governed configuration, from six answers.
+        assert doc["client"]["client_id"] == "NORDIC"
+        assert doc["portfolio"]["base_currency"] == "SEK"
+        assert doc["defaults"]["originator_legal_entity_identifier"] == VALID_LEI
+        assert doc["pipeline"]["esma_enabled"] is True
+        assert doc["loan_engine"]["day_count_convention"] == "ACT365"

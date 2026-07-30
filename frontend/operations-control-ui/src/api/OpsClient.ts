@@ -125,6 +125,8 @@ export interface OpsClient {
   getCase(caseId: string): Promise<OnboardingCase>;
   saveCaseStep(caseId: string, step: string, payload: Record<string, unknown>): Promise<OnboardingCase>;
   addPipelineBook(caseId: string, portfolioId: string): Promise<OnboardingCase>;
+  /** Record a sample pack; turns format, file names and asset class into inferences. */
+  registerSample(caseId: string, files: { name: string; headers?: string[] }[]): Promise<OnboardingCase>;
   removeSource(caseId: string, portfolioId: string, dataset: string): Promise<OnboardingCase>;
   getCaseChecklist(caseId: string): Promise<ChecklistRow[]>;
   createInformationRequest(

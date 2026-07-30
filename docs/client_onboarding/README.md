@@ -45,6 +45,7 @@ afterwards.
 | [02 — Domain model and catalogue](02_domain_model_and_catalogue.md) | The case, its statuses, entities with reusable roles, information requests; and the client-agnostic field catalogue with its two classifications. |
 | [03 — Generation mapping](03_generation_mapping.md) | Every answer and the artefact it becomes. Determinism, idempotency, and the fields no existing artefact can represent. |
 | [04 — Implementation ledger](04_implementation_ledger.md) | File by file, plus the API surface and storage layout. |
+| [06 — Field classification](06_field_classification.md) | Every field in one of five buckets, and the questions removed: 33 human-required fields down to 15. |
 | [05 — Test results](05_test_results.md) | What the tests prove, the 390px measurements, and the baseline comparison. |
 
 Screenshots: [`docs/screenshots/client_onboarding/`](../screenshots/client_onboarding/).
@@ -76,6 +77,12 @@ Same formats, same layers, same readers. No parallel configuration stack.
   created by a publication; it is created by an approved onboarding.
 - **Generation is deterministic and idempotent**, merges rather than replaces,
   and never clears what a real delivery earned a source record.
+- **Ask as little as possible.** Every field is classified by who can actually
+  answer it. Trakt infers the currency and time zone from the jurisdiction, the
+  asset class and file format from a sample pack, the identifiers from the
+  client's name, and every regime block from answers already given — 15
+  required human answers, not 33. Nothing is silent: each value shows where it
+  came from and can be overruled.
 - **Migration is secondary.** It is offered at the foot of the home page, it
   changes nothing before approval, and a legacy value today's rules refuse is
   raised as an issue rather than carried across quietly.

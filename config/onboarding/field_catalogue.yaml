@@ -171,6 +171,7 @@ sections:
           record Trakt keeps about this client. It cannot be changed later.
         scope: client
         source: operator_supplied
+        proposed_from: client_name
         type: identifier
         required: true
         validation: identifier
@@ -195,9 +196,10 @@ sections:
         label: Reporting currency
         help: The currency amounts are reported in.
         scope: client
-        source: client_supplied
-        type: currency
+        source: trakt_default
         required: true
+        infers_from: jurisdiction
+        type: currency
         validation: currency
         consumers: [Client configuration, all monetary normalisation]
         writes_to: client_config:portfolio.base_currency
@@ -206,10 +208,14 @@ sections:
       - key: time_zone
         label: Reporting time zone
         scope: client
-        source: operator_supplied
-        type: text
+        source: trakt_default
         required: true
-        default: Europe/London
+        infers_from: jurisdiction
+        type: text
+        # No catalogue-wide default: a time zone is a fact about the client's
+        # jurisdiction, so it comes from the jurisdiction table, and from that
+        # table's own fallback where the country is not listed. A default here
+        # would be one country's clock imposed on every client.
         consumers: [Reporting calendar]
         writes_to: client_config:client.time_zone
         amendable: true
@@ -433,8 +439,9 @@ sections:
         help: Short, stable and unique within this client.
         scope: portfolio
         source: operator_supplied
-        type: identifier
         required: true
+        proposed_from: portfolio type and sequence
+        type: identifier
         validation: identifier
         unique_across: portfolios
         consumers: [Source registrations, storage layout, portfolio metadata]
@@ -454,9 +461,11 @@ sections:
       - key: asset_class
         label: Asset class
         scope: portfolio
-        source: client_supplied
-        type: enum
+        source: inferred
         required: true
+        infers_from: the sample pack's column headers
+        confirm: true
+        type: enum
         options_from: asset_class
         consumers: [Client configuration, regime eligibility, product profile]
         writes_to: client_config:portfolio.asset_class
@@ -476,9 +485,8 @@ sections:
       - key: structure
         label: How the book is held
         scope: portfolio
-        source: client_supplied
+        source: operator_supplied
         type: enum
-        required: true
         options_from: portfolio_structure
         consumers: [Portfolio metadata]
         writes_to: portfolio_registry:structure
@@ -488,9 +496,10 @@ sections:
         label: Owning legal entity
         help: Which of the entities above holds this book.
         scope: portfolio
-        source: client_supplied
-        type: entity_reference
+        source: inferred
         required: true
+        infers_from: the only entity, where there is only one
+        type: entity_reference
         consumers: [Portfolio metadata, regime reporting]
         writes_to: portfolio_registry:owning_entity
         amendable: true
@@ -499,7 +508,9 @@ sections:
         label: Portfolio reporting currency
         help: Leave blank to use the client's reporting currency.
         scope: portfolio
-        source: client_supplied
+        source: inferred
+        required: true
+        infers_from: the client's reporting currency
         type: currency
         required: false
         validation: currency
@@ -511,7 +522,7 @@ sections:
         label: Still originating
         help: Whether new loans are still being written to this book.
         scope: portfolio
-        source: client_supplied
+        source: derived
         type: boolean
         required: false
         derived_default: "portfolio_type == direct"
@@ -522,9 +533,10 @@ sections:
       - key: period_convention
         label: Reporting period convention
         scope: portfolio
-        source: client_supplied
-        type: enum
+        source: inferred
         required: true
+        infers_from: the book's reporting cadence
+        type: enum
         options_from: period_convention
         consumers: [Reporting calendar, period validation]
         writes_to: portfolio_registry:period_convention
@@ -566,9 +578,10 @@ sections:
       - key: cadence
         label: Expected cadence
         scope: source
-        source: client_supplied
-        type: enum
+        source: trakt_default
         required: true
+        default: monthly
+        type: enum
         options_from: cadence
         consumers: [Source registration, storage layout]
         writes_to: source_registry:frequency
@@ -580,7 +593,6 @@ sections:
         scope: source
         source: client_supplied
         type: text
-        required: true
         consumers: [Source registration]
         writes_to: source_registry:source_system
         amendable: true
@@ -588,9 +600,8 @@ sections:
       - key: delivery_channel
         label: How files arrive
         scope: source
-        source: client_supplied
+        source: operator_supplied
         type: enum
-        required: true
         options_from: delivery_channel
         consumers: [Onboarding record, intake setup]
         writes_to: onboarding_record
@@ -599,9 +610,10 @@ sections:
       - key: file_format
         label: File format
         scope: source
-        source: client_supplied
-        type: enum
+        source: inferred
         required: true
+        infers_from: the sample pack's file extensions
+        type: enum
         options_from: file_format
         consumers: [Onboarding record, mapping]
         writes_to: onboarding_record
@@ -613,7 +625,8 @@ sections:
           The file names or patterns expected in each delivery, one per line.
           Used to tell an incomplete pack from a complete one.
         scope: source
-        source: client_supplied
+        source: inferred
+        infers_from: the file names in the sample pack
         type: multiline
         required: false
         consumers: [Source registration, pack completeness]
@@ -624,7 +637,7 @@ sections:
         label: Reporting cut-off
         help: The point in the period the data is taken as at.
         scope: source
-        source: client_supplied
+        source: derived
         type: enum
         required: false
         options_from: period_convention
@@ -709,7 +722,8 @@ sections:
       - key: report_title
         label: Report title
         scope: branding
-        source: client_supplied
+        source: inferred
+        infers_from: the client's name
         type: text
         required: false
         consumers: [Management information dashboard]
@@ -751,7 +765,8 @@ sections:
       - key: day_count_convention
         label: Day-count convention
         scope: operational
-        source: client_supplied
+        source: inferred
+        infers_from: the portfolio's asset class
         type: enum
         required: false
         options_from: day_count_convention
@@ -762,7 +777,8 @@ sections:
       - key: payment_frequency
         label: Payment frequency
         scope: operational
-        source: client_supplied
+        source: inferred
+        infers_from: the portfolio's asset class
         type: enum
         required: false
         options_from: payment_frequency

@@ -15,6 +15,7 @@ import {
   CatalogueFieldInput,
   ItemForm,
   SectionForm,
+  isAsked,
   type FieldValue,
 } from "@/components/onboarding/CatalogueForm";
 import {
@@ -193,8 +194,10 @@ function RegimeStep({
   const section = reference.catalogue.sections.find((s) => s.from_regime);
   const chosen = ((current.answers.reporting ?? {}) as { products?: string[] }).products ?? [];
   const held = (current.answers.regime ?? {}) as Record<string, Record<string, unknown>>;
+  // Only products with something left to ASK. A regime whose every standing
+  // value follows from an answer already given needs no step of its own.
   const withFields = chosen.filter((key) =>
-    (section?.fields ?? []).some((f) => f.product === key),
+    (section?.fields ?? []).some((f) => f.product === key && isAsked(f.source)),
   );
 
   if (!section || withFields.length === 0) {
@@ -205,7 +208,9 @@ function RegimeStep({
     <div className="space-y-6">
       <Note>{section.help}</Note>
       {withFields.map((product) => {
-        const fields = section.fields.filter((f) => f.product === product);
+        const fields = section.fields.filter(
+          (f) => f.product === product && isAsked(f.source),
+        );
         const productSpec = reference.catalogue.regime_products[product];
         return (
           <Card key={product} title={productSpec?.label ?? label(product)}>

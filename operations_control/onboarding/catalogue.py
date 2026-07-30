@@ -87,8 +87,23 @@ class Field:
 
     @property
     def collected(self) -> bool:
-        """Whether onboarding asks anyone for this at all."""
-        return self.source in (SOURCE_CLIENT, SOURCE_OPERATOR, SOURCE_DEFAULT)
+        """Whether this field is validated and shown.
+
+        Includes ``inferred``: inference DISCHARGES a requirement, it does not
+        remove one. A field Trakt normally works out but could not — an asset
+        class with no sample pack, a currency for an unlisted jurisdiction —
+        must still be answered before approval, or the generated configuration
+        would be quietly incomplete.
+        """
+        return self.source in (SOURCE_CLIENT, SOURCE_OPERATOR, SOURCE_DEFAULT,
+                               SOURCE_INFERRED)
+
+    @property
+    def answered_by_trakt(self) -> bool:
+        """Whether Trakt supplies this rather than a human. Used to count what
+        onboarding actually asks."""
+        return self.source in (SOURCE_INFERRED, SOURCE_DEFAULT, SOURCE_DERIVED,
+                               SOURCE_SYSTEM)
 
 
 @dataclass
@@ -357,12 +372,33 @@ def _regime_products(path: Path = STANDING_FIELDS_PATH) -> Dict[str, Any]:
     return products
 
 
+#: The regime declaration predates the catalogue and calls a field's shape
+#: ``format`` where the catalogue calls it ``type``. Mapped rather than renamed,
+#: because ``format`` is the word the delivery rules use throughout and changing
+#: it there would be a regime-package change for a naming preference.
+_REGIME_FORMAT_TO_TYPE = {
+    "lei": "lei", "country": "country", "email": "email", "text": "text",
+    "enum": "enum", "boolean": "boolean", "yes_no": "yes_no",
+    "date_or_nd": "date_or_nd", "multiline": "multiline",
+}
+
+
 def _build_field(raw: Dict[str, Any], vocabularies: Dict[str, Any],
                  product: str = "") -> Field:
     known = {f for f in Field.__dataclass_fields__}   # type: ignore[attr-defined]
     data = {k: v for k, v in (raw or {}).items() if k in known}
+    fmt = str((raw or {}).get("format") or "")
+    if fmt and "type" not in data:
+        data["type"] = _REGIME_FORMAT_TO_TYPE.get(fmt, "text")
+        data.setdefault("validation", data["type"])
     f = Field(**data)
     f.product = product
+    # A declaration may list options as bare values (``["2021", "2024"]``) where
+    # the value is its own label. Normalise, so everything downstream — the
+    # renderer and the enum validator alike — sees one shape.
+    f.options = [o if isinstance(o, dict)
+                 else {"value": str(o), "label": str(o)}
+                 for o in (f.options or [])]
     if f.options_from and not f.options:
         f.options = list((vocabularies.get(f.options_from) or {}).get("values")
                          or [])

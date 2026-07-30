@@ -19,6 +19,19 @@ import { Field, Select, TextInput, Toggle } from "./primitives";
 
 export type FieldValue = string | boolean | string[];
 
+/**
+ * Which fields appear on the form.
+ *
+ * `inferred` is shown: Trakt fills it in and the operator can change it, which
+ * is not the same as not asking. `derived` and `system_generated` are hidden —
+ * they follow from another answer by a fixed relationship, and offering an
+ * independent edit would invite two copies of one fact to disagree.
+ */
+export const SHOWN = ["client_supplied", "operator_supplied", "trakt_default", "inferred"];
+
+/** True when this field is a question rather than something Trakt supplies. */
+export const isAsked = (source: string) => SHOWN.includes(source);
+
 function problemFor(
   problems: CaseProblem[],
   key: string,
@@ -172,10 +185,7 @@ export function SectionForm({
   portfolios?: { value: string; label: string }[];
 }) {
   const block = (answers[section.key] ?? {}) as Record<string, unknown>;
-  // Values Trakt supplies or works out are not questions.
-  const asked = section.fields.filter((f) =>
-    ["client_supplied", "operator_supplied", "trakt_default"].includes(f.source),
-  );
+  const asked = section.fields.filter((f) => SHOWN.includes(f.source));
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       {asked.map((field) => (
@@ -215,9 +225,7 @@ export function ItemForm({
   entities?: { value: string; label: string }[];
   portfolios?: { value: string; label: string }[];
 }) {
-  const asked = section.fields.filter((f) =>
-    ["client_supplied", "operator_supplied", "trakt_default"].includes(f.source),
-  );
+  const asked = section.fields.filter((f) => SHOWN.includes(f.source));
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       {asked.map((field) => (

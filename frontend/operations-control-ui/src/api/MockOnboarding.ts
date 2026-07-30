@@ -31,7 +31,7 @@ import type {
   OpenQuestion,
   PlannedArtefact,
 } from "./onboardingTypes";
-import { CATALOGUE, STEPS, STATUS_LABELS, KIND_LABELS } from "./mockCatalogue";
+import { CATALOGUE, INFERENCE_RULES, STEPS, STATUS_LABELS, KIND_LABELS } from "./mockCatalogue";
 
 const clone = <T,>(value: T): T =>
   value === undefined ? (undefined as T) : (JSON.parse(JSON.stringify(value)) as T);
@@ -360,12 +360,12 @@ export class MockOnboarding {
       stored.answers[step] = { ...((stored.answers[step] ?? {}) as object), ...payload };
     }
 
+    this.syncDerived(stored, { [step]: new Set(Object.keys(payload ?? {})) });
     if (step === "client") {
       const client = (stored.answers.client ?? {}) as Record<string, string>;
       stored.client_id = client.client_id ?? "";
       stored.client_name = client.client_name ?? "";
     }
-    this.syncDerived(stored);
     this.record(stored, `answered_${step}`, stored.updated_by, {
       before: { [step]: before },
       after: { [step]: clone(stored.answers[step]) },
@@ -401,7 +401,233 @@ export class MockOnboarding {
     return this.present(stored);
   }
 
-  private syncDerived(stored: StoredCase) {
+  /** Whole words only — an identifier is permanent. */
+  private slug(name: string, max = 12): string {
+    const stop = new Set([
+      "the", "and", "of", "ltd", "limited", "plc", "ab", "as", "asa", "gmbh",
+      "sa", "nv", "bv", "inc", "llc", "lp", "llp", "group", "holdings",
+      "holding", "company", "co",
+    ]);
+    const words = (name ?? "").split(/[^A-Za-z0-9]+/).filter(Boolean);
+    const meaningful = words.filter((w) => !stop.has(w.toLowerCase()));
+    const chosen = meaningful.length ? meaningful : words;
+    let out = "";
+    for (const word of chosen) {
+      if (out && out.length + word.length > max) break;
+      out += word;
+    }
+    return (out || chosen.join("")).slice(0, max).toUpperCase();
+  }
+
+  /** The same rules the service applies, so the demo shows the real product. */
+  private infer(stored: StoredCase, touched?: Record<string, Set<string>>) {
+    const prov = stored.provenance;
+    const wasTouched = (path: string) => {
+      const section = path.split(".")[0].split("[")[0];
+      const key = path.split(".").pop()!;
+      return touched?.[section]?.has(key) ?? false;
+    };
+    const fill = (
+      block: Record<string, unknown>,
+      key: string,
+      value: unknown,
+      path: string,
+      origin: string,
+      force = false,
+    ) => {
+      if (value === undefined || value === null || value === "") return;
+      // Anything the operator just edited is theirs, including a deliberate
+      // blank: refilling it would append to what they are typing.
+      if (wasTouched(path)) return;
+      if (!force && present(block[key])) return;
+      block[key] = value;
+      prov[path] = origin;
+    };
+
+    const client = (stored.answers.client ?? {}) as Record<string, unknown>;
+    stored.answers.client = client;
+    const jurisdiction = String(client.jurisdiction ?? "").toUpperCase();
+    if (jurisdiction) {
+      client.jurisdiction = jurisdiction;
+      const table = (INFERENCE_RULES.jurisdiction ?? {})[jurisdiction] ?? {};
+      fill(client, "reporting_currency", table.reporting_currency,
+           "client.reporting_currency", `the currency used in ${jurisdiction}`);
+      fill(client, "time_zone",
+           table.time_zone ?? (INFERENCE_RULES.jurisdiction_fallback ?? {}).time_zone,
+           "client.time_zone",
+           table.time_zone
+             ? `the time zone for ${jurisdiction}`
+             : "the default where no rule matched the jurisdiction");
+    }
+    if (!present(client.client_id) && present(client.client_name)) {
+      const base = this.slug(String(client.client_name));
+      let candidate = base;
+      let n = 2;
+      while (candidate && this.active.has(candidate)) candidate = `${base}${n++}`;
+      fill(client, "client_id", candidate, "client.client_id",
+           "the client's name, checked against identifiers already in use");
+    }
+
+    const entities = (stored.answers.entities ?? []) as Record<string, unknown>[];
+    const sample = (stored.answers.sample ?? null) as { files?: { name: string; headers?: string[] }[] } | null;
+    const fromSample = sample ? this.inferFromSample(sample) : {};
+    const counts: Record<string, number> = {};
+    (stored.answers.portfolios as Record<string, unknown>[] | undefined)?.forEach((p, i) => {
+      const kind = String(p.portfolio_type ?? "direct");
+      counts[kind] = (counts[kind] ?? 0) + 1;
+      const path = `portfolios[${i}]`;
+      fill(p, "portfolio_id", `${kind}_${String(counts[kind]).padStart(3, "0")}`,
+           `${path}.portfolio_id`, "Trakt's naming convention for books of this type");
+      if (fromSample.asset_class)
+        fill(p, "asset_class", fromSample.asset_class, `${path}.asset_class`,
+             "the columns in the sample the client supplied");
+      if (entities.length === 1)
+        fill(p, "owning_entity", entities[0].entity_id, `${path}.owning_entity`,
+             "the only entity on this client");
+      fill(p, "reporting_currency", client.reporting_currency,
+           `${path}.reporting_currency`, "the client's reporting currency");
+      const cadence = String(
+        ((stored.answers.sources ?? []) as Record<string, unknown>[]).find(
+          (s) => s.portfolio_id === p.portfolio_id && s.dataset === "funded",
+        )?.cadence ?? "monthly",
+      );
+      fill(p, "period_convention", (INFERENCE_RULES.cadence ?? {})[cadence],
+           `${path}.period_convention`, `a ${cadence} book reporting to period end`);
+    });
+
+    ((stored.answers.sources ?? []) as Record<string, unknown>[]).forEach((s, i) => {
+      const path = `sources[${i}]`;
+      fill(s, "cadence", "monthly", `${path}.cadence`, "the cadence most books report at");
+      fill(s, "cut_off_convention",
+           (INFERENCE_RULES.cadence ?? {})[String(s.cadence ?? "monthly")],
+           `${path}.cut_off_convention`, "the reporting cadence");
+      if (fromSample.file_format)
+        fill(s, "file_format", fromSample.file_format, `${path}.file_format`,
+             "the sample the client supplied");
+      if (fromSample.expected_files && s.dataset === "funded")
+        fill(s, "expected_files", fromSample.expected_files, `${path}.expected_files`,
+             "the files in the sample the client supplied");
+    });
+
+    const presentation = (stored.answers.presentation ?? {}) as Record<string, unknown>;
+    stored.answers.presentation = presentation;
+    if (present(client.client_name))
+      fill(presentation, "report_title", `${String(client.client_name)} Portfolio MI`,
+           "presentation.report_title", "the client's name");
+    const assetClass = String(
+      ((stored.answers.portfolios ?? []) as Record<string, unknown>[])[0]?.asset_class ?? "",
+    );
+    const assetTable = (INFERENCE_RULES.asset_class ?? {})[assetClass] ?? {};
+    fill(presentation, "day_count_convention", assetTable.day_count_convention,
+         "presentation.day_count_convention", `the standard convention for ${assetClass}`);
+    fill(presentation, "payment_frequency", assetTable.payment_frequency,
+         "presentation.payment_frequency", `the standard convention for ${assetClass}`);
+
+    // Regime blocks are DERIVED: forced to match their source every time.
+    const products = new Set(this.products(stored));
+    const held = (stored.answers.regime ?? {}) as Record<string, Record<string, unknown>>;
+    stored.answers.regime = held;
+    const withRole = (role: string) =>
+      entities.find((e) => ((e.roles ?? []) as string[]).includes(role));
+    const contacts = (stored.answers.contacts ?? {}) as Record<string, unknown>;
+
+    if (products.has("esma_annex2")) {
+      const a2 = (held.esma_annex2 ??= {});
+      const originator = withRole("originator");
+      if (originator) {
+        fill(a2, "originator_name", originator.legal_name,
+             "regime.esma_annex2.originator_name", "the originator entity", true);
+        fill(a2, "originator_legal_entity_identifier", originator.lei,
+             "regime.esma_annex2.originator_legal_entity_identifier", "the originator entity", true);
+        fill(a2, "originator_establishment_country", originator.country_of_establishment,
+             "regime.esma_annex2.originator_establishment_country", "the originator entity", true);
+      }
+      if ((INFERENCE_RULES.jurisdiction ?? {})[jurisdiction]?.uk_geography &&
+          a2.uk_geography_override === undefined) {
+        a2.uk_geography_override = true;
+        prov["regime.esma_annex2.uk_geography_override"] =
+          "UK books report region as GBZZZ by convention";
+      }
+    }
+    if (products.has("investor_reporting")) {
+      const a12 = (held.investor_reporting ??= {});
+      const reporting = withRole("reporting_entity");
+      if (reporting) {
+        fill(a12, "IVSS3", reporting.legal_name, "regime.investor_reporting.IVSS3", "the reporting entity", true);
+        fill(a12, "IVSS4", reporting.legal_name, "regime.investor_reporting.IVSS4", "the reporting entity", true);
+        fill(a12, "IVSS1", reporting.lei, "regime.investor_reporting.IVSS1", "the reporting entity", true);
+      }
+      fill(a12, "IVSS5", contacts.reporting_contact_name, "regime.investor_reporting.IVSS5", "the reporting contact", true);
+      fill(a12, "IVSS6", contacts.reporting_contact_phone, "regime.investor_reporting.IVSS6", "the reporting contact", true);
+      fill(a12, "IVSS7", contacts.reporting_contact_email, "regime.investor_reporting.IVSS7", "the reporting contact", true);
+      const holder = withRole("risk_retention_holder");
+      if (holder) {
+        const table = INFERENCE_RULES.risk_retention_holder_by_role ?? {};
+        const code = ((holder.roles ?? []) as string[]).map((r) => table[r]).find(Boolean);
+        fill(a12, "IVSS9", code, "regime.investor_reporting.IVSS9",
+             "the role of the entity holding the retention", true);
+      }
+      fill(a12, "IVSS10", assetTable.underlying_exposure_type,
+           "regime.investor_reporting.IVSS10", "the portfolio's asset class", true);
+    }
+
+    // Declared defaults, last: anything better informed — a jurisdiction, a
+    // sample pack, a fact already given — has already had its say, and a
+    // default is what applies when nothing is known, not a value that
+    // displaces what is. Only sections the operator has reached are filled, so
+    // a case that was started and abandoned holds nothing.
+    const origin = "the standard value where nothing else is given";
+    for (const section of CATALOGUE.sections) {
+      for (const field of section.fields) {
+        if (field.default === null || field.default === undefined) continue;
+        if (section.repeatable) {
+          ((stored.answers[section.key] ?? []) as Record<string, unknown>[])
+            .forEach((item, i) =>
+              fill(item, field.key, field.default,
+                   `${section.key}[${i}].${field.key}`, origin));
+          continue;
+        }
+        if (section.from_regime) {
+          if (field.product && !products.has(field.product)) continue;
+          const block = (held[field.product] ??= {});
+          fill(block, field.key, field.default,
+               `${section.key}.${field.product}.${field.key}`, origin);
+          continue;
+        }
+        const block = (stored.answers[section.key] ?? {}) as Record<string, unknown>;
+        if (!Object.keys(block).length) continue;
+        fill(block, field.key, field.default, `${section.key}.${field.key}`, origin);
+      }
+    }
+  }
+
+  private inferFromSample(sample: { files?: { name: string; headers?: string[] }[] }) {
+    const out: Record<string, unknown> = {};
+    const files = (sample.files ?? []).filter((f) => f.name);
+    if (!files.length) return out;
+    const byExt = INFERENCE_RULES.from_sample?.file_format?.by_extension ?? {};
+    const formats = new Set(files.map((f) => byExt[f.name.split(".").pop()!.toLowerCase()]).filter(Boolean));
+    if (formats.size === 1) out.file_format = [...formats][0];
+    out.expected_files = files.map((f) => f.name);
+    const headers = files.flatMap((f) => (f.headers ?? []).map((h) => h.trim().toLowerCase().replace(/ /g, "_")));
+    // The demo fixture recognises equity release, matching the signal set the
+    // backend reads from the existing bootstrap agent.
+    const hits = ["no_negative_equity", "nneg", "roll_up", "drawdown_facility", "lifetime_mortgage"]
+      .filter((sig) => headers.some((h) => h.includes(sig))).length;
+    if (hits >= (INFERENCE_RULES.from_sample?.asset_class_min_hits ?? 2))
+      out.asset_class = "equity_release";
+    return out;
+  }
+
+  registerSample(caseId: string, files: { name: string; headers?: string[] }[]): OnboardingCase {
+    const stored = this.require(caseId);
+    this.requireEditable(stored);
+    stored.answers.sample = { files };
+    this.syncDerived(stored);
+    return this.present(stored);
+  }
+
+  private syncDerived(stored: StoredCase, touched?: Record<string, Set<string>>) {
     const entities = (stored.answers.entities ?? []) as Record<string, unknown>[];
     entities.forEach((e, i) => {
       if (!e.entity_id) e.entity_id = `ent_${stored.case_id}_${i + 1}`;
@@ -436,6 +662,7 @@ export class MockOnboarding {
       }
     }
     stored.answers.sources = kept;
+    this.infer(stored, touched);
   }
 
   private products(stored: StoredCase): string[] {
@@ -1074,15 +1301,34 @@ export class MockOnboarding {
     return out;
   }
 
+  /**
+   * Where the value in force is the governed default.
+   *
+   * Compared against the declaration rather than found as a gap: defaults are
+   * filled in as the case is answered, so by preview there is no gap left. What
+   * the approver needs to know is which values nobody chose.
+   */
   private defaultsUsed(stored: StoredCase) {
     const out: CasePreview["defaults_used"] = [];
+    const products = new Set(this.products(stored));
     for (const section of CATALOGUE.sections) {
-      if (section.repeatable || section.from_regime) continue;
       const block = (stored.answers[section.key] ?? {}) as Record<string, unknown>;
       for (const field of section.fields) {
         if (field.default === null || field.default === undefined) continue;
-        if (!present(block[field.key]))
-          out.push({ label: field.label, value: String(field.default), section: section.label });
+        let holders: Record<string, unknown>[];
+        if (section.repeatable) {
+          holders = (stored.answers[section.key] ?? []) as Record<string, unknown>[];
+        } else if (section.from_regime) {
+          if (field.product && !products.has(field.product)) continue;
+          holders = [(block[field.product] ?? {}) as Record<string, unknown>];
+        } else {
+          holders = [block];
+        }
+        for (const holder of holders) {
+          if (String(holder[field.key] ?? "") === String(field.default))
+            out.push({ label: field.label, value: String(field.default),
+                       section: section.label });
+        }
       }
     }
     return out;

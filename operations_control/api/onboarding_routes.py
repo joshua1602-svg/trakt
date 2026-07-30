@@ -106,6 +106,11 @@ class PipelineBody(BaseModel):
     portfolio_id: str
 
 
+class SampleBody(BaseModel):
+    #: [{"name": "LoanExtract.csv", "headers": ["loan_id", ...]}]
+    files: List[Dict[str, Any]] = []
+
+
 # --------------------------------------------------------------------------- #
 # Reference data
 # --------------------------------------------------------------------------- #
@@ -202,6 +207,22 @@ def add_pipeline_book(case_id: str, body: PipelineBody,
     case = service.add_pipeline_source(case_id=case_id,
                                        portfolio_id=body.portfolio_id,
                                        by=principal.name)
+    return {"ok": True, "case": service.present_case(case)}
+
+
+@router.post("/cases/{case_id}/sample")
+def register_sample(case_id: str, body: SampleBody,
+                    principal: Principal = Depends(authenticate)
+                    ) -> Dict[str, Any]:
+    """Record a sample pack the client has supplied.
+
+    Turns the file format, the expected file names and often the asset class
+    from questions into things Trakt reads off the pack.
+    """
+    service = _service()
+    _load(service, principal, case_id)
+    case = service.register_sample(case_id=case_id, files=body.files,
+                                   by=principal.name)
     return {"ok": True, "case": service.present_case(case)}
 
 

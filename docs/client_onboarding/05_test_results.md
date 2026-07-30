@@ -4,10 +4,10 @@
 
 ```
 $ python -m pytest tests/operations_control/ -q
-2 failed, 297 passed
+2 failed, 316 passed
 ```
 
-**77 onboarding tests, all passing.** The 2 failures are pre-existing and
+**96 onboarding tests, all passing.** The 2 failures are pre-existing and
 unrelated — `test_annex2_delivery.py::TestRealComponentsMiniGolden`, which fails
 in the Annex 2 XML builder against the real XSD, identically before and after
 this work.
@@ -27,6 +27,7 @@ this work.
 | Amendments | 6 | Start from the version in force; a client with no configuration cannot be amended; approval creates a new version and keeps the old one; history shows before and after; an invalid amendment cannot activate; an amendment does not trip the collision check |
 | Home queues | 3 | Cases appear in the queue matching their status; an activated client appears as active; a legacy client is offered for migration only |
 | Resolver seam | 3 | A client without configuration uses the repository file; an activated client resolves with its generated configuration; **the generated configuration satisfies the regulatory preflight with no blockers** |
+| **Inference and defaults** | 19 | The jurisdiction supplies the currency and the clock; **an unlisted jurisdiction does not guess a currency**; an answer the operator gave is never overwritten; the client identifier is proposed, whole words only, and avoids one already taken; portfolio identifiers follow the platform convention; a single entity owns every portfolio without asking; **a sample pack answers format, files and asset class**; **an ambiguous tape is left as a question**; the Annex 2 originator block is never asked for and tracks the entity it names; investor-report contacts come from the contacts step; the retention holder code comes from the role; the exposure type comes from the asset class; a UK book reports GBZZZ without being asked; conventions come from the asset class; **a declared default fills what nobody answered — including in the regime blocks**; **a default never displaces something better known**; **a case nobody has touched holds no defaults**; **a minimal case reaches a complete configuration from six answered steps** |
 | API and tenancy | 6 | The information model is served; a case starts blank over HTTP; unauthenticated refused; an operator may work a case but not approve; **a case cannot be named after another tenant's client**; another tenant's case is 404; an illegal transition returns an operator-safe message |
 
 ## Frontend
@@ -37,10 +38,10 @@ $ npx tsc --noEmit
 
 $ npm test
 Test Files  17 passed (17)
-     Tests  102 passed (102)
+     Tests  106 passed (106)
 ```
 
-**22 onboarding browser tests**, including:
+**26 onboarding browser tests**, including:
 
 - the home screen **leads with starting a new client, not importing one** — and
   the migration section is asserted to appear *after* the primary action in the
@@ -111,6 +112,7 @@ does not carry that key. No commit in this work touches `config/delivery/`.
 |---|---|
 | `01_onboarding_home.png` | Onboarding home — blank start leads |
 | `02_blank_new_client_start.png` | A blank new-client case |
+| `02b_inferred_from_jurisdiction.png` | Currency, time zone and identifier filled in from the country, each showing where it came from |
 | `03_entities_step.png` | Entities, one entity with three roles |
 | `04_portfolios_step.png` | Portfolios |
 | `05_reporting_and_regime.png` | Reporting products, with eligibility explained |

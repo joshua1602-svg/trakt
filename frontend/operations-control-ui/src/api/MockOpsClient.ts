@@ -1596,6 +1596,14 @@ export class MockOpsClient implements OpsClient {
     return this.onboarding.addPipelineBook(caseId, portfolioId);
   }
 
+  async registerSample(
+    caseId: string,
+    files: { name: string; headers?: string[] }[],
+  ): Promise<OnboardingCase> {
+    await this.wait();
+    return this.onboarding.registerSample(caseId, files);
+  }
+
   async removeSource(
     caseId: string,
     portfolioId: string,

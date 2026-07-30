@@ -382,3 +382,74 @@ describe("at 390px", () => {
     expect(rail.className).toMatch(/overflow-x-auto/);
   });
 });
+
+describe("what Trakt answers for itself", () => {
+  it("fills the currency and time zone from the jurisdiction", async () => {
+    const client = new MockOpsClient(0);
+    const created = await client.startNewClientCase();
+    const answered = await client.saveCaseStep(created.case_id, "client", {
+      client_name: "Nordic Lending",
+      jurisdiction: "SE",
+    });
+    const block = answered.answers.client as Record<string, string>;
+    expect(block.reporting_currency).toBe("SEK");
+    expect(block.time_zone).toBe("Europe/Stockholm");
+    expect(block.client_id).toBe("NORDIC");
+  });
+
+  it("shows an inferred value with where it came from, still editable", async () => {
+    const client = new MockOpsClient(0);
+    const created = await client.startNewClientCase();
+    await client.saveCaseStep(created.case_id, "client", {
+      client_name: "Nordic Lending",
+      jurisdiction: "SE",
+    });
+    renderAt(client, `/onboarding/cases/${created.case_id}`);
+    expect(await screen.findByDisplayValue("SEK")).toBeInTheDocument();
+    expect(screen.getByText(/Taken from the currency used in SE/)).toBeInTheDocument();
+    // Inferred is not the same as fixed: the operator can overrule it.
+    const currency = screen.getByDisplayValue("SEK");
+    await userEvent.clear(currency);
+    await userEvent.type(currency, "EUR");
+    await waitFor(async () => {
+      const updated = await client.getCase(created.case_id);
+      expect((updated.answers.client as Record<string, string>).reporting_currency).toBe("EUR");
+    });
+  });
+
+  it("hides values that follow from another answer", async () => {
+    const client = new MockOpsClient(0);
+    const id = await completeCase(client);
+    renderAt(client, `/onboarding/cases/${id}`);
+    await userEvent.click(await screen.findByRole("button", { name: /Regulatory information/ }));
+    // The Annex 2 originator block is the originator entity, restated. It is
+    // never offered as a separate question.
+    await screen.findByText("ESMA Annex 2");
+    expect(screen.queryByText("Originator name")).not.toBeInTheDocument();
+    expect(screen.queryByText("Originator LEI")).not.toBeInTheDocument();
+    // But it is generated.
+    const preview = await client.getCasePreview(id);
+    expect(preview.artefacts[0].text).toContain("originator_legal_entity_identifier");
+  });
+
+  it("reads the format and asset class off a sample pack", async () => {
+    const client = new MockOpsClient(0);
+    const created = await client.startNewClientCase();
+    await client.saveCaseStep(created.case_id, "client", {
+      client_name: "Nordic",
+      jurisdiction: "SE",
+    });
+    await client.saveCaseStep(created.case_id, "portfolios", {
+      portfolios: [{ display_name: "Direct", portfolio_type: "direct" }],
+    });
+    const withSample = await client.registerSample(created.case_id, [
+      { name: "LoanExtract.csv", headers: ["loan_id", "no_negative_equity", "roll_up"] },
+    ]);
+    const portfolio = (withSample.answers.portfolios as Record<string, unknown>[])[0];
+    expect(portfolio.asset_class).toBe("equity_release");
+    expect(portfolio.portfolio_id).toBe("direct_001");
+    const source = (withSample.answers.sources as Record<string, unknown>[])[0];
+    expect(source.file_format).toBe("csv");
+    expect(source.expected_files).toEqual(["LoanExtract.csv"]);
+  });
+});

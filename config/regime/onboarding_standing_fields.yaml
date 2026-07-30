@@ -63,7 +63,9 @@ products:
         label: Originator name
         regime_code: RREL82
         classification: standing_client
-        required: true
+        source: derived
+        derives_from: the entity holding the originator role
+        required: false
         format: text
         max_length: 100
         help: >-
@@ -75,7 +77,9 @@ products:
         label: Originator LEI
         regime_code: RREL83
         classification: standing_client
-        required: true
+        source: derived
+        derives_from: the entity holding the originator role
+        required: false
         format: lei
         help: The originator's 20-character Legal Entity Identifier.
         writes_to: client_config:defaults.originator_legal_entity_identifier
@@ -84,7 +88,9 @@ products:
         label: Originator country of establishment
         regime_code: RREL84
         classification: standing_client
-        required: true
+        source: derived
+        derives_from: the entity holding the originator role
+        required: false
         format: country
         writes_to: client_config:defaults.originator_establishment_country
 
@@ -92,6 +98,8 @@ products:
         label: Original lender LEI
         regime_code: RREL80
         classification: standing_client
+        source: derived
+        derives_from: the entity holding the original lender role
         required: false
         format: lei
         help: >-
@@ -103,6 +111,8 @@ products:
         label: Original lender country of establishment
         regime_code: RREL81
         classification: standing_client
+        source: derived
+        derives_from: the entity holding the original lender role
         required: false
         format: country
         writes_to: client_config:defaults.original_lender_establishment_country
@@ -110,8 +120,11 @@ products:
       - key: nuts_classification_year
         label: NUTS classification year
         classification: standing_portfolio
+        source: trakt_default
+        derives_from: the governed default vintage
         required: false
         format: enum
+        default: "2021"
         options: ["2021", "2024"]
         help: >-
           The NUTS vintage used for the regulatory geographic region fields.
@@ -120,6 +133,8 @@ products:
       - key: uk_geography_override
         label: Report UK geography as GBZZZ
         classification: standing_portfolio
+        source: inferred
+        derives_from: the client's jurisdiction
         required: false
         format: boolean
         help: >-
@@ -178,6 +193,8 @@ products:
       - key: IVSS1
         label: Securitisation unique identifier
         classification: standing_client
+        source: derived
+        derives_from: the reporting entity's identifier
         required: false
         format: text
         help: >-
@@ -188,6 +205,8 @@ products:
       - key: IVSS3
         label: Securitisation name
         classification: standing_client
+        source: derived
+        derives_from: the reporting entity's legal name
         required: false
         format: text
         writes_to: annex12_config:annex12.deal.IVSS3
@@ -195,6 +214,8 @@ products:
       - key: IVSS4
         label: Reporting entity name
         classification: standing_client
+        source: derived
+        derives_from: the reporting entity's legal name
         required: false
         format: text
         writes_to: annex12_config:annex12.deal.IVSS4
@@ -202,21 +223,27 @@ products:
       - key: IVSS5
         label: Reporting entity contact person
         classification: standing_client
-        required: true
+        source: derived
+        derives_from: the reporting contact
+        required: false
         format: text
         writes_to: annex12_config:annex12.deal.IVSS5
 
       - key: IVSS6
         label: Reporting entity contact telephone
         classification: standing_client
-        required: true
+        source: derived
+        derives_from: the reporting contact
+        required: false
         format: text
         writes_to: annex12_config:annex12.deal.IVSS6
 
       - key: IVSS7
         label: Reporting entity contact email
         classification: standing_client
-        required: true
+        source: derived
+        derives_from: the reporting contact
+        required: false
         format: email
         writes_to: annex12_config:annex12.deal.IVSS7
 
@@ -231,7 +258,9 @@ products:
       - key: IVSS9
         label: Risk retention holder
         classification: standing_client
-        required: true
+        source: derived
+        derives_from: the role of the entity holding the retention
+        required: false
         format: enum
         options_from: annex12_template:annex12.enums.IVSS9
         writes_to: annex12_config:annex12.deal.IVSS9
@@ -239,7 +268,9 @@ products:
       - key: IVSS10
         label: Underlying exposure type
         classification: standing_portfolio
-        required: true
+        source: derived
+        derives_from: the portfolio's asset class
+        required: false
         format: enum
         options_from: annex12_template:annex12.enums.IVSS10
         writes_to: annex12_config:annex12.deal.IVSS10
