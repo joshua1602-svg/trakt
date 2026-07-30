@@ -4,10 +4,10 @@
 
 ```
 $ python -m pytest tests/operations_control/ -q
-2 failed, 278 passed
+2 failed, 279 passed
 ```
 
-The 278 include **58 new onboarding tests**. All 58 pass.
+The 279 include **59 new onboarding tests**. All 59 pass.
 
 The 2 failures are **pre-existing on this branch and unrelated to this work** —
 verified by stashing every change and re-running:
@@ -34,7 +34,7 @@ and after this change.
 | Versioning and audit | 6 | A change creates a new version and the old one is intact and marked superseded; history records who/when/what/before/after/why; the hash-chained audit stays intact; an unchanged artefact reports as unchanged |
 | Client views | 5 | A legacy client is listed as such; the six tabs are populated; the source list is the live registry, not a copy |
 | Resolver seam | 3 | A client without a profile still uses the repository file; an onboarded client resolves with its generated configuration; **the generated configuration satisfies the Annex 2 preflight with no blockers** |
-| API and tenancy | 6 | Unauthenticated is refused; a full wizard runs over HTTP; an ordinary operator may draft but not approve; another tenant's client and draft are 404, not 403 |
+| API and tenancy | 7 | Unauthenticated is refused; a full wizard runs over HTTP; an ordinary operator may draft but not approve; another tenant's client and draft are 404, not 403; a draft cannot be named after another tenant's client, and the refusal happens before the write |
 
 ## Frontend
 

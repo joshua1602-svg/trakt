@@ -124,10 +124,15 @@ def save_step(draft_id: str, body: SaveStepBody, client: str = "",
     service = _service()
     doc = service.load_draft(client, draft_id)
     _require_draft_client(principal, doc.get("client_id", ""))
+    # Step 1 is where a draft first names its client. Check the binding BEFORE
+    # saving: a draft written under a client id and refused afterwards would
+    # still have landed in that tenant's prefix.
+    if body.step == "client":
+        _require_draft_client(principal,
+                              str((body.payload or {}).get("client_id") or ""))
     draft = service.save_step(client_id=client, draft_id=draft_id,
                               step=body.step, payload=body.payload,
                               by=principal.name)
-    _require_draft_client(principal, draft.get("client_id", ""))
     return {"ok": True, "draft": draft}
 
 

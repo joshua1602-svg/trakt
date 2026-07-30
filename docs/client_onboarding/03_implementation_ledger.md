@@ -12,7 +12,7 @@
 | `operations_control/onboarding/generation.py` | Profile → governed artefacts. Merge, never replace. `plan()` shows what would change; `apply()` writes only after approval. Preserves an existing source record's approved mapping and pinned fingerprint. |
 | `operations_control/onboarding/service.py` | The workflow: draft → answer → review → approve. Field-level before/after diffing, audit on every approval, and the client/version views. |
 | `operations_control/api/onboarding_routes.py` | The API. Tenant-bound on every route; approval additionally requires an administrator. |
-| `tests/operations_control/test_onboarding.py` | 58 tests across vocabularies, validation, derivation, adoption, generation, the workflow, versioning and audit, the client views, the resolver seam, and API tenancy. |
+| `tests/operations_control/test_onboarding.py` | 59 tests across vocabularies, validation, derivation, adoption, generation, the workflow, versioning and audit, the client views, the resolver seam, and API tenancy. |
 
 ## Changed — backend
 

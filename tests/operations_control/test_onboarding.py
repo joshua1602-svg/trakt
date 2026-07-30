@@ -884,6 +884,21 @@ class TestApi:
                           headers=ALICE).json()["clients"]
         assert {r["client_id"] for r in rows} == {"client_a"}
 
+    def test_a_draft_cannot_be_named_after_another_tenants_client(self, api,
+                                                                  store):
+        """The binding is checked BEFORE the write, so a refused draft never
+        lands in the other tenant's prefix."""
+        client, _ = api
+        did = client.post("/ops/onboarding/drafts", json={},
+                          headers=ALICE).json()["draft"]["draft_id"]
+        refused = client.put(
+            f"/ops/onboarding/drafts/{did}",
+            json={"step": "client", "payload": {"client_id": "client_b",
+                                                "client_name": "Not mine"}},
+            headers=ALICE)
+        assert refused.status_code == 404
+        assert OnboardingStore(store).list_drafts("client_b") == []
+
     def test_another_tenants_draft_cannot_be_read(self, api):
         client, _ = api
         did = client.post("/ops/onboarding/drafts",
