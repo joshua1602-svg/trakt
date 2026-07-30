@@ -2,6 +2,19 @@ import { copy } from "@/lib/copy";
 import { announceUnauthorized, clearToken, getToken } from "@/lib/token";
 import { OpsError, type OpsClient } from "./OpsClient";
 import type {
+  AuditTrail,
+  Comparison,
+  ConfigCatalogue,
+  ConfigLayer,
+  ConfigOverview,
+  ConfigVersion,
+  CreateDraftInput,
+  ImpactAnalysis,
+  Principal,
+  ValidationResult,
+  ValidationSummary,
+} from "./adminTypes";
+import type {
   Batch,
   CreateBatchInput,
   Dashboard,

@@ -53,19 +53,66 @@ export default function App() {
     <OpsClientProvider client={client}>
       <ToastProvider>
         <AuthGate>
-          <Shell>
-            <Routes>
-              <Route path="/" element={<HomeScreen />} />
-              <Route path="/new" element={<NewWorkflowScreen />} />
-              <Route path="/batches/:id" element={<BatchDetailScreen />} />
-              <Route path="/workflows" element={<WorkflowsScreen />} />
-              <Route path="/workflows/:id" element={<WorkflowDetailScreen />} />
-              <Route path="/reviews" element={<ReviewsScreen />} />
-              <Route path="/reviews/:id" element={<ReviewDetailScreen />} />
-              <Route path="/rules" element={<RulesScreen />} />
-              <Route path="/history" element={<HistoryScreen />} />
-            </Routes>
-          </Shell>
+          {/* SessionProvider loads the signed-in principal once. The Shell needs
+              it to decide whether to offer the administrator entry, and AdminOnly
+              needs it to decide what to render — so it must wrap both. */}
+          <SessionProvider>
+            <Shell>
+              <Routes>
+                <Route path="/" element={<HomeScreen />} />
+                <Route path="/new" element={<NewWorkflowScreen />} />
+                <Route path="/batches/:id" element={<BatchDetailScreen />} />
+                <Route path="/workflows" element={<WorkflowsScreen />} />
+                <Route path="/workflows/:id" element={<WorkflowDetailScreen />} />
+                <Route path="/reviews" element={<ReviewsScreen />} />
+                <Route path="/reviews/:id" element={<ReviewDetailScreen />} />
+                <Route path="/rules" element={<RulesScreen />} />
+                <Route path="/history" element={<HistoryScreen />} />
+                {/* Administrator area. The guard decides what to render; the
+                    backend decides what is allowed on every request. */}
+                <Route
+                  path="/admin/config"
+                  element={
+                    <AdminOnly>
+                      <ConfigOverviewScreen />
+                    </AdminOnly>
+                  }
+                />
+                <Route
+                  path="/admin/config/system"
+                  element={
+                    <AdminOnly>
+                      <ConfigSystemScreen />
+                    </AdminOnly>
+                  }
+                />
+                <Route
+                  path="/admin/config/assets"
+                  element={
+                    <AdminOnly>
+                      <ConfigAssetsScreen />
+                    </AdminOnly>
+                  }
+                />
+                <Route
+                  path="/admin/config/regimes"
+                  element={
+                    <AdminOnly>
+                      <ConfigRegimesScreen />
+                    </AdminOnly>
+                  }
+                />
+                <Route
+                  path="/admin/config/history"
+                  element={
+                    <AdminOnly>
+                      <ConfigHistoryScreen />
+                    </AdminOnly>
+                  }
+                />
+              </Routes>
+            </Shell>
+          </SessionProvider>
         </AuthGate>
       </ToastProvider>
     </OpsClientProvider>

@@ -1,4 +1,17 @@
 import type {
+  AuditTrail,
+  Comparison,
+  ConfigCatalogue,
+  ConfigLayer,
+  ConfigOverview,
+  ConfigVersion,
+  CreateDraftInput,
+  ImpactAnalysis,
+  Principal,
+  ValidationResult,
+  ValidationSummary,
+} from "./adminTypes";
+import type {
   Batch,
   CreateBatchInput,
   Dashboard,
