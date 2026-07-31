@@ -222,3 +222,63 @@ class TestDeepLinks:
             "publication_approval"
         assert workflow_view.step_for_stage("received") == "files_received"
         assert workflow_view.step_for_stage("validation") == "data_assessed"
+
+
+class TestCancellingADelivery:
+    """Cancelling ends a delivery and takes it off the working list. Nothing is
+    deleted: it is still there when asked for by name or by status."""
+
+    def _cancel(self, ready, reason="Raised in error during testing"):
+        return ready["client"].post(
+            f"/ops/workflows/{ready['run'].workflow_id}/cancel",
+            headers={"X-Operator-Token": OP_A}, json={"reason": reason})
+
+    def test_a_cancelled_delivery_leaves_the_working_list(self, ready):
+        listed = lambda params="": {                       # noqa: E731
+            w["workflow_id"] for w in ready["client"].get(
+                f"/ops/workflows{params}",
+                headers={"X-Operator-Token": OP_A}).json()["workflows"]}
+        assert ready["run"].workflow_id in listed()
+
+        assert self._cancel(ready).status_code == 200
+
+        assert ready["run"].workflow_id not in listed()
+        # Kept, not deleted: asking for cancelled ones finds it.
+        assert ready["run"].workflow_id in listed("?status=cancelled")
+
+    def test_the_delivery_itself_is_still_readable(self, ready):
+        self._cancel(ready)
+        workflow = _workflow(ready)
+        assert workflow["status"] == "cancelled"
+        # Its history is intact — the steps it did reach still report what
+        # happened, and the ones it never reached are marked not applicable.
+        steps = {s["key"]: s["status"] for s in workflow["steps"]}
+        assert steps["files_received"] == "complete"
+        assert steps["published"] == "not_applicable"
+
+    def test_it_stops_asking_questions(self, ready):
+        # Only meaningful if it was asking one.
+        assert ready["engine"].store.open_decisions(
+            "client_a", ready["run"].workflow_id)
+        self._cancel(ready)
+        reviews = ready["client"].get(
+            "/ops/reviews", headers={"X-Operator-Token": OP_A}).json()["reviews"]
+        assert [r for r in reviews
+                if r["workflow_id"] == ready["run"].workflow_id] == []
+
+    def test_a_published_delivery_cannot_be_cancelled(self, ready):
+        ready["client"].post(
+            f"/ops/workflows/{ready['run'].workflow_id}/publish",
+            headers={"X-Operator-Token": OP_A}, json={})
+        r = self._cancel(ready)
+        assert r.status_code >= 400
+        assert _workflow(ready)["status"] == "published"
+
+    def test_the_reason_is_kept_on_the_record(self, ready):
+        self._cancel(ready, "Duplicate of an earlier test run")
+        events = [e["event"] for e in
+                  ready["engine"].store.list_audit("client_a")]
+        assert "workflow_cancelled" in events
+        entry = next(e for e in ready["engine"].store.list_audit("client_a")
+                     if e["event"] == "workflow_cancelled")
+        assert entry["detail"]["reason"] == "Duplicate of an earlier test run"

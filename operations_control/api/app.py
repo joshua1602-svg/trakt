@@ -29,6 +29,7 @@ from ..contracts import (
     PUBLICATION_SCOPE_DEFAULT,
     RUN_AWAITING_PUBLICATION,
     RUN_BLOCKED,
+    RUN_CANCELLED,
     RUN_NEEDS_REVIEW,
     RUN_PUBLISHED,
     RUN_RECEIVED,
@@ -448,6 +449,11 @@ def list_workflows(client: Optional[str] = None, status: Optional[str] = None,
         open_by_wf = _open_counts(eng, c)
         for row in eng.store.list_workflows(c):
             if status and row.get("status") != status:
+                continue
+            # A cancelled delivery is kept, never deleted, but it is off the
+            # working list: it needs nothing from anybody. Asking for it by
+            # status still finds it.
+            if not status and row.get("status") == RUN_CANCELLED:
                 continue
             rows.append(presenters.present_workflow_row(
                 row, open_by_wf.get(row["workflow_id"], 0)))

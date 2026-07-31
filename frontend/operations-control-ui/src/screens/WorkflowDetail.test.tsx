@@ -209,3 +209,61 @@ describe("workflow layout on a small screen", () => {
     expect(header.className).toContain("sm:px-6");
   });
 });
+
+describe("cancelling a delivery", () => {
+  it("is offered on a live delivery and asks why", async () => {
+    const user = userEvent.setup();
+    renderWorkflow(new MockOpsClient(0), "/workflows/wf-1002");
+    await approvalStep();
+
+    await user.click(screen.getByRole("button", { name: "Cancel this delivery" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByText(/nothing has been published, so nothing is withdrawn/i),
+    ).toBeInTheDocument();
+    // A cancelled delivery is kept and read later, so the reason is required.
+    expect(within(dialog).getByRole("button", { name: "Cancel delivery" })).toBeDisabled();
+  });
+
+  it("ends the delivery and stops its questions being asked", async () => {
+    const user = userEvent.setup();
+    const client = new MockOpsClient(0);
+    // wf-1001 is parked with two open questions in the review queue.
+    expect((await client.getReviews({ workflow_id: "wf-1001" })).length).toBeGreaterThan(0);
+
+    renderWorkflow(client, "/workflows/wf-1001");
+    await approvalStep();
+    await user.click(screen.getByRole("button", { name: "Cancel this delivery" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.type(
+      within(dialog).getByRole("textbox"),
+      "Duplicate of an earlier test run",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Cancel delivery" }));
+
+    await waitFor(async () => {
+      expect((await client.getWorkflow("wf-1001")).status).toBe("cancelled");
+    });
+    expect(await client.getReviews({ workflow_id: "wf-1001" })).toEqual([]);
+  });
+
+  it("takes it off the working list but keeps it findable", async () => {
+    const client = new MockOpsClient(0);
+    await client.cancelWorkflow("wf-1002", "Duplicate of an earlier test run");
+
+    const working = await client.getWorkflows();
+    expect(working.map((w) => w.workflow_id)).not.toContain("wf-1002");
+    const cancelled = await client.getWorkflows({ status: "cancelled" });
+    expect(cancelled.map((w) => w.workflow_id)).toContain("wf-1002");
+  });
+
+  it("is not offered once the delivery is published", async () => {
+    const client = new MockOpsClient(0);
+    await client.publishWorkflow("wf-1002");
+    renderWorkflow(client, "/workflows/wf-1002");
+    await approvalStep();
+    expect(
+      screen.queryByRole("button", { name: "Cancel this delivery" }),
+    ).not.toBeInTheDocument();
+  });
+});

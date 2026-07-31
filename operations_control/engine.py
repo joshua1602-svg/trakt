@@ -41,6 +41,7 @@ from .contracts import (
     DEC_APPROVED,
     DEC_OPEN,
     DEC_REJECTED,
+    DEC_SUPERSEDED,
     DecisionRequired,
     Delivery,
     GovernedAgentResult,
@@ -280,12 +281,41 @@ class OpsEngine:
     def cancel(self, run: WorkflowRun, *, actor: str, reason: str) -> WorkflowRun:
         transition(run, RUN_CANCELLED)
         self.store.save_workflow(run)
+        superseded = self._supersede_open_decisions(run, actor=actor,
+                                                    reason=reason)
         self.store.append_event(run, "cancelled", actor=actor,
-                                detail={"reason": reason})
+                                detail={"reason": reason,
+                                        "questions_closed": superseded})
         self.store.append_audit(run.client_id, "workflow_cancelled", actor=actor,
                                 workflow_id=run.workflow_id,
-                                detail={"reason": reason})
+                                detail={"reason": reason,
+                                        "questions_closed": superseded})
         return run
+
+    def _supersede_open_decisions(self, run: WorkflowRun, *, actor: str,
+                                  reason: str) -> int:
+        """Close the questions a cancelled run was still asking.
+
+        A cancelled delivery has nothing left to decide, so leaving its
+        questions open would keep them in the review queue for a workflow
+        nobody can act on. They are marked superseded rather than approved or
+        rejected: neither answer was given, and recording one would put a
+        decision in the audit trail that nobody made.
+        """
+        closed = 0
+        for doc in self.store.list_decisions(run.client_id, status=DEC_OPEN,
+                                             workflow_id=run.workflow_id):
+            doc.update(status=DEC_SUPERSEDED, resolved_by=actor,
+                       resolved_at=now_iso(),
+                       resolution_reason=reason or "The delivery was cancelled.")
+            self.store.save_decision(run.client_id, doc)
+            self.store.append_audit(
+                run.client_id, "decision_superseded", actor=actor,
+                workflow_id=run.workflow_id,
+                decision_id=doc.get("decision_id", ""),
+                detail={"cause": "workflow_cancelled"})
+            closed += 1
+        return closed
 
     def _is_executing(self, workflow_id: str) -> bool:
         t = self._threads.get(workflow_id)

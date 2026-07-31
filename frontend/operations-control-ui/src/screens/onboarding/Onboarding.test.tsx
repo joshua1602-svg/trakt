@@ -453,3 +453,82 @@ describe("what Trakt answers for itself", () => {
     expect(source.expected_files).toEqual(["LoanExtract.csv"]);
   });
 });
+
+describe("cancelling an onboarding", () => {
+  it("is offered at every step, not only at the end", async () => {
+    const client = new MockOpsClient(0);
+    const created = await client.startNewClientCase();
+    renderAt(client, `/onboarding/cases/${created.case_id}`);
+    // The first step of a case nobody has answered yet.
+    expect(
+      await screen.findByRole("button", { name: /Cancel this onboarding/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("asks why, and refuses to proceed without a reason", async () => {
+    const client = new MockOpsClient(0);
+    const created = await client.startNewClientCase();
+    renderAt(client, `/onboarding/cases/${created.case_id}`);
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Cancel this onboarding/ }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    // A cancelled case is kept and read later. "Cancelled by Operator" alone
+    // does not answer why.
+    expect(
+      within(dialog).getByRole("button", { name: "Cancel onboarding" }),
+    ).toBeDisabled();
+    await userEvent.type(
+      within(dialog).getByPlaceholderText("A short note for the record"),
+      "Client withdrew from the deal",
+    );
+    expect(
+      within(dialog).getByRole("button", { name: "Cancel onboarding" }),
+    ).toBeEnabled();
+  });
+
+  it("says what is not happening, because nothing was ever created", async () => {
+    const client = new MockOpsClient(0);
+    const created = await client.startNewClientCase();
+    renderAt(client, `/onboarding/cases/${created.case_id}`);
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Cancel this onboarding/ }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/nothing is removed/i)).toBeInTheDocument();
+  });
+
+  it("keeps the record, and the case can no longer be edited", async () => {
+    const client = new MockOpsClient(0);
+    const created = await client.startNewClientCase();
+    renderAt(client, `/onboarding/cases/${created.case_id}`);
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Cancel this onboarding/ }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.type(
+      within(dialog).getByPlaceholderText("A short note for the record"),
+      "Client withdrew from the deal",
+    );
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Cancel onboarding" }),
+    );
+    await waitFor(async () => {
+      const after = await client.getCase(created.case_id);
+      expect(after.status).toBe("withdrawn");
+      expect(after.withdrawal_reason).toBe("Client withdrew from the deal");
+    });
+  });
+
+  it("is not offered once the client is live", async () => {
+    const client = new MockOpsClient(0);
+    const id = await completeCase(client);
+    await client.approveCase(id, "Checked");
+    await client.activateCase(id);
+    renderAt(client, `/onboarding/cases/${id}`);
+    await screen.findAllByText("About the client");
+    expect(
+      screen.queryByRole("button", { name: /Cancel this onboarding/ }),
+    ).not.toBeInTheDocument();
+  });
+});

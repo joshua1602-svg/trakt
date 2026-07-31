@@ -24,10 +24,15 @@ import { errorMessage, useLoad } from "@/lib/useLoad";
 const APPROVAL_STEP = "publication_approval";
 const ISSUES_STEP = "issues_reviewed";
 
-function Modal({ children }: { children: ReactNode }) {
+function Modal({ children, labelledBy }: { children: ReactNode; labelledBy?: string }) {
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-stone-900/30 px-6">
-      <div className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl border border-stone-200 bg-white p-6 shadow-xl">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={labelledBy}
+        className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl border border-stone-200 bg-white p-6 shadow-xl"
+      >
         {children}
       </div>
     </div>
@@ -345,6 +350,8 @@ export function WorkflowDetailScreen() {
   const [openStep, setOpenStep] = useState<string | null>(null);
   const [holdOpen, setHoldOpen] = useState(false);
   const [holdReason, setHoldReason] = useState("");
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
   const [busy, setBusy] = useState(false);
 
   // Poll while running.
@@ -383,6 +390,9 @@ export function WorkflowDetailScreen() {
   const canRerun =
     workflow &&
     (["blocked", "failed", "held"].includes(workflow.status) || workflow.interrupted);
+  // The engine allows cancelling from every status except the two terminal
+  // ones. Anything else is a delivery somebody may still be waiting on.
+  const canCancel = workflow && !["published", "cancelled"].includes(workflow.status);
 
   return (
     <Page
@@ -519,7 +529,72 @@ export function WorkflowDetailScreen() {
               </button>
             </div>
           )}
+
+          {workflow.status === "cancelled" && (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              {copy.workflow.cancelledNote}
+            </p>
+          )}
+
+          {/* Low emphasis and below everything else: cancelling is always
+              available on a live delivery, and never the suggested move. */}
+          {canCancel && (
+            <div className="border-t border-stone-200 pt-6">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setCancelOpen(true)}
+                className="text-sm font-medium text-stone-500 underline-offset-4 transition-colors hover:text-stone-900 hover:underline disabled:opacity-40"
+              >
+                {copy.workflow.cancel}
+              </button>
+            </div>
+          )}
         </div>
+      )}
+
+      {cancelOpen && workflow && (
+        <Modal labelledBy="cancel-heading">
+          <p id="cancel-heading" className="text-base font-semibold text-stone-900">
+            {copy.workflow.cancelHeading}
+          </p>
+          <p className="mt-3 text-sm leading-relaxed text-stone-700">
+            {copy.workflow.cancelExplain}
+          </p>
+          <label className="mb-2 mt-5 block text-sm text-stone-800" htmlFor="cancel-reason">
+            {copy.workflow.cancelPrompt}
+          </label>
+          <textarea
+            id="cancel-reason"
+            value={cancelReason}
+            onChange={(event) => setCancelReason(event.target.value)}
+            rows={3}
+            className="mb-4 w-full rounded-xl border border-stone-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+          />
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setCancelOpen(false)}
+              className="rounded-xl border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
+            >
+              {copy.common.cancel}
+            </button>
+            <button
+              type="button"
+              disabled={busy || !cancelReason.trim()}
+              onClick={() => {
+                setCancelOpen(false);
+                void run(
+                  () => client.cancelWorkflow(workflow.workflow_id, cancelReason.trim()),
+                  copy.workflow.cancelledToast,
+                );
+              }}
+              className="rounded-xl bg-stone-900 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-700 disabled:opacity-40"
+            >
+              {copy.workflow.cancelButton}
+            </button>
+          </div>
+        </Modal>
       )}
 
       {holdOpen && workflow && (

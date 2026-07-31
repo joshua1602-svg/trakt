@@ -73,6 +73,10 @@ Same formats, same layers, same readers. No parallel configuration stack.
   regime declaration, so a future regime needs no code.
 - **Approval and activation are different acts.** Approval records a decision.
   Activation writes configuration. Nothing active exists before it.
+- **A case can always be abandoned.** Cancelling is offered at every step, not
+  only at the end, because the moment someone decides to stop is exactly the
+  moment they should not have to finish the wizard to say so. It asks why, keeps
+  the record, and creates nothing.
 - **Portfolios and sources exist before the first delivery.** A portfolio is not
   created by a publication; it is created by an approved onboarding.
 - **Generation is deterministic and idempotent**, merges rather than replaces,
