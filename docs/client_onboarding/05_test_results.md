@@ -38,10 +38,10 @@ $ npx tsc --noEmit
 
 $ npm test
 Test Files  17 passed (17)
-     Tests  106 passed (106)
+     Tests  111 passed (111)
 ```
 
-**26 onboarding browser tests**, including:
+**31 onboarding browser tests**, including:
 
 - the home screen **leads with starting a new client, not importing one** — and
   the migration section is asserted to appear *after* the primary action in the
@@ -61,7 +61,10 @@ Test Files  17 passed (17)
 - legacy migration pre-populates and flags the invalid identifier;
 - amendments start from the version in force and produce a second version with
   the first still readable;
-- an ordinary operator is refused approval.
+- an ordinary operator is refused approval;
+- **an onboarding can be cancelled from any step** — the action is
+  offered before the wizard is finished, asks why, says what is *not*
+  being removed, and disappears once the client is live.
 
 ### Mobile at 390px
 
@@ -69,8 +72,9 @@ Two browser tests assert the layout properties, and the screenshot script
 asserts the real thing:
 
 ```
-13_mobile_home: horizontal overflow = 0px
-14_mobile_case: horizontal overflow = 0px
+13_mobile_home:  horizontal overflow = 0px
+14_mobile_case:  horizontal overflow = 0px
+15b_cancel_dialog: horizontal overflow = 0px
 ```
 
 Measured as `documentElement.scrollWidth - clientWidth` in a real 390×844
@@ -125,5 +129,7 @@ does not carry that key. No commit in this work touches `config/delivery/`.
 | `10_active_client.png` | The activated client |
 | `11_legacy_migration_entry.png` | Legacy migration entry |
 | `12_amendment_entry.png` | Amendment entry |
+| `15_cancel_onboarding.png` | Cancelling a case, with the reason required |
+| `15b_cancel_onboarding_mobile.png` | The same at 390px |
 | `13_mobile_home.png` | 390px home |
 | `14_mobile_case.png` | 390px case |

@@ -91,6 +91,19 @@ export const copy = {
     activate: "Activate client",
     activatedToast: "Client activated.",
 
+    withdraw: "Cancel this onboarding",
+    withdrawHeading: "Cancel this onboarding?",
+    withdrawExplain:
+      "Nothing has been created for this client, so nothing is removed. The case is kept with your reason on it, and can be read afterwards.",
+    withdrawExplainAmendment:
+      "The configuration in force is untouched. This cancels the proposed change only.",
+    withdrawReason: "Why is this being cancelled?",
+    withdrawConfirm: "Cancel onboarding",
+    withdrawnToast: "Onboarding cancelled. The record has been kept.",
+    withdrawnHeading: "Cancelled",
+    withdrawnNote:
+      "This onboarding was cancelled and can no longer be edited. Nothing was created.",
+
     clientSubtitle: "The configuration in force for this client, and how it got there.",
     allClients: "All clients",
     identityHeading: "Identity",

@@ -30,6 +30,7 @@ import {
   TextInput,
   Toggle,
 } from "@/components/onboarding/primitives";
+import { WithdrawDialog } from "@/components/onboarding/WithdrawDialog";
 import { Page } from "@/components/Page";
 import { useToast } from "@/components/Toast";
 import { copy } from "@/lib/copy";
@@ -578,6 +579,7 @@ export function OnboardingCaseScreen() {
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<CasePreview | null>(null);
   const [live, setLive] = useState<OnboardingCase | null>(null);
+  const [confirmWithdraw, setConfirmWithdraw] = useState(false);
 
   const load = useCallback(
     async () => ({
@@ -661,6 +663,8 @@ export function OnboardingCaseScreen() {
   const section = reference.catalogue.sections.find((s) => s.key === step);
   const index = current.steps.findIndex((s) => s.key === step);
   const named = current.client_name && current.client_name !== "Not yet named";
+  // The two statuses the case model itself treats as terminal.
+  const finished = current.status === "activated" || current.status === "withdrawn";
 
   return (
     <Page
@@ -771,6 +775,44 @@ export function OnboardingCaseScreen() {
           </PrimaryButton>
         )}
       </div>
+
+      {/* Available at every step, not only at the end: the moment an operator
+          decides to abandon a case is exactly the moment they should not have
+          to walk through the rest of the wizard to say so. */}
+      {current.status === "withdrawn" && (
+        <div className="mt-8">
+          <Note tone="warn">{copy.onboarding.withdrawnNote}</Note>
+        </div>
+      )}
+      {!finished && (
+        <div className="mt-8 border-t border-stone-200 pt-6">
+          <button
+            type="button"
+            onClick={() => setConfirmWithdraw(true)}
+            className="text-sm font-medium text-stone-500 underline-offset-4 hover:text-stone-900 hover:underline"
+          >
+            {copy.onboarding.withdraw}
+          </button>
+        </div>
+      )}
+
+      {confirmWithdraw && (
+        <WithdrawDialog
+          kind={current.kind}
+          busy={busy}
+          onCancel={() => setConfirmWithdraw(false)}
+          onConfirm={(why) =>
+            void act(
+              () => client.withdrawCase(id, why),
+              () => {
+                setConfirmWithdraw(false);
+                toast.show(copy.onboarding.withdrawnToast, "success");
+                navigate("/onboarding");
+              },
+            )
+          }
+        />
+      )}
     </Page>
   );
 }
