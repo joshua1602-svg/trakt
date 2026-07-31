@@ -39,9 +39,10 @@ confirm before step 2 runs at all.
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from apps.blob_trigger_app.storage import Storage
 
@@ -91,6 +92,8 @@ from .run import (
     SyntheticRun,
 )
 from .store import SyntheticRunStore, synthetic_ops_store
+
+logger = logging.getLogger("trakt.operations_control.occ_agent")
 
 
 class ActionNotAllowed(OpsError):
@@ -148,7 +151,6 @@ class OccAgentService:
         # the live operations container.
         self.onboarding = onboarding or OnboardingService(
             synthetic_ops_store(storage, self.store.container))
-        self._pending_audit: List[Tuple[str, str, Dict[str, Any]]] = []
         self.policy = policy or synthetic_policy(audit_sink=self._audit_refusal)
         self.interpreter = interpreter or DeterministicInterpreter(
             cat=self.onboarding.catalogue)
@@ -161,13 +163,14 @@ class OccAgentService:
         """Sink for policy refusals.
 
         A refusal can happen with no case in hand (a misconfigured call), so it
-        is recorded against the run when there is one and dropped into the
-        service log when there is not — never silently discarded.
+        is logged when there is no case to file it against — never silently
+        discarded. The capability is named; nothing about the case is.
         """
         case_ref = str(event.get("case_id") or "")
         tenant = str(event.get("tenant") or "")
         if not case_ref or not tenant:
-            self._pending_audit.append(("", "", event))
+            logger.warning("occ_agent: refused %s with no case to file it "
+                           "against", event.get("capability"))
             return
         self.store.append_audit(
             tenant, case_ref, action=str(event.get("action") or "refused"),
