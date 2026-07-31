@@ -110,6 +110,7 @@ FILE_LABELS: Dict[str, str] = {
     "config/system/run_context_policy.yaml": "Run policy",
     "config/regime/annex2_field_universe.yaml": "Annex 2 field list",
     "config/regime/annex2_delivery_rules.yaml": "Annex 2 delivery rules",
+    "config/regime/onboarding_standing_fields.yaml": "Standing field definitions",
     "config/asset/product_profiles.yaml": "Product profiles",
     "config/asset/product_defaults_ERM.yaml": "Equity release defaults",
     "config/asset/issue_policy.yaml": "Issue handling policy",

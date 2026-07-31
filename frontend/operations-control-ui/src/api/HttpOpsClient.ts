@@ -15,6 +15,16 @@ import type {
   ValidationSummary,
 } from "./adminTypes";
 import type {
+  ActivationResult,
+  CasePreview,
+  ChecklistRow,
+  ConfigurationVersionRow,
+  OnboardingCase,
+  OnboardingClientDetail,
+  OnboardingHome,
+  OnboardingReference,
+} from "./onboardingTypes";
+import type {
   Batch,
   CreateBatchInput,
   Dashboard,
@@ -343,5 +353,188 @@ export class HttpOpsClient implements OpsClient {
     toVersion: number,
   ): Promise<{ active_version: number }> {
     return this.post(`/ops/admin/config/${layer}/rollback`, { to_version: toVersion });
+  }
+
+  // -- Client Onboarding ---------------------------------------------------- //
+
+  async getOnboardingReference(): Promise<OnboardingReference> {
+    return this.request<OnboardingReference>("/ops/onboarding/reference");
+  }
+
+  async getOnboardingHome(): Promise<OnboardingHome> {
+    const body = await this.request<{ home: OnboardingHome }>("/ops/onboarding/home");
+    return body.home;
+  }
+
+  private async caseCall(path: string, payload?: unknown): Promise<OnboardingCase> {
+    const body = await this.post<{ case: OnboardingCase }>(path, payload ?? {});
+    return body.case;
+  }
+
+  async startNewClientCase(): Promise<OnboardingCase> {
+    return this.caseCall("/ops/onboarding/cases");
+  }
+
+  async startMigrationCase(clientId: string): Promise<OnboardingCase> {
+    return this.caseCall("/ops/onboarding/cases/migration", { client_id: clientId });
+  }
+
+  async startAmendmentCase(clientId: string): Promise<OnboardingCase> {
+    return this.caseCall("/ops/onboarding/cases/amendment", { client_id: clientId });
+  }
+
+  async getCase(caseId: string): Promise<OnboardingCase> {
+    const body = await this.request<{ case: OnboardingCase }>(
+      `/ops/onboarding/cases/${encodeURIComponent(caseId)}`,
+    );
+    return body.case;
+  }
+
+  async saveCaseStep(
+    caseId: string,
+    step: string,
+    payload: Record<string, unknown>,
+  ): Promise<OnboardingCase> {
+    const body = await this.request<{ case: OnboardingCase }>(
+      `/ops/onboarding/cases/${encodeURIComponent(caseId)}`,
+      { method: "PUT", body: JSON.stringify({ step, payload }) },
+    );
+    return body.case;
+  }
+
+  async addPipelineBook(caseId: string, portfolioId: string): Promise<OnboardingCase> {
+    return this.caseCall(`/ops/onboarding/cases/${encodeURIComponent(caseId)}/pipeline-book`, {
+      portfolio_id: portfolioId,
+    });
+  }
+
+  async registerSample(
+    caseId: string,
+    files: { name: string; headers?: string[] }[],
+  ): Promise<OnboardingCase> {
+    return this.caseCall(`/ops/onboarding/cases/${encodeURIComponent(caseId)}/sample`, {
+      files,
+    });
+  }
+
+  async removeSource(
+    caseId: string,
+    portfolioId: string,
+    dataset: string,
+  ): Promise<OnboardingCase> {
+    const body = await this.request<{ case: OnboardingCase }>(
+      `/ops/onboarding/cases/${encodeURIComponent(caseId)}/sources/` +
+        `${encodeURIComponent(portfolioId)}/${encodeURIComponent(dataset)}`,
+      { method: "DELETE" },
+    );
+    return body.case;
+  }
+
+  async getCaseChecklist(caseId: string): Promise<ChecklistRow[]> {
+    const body = await this.request<{ checklist: ChecklistRow[] }>(
+      `/ops/onboarding/cases/${encodeURIComponent(caseId)}/checklist`,
+    );
+    return body.checklist;
+  }
+
+  async createInformationRequest(
+    caseId: string,
+    items: ChecklistRow[],
+    options?: { responsible_party?: string; due_date?: string; note?: string },
+  ): Promise<OnboardingCase> {
+    return this.caseCall(`/ops/onboarding/cases/${encodeURIComponent(caseId)}/requests`, {
+      items,
+      responsible_party: options?.responsible_party ?? "client",
+      due_date: options?.due_date ?? "",
+      note: options?.note ?? "",
+    });
+  }
+
+  async markRequestSent(caseId: string, requestId: string): Promise<OnboardingCase> {
+    return this.caseCall(
+      `/ops/onboarding/cases/${encodeURIComponent(caseId)}/requests/` +
+        `${encodeURIComponent(requestId)}/sent`,
+    );
+  }
+
+  async recordRequestResponse(
+    caseId: string,
+    requestId: string,
+    body: {
+      note?: string;
+      answers?: Record<string, unknown>;
+      evidence?: { name: string; reference: string }[];
+    },
+  ): Promise<OnboardingCase> {
+    return this.caseCall(
+      `/ops/onboarding/cases/${encodeURIComponent(caseId)}/requests/` +
+        `${encodeURIComponent(requestId)}/response`,
+      body,
+    );
+  }
+
+  async addCaseQuestion(caseId: string, question: string): Promise<OnboardingCase> {
+    return this.caseCall(`/ops/onboarding/cases/${encodeURIComponent(caseId)}/questions`, {
+      question,
+    });
+  }
+
+  async resolveCaseQuestion(
+    caseId: string,
+    questionId: string,
+    resolution: string,
+  ): Promise<OnboardingCase> {
+    return this.caseCall(
+      `/ops/onboarding/cases/${encodeURIComponent(caseId)}/questions/` +
+        `${encodeURIComponent(questionId)}/resolve`,
+      { resolution },
+    );
+  }
+
+  async getCasePreview(caseId: string): Promise<CasePreview> {
+    const body = await this.request<{ preview: CasePreview }>(
+      `/ops/onboarding/cases/${encodeURIComponent(caseId)}/preview`,
+    );
+    return body.preview;
+  }
+
+  async submitCase(caseId: string): Promise<OnboardingCase> {
+    return this.caseCall(`/ops/onboarding/cases/${encodeURIComponent(caseId)}/submit`);
+  }
+
+  async approveCase(caseId: string, reason: string): Promise<OnboardingCase> {
+    return this.caseCall(`/ops/onboarding/cases/${encodeURIComponent(caseId)}/approve`, {
+      reason,
+    });
+  }
+
+  async activateCase(caseId: string): Promise<ActivationResult> {
+    return this.post<ActivationResult>(
+      `/ops/onboarding/cases/${encodeURIComponent(caseId)}/activate`,
+      {},
+    );
+  }
+
+  async withdrawCase(caseId: string, reason: string): Promise<OnboardingCase> {
+    return this.caseCall(`/ops/onboarding/cases/${encodeURIComponent(caseId)}/withdraw`, {
+      reason,
+    });
+  }
+
+  async getOnboardingClient(clientId: string): Promise<OnboardingClientDetail> {
+    const body = await this.request<{ client: OnboardingClientDetail }>(
+      `/ops/onboarding/clients/${encodeURIComponent(clientId)}`,
+    );
+    return body.client;
+  }
+
+  async getOnboardingClientVersion(
+    clientId: string,
+    version: number,
+  ): Promise<ConfigurationVersionRow> {
+    const body = await this.request<{ version: ConfigurationVersionRow }>(
+      `/ops/onboarding/clients/${encodeURIComponent(clientId)}/versions/${version}`,
+    );
+    return body.version;
   }
 }

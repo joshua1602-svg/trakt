@@ -1,4 +1,5 @@
 import { MockConfigAdmin } from "./MockConfigAdmin";
+import { MockOnboarding } from "./MockOnboarding";
 import { OpsError, type OpsClient } from "./OpsClient";
 import type {
   AuditTrail,
@@ -13,6 +14,16 @@ import type {
   ValidationResult,
   ValidationSummary,
 } from "./adminTypes";
+import type {
+  ActivationResult,
+  CasePreview,
+  ChecklistRow,
+  ConfigurationVersionRow,
+  OnboardingCase,
+  OnboardingClientDetail,
+  OnboardingHome,
+  OnboardingReference,
+} from "./onboardingTypes";
 import type {
   Batch,
   BatchInputRole,
@@ -92,6 +103,7 @@ export class MockOpsClient implements OpsClient {
   private readonly delayMs: number;
   private readonly principal: Principal;
   private readonly config = new MockConfigAdmin();
+  private readonly onboarding = new MockOnboarding();
   private nextId = 6000;
   /** Counts reads of a running workflow so it visibly "finishes" while polling. */
   private runningTicks = new Map<string, number>();
@@ -1536,5 +1548,155 @@ export class MockOpsClient implements OpsClient {
     await this.wait();
     this.requireAdmin();
     return this.config.rollback(layer, toVersion);
+  }
+
+  // -- Client Onboarding ---------------------------------------------------- //
+
+  async getOnboardingReference(): Promise<OnboardingReference> {
+    await this.wait();
+    return this.onboarding.reference();
+  }
+
+  async getOnboardingHome(): Promise<OnboardingHome> {
+    await this.wait();
+    return this.onboarding.home();
+  }
+
+  async startNewClientCase(): Promise<OnboardingCase> {
+    await this.wait();
+    return this.onboarding.startNewClient(this.principal.name);
+  }
+
+  async startMigrationCase(clientId: string): Promise<OnboardingCase> {
+    await this.wait();
+    return this.onboarding.startMigration(clientId, this.principal.name);
+  }
+
+  async startAmendmentCase(clientId: string): Promise<OnboardingCase> {
+    await this.wait();
+    return this.onboarding.startAmendment(clientId, this.principal.name);
+  }
+
+  async getCase(caseId: string): Promise<OnboardingCase> {
+    await this.wait();
+    return this.onboarding.case(caseId);
+  }
+
+  async saveCaseStep(
+    caseId: string,
+    step: string,
+    payload: Record<string, unknown>,
+  ): Promise<OnboardingCase> {
+    await this.wait();
+    return this.onboarding.saveStep(caseId, step, payload);
+  }
+
+  async addPipelineBook(caseId: string, portfolioId: string): Promise<OnboardingCase> {
+    await this.wait();
+    return this.onboarding.addPipelineBook(caseId, portfolioId);
+  }
+
+  async registerSample(
+    caseId: string,
+    files: { name: string; headers?: string[] }[],
+  ): Promise<OnboardingCase> {
+    await this.wait();
+    return this.onboarding.registerSample(caseId, files);
+  }
+
+  async removeSource(
+    caseId: string,
+    portfolioId: string,
+    dataset: string,
+  ): Promise<OnboardingCase> {
+    await this.wait();
+    return this.onboarding.removeSource(caseId, portfolioId, dataset);
+  }
+
+  async getCaseChecklist(caseId: string): Promise<ChecklistRow[]> {
+    await this.wait();
+    return this.onboarding.checklist(caseId);
+  }
+
+  async createInformationRequest(
+    caseId: string,
+    items: ChecklistRow[],
+    options?: { responsible_party?: string; due_date?: string; note?: string },
+  ): Promise<OnboardingCase> {
+    await this.wait();
+    return this.onboarding.createRequest(caseId, items, options);
+  }
+
+  async markRequestSent(caseId: string, requestId: string): Promise<OnboardingCase> {
+    await this.wait();
+    return this.onboarding.markSent(caseId, requestId);
+  }
+
+  async recordRequestResponse(
+    caseId: string,
+    requestId: string,
+    body: {
+      note?: string;
+      answers?: Record<string, unknown>;
+      evidence?: { name: string; reference: string }[];
+    },
+  ): Promise<OnboardingCase> {
+    await this.wait();
+    return this.onboarding.recordResponse(caseId, requestId, body);
+  }
+
+  async addCaseQuestion(caseId: string, question: string): Promise<OnboardingCase> {
+    await this.wait();
+    return this.onboarding.addQuestion(caseId, question);
+  }
+
+  async resolveCaseQuestion(
+    caseId: string,
+    questionId: string,
+    resolution: string,
+  ): Promise<OnboardingCase> {
+    await this.wait();
+    return this.onboarding.resolveQuestion(caseId, questionId, resolution);
+  }
+
+  async getCasePreview(caseId: string): Promise<CasePreview> {
+    await this.wait();
+    return this.onboarding.preview(caseId);
+  }
+
+  async submitCase(caseId: string): Promise<OnboardingCase> {
+    await this.wait();
+    return this.onboarding.submit(caseId);
+  }
+
+  /** Approval is an administrator act, exactly as the server enforces. */
+  async approveCase(caseId: string, reason: string): Promise<OnboardingCase> {
+    await this.wait();
+    this.requireAdmin();
+    return this.onboarding.approve(caseId, reason, this.principal.name);
+  }
+
+  async activateCase(caseId: string): Promise<ActivationResult> {
+    await this.wait();
+    this.requireAdmin();
+    return this.onboarding.activate(caseId, this.principal.name);
+  }
+
+  async withdrawCase(caseId: string, reason: string): Promise<OnboardingCase> {
+    await this.wait();
+    return this.onboarding.withdraw(caseId, reason);
+  }
+
+  async getOnboardingClient(clientId: string): Promise<OnboardingClientDetail> {
+    await this.wait();
+    return this.onboarding.client(clientId);
+  }
+
+  async getOnboardingClientVersion(
+    clientId: string,
+    version: number,
+  ): Promise<ConfigurationVersionRow> {
+    await this.wait();
+    return this.onboarding.version(clientId, version);
   }
 }

@@ -1,0 +1,852 @@
+# =========================================================================
+# Client onboarding field catalogue — client-agnostic.
+# =========================================================================
+#
+# The single declaration of what Trakt needs to know before it can configure a
+# client it has never met. The wizard renders this; validation reads this; the
+# client information request is derived from this; generation routes through
+# this. Adding a field is a change here, not a change to a form component.
+#
+# It contains NO client values and NO client-specific defaults. It was derived
+# by reading what the platform currently requires — the client configuration
+# blocks, the Annex 2 delivery rules, the Annex 12 deal template, the source
+# registry record and the portfolio registry — and asking, for each field, who
+# is actually able to answer it.
+#
+# ---------------------------------------------------------------------------
+# `source` — who supplies the value. This is the axis that decides whether a
+# field appears on a client information request at all:
+#
+#   client_supplied    only the client knows it (legal names, LEIs, contacts)
+#   operator_supplied  Trakt's operator decides it (identifiers, conventions)
+#   inferred           read from data the client uploads (not asked)
+#   derived            computed from another answer (never asked)
+#   trakt_default      a governed default applies unless overridden
+#   system_generated   Trakt mints it (case ids, blob prefixes)
+#   delivery_specific  changes every period — EXCLUDED from onboarding
+#
+# `scope` — what the value belongs to: client, legal_entity, portfolio, source,
+# transaction, regime, output, contact, branding, operational.
+#
+# `writes_to` — the governed artefact and key path generation writes it into:
+#   client_config:<dotted>       config/client/config_client_{CLIENT}.yaml
+#   annex12_config:<dotted>      config/client/config_client_{CLIENT}_annex12.yaml
+#   portfolio_registry:<key>     config/client/portfolio_registry_{CLIENT}.yaml
+#   source_registry:<field>      the durable source registry record
+#   tenancy:<dotted>             the per-client index
+#   onboarding_record            held in the governed onboarding record only,
+#                                because no existing artefact can represent it
+#   derived:<artefact>.<block>   shapes that artefact through a rule rather than
+#                                a direct key write (the generator owns it)
+#
+# `required_when` — a conditional expression over other answers. Supported
+# forms: `<path> == <value>`, `<path> != <value>`, `<path> in [a, b]`,
+# `<path> contains <value>`, `always`. Evaluated by
+# operations_control/onboarding/catalogue.py.
+
+version: 1
+
+# ---------------------------------------------------------------------------
+# Governed value lists. Referenced by fields as `options_from: <name>`.
+# Lists owned elsewhere in the platform are marked `owner:` and resolved at
+# load time rather than restated here.
+# ---------------------------------------------------------------------------
+vocabularies:
+
+  asset_class:
+    owner: operations_control.configuration.packages.ASSET_MODEL
+    label: Asset class
+
+  dataset:
+    owner: operations_control.contracts.BATCH_DATASETS
+    label: Book
+
+  cadence:
+    owner: apps.blob_trigger_app.path_parser.VALID_FREQUENCIES
+    label: Reporting cadence
+
+  portfolio_type:
+    label: How the book was acquired
+    values:
+      - {value: direct, label: Originated by the client}
+      - {value: acquired, label: Acquired from a third party}
+
+  portfolio_structure:
+    label: How the book is held
+    values:
+      - {value: on_balance_sheet, label: On balance sheet}
+      - {value: warehouse, label: Warehouse facility}
+      - {value: spv, label: Special purpose vehicle}
+      - {value: managed, label: Managed for a third party}
+
+  entity_role:
+    label: Role
+    help: >-
+      One legal entity may hold several roles. Roles are recorded against the
+      entity, so its identity is captured once.
+    values:
+      - {value: originator, label: Originator}
+      - {value: sponsor, label: Sponsor}
+      - {value: sspe, label: Issuer / SSPE}
+      - {value: reporting_entity, label: Reporting entity}
+      - {value: original_lender, label: Original lender}
+      - {value: servicer, label: Servicer}
+      - {value: risk_retention_holder, label: Risk retention holder}
+      - {value: trustee, label: Trustee}
+      - {value: warehouse_lender, label: Warehouse lender}
+      - {value: investment_manager, label: Investment manager}
+      - {value: calculation_agent, label: Calculation agent}
+      - {value: seller, label: Seller}
+
+  delivery_channel:
+    label: How files arrive
+    values:
+      - {value: sftp, label: SFTP}
+      - {value: blob_upload, label: Secure upload}
+      - {value: email, label: Email}
+      - {value: api, label: System to system}
+
+  file_format:
+    label: File format
+    values:
+      - {value: csv, label: CSV}
+      - {value: xlsx, label: Excel}
+      - {value: parquet, label: Parquet}
+      - {value: fixed_width, label: Fixed width}
+
+  period_convention:
+    label: Reporting period convention
+    values:
+      - {value: calendar_month_end, label: Calendar month end}
+      - {value: calendar_quarter_end, label: Calendar quarter end}
+      - {value: business_month_end, label: Last business day of the month}
+      - {value: anniversary, label: Anniversary of the facility date}
+
+  day_count_convention:
+    label: Day-count convention
+    values:
+      - {value: ACT365, label: Actual/365}
+      - {value: ACT360, label: Actual/360}
+      - {value: ACT_ACT, label: Actual/Actual}
+      - {value: THIRTY_360, label: 30/360}
+
+  payment_frequency:
+    label: Payment frequency
+    values:
+      - {value: MONTHLY, label: Monthly}
+      - {value: QUARTERLY, label: Quarterly}
+      - {value: SEMI_ANNUAL, label: Semi-annual}
+      - {value: ANNUAL, label: Annual}
+      - {value: AT_REDEMPTION, label: At redemption}
+
+# ---------------------------------------------------------------------------
+# Sections, in the order the wizard presents them.
+# ---------------------------------------------------------------------------
+sections:
+
+  # -----------------------------------------------------------------------
+  - key: client
+    label: About the client
+    help: >-
+      The organisation Trakt reports for. Its identity, where it operates and
+      who Trakt should speak to.
+    fields:
+
+      - key: client_name
+        label: Client name
+        help: How this client should be referred to in reports and in Trakt.
+        scope: client
+        source: client_supplied
+        type: text
+        required: true
+        max_length: 120
+        consumers: [Client configuration, every report heading]
+        writes_to: client_config:client.display_name
+        amendable: true
+
+      - key: client_id
+        label: Client identifier
+        help: >-
+          Short, stable and unique. Used in storage locations and in every
+          record Trakt keeps about this client. It cannot be changed later.
+        scope: client
+        source: operator_supplied
+        proposed_from: client_name
+        type: identifier
+        required: true
+        validation: identifier
+        unique_across: clients
+        consumers: [Client configuration, source registrations, storage layout]
+        writes_to: client_config:client.client_id
+        amendable: false
+
+      - key: jurisdiction
+        label: Jurisdiction
+        help: The country whose rules the client reports under.
+        scope: client
+        source: client_supplied
+        type: country
+        required: true
+        validation: country
+        consumers: [Client configuration, geographic enrichment]
+        writes_to: client_config:portfolio.country
+        amendable: true
+
+      - key: reporting_currency
+        label: Reporting currency
+        help: The currency amounts are reported in.
+        scope: client
+        source: trakt_default
+        required: true
+        infers_from: jurisdiction
+        type: currency
+        validation: currency
+        consumers: [Client configuration, all monetary normalisation]
+        writes_to: client_config:portfolio.base_currency
+        amendable: true
+
+      - key: time_zone
+        label: Reporting time zone
+        scope: client
+        source: trakt_default
+        required: true
+        infers_from: jurisdiction
+        type: text
+        # No catalogue-wide default: a time zone is a fact about the client's
+        # jurisdiction, so it comes from the jurisdiction table, and from that
+        # table's own fallback where the country is not listed. A default here
+        # would be one country's clock imposed on every client.
+        consumers: [Reporting calendar]
+        writes_to: client_config:client.time_zone
+        amendable: true
+
+      - key: environment
+        label: Environment
+        scope: operational
+        source: trakt_default
+        type: enum
+        required: false
+        default: production
+        options:
+          - {value: production, label: Production}
+          - {value: uat, label: Test}
+        consumers: [Client configuration]
+        writes_to: client_config:client.environment
+        amendable: true
+
+  # -----------------------------------------------------------------------
+  - key: entities
+    label: Legal and reporting entities
+    help: >-
+      The entities involved in the transaction. Capture each entity once and
+      give it every role it holds — the same company is often both originator
+      and servicer.
+    repeatable: true
+    repeatable_key: entity_id
+    min_items: 1
+    item_label_field: legal_name
+    fields:
+
+      - key: entity_id
+        label: Entity reference
+        scope: legal_entity
+        source: system_generated
+        type: identifier
+        required: false
+        help: Generated by Trakt so portfolios can point at this entity.
+        writes_to: onboarding_record
+        amendable: false
+
+      - key: legal_name
+        label: Legal name
+        help: >-
+          The full registered name. Where the entity has an identifier, this
+          must match the name held against it in the global register.
+        scope: legal_entity
+        source: client_supplied
+        type: text
+        required: true
+        max_length: 200
+        evidence_required: true
+        consumers: [Annex 2 RREL82 where the entity is the originator, Annex 12 IVSS3/IVSS4 where it is the reporting entity]
+        # Reaches the generated configuration through the entity's ROLE rather
+        # than a fixed key: the originator's name becomes defaults.originator_name,
+        # the reporting entity's becomes IVSS3/IVSS4. The generator owns that.
+        writes_to: derived:client_config.defaults
+        amendable: true
+
+      - key: roles
+        label: Roles
+        help: Every role this entity holds in the transaction.
+        scope: legal_entity
+        source: client_supplied
+        type: multi_enum
+        required: true
+        options_from: entity_role
+        consumers: [Regime reporting, report cover pages]
+        # Roles decide which generated block an entity appears in.
+        writes_to: derived:client_config.reporting_parties
+        amendable: true
+
+      - key: lei
+        label: Legal Entity Identifier
+        help: Twenty characters. Required for any entity named in regulatory reporting.
+        scope: legal_entity
+        source: client_supplied
+        type: lei
+        required: false
+        required_when: "roles contains originator"
+        validation: lei
+        evidence_required: true
+        consumers: [Annex 2 RREL83, Annex 12 IVSS1]
+        writes_to: derived:client_config.defaults
+        amendable: true
+
+      - key: registration_number
+        label: Company registration number
+        scope: legal_entity
+        source: client_supplied
+        type: text
+        required: false
+        evidence_required: true
+        consumers: [Onboarding record]
+        writes_to: onboarding_record
+        amendable: true
+
+      - key: country_of_establishment
+        label: Country of establishment
+        scope: legal_entity
+        source: client_supplied
+        type: country
+        required: false
+        required_when: "roles contains originator"
+        validation: country
+        consumers: [Annex 2 RREL84]
+        writes_to: derived:client_config.defaults
+        amendable: true
+
+      - key: registered_address
+        label: Registered address
+        scope: legal_entity
+        source: client_supplied
+        type: multiline
+        required: false
+        consumers: [Report cover pages]
+        writes_to: onboarding_record
+        amendable: true
+
+  # -----------------------------------------------------------------------
+  - key: contacts
+    label: Contacts and distribution
+    help: Who Trakt should contact, and who receives what.
+    fields:
+
+      - key: reporting_contact_name
+        label: Primary reporting contact
+        scope: contact
+        source: client_supplied
+        type: text
+        required: true
+        consumers: [Client configuration, publication notification]
+        writes_to: client_config:client.reporting_contact.name
+        amendable: true
+
+      - key: reporting_contact_email
+        label: Reporting email
+        scope: contact
+        source: client_supplied
+        type: email
+        required: true
+        validation: email
+        sensitive: true
+        consumers: [Client configuration, publication notification]
+        writes_to: client_config:client.reporting_contact.email
+        amendable: true
+
+      - key: reporting_contact_phone
+        label: Reporting contact telephone
+        scope: contact
+        source: client_supplied
+        type: text
+        required: false
+        required_when: "reporting.products contains investor_reporting"
+        sensitive: true
+        consumers: [Annex 12 IVSS6]
+        writes_to: annex12_config:annex12.deal.IVSS6
+        amendable: true
+
+      - key: operational_contact_name
+        label: Operational contact
+        help: Who Trakt speaks to about deliveries and data questions.
+        scope: contact
+        source: client_supplied
+        type: text
+        required: true
+        consumers: [Client configuration]
+        writes_to: client_config:client.operational_contact.name
+        amendable: true
+
+      - key: operational_contact_email
+        label: Operational email
+        scope: contact
+        source: client_supplied
+        type: email
+        required: true
+        validation: email
+        sensitive: true
+        consumers: [Client configuration]
+        writes_to: client_config:client.operational_contact.email
+        amendable: true
+
+      - key: authorised_approver
+        label: Authorised approver
+        help: Who at the client may approve a report for release.
+        scope: contact
+        source: client_supplied
+        type: text
+        required: false
+        consumers: [Onboarding record]
+        writes_to: onboarding_record
+        amendable: true
+
+      - key: investor_report_recipients
+        label: Investor report recipients
+        help: One address per line.
+        scope: contact
+        source: client_supplied
+        type: multiline
+        required: false
+        required_when: "reporting.products contains investor_reporting"
+        sensitive: true
+        consumers: [Investor report distribution]
+        writes_to: onboarding_record
+        amendable: true
+
+  # -----------------------------------------------------------------------
+  - key: portfolios
+    label: Portfolios
+    help: >-
+      The books Trakt will report on. A portfolio exists from the moment it is
+      approved here — it does not wait for a first delivery.
+    repeatable: true
+    repeatable_key: portfolio_id
+    min_items: 1
+    item_label_field: display_name
+    fields:
+
+      - key: portfolio_id
+        label: Portfolio identifier
+        help: Short, stable and unique within this client.
+        scope: portfolio
+        source: operator_supplied
+        required: true
+        proposed_from: portfolio type and sequence
+        type: identifier
+        validation: identifier
+        unique_across: portfolios
+        consumers: [Source registrations, storage layout, portfolio metadata]
+        writes_to: portfolio_registry:source_portfolio_id
+        amendable: false
+
+      - key: display_name
+        label: Portfolio name
+        scope: portfolio
+        source: client_supplied
+        type: text
+        required: true
+        consumers: [Portfolio metadata, report headings]
+        writes_to: portfolio_registry:source_portfolio_label
+        amendable: true
+
+      - key: asset_class
+        label: Asset class
+        scope: portfolio
+        source: inferred
+        required: true
+        infers_from: the sample pack's column headers
+        confirm: true
+        type: enum
+        options_from: asset_class
+        consumers: [Client configuration, regime eligibility, product profile]
+        writes_to: client_config:portfolio.asset_class
+        amendable: false
+
+      - key: portfolio_type
+        label: How the book was acquired
+        scope: portfolio
+        source: client_supplied
+        type: enum
+        required: true
+        options_from: portfolio_type
+        consumers: [Source registrations, storage layout, origination default]
+        writes_to: portfolio_registry:source_portfolio_type
+        amendable: false
+
+      - key: structure
+        label: How the book is held
+        scope: portfolio
+        source: operator_supplied
+        type: enum
+        options_from: portfolio_structure
+        consumers: [Portfolio metadata]
+        writes_to: portfolio_registry:structure
+        amendable: true
+
+      - key: owning_entity
+        label: Owning legal entity
+        help: Which of the entities above holds this book.
+        scope: portfolio
+        source: inferred
+        required: true
+        infers_from: the only entity, where there is only one
+        type: entity_reference
+        consumers: [Portfolio metadata, regime reporting]
+        writes_to: portfolio_registry:owning_entity
+        amendable: true
+
+      - key: reporting_currency
+        label: Portfolio reporting currency
+        help: Leave blank to use the client's reporting currency.
+        scope: portfolio
+        source: inferred
+        required: true
+        infers_from: the client's reporting currency
+        type: currency
+        required: false
+        validation: currency
+        consumers: [Portfolio metadata]
+        writes_to: portfolio_registry:reporting_currency
+        amendable: true
+
+      - key: originates
+        label: Still originating
+        help: Whether new loans are still being written to this book.
+        scope: portfolio
+        source: derived
+        type: boolean
+        required: false
+        derived_default: "portfolio_type == direct"
+        consumers: [Portfolio metadata, forecast treatment]
+        writes_to: portfolio_registry:originates
+        amendable: true
+
+      - key: period_convention
+        label: Reporting period convention
+        scope: portfolio
+        source: inferred
+        required: true
+        infers_from: the book's reporting cadence
+        type: enum
+        options_from: period_convention
+        consumers: [Reporting calendar, period validation]
+        writes_to: portfolio_registry:period_convention
+        amendable: true
+
+  # -----------------------------------------------------------------------
+  - key: sources
+    label: Expected deliveries
+    help: >-
+      What Trakt should expect to receive for each book, and how. One
+      registration is created per book and dataset.
+    repeatable: true
+    repeatable_key: source_key
+    derived_from: portfolios
+    item_label_field: source_key
+    fields:
+
+      - key: portfolio_id
+        label: Portfolio
+        scope: source
+        source: derived
+        type: portfolio_reference
+        required: true
+        writes_to: source_registry:source_portfolio_id
+        amendable: false
+
+      - key: dataset
+        label: Book
+        help: The funded book is the loans already advanced. Pipeline is what is being written.
+        scope: source
+        source: operator_supplied
+        type: enum
+        required: true
+        options_from: dataset
+        consumers: [Source registration, intake routing]
+        writes_to: source_registry:dataset
+        amendable: false
+
+      - key: cadence
+        label: Expected cadence
+        scope: source
+        source: trakt_default
+        required: true
+        default: monthly
+        type: enum
+        options_from: cadence
+        consumers: [Source registration, storage layout]
+        writes_to: source_registry:frequency
+        amendable: true
+
+      - key: source_party
+        label: Who sends the data
+        help: The system or organisation the files come from.
+        scope: source
+        source: client_supplied
+        type: text
+        consumers: [Source registration]
+        writes_to: source_registry:source_system
+        amendable: true
+
+      - key: delivery_channel
+        label: How files arrive
+        scope: source
+        source: operator_supplied
+        type: enum
+        options_from: delivery_channel
+        consumers: [Onboarding record, intake setup]
+        writes_to: onboarding_record
+        amendable: true
+
+      - key: file_format
+        label: File format
+        scope: source
+        source: inferred
+        required: true
+        infers_from: the sample pack's file extensions
+        type: enum
+        options_from: file_format
+        consumers: [Onboarding record, mapping]
+        writes_to: onboarding_record
+        amendable: true
+
+      - key: expected_files
+        label: Expected files
+        help: >-
+          The file names or patterns expected in each delivery, one per line.
+          Used to tell an incomplete pack from a complete one.
+        scope: source
+        source: inferred
+        infers_from: the file names in the sample pack
+        type: multiline
+        required: false
+        consumers: [Source registration, pack completeness]
+        writes_to: source_registry:expected_columns
+        amendable: true
+
+      - key: cut_off_convention
+        label: Reporting cut-off
+        help: The point in the period the data is taken as at.
+        scope: source
+        source: derived
+        type: enum
+        required: false
+        options_from: period_convention
+        consumers: [Onboarding record]
+        writes_to: onboarding_record
+        amendable: true
+
+      - key: sample_provided
+        label: Sample file provided
+        scope: source
+        source: operator_supplied
+        type: boolean
+        required: false
+        consumers: [Readiness]
+        writes_to: onboarding_record
+        amendable: true
+
+      - key: mapping_complete
+        label: Mapping approved
+        help: >-
+          Left unticked, the first delivery routes through source onboarding for
+          mapping approval, which is the normal path for a new source.
+        scope: source
+        source: operator_supplied
+        type: boolean
+        required: false
+        consumers: [Source registration status]
+        writes_to: onboarding_record
+        amendable: true
+
+      - key: regime_required
+        label: Included in regulatory reporting
+        scope: source
+        source: derived
+        type: boolean
+        required: false
+        consumers: [Source registration, intake routing]
+        writes_to: source_registry:regime_required
+        amendable: true
+
+  # -----------------------------------------------------------------------
+  - key: reporting
+    label: Reporting requirements
+    help: >-
+      Which Trakt outputs this client receives. Where eligibility follows from
+      the books, Trakt works it out; where it is a client decision, it is asked.
+    fields:
+
+      - key: products
+        label: Reporting products
+        scope: output
+        source: client_supplied
+        type: product_selection
+        required: true
+        consumers: [Client configuration, regime configuration, workflow outcomes]
+        # Not a direct key write: the selection shapes pipeline.esma_enabled,
+        # supported_regimes and default_regime through a rule in the generator,
+        # because those three must stay consistent with each other.
+        writes_to: derived:client_config.pipeline
+        amendable: true
+
+  # -----------------------------------------------------------------------
+  # Regime standing data. The fields themselves are declared per product in
+  # config/regime/onboarding_standing_fields.yaml so that a future regime is a
+  # configuration change; this section tells the wizard where to render them.
+  # -----------------------------------------------------------------------
+  - key: regime
+    label: Regulatory information
+    help: >-
+      Standing regulatory values. These stay the same from period to period, so
+      Trakt asks once and reuses them on every delivery.
+    fields_from: regime_products
+
+  # -----------------------------------------------------------------------
+  - key: presentation
+    label: Report presentation
+    help: >-
+      How reports look, and the standing conventions behind the numbers. None of
+      this is regulatory.
+    fields:
+
+      - key: report_title
+        label: Report title
+        scope: branding
+        source: inferred
+        infers_from: the client's name
+        type: text
+        required: false
+        consumers: [Management information dashboard]
+        writes_to: client_config:mi.branding.app_title
+        amendable: true
+
+      - key: brand_colour
+        label: Brand colour
+        help: A hex colour, for example #1F3B5C.
+        scope: branding
+        source: client_supplied
+        type: colour
+        required: false
+        validation: colour
+        consumers: [Management information dashboard]
+        writes_to: client_config:mi.branding.theme.primary_color
+        amendable: true
+
+      - key: logo_uri
+        label: Logo
+        scope: branding
+        source: client_supplied
+        type: text
+        required: false
+        consumers: [Report cover pages]
+        writes_to: client_config:mi.branding.logo_uri
+        amendable: true
+
+      - key: disclaimer
+        label: Disclaimer
+        scope: branding
+        source: client_supplied
+        type: multiline
+        required: false
+        consumers: [Report cover pages]
+        writes_to: client_config:mi.branding.disclaimer
+        amendable: true
+
+      - key: day_count_convention
+        label: Day-count convention
+        scope: operational
+        source: inferred
+        infers_from: the portfolio's asset class
+        type: enum
+        required: false
+        options_from: day_count_convention
+        consumers: [Interest calculations]
+        writes_to: client_config:loan_engine.day_count_convention
+        amendable: true
+
+      - key: payment_frequency
+        label: Payment frequency
+        scope: operational
+        source: inferred
+        infers_from: the portfolio's asset class
+        type: enum
+        required: false
+        options_from: payment_frequency
+        consumers: [Interest calculations]
+        writes_to: client_config:loan_engine.interest_payment_frequency
+        amendable: true
+
+      - key: reporting_calendar_note
+        label: Reporting calendar
+        help: >-
+          Anything Trakt should know about when reports are due — for example a
+          fixed business day, or a quarter-end dependency.
+        scope: operational
+        source: client_supplied
+        type: multiline
+        required: false
+        consumers: [Onboarding record]
+        writes_to: onboarding_record
+        amendable: true
+
+# ---------------------------------------------------------------------------
+# Values Trakt supplies, computes or refuses to ask for. Declared so the
+# catalogue is a complete account of the information model, not only of the
+# questions.
+# ---------------------------------------------------------------------------
+not_collected:
+
+  - key: reporting_period
+    label: Reporting period
+    source: delivery_specific
+    reason: >-
+      Supplied with each delivery. The workflow already asks for it, and a
+      standing value would silently mis-date a report.
+
+  - key: static_reporting_date
+    label: Static reporting date
+    source: delivery_specific
+    reason: >-
+      Present in the legacy client configuration but delivery-specific. Not
+      written by onboarding.
+
+  - key: expected_schema_fingerprint
+    label: Expected file signature
+    source: inferred
+    reason: >-
+      Learned from the first real delivery and pinned by the existing
+      promotion path. Asking for it would be asking the operator to guess.
+
+  - key: file_role_schemas
+    label: File role signatures
+    source: inferred
+    reason: Learned at mapping approval from a representative pack.
+
+  - key: blob_prefix
+    label: Delivery location
+    source: system_generated
+    reason: >-
+      Derived from the client, book type, dataset, cadence and portfolio using
+      the production storage layout. Shown for confirmation, never typed.
+
+  - key: onboarding_case_id
+    label: Onboarding reference
+    source: system_generated
+    reason: Minted when the case is opened.
+
+  - key: nd_defaults
+    label: No-data policy
+    source: trakt_default
+    reason: >-
+      The governed regime delivery rules carry no-data defaults. A client
+      override is an administrator change, not an onboarding question.

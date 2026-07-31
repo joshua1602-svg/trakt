@@ -60,11 +60,49 @@ would leave an asset reporting under a regulatory package the candidate does
 not carry. Running workflows stay pinned to the version they resolved with;
 activation only changes what future runs resolve.
 
+## Client Onboarding
+
+A governed capability alongside Operations for bringing a client Trakt has never
+met into Trakt. It **starts blank**: no existing client configuration is
+required, read or implied. Design pack: `docs/client_onboarding/`.
+
+Three entry points share one model — only where the answers start differs:
+
+    POST /ops/onboarding/cases              new client (blank) — the product
+    POST /ops/onboarding/cases/migration    a legacy client's files — secondary
+    POST /ops/onboarding/cases/amendment    the version in force — ongoing change
+
+The questions come from `config/onboarding/field_catalogue.yaml`, which declares
+for every field who supplies it, what it belongs to, when it is required and
+which governed artefact it is written into. Adding a field is a change there,
+not to a form. Vocabularies are read from the modules that own them
+(`ASSET_MODEL`, `BATCH_DATASETS`, `VALID_FREQUENCIES`), and regime fields come
+from `config/regime/onboarding_standing_fields.yaml`, so a future regime reaches
+the wizard as configuration.
+
+| Endpoint | Returns |
+|---|---|
+| `GET /ops/onboarding/reference` | The information model the wizard renders |
+| `GET /ops/onboarding/home` | Drafts, awaiting client, in review, active clients |
+| `GET /ops/onboarding/cases/{id}/checklist` | What the client still owes, derived |
+| `GET /ops/onboarding/cases/{id}/preview` | Exactly what activation would write |
+| `POST /ops/onboarding/cases/{id}/approve` | Records the decision. **Writes nothing.** |
+| `POST /ops/onboarding/cases/{id}/activate` | Creates the configuration |
+
+Approval and activation are separate acts and both require an administrator.
+Activation is the only place active configuration is written; it generates the
+client configuration, the investor report overlay, portfolio metadata, the client
+index and the source registrations, then commits an immutable version and
+appends to the hash-chained audit trail. `EffectiveConfigResolver.client_config_for()`
+then resolves that client's deliveries against the generated configuration.
+
 ## Tests
 
 ```bash
 python -m pytest tests/operations_control/ -q
 python -m pytest tests/operations_control/test_admin_config_api.py -q   # admin config API
+python -m pytest tests/operations_control/test_onboarding.py -q         # client onboarding
+python -m scripts.build_mock_catalogue                                   # regenerate the browser fixture
 ```
 
 Covers workflow transitions, restart recovery, all four delivery
