@@ -419,6 +419,61 @@ export const copy = {
     blockersHeading: "What's in the way",
     packHeading: "Onboarding pack",
     packIssued: "Recorded as issued. No email was sent.",
+    packDescription:
+      "Everything Trakt needs from this client, drawn from the same governed catalogue the " +
+      "onboarding screens use. Nothing here is a separate questionnaire.",
+    packDraft: "Draft the pack",
+    packRedraft: "Redraft it",
+    packApprove: "Approve it for sending",
+    packSend: "Record it as issued",
+    packOutstanding: "still outstanding",
+    packAnswered: "answered",
+    packNone: "No pack has been drafted yet.",
+    packDocument: "Show the document",
+    packHide: "Hide it",
+    packRecipients: "Goes to",
+    packNoRecipient:
+      "There is no contact address on this case yet. Record one, or type an address when you " +
+      "issue it.",
+    packMappingHeading: "About field mappings",
+    packStatusHeading: "Where the pack has got to",
+    packNotSent:
+      "Trakt did not send this. Send the approved pack and covering email from the record.",
+
+    reviewHeading: "Review and approval",
+    reviewDescription:
+      "The complete package a human approves: what Trakt holds, where every answer came from, " +
+      "what is still outstanding, and exactly what activation would do.",
+    reviewSubmit: "Submit for review",
+    reviewShow: "Show the review package",
+    reviewNone: "The case has not been submitted for review yet.",
+    reviewApprove: "Approve the configuration",
+    reviewApproveNote: "Approving records a decision. It starts nothing.",
+    reviewProvenance: "Where it came from",
+    reviewOperatorActions: "Actions for an administrator",
+    reviewNotProvisioned: "Not provisioned",
+
+    activationHeading: "Activation",
+    activationDescription:
+      "What confirming would do, in full. Approving the configuration is a separate act, and " +
+      "does not start this.",
+    activationConfirm: "Confirm and activate",
+    activationConfirmLabel: "Type what you are confirming, for the record",
+    activationRefusedHeading: "Why this cannot be activated",
+    activationFiles: "Files that would be placed",
+    activationTargets: "Where they would go",
+    activationActions: "What would happen",
+    activationDisabled:
+      "Live execution is not switched on in this environment, so this is refused. The refusal " +
+      "is recorded on the case.",
+    activationStarted: "Ingestion started",
+
+    disclosureUnderstood: "What Trakt understood",
+    disclosureQuestions: "What Trakt needs to know",
+    disclosureUnrecognised: "What Trakt could not read",
+    disclosureNothingApplied:
+      "Nothing has been applied. Confirm to apply only what is listed above, or tell Trakt the " +
+      "rest.",
     auditHeading: "What happened",
     occLinksHeading: "Elsewhere in Trakt",
     nothingYet: "Nothing yet.",

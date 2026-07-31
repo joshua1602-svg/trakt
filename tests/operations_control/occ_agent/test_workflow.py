@@ -48,8 +48,14 @@ def test_each_fixture_reaches_its_declared_outcome(service, scenario):
 
 
 def test_scenario_a_reaches_ready_for_execution(service):
+    """The rehearsal passes, and then stops at the confirmation gate.
+
+    ``READY_FOR_EXECUTION`` is a waypoint, so it is asserted through the
+    readiness status it set rather than through the run's current state.
+    """
     run = run_scenario(service, "scenario_a_clean", tenant=TENANT_A, actor=ACTOR)
-    assert run.case.run.state == _states.READY_FOR_EXECUTION
+    assert _states.READY_FOR_EXECUTION in run.progression
+    assert run.case.run.state == _states.ACTIVATION_CONFIRMATION_REQUIRED
     assert run.case.run.readiness_status == _states.READY_FOR_EXECUTION
     assert run.case.run.blockers == []
     verdict = service.evaluate_readiness(run.case)
@@ -64,9 +70,12 @@ def test_scenario_a_walks_both_lifecycles(service):
         "draft", "information_requested", "in_review", "ready_for_approval",
         "approved"]
     assert run.progression == [
-        _states.AWAITING_ONBOARDING, _states.READY_TO_RUN,
-        _states.SYNTHETIC_ONBOARDING_PASSED,
-        _states.EXECUTION_APPROVAL_REQUIRED, _states.READY_FOR_EXECUTION]
+        _states.AWAITING_ONBOARDING, _states.PACK_REVIEW_REQUIRED,
+        _states.PACK_APPROVED_TO_SEND, _states.PACK_SENT,
+        _states.READY_TO_RUN, _states.SYNTHETIC_ONBOARDING_PASSED,
+        _states.EXECUTION_APPROVAL_REQUIRED, _states.READY_FOR_EXECUTION,
+        _states.READY_FOR_REVIEW,
+        _states.ACTIVATION_CONFIRMATION_REQUIRED]
 
 
 def test_scenario_b_needs_a_human_then_reruns_the_affected_controls(service):
@@ -110,7 +119,8 @@ def test_scenario_d_blocks_inside_client_onboarding_not_here(service):
     """
     run = run_scenario(service, "scenario_d_product_information_gap",
                        tenant=TENANT_A, actor=ACTOR)
-    assert run.case.run.state == _states.AWAITING_ONBOARDING
+    # The pack went out; the onboarding itself is what holds the case.
+    assert run.case.run.state == _states.PACK_SENT
     assert run.case.case.status == "in_review"
     readiness = service.onboarding_readiness(run.case)
     assert readiness["ready"] is False
@@ -133,7 +143,7 @@ def test_scenario_d_is_not_written_around_one_reporting_product(service):
     clean = run_scenario(service, "scenario_a_clean", tenant=TENANT_A,
                          actor=ACTOR)
     assert "investor_reporting" not in clean.case.case.products
-    assert clean.case.run.state == _states.READY_FOR_EXECUTION
+    assert clean.case.run.readiness_status == _states.READY_FOR_EXECUTION
 
 
 def test_scenario_e_blocks_on_materiality_after_a_successful_transform(service):

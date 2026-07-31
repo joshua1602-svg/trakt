@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -56,20 +57,38 @@ from ..onboarding.case import (
     OnboardingCase,
 )
 from ..onboarding.service import STEP_LABELS, STEPS, OnboardingService
+from . import adapters as _adapters
+from . import communication as _comms
 from . import derive as _derive
+from . import pack as _pack
+from . import planning as _planning
 from . import readiness as _readiness
+from . import review as _review
 from . import states as _states
+from .adapters import (
+    ActivationPreconditions,
+    ExecutionAdapter,
+    LiveExecutionAdapter,
+    SyntheticExecutionAdapter,
+)
 from .artefacts import ArtefactService, RoleReadiness, sample_manifest
 from .derive import ExecutionFacts
 from .execution import SyntheticOnboardingAdapters, run_synthetic_orchestration
 from .input_roles import artefact_vocabulary
 from .interpretation import (
+    PROV_AGENT,
+    PROV_APPROVED,
+    PROV_ARTEFACT,
+    PROV_CLIENT,
+    PROV_HUMAN,
+    PROV_INHERITED,
     DeterministicInterpreter,
     Interpretation,
     InterpretationError,
     Interpreter,
     ProposedChange,
 )
+from .planning import ApplicationPlan
 from .policy import (
     CAP_ACTIVATE_CONFIGURATION,
     CAP_EXTERNAL_EMAIL,
@@ -85,6 +104,7 @@ from .run import (
     EXEC_DETERMINISTIC,
     EXEC_HUMAN_CONFIRMED,
     EXEC_MODEL_PROPOSED,
+    EXEC_SIMULATED,
     EXEC_SYNTHETICALLY_EXECUTED,
     STAGE_DETERMINISTIC_COMPLETED,
     STAGE_HARD_BLOCKED,
@@ -105,6 +125,30 @@ class ActionNotAllowed(OpsError):
             f"'{action.replace('_', ' ')}' is not something you can do while "
             f"this practice case is at {_states.spec_label(state)}.",
             http_status=409)
+
+
+class PartiallyUnderstood(OpsError):
+    """Part of an instruction could not be read, so none of it was applied.
+
+    The whole point of the exception is what it carries: the plan's disclosure,
+    so the caller can show what WAS understood, what was not, and what the agent
+    would like to ask — and then confirm the disclosed remainder if they choose
+    to. Nothing is written in the meantime.
+    """
+
+    def __init__(self, plan: ApplicationPlan):
+        self.plan = plan
+        self.disclosure = plan.disclosure()
+        detail: List[str] = []
+        if plan.unrecognised:
+            detail.append("I could not read: "
+                          + "; ".join(f'"{u}"' for u in plan.unrecognised[:3]))
+        if plan.questions:
+            detail.append(" ".join(q.question for q in plan.questions[:2]))
+        super().__init__(
+            "OCC_AGENT_PARTIALLY_UNDERSTOOD",
+            "Nothing was applied. " + " ".join(detail),
+            http_status=422)
 
 
 @dataclass
@@ -143,7 +187,10 @@ class OccAgentService:
                  policy: Optional[SyntheticPolicy] = None,
                  interpreter: Optional[Interpreter] = None,
                  store: Optional[SyntheticRunStore] = None,
-                 onboarding: Optional[OnboardingService] = None):
+                 onboarding: Optional[OnboardingService] = None,
+                 adapter: Optional[ExecutionAdapter] = None,
+                 communication: Optional[_comms.CommunicationAdapter] = None,
+                 engine: Optional[Any] = None):
         self.store = store or SyntheticRunStore(storage, container=container,
                                                 sandbox=sandbox)
         # The onboarding service, pinned to the synthetic container. Everything
@@ -155,6 +202,28 @@ class OccAgentService:
         self.interpreter = interpreter or DeterministicInterpreter(
             cat=self.onboarding.catalogue)
         self.artefacts = ArtefactService(self.store, self.policy)
+        # How the pack reaches a client, and what happens at activation. Both
+        # are seams; the workflow above them does not change with either.
+        self.communication = communication or _comms.default_adapter(
+            self.policy)
+        self.adapter: ExecutionAdapter = adapter or self._default_adapter(
+            engine)
+        # Practice runs execute on their own thread, as live workflows already
+        # do (operations_control.engine.Engine.start), so a pipeline pass never
+        # occupies an API request.
+        self._jobs: Dict[str, threading.Thread] = {}
+        self._jobs_lock = threading.Lock()
+
+    def _default_adapter(self, engine: Optional[Any]) -> ExecutionAdapter:
+        """Rehearsal unless this environment explicitly enables live mode.
+
+        The live adapter is still constructed when the flag is on, so the
+        refusal an operator sees comes from the one activation gate rather than
+        from a missing object.
+        """
+        if _adapters.live_enabled() and engine is not None:
+            return LiveExecutionAdapter(self.onboarding, engine)
+        return SyntheticExecutionAdapter(self.policy)
 
     # ------------------------------------------------------------------ #
     # Audit plumbing
@@ -274,40 +343,74 @@ class OccAgentService:
     # ------------------------------------------------------------------ #
     # The onboarding half — every one of these delegates
     # ------------------------------------------------------------------ #
-    def answer_from_instruction(self, agent_case: AgentCase, *,
-                                instruction: str, actor: str) -> AgentCase:
-        """Turn one instruction into answers on the onboarding case."""
+    def plan_instruction(self, agent_case: AgentCase, *,
+                         instruction: str) -> ApplicationPlan:
+        """What an instruction WOULD do. Writes nothing.
+
+        This is the honest half of the conversation: it reports what was
+        understood, what it proposes, what it could not read, and what it
+        cannot place without being told — before anything is applied.
+        """
         interpretation = self.interpreter.interpret_instruction(instruction)
         interpretation.validate(self.onboarding.catalogue)
+        return self.plan_interpretation(agent_case, interpretation)
+
+    def plan_interpretation(self, agent_case: AgentCase,
+                            interpretation: Interpretation) -> ApplicationPlan:
+        plan = _planning.plan_changes(
+            agent_case.case, self.onboarding.catalogue,
+            steps=interpretation.steps,
+            provenance=interpretation.provenance,
+            confidence=interpretation.confidence)
+        plan.unrecognised.extend(interpretation.unrecognised)
+        plan.reporting_period = interpretation.reporting_period
+        plan.expected_artefacts = list(interpretation.expected_artefacts)
+        if interpretation.delivery:
+            plan.cadence = str(interpretation.delivery.get("cadence") or "")
+            plan.steps["_delivery"] = dict(interpretation.delivery)
+        return plan
+
+    def answer_from_instruction(self, agent_case: AgentCase, *,
+                                instruction: str, actor: str,
+                                confirm: bool = True) -> AgentCase:
+        """Turn one instruction into answers on the onboarding case."""
+        plan = self.plan_instruction(agent_case, instruction=instruction)
         agent_case.run.messages.append(
             Message(role="operator", text=instruction[:4000]).to_dict())
-        return self.apply_interpretation(agent_case,
-                                         interpretation=interpretation,
-                                         actor=actor)
+        return self.apply_plan(agent_case, plan=plan, actor=actor,
+                               confirm=confirm)
 
-    def apply_interpretation(self, agent_case: AgentCase, *,
-                             interpretation: Interpretation,
-                             actor: str) -> AgentCase:
-        """Write a CONFIRMED interpretation onto the case, step by step."""
-        interpretation.validate(self.onboarding.catalogue)
+    def apply_plan(self, agent_case: AgentCase, *, plan: ApplicationPlan,
+                   actor: str, confirm: bool = False) -> AgentCase:
+        """Write a plan onto the case, step by step, through ``save_step``.
+
+        A plan that could not be fully read is refused unless the human has
+        explicitly confirmed the disclosed remainder. Nothing is ever applied
+        in part without that being said first.
+        """
+        if not plan.complete and not confirm:
+            raise PartiallyUnderstood(plan)
+
         run = agent_case.run
         case = agent_case.case
+        delivery = dict((plan.steps or {}).pop("_delivery", {}) or {})
         written: List[str] = []
         for step in STEPS:
-            payload = (interpretation.steps or {}).get(step)
+            payload = (plan.steps or {}).get(step)
             if not payload:
                 continue
-            case = self.onboarding.save_step(
-                case_id=case.case_id, step=step,
-                payload=self._merge_step(case, step, payload), by=actor)
+            case = self.onboarding.save_step(case_id=case.case_id, step=step,
+                                             payload=payload, by=actor)
             written.append(step)
-        if interpretation.cadence:
-            case = self._apply_cadence(case, interpretation.cadence, actor)
+        if delivery:
+            case = self._apply_delivery(case, delivery, actor)
             written.append("sources")
-        if interpretation.reporting_period:
-            run.reporting_period = interpretation.reporting_period
+        if plan.reporting_period:
+            run.reporting_period = plan.reporting_period
 
-        agent_case.case = case
+        agent_case.case = self._record_provenance(case, plan, actor,
+                                                  confirmed=confirm)
+        self._reserve_identifiers(agent_case)
         run.facts = self.facts(agent_case).to_dict()
         self.store.save(run)
         self._audit(run, "onboarding_answered", actor_type=ACTOR_AGENT,
@@ -316,52 +419,110 @@ class OccAgentService:
                                    "instruction and written through Client "
                                    "Onboarding",
                     detail={"steps": written,
+                            "changes": plan.change_count,
+                            "unrecognised": len(plan.unrecognised),
                             "reporting_period": run.reporting_period})
         run.messages.append(Message(
-            role="agent", text=self.describe_case(agent_case)).to_dict())
+            role="agent",
+            text=self.describe_plan(agent_case, plan)).to_dict())
         self.store.save(run)
         return agent_case
 
-    def _merge_step(self, case: OnboardingCase, step: str,
-                    payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Merge a proposed answer into what the case already holds.
+    def _record_provenance(self, case: OnboardingCase, plan: ApplicationPlan,
+                           actor: str, *,
+                           confirmed: bool = False) -> OnboardingCase:
+        """Keep where each answer came from, on the case that holds it.
 
-        A repeatable section is replaced wholesale by ``save_step``, so a second
-        instruction that mentions the portfolio must not silently drop the
-        answers the first one gave. Merging by identity keeps them.
+        Client Onboarding already carries a per-field provenance map and shows
+        it in its own screens, so the agent's answers appear there beside a
+        migrated client's — rather than living only in a transient
+        interpretation the operator never sees again.
+
+        A value the agent could only *propose* — it was not certain which item
+        the operator meant — is recorded as human-approved once they confirm
+        it, so the record distinguishes "the client said so" from "the agent
+        guessed and a person agreed".
+
+        Two maps are written, because the case already has two questions to
+        answer: ``provenance`` is the sentence its own screens show, and
+        ``provenance_class`` is the category a control can act on.
         """
-        section = self.onboarding.catalogue.section(step)
-        if section is None or not section.repeatable:
-            return payload
-        incoming = list(payload.get(section.key) or payload.get("items") or [])
-        existing = list(case.items(step))
-        if not existing:
-            return {section.key: incoming}
-        key = _identity_field(step)
-        merged = [dict(item) for item in existing]
-        for candidate in incoming:
-            match = next(
-                (m for m in merged
-                 if key and candidate.get(key)
-                 and str(m.get(key) or "") == str(candidate.get(key) or "")),
-                None)
-            if match is None and len(incoming) == 1 and len(merged) == 1:
-                match = merged[0]     # one book named two ways is one book
-            if match is None:
-                merged.append(dict(candidate))
+        changed = [c for c in plan.understood
+                   if c.action != _planning.UNCHANGED]
+        if not changed:
+            return case
+        for change in changed:
+            path = f"{change.section}.{change.field}"
+            if change.index is not None:
+                path = f"{change.section}[{change.index}].{change.field}"
+            uncertain = (change.confidence is not None
+                         and change.confidence < 1.0)
+            if confirmed and uncertain:
+                category = PROV_APPROVED
             else:
-                match.update({k: v for k, v in candidate.items() if v not in
-                              (None, "", [])})
-        return {section.key: merged}
+                category = change.provenance or PROV_CLIENT
+            case.provenance_class[path] = category
+            case.provenance[path] = _PROVENANCE_SENTENCE.get(category, category)
+        case.record("provenance_recorded", actor=actor,
+                    detail={"fields": sorted(
+                        f"{c.section}.{c.field}" for c in changed)})
+        self.onboarding.cases.save_case(case)
+        return case
 
-    def _apply_cadence(self, case: OnboardingCase, cadence: str,
-                       actor: str) -> OnboardingCase:
-        """Set the expected cadence on every delivery Trakt has derived."""
+    def _reserve_identifiers(self, agent_case: AgentCase) -> None:
+        """Claim the client identifier this case intends to use.
+
+        Nothing is activated in a rehearsal, so Client Onboarding's own
+        collision check cannot see one practice case from another. The
+        reservation closes that gap inside the practice container.
+        """
+        client_id = agent_case.case.client_id
+        if not client_id:
+            return
+        clash = self.store.reserve_identifier(
+            "client_id", client_id, case_ref=agent_case.case_ref,
+            tenant=agent_case.run.tenant)
+        if clash:
+            note = (f"'{client_id}' is already claimed by practice case "
+                    f"{clash.get('case_ref')}.")
+            if note not in agent_case.run.observations:
+                agent_case.run.observations.append(note)
+
+    def describe_plan(self, agent_case: AgentCase,
+                      plan: ApplicationPlan) -> str:
+        """What the agent did, in the catalogue's own labels."""
+        lines: List[str] = []
+        applied = [c.sentence() for c in plan.understood
+                   if c.action != _planning.UNCHANGED]
+        if applied:
+            lines.append("Recorded:")
+            lines += [f"- {line}" for line in applied]
+        if plan.reporting_period:
+            lines.append(f"- Reporting period: {plan.reporting_period}")
+        if plan.unrecognised:
+            lines.append("I could not read:")
+            lines += [f"- \"{fragment}\"" for fragment in plan.unrecognised]
+        for question in plan.questions:
+            lines.append(f"- {question.question}")
+        outstanding = self.onboarding.client_checklist(agent_case.case)
+        if outstanding:
+            lines.append("Still needed from the client:")
+            lines += [f"- {row['label']}" for row in outstanding[:8]]
+        return "\n".join(lines) or "Nothing changed."
+
+    def _apply_delivery(self, case: OnboardingCase, values: Dict[str, Any],
+                        actor: str) -> OnboardingCase:
+        """Apply delivery answers to every delivery Trakt has derived.
+
+        Deliveries are derived from the portfolios, so "they send monthly by
+        SFTP" is a statement about all of them, not about one.
+        """
         sources = [dict(s) for s in case.items("sources")]
         if not sources:
             return case
         for source in sources:
-            source["cadence"] = cadence
+            source.update({k: v for k, v in values.items() if v not in
+                           (None, "", [])})
         return self.onboarding.save_step(case_id=case.case_id, step="sources",
                                          payload={"sources": sources}, by=actor)
 
@@ -424,6 +585,9 @@ class OccAgentService:
         agent_case.case = self.onboarding.review_response(
             case_id=case_id, request_id=request_id, accept=accept, by=actor,
             note=note)
+        if accept and answers:
+            agent_case.case = self._mark_client_supplied(agent_case.case,
+                                                          answers, actor)
         self._audit(agent_case.run, "client_response_recorded",
                     actor_type=ACTOR_HUMAN, actor=actor,
                     classification=EXEC_HUMAN_CONFIRMED,
@@ -434,6 +598,43 @@ class OccAgentService:
                                     "response"),
                     detail={"sections": sorted(answers or {})})
         return agent_case
+
+    def _mark_client_supplied(self, case: OnboardingCase,
+                              answers: Dict[str, Any],
+                              actor: str) -> OnboardingCase:
+        """Record that these values came from the client, field by field.
+
+        Client Onboarding accepts the response; what it has no way to know is
+        that the answers arrived from the client rather than from an operator.
+        That distinction is exactly what an approver needs, so it is written to
+        the case's own provenance map rather than kept here.
+        """
+        recorded: List[str] = []
+        for section_key, payload in (answers or {}).items():
+            section = self.onboarding.catalogue.section(section_key)
+            if section is None:
+                continue
+            rows = (payload if isinstance(payload, list)
+                    else (payload or {}).get(section_key)
+                    if isinstance((payload or {}).get(section_key), list)
+                    else [payload])
+            for index, row in enumerate(rows or []):
+                if not isinstance(row, dict):
+                    continue
+                for key in row:
+                    if section.field(key) is None:
+                        continue
+                    path = (f"{section_key}[{index}].{key}" if section.repeatable
+                            else f"{section_key}.{key}")
+                    case.provenance_class[path] = PROV_CLIENT
+                    case.provenance[path] = _PROVENANCE_SENTENCE[PROV_CLIENT]
+                    recorded.append(path)
+        if recorded:
+            case.record("provenance_recorded", actor=actor,
+                        detail={"fields": sorted(recorded),
+                                "provenance": PROV_CLIENT})
+            self.onboarding.cases.save_case(case)
+        return case
 
     def submit_for_approval(self, agent_case: AgentCase, *,
                             actor: str) -> AgentCase:
@@ -462,8 +663,12 @@ class OccAgentService:
             case_id=agent_case.case_ref, by=actor,
             reason=reason or "Approved in a practice case.")
         run = agent_case.run
-        if run.state == _states.AWAITING_ONBOARDING and \
-                _states.is_transition_allowed(run.state, _states.READY_TO_RUN):
+        # Approving the onboarding releases the execution half, wherever the
+        # pack has got to. A case whose pack is still in draft is not held
+        # back: issuing one is an option, not a precondition.
+        if run.state in (_states.AWAITING_ONBOARDING,) + _states.PACK_STATES \
+                and _states.is_transition_allowed(run.state,
+                                                  _states.READY_TO_RUN):
             self._move(run, _states.READY_TO_RUN)
         run.facts = self.facts(agent_case).to_dict()
         self.store.save(run)
@@ -492,6 +697,128 @@ class OccAgentService:
 
     def onboarding_readiness(self, agent_case: AgentCase) -> Dict[str, Any]:
         return self.onboarding.readiness(agent_case.case)
+
+    # ------------------------------------------------------------------ #
+    # The client pack — DRAFTED → HUMAN_REVIEW_REQUIRED → APPROVED_TO_SEND
+    #                                                   → SENT
+    # ------------------------------------------------------------------ #
+    def build_pack(self, agent_case: AgentCase) -> _pack.OnboardingPack:
+        """The pack this case would issue. Writes nothing."""
+        return _pack.build(agent_case.case, cat=self.onboarding.catalogue,
+                           outcome=self.facts(agent_case).outcome,
+                           reporting_period=agent_case.run.reporting_period)
+
+    def draft_pack(self, agent_case: AgentCase, *, actor: str) -> AgentCase:
+        """Draft the client pack, and put it straight in front of a human.
+
+        A draft is never issuable: drafting moves the pack to
+        ``HUMAN_REVIEW_REQUIRED`` in the same call, so there is no state in
+        which something could be sent without having been read.
+        """
+        run = agent_case.run
+        self._require_action(run, _states.ACTION_DRAFT_PACK)
+        built = self.build_pack(agent_case)
+        run.pack = built.to_dict()
+        document = self.store.write_package(
+            run.tenant, run.case_ref, "onboarding_pack.md", built.document())
+        email = self.store.write_package(
+            run.tenant, run.case_ref, "covering_email.txt",
+            f"To: {', '.join(built.email.to) or '(no contact recorded)'}\n"
+            f"Subject: {built.email.subject}\n\n{built.email.body}\n")
+        run.pack["artefacts"] = [{"name": "onboarding_pack.md",
+                                  "ref": document},
+                                 {"name": "covering_email.txt", "ref": email}]
+
+        self._set_pack_status(run, _comms.DRAFTED, actor=actor,
+                              note="the agent drafted the pack from the "
+                                   "governed catalogue")
+        self._set_pack_status(run, _comms.HUMAN_REVIEW_REQUIRED, actor=actor,
+                              note="a human must read it before it goes out")
+        if _states.is_transition_allowed(run.state, _states.PACK_DRAFTED):
+            self._move(run, _states.PACK_DRAFTED)
+        if _states.is_transition_allowed(run.state,
+                                         _states.PACK_REVIEW_REQUIRED):
+            self._move(run, _states.PACK_REVIEW_REQUIRED)
+        self.store.save(run)
+        self._audit(run, "onboarding_pack_drafted", actor_type=ACTOR_AGENT,
+                    actor=actor, classification=EXEC_MODEL_PROPOSED,
+                    output_reference=document,
+                    decision_basis="every question is a field the governed "
+                                   "catalogue declares; nothing was invented",
+                    detail={"questions": built.question_count,
+                            "outstanding": built.outstanding,
+                            "content_hash": built.content_hash})
+        return agent_case
+
+    def approve_pack(self, agent_case: AgentCase, *, actor: str,
+                     reason: str = "") -> AgentCase:
+        """A human approves the pack for issue. The agent cannot do this."""
+        run = agent_case.run
+        self._require_action(run, _states.ACTION_APPROVE_PACK)
+        if not run.pack:
+            raise OpsError("OCC_AGENT_NO_PACK",
+                           "There is no pack to approve. Draft one first.",
+                           http_status=409)
+        run.approvals.append({
+            "approval_id": new_id("appr"), "subject": "client_pack",
+            "decision": "approved", "actor": actor, "at": now_iso(),
+            "reason": reason,
+            "content_hash": str(run.pack.get("content_hash") or "")})
+        self._set_pack_status(run, _comms.APPROVED_TO_SEND, actor=actor,
+                              note=reason or "approved by a human")
+        prior = self._move(run, _states.PACK_APPROVED_TO_SEND)
+        self.store.save(run)
+        self._audit(run, "onboarding_pack_approved", actor_type=ACTOR_HUMAN,
+                    actor=actor, prior_state=prior,
+                    classification=EXEC_HUMAN_CONFIRMED,
+                    decision_basis=reason or "a human approved the pack for "
+                                             "issue",
+                    detail={"content_hash": run.pack.get("content_hash")})
+        return agent_case
+
+    def send_pack(self, agent_case: AgentCase, *, actor: str,
+                  to: Optional[List[str]] = None) -> AgentCase:
+        """Issue the approved pack through the communication adapter.
+
+        The receipt says whether it actually left Trakt. In this environment it
+        does not, and the receipt says exactly that rather than "sent".
+        """
+        run = agent_case.run
+        self._require_action(run, _states.ACTION_SEND_PACK)
+        email = (run.pack or {}).get("email") or {}
+        recipients = list(to or email.get("to") or [])
+        if not recipients:
+            raise OpsError(
+                "OCC_AGENT_NO_RECIPIENT",
+                "There is no contact address on this case to issue the pack "
+                "to. Record one first.", http_status=409)
+        receipt = self.communication.deliver(
+            to=recipients, subject=str(email.get("subject") or ""),
+            body=str(email.get("body") or ""),
+            artefacts=list((run.pack or {}).get("artefacts") or []),
+            content_hash=str((run.pack or {}).get("content_hash") or ""),
+            actor=actor)
+        run.pack_receipt = receipt.to_dict()
+        self._set_pack_status(run, _comms.SENT, actor=actor,
+                              note=receipt.statement)
+        prior = self._move(run, _states.PACK_SENT)
+        self.store.save(run)
+        self._audit(run, "onboarding_pack_issued", actor_type=ACTOR_HUMAN,
+                    actor=actor, prior_state=prior,
+                    classification=(EXEC_HUMAN_CONFIRMED if receipt.sent
+                                    else EXEC_SIMULATED),
+                    output_reference=receipt.receipt_id,
+                    decision_basis=receipt.statement,
+                    detail={"adapter": receipt.adapter, "sent": receipt.sent,
+                            "recipients": len(recipients)})
+        return agent_case
+
+    def _set_pack_status(self, run: SyntheticRun, to_status: str, *,
+                         actor: str, note: str = "") -> None:
+        _comms.assert_pack_transition(run.pack_status, to_status)
+        run.pack_status = to_status
+        run.pack_history.append({"status": to_status, "actor": actor,
+                                 "at": now_iso(), "note": note})
 
     # ------------------------------------------------------------------ #
     # The execution half
@@ -594,6 +921,49 @@ class OccAgentService:
         self.store.save(run)
         return agent_case
 
+    def start_synthetic_onboarding(self, agent_case: AgentCase, *,
+                                   actor: str) -> Dict[str, Any]:
+        """Start the practice run on its own thread and return immediately.
+
+        The same pattern the live engine already uses
+        (:meth:`operations_control.engine.Engine.start`): a pipeline pass takes
+        minutes, and an HTTP request must not hold one open. The run's own state
+        is the job record — an operator polls the case, not a separate job.
+        """
+        run = agent_case.run
+        self._require_action(run, _states.ACTION_RUN_ONBOARDING)
+        key = f"{run.tenant}/{run.case_ref}"
+        with self._jobs_lock:
+            existing = self._jobs.get(key)
+            if existing is not None and existing.is_alive():
+                raise OpsError(
+                    "OCC_AGENT_RUN_IN_PROGRESS",
+                    "This practice case is already running.", http_status=409)
+
+            def _job() -> None:
+                try:
+                    self.run_synthetic_onboarding(
+                        self.load(run.tenant, run.case_ref), actor=actor)
+                except Exception:               # noqa: BLE001 — see below
+                    # The failure is recorded on the run by _block/_audit where
+                    # it is recoverable; anything else is logged rather than
+                    # lost with the thread.
+                    logger.exception("occ_agent: practice run %s failed",
+                                     run.case_ref)
+
+            thread = threading.Thread(target=_job, name=f"occ-agent-{key}",
+                                      daemon=True)
+            self._jobs[key] = thread
+            thread.start()
+        return {"case_ref": run.case_ref, "started": True,
+                "state": run.state,
+                "poll": f"/api/occ-agent/cases/{run.case_ref}"}
+
+    def job_running(self, tenant: str, case_ref: str) -> bool:
+        with self._jobs_lock:
+            thread = self._jobs.get(f"{tenant}/{case_ref}")
+        return bool(thread is not None and thread.is_alive())
+
     def run_synthetic_onboarding(self, agent_case: AgentCase, *,
                                  actor: str) -> AgentCase:
         run = agent_case.run
@@ -627,6 +997,9 @@ class OccAgentService:
                     decision_basis="the existing orchestration conductor was "
                                    "run over the synthetic adapter")
 
+        # Rebuild the working files from durable storage first: the instance
+        # that runs the case need not be the one that received the upload.
+        self.store.materialise(run.tenant, run.case_ref)
         adapters = SyntheticOnboardingAdapters(
             artefact_paths=self._artefact_paths(run), policy=self.policy,
             sandbox=self.store.case_dir(run.tenant, run.case_ref),
@@ -928,6 +1301,235 @@ class OccAgentService:
             preview=self._safe_preview(agent_case))
 
     # ------------------------------------------------------------------ #
+    # Human review, and the road to production
+    # ------------------------------------------------------------------ #
+    def build_review_package(self, agent_case: AgentCase
+                             ) -> _review.ReviewPackage:
+        """Everything the approver needs. Derived; writes nothing."""
+        run = agent_case.run
+        return _review.build(
+            agent_case.case, run, self.facts(agent_case),
+            cat=self.onboarding.catalogue,
+            readiness=self._verdict(agent_case).to_dict(),
+            preview=self._safe_preview(agent_case),
+            onboarding=self.onboarding_readiness(agent_case),
+            intent=self._intent(agent_case).to_dict(),
+            audit=self.store.list_audit(run.tenant, run.case_ref))
+
+    def request_activation(self, agent_case: AgentCase, *,
+                           actor: str) -> AgentCase:
+        """Put the complete review package in front of a human.
+
+        The rehearsal passing is not permission to do anything. This is where
+        the process turns from "would this work" into "shall we", and the thing
+        the human is asked to decide on is the package, not a button.
+        """
+        run = agent_case.run
+        self._require_action(run, _states.ACTION_REQUEST_ACTIVATION)
+        package = self.build_review_package(agent_case)
+        run.review_package_ref = self.store.write_package(
+            run.tenant, run.case_ref, "review_package.json",
+            json.dumps(package.to_dict(), indent=2, default=str))
+        self.store.write_package(run.tenant, run.case_ref, "review_package.md",
+                                 package.document())
+        prior = self._move(run, _states.READY_FOR_REVIEW)
+        self.store.save(run)
+        self._audit(run, "review_package_assembled", actor_type=ACTOR_AGENT,
+                    actor=actor, prior_state=prior,
+                    classification=EXEC_DETERMINISTIC,
+                    output_reference=run.review_package_ref,
+                    decision_basis="the review package was derived from the "
+                                   "case, the catalogue, the run and the audit "
+                                   "trail",
+                    detail={"content_hash": package.content_hash,
+                            "outstanding": len(package.outstanding),
+                            "operator_actions": len(package.operator_actions)})
+        return agent_case
+
+    def approve_activation(self, agent_case: AgentCase, *, actor: str,
+                           reason: str = "") -> AgentCase:
+        """A human approves the configuration for activation.
+
+        **This does not start anything.** It records a decision and prepares the
+        confirmation. Production needs a second, explicit act — which is the
+        whole reason the two are separate states.
+        """
+        run = agent_case.run
+        self._require_action(run, _states.ACTION_APPROVE_ACTIVATION)
+        if not run.review_package_ref:
+            raise OpsError(
+                "OCC_AGENT_NO_REVIEW_PACKAGE",
+                "There is no review package to approve. Submit the case for "
+                "review first.", http_status=409)
+        run.approvals.append({
+            "approval_id": new_id("appr"), "subject": "configuration",
+            "decision": "approved", "actor": actor, "at": now_iso(),
+            "reason": reason or "Configuration approved for activation.",
+            "review_package_ref": run.review_package_ref})
+        prior = self._move(run, _states.APPROVED_FOR_ACTIVATION)
+        intent = self._intent(agent_case)
+        run.activation_intent = intent.to_dict()
+        self._move(run, _states.ACTIVATION_CONFIRMATION_REQUIRED)
+        self.store.save(run)
+        self._audit(run, "activation_approved", actor_type=ACTOR_HUMAN,
+                    actor=actor, prior_state=prior,
+                    classification=EXEC_HUMAN_CONFIRMED,
+                    input_reference=run.review_package_ref,
+                    decision_basis=reason or "a human approved the "
+                                             "configuration; nothing was "
+                                             "started",
+                    detail={"started": False,
+                            "requires": _states.ACTION_CONFIRM_ACTIVATION})
+        return agent_case
+
+    def activation_confirmation(self, agent_case: AgentCase) -> Dict[str, Any]:
+        """What confirming would do, and whether it may be confirmed at all."""
+        pre = self.activation_preconditions(agent_case, confirmed=False)
+        return {
+            "intent": self._intent(agent_case).to_dict(),
+            "preconditions": pre.to_dict(),
+            # The confirmation itself is deliberately excluded from the reasons
+            # shown here: the operator has not given it yet, and listing it
+            # would read as a failure rather than as the next step.
+            "refusals": [r for r in _adapters.activation_refusals(pre)
+                         if "final confirmation" not in r],
+            "mode": self.adapter.mode,
+            "live_enabled": _adapters.live_enabled(),
+        }
+
+    def confirm_activation(self, agent_case: AgentCase, *, actor: str,
+                           confirmation: str = "") -> AgentCase:
+        """The one call that can reach production, through the one gate.
+
+        Every precondition is assembled here and checked in
+        :func:`~operations_control.occ_agent.adapters.assert_may_activate`. In
+        a rehearsal the synthetic adapter refuses through the policy, which is
+        audited — so the refusal is exercised rather than assumed.
+        """
+        run = agent_case.run
+        self._require_action(run, _states.ACTION_CONFIRM_ACTIVATION)
+        pre = self.activation_preconditions(agent_case, confirmed=True)
+        intent = self._intent(agent_case)
+        run.activation_intent = intent.to_dict()
+
+        if not self.adapter.may_activate():
+            # Rehearsal. Name the capability, take the audited refusal, and
+            # report every reason rather than only the first.
+            self._audit(run, "activation_refused", actor_type=ACTOR_SYSTEM,
+                        actor=actor, classification=EXEC_BLOCKED,
+                        decision_basis="live execution is not available in "
+                                       "this environment",
+                        detail={"reasons":
+                                _adapters.activation_refusals(pre)})
+            try:
+                self.adapter.activate(pre=pre, intent=intent, actor=actor)
+            except _adapters.ActivationRefused:
+                raise
+            except OpsError:
+                raise _adapters.ActivationRefused(
+                    _adapters.activation_refusals(pre)) from None
+            raise _adapters.ActivationRefused(          # pragma: no cover
+                _adapters.activation_refusals(pre))
+
+        _adapters.assert_may_activate(pre)
+        prior = self._move(run, _states.ACTIVATING)
+        self.store.save(run)
+        self._audit(run, "activation_started", actor_type=ACTOR_HUMAN,
+                    actor=actor, prior_state=prior,
+                    classification=EXEC_HUMAN_CONFIRMED,
+                    decision_basis=confirmation or intent.statement,
+                    detail={"files": len(intent.files),
+                            "targets": intent.target_locations})
+
+        result = self.adapter.activate(pre=pre, intent=intent, actor=actor,
+                                       payloads=self._payloads(run))
+        run.activation_result = result.to_dict()
+        if result.ok:
+            self._move(run, _states.INGESTION_STARTED)
+            agent_case.case = self.onboarding.load_case(run.case_ref)
+        else:
+            self._move(run, _states.ACTIVATION_FAILED)
+            run.blockers = [result.error or "Activation failed."]
+        self.store.save(run)
+        self._audit(run,
+                    "ingestion_started" if result.ok else "activation_failed",
+                    actor_type=ACTOR_SYSTEM, actor=actor,
+                    classification=(EXEC_DETERMINISTIC if result.ok
+                                    else EXEC_BLOCKED),
+                    output_reference=result.workflow_id,
+                    decision_basis=result.message,
+                    detail=result.to_dict())
+        return agent_case
+
+    def activation_preconditions(self, agent_case: AgentCase, *,
+                                 confirmed: bool) -> ActivationPreconditions:
+        """Assemble the gate's inputs from state this service already holds.
+
+        Assembling and checking are deliberately separate: this method reads,
+        :func:`assert_may_activate` decides. A caller cannot reach production by
+        assembling a friendlier set of facts, because every one of them comes
+        from a persisted record.
+        """
+        run, case = agent_case.run, agent_case.case
+        facts = self.facts(agent_case)
+        verdict = self._verdict(agent_case)
+        preview = self._safe_preview(agent_case)
+        problems = [str(p.get("detail") or p)
+                    for p in (self.onboarding_readiness(agent_case).get(
+                        "blocking") or [])]
+        roles = self.artefacts.readiness(run, facts.outcome)
+        approval = run.approval("configuration")
+        audited = any(
+            e.get("action") == "activation_approved"
+            for e in self.store.list_audit(run.tenant, run.case_ref))
+        return ActivationPreconditions(
+            mode=run.mode,
+            flag_enabled=_adapters.live_enabled(),
+            case_ref=run.case_ref,
+            onboarding_status=case.status,
+            configuration_approved=(approval.get("decision") == "approved"),
+            readiness_passed=verdict.ready,
+            tenant=run.tenant,
+            client_id=facts.client_id,
+            portfolio_id=facts.portfolio_id,
+            configuration_valid=bool(preview.get("artefacts")) and not problems,
+            configuration_problems=problems,
+            artefacts_present=len(run.received_artefacts),
+            required_artefacts_satisfied=roles.ready,
+            approval_audited=audited,
+            already_activated=bool(case.activated_version),
+            confirmed=confirmed)
+
+    def _intent(self, agent_case: AgentCase) -> _adapters.ActivationIntent:
+        """What activation would cause, built from the case and the files."""
+        run = agent_case.run
+        facts = self.facts(agent_case)
+        files = [{"name": a.source_file, "target": a.intended_live_uri,
+                  "sha256": a.sha256} for a in run.artefacts()]
+        preview = self._safe_preview(agent_case)
+        return _adapters.build_intent(
+            agent_case.case, facts, reporting_period=run.reporting_period,
+            files=files,
+            configuration_artefacts=[str(a.get("path") or a.get("name") or a)
+                                     for a in (preview.get("artefacts") or [])])
+
+    def _payloads(self, run: SyntheticRun) -> Dict[str, bytes]:
+        """The bytes behind the intent's files, rebuilt from durable storage.
+
+        Read at the moment of activation rather than carried through the
+        approval, so what is placed is what the case actually holds — and so an
+        instance that never saw the upload can still perform it.
+        """
+        self.store.materialise(run.tenant, run.case_ref)
+        out: Dict[str, bytes] = {}
+        base = self.store.artefact_dir(run.tenant, run.case_ref)
+        for artefact in run.artefacts():
+            path = base / artefact.source_file
+            if path.exists():
+                out[artefact.source_file] = path.read_bytes()
+        return out
+
+    # ------------------------------------------------------------------ #
     # Cancelling
     # ------------------------------------------------------------------ #
     def cancel(self, agent_case: AgentCase, *, actor: str,
@@ -983,22 +1585,53 @@ class OccAgentService:
 
         self._require_action(run, change.action)
 
+        # An instruction that answers questions is planned before anything is
+        # decided about it, so what the turn reports is what the plan actually
+        # found — not what the sentence looked like. A plan that could not be
+        # read in full is always put to the human, whatever the action's own
+        # materiality says.
+        plan: Optional[ApplicationPlan] = None
+        if change.action == _states.ACTION_ANSWER:
+            raw = change.payload.get("interpretation") or {}
+            plan = self.plan_interpretation(agent_case, Interpretation(
+                **{k: v for k, v in raw.items()
+                   if k in Interpretation.__dataclass_fields__}))
+            if plan.material:
+                change.requires_confirmation = True
+                change.summary = plan.summary()
+
         if change.requires_confirmation and not confirm:
             proposal = {"proposal_id": new_id("prop"), "action": change.action,
                         "payload": change.payload, "summary": change.summary,
                         "basis": change.basis, "material": change.material,
                         "confidence": change.confidence}
+            if plan is not None:
+                proposal["disclosure"] = plan.disclosure()
+                proposal["plan"] = plan.to_dict()
+                proposal["complete"] = plan.complete
             run.messages.append(Message(
                 role="agent",
-                text=f"Proposed: {proposal['summary']} Confirm to apply.",
+                text=self._proposal_text(proposal, plan),
                 refs=[proposal["proposal_id"]]).to_dict())
             self.store.save(run)
             self._audit(run, "change_proposed", actor_type=ACTOR_AGENT,
                         actor=actor, classification=EXEC_MODEL_PROPOSED,
                         decision_basis=change.basis,
                         detail={"action": change.action})
-            return TurnResult(case=agent_case, reply=proposal["summary"],
+            return TurnResult(case=agent_case,
+                              reply=self._proposal_text(proposal, plan),
                               proposal=proposal)
+
+        if plan is not None:
+            agent_case = self.apply_plan(agent_case, plan=plan, actor=actor,
+                                         confirm=confirm)
+            reply = self.describe_plan(agent_case, plan)
+            agent_case.run.messages.append(
+                Message(role="agent", text=reply).to_dict())
+            self.store.save(agent_case.run)
+            return TurnResult(case=agent_case, reply=reply, applied=True,
+                              proposal={"disclosure": plan.disclosure()},
+                              decisions=agent_case.run.open_decisions)
 
         agent_case = self._apply(agent_case, change, actor=actor)
         reply = self.status_sentence(agent_case)
@@ -1007,6 +1640,35 @@ class OccAgentService:
         self.store.save(agent_case.run)
         return TurnResult(case=agent_case, reply=reply, applied=True,
                           decisions=agent_case.run.open_decisions)
+
+    @staticmethod
+    def _proposal_text(proposal: Dict[str, Any],
+                       plan: Optional[ApplicationPlan]) -> str:
+        """What the agent says when it wants a human to look.
+
+        The four populations are always reported in the same order, so an
+        operator learns where to look for "and what did you NOT understand?".
+        """
+        if plan is None:
+            return f"Proposed: {proposal['summary']} Confirm to apply."
+        lines: List[str] = []
+        understood = plan.disclosure()["understood"]
+        if understood:
+            lines.append("I understood:")
+            lines += [f"- {line}" for line in understood]
+        for question in plan.questions:
+            lines.append(f"- {question.question}"
+                         + (f" ({', '.join(question.candidates)})"
+                            if question.candidates else ""))
+        if plan.unrecognised:
+            lines.append("I could not read:")
+            lines += [f'- "{fragment}"' for fragment in plan.unrecognised]
+        if plan.complete:
+            lines.append("Confirm to apply.")
+        else:
+            lines.append("Nothing has been applied. Confirm to apply only "
+                         "what is listed above, or tell me the rest.")
+        return "\n".join(lines)
 
     def _apply(self, agent_case: AgentCase, change: ProposedChange, *,
                actor: str) -> AgentCase:
@@ -1017,8 +1679,11 @@ class OccAgentService:
             interpretation = Interpretation(
                 **{k: v for k, v in raw.items()
                    if k in Interpretation.__dataclass_fields__})
-            return self.apply_interpretation(
-                agent_case, interpretation=interpretation, actor=actor)
+            plan = self.plan_interpretation(agent_case, interpretation)
+            # Reaching here means the human has already seen the proposal and
+            # confirmed it, disclosed remainder included.
+            return self.apply_plan(agent_case, plan=plan, actor=actor,
+                                   confirm=True)
         if action == _states.ACTION_REQUEST_INFORMATION:
             return self.request_client_information(agent_case, actor=actor)
         if action == _states.ACTION_RECORD_RESPONSE:
@@ -1054,6 +1719,22 @@ class OccAgentService:
             return self.generate_orchestration_plan(agent_case, actor=actor)
         if action == _states.ACTION_APPROVE_EXECUTION:
             return self.approve_execution_readiness(agent_case, actor=actor)
+        if action == _states.ACTION_DRAFT_PACK:
+            return self.draft_pack(agent_case, actor=actor)
+        if action == _states.ACTION_APPROVE_PACK:
+            return self.approve_pack(agent_case, actor=actor,
+                                     reason=payload.get("reason", ""))
+        if action == _states.ACTION_SEND_PACK:
+            return self.send_pack(agent_case, actor=actor)
+        if action == _states.ACTION_REQUEST_ACTIVATION:
+            return self.request_activation(agent_case, actor=actor)
+        if action == _states.ACTION_APPROVE_ACTIVATION:
+            return self.approve_activation(agent_case, actor=actor,
+                                           reason=payload.get("reason", ""))
+        if action == _states.ACTION_CONFIRM_ACTIVATION:
+            return self.confirm_activation(
+                agent_case, actor=actor,
+                confirmation=payload.get("confirmation", ""))
         if action == _states.ACTION_CANCEL:
             return self.cancel(agent_case, actor=actor)
         raise ActionNotAllowed(action, agent_case.run.state)  # pragma: no cover
@@ -1210,6 +1891,30 @@ class OccAgentService:
             "observations": run.observations,
             "blockers": run.blockers,
             "occ_links": _occ_links(case, run),
+            # The client-facing half: what has been drafted, approved and
+            # issued, and — honestly — whether anything actually left Trakt.
+            "pack": {
+                "status": run.pack_status,
+                "history": run.pack_history,
+                "outstanding": (run.pack or {}).get("outstanding", 0),
+                "questions": (run.pack or {}).get("questions", 0),
+                "sections": (run.pack or {}).get("sections", []),
+                "email": (run.pack or {}).get("email", {}),
+                "artefacts": (run.pack or {}).get("artefacts", []),
+                "mapping_statement": _pack.MAPPING_STATEMENT,
+                "receipt": run.pack_receipt,
+                "sent": bool((run.pack_receipt or {}).get("sent")),
+            },
+            "review_package_ref": run.review_package_ref,
+            "activation": {
+                "mode": run.mode,
+                "adapter": self.adapter.mode,
+                "live_enabled": _adapters.live_enabled(),
+                "intent": run.activation_intent,
+                "result": run.activation_result,
+                "approval": run.approval("configuration"),
+            },
+            "running": self.job_running(run.tenant, run.case_ref),
             # Surfaced separately so the tab can never present a simulated or
             # blocked stage as a completed one, nor imply anything was created.
             "anything_simulated": _readiness.anything_simulated(run),
@@ -1321,22 +2026,23 @@ class OccAgentService:
             path.unlink()
 
 
+#: How each provenance category reads on the case's own screens, which show the
+#: sentence rather than the category.
+_PROVENANCE_SENTENCE = {
+    PROV_HUMAN: "an operator told Trakt",
+    PROV_CLIENT: "the client told Trakt",
+    PROV_ARTEFACT: "a file the client sent",
+    PROV_AGENT: "proposed by the agent",
+    PROV_APPROVED: "proposed by the agent and approved by an operator",
+    PROV_INHERITED: "existing configuration",
+}
+
 _AGENT_FOR_STEP = {
     "onboard": "Onboarding Agent",
     "transform": "Transformation Agent",
     "validate": "Validation Agent",
     "stamp": "Provenance stamping",
 }
-
-#: Which field identifies an item within a repeatable catalogue section, so a
-#: later instruction updates a book rather than adding a second one.
-_IDENTITY_FIELDS = {"portfolios": "portfolio_id", "entities": "legal_name",
-                    "sources": "source_key"}
-
-
-def _identity_field(step: str) -> str:
-    return _IDENTITY_FIELDS.get(step, "")
-
 
 def _raw_decisions(run_root: Path) -> Dict[str, Dict[str, Any]]:
     """The adapter's own pending-decision rows, keyed by decision id.

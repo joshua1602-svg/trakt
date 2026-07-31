@@ -62,7 +62,8 @@ from .validation import Validator
 
 #: Wizard steps, in order. Each maps to one catalogue section except review.
 STEPS = ("client", "entities", "contacts", "portfolios", "sources",
-         "reporting", "regime", "presentation", "review")
+         "reporting", "regime", "data_definitions", "access", "presentation",
+         "review")
 
 STEP_LABELS = {
     "client": "About the client",
@@ -72,6 +73,8 @@ STEP_LABELS = {
     "sources": "Expected deliveries",
     "reporting": "Reporting requirements",
     "regime": "Regulatory information",
+    "data_definitions": "How to read the data",
+    "access": "Who needs access",
     "presentation": "Report presentation",
     "review": "Review and activate",
 }

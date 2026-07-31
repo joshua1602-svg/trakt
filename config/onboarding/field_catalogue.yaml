@@ -804,6 +804,198 @@ sections:
 # catalogue is a complete account of the information model, not only of the
 # questions.
 # ---------------------------------------------------------------------------
+  # -----------------------------------------------------------------------
+  - key: data_definitions
+    label: How to read the data
+    help: >-
+      What the client's own fields MEAN. Not a field mapping — Trakt learns the
+      mapping from the first representative delivery and approves it through the
+      existing mapping path. What it cannot learn is the business meaning behind
+      a number, so that is asked here and kept with the client's record.
+    repeatable: true
+    repeatable_key: data_definitions
+    item_label_field: source_file
+    fields:
+
+      - key: source_file
+        label: Source file
+        help: The file or extract this describes, as the client names it.
+        scope: delivery
+        source: client_supplied
+        type: text
+        required: true
+        max_length: 200
+        consumers: [Onboarding record, first-delivery mapping review]
+        writes_to: onboarding_record
+
+      - key: description
+        label: What the file contains
+        scope: delivery
+        source: client_supplied
+        type: multiline
+        required: true
+        max_length: 2000
+        consumers: [Onboarding record, first-delivery mapping review]
+        writes_to: onboarding_record
+
+      - key: proprietary_fields
+        label: Fields that need explaining
+        help: >-
+          Any column whose name would not tell Trakt what it holds, with the
+          client's own definition.
+        scope: delivery
+        source: client_supplied
+        type: multiline
+        max_length: 4000
+        consumers: [First-delivery mapping review]
+        writes_to: onboarding_record
+
+      - key: units_and_currency
+        label: Units and currency
+        help: Whether amounts are in units, thousands or millions, and in which
+          currency.
+        scope: delivery
+        source: client_supplied
+        type: text
+        max_length: 200
+        consumers: [First-delivery mapping review, validation]
+        writes_to: onboarding_record
+
+      - key: balance_definition
+        label: What a balance means
+        help: >-
+          Whether balances include accrued interest, fees or arrears, and
+          whether they are gross or net.
+        scope: delivery
+        source: client_supplied
+        type: multiline
+        max_length: 2000
+        consumers: [First-delivery mapping review, validation]
+        writes_to: onboarding_record
+
+      - key: date_conventions
+        label: Date conventions
+        help: The date format used, and whether dates are inclusive of the
+          reporting day.
+        scope: delivery
+        source: client_supplied
+        type: text
+        max_length: 200
+        consumers: [First-delivery mapping review]
+        writes_to: onboarding_record
+
+      - key: measure_basis
+        label: Point in time or cumulative
+        scope: delivery
+        source: client_supplied
+        type: enum
+        options:
+          - value: point_in_time
+            label: Point in time, as at the reporting date
+          - value: cumulative
+            label: Cumulative since inception
+          - value: period
+            label: For the reporting period only
+          - value: mixed
+            label: A mixture — described above
+        consumers: [First-delivery mapping review, validation]
+        writes_to: onboarding_record
+
+      - key: known_limitations
+        label: Known data-quality limitations
+        help: Anything the client already knows is missing, estimated or
+          unreliable.
+        scope: delivery
+        source: client_supplied
+        type: multiline
+        max_length: 4000
+        consumers: [Onboarding record, validation review]
+        writes_to: onboarding_record
+
+  # -----------------------------------------------------------------------
+  - key: access
+    label: Who needs access
+    help: >-
+      The people who will use Trakt for this client, and what each of them
+      needs. Trakt records the requirement; provisioning is an operator action
+      outside onboarding.
+    repeatable: true
+    repeatable_key: access
+    item_label_field: user_name
+    fields:
+
+      - key: user_name
+        label: Name
+        scope: access
+        source: client_supplied
+        type: text
+        required: true
+        max_length: 120
+        consumers: [Onboarding record, access provisioning]
+        writes_to: onboarding_record
+
+      - key: user_email
+        label: Email address
+        scope: access
+        source: client_supplied
+        type: email
+        required: true
+        validation: email
+        consumers: [Onboarding record, access provisioning]
+        writes_to: onboarding_record
+
+      - key: user_role
+        label: Role
+        scope: access
+        source: client_supplied
+        type: enum
+        required: true
+        options:
+          - value: viewer
+            label: Views reports and dashboards
+          - value: analyst
+            label: Works with the data
+          - value: approver
+            label: Approves deliveries and configuration
+          - value: administrator
+            label: Administers this client's settings
+        consumers: [Access provisioning]
+        writes_to: onboarding_record
+
+      - key: scope_note
+        label: Which clients or portfolios
+        help: Leave blank for all of this client's portfolios.
+        scope: access
+        source: client_supplied
+        type: text
+        max_length: 200
+        consumers: [Access provisioning]
+        writes_to: onboarding_record
+
+      - key: occ_access_required
+        label: Needs Operations Control Centre access
+        scope: access
+        source: client_supplied
+        type: boolean
+        consumers: [Access provisioning]
+        writes_to: onboarding_record
+
+      - key: dashboard_access_required
+        label: Needs dashboard access
+        scope: access
+        source: client_supplied
+        type: boolean
+        consumers: [Access provisioning]
+        writes_to: onboarding_record
+
+      - key: report_recipient
+        label: Receives reports by email
+        scope: access
+        source: client_supplied
+        type: boolean
+        consumers: [Report distribution]
+        writes_to: onboarding_record
+
 not_collected:
 
   - key: reporting_period

@@ -251,7 +251,7 @@ def test_the_real_header_mapper_and_profiler_are_used(service, monkeypatch):
     monkeypatch.setattr(fp, "profile_file", spy_profile)
 
     run = run_scenario(service, "scenario_a_clean", tenant=TENANT_A, actor=ACTOR)
-    assert run.case.run.state == "READY_FOR_EXECUTION"
+    assert run.case.run.state == "ACTIVATION_CONFIRMATION_REQUIRED"
     assert calls["mapper"] > 10, "the real header mapper did not run"
     assert calls["profile"] >= 1, "the real source profiler did not run"
 

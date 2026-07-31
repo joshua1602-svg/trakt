@@ -163,6 +163,24 @@ class LoadFixture(BaseModel):
     run: bool = True
 
 
+class SendPack(BaseModel):
+    """Issue the approved pack. ``to`` overrides the recorded contacts."""
+
+    to: Optional[List[str]] = None
+    tenant: Optional[str] = None
+
+
+class ConfirmActivation(BaseModel):
+    """The last, separate act before anything reaches production.
+
+    ``confirmation`` is the operator's own words, recorded on the audit event.
+    Approving the configuration is a different call, and does not start this.
+    """
+
+    confirmation: str = ""
+    tenant: Optional[str] = None
+
+
 # --------------------------------------------------------------------------- #
 # Meta
 # --------------------------------------------------------------------------- #
@@ -261,7 +279,10 @@ def get_readiness(case_ref: str, tenant: Optional[str] = None,
     _require_feature()
     service = get_service()
     agent_case = _load(service, _tenant_for(principal, tenant), case_ref)
-    ready = agent_case.run.state == _states.READY_FOR_EXECUTION
+    # Readiness is a waypoint the run passes THROUGH, so the package is offered
+    # from the status it recorded rather than from where the run is now — a
+    # case that has gone on to review still has a readiness package.
+    ready = agent_case.run.readiness_status == _states.READY_FOR_EXECUTION
     return {"ok": True, "readiness": service.evaluate_readiness(agent_case),
             "package": service.readiness_package(agent_case) if ready else None}
 
@@ -487,6 +508,126 @@ def approve_readiness(case_ref: str, body: TenantBody,
     return {"ok": True,
             **service.status(service.approve_execution_readiness(
                 agent_case, actor=principal.name))}
+
+
+# --------------------------------------------------------------------------- #
+# The client pack
+# --------------------------------------------------------------------------- #
+
+@router.post("/cases/{case_ref}/pack/draft")
+def draft_pack(case_ref: str, body: TenantBody,
+               principal: Principal = Depends(authenticate)) -> Dict[str, Any]:
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
+    return {"ok": True,
+            **service.status(service.draft_pack(agent_case,
+                                                actor=principal.name))}
+
+
+@router.get("/cases/{case_ref}/pack")
+def get_pack(case_ref: str, tenant: Optional[str] = None,
+             principal: Principal = Depends(authenticate)) -> Dict[str, Any]:
+    """The pack as it stands, plus the document a human would actually read."""
+    _require_feature()
+    service = get_service()
+    t = _tenant_for(principal, tenant)
+    agent_case = _load(service, t, case_ref)
+    built = service.build_pack(agent_case)
+    return {"ok": True, "pack": built.to_dict(), "document": built.document(),
+            "status": agent_case.run.pack_status,
+            "history": agent_case.run.pack_history,
+            "receipt": agent_case.run.pack_receipt}
+
+
+@router.post("/cases/{case_ref}/pack/approve")
+def approve_pack(case_ref: str, body: TenantBody,
+                 principal: Principal = Depends(authenticate)) -> Dict[str, Any]:
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
+    return {"ok": True,
+            **service.status(service.approve_pack(
+                agent_case, actor=principal.name, reason=body.reason))}
+
+
+@router.post("/cases/{case_ref}/pack/send")
+def send_pack(case_ref: str, body: SendPack,
+              principal: Principal = Depends(authenticate)) -> Dict[str, Any]:
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
+    return {"ok": True,
+            **service.status(service.send_pack(agent_case,
+                                               actor=principal.name,
+                                               to=body.to))}
+
+
+# --------------------------------------------------------------------------- #
+# Review, approval and the confirmation gate
+# --------------------------------------------------------------------------- #
+
+@router.post("/cases/{case_ref}/review")
+def request_review(case_ref: str, body: TenantBody,
+                   principal: Principal = Depends(authenticate)) -> Dict[str, Any]:
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
+    return {"ok": True,
+            **service.status(service.request_activation(
+                agent_case, actor=principal.name))}
+
+
+@router.get("/cases/{case_ref}/review")
+def get_review(case_ref: str, tenant: Optional[str] = None,
+               principal: Principal = Depends(authenticate)) -> Dict[str, Any]:
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, tenant), case_ref)
+    package = service.build_review_package(agent_case)
+    return {"ok": True, "package": package.to_dict(),
+            "document": package.document()}
+
+
+@router.post("/cases/{case_ref}/activation/approve")
+def approve_activation(case_ref: str, body: TenantBody,
+                       principal: Principal = Depends(authenticate)
+                       ) -> Dict[str, Any]:
+    """Approve the configuration. This starts nothing — see the confirm route."""
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
+    return {"ok": True,
+            **service.status(service.approve_activation(
+                agent_case, actor=principal.name, reason=body.reason))}
+
+
+@router.get("/cases/{case_ref}/activation")
+def get_activation(case_ref: str, tenant: Optional[str] = None,
+                   principal: Principal = Depends(authenticate)
+                   ) -> Dict[str, Any]:
+    """What confirming would do, and every reason it currently may not."""
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, tenant), case_ref)
+    return {"ok": True, **service.activation_confirmation(agent_case)}
+
+
+@router.post("/cases/{case_ref}/activation/confirm")
+def confirm_activation(case_ref: str, body: ConfirmActivation,
+                       principal: Principal = Depends(authenticate)
+                       ) -> Dict[str, Any]:
+    """The one route that can reach production, through the one gate.
+
+    In a synthetic environment it is always refused, and the refusal is audited.
+    """
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
+    return {"ok": True,
+            **service.status(service.confirm_activation(
+                agent_case, actor=principal.name,
+                confirmation=body.confirmation))}
 
 
 @router.post("/cases/{case_ref}/cancel")

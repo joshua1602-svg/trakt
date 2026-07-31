@@ -4,6 +4,7 @@ import { ArrowLeft, CheckCircle2, CircleDot, ExternalLink } from "lucide-react";
 import clsx from "clsx";
 import { useOpsClient } from "@/api/context";
 import type {
+  AgentDisclosure,
   AgentProposal,
   AgentStatus,
   DecisionCard,
@@ -44,6 +45,7 @@ const STEPS: { action: string; step: AgentStep; label: string }[] = [
   { action: "run_synthetic_onboarding", step: "run", label: "Run the practice onboarding" },
   { action: "generate_orchestration_plan", step: "plan", label: "Prepare the execution plan" },
   { action: "approve_execution_readiness", step: "readiness/approve", label: "Approve readiness" },
+  { action: "request_activation", step: "review", label: "Submit for review" },
 ];
 
 /** Which onboarding actions are worth a button, given where the case is. */
@@ -119,7 +121,9 @@ export function AgentCaseScreen() {
   const run = status.run;
   const onboarding = status.onboarding;
   const facts = status.facts;
-  const isReady = run.state === "READY_FOR_EXECUTION";
+  // The rehearsal's verdict, not the run's current position: READY_FOR_EXECUTION
+  // is a waypoint, and a case that has gone on to review still passed it.
+  const isReady = run.readiness_status === "READY_FOR_EXECUTION";
   const available = new Set([
     ...(status.state.allowed_human_actions ?? []),
     ...onboardingActions(status),
@@ -168,6 +172,7 @@ export function AgentCaseScreen() {
               <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
                 <p className="text-sm font-semibold text-amber-900">{copy.agent.proposalHeading}</p>
                 <p className="mt-1 text-sm text-amber-900">{proposal.summary}</p>
+                {proposal.disclosure && <Disclosure disclosure={proposal.disclosure} />}
                 <div className="mt-3 flex gap-2">
                   <button
                     type="button"
@@ -310,6 +315,32 @@ export function AgentCaseScreen() {
               </ul>
             )}
           </Panel>
+
+          <PackPanel
+            status={status}
+            busy={busy}
+            caseId={caseId}
+            onDraft={() => void act(() => client.draftAgentPack(caseId))}
+            onApprove={() => void act(() => client.approveAgentPack(caseId))}
+            onSend={(to) => void act(() => client.sendAgentPack(caseId, to))}
+          />
+
+          <ReviewPanel
+            status={status}
+            busy={busy}
+            caseId={caseId}
+            onSubmit={() => void act(() => client.requestAgentReview(caseId))}
+            onApprove={() => void act(() => client.approveAgentActivation(caseId))}
+          />
+
+          <ActivationPanel
+            status={status}
+            busy={busy}
+            caseId={caseId}
+            onConfirm={(confirmation) =>
+              void act(() => client.confirmAgentActivation(caseId, confirmation))
+            }
+          />
 
           <Panel
             title={copy.agent.previewHeading}
@@ -508,6 +539,431 @@ export function AgentCaseScreen() {
         </aside>
       </div>
     </Page>
+  );
+}
+
+/**
+ * The four populations a turn must report.
+ *
+ * Rendered together and always in the same order, so "and what did you NOT
+ * understand?" has one place to look. A proposal carrying questions or
+ * unrecognised text has applied NOTHING — the panel says so rather than
+ * leaving it to be inferred from a missing tick.
+ */
+function Disclosure({ disclosure }: { disclosure: AgentDisclosure }) {
+  const incomplete = disclosure.questions.length > 0 || disclosure.unrecognised.length > 0;
+  return (
+    <div className="mt-3 space-y-2 text-sm text-amber-900">
+      {disclosure.understood.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+            {copy.agent.disclosureUnderstood}
+          </p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4">
+            {disclosure.understood.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {disclosure.questions.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+            {copy.agent.disclosureQuestions}
+          </p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4">
+            {disclosure.questions.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {disclosure.unrecognised.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">
+            {copy.agent.disclosureUnrecognised}
+          </p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4 text-rose-800">
+            {disclosure.unrecognised.map((line) => (
+              <li key={line}>“{line}”</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {incomplete && (
+        <p className="font-medium text-rose-800">{copy.agent.disclosureNothingApplied}</p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The client pack, and its own four-state workflow.
+ *
+ * Every question in it is a field the governed catalogue declares — this panel
+ * projects what the server built and adds nothing. The receipt's `sent` is
+ * reported as it stands: in an environment with no mail integration it is
+ * false, and the panel says "recorded, not sent" rather than implying delivery.
+ */
+function PackPanel({
+  status,
+  busy,
+  caseId,
+  onDraft,
+  onApprove,
+  onSend,
+}: {
+  status: AgentStatus;
+  busy: boolean;
+  caseId: string;
+  onDraft: () => void;
+  onApprove: () => void;
+  onSend: (to?: string[]) => void;
+}) {
+  const client = useOpsClient();
+  const [showDocument, setShowDocument] = useState(false);
+  const [recipient, setRecipient] = useState("");
+  const pack = status.pack;
+  const allowed = new Set(status.state.allowed_human_actions ?? []);
+  const document = useLoad(() => client.getAgentPack(caseId), [caseId, status.run.version]);
+  const recipients = pack.email?.to ?? [];
+
+  return (
+    <Panel
+      title={copy.agent.packHeading}
+      action={
+        pack.sections.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => setShowDocument((prev) => !prev)}
+            className="text-sm font-medium text-blue-700"
+          >
+            {showDocument ? copy.agent.packHide : copy.agent.packDocument}
+          </button>
+        ) : undefined
+      }
+    >
+      <p className="text-sm text-stone-600">{copy.agent.packDescription}</p>
+
+      {pack.sections.length === 0 ? (
+        <p className="mt-3 text-sm text-stone-400">{copy.agent.packNone}</p>
+      ) : (
+        <>
+          <p className="mt-3 text-sm text-stone-700">
+            {pack.questions - pack.outstanding} {copy.agent.packAnswered} ·{" "}
+            <span className="font-medium">{pack.outstanding}</span> {copy.agent.packOutstanding}
+          </p>
+          <ul className="mt-2 space-y-1 text-sm text-stone-600">
+            {pack.sections.map((section) => (
+              <li key={section.key} className="flex justify-between gap-2">
+                <span>{section.label}</span>
+                <span className="text-xs text-stone-500">
+                  {section.outstanding} {copy.agent.packOutstanding}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-xs text-stone-500">{pack.mapping_statement}</p>
+          {showDocument && (
+            <pre className="mt-3 max-h-96 overflow-auto rounded-xl bg-stone-900 p-3 text-xs text-stone-100">
+              {document.data?.document ?? ""}
+            </pre>
+          )}
+        </>
+      )}
+
+      {pack.status && (
+        <p className="mt-3 text-xs uppercase tracking-wide text-stone-400">
+          {copy.agent.packStatusHeading}: {humanize(pack.status)}
+        </p>
+      )}
+
+      {/* The honest answer to "did this leave Trakt?". */}
+      {pack.status === "SENT" && (
+        <p className="mt-2 rounded-lg bg-violet-50 px-3 py-2 text-sm font-medium text-violet-800">
+          {pack.sent ? copy.agent.packIssued : copy.agent.packNotSent}
+        </p>
+      )}
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {allowed.has("draft_onboarding_pack") && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onDraft}
+            className="rounded-xl border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+          >
+            {pack.sections.length > 0 ? copy.agent.packRedraft : copy.agent.packDraft}
+          </button>
+        )}
+        {allowed.has("approve_pack_to_send") && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onApprove}
+            className="rounded-xl bg-stone-900 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {copy.agent.packApprove}
+          </button>
+        )}
+        {allowed.has("send_onboarding_pack") && (
+          <>
+            {recipients.length === 0 && (
+              <input
+                aria-label={copy.agent.packRecipients}
+                className="min-w-0 flex-1 rounded-xl border border-stone-300 px-3 py-1.5 text-sm"
+                placeholder={copy.agent.packNoRecipient}
+                value={recipient}
+                onChange={(event) => setRecipient(event.target.value)}
+              />
+            )}
+            <button
+              type="button"
+              disabled={busy || (recipients.length === 0 && !recipient.trim())}
+              onClick={() => onSend(recipients.length > 0 ? undefined : [recipient.trim()])}
+              className="rounded-xl bg-stone-900 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {copy.agent.packSend}
+            </button>
+          </>
+        )}
+      </div>
+      {recipients.length > 0 && (
+        <p className="mt-2 text-xs text-stone-500">
+          {copy.agent.packRecipients}: {recipients.join(", ")}
+        </p>
+      )}
+    </Panel>
+  );
+}
+
+/**
+ * The review package, and the approval of the configuration.
+ *
+ * Approving records a decision and prepares the confirmation. It does not start
+ * anything, and the panel says so beside the button rather than after the fact.
+ */
+function ReviewPanel({
+  status,
+  busy,
+  caseId,
+  onSubmit,
+  onApprove,
+}: {
+  status: AgentStatus;
+  busy: boolean;
+  caseId: string;
+  onSubmit: () => void;
+  onApprove: () => void;
+}) {
+  const client = useOpsClient();
+  const [show, setShow] = useState(false);
+  const allowed = new Set(status.state.allowed_human_actions ?? []);
+  const submitted = Boolean(status.review_package_ref);
+  const review = useLoad(
+    () => (submitted ? client.getAgentReview(caseId) : Promise.resolve(null)),
+    [caseId, submitted, status.run.version],
+  );
+  const pkg = review.data?.package as
+    | { operator_actions?: { kind: string; subject: string; detail: string; status: string }[] }
+    | undefined;
+
+  if (!submitted && !allowed.has("request_activation")) return null;
+
+  return (
+    <Panel
+      title={copy.agent.reviewHeading}
+      action={
+        submitted ? (
+          <button
+            type="button"
+            onClick={() => setShow((prev) => !prev)}
+            className="text-sm font-medium text-blue-700"
+          >
+            {show ? copy.agent.packHide : copy.agent.reviewShow}
+          </button>
+        ) : undefined
+      }
+    >
+      <p className="text-sm text-stone-600">{copy.agent.reviewDescription}</p>
+
+      {!submitted ? (
+        <p className="mt-3 text-sm text-stone-400">{copy.agent.reviewNone}</p>
+      ) : (
+        <>
+          {(pkg?.operator_actions ?? []).length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs uppercase tracking-wide text-stone-400">
+                {copy.agent.reviewOperatorActions}
+              </p>
+              <ul className="mt-1 space-y-1 text-sm text-stone-700">
+                {(pkg?.operator_actions ?? []).map((action) => (
+                  <li key={`${action.kind}-${action.subject}`}>
+                    <span className="font-medium">{action.subject}</span> — {action.detail}{" "}
+                    <span className="text-xs font-medium text-amber-700">
+                      {copy.agent.reviewNotProvisioned}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {show && (
+            <pre className="mt-3 max-h-96 overflow-auto rounded-xl bg-stone-900 p-3 text-xs text-stone-100">
+              {review.data?.document ?? ""}
+            </pre>
+          )}
+        </>
+      )}
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {allowed.has("request_activation") && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onSubmit}
+            className="rounded-xl border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+          >
+            {copy.agent.reviewSubmit}
+          </button>
+        )}
+        {allowed.has("approve_activation") && (
+          <>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onApprove}
+              className="rounded-xl bg-stone-900 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {copy.agent.reviewApprove}
+            </button>
+            <span className="text-xs text-stone-500">{copy.agent.reviewApproveNote}</span>
+          </>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+/**
+ * The confirmation immediately before production.
+ *
+ * Deliberately concrete: the client, the portfolio, the files, where they would
+ * go, and what would happen. "Activate this client" is not a decision anyone can
+ * make on its own. Every reason the server would refuse is listed, so an
+ * operator is never left guessing why the button did nothing.
+ */
+function ActivationPanel({
+  status,
+  busy,
+  caseId,
+  onConfirm,
+}: {
+  status: AgentStatus;
+  busy: boolean;
+  caseId: string;
+  onConfirm: (confirmation: string) => void;
+}) {
+  const client = useOpsClient();
+  const [confirmation, setConfirmation] = useState("");
+  const allowed = new Set(status.state.allowed_human_actions ?? []);
+  const relevant = allowed.has("confirm_activation") || status.run.state === "INGESTION_STARTED";
+  const view = useLoad(
+    () => (relevant ? client.getAgentActivation(caseId) : Promise.resolve(null)),
+    [caseId, relevant, status.run.version],
+  );
+
+  if (!relevant) return null;
+  const intent = view.data?.intent;
+  const refusals = view.data?.refusals ?? [];
+
+  return (
+    <Panel title={copy.agent.activationHeading}>
+      <p className="text-sm text-stone-600">{copy.agent.activationDescription}</p>
+
+      {intent && (
+        <>
+          <p className="mt-3 text-sm font-medium text-stone-900">{intent.statement}</p>
+          {intent.files.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs uppercase tracking-wide text-stone-400">
+                {copy.agent.activationFiles}
+              </p>
+              <ul className="mt-1 space-y-0.5 text-sm text-stone-700">
+                {intent.files.map((file) => (
+                  <li key={file.name}>{file.name}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {intent.target_locations.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs uppercase tracking-wide text-stone-400">
+                {copy.agent.activationTargets}
+              </p>
+              <ul className="mt-1 space-y-0.5 break-all text-xs text-stone-500">
+                {intent.target_locations.map((target) => (
+                  <li key={target}>{target}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div className="mt-3">
+            <p className="text-xs uppercase tracking-wide text-stone-400">
+              {copy.agent.activationActions}
+            </p>
+            <ul className="mt-1 list-disc space-y-0.5 pl-4 text-sm text-stone-700">
+              {intent.actions.map((action) => (
+                <li key={action}>{action}</li>
+              ))}
+            </ul>
+          </div>
+        </>
+      )}
+
+      {status.run.state === "INGESTION_STARTED" ? (
+        <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
+          {copy.agent.activationStarted}
+        </p>
+      ) : (
+        <>
+          {refusals.length > 0 && (
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
+              <p className="text-sm font-semibold text-amber-900">
+                {copy.agent.activationRefusedHeading}
+              </p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-4 text-sm text-amber-900">
+                {refusals.map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {!view.data?.live_enabled && (
+            <p className="mt-3 text-sm font-medium text-violet-800">
+              {copy.agent.activationDisabled}
+            </p>
+          )}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <input
+              aria-label={copy.agent.activationConfirmLabel}
+              className="min-w-0 flex-1 rounded-xl border border-stone-300 px-3 py-1.5 text-sm"
+              placeholder={copy.agent.activationConfirmLabel}
+              value={confirmation}
+              onChange={(event) => setConfirmation(event.target.value)}
+            />
+            <button
+              type="button"
+              disabled={busy || !confirmation.trim()}
+              onClick={() => onConfirm(confirmation.trim())}
+              className="rounded-xl bg-rose-700 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {copy.agent.activationConfirm}
+            </button>
+          </div>
+        </>
+      )}
+    </Panel>
   );
 }
 

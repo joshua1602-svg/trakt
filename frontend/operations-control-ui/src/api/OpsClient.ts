@@ -1,9 +1,12 @@
 import type {
+  AgentActivation,
   AgentAudit,
   AgentChecklist,
   AgentMeta,
+  AgentPack,
   AgentPreview,
   AgentReadinessPackage,
+  AgentReviewPackage,
   AgentStatus,
   AgentTurn,
   CaseSummary,
@@ -186,6 +189,7 @@ export interface OpsClient {
       | "run"
       | "plan"
       | "readiness/approve"
+      | "review"
       | "cancel",
     body?: Record<string, unknown>,
   ): Promise<AgentStatus>;
@@ -214,4 +218,24 @@ export interface OpsClient {
   getAgentPreview(caseRef: string): Promise<AgentPreview>;
   getAgentReadiness(caseRef: string): Promise<AgentReadinessPackage>;
   getAgentAudit(caseRef: string): Promise<AgentAudit>;
+
+  // -- the client pack ----------------------------------------------------- //
+  /** The pack, plus the document a human would read and send by hand. */
+  getAgentPack(caseRef: string): Promise<AgentPack>;
+  draftAgentPack(caseRef: string): Promise<AgentStatus>;
+  /** A human approves the pack for issue. The agent cannot do this. */
+  approveAgentPack(caseRef: string, reason?: string): Promise<AgentStatus>;
+  /** Record the pack as issued. The receipt says whether anything was sent. */
+  sendAgentPack(caseRef: string, to?: string[]): Promise<AgentStatus>;
+
+  // -- review, approval and the confirmation gate --------------------------- //
+  /** Assemble the review package and submit the case for review. */
+  requestAgentReview(caseRef: string): Promise<AgentStatus>;
+  getAgentReview(caseRef: string): Promise<AgentReviewPackage>;
+  /** Approve the configuration. This starts nothing. */
+  approveAgentActivation(caseRef: string, reason?: string): Promise<AgentStatus>;
+  /** What confirming would do, and every reason it currently may not. */
+  getAgentActivation(caseRef: string): Promise<AgentActivation>;
+  /** The one call that can reach production, through the server's one gate. */
+  confirmAgentActivation(caseRef: string, confirmation: string): Promise<AgentStatus>;
 }

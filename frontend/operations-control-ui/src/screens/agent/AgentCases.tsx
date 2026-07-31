@@ -25,7 +25,10 @@ type FilterKey = (typeof FILTERS)[number]["key"];
 function matches(row: CaseSummary, filter: FilterKey): boolean {
   if (filter === "all") return true;
   if (filter === "blocked") return row.state === "BLOCKED";
-  if (filter === "ready") return row.state === "READY_FOR_EXECUTION";
+  // Readiness is a WAYPOINT the run passes through, so "ready" is asked of the
+  // readiness status the run recorded — not of where the run is now. A case
+  // waiting for an activation decision has passed readiness and belongs here.
+  if (filter === "ready") return row.readiness_status === "READY_FOR_EXECUTION";
   // "Needs you" is anything waiting on a human: an approval state on either
   // lifecycle, or an open decision. All three are properties the backend
   // already decided.

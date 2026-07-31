@@ -2,11 +2,14 @@ import { copy } from "@/lib/copy";
 import { announceUnauthorized, clearToken, getToken } from "@/lib/token";
 import { OpsError, type OpsClient } from "./OpsClient";
 import type {
+  AgentActivation,
   AgentAudit,
   AgentChecklist,
   AgentMeta,
+  AgentPack,
   AgentPreview,
   AgentReadinessPackage,
+  AgentReviewPackage,
   AgentStatus,
   AgentTurn,
   CaseSummary,
@@ -552,7 +555,12 @@ export class HttpOpsClient implements OpsClient {
   // -- OCC Agent ----------------------------------------------------------- //
   // The case reference is the only thing these send: the tenant comes from the
   // signed-in principal server-side, so a browser cannot address another
-  // tenant's case. There is deliberately no activation call.
+  // tenant's case.
+  //
+  // There IS an activation call, and it is deliberately three: approving the
+  // configuration, reading the confirmation, and confirming. Approval starts
+  // nothing, and the server refuses the confirmation in every environment
+  // where live execution is not switched on.
 
   async getAgentMeta(): Promise<AgentMeta> {
     return this.request<{ ok: true } & AgentMeta>("/ops/agent/meta");
@@ -688,6 +696,74 @@ export class HttpOpsClient implements OpsClient {
   async getAgentAudit(caseRef: string): Promise<AgentAudit> {
     return this.request<{ ok: true } & AgentAudit>(
       `/ops/agent/cases/${encodeURIComponent(caseRef)}/audit`,
+    );
+  }
+
+  // -- the client pack ------------------------------------------------------ //
+
+  async getAgentPack(caseRef: string): Promise<AgentPack> {
+    return this.request<{ ok: true } & AgentPack>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/pack`,
+    );
+  }
+
+  async draftAgentPack(caseRef: string): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/pack/draft`,
+      {},
+    );
+  }
+
+  async approveAgentPack(caseRef: string, reason = ""): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/pack/approve`,
+      { reason },
+    );
+  }
+
+  async sendAgentPack(caseRef: string, to?: string[]): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/pack/send`,
+      { to: to ?? null },
+    );
+  }
+
+  // -- review, approval and the confirmation gate --------------------------- //
+
+  async requestAgentReview(caseRef: string): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/review`,
+      {},
+    );
+  }
+
+  async getAgentReview(caseRef: string): Promise<AgentReviewPackage> {
+    return this.request<{ ok: true } & AgentReviewPackage>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/review`,
+    );
+  }
+
+  async approveAgentActivation(caseRef: string, reason = ""): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/activation/approve`,
+      { reason },
+    );
+  }
+
+  async getAgentActivation(caseRef: string): Promise<AgentActivation> {
+    return this.request<{ ok: true } & AgentActivation>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/activation`,
+    );
+  }
+
+  /**
+   * The one call that can reach production. It goes through the server's single
+   * activation gate, which refuses unless every precondition holds.
+   */
+  async confirmAgentActivation(caseRef: string, confirmation: string): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/activation/confirm`,
+      { confirmation },
     );
   }
 }

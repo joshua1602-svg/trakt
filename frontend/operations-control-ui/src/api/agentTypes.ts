@@ -177,6 +177,15 @@ export interface SyntheticRunDoc {
   readiness: Readiness | Record<string, never>;
   readiness_status: string;
   readiness_package_ref: string;
+  review_package_ref: string;
+  /** Which adapter this case is worked under. "synthetic" unless live is on. */
+  mode: string;
+  pack: Record<string, unknown>;
+  pack_status: string;
+  pack_history: PackHistoryEntry[];
+  pack_receipt: Record<string, unknown>;
+  activation_intent: Record<string, unknown>;
+  activation_result: Record<string, unknown>;
   approvals: Record<string, unknown>[];
   blockers: string[];
   observations: string[];
@@ -184,6 +193,136 @@ export interface SyntheticRunDoc {
   fixture_id: string;
   created_at: string;
   updated_at: string;
+}
+
+/** One step of the pack's own DRAFTED -> ... -> SENT workflow. */
+export interface PackHistoryEntry {
+  status: string;
+  actor: string;
+  at: string;
+  note: string;
+}
+
+/** One question in the client pack. Every one is a catalogue field. */
+export interface PackQuestion {
+  section: string;
+  field: string;
+  label: string;
+  help: string;
+  /** "answered" | "outstanding" | "derived" */
+  status: string;
+  value: unknown;
+  provenance: string;
+  index: number | null;
+  item: string;
+  required: boolean;
+  evidence_required: boolean;
+  sensitive: boolean;
+  writes_to: string;
+}
+
+export interface PackSection {
+  key: string;
+  label: string;
+  help: string;
+  repeatable: boolean;
+  questions: PackQuestion[];
+  outstanding: number;
+}
+
+/** What happened when the pack was issued. `sent` is the honest answer. */
+export interface PackReceipt {
+  adapter: string;
+  sent: boolean;
+  at: string;
+  receipt_id: string;
+  to: string[];
+  subject: string;
+  artefacts: { name?: string; ref?: string }[];
+  content_hash: string;
+  statement: string;
+}
+
+/** The pack as the case workspace shows it. */
+export interface PackView {
+  status: string;
+  history: PackHistoryEntry[];
+  outstanding: number;
+  questions: number;
+  sections: PackSection[];
+  email: { to: string[]; cc: string[]; subject: string; body: string };
+  artefacts: { name: string; ref: string }[];
+  mapping_statement: string;
+  receipt: PackReceipt | Record<string, never>;
+  /** False in every environment without a mail integration. */
+  sent: boolean;
+}
+
+/** What confirming activation would cause. Built from the case, never prose. */
+export interface ActivationIntent {
+  client_id: string;
+  client_name: string;
+  portfolio_id: string;
+  dataset: string;
+  reporting_period: string;
+  files: { name: string; target: string; sha256?: string }[];
+  target_locations: string[];
+  actions: string[];
+  configuration_artefacts: string[];
+  statement: string;
+}
+
+export interface ActivationResult {
+  ok: boolean;
+  mode: string;
+  client_id: string;
+  version: number | null;
+  artefacts_written: Record<string, unknown>[];
+  batch_id: string;
+  workflow_id: string;
+  files_placed: string[];
+  message: string;
+  error: string;
+}
+
+/** Where the case stands on the road to production. */
+export interface ActivationView {
+  mode: string;
+  adapter: string;
+  /** The OCC_AGENT_LIVE_ENABLED flag. False in every checked-in environment. */
+  live_enabled: boolean;
+  intent: ActivationIntent | Record<string, never>;
+  result: ActivationResult | Record<string, never>;
+  approval: Record<string, unknown>;
+}
+
+/** Everything that must be true before anything reaches production. */
+export interface ActivationPreconditions {
+  mode: string;
+  flag_enabled: boolean;
+  case_ref: string;
+  onboarding_status: string;
+  configuration_approved: boolean;
+  readiness_passed: boolean;
+  tenant: string;
+  client_id: string;
+  portfolio_id: string;
+  configuration_valid: boolean;
+  configuration_problems: string[];
+  artefacts_present: number;
+  required_artefacts_satisfied: boolean;
+  approval_audited: boolean;
+  already_activated: boolean;
+  confirmed: boolean;
+}
+
+/** The confirmation screen: what would happen, and every reason it may not. */
+export interface AgentActivation {
+  intent: ActivationIntent;
+  preconditions: ActivationPreconditions;
+  refusals: string[];
+  mode: string;
+  live_enabled: boolean;
 }
 
 /** A deep link into an existing OCC view, rather than a copy of it. */
@@ -210,6 +349,12 @@ export interface AgentStatus {
   observations: string[];
   blockers: string[];
   occ_links: OccLink[];
+  /** The client-facing half: drafted, approved, issued — and whether sent. */
+  pack: PackView;
+  review_package_ref: string;
+  activation: ActivationView;
+  /** True while a practice run is executing on its own thread. */
+  running: boolean;
   /** True when a stage was simulated rather than executed for real. */
   anything_simulated: boolean;
   /** True when a stage was hard-blocked by a deterministic control. */
@@ -234,6 +379,23 @@ export interface AgentProposal {
   basis: string;
   material: boolean;
   confidence: number;
+  /** The four populations a turn must report. Present for answer proposals. */
+  disclosure?: AgentDisclosure;
+  plan?: Record<string, unknown>;
+  complete?: boolean;
+}
+
+/**
+ * What the agent understood, and — just as importantly — what it did not.
+ *
+ * A proposal carrying anything in `questions` or `unrecognised` has applied
+ * NOTHING. Confirming applies only what `understood` lists.
+ */
+export interface AgentDisclosure {
+  understood: string[];
+  proposed: string;
+  questions: string[];
+  unrecognised: string[];
 }
 
 export interface ScenarioSummary {
@@ -284,4 +446,19 @@ export interface AgentPreview {
 export interface AgentReadinessPackage {
   readiness: Readiness;
   package: Record<string, unknown> | null;
+}
+
+/** The pack, plus the document a human would actually read and send. */
+export interface AgentPack {
+  pack: Record<string, unknown> & { sections: PackSection[] };
+  document: string;
+  status: string;
+  history: PackHistoryEntry[];
+  receipt: PackReceipt | Record<string, never>;
+}
+
+/** The complete package an approver decides on. */
+export interface AgentReviewPackage {
+  package: Record<string, unknown>;
+  document: string;
 }

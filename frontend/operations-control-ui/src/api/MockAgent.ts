@@ -1,18 +1,26 @@
 import { MockOnboarding } from "./MockOnboarding";
 import { OpsError } from "./OpsClient";
 import type {
+  ActivationIntent,
+  ActivationResult,
+  AgentActivation,
   AgentAudit,
   AgentChecklist,
   AgentMeta,
+  AgentPack,
   AgentPreview,
   AgentProposal,
   AgentReadinessPackage,
+  AgentReviewPackage,
   AgentStatus,
   AgentTurn,
   CaseSummary,
   DecisionCard,
   ExecutionFacts,
   LifecycleState,
+  PackQuestion,
+  PackReceipt,
+  PackSection,
   ScenarioSummary,
   SyntheticRunDoc,
 } from "./agentTypes";
@@ -35,6 +43,10 @@ import type { ChecklistRow, OnboardingCase } from "./onboardingTypes";
 
 const S = {
   AWAITING_ONBOARDING: "AWAITING_ONBOARDING",
+  PACK_DRAFTED: "PACK_DRAFTED",
+  PACK_REVIEW_REQUIRED: "PACK_REVIEW_REQUIRED",
+  PACK_APPROVED_TO_SEND: "PACK_APPROVED_TO_SEND",
+  PACK_SENT: "PACK_SENT",
   READY_TO_RUN: "READY_TO_RUN",
   SYNTHETIC_ONBOARDING_RUNNING: "SYNTHETIC_ONBOARDING_RUNNING",
   EXCEPTIONS_REQUIRE_INPUT: "EXCEPTIONS_REQUIRE_INPUT",
@@ -42,12 +54,22 @@ const S = {
   ORCHESTRATION_PLAN_GENERATED: "ORCHESTRATION_PLAN_GENERATED",
   EXECUTION_APPROVAL_REQUIRED: "EXECUTION_APPROVAL_REQUIRED",
   READY_FOR_EXECUTION: "READY_FOR_EXECUTION",
+  READY_FOR_REVIEW: "READY_FOR_REVIEW",
+  APPROVED_FOR_ACTIVATION: "APPROVED_FOR_ACTIVATION",
+  ACTIVATION_CONFIRMATION_REQUIRED: "ACTIVATION_CONFIRMATION_REQUIRED",
+  ACTIVATING: "ACTIVATING",
+  INGESTION_STARTED: "INGESTION_STARTED",
+  ACTIVATION_FAILED: "ACTIVATION_FAILED",
   BLOCKED: "BLOCKED",
   CANCELLED: "CANCELLED",
 } as const;
 
 const STATE_LABELS: Record<string, string> = {
   [S.AWAITING_ONBOARDING]: "Working through onboarding",
+  [S.PACK_DRAFTED]: "Onboarding pack drafted",
+  [S.PACK_REVIEW_REQUIRED]: "Pack needs your review",
+  [S.PACK_APPROVED_TO_SEND]: "Pack approved to send",
+  [S.PACK_SENT]: "Pack issued to the client",
   [S.READY_TO_RUN]: "Ready to run",
   [S.SYNTHETIC_ONBOARDING_RUNNING]: "Synthetic onboarding running",
   [S.EXCEPTIONS_REQUIRE_INPUT]: "Exceptions need your input",
@@ -55,6 +77,12 @@ const STATE_LABELS: Record<string, string> = {
   [S.ORCHESTRATION_PLAN_GENERATED]: "Execution plan prepared",
   [S.EXECUTION_APPROVAL_REQUIRED]: "Readiness needs your approval",
   [S.READY_FOR_EXECUTION]: "READY_FOR_EXECUTION",
+  [S.READY_FOR_REVIEW]: "Ready for review and approval",
+  [S.APPROVED_FOR_ACTIVATION]: "Approved for activation",
+  [S.ACTIVATION_CONFIRMATION_REQUIRED]: "Confirm activation",
+  [S.ACTIVATING]: "Activating",
+  [S.INGESTION_STARTED]: "Ingestion started",
+  [S.ACTIVATION_FAILED]: "Activation failed",
   [S.BLOCKED]: "Blocked",
   [S.CANCELLED]: "Cancelled",
 };
@@ -73,8 +101,18 @@ const ONBOARDING_ACTIONS = [
   "withdraw_case",
 ];
 
+const PACK_ACTIONS = ["draft_onboarding_pack", "register_synthetic_artefact", "cancel_run"];
+
 const ALLOWED: Record<string, string[]> = {
-  [S.AWAITING_ONBOARDING]: ["register_synthetic_artefact", "cancel_run"],
+  [S.AWAITING_ONBOARDING]: PACK_ACTIONS,
+  [S.PACK_DRAFTED]: [...PACK_ACTIONS, "approve_pack_to_send"],
+  [S.PACK_REVIEW_REQUIRED]: [...PACK_ACTIONS, "approve_pack_to_send"],
+  [S.PACK_APPROVED_TO_SEND]: [
+    "send_onboarding_pack",
+    "register_synthetic_artefact",
+    "cancel_run",
+  ],
+  [S.PACK_SENT]: PACK_ACTIONS,
   [S.READY_TO_RUN]: ["run_synthetic_onboarding", "register_synthetic_artefact", "cancel_run"],
   [S.SYNTHETIC_ONBOARDING_RUNNING]: ["cancel_run"],
   [S.EXCEPTIONS_REQUIRE_INPUT]: [
@@ -86,11 +124,20 @@ const ALLOWED: Record<string, string[]> = {
   [S.SYNTHETIC_ONBOARDING_PASSED]: ["generate_orchestration_plan", "cancel_run"],
   [S.ORCHESTRATION_PLAN_GENERATED]: ["approve_execution_readiness", "cancel_run"],
   [S.EXECUTION_APPROVAL_REQUIRED]: ["approve_execution_readiness", "cancel_run"],
-  [S.READY_FOR_EXECUTION]: [],
+  // A waypoint, not the finish: what follows is the human decision about the
+  // real thing.
+  [S.READY_FOR_EXECUTION]: ["request_activation", "cancel_run"],
+  [S.READY_FOR_REVIEW]: ["approve_activation", "cancel_run"],
+  [S.APPROVED_FOR_ACTIVATION]: ["confirm_activation", "cancel_run"],
+  [S.ACTIVATION_CONFIRMATION_REQUIRED]: ["confirm_activation", "cancel_run"],
+  [S.ACTIVATING]: [],
+  [S.INGESTION_STARTED]: [],
+  [S.ACTIVATION_FAILED]: ["confirm_activation", "cancel_run"],
   [S.BLOCKED]: [
     "resolve_decision",
     "register_synthetic_artefact",
     "run_synthetic_onboarding",
+    "draft_onboarding_pack",
     "cancel_run",
   ],
   [S.CANCELLED]: [],
@@ -417,9 +464,203 @@ export class MockAgent {
           why: "The approved mapping and alias rules the platform applies.",
         },
       ],
+      pack: this.packView(stored),
+      review_package_ref: stored.doc.review_package_ref,
+      activation: {
+        mode: stored.doc.mode,
+        adapter: "synthetic",
+        live_enabled: false,
+        intent: stored.doc.activation_intent as ActivationIntent | Record<string, never>,
+        result: stored.doc.activation_result as ActivationResult | Record<string, never>,
+        approval:
+          (stored.doc.approvals.find((a) => a.subject === "configuration") as Record<
+            string,
+            unknown
+          >) ?? {},
+      },
+      running: false,
       anything_simulated: false,
       anything_blocked: stored.doc.state === S.BLOCKED,
       configuration_written: onboarding.status === "activated",
+    };
+  }
+
+  // -- the client pack ----------------------------------------------------- //
+
+  /**
+   * The pack, projected from the onboarding reference's own catalogue.
+   *
+   * The mock builds it the same way the server does — every question is a
+   * catalogue field — so a test that asserts "no question was invented" is
+   * meaningful against the mock too.
+   */
+  pack(caseRef: string): AgentPack {
+    const stored = this.get(caseRef);
+    const sections = this.packSections(caseRef);
+    return {
+      pack: { sections, mapping_statement: MAPPING_STATEMENT },
+      document: packDocument(this.onboardingCase(caseRef).client_name, sections),
+      status: stored.doc.pack_status,
+      history: stored.doc.pack_history,
+      receipt: stored.doc.pack_receipt as PackReceipt | Record<string, never>,
+    };
+  }
+
+  private packSections(caseRef: string): PackSection[] {
+    const onboarding = this.onboardingCase(caseRef);
+    const catalogue = this.onboarding.reference().catalogue;
+    const answers = onboarding.answers as Record<string, unknown>;
+    const out: PackSection[] = [];
+    for (const section of catalogue.sections ?? []) {
+      // "Collected" is the field's own `source`: a client or an operator
+      // supplies it. Anything derived, inferred or defaulted is Trakt's to
+      // answer, and is never asked of a client.
+      const fields = (section.fields ?? []).filter((f) =>
+        CLIENT_FACING_SOURCES.has(f.source),
+      );
+      if (fields.length === 0) continue;
+      const holder = section.repeatable
+        ? (((answers[section.key] as Record<string, unknown>[]) ?? [{}])[0] ?? {})
+        : ((answers[section.key] as Record<string, unknown>) ?? {});
+      const questions: PackQuestion[] = fields.map((f) => ({
+        section: section.key,
+        field: f.key,
+        label: f.label,
+        help: f.help ?? "",
+        status: present(holder[f.key]) ? "answered" : "outstanding",
+        value: holder[f.key] ?? null,
+        provenance: "",
+        index: section.repeatable ? 0 : null,
+        item: "",
+        required: false,
+        evidence_required: false,
+        sensitive: Boolean(f.sensitive),
+        writes_to: String(f.writes_to ?? ""),
+      }));
+      out.push({
+        key: section.key,
+        label: section.label,
+        help: section.help ?? "",
+        repeatable: Boolean(section.repeatable),
+        questions,
+        outstanding: questions.filter((q) => q.status === "outstanding").length,
+      });
+    }
+    return out;
+  }
+
+  private packView(stored: StoredRun): AgentStatus["pack"] {
+    const receipt = stored.doc.pack_receipt as PackReceipt | Record<string, never>;
+    const pack = stored.doc.pack as Record<string, unknown>;
+    return {
+      status: stored.doc.pack_status,
+      history: stored.doc.pack_history,
+      outstanding: Number(pack.outstanding ?? 0),
+      questions: Number(pack.questions ?? 0),
+      sections: (pack.sections as PackSection[]) ?? [],
+      email: (pack.email as AgentStatus["pack"]["email"]) ?? {
+        to: [],
+        cc: [],
+        subject: "",
+        body: "",
+      },
+      artefacts: (pack.artefacts as { name: string; ref: string }[]) ?? [],
+      mapping_statement: MAPPING_STATEMENT,
+      receipt,
+      sent: Boolean((receipt as PackReceipt).sent),
+    };
+  }
+
+  // -- the review package --------------------------------------------------- //
+
+  review(caseRef: string): AgentReviewPackage {
+    const onboarding = this.onboardingCase(caseRef);
+    const stored = this.get(caseRef);
+    const pkg = {
+      case_ref: caseRef,
+      client_name: onboarding.client_name,
+      sections: this.packSections(caseRef).map((s) => ({
+        key: s.key,
+        label: s.label,
+        rows: s.questions
+          .filter((q) => present(q.value))
+          .map((q) => ({
+            label: q.label,
+            value: q.value,
+            item: q.item,
+            provenance: "client_supplied",
+            provenance_label: "the client told Trakt",
+          })),
+      })),
+      outstanding: [],
+      access_requirements: [],
+      operator_actions: [],
+      mapping_note: MAPPING_NOTE,
+      access_note: ACCESS_NOTE,
+      activation: stored.doc.activation_intent,
+      readiness: this.readiness(stored, onboarding),
+      content_hash: "sha-mock-review",
+    };
+    return { package: pkg, document: reviewDocument(pkg) };
+  }
+
+  activation(caseRef: string): AgentActivation {
+    const stored = this.get(caseRef);
+    const intent = this.intent(stored);
+    return {
+      intent,
+      preconditions: {
+        mode: stored.doc.mode,
+        flag_enabled: false,
+        case_ref: caseRef,
+        onboarding_status: this.onboardingCase(caseRef).status,
+        configuration_approved: stored.doc.approvals.some(
+          (a) => a.subject === "configuration",
+        ),
+        readiness_passed: stored.doc.readiness_status === S.READY_FOR_EXECUTION,
+        tenant: TENANT,
+        client_id: intent.client_id,
+        portfolio_id: intent.portfolio_id,
+        configuration_valid: true,
+        configuration_problems: [],
+        artefacts_present: stored.doc.received_artefacts.length,
+        required_artefacts_satisfied: true,
+        approval_audited: true,
+        already_activated: false,
+        confirmed: false,
+      },
+      refusals: [
+        "This case is in rehearsal mode.",
+        "Live execution is not switched on in this environment.",
+      ],
+      mode: "synthetic",
+      live_enabled: false,
+    };
+  }
+
+  private intent(stored: StoredRun): ActivationIntent {
+    const facts = this.facts(this.onboardingCase(stored.doc.case_ref), stored);
+    const files = stored.doc.received_artefacts.map((a) => ({
+      name: a.source_file,
+      target: a.intended_live_uri,
+      sha256: a.sha256,
+    }));
+    return {
+      client_id: facts.client_id,
+      client_name: facts.client_name,
+      portfolio_id: facts.portfolio_id,
+      dataset: facts.dataset,
+      reporting_period: stored.doc.reporting_period,
+      files,
+      target_locations: [...new Set(files.map((f) => f.target).filter(Boolean))],
+      actions: [
+        `Write 1 configuration artefact(s) for ${facts.client_id}, as a new governed version.`,
+        "Register the expected source deliveries in the production source registry.",
+        `Place ${files.length} file(s) in the production raw location.`,
+        "Start the existing Onboarding Agent, which will profile, map, transform, validate and assemble the delivery.",
+      ],
+      configuration_artefacts: [`clients/${facts.client_id}.yaml`],
+      statement: `Confirming activates ${facts.client_name || facts.client_id}'s configuration and starts ingestion of the files listed. This is production. It cannot be undone from this tab.`,
     };
   }
 
@@ -625,6 +866,16 @@ export class MockAgent {
     const stored = this.get(caseRef);
     stored.doc.reporting_period = scenario.reporting_period;
 
+    // The process starts with the client: draft the pack, have a human read
+    // it, approve it and record it as issued.
+    this.step(caseRef, "pack/draft");
+    this.step(caseRef, "pack/approve");
+    this.step(caseRef, "pack/send", {
+      to: [clientResponse(SCENARIO_DOMAINS[fixtureId] ?? "practice.example")[
+        "contacts.reporting_contact_email"
+      ]],
+    });
+
     this.loadFixtureArtefacts(caseRef, fixtureId);
 
     // The onboarding half, in the order a human would work it.
@@ -647,8 +898,10 @@ export class MockAgent {
     this.step(caseRef, "submit");
     this.step(caseRef, "approve");
 
-    // The execution half.
-    for (const step of ["run", "plan", "readiness/approve"]) {
+    // The execution half, then the human decision about the real thing. The
+    // drive stops at the confirmation: that act is a person's, and in a
+    // rehearsal it is refused anyway.
+    for (const step of ["run", "plan", "readiness/approve", "review", "activation/approve"]) {
       const now = this.get(caseRef).doc.state;
       if (now === S.BLOCKED || now === S.EXCEPTIONS_REQUIRE_INPUT) break;
       this.step(caseRef, step);
@@ -729,13 +982,122 @@ export class MockAgent {
         this.onboarding.submit(caseRef);
         this.record(stored, "onboarding_submitted_for_approval", "the onboarding reported ready");
         break;
+      case "pack/draft": {
+        const sections = this.packSections(caseRef);
+        const onboarding = this.onboardingCase(caseRef);
+        const contacts = (onboarding.answers.contacts ?? {}) as Record<string, string>;
+        const outstanding = sections.reduce((n, sec) => n + sec.outstanding, 0);
+        stored.doc.pack = {
+          sections,
+          outstanding,
+          questions: sections.reduce((n, sec) => n + sec.questions.length, 0),
+          content_hash: "sha-mock-pack",
+          email: {
+            to: [contacts.reporting_contact_email].filter(Boolean),
+            cc: [],
+            subject: `Trakt onboarding — ${onboarding.client_name} (${caseRef})`,
+            body: packEmailBody(onboarding.client_name, outstanding),
+          },
+          artefacts: [
+            { name: "onboarding_pack.md", ref: `blob://practice/${caseRef}/onboarding_pack.md` },
+            { name: "covering_email.txt", ref: `blob://practice/${caseRef}/covering_email.txt` },
+          ],
+        };
+        this.setPackStatus(stored, "DRAFTED", "the agent drafted the pack from the catalogue");
+        this.setPackStatus(stored, "HUMAN_REVIEW_REQUIRED", "a human must read it first");
+        if (stored.doc.state === S.AWAITING_ONBOARDING || stored.doc.state === S.PACK_SENT) {
+          this.move(stored, S.PACK_DRAFTED);
+        }
+        this.move(stored, S.PACK_REVIEW_REQUIRED);
+        this.record(stored, "onboarding_pack_drafted", "every question is a catalogue field");
+        break;
+      }
+      case "pack/approve": {
+        if (!stored.doc.pack.sections) {
+          throw new OpsError("There is no pack to approve. Draft one first.", "OCC_AGENT_NO_PACK");
+        }
+        stored.doc.approvals.push({
+          subject: "client_pack",
+          decision: "approved",
+          actor: ACTOR,
+          reason: String(body.reason ?? ""),
+        });
+        this.setPackStatus(stored, "APPROVED_TO_SEND", "approved by a human");
+        this.move(stored, S.PACK_APPROVED_TO_SEND);
+        this.record(stored, "onboarding_pack_approved", "a human approved the pack for issue");
+        break;
+      }
+      case "pack/send": {
+        const email = (stored.doc.pack.email ?? {}) as { to?: string[]; subject?: string };
+        const to = (body.to as string[] | null) ?? email.to ?? [];
+        if (to.length === 0) {
+          throw new OpsError(
+            "There is no contact address on this case to issue the pack to. Record one first.",
+            "OCC_AGENT_NO_RECIPIENT",
+          );
+        }
+        stored.doc.pack_receipt = {
+          adapter: "record_only",
+          sent: false,
+          at: nowIso(),
+          receipt_id: `com_${caseRef}`,
+          to,
+          subject: String(email.subject ?? ""),
+          artefacts: (stored.doc.pack.artefacts as { name: string; ref: string }[]) ?? [],
+          content_hash: "sha-mock-pack",
+          statement: RECORD_ONLY_STATEMENT,
+        };
+        this.setPackStatus(stored, "SENT", RECORD_ONLY_STATEMENT);
+        this.move(stored, S.PACK_SENT);
+        this.record(stored, "onboarding_pack_issued", RECORD_ONLY_STATEMENT);
+        break;
+      }
+      case "review": {
+        stored.doc.activation_intent = this.intent(stored) as unknown as Record<string, unknown>;
+        stored.doc.review_package_ref = `blob://practice/${caseRef}/review_package.json`;
+        this.move(stored, S.READY_FOR_REVIEW);
+        this.record(stored, "review_package_assembled", "derived from the case and the run");
+        break;
+      }
+      case "activation/approve": {
+        if (!stored.doc.review_package_ref) {
+          throw new OpsError(
+            "There is no review package to approve. Submit the case for review first.",
+            "OCC_AGENT_NO_REVIEW_PACKAGE",
+          );
+        }
+        stored.doc.approvals.push({
+          subject: "configuration",
+          decision: "approved",
+          actor: ACTOR,
+          reason: String(body.reason ?? "") || "Configuration approved for activation.",
+        });
+        this.move(stored, S.APPROVED_FOR_ACTIVATION);
+        stored.doc.activation_intent = this.intent(stored) as unknown as Record<string, unknown>;
+        this.move(stored, S.ACTIVATION_CONFIRMATION_REQUIRED);
+        this.record(
+          stored,
+          "activation_approved",
+          "a human approved the configuration; nothing was started",
+        );
+        break;
+      }
+      case "activation/confirm": {
+        // The rehearsal's whole point. The refusal is the feature, and it is
+        // audited exactly as the server audits it.
+        this.record(stored, "activation_refused", "live execution is not available here");
+        throw new OpsError(
+          "This cannot be activated yet. This case is in rehearsal mode. Live execution is not switched on in this environment.",
+          "OCC_AGENT_ACTIVATION_REFUSED",
+        );
+      }
       case "approve":
         this.onboarding.approve(
           caseRef,
           String(body.reason ?? "") || "Approved in a practice case.",
           ACTOR,
         );
-        if (stored.doc.state === S.AWAITING_ONBOARDING) this.move(stored, S.READY_TO_RUN);
+        if (PACK_OR_START.has(stored.doc.state)) this.move(stored, S.READY_TO_RUN);
         this.record(
           stored,
           "onboarding_approved",
@@ -1084,6 +1446,14 @@ export class MockAgent {
     return hit?.fixture_id ?? "scenario_a_clean";
   }
 
+  private setPackStatus(stored: StoredRun, status: string, note: string): void {
+    stored.doc.pack_status = status;
+    stored.doc.pack_history = [
+      ...stored.doc.pack_history,
+      { status, actor: ACTOR, at: nowIso(), note },
+    ];
+  }
+
   private blankRun(
     caseRef: string,
     instruction: string,
@@ -1113,6 +1483,14 @@ export class MockAgent {
       readiness: {},
       readiness_status: "not_evaluated",
       readiness_package_ref: "",
+      review_package_ref: "",
+      mode: "synthetic",
+      pack: {},
+      pack_status: "",
+      pack_history: [],
+      pack_receipt: {},
+      activation_intent: {},
+      activation_result: {},
       approvals: [],
       blockers: [],
       observations: [],
@@ -1132,8 +1510,23 @@ const COMPLETED_STAGES: Record<string, string> = {
   assemble: "deterministic_execution_completed",
 };
 
+/** From which states approving the onboarding releases the execution half. */
+const PACK_OR_START = new Set<string>([
+  S.AWAITING_ONBOARDING,
+  S.PACK_DRAFTED,
+  S.PACK_REVIEW_REQUIRED,
+  S.PACK_APPROVED_TO_SEND,
+  S.PACK_SENT,
+]);
+
 const STEP_ACTIONS: Record<string, string> = {
   "information-requests": "request_client_information",
+  "pack/draft": "draft_onboarding_pack",
+  "pack/approve": "approve_pack_to_send",
+  "pack/send": "send_onboarding_pack",
+  review: "request_activation",
+  "activation/approve": "approve_activation",
+  "activation/confirm": "confirm_activation",
   submit: "submit_for_approval",
   approve: "approve_onboarding",
   "request-changes": "request_changes",
@@ -1143,10 +1536,23 @@ const STEP_ACTIONS: Record<string, string> = {
   cancel: "cancel_run",
 };
 
-const MATERIAL_STEPS = new Set(["submit", "approve", "readiness/approve", "cancel"]);
+const MATERIAL_STEPS = new Set([
+  "submit",
+  "approve",
+  "readiness/approve",
+  "pack/approve",
+  "pack/send",
+  "activation/approve",
+  "activation/confirm",
+  "cancel",
+]);
 
 const PROPOSAL_SUMMARIES: Record<string, string> = {
   submit: "Submit the onboarding for approval.",
+  "pack/approve": "Approve the pack for sending.",
+  "pack/send": "Record the pack as issued to the client.",
+  "activation/approve": "Approve the configuration for activation. This starts nothing.",
+  "activation/confirm": "Confirm activation. This is production.",
   approve: "Approve the onboarding.",
   "readiness/approve": "Approve readiness for execution.",
   cancel: "Cancel this practice case.",
@@ -1158,6 +1564,10 @@ const PENDING_CONFIRMATION: Record<string, string> = {
   [S.SYNTHETIC_ONBOARDING_PASSED]: "plan",
   [S.ORCHESTRATION_PLAN_GENERATED]: "readiness/approve",
   [S.EXECUTION_APPROVAL_REQUIRED]: "readiness/approve",
+  [S.READY_FOR_EXECUTION]: "review",
+  [S.READY_FOR_REVIEW]: "activation/approve",
+  // ACTIVATION_CONFIRMATION_REQUIRED is deliberately absent: a bare "yes" must
+  // never start production.
 };
 
 const MOCK_PLAN = {
@@ -1234,4 +1644,87 @@ function scenarioById(fixtureId: string): ScenarioSummary {
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+
+/** What the pack tells a client about mappings. A governed decision, stated. */
+const MAPPING_STATEMENT =
+  "Trakt does not ask you to map your fields to ours. Send a representative " +
+  "file and Trakt will propose the mapping itself; an operator reviews and " +
+  "approves it during the first ingestion, and it is then fixed for every " +
+  "later delivery.";
+
+/** What the approver is told about mappings. */
+const MAPPING_NOTE =
+  "Field mappings are NOT part of this configuration and were not collected. " +
+  "They are proposed by Trakt from the first representative delivery, " +
+  "reviewed and approved by an operator during that first ingestion, and then " +
+  "fingerprinted and fixed. Approving this activation does not approve any " +
+  "mapping.";
+
+/** What the approver is told about user access. */
+const ACCESS_NOTE =
+  "User access recorded during onboarding is a REQUIREMENT, not a grant. " +
+  "Trakt reads its operators from environment configuration in this " +
+  "environment, so nothing below has been provisioned.";
+
+/** Never "queued" or "pending": the pack is not going anywhere on its own. */
+const RECORD_ONLY_STATEMENT =
+  "Recorded as issued. Trakt did not send it: no email integration is enabled " +
+  "in this environment. Send the approved pack and covering email from the " +
+  "record.";
+
+/** Which field sources a client or an operator actually answers. */
+const CLIENT_FACING_SOURCES = new Set(["client_supplied", "operator_supplied"]);
+
+function present(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "boolean") return true;
+  if (Array.isArray(value)) return value.length > 0;
+  return String(value).trim() !== "";
+}
+
+function packEmailBody(clientName: string, outstanding: number): string {
+  return [
+    `Dear ${clientName || "there"},`,
+    "",
+    "We are setting your portfolio up on Trakt. Attached is the onboarding " +
+      "pack: it lists what we still need from you, and the files to send with it.",
+    "",
+    outstanding > 0
+      ? `There are ${outstanding} question${outstanding === 1 ? "" : "s"} outstanding.`
+      : "We have everything we need — please confirm the details in the pack are right.",
+    "",
+    "Kind regards,",
+    "Trakt Operations",
+  ].join("\n");
+}
+
+function packDocument(clientName: string, sections: PackSection[]): string {
+  const lines = [`# Onboarding — ${clientName}`, ""];
+  for (const section of sections) {
+    lines.push(`## ${section.label}`, "");
+    for (const question of section.questions) {
+      lines.push(`- [${question.status === "answered" ? "answered" : "  "}] ${question.label}`);
+    }
+    lines.push("");
+  }
+  lines.push("## About field mappings", "", MAPPING_STATEMENT, "");
+  return lines.join("\n");
+}
+
+function reviewDocument(pkg: {
+  client_name: string;
+  sections: { label: string; rows: { label: string; value: unknown }[] }[];
+  mapping_note: string;
+}): string {
+  const lines = [`# Review — ${pkg.client_name}`, "", "## What Trakt holds", ""];
+  for (const section of pkg.sections) {
+    if (section.rows.length === 0) continue;
+    lines.push(`### ${section.label}`, "");
+    for (const row of section.rows) lines.push(`- **${row.label}**: ${String(row.value)}`);
+    lines.push("");
+  }
+  lines.push("## Field mappings", "", pkg.mapping_note, "");
+  return lines.join("\n");
 }

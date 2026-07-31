@@ -3,11 +3,14 @@ import { MockConfigAdmin } from "./MockConfigAdmin";
 import { MockOnboarding } from "./MockOnboarding";
 import { OpsError, type OpsClient } from "./OpsClient";
 import type {
+  AgentActivation,
   AgentAudit,
   AgentChecklist,
   AgentMeta,
+  AgentPack,
   AgentPreview,
   AgentReadinessPackage,
+  AgentReviewPackage,
   AgentStatus,
   AgentTurn,
   CaseSummary,
@@ -1854,5 +1857,55 @@ export class MockOpsClient implements OpsClient {
   async getAgentAudit(caseRef: string): Promise<AgentAudit> {
     await this.wait();
     return this.agent.audit(caseRef);
+  }
+
+  // -- the client pack ------------------------------------------------------ //
+
+  async getAgentPack(caseRef: string): Promise<AgentPack> {
+    await this.wait();
+    return this.agent.pack(caseRef);
+  }
+
+  async draftAgentPack(caseRef: string): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.step(caseRef, "pack/draft");
+  }
+
+  async approveAgentPack(caseRef: string, reason = ""): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.step(caseRef, "pack/approve", { reason });
+  }
+
+  async sendAgentPack(caseRef: string, to?: string[]): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.step(caseRef, "pack/send", { to: to ?? null });
+  }
+
+  // -- review, approval and the confirmation gate --------------------------- //
+
+  async requestAgentReview(caseRef: string): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.step(caseRef, "review");
+  }
+
+  async getAgentReview(caseRef: string): Promise<AgentReviewPackage> {
+    await this.wait();
+    return this.agent.review(caseRef);
+  }
+
+  async approveAgentActivation(caseRef: string, reason = ""): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.step(caseRef, "activation/approve", { reason });
+  }
+
+  async getAgentActivation(caseRef: string): Promise<AgentActivation> {
+    await this.wait();
+    return this.agent.activation(caseRef);
+  }
+
+  /** Always refused here, exactly as the server refuses it in synthetic mode. */
+  async confirmAgentActivation(caseRef: string, confirmation: string): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.step(caseRef, "activation/confirm", { confirmation });
   }
 }

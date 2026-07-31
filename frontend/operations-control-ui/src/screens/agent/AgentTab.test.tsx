@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "@/App";
+import { MockOpsClient } from "@/api/MockOpsClient";
 import { copy } from "@/lib/copy";
 
 /**
@@ -279,10 +280,16 @@ describe("OCC Agent tab — the operating loop", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("says a finished case is finished", async () => {
+  it("a rehearsal that has passed still has one thing left to decide", async () => {
+    // READY_FOR_EXECUTION is a waypoint, not a finish: what remains is the
+    // human decision about the real thing, and the tab must offer it rather
+    // than declaring the case done.
     await runScenario("A — Clean onboarding");
-    const panel = (await screen.findByText(copy.agent.actionsHeading)).closest("section");
-    expect(within(panel as HTMLElement).getByText(copy.agent.actionsNone)).toBeInTheDocument();
+    const panel = (await screen.findByText(copy.agent.activationHeading)).closest("section");
+    expect(panel).not.toBeNull();
+    expect(
+      within(panel as HTMLElement).getByRole("button", { name: copy.agent.activationConfirm }),
+    ).toBeInTheDocument();
   });
 
   it("shows the intended storage location and says it was not written", async () => {
@@ -306,7 +313,7 @@ describe("OCC Agent tab — the operating loop", () => {
     );
   });
 
-  it("shows both lifecycles, and never offers to activate", async () => {
+  it("shows both lifecycles, and states that activation is refused here", async () => {
     await runScenario("A — Clean onboarding");
     const panel = (await screen.findByText(copy.agent.statusHeading)).closest("section");
     expect(panel).not.toBeNull();
@@ -315,8 +322,70 @@ describe("OCC Agent tab — the operating loop", () => {
     expect(
       within(panel as HTMLElement).getAllByText(copy.agent.readyStatus).length,
     ).toBeGreaterThan(0);
-    // Nothing anywhere offers activation.
-    expect(screen.queryByRole("button", { name: /activate/i })).not.toBeInTheDocument();
+    // Activation IS offered — and the tab says outright that it is refused
+    // here, and why, rather than hiding the control and explaining nothing.
+    expect(await screen.findByText(copy.agent.activationRefusedHeading)).toBeInTheDocument();
+    expect(screen.getByText(copy.agent.activationDisabled)).toBeInTheDocument();
+    expect(screen.getByText(/rehearsal mode/i)).toBeInTheDocument();
+  });
+
+  it("confirming activation is refused, and says why", async () => {
+    const user = userEvent.setup();
+    await runScenario("A — Clean onboarding");
+    const input = await screen.findByLabelText(copy.agent.activationConfirmLabel);
+    await user.type(input, "go ahead");
+    await user.click(screen.getByRole("button", { name: copy.agent.activationConfirm }));
+    expect(await screen.findByText(/rehearsal mode/i)).toBeInTheDocument();
+  });
+
+  it("approving the configuration starts nothing", async () => {
+    // Asserted against the client rather than the screen: the lifecycle panel
+    // NAMES every state including "Ingestion started", so its presence as text
+    // says nothing about where the case actually is.
+    const client = new MockOpsClient();
+    const status = await client.runAgentScenario("scenario_a_clean");
+    expect(
+      status.run.approvals.some((a) => (a as { subject?: string }).subject === "configuration"),
+    ).toBe(true);
+    expect(status.run.state).toBe("ACTIVATION_CONFIRMATION_REQUIRED");
+    expect(status.run.activation_result).toEqual({});
+    expect(status.configuration_written).toBe(false);
+    expect(status.onboarding.status).toBe("approved");
+  });
+
+  it("the pack is drafted, approved and issued — and never claims it was sent", async () => {
+    await runScenario("A — Clean onboarding");
+    const panel = (await screen.findByText(copy.agent.packHeading)).closest("section");
+    expect(panel).not.toBeNull();
+    expect(within(panel as HTMLElement).getByText(copy.agent.packNotSent)).toBeInTheDocument();
+    // And it states the governed decision about mappings to the client.
+    expect(
+      within(panel as HTMLElement).getByText(/does not ask you to map/i),
+    ).toBeInTheDocument();
+  });
+
+  it("every pack question is a field the governed catalogue declares", async () => {
+    const client = new MockOpsClient();
+    const created = await client.runAgentScenario("scenario_a_clean");
+    const pack = await client.getAgentPack(created.case_ref);
+    const reference = (await client.getAgentMeta()).onboarding_reference;
+    const declared = new Set<string>();
+    for (const section of reference.catalogue.sections ?? []) {
+      for (const field of section.fields ?? []) declared.add(`${section.key}.${field.key}`);
+    }
+    const questions = pack.pack.sections.flatMap((s) => s.questions);
+    expect(questions.length).toBeGreaterThan(0);
+    for (const question of questions) {
+      expect(declared.has(`${question.section}.${question.field}`)).toBe(true);
+    }
+  });
+
+  it("the review package says mappings are learned at first ingestion", async () => {
+    const client = new MockOpsClient();
+    const created = await client.runAgentScenario("scenario_a_clean");
+    const review = await client.getAgentReview(created.case_ref);
+    expect(review.document).toMatch(/were not collected/i);
+    expect(review.document).toMatch(/first representative delivery/i);
   });
 
   it("links to the onboarding case in the screens it normally lives in", async () => {

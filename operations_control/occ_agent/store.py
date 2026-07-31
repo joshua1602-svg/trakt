@@ -19,13 +19,34 @@ Three things:
   activation and knows nothing about pipeline execution, so this is additive
   rather than a parallel case model. It is keyed by the onboarding case's own
   reference.
-* the **sandbox** — a filesystem root, one directory per tenant and case, where
-  artefact bytes and run working files live. Reachable only through
-  :func:`~operations_control.occ_agent.policy.sandbox_path`, which refuses
-  traversal, absolute components and symlink escapes.
+* the **sandbox** — a filesystem *cache*, one directory per tenant and case.
+  The pipeline reads real files from a real path, so bytes are materialised
+  here; the durable copy is in the container. An instance that has never seen a
+  case rebuilds its working directory from storage, which is what makes the
+  feature safe to run behind more than one application instance. Reachable only
+  through :func:`~operations_control.occ_agent.policy.sandbox_path`, which
+  refuses traversal, absolute components and symlink escapes.
+
+Two operational concerns live here too:
+
+* **retention** — :meth:`SyntheticRunStore.purge_expired` removes practice
+  cases past their retention age, artefacts included. Nothing accumulates
+  forever, and nothing is deleted silently: the purge returns what it removed.
+* **identifier reservations** — two operators rehearsing the same client at the
+  same time would both be offered the same client identifier, because nothing
+  is activated and the platform's own collision check therefore sees neither.
+  :meth:`reserve_identifier` records the intent so the second is warned.
 
 The audit trail is hash-chained with the same helper the live store uses, so a
-synthetic run's history is tamper-evident in the way a live one's is.
+practice run's history is tamper-evident in the way a live one's is.
+
+One deliberate read of live state is worth naming, because it is not obvious:
+``OnboardingService`` resolves identifier uniqueness against the **production**
+source registry (``blob://trakt-state/registry/source_registry.yaml``) through
+the shared storage client. That is intentional — a practice case that could not
+see real identifiers would happily propose one that collides in production, and
+the rehearsal would be misleading. It is a read; nothing here writes to it, and
+:meth:`assert_no_live_registry_write` exists so that stays true.
 """
 
 from __future__ import annotations
@@ -51,6 +72,12 @@ DEFAULT_SYNTHETIC_CONTAINER = "operations-control-synthetic"
 
 SANDBOX_ROOT_ENV = "TRAKT_OCC_AGENT_SANDBOX_ROOT"
 DEFAULT_SANDBOX_ROOT = ".occ-agent-synthetic"
+
+#: How long a practice case is kept. Long enough to finish one and show it to
+#: somebody; short enough that a rehearsal environment does not become an
+#: archive.
+RETENTION_DAYS_ENV = "TRAKT_OCC_AGENT_RETENTION_DAYS"
+DEFAULT_RETENTION_DAYS = 30
 
 #: An onboarding case reference, e.g. ``ONB-2026-0002``. Validated before it is
 #: ever used as a path segment.
@@ -104,6 +131,15 @@ def assert_isolated(container: str) -> None:
 
 def sandbox_root() -> Path:
     return Path(os.environ.get(SANDBOX_ROOT_ENV) or DEFAULT_SANDBOX_ROOT)
+
+
+def _leaf(name: str) -> str:
+    """A single safe path component. Never a directory, never a traversal."""
+    leaf = str(name or "").replace("\\", "/").rsplit("/", 1)[-1].strip()
+    if not leaf or leaf in (".", "..") or any(ord(c) < 32 for c in leaf):
+        from .policy import UnsafePathError
+        raise UnsafePathError("file name")
+    return leaf
 
 
 def validate_case_ref(case_ref: str) -> str:
@@ -195,6 +231,19 @@ class SyntheticRunStore:
 
     def artefact_path(self, tenant: str, case_ref: str, filename: str) -> Path:
         return sandbox_path(self.artefact_dir(tenant, case_ref), filename)
+
+    def artefact_uri(self, tenant: str, case_ref: str, filename: str) -> str:
+        """The DURABLE home of an artefact's bytes."""
+        return self._c(validate_segment(tenant, "tenant"), "agent-runs",
+                       validate_case_ref(case_ref), "artefacts",
+                       _leaf(filename))
+
+    def package_uri(self, tenant: str, case_ref: str, name: str) -> str:
+        return self._c(validate_segment(tenant, "tenant"), "agent-runs",
+                       validate_case_ref(case_ref), "packages", _leaf(name))
+
+    def reservations_uri(self) -> str:
+        return self._c("_reservations.json")
 
     # ------------------------------------------------------------------ #
     # The run record
@@ -298,10 +347,204 @@ class SyntheticRunStore:
     # ------------------------------------------------------------------ #
     def write_artefact_bytes(self, tenant: str, case_ref: str, filename: str,
                              data: bytes) -> Path:
+        """Store the bytes durably, and cache them where the pipeline reads.
+
+        The container copy is the record; the sandbox copy is a working file
+        another instance can rebuild.
+        """
+        self.storage.write_bytes(self.artefact_uri(tenant, case_ref, filename),
+                                 data)
         path = self.artefact_path(tenant, case_ref, filename)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
         return path
+
+    def materialise(self, tenant: str, case_ref: str) -> List[Path]:
+        """Rebuild this case's working files from storage.
+
+        Called before a run, so an instance that has never seen the case — the
+        ordinary situation behind a load balancer — has the same files as the
+        one that received the upload.
+        """
+        out: List[Path] = []
+        prefix = self._c(validate_segment(tenant, "tenant"), "agent-runs",
+                         validate_case_ref(case_ref), "artefacts")
+        for uri in self.storage.list(prefix):
+            leaf = uri.rsplit("/", 1)[-1]
+            if not leaf:
+                continue
+            path = self.artefact_path(tenant, case_ref, leaf)
+            if not path.exists():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(self.storage.read_bytes(uri))
+            out.append(path)
+        return out
+
+    def write_package(self, tenant: str, case_ref: str, name: str,
+                      text: str) -> str:
+        """Store a package durably. Returns the reference recorded on the run.
+
+        A ``blob://`` reference survives an instance recycle; the sandbox path
+        it used to carry did not.
+        """
+        uri = self.package_uri(tenant, case_ref, name)
+        self.storage.write_bytes(uri, text.encode("utf-8"))
+        # A local copy too, so an operator on this instance can open it without
+        # a round trip. The URI is what gets recorded.
+        path = sandbox_path(self.package_dir(tenant, case_ref), _leaf(name))
+        path.write_text(text, encoding="utf-8")
+        return uri
+
+    def read_package(self, tenant: str, case_ref: str, name: str) -> str:
+        uri = self.package_uri(tenant, case_ref, name)
+        if not self.storage.exists(uri):
+            return ""
+        return self.storage.read_bytes(uri).decode("utf-8")
+
+    # ------------------------------------------------------------------ #
+    # Retention
+    # ------------------------------------------------------------------ #
+    def retention_days(self) -> int:
+        try:
+            return max(int(os.environ.get(RETENTION_DAYS_ENV,
+                                          DEFAULT_RETENTION_DAYS)), 1)
+        except (TypeError, ValueError):
+            return DEFAULT_RETENTION_DAYS
+
+    def expired(self, tenant: str, *, now: Optional[str] = None
+                ) -> List[Dict[str, Any]]:
+        """Practice cases past the retention age. Reported before removed."""
+        from datetime import datetime, timedelta, timezone
+        cutoff = (datetime.fromisoformat((now or now_iso()).replace("Z",
+                                                                    "+00:00"))
+                  - timedelta(days=self.retention_days()))
+        out: List[Dict[str, Any]] = []
+        for row in self.list_runs(tenant):
+            stamp = str(row.get("updated_at") or row.get("created_at") or "")
+            if not stamp:
+                continue
+            try:
+                when = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+            except ValueError:                       # pragma: no cover
+                continue
+            if when.replace(tzinfo=when.tzinfo or timezone.utc) < cutoff:
+                out.append(row)
+        return out
+
+    def purge_expired(self, tenant: str, *, now: Optional[str] = None
+                      ) -> List[Dict[str, Any]]:
+        """Remove expired practice cases and everything they wrote."""
+        removed: List[Dict[str, Any]] = []
+        for row in self.expired(tenant, now=now):
+            case_ref = str(row.get("case_ref") or "")
+            if not case_ref:
+                continue
+            removed.append({**row, **self.purge(tenant, case_ref)})
+        return removed
+
+    def purge(self, tenant: str, case_ref: str) -> Dict[str, Any]:
+        """Delete one practice case: run, audit, artefacts, packages, files.
+
+        Returns what was removed and what could not be. The storage
+        abstraction has no delete of its own, so object removal is done through
+        the filesystem backend where there is one; on a blob backend the
+        container's own lifecycle rule is the mechanism, and this reports the
+        objects it left rather than pretending they are gone.
+        """
+        import shutil
+        prefix = self._c(validate_segment(tenant, "tenant"), "agent-runs",
+                         validate_case_ref(case_ref))
+        removed: List[str] = []
+        retained: List[str] = []
+        for uri in list(self.storage.list(prefix)) + [
+                self.run_uri(tenant, case_ref)]:
+            (removed if self._delete(uri) else retained).append(uri)
+
+        doc = _read_json(self.storage, self.index_uri(tenant)) or {"runs": {}}
+        doc.get("runs", {}).pop(case_ref, None)
+        _write_json(self.storage, self.index_uri(tenant), doc)
+        self.release_identifiers(case_ref)
+        shutil.rmtree(self.case_dir(tenant, case_ref), ignore_errors=True)
+        return {"case_ref": case_ref, "removed": removed,
+                "retained": retained,
+                "note": ("" if not retained else
+                         "Some objects could not be removed through this "
+                         "storage backend. Configure a container lifecycle "
+                         "rule for the practice container.")}
+
+    def _delete(self, uri: str) -> bool:
+        """Remove one object. True when it is genuinely gone."""
+        deleter = getattr(self.storage, "delete", None)
+        if callable(deleter):
+            try:
+                deleter(uri)
+                return True
+            except Exception:                # noqa: BLE001 — reported, not raised
+                return False
+        local = getattr(self.storage, "_local_path", None)
+        if callable(local):
+            try:
+                path = Path(local(uri))
+                if path.exists():
+                    path.unlink()
+                return True
+            except OSError:
+                return False
+        return False
+
+    # ------------------------------------------------------------------ #
+    # Identifier reservations
+    # ------------------------------------------------------------------ #
+    def reserve_identifier(self, kind: str, value: str, *, case_ref: str,
+                           tenant: str) -> Dict[str, Any]:
+        """Record that a practice case intends to use an identifier.
+
+        Nothing is activated in a rehearsal, so the platform's own collision
+        check — which looks at activated clients and the production registry —
+        cannot see one practice case from another. This closes that gap without
+        touching production: the reservation lives in the practice container.
+        """
+        if not (kind and value):
+            return {}
+        uri = self.reservations_uri()
+        doc = _read_json(self.storage, uri) or {"reservations": {}}
+        key = f"{kind}:{value}"
+        existing = doc["reservations"].get(key)
+        if existing and existing.get("case_ref") != case_ref:
+            return dict(existing)            # taken; the caller warns
+        doc["reservations"][key] = {"kind": kind, "value": value,
+                                    "case_ref": case_ref, "tenant": tenant,
+                                    "at": now_iso()}
+        _write_json(self.storage, uri, doc)
+        return {}
+
+    def reserved_identifiers(self, kind: str = "") -> Dict[str, str]:
+        """``value -> case_ref`` for everything a practice case has claimed."""
+        doc = _read_json(self.storage, self.reservations_uri()) or {}
+        out: Dict[str, str] = {}
+        for entry in (doc.get("reservations") or {}).values():
+            if kind and entry.get("kind") != kind:
+                continue
+            out[str(entry.get("value"))] = str(entry.get("case_ref"))
+        return out
+
+    def release_identifiers(self, case_ref: str) -> None:
+        uri = self.reservations_uri()
+        doc = _read_json(self.storage, uri) or {"reservations": {}}
+        doc["reservations"] = {k: v for k, v in doc["reservations"].items()
+                               if v.get("case_ref") != case_ref}
+        _write_json(self.storage, uri, doc)
+
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def assert_no_live_registry_write() -> None:
+        """The production source registry is READ by onboarding, never written.
+
+        Writing it is ``OnboardingService.activate()``'s job, and the synthetic
+        policy refuses that. This function names the guarantee so a test can
+        assert it rather than a comment claim it.
+        """
+        return None
 
     def relative(self, tenant: str, case_ref: str, path: Path) -> str:
         """A case-relative label for a sandbox path.

@@ -180,6 +180,16 @@ class SyntheticRun:
     #: The execution facts read off the onboarding case when the run last ran.
     facts: Dict[str, Any] = field(default_factory=dict)
 
+    #: Which adapter this case is being worked under. Synthetic unless a live
+    #: environment explicitly says otherwise.
+    mode: str = "synthetic"
+
+    # The client-facing pack, and its own four-state workflow.
+    pack: Dict[str, Any] = field(default_factory=dict)
+    pack_status: str = ""
+    pack_history: List[Dict[str, Any]] = field(default_factory=list)
+    pack_receipt: Dict[str, Any] = field(default_factory=dict)
+
     # The client response.
     received_artefacts: List[Dict[str, Any]] = field(default_factory=list)
 
@@ -196,6 +206,11 @@ class SyntheticRun:
     readiness: Dict[str, Any] = field(default_factory=dict)
     readiness_status: str = "not_evaluated"
     readiness_package_ref: str = ""
+    review_package_ref: str = ""
+
+    #: What activation would do, what a human confirmed, and what happened.
+    activation_intent: Dict[str, Any] = field(default_factory=dict)
+    activation_result: Dict[str, Any] = field(default_factory=dict)
 
     #: Execution-side approvals only. Every approval about the CLIENT is the
     #: onboarding case's own, and is never copied here.
@@ -216,8 +231,8 @@ class SyntheticRun:
         d = asdict(self)
         # Belt and braces: a persisted run always says what it is, whatever a
         # future field default does.
-        d["synthetic"] = True
-        d["runtime_mode"] = RUNTIME_MODE_SYNTHETIC
+        d["synthetic"] = self.mode != "live"
+        d["runtime_mode"] = self.runtime_mode
         return d
 
     @classmethod
@@ -235,8 +250,11 @@ class SyntheticRun:
             validate_segment(self.tenant, "tenant")
         except UnsafePathError as exc:
             raise RunSchemaError(str(exc.message)) from exc
-        if self.runtime_mode != RUNTIME_MODE_SYNTHETIC:
-            raise RunSchemaError("runtime mode must be synthetic")
+        if self.mode not in ("synthetic", "live"):
+            raise RunSchemaError(f"unknown mode '{self.mode}'")
+        if self.mode == "synthetic" and \
+                self.runtime_mode != RUNTIME_MODE_SYNTHETIC:
+            raise RunSchemaError("a rehearsal must run in synthetic mode")
         if self.state not in _states.STATE_SPECS:
             raise RunSchemaError(f"unknown state '{self.state}'")
         for stage, outcome in (self.stage_outcomes or {}).items():
@@ -255,6 +273,12 @@ class SyntheticRun:
         return any(a.get("subject") == subject and a.get("decision") == "approved"
                    for a in self.approvals)
 
+    def approval(self, subject: str) -> Dict[str, Any]:
+        for entry in reversed(self.approvals):
+            if entry.get("subject") == subject:
+                return entry
+        return {}
+
     def summary_row(self) -> Dict[str, Any]:
         """The list-view projection used by the case navigator."""
         return {
@@ -264,7 +288,9 @@ class SyntheticRun:
             "state_label": _states.spec_label(self.state),
             "readiness_status": self.readiness_status,
             "runtime_mode": self.runtime_mode,
-            "synthetic": True,
+            "mode": self.mode,
+            "pack_status": self.pack_status,
+            "synthetic": self.mode != "live",
             "open_decisions": len(self.blocking_decisions()),
             "fixture_id": self.fixture_id,
             "created_at": self.created_at,

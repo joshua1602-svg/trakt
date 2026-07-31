@@ -258,9 +258,9 @@ def test_the_whole_scenario_runs_over_the_api(api_client):
                                json={"fixture_id": "scenario_a_clean"})
     assert response.status_code == 200
     body = response.json()
-    assert body["scenario"]["state"] == "READY_FOR_EXECUTION"
+    assert body["scenario"]["state"] == "ACTIVATION_CONFIRMATION_REQUIRED"
     assert body["scenario"]["onboarding_status"] == "approved"
-    assert body["run"]["state"] == "READY_FOR_EXECUTION"
+    assert body["run"]["state"] == "ACTIVATION_CONFIRMATION_REQUIRED"
     assert body["readiness"]["ready"] is True
 
     case_ref = body["case_ref"]

@@ -70,6 +70,21 @@ def run_scenario(service: OccAgentService, scenario_or_id, *, tenant: str,
     always: Callable[[AgentCase], bool] = lambda _c: True          # noqa: E731
     steps: Tuple[Tuple[str, str, Callable[[AgentCase], bool],
                        Callable[[AgentCase], AgentCase]], ...] = (
+        # The process starts with the client, not with the files: draft the
+        # pack the catalogue implies, have a human read it, approve it and
+        # record it as issued.
+        ("draft the onboarding pack", _states.ACTION_DRAFT_PACK, always,
+         lambda c: service.draft_pack(c, actor=actor)),
+        ("approve the pack for sending", _states.ACTION_APPROVE_PACK, always,
+         lambda c: service.approve_pack(
+             c, actor=actor, reason="Reviewed in a practice case.")),
+        # The address the pack goes to is one the operator already has. It is
+        # not on the case yet — collecting the client's contacts is one of the
+        # things the pack is FOR — so it is supplied here, as an operator would.
+        ("issue the pack to the client", _states.ACTION_SEND_PACK,
+         lambda c: bool(_pack_recipients(c, scenario)),
+         lambda c: service.send_pack(c, actor=actor,
+                                     to=_pack_recipients(c, scenario))),
         ("provide the practice client response",
          _states.ACTION_REGISTER_ARTEFACT, always,
          lambda c: _register_files(service, c, scenario, actor)),
@@ -100,6 +115,16 @@ def run_scenario(service: OccAgentService, scenario_or_id, *, tenant: str,
          lambda c: service.generate_orchestration_plan(c, actor=actor)),
         ("approve readiness", _states.ACTION_APPROVE_EXECUTION, always,
          lambda c: service.approve_execution_readiness(c, actor=actor)),
+        # Readiness is a waypoint. What follows is the human decision about the
+        # real thing: assemble the review package, approve the configuration,
+        # and stop at the confirmation. The drive never confirms — that act is
+        # a person's, and in a rehearsal it is refused anyway.
+        ("submit the case for review", _states.ACTION_REQUEST_ACTIVATION,
+         always, lambda c: service.request_activation(c, actor=actor)),
+        ("approve the configuration for activation",
+         _states.ACTION_APPROVE_ACTIVATION, always,
+         lambda c: service.approve_activation(
+             c, actor=actor, reason="Approved in a practice case.")),
     )
 
     for label, action, applies, step in steps:
@@ -129,10 +154,27 @@ def run_scenario(service: OccAgentService, scenario_or_id, *, tenant: str,
             return run
         run.case = step(run.case)
         record(run)
-    if run.case.run.state != _states.READY_FOR_EXECUTION:
+    if run.case.run.state == _states.ACTIVATION_CONFIRMATION_REQUIRED:
+        # The correct end of a rehearsal: everything is approved, and the one
+        # act that would reach production has deliberately not been performed.
+        run.stopped_because = (
+            "the case is waiting for an explicit confirmation to activate, "
+            "which a rehearsal never gives")
+    elif run.case.run.state != _states.READY_FOR_EXECUTION:
         run.stopped_because = "the case did not satisfy every readiness " \
                               "criterion"
     return run
+
+
+def _pack_recipients(agent_case: AgentCase, scenario: Scenario) -> List[str]:
+    """Who the pack is issued to: the case's contacts, or the operator's own."""
+    recorded = list(((agent_case.run.pack or {}).get("email") or {}).get("to")
+                    or [])
+    if recorded:
+        return recorded
+    known = str(scenario.client_response.get("contacts.reporting_contact_email")
+                or "")
+    return [known] if known else []
 
 
 def _onboarding_holds(service: OccAgentService, agent_case: AgentCase,

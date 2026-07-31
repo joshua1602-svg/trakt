@@ -19,10 +19,20 @@ from .conftest import ACTOR, TENANT_A
 #: Every execution state the feature promises. Kept as a literal list so a state
 #: silently dropped from the table fails here.
 REQUIRED_STATES = (
-    "AWAITING_ONBOARDING", "READY_TO_RUN", "SYNTHETIC_ONBOARDING_RUNNING",
+    "AWAITING_ONBOARDING",
+    # the client-facing pack
+    "PACK_DRAFTED", "PACK_REVIEW_REQUIRED", "PACK_APPROVED_TO_SEND",
+    "PACK_SENT",
+    # the rehearsal
+    "READY_TO_RUN", "SYNTHETIC_ONBOARDING_RUNNING",
     "EXCEPTIONS_REQUIRE_INPUT", "SYNTHETIC_ONBOARDING_PASSED",
     "ORCHESTRATION_PLAN_GENERATED", "EXECUTION_APPROVAL_REQUIRED",
-    "READY_FOR_EXECUTION", "BLOCKED", "CANCELLED",
+    "READY_FOR_EXECUTION",
+    # review, approval, and the one act that reaches production
+    "READY_FOR_REVIEW", "APPROVED_FOR_ACTIVATION",
+    "ACTIVATION_CONFIRMATION_REQUIRED", "ACTIVATING", "INGESTION_STARTED",
+    "ACTIVATION_FAILED",
+    "BLOCKED", "CANCELLED",
 )
 
 
@@ -51,9 +61,27 @@ def test_onboarding_actions_are_not_gated_by_the_execution_table():
             assert _states.action_allowed(state, action) is True, (state, action)
 
 
-def test_activation_is_not_a_state_this_feature_can_reach():
+def test_activation_is_never_reached_without_an_explicit_confirmation():
+    """Approving is not starting.
+
+    The lifecycle now goes all the way to production, so the property that
+    matters is no longer "activation is unreachable" — it is that the only
+    state which can precede ``ACTIVATING`` is the explicit confirmation, and
+    that an approval alone cannot get there.
+    """
+    assert _states.STATE_SPECS[_states.ACTIVATING].permitted_prior == (
+        _states.ACTIVATION_CONFIRMATION_REQUIRED,)
+    assert _states.ACTIVATING not in _states.permitted_next(
+        _states.APPROVED_FOR_ACTIVATION)
+    assert _states.ACTIVATING not in _states.permitted_next(
+        _states.READY_FOR_REVIEW)
+    assert _states.ACTIVATING not in _states.permitted_next(
+        _states.READY_FOR_EXECUTION)
+
+
+def test_the_onboarding_status_named_activated_is_not_an_execution_state():
+    """``ACTIVATED`` is a status of the CASE, and stays there."""
     assert "ACTIVATED" not in _states.STATE_SPECS
-    assert not any("activat" in state.lower() for state in _states.STATE_SPECS)
 
 
 # --------------------------------------------------------------------------- #
@@ -77,8 +105,8 @@ def test_every_state_defines_its_full_contract():
 
 def test_every_live_state_can_be_blocked_or_cancelled():
     for state in _states.STATE_SPECS:
-        if state in (_states.READY_FOR_EXECUTION, _states.CANCELLED):
-            continue        # terminal
+        if state in _states.TERMINAL_STATES:
+            continue
         if state != _states.BLOCKED:
             assert _states.BLOCKED in _states.permitted_next(state), state
         # A blocked run can always still be cancelled.
@@ -122,6 +150,19 @@ def test_the_happy_path_is_walkable_end_to_end():
         _states.SYNTHETIC_ONBOARDING_PASSED,
         _states.ORCHESTRATION_PLAN_GENERATED,
         _states.EXECUTION_APPROVAL_REQUIRED, _states.READY_FOR_EXECUTION,
+        _states.READY_FOR_REVIEW, _states.APPROVED_FOR_ACTIVATION,
+        _states.ACTIVATION_CONFIRMATION_REQUIRED, _states.ACTIVATING,
+        _states.INGESTION_STARTED,
+    ]
+    for current, nxt in zip(path, path[1:]):
+        _states.assert_transition(current, nxt)
+
+
+def test_the_pack_path_is_walkable_and_rejoins_the_rehearsal():
+    path = [
+        _states.AWAITING_ONBOARDING, _states.PACK_DRAFTED,
+        _states.PACK_REVIEW_REQUIRED, _states.PACK_APPROVED_TO_SEND,
+        _states.PACK_SENT, _states.READY_TO_RUN,
     ]
     for current, nxt in zip(path, path[1:]):
         _states.assert_transition(current, nxt)

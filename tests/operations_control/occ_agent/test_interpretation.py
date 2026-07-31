@@ -22,9 +22,11 @@ from operations_control.occ_agent.interpretation import (
     Interpretation,
     InterpretationError,
     ProposedChange,
-    asset_tokens,
-    cadence_tokens,
-    product_tokens,
+)
+from operations_control.occ_agent.extraction import (
+    asset_signal_tokens,
+    collected_fields,
+    cues_for,
 )
 from operations_control.occ_agent.run import SyntheticRun
 from operations_control.onboarding.case import (
@@ -68,8 +70,9 @@ def test_the_worked_example_answers_the_catalogue(interpreter):
     assert result.steps["client"]["jurisdiction"] == "GB"
     portfolio = result.steps["portfolios"]["portfolios"][0]
     assert portfolio["asset_class"] == "equity_release"
-    assert result.steps["reporting"]["products"] == ["mi", "investor_reporting"]
-    assert result.cadence == "monthly"
+    assert set(result.steps["reporting"]["products"]) == {"mi",
+                                                          "investor_reporting"}
+    assert result.delivery["cadence"] == "monthly"
     assert set(result.expected_artefacts) == {"loan_extract",
                                               "property_extract",
                                               "cashflow_extract"}
@@ -147,7 +150,7 @@ def test_nothing_is_guessed_when_it_was_not_said(interpreter):
     result = interpreter.interpret_instruction("Onboard Northstar Lending.")
     assert "reporting" not in result.steps
     assert result.reporting_period == ""
-    assert result.cadence == ""
+    assert result.delivery == {}
     # No identifier is proposed here: Client Onboarding proposes one, with a
     # collision check, and records where it came from.
     assert "client_id" not in result.steps["client"]
@@ -179,23 +182,50 @@ def test_extraction_is_deterministic(interpreter):
 # --------------------------------------------------------------------------- #
 
 def test_the_asset_vocabulary_is_the_platforms_own():
+    """Asset recognition uses the product profiles' own signal tokens.
+
+    The map may cover assets the onboarding catalogue does not offer — the
+    profiles serve the whole platform — but every asset the catalogue DOES
+    offer must take its vocabulary from there rather than from a list here.
+    """
     declared = {o["value"] for o in
                 (catalogue().field("portfolios", "asset_class").options or [])}
-    assert declared
-    assert {asset for _token, asset, _confidence in asset_tokens()} <= declared
+    signals = asset_signal_tokens()
+    assert declared and signals
+    assert declared & set(signals), "no declared asset class has a vocabulary"
+    assert "lifetime mortgage" in signals["equity_release"]
 
 
-def test_the_product_vocabulary_is_the_regime_declaration():
+def test_the_product_vocabulary_is_the_regime_declaration(interpreter):
+    """Only a product the regime declaration names can ever be selected."""
     declared = set(catalogue().regime_products)
     assert declared
-    assert {product for _token, product in product_tokens()} <= declared
+    result = interpreter.interpret_instruction(EXAMPLE)
+    assert set(result.steps["reporting"]["products"]) <= declared
 
 
-def test_the_cadence_vocabulary_is_the_catalogues_own():
+def test_the_cadence_vocabulary_is_the_catalogues_own(interpreter):
     declared = {o["value"] for o in
                 (catalogue().field("sources", "cadence").options or [])}
     assert declared
-    assert {value for _token, value in cadence_tokens()} <= declared
+    result = interpreter.interpret_instruction(
+        "Onboard Northstar Lending. They deliver monthly.")
+    assert result.delivery["cadence"] in declared
+
+
+def test_every_field_the_agent_can_read_is_a_catalogue_field():
+    """There is no second field list. Every readable field is the catalogue's."""
+    cat = catalogue()
+    for ref in collected_fields(cat):
+        assert cat.field(ref.section, ref.key) is not None, ref.path
+
+
+def test_every_cue_names_a_field_that_exists():
+    cat = catalogue()
+    for section in cat.sections:
+        for f in section.fields:
+            if f.collected:
+                assert cues_for(section, f), f"{section.key}.{f.key}"
 
 
 def test_a_product_the_catalogue_does_not_declare_is_never_matched(interpreter):
@@ -322,6 +352,13 @@ def test_every_supported_human_action_is_reachable_in_language(interpreter):
         "acknowledge that": _states.ACTION_ACKNOWLEDGE_EXCEPTION,
         "prepare the orchestration plan": _states.ACTION_GENERATE_PLAN,
         "approve readiness": _states.ACTION_APPROVE_EXECUTION,
+        "draft the onboarding pack": _states.ACTION_DRAFT_PACK,
+        "approve the pack": _states.ACTION_APPROVE_PACK,
+        "send the pack to the client": _states.ACTION_SEND_PACK,
+        "submit this for review": _states.ACTION_REQUEST_ACTIVATION,
+        "approve the configuration for activation":
+            _states.ACTION_APPROVE_ACTIVATION,
+        "confirm activation": _states.ACTION_CONFIRM_ACTIVATION,
         "what is still needed?": _states.ACTION_ASK,
         "cancel this case": _states.ACTION_CANCEL,
     }
@@ -333,9 +370,5 @@ def test_every_supported_human_action_is_reachable_in_language(interpreter):
 def test_every_action_the_interpreter_can_name_is_a_lifecycle_action():
     """No action exists in language that the state model does not know."""
     from operations_control.occ_agent.interpretation import _ALL_ACTIONS
-    known = set(_states.ONBOARDING_ACTIONS) | {
-        _states.ACTION_REGISTER_ARTEFACT, _states.ACTION_RUN_ONBOARDING,
-        _states.ACTION_RESOLVE_DECISION, _states.ACTION_ACKNOWLEDGE_EXCEPTION,
-        _states.ACTION_GENERATE_PLAN, _states.ACTION_APPROVE_EXECUTION,
-        _states.ACTION_CANCEL, _states.ACTION_ASK}
+    known = set(_states.ONBOARDING_ACTIONS) | set(_states.EXECUTION_ACTIONS)
     assert _ALL_ACTIONS == known

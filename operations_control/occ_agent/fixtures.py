@@ -72,7 +72,9 @@ class Scenario:
     #: concept of a period, so a scenario names one.
     reporting_period: str = ""
     #: The state the scenario is expected to settle in when driven end to end.
-    expected_state: str = _states.READY_FOR_EXECUTION
+    #: For a scenario that gets all the way through, that is the confirmation
+    #: gate — a rehearsal reaches everything up to production and stops there.
+    expected_state: str = _states.ACTIVATION_CONFIRMATION_REQUIRED
     #: The onboarding status it is expected to reach.
     expected_onboarding_status: str = "approved"
     #: What the human must do part-way through, in the order it is needed.
@@ -231,6 +233,9 @@ def _client_response(*, domain: str, country: str = "GB",
         "contacts.reporting_contact_email": f"reporting@{domain}",
         "contacts.operational_contact_name": "Practice Operations Contact",
         "contacts.operational_contact_email": f"operations@{domain}",
+        # How the book was acquired is the client's to state, and the pack asks
+        # for it: an opening instruction that never says so leaves it open.
+        "portfolios.portfolio_type": "direct",
         **extra,
     }
 
@@ -255,10 +260,12 @@ SCENARIO_A = Scenario(
     ),
     client_response=_client_response(domain="northstar.example"),
     reporting_period=REPORTING_DATE,
-    expected_state=_states.READY_FOR_EXECUTION,
-    expected_human_steps=("ask the client for what is outstanding",
+    expected_state=_states.ACTIVATION_CONFIRMATION_REQUIRED,
+    expected_human_steps=("approve the pack before it is issued",
+                          "ask the client for what is outstanding",
                           "record their response", "approve the onboarding",
-                          "approve readiness"),
+                          "approve readiness",
+                          "approve the configuration for activation"),
     demonstrates="The whole operating process end to end with nothing in the "
                  "way.",
 )
@@ -281,10 +288,12 @@ SCENARIO_B = Scenario(
     ),
     client_response=_client_response(domain="harbourpoint.example"),
     reporting_period=REPORTING_DATE,
-    expected_state=_states.READY_FOR_EXECUTION,
-    expected_human_steps=("ask the client for what is outstanding",
+    expected_state=_states.ACTIVATION_CONFIRMATION_REQUIRED,
+    expected_human_steps=("approve the pack before it is issued",
+                          "ask the client for what is outstanding",
                           "record their response", "approve the onboarding",
-                          "settle the ambiguous mapping", "approve readiness"),
+                          "settle the ambiguous mapping", "approve readiness",
+                          "approve the configuration for activation"),
     demonstrates="A control the engine cannot settle alone, and the rerun that "
                  "follows a human decision.",
 )
@@ -335,7 +344,9 @@ SCENARIO_D = Scenario(
     # declaration, not to this fixture and not to any code path.
     client_response=_client_response(domain="aldermere.example"),
     reporting_period=REPORTING_DATE,
-    expected_state=_states.AWAITING_ONBOARDING,
+    # The pack is issued, and then the onboarding itself holds the case: the
+    # product's own question is unanswered, so nothing downstream may start.
+    expected_state=_states.PACK_SENT,
     expected_onboarding_status="in_review",
     expected_human_steps=("ask the client for what is outstanding",
                           "record their response",

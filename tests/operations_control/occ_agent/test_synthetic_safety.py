@@ -119,7 +119,7 @@ def test_activation_is_refused_so_no_configuration_is_ever_created(service):
 def test_a_completed_practice_case_created_no_configuration(service):
     """The end state: approved, ready for execution, nothing written."""
     run = run_scenario(service, "scenario_a_clean", tenant=TENANT_A, actor=ACTOR)
-    assert run.case.run.state == "READY_FOR_EXECUTION"
+    assert run.case.run.state == "ACTIVATION_CONFIRMATION_REQUIRED"
     assert run.case.case.status in NO_ACTIVE_CONFIGURATION
     assert run.case.case.status != ACTIVATED
     assert run.case.case.activated_version is None
@@ -201,7 +201,7 @@ def test_nothing_can_be_marked_published(service):
 
 def test_a_full_run_writes_nothing_to_the_live_container(service, blob_root):
     run = run_scenario(service, "scenario_a_clean", tenant=TENANT_A, actor=ACTOR)
-    assert run.case.run.state == "READY_FOR_EXECUTION"
+    assert run.case.run.state == "ACTIVATION_CONFIRMATION_REQUIRED"
     assert live_container_paths(blob_root) == [], (
         "a practice case wrote into the live operations container")
 
@@ -253,7 +253,7 @@ def test_synthetic_mode_needs_no_live_credentials(service, monkeypatch):
         monkeypatch.delenv(name, raising=False)
     _policy.assert_no_live_credentials_required()
     run = run_scenario(service, "scenario_a_clean", tenant=TENANT_A, actor=ACTOR)
-    assert run.case.run.state == "READY_FOR_EXECUTION"
+    assert run.case.run.state == "ACTIVATION_CONFIRMATION_REQUIRED"
 
 
 def test_the_agent_cannot_read_files_outside_its_sandbox(service, agent_env,
