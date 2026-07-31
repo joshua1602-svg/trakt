@@ -859,6 +859,15 @@ export class MockOnboarding {
     return this.present(stored);
   }
 
+  requestChanges(caseId: string, reason: string): OnboardingCase {
+    const stored = this.require(caseId);
+    if (!reason.trim()) {
+      throw new MockOnboardingError("Please say what needs to change.", "OPS_REASON_REQUIRED");
+    }
+    this.transition(stored, "changes_required");
+    return this.present(stored);
+  }
+
   approve(caseId: string, reason: string, by: string): OnboardingCase {
     const stored = this.require(caseId);
     if (stored.status === "activated" || stored.status === "withdrawn") {

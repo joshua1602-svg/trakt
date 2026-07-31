@@ -1,4 +1,19 @@
 import type {
+  AgentActivation,
+  AgentAudit,
+  AgentClassification,
+  AgentClientForm,
+  AgentChecklist,
+  AgentMeta,
+  AgentPack,
+  AgentPreview,
+  AgentReadinessPackage,
+  AgentReviewPackage,
+  AgentStatus,
+  AgentTurn,
+  CaseSummary,
+} from "./agentTypes";
+import type {
   AuditTrail,
   Comparison,
   ConfigCatalogue,
@@ -149,4 +164,90 @@ export interface OpsClient {
   withdrawCase(caseId: string, reason: string): Promise<OnboardingCase>;
   getOnboardingClient(clientId: string): Promise<OnboardingClientDetail>;
   getOnboardingClientVersion(clientId: string, version: number): Promise<ConfigurationVersionRow>;
+
+  // -- OCC Agent (practice onboarding cases) -------------------------------- //
+  // A practice case is a REAL onboarding case, opened by the calls above and
+  // stored in an isolated container, plus a practice execution beside it. None
+  // of these can reach a live workflow or activate a configuration, and the
+  // backend refuses them all when the feature flag is off — hiding the tab is
+  // convenience, not the control.
+  getAgentMeta(): Promise<AgentMeta>;
+  listAgentCases(state?: string): Promise<CaseSummary[]>;
+  createAgentCase(instruction: string, fixtureId?: string): Promise<AgentStatus>;
+  getAgentCase(caseRef: string): Promise<AgentStatus>;
+  instructAgent(caseRef: string, text: string, confirm?: boolean): Promise<AgentTurn>;
+  answerAgentDecision(
+    caseRef: string,
+    input: { decision_id: string; action: string; value?: string; reason?: string },
+  ): Promise<AgentStatus>;
+  /** Named lifecycle steps, for the operator controls beside the conversation. */
+  runAgentStep(
+    caseRef: string,
+    step:
+      | "information-requests"
+      | "submit"
+      | "approve"
+      | "request-changes"
+      | "run"
+      | "plan"
+      | "readiness/approve"
+      | "review"
+      | "cancel",
+    body?: Record<string, unknown>,
+  ): Promise<AgentStatus>;
+  /** Answer one wizard step directly, through Client Onboarding itself. */
+  saveAgentStep(
+    caseRef: string,
+    step: string,
+    payload: Record<string, unknown>,
+  ): Promise<AgentStatus>;
+  recordAgentClientResponse(
+    caseRef: string,
+    input: { request_id: string; answers: Record<string, unknown>; note?: string; accept?: boolean },
+  ): Promise<AgentStatus>;
+  /** Name which delivery the practice run is for. */
+  setAgentRunTarget(
+    caseRef: string,
+    input: { portfolio_id?: string; dataset?: string; reporting_period?: string },
+  ): Promise<AgentStatus>;
+  uploadAgentArtefacts(caseRef: string, files: File[]): Promise<AgentStatus>;
+  /** Generate a client response from the delivery outcome the case implies. */
+  generateAgentResponse(caseRef: string): Promise<AgentStatus>;
+  loadAgentFixtureArtefacts(caseRef: string, fixtureId: string): Promise<AgentStatus>;
+  runAgentScenario(fixtureId: string): Promise<AgentStatus>;
+  getAgentChecklist(caseRef: string): Promise<AgentChecklist>;
+  /** What activation WOULD create. It creates nothing. */
+  getAgentPreview(caseRef: string): Promise<AgentPreview>;
+  getAgentReadiness(caseRef: string): Promise<AgentReadinessPackage>;
+  getAgentAudit(caseRef: string): Promise<AgentAudit>;
+
+  // -- the client pack ----------------------------------------------------- //
+  /** The pack, plus the document a human would read and send by hand. */
+  getAgentPack(caseRef: string): Promise<AgentPack>;
+  /** The structured form this client should see now: only what they can answer. */
+  getAgentClientForm(caseRef: string): Promise<AgentClientForm>;
+  /** Persist a structured response, verbatim. Keys are catalogue keys. */
+  submitAgentClientForm(
+    caseRef: string,
+    answers: Record<string, unknown>,
+    options?: { request_id?: string; strict?: boolean },
+  ): Promise<AgentStatus>;
+  /** Every catalogue field, in one of the five categories, and why. */
+  getAgentClassification(caseRef: string): Promise<AgentClassification>;
+  draftAgentPack(caseRef: string): Promise<AgentStatus>;
+  /** A human approves the pack for issue. The agent cannot do this. */
+  approveAgentPack(caseRef: string, reason?: string): Promise<AgentStatus>;
+  /** Record the pack as issued. The receipt says whether anything was sent. */
+  sendAgentPack(caseRef: string, to?: string[]): Promise<AgentStatus>;
+
+  // -- review, approval and the confirmation gate --------------------------- //
+  /** Assemble the review package and submit the case for review. */
+  requestAgentReview(caseRef: string): Promise<AgentStatus>;
+  getAgentReview(caseRef: string): Promise<AgentReviewPackage>;
+  /** Approve the configuration. This starts nothing. */
+  approveAgentActivation(caseRef: string, reason?: string): Promise<AgentStatus>;
+  /** What confirming would do, and every reason it currently may not. */
+  getAgentActivation(caseRef: string): Promise<AgentActivation>;
+  /** The one call that can reach production, through the server's one gate. */
+  confirmAgentActivation(caseRef: string, confirmation: string): Promise<AgentStatus>;
 }

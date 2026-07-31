@@ -2,6 +2,22 @@ import { copy } from "@/lib/copy";
 import { announceUnauthorized, clearToken, getToken } from "@/lib/token";
 import { OpsError, type OpsClient } from "./OpsClient";
 import type {
+  AgentActivation,
+  AgentAudit,
+  AgentClassification,
+  AgentClientForm,
+  AgentChecklist,
+  AgentMeta,
+  AgentPack,
+  AgentPreview,
+  AgentReadinessPackage,
+  AgentReviewPackage,
+  AgentStatus,
+  AgentTurn,
+  CaseSummary,
+} from "./agentTypes";
+
+import type {
   AuditTrail,
   Comparison,
   ConfigCatalogue,
@@ -536,5 +552,247 @@ export class HttpOpsClient implements OpsClient {
       `/ops/onboarding/clients/${encodeURIComponent(clientId)}/versions/${version}`,
     );
     return body.version;
+  }
+
+  // -- OCC Agent ----------------------------------------------------------- //
+  // The case reference is the only thing these send: the tenant comes from the
+  // signed-in principal server-side, so a browser cannot address another
+  // tenant's case.
+  //
+  // There IS an activation call, and it is deliberately three: approving the
+  // configuration, reading the confirmation, and confirming. Approval starts
+  // nothing, and the server refuses the confirmation in every environment
+  // where live execution is not switched on.
+
+  async getAgentMeta(): Promise<AgentMeta> {
+    return this.request<{ ok: true } & AgentMeta>("/ops/agent/meta");
+  }
+
+  async listAgentCases(state?: string): Promise<CaseSummary[]> {
+    const body = await this.request<{ cases: CaseSummary[] }>(
+      `/ops/agent/cases${query({ state })}`,
+    );
+    return body.cases;
+  }
+
+  async createAgentCase(instruction: string, fixtureId?: string): Promise<AgentStatus> {
+    return this.post<AgentStatus>("/ops/agent/cases", {
+      instruction,
+      fixture_id: fixtureId ?? "",
+    });
+  }
+
+  async getAgentCase(caseRef: string): Promise<AgentStatus> {
+    return this.request<{ ok: true } & AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}`,
+    );
+  }
+
+  async instructAgent(caseRef: string, text: string, confirm = false): Promise<AgentTurn> {
+    return this.post<AgentTurn>(`/ops/agent/cases/${encodeURIComponent(caseRef)}/instruct`, {
+      text,
+      confirm,
+    });
+  }
+
+  async answerAgentDecision(
+    caseRef: string,
+    input: { decision_id: string; action: string; value?: string; reason?: string },
+  ): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/decisions`,
+      { value: "", reason: "", ...input },
+    );
+  }
+
+  async runAgentStep(
+    caseRef: string,
+    step: string,
+    body: Record<string, unknown> = {},
+  ): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/${step}`,
+      body,
+    );
+  }
+
+  async saveAgentStep(
+    caseRef: string,
+    step: string,
+    payload: Record<string, unknown>,
+  ): Promise<AgentStatus> {
+    return this.post<AgentStatus>(`/ops/agent/cases/${encodeURIComponent(caseRef)}/steps`, {
+      step,
+      payload,
+    });
+  }
+
+  async recordAgentClientResponse(
+    caseRef: string,
+    input: { request_id: string; answers: Record<string, unknown>; note?: string; accept?: boolean },
+  ): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/information-requests/respond`,
+      { note: "", accept: true, ...input },
+    );
+  }
+
+  async setAgentRunTarget(
+    caseRef: string,
+    input: { portfolio_id?: string; dataset?: string; reporting_period?: string },
+  ): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/target`,
+      input,
+    );
+  }
+
+  async uploadAgentArtefacts(caseRef: string, files: File[]): Promise<AgentStatus> {
+    const form = new FormData();
+    for (const file of files) form.append("files", file, file.name);
+    return this.request<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/artefacts`,
+      { method: "POST", body: form },
+    );
+  }
+
+  async generateAgentResponse(caseRef: string): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/artefacts/generate`,
+      {},
+    );
+  }
+
+  async loadAgentFixtureArtefacts(caseRef: string, fixtureId: string): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/artefacts/fixture`,
+      { fixture_id: fixtureId },
+    );
+  }
+
+  async runAgentScenario(fixtureId: string): Promise<AgentStatus> {
+    return this.post<AgentStatus>("/ops/agent/scenarios/run", {
+      fixture_id: fixtureId,
+      run: true,
+    });
+  }
+
+  async getAgentChecklist(caseRef: string): Promise<AgentChecklist> {
+    return this.request<{ ok: true } & AgentChecklist>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/checklist`,
+    );
+  }
+
+  async getAgentPreview(caseRef: string): Promise<AgentPreview> {
+    return this.request<{ ok: true } & AgentPreview>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/preview`,
+    );
+  }
+
+  async getAgentReadiness(caseRef: string): Promise<AgentReadinessPackage> {
+    return this.request<{ ok: true } & AgentReadinessPackage>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/readiness`,
+    );
+  }
+
+  async getAgentAudit(caseRef: string): Promise<AgentAudit> {
+    return this.request<{ ok: true } & AgentAudit>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/audit`,
+    );
+  }
+
+  // -- the client pack ------------------------------------------------------ //
+
+  async getAgentPack(caseRef: string): Promise<AgentPack> {
+    return this.request<{ ok: true } & AgentPack>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/pack`,
+    );
+  }
+
+  async getAgentClientForm(caseRef: string): Promise<AgentClientForm> {
+    return this.request<{ ok: true } & AgentClientForm>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/form`,
+    );
+  }
+
+  /**
+   * Persist a structured response. The keys are authoritative catalogue keys,
+   * and the server refuses any it did not ask this client for.
+   */
+  async submitAgentClientForm(
+    caseRef: string,
+    answers: Record<string, unknown>,
+    options: { request_id?: string; strict?: boolean } = {},
+  ): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/form`,
+      { answers, request_id: options.request_id ?? "", strict: options.strict ?? true },
+    );
+  }
+
+  async getAgentClassification(caseRef: string): Promise<AgentClassification> {
+    return this.request<{ ok: true } & AgentClassification>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/classification`,
+    );
+  }
+
+  async draftAgentPack(caseRef: string): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/pack/draft`,
+      {},
+    );
+  }
+
+  async approveAgentPack(caseRef: string, reason = ""): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/pack/approve`,
+      { reason },
+    );
+  }
+
+  async sendAgentPack(caseRef: string, to?: string[]): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/pack/send`,
+      { to: to ?? null },
+    );
+  }
+
+  // -- review, approval and the confirmation gate --------------------------- //
+
+  async requestAgentReview(caseRef: string): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/review`,
+      {},
+    );
+  }
+
+  async getAgentReview(caseRef: string): Promise<AgentReviewPackage> {
+    return this.request<{ ok: true } & AgentReviewPackage>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/review`,
+    );
+  }
+
+  async approveAgentActivation(caseRef: string, reason = ""): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/activation/approve`,
+      { reason },
+    );
+  }
+
+  async getAgentActivation(caseRef: string): Promise<AgentActivation> {
+    return this.request<{ ok: true } & AgentActivation>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/activation`,
+    );
+  }
+
+  /**
+   * The one call that can reach production. It goes through the server's single
+   * activation gate, which refuses unless every precondition holds.
+   */
+  async confirmAgentActivation(caseRef: string, confirmation: string): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/activation/confirm`,
+      { confirmation },
+    );
   }
 }

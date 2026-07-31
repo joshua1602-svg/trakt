@@ -63,6 +63,12 @@ class Field:
     help: str = ""
     required: bool = False
     required_when: str = ""
+    #: When this field is worth ASKING at all, as an expression over the other
+    #: answers. Distinct from ``required_when``, which decides whether an asked
+    #: question must be answered: a brand colour is never required, but it is
+    #: only worth asking of a client who receives a branded report. Empty means
+    #: "always worth asking".
+    asked_when: str = ""
     validation: str = ""
     options: List[Dict[str, str]] = field(default_factory=list)
     options_from: str = ""
@@ -116,6 +122,10 @@ class Section:
     item_label_field: str = ""
     min_items: int = 0
     derived_from: str = ""
+    #: When a whole section's questions only make sense once something else
+    #: exists, stated here rather than in code. Non-empty means the section is
+    #: not part of the initial pack, and the text says what has to happen first.
+    deferred_until: str = ""
     fields: List[Field] = field(default_factory=list)
     #: True when the section's fields come from the regime products rather than
     #: from the catalogue itself.
@@ -157,6 +167,18 @@ class Catalogue:
                 "regime_products": self.regime_products}
 
     # -- conditional requirement ------------------------------------------- #
+    def is_asked(self, f: Field, answers: Dict[str, Any],
+                 item: Optional[Dict[str, Any]] = None) -> bool:
+        """Whether this field is worth putting in front of anyone at all.
+
+        A field with no ``asked_when`` is always asked. One that declares a
+        condition is asked only when the condition holds, so a follow-up
+        question appears when its trigger is answered and not before.
+        """
+        if not f.asked_when:
+            return True
+        return evaluate(f.asked_when, answers, item)
+
     def is_required(self, f: Field, answers: Dict[str, Any],
                     item: Optional[Dict[str, Any]] = None) -> bool:
         """Whether ``f`` must be answered given what has been answered so far."""
@@ -420,6 +442,7 @@ def load(path: Path = CATALOGUE_PATH,
             key=raw["key"], label=raw.get("label", raw["key"]),
             help=raw.get("help", ""),
             repeatable=bool(raw.get("repeatable")),
+            deferred_until=str(raw.get("deferred_until") or "").strip(),
             repeatable_key=raw.get("repeatable_key", ""),
             item_label_field=raw.get("item_label_field", ""),
             min_items=int(raw.get("min_items") or 0),

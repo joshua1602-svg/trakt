@@ -1,6 +1,23 @@
+import { MockAgent } from "./MockAgent";
 import { MockConfigAdmin } from "./MockConfigAdmin";
 import { MockOnboarding } from "./MockOnboarding";
 import { OpsError, type OpsClient } from "./OpsClient";
+import type {
+  AgentActivation,
+  AgentAudit,
+  AgentClassification,
+  AgentClientForm,
+  AgentChecklist,
+  AgentMeta,
+  AgentPack,
+  AgentPreview,
+  AgentReadinessPackage,
+  AgentReviewPackage,
+  AgentStatus,
+  AgentTurn,
+  CaseSummary,
+} from "./agentTypes";
+
 import type {
   AuditTrail,
   Comparison,
@@ -103,6 +120,7 @@ export class MockOpsClient implements OpsClient {
   private readonly delayMs: number;
   private readonly principal: Principal;
   private readonly config = new MockConfigAdmin();
+  private readonly agent = new MockAgent();
   private readonly onboarding = new MockOnboarding();
   private nextId = 6000;
   /** Counts reads of a running workflow so it visibly "finishes" while polling. */
@@ -1729,5 +1747,186 @@ export class MockOpsClient implements OpsClient {
   ): Promise<ConfigurationVersionRow> {
     await this.wait();
     return this.onboarding.version(clientId, version);
+  }
+
+  // -- OCC Agent ----------------------------------------------------------- //
+
+  async getAgentMeta(): Promise<AgentMeta> {
+    await this.wait();
+    return this.agent.meta();
+  }
+
+  async listAgentCases(state?: string): Promise<CaseSummary[]> {
+    await this.wait();
+    return this.agent.list(state);
+  }
+
+  async createAgentCase(instruction: string, fixtureId?: string): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.create(instruction, fixtureId);
+  }
+
+  async getAgentCase(caseRef: string): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.status(caseRef);
+  }
+
+  async instructAgent(caseRef: string, text: string, confirm = false): Promise<AgentTurn> {
+    await this.wait();
+    return this.agent.instruct(caseRef, text, confirm);
+  }
+
+  async answerAgentDecision(
+    caseRef: string,
+    input: { decision_id: string; action: string; value?: string; reason?: string },
+  ): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.answerDecision(caseRef, input);
+  }
+
+  async runAgentStep(
+    caseRef: string,
+    step: string,
+    body: Record<string, unknown> = {},
+  ): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.step(caseRef, step, body);
+  }
+
+  async saveAgentStep(
+    caseRef: string,
+    step: string,
+    payload: Record<string, unknown>,
+  ): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.saveStep(caseRef, step, payload);
+  }
+
+  async recordAgentClientResponse(
+    caseRef: string,
+    input: { request_id: string; answers: Record<string, unknown>; note?: string; accept?: boolean },
+  ): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.recordClientResponse(caseRef, input);
+  }
+
+  async setAgentRunTarget(
+    caseRef: string,
+    input: { portfolio_id?: string; dataset?: string; reporting_period?: string },
+  ): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.setRunTarget(caseRef, input);
+  }
+
+  async uploadAgentArtefacts(caseRef: string, files: File[]): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.uploadArtefacts(
+      caseRef,
+      files.map((f) => f.name),
+    );
+  }
+
+  async generateAgentResponse(caseRef: string): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.generateResponse(caseRef);
+  }
+
+  async loadAgentFixtureArtefacts(caseRef: string, fixtureId: string): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.loadFixtureArtefacts(caseRef, fixtureId);
+  }
+
+  async runAgentScenario(fixtureId: string): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.runScenario(fixtureId);
+  }
+
+  async getAgentChecklist(caseRef: string): Promise<AgentChecklist> {
+    await this.wait();
+    return this.agent.checklist(caseRef);
+  }
+
+  async getAgentPreview(caseRef: string): Promise<AgentPreview> {
+    await this.wait();
+    return this.agent.preview(caseRef);
+  }
+
+  async getAgentReadiness(caseRef: string): Promise<AgentReadinessPackage> {
+    await this.wait();
+    return this.agent.readinessPackage(caseRef);
+  }
+
+  async getAgentAudit(caseRef: string): Promise<AgentAudit> {
+    await this.wait();
+    return this.agent.audit(caseRef);
+  }
+
+  // -- the client pack ------------------------------------------------------ //
+
+  async getAgentPack(caseRef: string): Promise<AgentPack> {
+    await this.wait();
+    return this.agent.pack(caseRef);
+  }
+
+  async getAgentClientForm(caseRef: string): Promise<AgentClientForm> {
+    await this.wait();
+    return { form: this.agent.clientForm(caseRef) };
+  }
+
+  async submitAgentClientForm(
+    caseRef: string,
+    answers: Record<string, unknown>,
+    options: { request_id?: string; strict?: boolean } = {},
+  ): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.submitClientForm(caseRef, answers, options);
+  }
+
+  async getAgentClassification(caseRef: string): Promise<AgentClassification> {
+    await this.wait();
+    return this.agent.classification(caseRef);
+  }
+
+  async draftAgentPack(caseRef: string): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.step(caseRef, "pack/draft");
+  }
+
+  async approveAgentPack(caseRef: string, reason = ""): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.step(caseRef, "pack/approve", { reason });
+  }
+
+  async sendAgentPack(caseRef: string, to?: string[]): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.step(caseRef, "pack/send", { to: to ?? null });
+  }
+
+  // -- review, approval and the confirmation gate --------------------------- //
+
+  async requestAgentReview(caseRef: string): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.step(caseRef, "review");
+  }
+
+  async getAgentReview(caseRef: string): Promise<AgentReviewPackage> {
+    await this.wait();
+    return this.agent.review(caseRef);
+  }
+
+  async approveAgentActivation(caseRef: string, reason = ""): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.step(caseRef, "activation/approve", { reason });
+  }
+
+  async getAgentActivation(caseRef: string): Promise<AgentActivation> {
+    await this.wait();
+    return this.agent.activation(caseRef);
+  }
+
+  /** Always refused here, exactly as the server refuses it in synthetic mode. */
+  async confirmAgentActivation(caseRef: string, confirmation: string): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.step(caseRef, "activation/confirm", { confirmation });
   }
 }

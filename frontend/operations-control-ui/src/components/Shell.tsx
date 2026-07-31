@@ -6,13 +6,15 @@ import {
   GitBranch,
   BookOpen,
   Clock,
+  Building2,
+  FlaskConical,
   Plus,
   SlidersHorizontal,
-  Building2,
 } from "lucide-react";
 import clsx from "clsx";
 import { useSession } from "@/api/session";
 import { copy } from "@/lib/copy";
+import { occAgentEnabled } from "@/lib/features";
 
 const NAV_ITEMS = [
   { to: "/", label: copy.nav.home, icon: Home, end: true },
@@ -23,6 +25,14 @@ const NAV_ITEMS = [
   // A governed capability of its own, not a step of the delivery workflow.
   { to: "/onboarding", label: copy.nav.onboarding, icon: Building2, end: false },
 ];
+
+/** The OCC Agent tab. Sits alongside the live tabs, behind its feature flag. */
+const AGENT_ITEM = {
+  to: "/agent",
+  label: copy.nav.agent,
+  icon: FlaskConical,
+  end: false,
+};
 
 /** Administrator-only entry. Hidden for ordinary operators — the backend still
  *  refuses the route and every request behind it. */
@@ -35,7 +45,11 @@ const ADMIN_ITEM = {
 
 function NavItems({ compact }: { compact?: boolean }) {
   const { isAdmin } = useSession();
-  const items = isAdmin ? [...NAV_ITEMS, ADMIN_ITEM] : NAV_ITEMS;
+  const items = [
+    ...NAV_ITEMS,
+    ...(occAgentEnabled() ? [AGENT_ITEM] : []),
+    ...(isAdmin ? [ADMIN_ITEM] : []),
+  ];
   return (
     <>
       {items.map(({ to, label, icon: Icon, end }) => (

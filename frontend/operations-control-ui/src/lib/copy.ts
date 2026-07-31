@@ -11,6 +11,7 @@ export const copy = {
     workflows: "Workflows",
     rules: "Rules",
     history: "History",
+    agent: "Onboarding Agent",
     admin: "Platform configuration",
     onboarding: "Client onboarding",
     startNew: "Create a manual delivery",
@@ -338,6 +339,209 @@ export const copy = {
     builtWithSuffix: "approved rules",
     previousVersion: "Previous version available",
     empty: "No reports yet.",
+  },
+
+  // The OCC Agent tab. A rehearsal space: the operator works the whole
+  // onboarding process in conversation, against synthetic cases only.
+  agent: {
+    title: "Onboarding Agent",
+    subtitle: "Work through an onboarding in conversation, on a practice case.",
+    syntheticChip: "Practice case",
+    syntheticBanner:
+      "Everything in this tab is a practice case. It uses the real onboarding, the real agents " +
+      "and the real controls, but Trakt never activates a configuration, writes files, starts " +
+      "the pipeline, sends an email or publishes anything from here.",
+    newCase: "Start a new practice case",
+    newCaseHeading: "What needs onboarding?",
+    newCasePrompt:
+      "Tell Trakt in your own words. For example: “Onboard Northstar Lending. It is a UK " +
+      "equity-release portfolio. They need monthly management information. The first files will " +
+      "be a loan tape and executed cashflows.”",
+    newCasePlaceholder: "Describe the client and what they need…",
+    createButton: "Start",
+    scenariosHeading: "Or start from a prepared example",
+    scenarioRun: "Run this example",
+    scenarioExpected: "Expected outcome",
+    casesHeading: "Practice cases",
+    caseEmpty: "No practice cases yet.",
+    filterAll: "All",
+    filterNeedsYou: "Needs you",
+    filterBlocked: "Blocked",
+    filterReady: "Ready for execution",
+    disabledTitle: "Not switched on",
+    disabled:
+      "The Onboarding Agent is not switched on for this environment. Ask your Trakt " +
+      "administrator.",
+
+    conversationHeading: "Conversation",
+    conversationPlaceholder: "Tell Trakt what to do, or ask what is still needed…",
+    send: "Send",
+    sending: "Working…",
+    proposalHeading: "Trakt is proposing a change",
+    proposalConfirm: "Confirm and apply",
+    proposalDismiss: "Not yet",
+
+    statusHeading: "Where this case has got to",
+    stageHeading: "Practice run",
+    onboardingStageHeading: "Onboarding",
+    onboardingHeading: "The onboarding",
+    onboardingOpen: "Open it in the onboarding screens",
+    checklistHeading: "What the client still has to tell us",
+    checklistEmpty: "Nothing outstanding from the client.",
+    checklistAsk: "Ask the client for these",
+    checklistRecord: "Record what came back",
+    requestsHeading: "Asked for",
+    requestOutstanding: "Waiting on the client",
+    requestAnswered: "Answered",
+    previewHeading: "What activation would create",
+    previewDescription:
+      "The configuration this onboarding would generate. Nothing here has been created, and " +
+      "this tab cannot create it.",
+    previewNothingWritten: "Not created — practice case",
+    previewNone: "There is not yet enough answered to generate a configuration.",
+    factsHeading: "What the run is for",
+    gatesHeading: "Controls",
+    gateDone: "Passed",
+    gateActive: "Now",
+    gateBlocked: "Blocked",
+    gatePending: "Not started",
+    missingHeading: "Missing inputs",
+    criteriaOnboarding: "The onboarding",
+    criteriaExecution: "The practice run",
+    criteriaBoundary: "The practice boundary",
+    decisionsHeading: "Decisions waiting for you",
+    artefactsHeading: "Files received",
+    artefactIntended: "Where this would be filed",
+    artefactNotWritten: "Not written — practice case",
+    executionHeading: "Practice execution",
+    readinessHeading: "Readiness",
+    observationsHeading: "Worth knowing",
+    blockersHeading: "What's in the way",
+    packHeading: "Onboarding pack",
+    packIssued: "Recorded as issued. No email was sent.",
+    packDescription:
+      "Everything Trakt needs from this client, drawn from the same governed catalogue the " +
+      "onboarding screens use. Nothing here is a separate questionnaire.",
+    packDraft: "Draft the pack",
+    packRedraft: "Redraft it",
+    packApprove: "Approve it for sending",
+    packSend: "Record it as issued",
+    packOutstanding: "still outstanding",
+    packAnswered: "answered",
+    packNone: "No pack has been drafted yet.",
+    packDocument: "Show the document",
+    packHide: "Hide it",
+    packRecipients: "Goes to",
+    packNoRecipient:
+      "There is no contact address on this case yet. Record one, or type an address when you " +
+      "issue it.",
+    packMappingHeading: "About field mappings",
+    packSteps: "Steps",
+    packRequired: "required",
+    packOptional: "optional",
+    packConfirmHeading: "Already known — check these are right",
+    packConfirmNote:
+      "Trakt worked these out or was told them. They are pre-populated, not asked again.",
+    packNotAskedHeading: "What the client is NOT asked, and why",
+    packLocked: "Not open yet",
+
+    classificationHeading: "Who can answer what",
+    classificationDescription:
+      "Every field the governed catalogue declares, in one of five categories. Only the " +
+      "second reaches a client.",
+    classificationShow: "Show every field",
+    classificationClientFacing: "asked of the client",
+    packStatusHeading: "Where the pack has got to",
+    packNotSent:
+      "Trakt did not send this. Send the approved pack and covering email from the record.",
+
+    reviewHeading: "Review and approval",
+    reviewDescription:
+      "The complete package a human approves: what Trakt holds, where every answer came from, " +
+      "what is still outstanding, and exactly what activation would do.",
+    reviewSubmit: "Submit for review",
+    reviewShow: "Show the review package",
+    reviewNone: "The case has not been submitted for review yet.",
+    reviewApprove: "Approve the configuration",
+    reviewApproveNote: "Approving records a decision. It starts nothing.",
+    reviewProvenance: "Where it came from",
+    reviewOperatorActions: "Actions for an administrator",
+    reviewNotProvisioned: "Not provisioned",
+
+    activationHeading: "Activation",
+    activationDescription:
+      "What confirming would do, in full. Approving the configuration is a separate act, and " +
+      "does not start this.",
+    activationConfirm: "Confirm and activate",
+    activationConfirmLabel: "Type what you are confirming, for the record",
+    activationRefusedHeading: "Why this cannot be activated",
+    activationFiles: "Files that would be placed",
+    activationTargets: "Where they would go",
+    activationActions: "What would happen",
+    activationDisabled:
+      "Live execution is not switched on in this environment, so this is refused. The refusal " +
+      "is recorded on the case.",
+    activationStarted: "Ingestion started",
+
+    disclosureUnderstood: "What Trakt understood",
+    disclosureQuestions: "What Trakt needs to know",
+    disclosureUnrecognised: "What Trakt could not read",
+    disclosureNothingApplied:
+      "Nothing has been applied. Confirm to apply only what is listed above, or tell Trakt the " +
+      "rest.",
+    auditHeading: "What happened",
+    occLinksHeading: "Elsewhere in Trakt",
+    nothingYet: "Nothing yet.",
+
+    decisionIssue: "The issue",
+    decisionEvidence: "Evidence",
+    decisionRecommendation: "Trakt suggests",
+    decisionConfidence: "Confidence",
+    decisionMateriality: "Materiality",
+    decisionConsequence: "If this is wrong",
+    decisionActions: "Your answer",
+    decisionApprove: "Accept",
+    decisionReject: "Reject",
+    decisionAnswered: "Answered",
+
+    actionsHeading: "Governed controls",
+    actionsHelp:
+      "These are the same governed steps the conversation drives. Use whichever you prefer.",
+    actionsInConversation:
+      "What you can do next needs a detail Trakt has to be told — use the conversation:",
+    actionsNone: "This case is finished. There is nothing further to do.",
+    uploadHeading: "Provide the client response",
+    uploadHelp:
+      "Upload practice files, or use the files from a prepared example. They stay inside this " +
+      "practice case.",
+    uploadButton: "Add files",
+    uploadFixture: "Use the example files",
+    uploadGenerate: "Let Trakt make up a response",
+
+    readyHeadline: "Practice case ready for execution.",
+    readyNotDone: [
+      "No live files were written.",
+      "No production pipeline was triggered.",
+      "No external email was sent.",
+      "No client configuration was activated.",
+      "Nothing was published.",
+    ],
+    readyStatus: "READY_FOR_EXECUTION",
+    notReady: "Not ready yet",
+    criteriaHeading: "Readiness criteria",
+    manifestHeading: "Machine-readable summary",
+    downloadPackage: "Show the readiness package",
+    hidePackage: "Hide the readiness package",
+
+    stageOutcomes: {
+      deterministic_execution_completed: "Ran for real",
+      contract_validation_completed: "Contract checked",
+      execution_simulated: "Simulated only",
+      human_input_required: "Needs you",
+      hard_blocked: "Blocked",
+    } as Record<string, string>,
+
+    notFound: "That practice case could not be found.",
   },
 
   admin: {

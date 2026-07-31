@@ -118,6 +118,11 @@ def derive_sources(case: OnboardingCase) -> List[Dict[str, Any]]:
                 "source_key": source_key(pid, dataset),
                 "portfolio_id": pid,
                 "dataset": dataset,
+                # Carried from the book, so a question about the DELIVERY can be
+                # conditioned on how the book was acquired without the condition
+                # having to reach across sections. Not collected here: the
+                # portfolio owns it, and this is a copy for evaluation.
+                "portfolio_type": str(p.get("portfolio_type") or ""),
                 "cadence": previous.get("cadence") or "",
                 "source_party": previous.get("source_party") or "",
                 "regime_required": regime_required,

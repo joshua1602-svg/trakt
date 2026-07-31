@@ -168,7 +168,17 @@ class OnboardingCase:
     #: Free-text questions the operator has not turned into a formal request.
     open_questions: List[Dict[str, Any]] = field(default_factory=list)
     #: Where a migrated or amended case's answers came from, per field path.
+    #: Human-readable, and shown as written ("the durable source
+    #: registrations", "the currency used in GB").
     provenance: Dict[str, str] = field(default_factory=dict)
+    #: The same question, answered as a CATEGORY rather than a sentence:
+    #: ``human_supplied`` / ``client_supplied`` / ``artefact_derived`` /
+    #: ``agent_proposed`` / ``human_approved`` / ``inherited_configuration``.
+    #: Kept beside :attr:`provenance` rather than replacing it, because the two
+    #: answer different needs — one is read by a person, the other by a control
+    #: — and collapsing them would make the sentence unwritable or the category
+    #: unusable. Sparse: only paths something has classified appear.
+    provenance_class: Dict[str, str] = field(default_factory=dict)
     #: For amendments and migrations: the version this case started from.
     based_on_version: Optional[int] = None
     #: For migrations: the legacy documents, so unmanaged blocks survive.

@@ -69,6 +69,8 @@ export interface CatalogueSection {
   item_label_field: string;
   min_items: number;
   derived_from: string;
+  /** Non-empty when the whole section waits for something else to exist. */
+  deferred_until?: string;
   from_regime: boolean;
   fields: CatalogueField[];
 }
