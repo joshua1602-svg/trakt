@@ -11,6 +11,7 @@ import type {
   AgentTurn,
   CaseSummary,
 } from "./agentTypes";
+
 import type {
   AuditTrail,
   Comparison,
@@ -113,8 +114,8 @@ export class MockOpsClient implements OpsClient {
   private readonly delayMs: number;
   private readonly principal: Principal;
   private readonly config = new MockConfigAdmin();
-  private readonly onboarding = new MockOnboarding();
   private readonly agent = new MockAgent();
+  private readonly onboarding = new MockOnboarding();
   private nextId = 6000;
   /** Counts reads of a running workflow so it visibly "finishes" while polling. */
   private runningTicks = new Map<string, number>();
@@ -1740,6 +1741,8 @@ export class MockOpsClient implements OpsClient {
   ): Promise<ConfigurationVersionRow> {
     await this.wait();
     return this.onboarding.version(clientId, version);
+  }
+
   // -- OCC Agent ----------------------------------------------------------- //
 
   async getAgentMeta(): Promise<AgentMeta> {

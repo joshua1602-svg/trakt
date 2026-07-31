@@ -158,6 +158,7 @@ export interface OpsClient {
   withdrawCase(caseId: string, reason: string): Promise<OnboardingCase>;
   getOnboardingClient(clientId: string): Promise<OnboardingClientDetail>;
   getOnboardingClientVersion(clientId: string, version: number): Promise<ConfigurationVersionRow>;
+
   // -- OCC Agent (synthetic onboarding cases) ------------------------------ //
   // Every one of these is served by the synthetic case store. None of them can
   // reach a live workflow, and the backend refuses them all when the feature

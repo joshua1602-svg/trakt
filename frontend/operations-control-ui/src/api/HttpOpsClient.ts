@@ -10,6 +10,7 @@ import type {
   AgentTurn,
   CaseSummary,
 } from "./agentTypes";
+
 import type {
   AuditTrail,
   Comparison,
@@ -520,6 +521,33 @@ export class HttpOpsClient implements OpsClient {
   async activateCase(caseId: string): Promise<ActivationResult> {
     return this.post<ActivationResult>(
       `/ops/onboarding/cases/${encodeURIComponent(caseId)}/activate`,
+      {},
+    );
+  }
+
+  async withdrawCase(caseId: string, reason: string): Promise<OnboardingCase> {
+    return this.caseCall(`/ops/onboarding/cases/${encodeURIComponent(caseId)}/withdraw`, {
+      reason,
+    });
+  }
+
+  async getOnboardingClient(clientId: string): Promise<OnboardingClientDetail> {
+    const body = await this.request<{ client: OnboardingClientDetail }>(
+      `/ops/onboarding/clients/${encodeURIComponent(clientId)}`,
+    );
+    return body.client;
+  }
+
+  async getOnboardingClientVersion(
+    clientId: string,
+    version: number,
+  ): Promise<ConfigurationVersionRow> {
+    const body = await this.request<{ version: ConfigurationVersionRow }>(
+      `/ops/onboarding/clients/${encodeURIComponent(clientId)}/versions/${version}`,
+    );
+    return body.version;
+  }
+
   // -- OCC Agent ----------------------------------------------------------- //
   // The case id is the only thing these send: the tenant comes from the signed-in
   // principal server-side, so a browser cannot address another tenant's case.
@@ -572,8 +600,6 @@ export class HttpOpsClient implements OpsClient {
     );
   }
 
-  async withdrawCase(caseId: string, reason: string): Promise<OnboardingCase> {
-    return this.caseCall(`/ops/onboarding/cases/${encodeURIComponent(caseId)}/withdraw`, {
   async uploadAgentArtefacts(caseId: string, files: File[]): Promise<AgentStatus> {
     const form = new FormData();
     for (const file of files) form.append("files", file, file.name);
@@ -608,21 +634,6 @@ export class HttpOpsClient implements OpsClient {
     });
   }
 
-  async getOnboardingClient(clientId: string): Promise<OnboardingClientDetail> {
-    const body = await this.request<{ client: OnboardingClientDetail }>(
-      `/ops/onboarding/clients/${encodeURIComponent(clientId)}`,
-    );
-    return body.client;
-  }
-
-  async getOnboardingClientVersion(
-    clientId: string,
-    version: number,
-  ): Promise<ConfigurationVersionRow> {
-    const body = await this.request<{ version: ConfigurationVersionRow }>(
-      `/ops/onboarding/clients/${encodeURIComponent(clientId)}/versions/${version}`,
-    );
-    return body.version;
   async runAgentScenario(fixtureId: string): Promise<AgentStatus> {
     return this.post<AgentStatus>("/ops/agent/scenarios/run", {
       fixture_id: fixtureId,
