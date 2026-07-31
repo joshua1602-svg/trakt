@@ -34,6 +34,7 @@ from typing import Any, Dict, List, Optional
 from ..contracts import canonical_json, stable_hash
 from ..onboarding.case import STATUS_LABELS, OnboardingCase
 from ..onboarding.catalogue import Catalogue, Field, Section
+from . import classification as _classification
 from . import states as _states
 from .derive import ExecutionFacts, product_label
 from .pack import MAPPING_STATEMENT
@@ -57,12 +58,20 @@ ACCESS_NOTE = (
 )
 
 #: How each provenance value reads to a human.
+#:
+#: A pre-populated value is not one thing, and an approver has to be able to
+#: tell which kind it is: an operator's decision, a value read out of an
+#: existing client record, something Trakt computed and a governed default are
+#: four different claims about how much scrutiny the number deserves.
 PROVENANCE_LABELS = {
     "human_supplied": "an operator told Trakt",
     "client_supplied": "the client told Trakt",
+    "existing_record": "read from this client's existing record",
+    "trakt_derived": "Trakt derived it",
+    "inherited_default": "a governed default, inherited",
     "artefact_derived": "read from a file the client sent",
     "agent_proposed": "the agent proposed it",
-    "human_approved": "an operator approved it",
+    "human_approved": "the agent proposed it and an operator approved it",
     "inherited_configuration": "inherited from existing configuration",
 }
 
@@ -254,18 +263,19 @@ def build(case: OnboardingCase, run: SyntheticRun, facts: ExecutionFacts, *,
 
 
 def _rows(case: OnboardingCase, section: Section) -> List[AnswerRow]:
+    migrated = bool(case.base_documents)
     out: List[AnswerRow] = []
     if section.repeatable:
         for index, item in enumerate(case.items(section.key)):
             label = str(item.get(section.item_label_field) or "").strip()
             for f in section.fields:
-                row = _row(case, section, f, item, index, label)
+                row = _row(case, section, f, item, index, label, migrated)
                 if row is not None:
                     out.append(row)
     else:
         block = case.answers.get(section.key) or {}
         for f in section.fields:
-            row = _row(case, section, f, block, None, "")
+            row = _row(case, section, f, block, None, "", migrated)
             if row is not None:
                 out.append(row)
     return out
@@ -273,25 +283,31 @@ def _rows(case: OnboardingCase, section: Section) -> List[AnswerRow]:
 
 def _row(case: OnboardingCase, section: Section, f: Field,
          holder: Dict[str, Any], index: Optional[int],
-         item: str) -> Optional[AnswerRow]:
+         item: str, migrated: bool = False) -> Optional[AnswerRow]:
     value = holder.get(f.key)
     if not _present(value):
         return None
     path = f"{section.key}.{f.key}"
     indexed = f"{section.key}[{index}].{f.key}" if index is not None else path
-    # The CATEGORY where something classified it, and the case's own sentence
-    # otherwise — so a value Client Onboarding inherited from an existing
-    # configuration still reads as something rather than as "not recorded".
-    provenance = str(case.provenance_class.get(indexed)
-                     or case.provenance_class.get(path) or "")
+    # What something recorded, and — where nothing did — the origin the field's
+    # own `source` implies. Every value on a review package says which of the
+    # five kinds of "already known" it is, rather than half of them reading as
+    # "not recorded" because no code path happened to classify them.
+    recorded = str(case.provenance_class.get(indexed)
+                   or case.provenance_class.get(path) or "")
+    provenance = _classification.origin_provenance(f, recorded,
+                                                   migrated=migrated)
+    # Client Onboarding's own sentence is kept as the detail: it says WHICH
+    # default or WHICH derivation, which the category alone cannot.
     sentence = str(case.provenance.get(indexed)
                    or case.provenance.get(path) or "")
+    label = PROVENANCE_LABELS.get(provenance) or sentence or "not recorded"
+    if sentence and PROVENANCE_LABELS.get(provenance) and sentence != label:
+        label = f"{label} — {sentence}"
     return AnswerRow(
         section=section.key, section_label=section.label, field=f.key,
         label=f.label, value=value, item=item, index=index,
-        provenance=provenance,
-        provenance_label=PROVENANCE_LABELS.get(provenance)
-        or sentence or "not recorded",
+        provenance=provenance, provenance_label=label,
         writes_to=f.writes_to, sensitive=f.sensitive)
 
 

@@ -124,15 +124,30 @@ def test_the_catalogue_still_records_mappings_as_not_collected():
 
 
 def test_the_pack_asks_what_the_numbers_mean_rather_than_how_to_map_them():
-    """Decision 1's permitted scope, as catalogue fields."""
+    """Decision 1's permitted scope, split by who can answer when.
+
+    The business meaning is a property of how the CLIENT runs their book, so it
+    is asked during onboarding. What is specific to a FILE waits for one.
+    """
     cat = catalogue()
-    section = cat.section("data_definitions")
-    assert section is not None
-    keys = {f.key for f in section.fields}
+    business = cat.section("data_semantics")
+    technical = cat.section("data_definitions")
+    assert business is not None and technical is not None
+
+    business_keys = {f.key for f in business.fields}
+    for expected in ("balance_definition", "units_and_currency",
+                     "cut_off_convention", "measure_basis",
+                     "gross_net_convention", "valuation_basis",
+                     "cashflow_basis", "accrued_interest_treatment",
+                     "redemption_definition", "status_definitions"):
+        assert expected in business_keys, expected
+    assert not business.deferred_until
+
+    technical_keys = {f.key for f in technical.fields}
     for expected in ("source_file", "description", "proprietary_fields",
-                     "units_and_currency", "balance_definition",
-                     "date_conventions", "measure_basis", "known_limitations"):
-        assert expected in keys, expected
+                     "date_conventions", "known_limitations"):
+        assert expected in technical_keys, expected
+    assert technical.deferred_until, "file detail must wait for a file"
 
 
 def test_the_pack_asks_for_files_from_the_governed_input_requirements(service,

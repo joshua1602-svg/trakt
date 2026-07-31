@@ -1,3 +1,4 @@
+import { CATALOGUE } from "./mockCatalogue";
 import { MockOnboarding } from "./MockOnboarding";
 import { OpsError } from "./OpsClient";
 import type {
@@ -171,6 +172,15 @@ function clientResponse(domain: string): Record<string, string> {
     "contacts.reporting_contact_email": `reporting@${domain}`,
     "contacts.operational_contact_name": "Practice Operations Contact",
     "contacts.operational_contact_email": `operations@${domain}`,
+    "portfolios.portfolio_type": "direct",
+    // The business conventions behind the numbers. Trakt cannot read these out
+    // of a file, so onboarding asks and a scenario answers.
+    "data_semantics.balance_definition":
+      "Current principal only. Accrued interest is reported separately.",
+    "data_semantics.gross_net_convention": "Gross of fees and charges.",
+    "data_semantics.units_and_currency": "Units, GBP.",
+    "data_semantics.cut_off_convention": "Calendar month end.",
+    "data_semantics.measure_basis": "point_in_time",
   };
 }
 
@@ -638,13 +648,13 @@ export class MockAgent {
       case_ref: caseRef,
       client_name: onboarding.client_name,
       steps,
-      locked: [
-        {
+      locked: (catalogue.sections ?? [])
+        .filter((s: { deferred_until?: string }) => Boolean(s.deferred_until))
+        .map((s: { key: string; label: string; deferred_until?: string }) => ({
           step: "data",
-          label: "How to read the data",
-          unlocked_by: "Asked once the client has listed the files they will send.",
-        },
-      ],
+          label: s.label,
+          unlocked_by: `Asked once ${s.deferred_until}.`,
+        })),
       questions: steps.reduce((n, s) => n + s.questions, 0),
       required: steps.reduce((n, s) => n + s.required, 0),
       content_hash: "sha-mock-form",
@@ -2044,8 +2054,17 @@ const INTERNAL_FIELDS = new Set([
   "sources.dataset",
 ]);
 
-/** Sections asked once something else exists. */
-const DEFERRED_SECTIONS = new Set(["data_definitions"]);
+/**
+ * Sections asked once something else exists.
+ *
+ * Read from the catalogue's own `deferred_until`, so which questions wait for
+ * a delivery is a governed decision rather than a constant here.
+ */
+const DEFERRED_SECTIONS = new Set(
+  (CATALOGUE.sections ?? [])
+    .filter((s: { deferred_until?: string }) => Boolean(s.deferred_until))
+    .map((s: { key: string }) => s.key),
+);
 
 /** An identifier a client never saw is not put up for confirmation. */
 const NEVER_CONFIRMED_SOURCES = new Set([
@@ -2061,6 +2080,9 @@ const ASKED_WHEN: Record<string, (products: Set<string>) => boolean> = {
   "presentation.logo_uri": (p) => p.has("mi"),
   "presentation.disclaimer": (p) => p.has("mi"),
   "presentation.reporting_calendar_note": (p) => p.has("mi"),
+  "data_semantics.cashflow_basis": (p) => p.has("mi"),
+  "data_semantics.valuation_basis": (p) => p.has("mi"),
+  "data_semantics.accrued_interest_treatment": (p) => p.has("mi"),
 };
 
 /** The client-facing steps, in the order a client meets them. */
@@ -2094,5 +2116,14 @@ const FORM_STEPS: { key: string; label: string; help: string; sections: string[]
     label: "Who needs access",
     help: "People at your end who need Trakt, or who receive reports.",
     sections: ["access"],
+  },
+  {
+    key: "meaning",
+    label: "What your numbers mean",
+    help:
+      "The conventions behind your figures. Trakt works out the FORMAT of a " +
+      "file itself; what it cannot work out is what you mean by a balance, a " +
+      "redemption or a valuation.",
+    sections: ["data_semantics"],
   },
 ];

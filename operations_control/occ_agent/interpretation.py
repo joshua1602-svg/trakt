@@ -57,8 +57,18 @@ PROV_ARTEFACT = "artefact_derived"
 PROV_AGENT = "agent_proposed"
 PROV_APPROVED = "human_approved"
 PROV_INHERITED = "inherited_configuration"
+
+#: Three more, for values nobody typed. A pre-populated field is not one thing:
+#: an operator's decision, a value read out of an existing client record, a
+#: number Trakt computed and a governed default are four different claims, and
+#: an approver reviewing them needs to be able to tell which is which.
+PROV_EXISTING_RECORD = "existing_record"
+PROV_TRAKT_DERIVED = "trakt_derived"
+PROV_INHERITED_DEFAULT = "inherited_default"
+
 PROVENANCE_SOURCES = (PROV_HUMAN, PROV_CLIENT, PROV_ARTEFACT, PROV_AGENT,
-                      PROV_APPROVED, PROV_INHERITED)
+                      PROV_APPROVED, PROV_INHERITED, PROV_EXISTING_RECORD,
+                      PROV_TRAKT_DERIVED, PROV_INHERITED_DEFAULT)
 
 #: Retained for the older vocabulary used in tests and stored cases.
 PROV_HUMAN_INSTRUCTION = PROV_HUMAN

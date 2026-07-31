@@ -822,13 +822,180 @@ sections:
 # questions.
 # ---------------------------------------------------------------------------
   # -----------------------------------------------------------------------
-  - key: data_definitions
-    label: How to read the data
+  - key: data_semantics
+    label: What your numbers mean
     help: >-
-      What the client's own fields MEAN. Not a field mapping — Trakt learns the
-      mapping from the first representative delivery and approves it through the
-      existing mapping path. What it cannot learn is the business meaning behind
-      a number, so that is asked here and kept with the client's record.
+      The business conventions behind the figures. These are properties of how
+      the CLIENT runs their book, not of any particular file, so they are asked
+      during onboarding and reused for every delivery afterwards.
+
+      Asked, not demanded. Making them block approval would stop an existing
+      client being brought in on records that never captured them, and would
+      change what "complete" means for every onboarding already in flight.
+      Whether any should become mandatory is a governance decision, and one to
+      take deliberately rather than as a side effect of adding the questions.
+
+      Trakt cannot work these out by reading data: two lenders can send the same
+      column name and mean different things by it. What Trakt CAN work out — the
+      format, the column names, the mapping — it does not ask for. Those live in
+      "How to read each file", which is deferred until a file exists.
+    fields:
+
+      - key: balance_definition
+        label: What a balance means
+        help: >-
+          Whether balances include accrued interest, fees or arrears, and at
+          what point in the month they are struck.
+        scope: client
+        source: client_supplied
+        type: multiline
+        max_length: 2000
+        consumers: [Onboarding record, first-delivery mapping review, validation]
+        writes_to: onboarding_record
+
+      - key: gross_net_convention
+        label: Gross or net amounts
+        help: >-
+          Whether the amounts you report are gross or net, and of what — fees,
+          charges, recoveries.
+        scope: client
+        source: client_supplied
+        type: multiline
+        max_length: 2000
+        consumers: [Onboarding record, validation]
+        writes_to: onboarding_record
+
+      - key: units_and_currency
+        label: Units and currency
+        help: >-
+          Whether amounts are in units, thousands or millions, and in which
+          currency.
+        scope: client
+        source: client_supplied
+        type: text
+        max_length: 200
+        consumers: [Onboarding record, validation]
+        writes_to: onboarding_record
+
+      - key: cut_off_convention
+        label: Reporting cut-off
+        help: >-
+          The point at which a reporting period closes for you — calendar
+          month end, a fixed business day, or something else.
+        scope: client
+        source: client_supplied
+        type: multiline
+        max_length: 2000
+        consumers: [Onboarding record, validation]
+        writes_to: onboarding_record
+
+      - key: measure_basis
+        label: Point in time or cumulative
+        help: >-
+          Whether the figures you send describe a moment, a period, or a
+          running total.
+        scope: client
+        source: client_supplied
+        type: enum
+        options:
+          - value: point_in_time
+            label: Point in time, as at the reporting date
+          - value: cumulative
+            label: Cumulative since inception
+          - value: period
+            label: For the reporting period only
+          - value: mixed
+            label: A mixture — described above
+        consumers: [Onboarding record, validation]
+        writes_to: onboarding_record
+
+      - key: cashflow_basis
+        label: Actual or forecast cashflows
+        help: >-
+          Whether the cashflows you send are what actually happened, what you
+          expect to happen, or both — and how the two are distinguished.
+        scope: client
+        source: client_supplied
+        type: enum
+        # Only worth asking of a client who is sending cashflows at all, which
+        # follows from the products they receive.
+        asked_when: "reporting.products contains mi"
+        options:
+          - value: actual
+            label: Actual, as executed
+          - value: forecast
+            label: Forecast or expected
+          - value: both
+            label: Both, distinguished in the file
+        consumers: [Onboarding record, validation]
+        writes_to: onboarding_record
+
+      - key: valuation_basis
+        label: How valuations are struck
+        help: >-
+          Whose valuation it is, how old it may be, and whether it is indexed
+          between full valuations.
+        scope: client
+        source: client_supplied
+        type: multiline
+        # Valuations only matter where a product reports on them.
+        asked_when: "reporting.products contains mi"
+        max_length: 2000
+        consumers: [Onboarding record, validation]
+        writes_to: onboarding_record
+
+      - key: accrued_interest_treatment
+        label: How accrued interest is treated
+        help: >-
+          Whether interest is rolled into the balance, reported separately, or
+          both — and from which date it accrues.
+        scope: client
+        source: client_supplied
+        type: multiline
+        asked_when: "reporting.products contains mi"
+        max_length: 2000
+        consumers: [Onboarding record, validation]
+        writes_to: onboarding_record
+
+      - key: redemption_definition
+        label: When a loan counts as redeemed
+        help: >-
+          What you treat as a redemption or completion, and the date you use
+          for it.
+        scope: client
+        source: client_supplied
+        type: multiline
+        max_length: 2000
+        consumers: [Onboarding record, validation]
+        writes_to: onboarding_record
+
+      - key: status_definitions
+        label: What your account statuses mean
+        help: >-
+          Any status of your own — arrears bands, holds, forbearance — and what
+          each one means.
+        scope: client
+        source: client_supplied
+        type: multiline
+        max_length: 4000
+        consumers: [Onboarding record, validation]
+        writes_to: onboarding_record
+
+  # -----------------------------------------------------------------------
+  - key: data_definitions
+    label: How to read each file
+    # Deferred by the CATALOGUE, not by code. A question about what a column in
+    # a file holds cannot be asked before the client has told Trakt which files
+    # there are — and most of what would go here, Trakt reads for itself.
+    deferred_until: >-
+      the client has sent a representative file, because these describe a FILE
+      rather than the business behind it
+    help: >-
+      File-specific technical detail, asked at the first delivery rather than
+      during onboarding. Trakt learns the canonical mapping, the datatypes, the
+      aliases and the schema fingerprint from the file itself, through the
+      existing mapping path; what is asked here is only what remains once it
+      has, and only about a file that exists.
     repeatable: true
     repeatable_key: data_definitions
     item_label_field: source_file
@@ -856,10 +1023,11 @@ sections:
         writes_to: onboarding_record
 
       - key: proprietary_fields
-        label: Fields that need explaining
+        label: Source columns that need explaining
         help: >-
-          Any column whose name would not tell Trakt what it holds, with the
-          client's own definition.
+          Any column in THIS file whose name would not tell Trakt what it holds,
+          with the client's own definition. The business meaning behind the
+          numbers is asked during onboarding, not here.
         scope: delivery
         source: client_supplied
         type: multiline
@@ -867,33 +1035,11 @@ sections:
         consumers: [First-delivery mapping review]
         writes_to: onboarding_record
 
-      - key: units_and_currency
-        label: Units and currency
-        help: Whether amounts are in units, thousands or millions, and in which
-          currency.
-        scope: delivery
-        source: client_supplied
-        type: text
-        max_length: 200
-        consumers: [First-delivery mapping review, validation]
-        writes_to: onboarding_record
-
-      - key: balance_definition
-        label: What a balance means
-        help: >-
-          Whether balances include accrued interest, fees or arrears, and
-          whether they are gross or net.
-        scope: delivery
-        source: client_supplied
-        type: multiline
-        max_length: 2000
-        consumers: [First-delivery mapping review, validation]
-        writes_to: onboarding_record
-
       - key: date_conventions
-        label: Date conventions
-        help: The date format used, and whether dates are inclusive of the
-          reporting day.
+        label: Date format and datatype notes
+        help: >-
+          The date format used in this file, and anything about how values are
+          typed that Trakt should not have to guess.
         scope: delivery
         source: client_supplied
         type: text
@@ -901,27 +1047,11 @@ sections:
         consumers: [First-delivery mapping review]
         writes_to: onboarding_record
 
-      - key: measure_basis
-        label: Point in time or cumulative
-        scope: delivery
-        source: client_supplied
-        type: enum
-        options:
-          - value: point_in_time
-            label: Point in time, as at the reporting date
-          - value: cumulative
-            label: Cumulative since inception
-          - value: period
-            label: For the reporting period only
-          - value: mixed
-            label: A mixture — described above
-        consumers: [First-delivery mapping review, validation]
-        writes_to: onboarding_record
-
       - key: known_limitations
-        label: Known data-quality limitations
-        help: Anything the client already knows is missing, estimated or
-          unreliable.
+        label: Known data-quality behaviour in this file
+        help: >-
+          Anything in this file the client already knows is missing, estimated
+          or unreliable.
         scope: delivery
         source: client_supplied
         type: multiline
@@ -929,7 +1059,6 @@ sections:
         consumers: [Onboarding record, validation review]
         writes_to: onboarding_record
 
-  # -----------------------------------------------------------------------
   - key: access
     label: Who needs access
     help: >-

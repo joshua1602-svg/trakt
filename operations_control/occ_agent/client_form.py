@@ -75,9 +75,14 @@ STEPS: Tuple[Dict[str, Any], ...] = (
     {"key": "access", "label": "Who needs access",
      "help": "People at your end who need Trakt, or who receive reports.",
      "sections": ("access",)},
-    {"key": "data", "label": "About your data",
-     "help": "What your numbers mean. Trakt works out the FORMAT itself — "
-             "these questions are about meaning, which it cannot.",
+    {"key": "meaning", "label": "What your numbers mean",
+     "help": "The conventions behind your figures. Trakt works out the FORMAT "
+             "of a file itself; what it cannot work out is what you mean by a "
+             "balance, a redemption or a valuation.",
+     "sections": ("data_semantics",)},
+    {"key": "data", "label": "How to read each file",
+     "help": "File-specific detail, asked once a file exists. Most of it Trakt "
+             "reads for itself.",
      "sections": ("data_definitions",)},
 )
 
@@ -261,8 +266,9 @@ def build(case: OnboardingCase, *, cat: Optional[Catalogue] = None
             form.steps.append(step)
 
     # A deferred section is not absent, it is not open yet. Say which, and why,
-    # so an operator can see the whole shape of what will be asked.
-    for section_key, trigger in _classification.DEFERRED_SECTIONS.items():
+    # so an operator can see the whole shape of what will be asked. Which
+    # sections those are is the catalogue's own declaration.
+    for section_key, trigger in _classification.deferred_sections(cat).items():
         section = cat.section(section_key)
         if section is None:
             continue

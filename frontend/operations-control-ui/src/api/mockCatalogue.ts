@@ -23,6 +23,7 @@ export const CATALOGUE = {
       "item_label_field": "",
       "min_items": 0,
       "derived_from": "",
+      "deferred_until": "",
       "from_regime": false,
       "fields": [
         {
@@ -212,6 +213,7 @@ export const CATALOGUE = {
       "item_label_field": "legal_name",
       "min_items": 1,
       "derived_from": "",
+      "deferred_until": "",
       "from_regime": false,
       "fields": [
         {
@@ -464,6 +466,7 @@ export const CATALOGUE = {
       "item_label_field": "",
       "min_items": 0,
       "derived_from": "",
+      "deferred_until": "",
       "from_regime": false,
       "fields": [
         {
@@ -668,6 +671,7 @@ export const CATALOGUE = {
       "item_label_field": "display_name",
       "min_items": 1,
       "derived_from": "",
+      "deferred_until": "",
       "from_regime": false,
       "fields": [
         {
@@ -982,6 +986,7 @@ export const CATALOGUE = {
       "item_label_field": "source_key",
       "min_items": 0,
       "derived_from": "portfolios",
+      "deferred_until": "",
       "from_regime": false,
       "fields": [
         {
@@ -1377,6 +1382,7 @@ export const CATALOGUE = {
       "item_label_field": "",
       "min_items": 0,
       "derived_from": "",
+      "deferred_until": "",
       "from_regime": false,
       "fields": [
         {
@@ -1419,6 +1425,7 @@ export const CATALOGUE = {
       "item_label_field": "",
       "min_items": 0,
       "derived_from": "",
+      "deferred_until": "",
       "from_regime": true,
       "fields": [
         {
@@ -2074,6 +2081,7 @@ export const CATALOGUE = {
       "item_label_field": "",
       "min_items": 0,
       "derived_from": "",
+      "deferred_until": "",
       "from_regime": false,
       "fields": [
         {
@@ -2306,14 +2314,340 @@ export const CATALOGUE = {
       ]
     },
     {
+      "key": "data_semantics",
+      "label": "What your numbers mean",
+      "help": "The business conventions behind the figures. These are properties of how the CLIENT runs their book, not of any particular file, so they are asked during onboarding and reused for every delivery afterwards.\nTrakt cannot work these out by reading data: two lenders can send the same column name and mean different things by it. What Trakt CAN work out — the format, the column names, the mapping — it does not ask for. Those live in \"How to read each file\", which is deferred until a file exists.",
+      "repeatable": false,
+      "repeatable_key": "",
+      "item_label_field": "",
+      "min_items": 0,
+      "derived_from": "",
+      "deferred_until": "",
+      "from_regime": false,
+      "fields": [
+        {
+          "key": "balance_definition",
+          "label": "What a balance means",
+          "scope": "client",
+          "source": "client_supplied",
+          "type": "multiline",
+          "help": "Whether balances include accrued interest, fees or arrears, and at what point in the month they are struck.",
+          "required": true,
+          "required_when": "",
+          "asked_when": "",
+          "validation": "",
+          "options": [],
+          "options_from": "",
+          "default": null,
+          "derived_default": "",
+          "max_length": 2000,
+          "unique_across": "",
+          "consumers": [
+            "Onboarding record",
+            "first-delivery mapping review",
+            "validation"
+          ],
+          "writes_to": "onboarding_record",
+          "evidence_required": false,
+          "sensitive": false,
+          "amendable": true,
+          "regime_code": "",
+          "product": ""
+        },
+        {
+          "key": "gross_net_convention",
+          "label": "Gross or net amounts",
+          "scope": "client",
+          "source": "client_supplied",
+          "type": "multiline",
+          "help": "Whether the amounts you report are gross or net, and of what — fees, charges, recoveries.",
+          "required": true,
+          "required_when": "",
+          "asked_when": "",
+          "validation": "",
+          "options": [],
+          "options_from": "",
+          "default": null,
+          "derived_default": "",
+          "max_length": 2000,
+          "unique_across": "",
+          "consumers": [
+            "Onboarding record",
+            "validation"
+          ],
+          "writes_to": "onboarding_record",
+          "evidence_required": false,
+          "sensitive": false,
+          "amendable": true,
+          "regime_code": "",
+          "product": ""
+        },
+        {
+          "key": "units_and_currency",
+          "label": "Units and currency",
+          "scope": "client",
+          "source": "client_supplied",
+          "type": "text",
+          "help": "Whether amounts are in units, thousands or millions, and in which currency.",
+          "required": true,
+          "required_when": "",
+          "asked_when": "",
+          "validation": "",
+          "options": [],
+          "options_from": "",
+          "default": null,
+          "derived_default": "",
+          "max_length": 200,
+          "unique_across": "",
+          "consumers": [
+            "Onboarding record",
+            "validation"
+          ],
+          "writes_to": "onboarding_record",
+          "evidence_required": false,
+          "sensitive": false,
+          "amendable": true,
+          "regime_code": "",
+          "product": ""
+        },
+        {
+          "key": "cut_off_convention",
+          "label": "Reporting cut-off",
+          "scope": "client",
+          "source": "client_supplied",
+          "type": "multiline",
+          "help": "The point at which a reporting period closes for you — calendar month end, a fixed business day, or something else.",
+          "required": true,
+          "required_when": "",
+          "asked_when": "",
+          "validation": "",
+          "options": [],
+          "options_from": "",
+          "default": null,
+          "derived_default": "",
+          "max_length": 2000,
+          "unique_across": "",
+          "consumers": [
+            "Onboarding record",
+            "validation"
+          ],
+          "writes_to": "onboarding_record",
+          "evidence_required": false,
+          "sensitive": false,
+          "amendable": true,
+          "regime_code": "",
+          "product": ""
+        },
+        {
+          "key": "measure_basis",
+          "label": "Point in time or cumulative",
+          "scope": "client",
+          "source": "client_supplied",
+          "type": "enum",
+          "help": "Whether the figures you send describe a moment, a period, or a running total.",
+          "required": true,
+          "required_when": "",
+          "asked_when": "",
+          "validation": "enum",
+          "options": [
+            {
+              "value": "point_in_time",
+              "label": "Point in time, as at the reporting date"
+            },
+            {
+              "value": "cumulative",
+              "label": "Cumulative since inception"
+            },
+            {
+              "value": "period",
+              "label": "For the reporting period only"
+            },
+            {
+              "value": "mixed",
+              "label": "A mixture — described above"
+            }
+          ],
+          "options_from": "",
+          "default": null,
+          "derived_default": "",
+          "max_length": null,
+          "unique_across": "",
+          "consumers": [
+            "Onboarding record",
+            "validation"
+          ],
+          "writes_to": "onboarding_record",
+          "evidence_required": false,
+          "sensitive": false,
+          "amendable": true,
+          "regime_code": "",
+          "product": ""
+        },
+        {
+          "key": "cashflow_basis",
+          "label": "Actual or forecast cashflows",
+          "scope": "client",
+          "source": "client_supplied",
+          "type": "enum",
+          "help": "Whether the cashflows you send are what actually happened, what you expect to happen, or both — and how the two are distinguished.",
+          "required": false,
+          "required_when": "",
+          "asked_when": "reporting.products contains mi",
+          "validation": "enum",
+          "options": [
+            {
+              "value": "actual",
+              "label": "Actual, as executed"
+            },
+            {
+              "value": "forecast",
+              "label": "Forecast or expected"
+            },
+            {
+              "value": "both",
+              "label": "Both, distinguished in the file"
+            }
+          ],
+          "options_from": "",
+          "default": null,
+          "derived_default": "",
+          "max_length": null,
+          "unique_across": "",
+          "consumers": [
+            "Onboarding record",
+            "validation"
+          ],
+          "writes_to": "onboarding_record",
+          "evidence_required": false,
+          "sensitive": false,
+          "amendable": true,
+          "regime_code": "",
+          "product": ""
+        },
+        {
+          "key": "valuation_basis",
+          "label": "How valuations are struck",
+          "scope": "client",
+          "source": "client_supplied",
+          "type": "multiline",
+          "help": "Whose valuation it is, how old it may be, and whether it is indexed between full valuations.",
+          "required": false,
+          "required_when": "",
+          "asked_when": "reporting.products contains mi",
+          "validation": "",
+          "options": [],
+          "options_from": "",
+          "default": null,
+          "derived_default": "",
+          "max_length": 2000,
+          "unique_across": "",
+          "consumers": [
+            "Onboarding record",
+            "validation"
+          ],
+          "writes_to": "onboarding_record",
+          "evidence_required": false,
+          "sensitive": false,
+          "amendable": true,
+          "regime_code": "",
+          "product": ""
+        },
+        {
+          "key": "accrued_interest_treatment",
+          "label": "How accrued interest is treated",
+          "scope": "client",
+          "source": "client_supplied",
+          "type": "multiline",
+          "help": "Whether interest is rolled into the balance, reported separately, or both — and from which date it accrues.",
+          "required": false,
+          "required_when": "",
+          "asked_when": "reporting.products contains mi",
+          "validation": "",
+          "options": [],
+          "options_from": "",
+          "default": null,
+          "derived_default": "",
+          "max_length": 2000,
+          "unique_across": "",
+          "consumers": [
+            "Onboarding record",
+            "validation"
+          ],
+          "writes_to": "onboarding_record",
+          "evidence_required": false,
+          "sensitive": false,
+          "amendable": true,
+          "regime_code": "",
+          "product": ""
+        },
+        {
+          "key": "redemption_definition",
+          "label": "When a loan counts as redeemed",
+          "scope": "client",
+          "source": "client_supplied",
+          "type": "multiline",
+          "help": "What you treat as a redemption or completion, and the date you use for it.",
+          "required": false,
+          "required_when": "",
+          "asked_when": "",
+          "validation": "",
+          "options": [],
+          "options_from": "",
+          "default": null,
+          "derived_default": "",
+          "max_length": 2000,
+          "unique_across": "",
+          "consumers": [
+            "Onboarding record",
+            "validation"
+          ],
+          "writes_to": "onboarding_record",
+          "evidence_required": false,
+          "sensitive": false,
+          "amendable": true,
+          "regime_code": "",
+          "product": ""
+        },
+        {
+          "key": "status_definitions",
+          "label": "What your account statuses mean",
+          "scope": "client",
+          "source": "client_supplied",
+          "type": "multiline",
+          "help": "Any status of your own — arrears bands, holds, forbearance — and what each one means.",
+          "required": false,
+          "required_when": "",
+          "asked_when": "",
+          "validation": "",
+          "options": [],
+          "options_from": "",
+          "default": null,
+          "derived_default": "",
+          "max_length": 4000,
+          "unique_across": "",
+          "consumers": [
+            "Onboarding record",
+            "validation"
+          ],
+          "writes_to": "onboarding_record",
+          "evidence_required": false,
+          "sensitive": false,
+          "amendable": true,
+          "regime_code": "",
+          "product": ""
+        }
+      ]
+    },
+    {
       "key": "data_definitions",
-      "label": "How to read the data",
-      "help": "What the client's own fields MEAN. Not a field mapping — Trakt learns the mapping from the first representative delivery and approves it through the existing mapping path. What it cannot learn is the business meaning behind a number, so that is asked here and kept with the client's record.",
+      "label": "How to read each file",
+      "help": "File-specific technical detail, asked at the first delivery rather than during onboarding. Trakt learns the canonical mapping, the datatypes, the aliases and the schema fingerprint from the file itself, through the existing mapping path; what is asked here is only what remains once it has, and only about a file that exists.",
       "repeatable": true,
       "repeatable_key": "data_definitions",
       "item_label_field": "source_file",
       "min_items": 0,
       "derived_from": "",
+      "deferred_until": "the client has sent a representative file, because these describe a FILE rather than the business behind it",
       "from_regime": false,
       "fields": [
         {
@@ -2374,11 +2708,11 @@ export const CATALOGUE = {
         },
         {
           "key": "proprietary_fields",
-          "label": "Fields that need explaining",
+          "label": "Source columns that need explaining",
           "scope": "delivery",
           "source": "client_supplied",
           "type": "multiline",
-          "help": "Any column whose name would not tell Trakt what it holds, with the client's own definition.",
+          "help": "Any column in THIS file whose name would not tell Trakt what it holds, with the client's own definition. The business meaning behind the numbers is asked during onboarding, not here.",
           "required": false,
           "required_when": "",
           "asked_when": "",
@@ -2400,68 +2734,12 @@ export const CATALOGUE = {
           "product": ""
         },
         {
-          "key": "units_and_currency",
-          "label": "Units and currency",
-          "scope": "delivery",
-          "source": "client_supplied",
-          "type": "text",
-          "help": "Whether amounts are in units, thousands or millions, and in which currency.",
-          "required": false,
-          "required_when": "",
-          "asked_when": "",
-          "validation": "",
-          "options": [],
-          "options_from": "",
-          "default": null,
-          "derived_default": "",
-          "max_length": 200,
-          "unique_across": "",
-          "consumers": [
-            "First-delivery mapping review",
-            "validation"
-          ],
-          "writes_to": "onboarding_record",
-          "evidence_required": false,
-          "sensitive": false,
-          "amendable": true,
-          "regime_code": "",
-          "product": ""
-        },
-        {
-          "key": "balance_definition",
-          "label": "What a balance means",
-          "scope": "delivery",
-          "source": "client_supplied",
-          "type": "multiline",
-          "help": "Whether balances include accrued interest, fees or arrears, and whether they are gross or net.",
-          "required": false,
-          "required_when": "",
-          "asked_when": "",
-          "validation": "",
-          "options": [],
-          "options_from": "",
-          "default": null,
-          "derived_default": "",
-          "max_length": 2000,
-          "unique_across": "",
-          "consumers": [
-            "First-delivery mapping review",
-            "validation"
-          ],
-          "writes_to": "onboarding_record",
-          "evidence_required": false,
-          "sensitive": false,
-          "amendable": true,
-          "regime_code": "",
-          "product": ""
-        },
-        {
           "key": "date_conventions",
-          "label": "Date conventions",
+          "label": "Date format and datatype notes",
           "scope": "delivery",
           "source": "client_supplied",
           "type": "text",
-          "help": "The date format used, and whether dates are inclusive of the reporting day.",
+          "help": "The date format used in this file, and anything about how values are typed that Trakt should not have to guess.",
           "required": false,
           "required_when": "",
           "asked_when": "",
@@ -2483,57 +2761,12 @@ export const CATALOGUE = {
           "product": ""
         },
         {
-          "key": "measure_basis",
-          "label": "Point in time or cumulative",
-          "scope": "delivery",
-          "source": "client_supplied",
-          "type": "enum",
-          "help": "",
-          "required": false,
-          "required_when": "",
-          "asked_when": "",
-          "validation": "enum",
-          "options": [
-            {
-              "value": "point_in_time",
-              "label": "Point in time, as at the reporting date"
-            },
-            {
-              "value": "cumulative",
-              "label": "Cumulative since inception"
-            },
-            {
-              "value": "period",
-              "label": "For the reporting period only"
-            },
-            {
-              "value": "mixed",
-              "label": "A mixture — described above"
-            }
-          ],
-          "options_from": "",
-          "default": null,
-          "derived_default": "",
-          "max_length": null,
-          "unique_across": "",
-          "consumers": [
-            "First-delivery mapping review",
-            "validation"
-          ],
-          "writes_to": "onboarding_record",
-          "evidence_required": false,
-          "sensitive": false,
-          "amendable": true,
-          "regime_code": "",
-          "product": ""
-        },
-        {
           "key": "known_limitations",
-          "label": "Known data-quality limitations",
+          "label": "Known data-quality behaviour in this file",
           "scope": "delivery",
           "source": "client_supplied",
           "type": "multiline",
-          "help": "Anything the client already knows is missing, estimated or unreliable.",
+          "help": "Anything in this file the client already knows is missing, estimated or unreliable.",
           "required": false,
           "required_when": "",
           "asked_when": "",
@@ -2566,6 +2799,7 @@ export const CATALOGUE = {
       "item_label_field": "user_name",
       "min_items": 0,
       "derived_from": "",
+      "deferred_until": "",
       "from_regime": false,
       "fields": [
         {
@@ -3536,8 +3770,12 @@ export const STEPS: { key: string; label: string }[] = [
     "label": "Regulatory information"
   },
   {
+    "key": "data_semantics",
+    "label": "What your numbers mean"
+  },
+  {
     "key": "data_definitions",
-    "label": "How to read the data"
+    "label": "How to read each file"
   },
   {
     "key": "access",

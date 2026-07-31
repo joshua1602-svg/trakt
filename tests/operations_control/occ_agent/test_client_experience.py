@@ -79,7 +79,7 @@ def test_every_override_names_a_real_field():
 
 def test_every_deferred_section_is_a_real_section():
     cat = catalogue()
-    for key in _classification.DEFERRED_SECTIONS:
+    for key in _classification.deferred_sections(cat):
         assert cat.section(key) is not None, key
 
 
@@ -404,3 +404,216 @@ def test_the_classification_is_pure(opened, service):
     _classification.classify_all(opened.case.answers,
                                  cat=service.onboarding.catalogue)
     assert opened.case.answers == snapshot
+
+
+# --------------------------------------------------------------------------- #
+# Business meaning is asked; technical file detail is deferred
+# --------------------------------------------------------------------------- #
+
+#: What only the client can tell Trakt, because two lenders can send the same
+#: column name and mean different things by it.
+BUSINESS_DEFINITIONS = (
+    "balance_definition", "valuation_basis", "cashflow_basis",
+    "units_and_currency", "cut_off_convention", "accrued_interest_treatment",
+    "redemption_definition", "status_definitions", "gross_net_convention",
+    "measure_basis",
+)
+
+#: What the Onboarding Agent reads out of the file itself.
+TECHNICAL_DEFINITIONS = (
+    "source_file", "description", "proprietary_fields", "date_conventions",
+    "known_limitations",
+)
+
+
+def test_the_split_is_declared_in_the_catalogue():
+    """Two sections, and the deferral is the catalogue's own declaration."""
+    cat = catalogue()
+    business = cat.section("data_semantics")
+    technical = cat.section("data_definitions")
+    assert business is not None and technical is not None
+    assert business.deferred_until == "", \
+        "business meaning is asked during onboarding, not deferred"
+    assert technical.deferred_until, \
+        "file-specific detail must be deferred by the catalogue"
+    assert {f.key for f in business.fields} == set(BUSINESS_DEFINITIONS)
+    assert {f.key for f in technical.fields} == set(TECHNICAL_DEFINITIONS)
+
+
+def test_the_deferral_is_not_hardcoded():
+    """``deferred_sections`` reads the catalogue rather than holding a list."""
+    cat = catalogue()
+    deferred = _classification.deferred_sections(cat)
+    assert deferred == {s.key: s.deferred_until for s in cat.sections
+                        if s.deferred_until}
+    assert "data_definitions" in deferred
+    assert "data_semantics" not in deferred
+
+
+def test_business_definitions_appear_in_the_initial_pack(opened, service):
+    """1 — what the numbers MEAN is asked during onboarding."""
+    form = _client_form.build(opened.case, cat=service.onboarding.catalogue)
+    keys = set(form.keys())
+    for always in ("balance_definition", "gross_net_convention",
+                   "units_and_currency", "cut_off_convention",
+                   "measure_basis", "redemption_definition",
+                   "status_definitions"):
+        assert f"data_semantics.{always}" in keys, always
+    step = next(s for s in form.steps if s.key == "meaning")
+    assert step.question_count == 10
+    # Asked, not demanded: making these block approval would stop an existing
+    # client being brought in on records that never captured them. Whether any
+    # should become mandatory is a governance decision taken separately.
+    assert step.required_count == 0
+
+
+def test_business_definitions_are_conditional_where_applicable(service):
+    """1 — "where applicable" is the catalogue's condition, not a constant."""
+    cat = service.onboarding.catalogue
+    conditional = ("valuation_basis", "cashflow_basis",
+                   "accrued_interest_treatment")
+    for key in conditional:
+        assert cat.field("data_semantics", key).asked_when, key
+
+    # A client who receives MI is asked them.
+    with_mi = service.create_case(
+        tenant=TENANT_A, initiating_user=ACTOR,
+        instruction="Onboard Northstar Lending. UK equity release. Monthly "
+                    "portfolio MI. Portfolio id direct_101.")
+    asked = set(_client_form.build(with_mi.case, cat=cat).keys())
+    for key in conditional:
+        assert f"data_semantics.{key}" in asked, key
+
+    # A client who has selected no product yet is not.
+    without = service.create_case(
+        tenant=TENANT_A, initiating_user=ACTOR,
+        instruction="Onboard Kestrel Mutual. UK equity release. Portfolio id "
+                    "direct_601.")
+    assert "mi" not in without.case.products
+    quiet = set(_client_form.build(without.case, cat=cat).keys())
+    for key in conditional:
+        assert f"data_semantics.{key}" not in quiet, key
+
+
+def test_technical_file_detail_stays_deferred(opened, service):
+    """2 — mappings, schema and file formatting are never in the pack."""
+    cat = service.onboarding.catalogue
+    form = _client_form.build(opened.case, cat=cat)
+    keys = set(form.keys())
+    for technical in TECHNICAL_DEFINITIONS:
+        assert f"data_definitions.{technical}" not in keys, technical
+    # And it is reported as waiting, not as absent.
+    locked = {row["step"] for row in form.locked}
+    assert "data" in locked
+
+    rows = _classification.classify_all(opened.case.answers, cat=cat)
+    deferred = {r.field for r in rows
+                if r.section == "data_definitions"}
+    assert deferred == set(TECHNICAL_DEFINITIONS)
+    for row in rows:
+        if row.section == "data_definitions":
+            assert row.category == _classification.FIRST_DELIVERY
+
+
+def test_mappings_and_fingerprints_are_still_not_collected_at_all():
+    """2 — the governed `not_collected` decision is untouched."""
+    not_collected = {row["key"] for row in catalogue().not_collected}
+    assert "file_role_schemas" in not_collected
+    assert "expected_schema_fingerprint" in not_collected
+    # And no section asks for one under another name.
+    for section in catalogue().sections:
+        for f in section.fields:
+            assert "fingerprint" not in f.key, f"{section.key}.{f.key}"
+            assert "canonical_field" not in f.key, f"{section.key}.{f.key}"
+
+
+def test_the_pack_stays_progressive_rather_than_flat(opened, service):
+    """3 — adding business questions must not revert to a flat projection."""
+    cat = service.onboarding.catalogue
+    declared = sum(len(s.fields) for s in cat.sections)
+    rows = _classification.classify_all(opened.case.answers, cat=cat)
+    form = _client_form.build(opened.case, cat=cat)
+
+    # Still materially fewer questions than fields.
+    assert form.question_count < declared / 2, (
+        f"{form.question_count} questions from {declared} declared fields")
+    # And the reduction is because of the OTHER categories, not truncation.
+    asked = len([r for r in rows if r.client_facing])
+    assert form.question_count == asked
+    for category in (_classification.KNOWN, _classification.FIRST_DELIVERY,
+                     _classification.INTERNAL):
+        assert [r for r in rows if r.category == category], category
+
+
+def test_answering_a_business_definition_removes_it_from_the_pack(opened,
+                                                                  service):
+    """3 — progressive in the other direction: answered questions go away."""
+    cat = service.onboarding.catalogue
+    before = _client_form.build(opened.case, cat=cat).question_count
+    answered = service.submit_client_response(
+        opened, actor=ACTOR,
+        response={"data_semantics.units_and_currency": "Units, GBP.",
+                  "data_semantics.measure_basis": "point_in_time"})
+    after = _client_form.build(answered.case, cat=cat)
+    assert after.question_count == before - 2
+    assert "data_semantics.units_and_currency" not in set(after.keys())
+
+
+# --------------------------------------------------------------------------- #
+# Provenance in the operator review
+# --------------------------------------------------------------------------- #
+
+def test_the_operator_review_distinguishes_where_a_value_came_from(service):
+    """4 — five kinds of "already known", told apart."""
+    from operations_control.occ_agent.scenarios import run_scenario
+
+    run = run_scenario(service, "scenario_a_clean", tenant=TENANT_A,
+                       actor=ACTOR)
+    package = service.build_review_package(run.case)
+    rows = [r for s in package.sections for r in s["rows"]]
+    assert rows
+
+    seen = {r["provenance"] for r in rows}
+    for expected in ("human_supplied", "client_supplied", "trakt_derived",
+                     "inherited_default", "artefact_derived"):
+        assert expected in seen, f"{expected} not distinguished; saw {seen}"
+
+
+def test_no_reviewed_value_is_left_unattributed(service):
+    """4 — every value says something; none reads "not recorded"."""
+    from operations_control.occ_agent.scenarios import run_scenario
+
+    run = run_scenario(service, "scenario_a_clean", tenant=TENANT_A,
+                       actor=ACTOR)
+    package = service.build_review_package(run.case)
+    for section in package.sections:
+        for row in section["rows"]:
+            assert row["provenance"], f"{row['label']} has no provenance"
+            assert row["provenance_label"] != "not recorded", row["label"]
+
+
+def test_every_provenance_value_has_a_human_label():
+    from operations_control.occ_agent import review as _review
+    from operations_control.occ_agent.interpretation import PROVENANCE_SOURCES
+
+    for source in PROVENANCE_SOURCES:
+        assert source in _review.PROVENANCE_LABELS, source
+
+
+def test_a_default_and_a_derivation_read_differently(service, opened):
+    """The distinction that matters: what Trakt chose vs what it computed."""
+    from operations_control.occ_agent import review as _review
+
+    package = service.build_review_package(opened)
+    # Keyed by SECTION and field: two sections declare a reporting currency,
+    # and they come from different places.
+    by_path = {f"{s['key']}.{r['field']}": r
+               for s in package.sections for r in s["rows"]}
+    # A governed default Trakt applied.
+    assert by_path["client.reporting_currency"]["provenance"] == \
+        "inherited_default"
+    # Something Trakt worked out from another answer.
+    assert by_path["entities.entity_id"]["provenance"] == "trakt_derived"
+    # And the labels are not the same sentence.
+    assert (_review.PROVENANCE_LABELS["inherited_default"]
+            != _review.PROVENANCE_LABELS["trakt_derived"])

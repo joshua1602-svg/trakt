@@ -94,6 +94,15 @@ async function completeCase(client: MockOpsClient) {
       },
     },
   });
+  // What the client's numbers MEAN. Business conventions Trakt cannot read out
+  // of a file, so onboarding asks for them and a complete case answers them.
+  await client.saveCaseStep(id, "data_semantics", {
+    balance_definition: "Current principal only; accrued interest separate.",
+    gross_net_convention: "Gross of fees and charges.",
+    units_and_currency: "Units, SEK.",
+    cut_off_convention: "Calendar month end.",
+    measure_basis: "point_in_time",
+  });
   return id;
 }
 

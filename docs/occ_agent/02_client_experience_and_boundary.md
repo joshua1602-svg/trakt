@@ -36,23 +36,66 @@ yet told Trakt about.
 `operations_control/occ_agent/classification.py` assigns every field exactly one
 category, **derived** from the catalogue's own `source` axis plus two
 adjustments it cannot express: an already-answered field is category 1 whatever
-its source, and `DEFERRED_SECTIONS` names sections whose questions need
-something else to exist first. A five-entry `OVERRIDES` map covers fields whose
-`source` is right for generation but wrong for who to ask.
+its source, and a section carrying `deferred_until` in the catalogue waits for
+whatever that names. A five-entry `OVERRIDES` map covers fields whose `source`
+is right for generation but wrong for who to ask.
 
 ### Scenario A, after
 
 | # | Category | Count | What happens |
 |---|---|---:|---|
-| 2 | **Only the client can answer** | **22** | the pack |
+| 2 | **Only the client can answer** | **32** | the pack |
 | 1 | Already known | 22 | pre-populated; 11 offered for confirmation |
 | 3 | Trakt works it out | 0 | see note below |
-| 4 | Learned from the first delivery | 10 | never in the initial pack |
+| 4 | Learned from the first delivery | 7 | never in the initial pack |
 | 5 | Internal operator decision | 7 | OCC workflow only |
 | — | Does not apply to this client | 2 | excluded by a catalogue condition |
-| | **Total classified** | **63** | |
+| | **Total classified** | **70** (of 91 declared) | |
 
-**58 client-facing questions → 22.** Ten are required.
+**58 → 32 client questions**, 10 required, from a catalogue of 91 declared
+fields. The 32 includes ten business-meaning questions the original 58 never
+asked at all — see §1a. The reduction is not truncation: every field not asked
+falls into a reported category.
+
+### 1a. Business meaning versus technical file detail
+
+The original `data_definitions` section mixed two different questions. What a
+balance *means* is a property of how the client runs their book and never
+changes; what column 7 of `loans_202606.csv` holds is a property of a file that
+does not exist yet. They were split:
+
+| Section | Asked | Contents |
+|---|---|---|
+| `data_semantics` | **during onboarding**, all optional | balance definitions · valuation basis · actual vs forecast cashflows · units and currency · reporting cut-off · accrued-interest treatment · redemption and completion · client status definitions · gross vs net |
+| `data_definitions` | **deferred to first delivery** | source file · what it contains · source columns needing explanation · date format and datatype notes · file-specific quality behaviour |
+
+Canonical mappings, schema fingerprints and aliases are not in either — they
+remain in the catalogue's `not_collected` list, learned through the existing
+mapping path.
+
+The deferral is **declared in the catalogue**, not in code:
+
+```yaml
+  - key: data_definitions
+    label: How to read each file
+    deferred_until: >-
+      the client has sent a representative file, because these describe a FILE
+      rather than the business behind it
+```
+
+`Section.deferred_until` is read by `classification.deferred_sections()`; the
+Python constant that used to hold this list is gone, and a test asserts the two
+agree. "Where applicable" is likewise the catalogue's: `valuation_basis`,
+`cashflow_basis` and `accrued_interest_treatment` carry
+`asked_when: "reporting.products contains mi"`, so a client who has selected no
+product is not asked them.
+
+**They are asked, not demanded.** None of the ten is `required`. Making them
+block approval would stop an existing client being brought in on records that
+never captured them — it broke 27 of Client Onboarding's own tests, including
+every migration and amendment path, which is the behaviour those tests exist to
+protect. Whether any should become mandatory is a governance decision worth
+taking deliberately, not a side effect of adding the questions.
 
 **On category 3 being zero.** It is not empty because nothing is derived — it is
 empty because by the time the pack is built, everything derivable has already
@@ -63,22 +106,28 @@ for a value Trakt will derive but has not yet; on a case opened with a thinner
 instruction it is populated. Reporting it as zero rather than folding it into
 category 1 keeps the count honest.
 
-**The 63 vs the catalogue's 84.** Regime fields for products this client did not
+**The 70 vs the catalogue's 91.** Regime fields for products this client did not
 select are excluded entirely — they are not questions, not deferred and not
 internal; they simply do not exist for this client.
 
 ### The full listing for scenario A
 
-**Category 2 — asked (22)**
+**Category 2 — asked (32)** *(\* = required)*
 
-`entities[0]`: `lei`*, `country_of_establishment`*, `registration_number`,
-`registered_address` · `contacts`: `reporting_contact_name`*,
-`reporting_contact_email`*, `operational_contact_name`*,
-`operational_contact_email`*, `reporting_contact_phone`, `authorised_approver` ·
-`portfolios[0]`: `portfolio_type`* · `presentation`: `brand_colour`,
-`logo_uri`, `disclaimer`, `reporting_calendar_note` · `access[0]`: `user_name`*,
-`user_email`*, `user_role`*, `scope_note`, `occ_access_required`,
-`dashboard_access_required`, `report_recipient`  *(\* = required)*
+* `entities[0]`: `lei`*, `country_of_establishment`*, `registration_number`,
+  `registered_address`
+* `contacts`: `reporting_contact_name`*, `reporting_contact_email`*,
+  `operational_contact_name`*, `operational_contact_email`*,
+  `reporting_contact_phone`, `authorised_approver`
+* `portfolios[0]`: `portfolio_type`*
+* `data_semantics`: `balance_definition`, `gross_net_convention`,
+  `units_and_currency`, `cut_off_convention`, `measure_basis`,
+  `cashflow_basis`, `valuation_basis`, `accrued_interest_treatment`,
+  `redemption_definition`, `status_definitions` *(all optional — see above)*
+* `presentation`: `brand_colour`, `logo_uri`, `disclaimer`,
+  `reporting_calendar_note`
+* `access[0]`: `user_name`*, `user_email`*, `user_role`*, `scope_note`,
+  `occ_access_required`, `dashboard_access_required`, `report_recipient`
 
 **Category 1 — pre-populated (22)** — `client.client_name`, `jurisdiction`,
 `reporting_currency`, `time_zone`, `environment`; `entities[0].entity_id`,
@@ -88,7 +137,7 @@ internal; they simply do not exist for this client.
 `reporting.products`; `sources[0].cadence`, `cut_off_convention`,
 `portfolio_id`, `regime_required`
 
-**Category 4 — deferred (10)** — all eight `data_definitions` fields, plus
+**Category 4 — deferred (7)** — all five `data_definitions` fields, plus
 `sources[0].file_format` and `sources[0].expected_files`
 
 **Category 5 — internal (7)** — `client.client_id`,
@@ -107,7 +156,7 @@ question must be answered.
 
 | Conditional on | Declared where | Effect |
 |---|---|---|
-| **Selected product** | `contacts.investor_report_recipients`, four `presentation` fields | branding is only asked of a client who receives an MI surface; an investor-report list only of one who selected investor reporting |
+| **Selected product** | `contacts.investor_report_recipients`, four `presentation` fields, three `data_semantics` fields | branding is only asked of a client who receives an MI surface; an investor-report list only of one who selected investor reporting; a valuation basis only where a product reports on valuations |
 | **Portfolio structure** | `sources.source_party` (`portfolio_type == acquired`) | who sends the file is only asked when it is not the client |
 | **Asset class** | regime sections, via `from_regime` + `f.product` | a product's standing regulatory fields exist only for a client who selected it |
 | **Delivery method** | `sources.delivery_channel` is category 5 | the operator sets the channel; the client is not asked to choose Trakt's plumbing |
@@ -128,8 +177,9 @@ Client-level questions are asked once; each book gets its own group.
 
 | | one portfolio | two portfolios |
 |---|---:|---:|
-| Total questions | 22 | 24 |
+| Total questions | 32 | 34 |
 | `contacts.*` | 6 | **6** |
+| `data_semantics.*` | 10 | **10** |
 | `portfolios[*]` groups | 1 | 2 |
 
 The two extra questions are the second book's, and only the second book's.
@@ -143,7 +193,7 @@ The two extra questions are the second book's, and only the second book's.
 
 Reference: ONB-2026-0001
 
-There are 22 questions for you, 10 of them required. Everything else Trakt
+There are 32 questions for you, 10 of them required. Everything else Trakt
 either already holds or works out itself.
 
 ## Please check these are right
@@ -210,6 +260,25 @@ People at your end who need Trakt, or who receive reports.
 - [optional] **Needs dashboard access**
 - [optional] **Receives reports by email**
 
+## What your numbers mean
+
+The conventions behind your figures. Trakt works out the FORMAT of a file
+itself; what it cannot work out is what you mean by a balance, a redemption or
+a valuation.
+
+- [required] **What a balance means**
+      Whether balances include accrued interest, fees or arrears, and at what
+      point in the month they are struck.
+- [required] **Gross or net amounts**
+- [required] **Units and currency**
+- [required] **Reporting cut-off**
+- [required] **Point in time or cumulative**
+- [optional] **Actual or forecast cashflows**
+- [optional] **How valuations are struck**
+- [optional] **How accrued interest is treated**
+- [optional] **When a loan counts as redeemed**
+- [optional] **What your account statuses mean**
+
 ## Files to send
 
 - **Primary loan tape** — required
@@ -231,9 +300,9 @@ that once it has seen your files, not before.
 Trakt reads these from the first file you send, so there is nothing for you to
 fill in:
 
-- Date conventions · Expected files · Fields that need explaining · File format
-- Known data-quality limitations · Point in time or cumulative · Source file
-- Units and currency · What a balance means · What the file contains
+- Date format and datatype notes · Expected files · File format
+- Known data-quality behaviour in this file · Source columns that need
+  explaining · Source file · What the file contains
 ```
 
 ---
@@ -293,6 +362,28 @@ fixed. Approving this activation does not approve any mapping.
 view: every field, its category, its reason and its provenance.
 
 ---
+
+### 3a. Provenance of pre-populated values
+
+"Already known" was one word for four different claims. The operator review now
+distinguishes them, using the existing `provenance_class` map — the five-category
+model is unchanged:
+
+| `provenance_class` | Reads as | Scenario A |
+|---|---|---:|
+| `human_supplied` | an operator told Trakt | 4 |
+| `client_supplied` | the client told Trakt | 1 |
+| `existing_record` | read from this client's existing record | — |
+| `trakt_derived` | Trakt derived it | 5 |
+| `inherited_default` | a governed default, inherited | 4 |
+| `artefact_derived` | read from a file the client sent | 6 |
+| `human_approved` | the agent proposed it and an operator approved it | 2 |
+
+Where nothing recorded a provenance, `classification.origin_provenance` derives
+one from the field's own `source`, so no value on a review package reads "not
+recorded". Client Onboarding's own sentence is kept as the detail after an em
+dash — *"a governed default, inherited — the currency used in GB"* — because the
+category says what kind and the sentence says which one.
 
 ## 4. How structured client answers are persisted
 
@@ -504,10 +595,18 @@ activation gate. None of it reads a data file.
 
 | Suite | Result |
 |---|---|
-| `tests/operations_control/occ_agent` | **489 passed** |
-| — of which new here | `test_client_experience.py` 34, `test_boundary.py` 23 |
-| Frontend `vitest run` | 143 passed |
+| `tests/operations_control/occ_agent` | **549 passed** |
+| — of which new here | `test_client_experience.py` 46, `test_boundary.py` 23 |
+| Frontend `vitest run` | 146 passed |
 | `npm run lint` (`tsc --noEmit`) | clean |
+
+### Commit signature verification
+
+This environment can **sign** commits but cannot **verify** them locally: the
+configured helper has no verify path, so `git verify-commit` and `%G?` report
+`N` for every commit — including `3d507dc`, which is already on origin and was
+accepted there. The `N` is therefore not evidence of an unsigned commit, and
+re-authoring to chase it only mints new SHAs without changing the result.
 
 ### Whole-repo comparison
 

@@ -122,6 +122,10 @@ class Section:
     item_label_field: str = ""
     min_items: int = 0
     derived_from: str = ""
+    #: When a whole section's questions only make sense once something else
+    #: exists, stated here rather than in code. Non-empty means the section is
+    #: not part of the initial pack, and the text says what has to happen first.
+    deferred_until: str = ""
     fields: List[Field] = field(default_factory=list)
     #: True when the section's fields come from the regime products rather than
     #: from the catalogue itself.
@@ -438,6 +442,7 @@ def load(path: Path = CATALOGUE_PATH,
             key=raw["key"], label=raw.get("label", raw["key"]),
             help=raw.get("help", ""),
             repeatable=bool(raw.get("repeatable")),
+            deferred_until=str(raw.get("deferred_until") or "").strip(),
             repeatable_key=raw.get("repeatable_key", ""),
             item_label_field=raw.get("item_label_field", ""),
             min_items=int(raw.get("min_items") or 0),

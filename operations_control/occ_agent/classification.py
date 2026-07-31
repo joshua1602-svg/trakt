@@ -47,6 +47,14 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Optional
 
+from .interpretation import (
+    PROV_ARTEFACT,
+    PROV_CLIENT,
+    PROV_EXISTING_RECORD,
+    PROV_HUMAN,
+    PROV_INHERITED_DEFAULT,
+    PROV_TRAKT_DERIVED,
+)
 from ..onboarding.catalogue import (
     SOURCE_CLIENT,
     SOURCE_DEFAULT,
@@ -104,14 +112,16 @@ _BY_SOURCE = {
     SOURCE_INFERRED: FIRST_DELIVERY,
 }
 
-#: Sections whose questions cannot be asked in the initial pack because they are
-#: *about* something the client has not told Trakt about yet. Mapped to the
-#: answer that has to exist first.
-DEFERRED_SECTIONS: Dict[str, str] = {
-    # "What does the balance column in this file mean?" needs the file list.
-    # The client annotates their data when they describe or send it, not before.
-    "data_definitions": "the client has listed the files they will send",
-}
+def deferred_sections(cat: Optional[Catalogue] = None) -> Dict[str, str]:
+    """Sections the CATALOGUE defers, and what has to happen first.
+
+    Read from ``deferred_until`` rather than listed here, so which questions
+    wait for a delivery is a governed decision in
+    ``config/onboarding/field_catalogue.yaml`` and not a Python constant this
+    module happens to hold.
+    """
+    cat = cat or catalogue()
+    return {s.key: s.deferred_until for s in cat.sections if s.deferred_until}
 
 #: Fields whose ``source`` is right for *generation* but wrong for *who to ask*.
 #: Deliberately tiny; each entry says why.
@@ -166,7 +176,8 @@ def classify(section: Section, f: Field, *,
              holder: Optional[Dict[str, Any]] = None,
              answers: Optional[Dict[str, Any]] = None,
              cat: Optional[Catalogue] = None,
-             provenance: str = "") -> Classification:
+             provenance: str = "",
+             migrated: bool = False) -> Classification:
     """The one category this field belongs to, given what is already answered."""
     cat = cat or catalogue()
     holder = holder or {}
@@ -185,11 +196,47 @@ def classify(section: Section, f: Field, *,
             required=False, value=value, provenance=provenance)
 
     category, reason = _category(section, f, path, value, answers)
+    # A pre-populated value always says where it came from. Nothing recorded a
+    # provenance for a default Trakt applied or a number it computed, so the
+    # field's own `source` supplies one rather than leaving the operator with
+    # "not recorded" against half the case.
+    recorded = provenance
+    if category == KNOWN:
+        recorded = origin_provenance(f, provenance, migrated=migrated)
     return Classification(
         section=section.key, field=f.key, label=f.label, category=category,
         reason=reason, source=f.source, required=required,
         confirm=_needs_confirmation(category, f, required),
-        value=value, provenance=provenance)
+        value=value, provenance=recorded)
+
+
+#: How a pre-populated value's ORIGIN reads, when nothing has classified it.
+#: Derived from the field's own ``source``, so an operator looking at a value
+#: Trakt filled in can tell which kind of "already known" it is.
+ORIGIN_PROVENANCE = {
+    SOURCE_CLIENT: PROV_CLIENT,
+    SOURCE_OPERATOR: PROV_HUMAN,
+    SOURCE_DEFAULT: PROV_INHERITED_DEFAULT,
+    SOURCE_DERIVED: PROV_TRAKT_DERIVED,
+    SOURCE_SYSTEM: PROV_TRAKT_DERIVED,
+    SOURCE_INFERRED: PROV_ARTEFACT,
+}
+
+
+def origin_provenance(f: Field, recorded: str = "", *,
+                      migrated: bool = False) -> str:
+    """Where a pre-populated value came from.
+
+    What something recorded takes precedence — an answer the client actually
+    gave is client-supplied whatever the catalogue expected. Otherwise the
+    field's own ``source`` says which kind of "already known" this is, which is
+    the distinction an operator needs when reviewing a value nobody typed.
+    """
+    if recorded:
+        return recorded
+    if migrated:
+        return PROV_EXISTING_RECORD
+    return ORIGIN_PROVENANCE.get(f.source, "")
 
 
 def _category(section: Section, f: Field, path: str, value: Any,
@@ -207,8 +254,8 @@ def _category(section: Section, f: Field, path: str, value: Any,
     if _present(value):
         return KNOWN, f"already answered ({_origin(f)})"
 
-    if section.key in DEFERRED_SECTIONS:
-        return FIRST_DELIVERY, f"asked once {DEFERRED_SECTIONS[section.key]}"
+    if section.deferred_until:
+        return FIRST_DELIVERY, f"asked once {section.deferred_until}"
 
     category = _BY_SOURCE.get(f.source, INTERNAL)
     return category, _REASONS[category]
@@ -268,8 +315,8 @@ def _needs_confirmation(category: str, f: Field, required: bool) -> bool:
 
 def classify_all(answers: Optional[Dict[str, Any]] = None, *,
                  cat: Optional[Catalogue] = None,
-                 provenance: Optional[Dict[str, str]] = None
-                 ) -> List[Classification]:
+                 provenance: Optional[Dict[str, str]] = None,
+                 migrated: bool = False) -> List[Classification]:
     """Every field in the catalogue, classified against these answers.
 
     Repeatable sections are classified per item, so a case with two portfolios
@@ -289,7 +336,7 @@ def classify_all(answers: Optional[Dict[str, Any]] = None, *,
                     if _excluded(section, f, products):
                         continue
                     row = classify(section, f, holder=item, answers=answers,
-                                   cat=cat,
+                                   cat=cat, migrated=migrated,
                                    provenance=provenance.get(
                                        f"{section.key}[{index}].{f.key}", ""))
                     row.index, row.item = index, label
@@ -301,6 +348,7 @@ def classify_all(answers: Optional[Dict[str, Any]] = None, *,
                     continue
                 out.append(classify(
                     section, f, holder=block, answers=answers, cat=cat,
+                    migrated=migrated,
                     provenance=provenance.get(f"{section.key}.{f.key}", "")))
     return out
 

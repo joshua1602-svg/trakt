@@ -236,6 +236,18 @@ def _client_response(*, domain: str, country: str = "GB",
         # How the book was acquired is the client's to state, and the pack asks
         # for it: an opening instruction that never says so leaves it open.
         "portfolios.portfolio_type": "direct",
+        # The business conventions behind the numbers. Trakt cannot read these
+        # out of a file — two lenders can send the same column and mean
+        # different things — so onboarding asks, and a scenario answers.
+        "data_semantics.balance_definition":
+            "Current principal only. Accrued interest is reported separately "
+            "and excluded from the balance.",
+        "data_semantics.gross_net_convention":
+            "Gross of fees and charges; recoveries are reported separately.",
+        "data_semantics.units_and_currency": "Units, GBP.",
+        "data_semantics.cut_off_convention":
+            "Calendar month end, struck at close of business.",
+        "data_semantics.measure_basis": "point_in_time",
         **extra,
     }
 

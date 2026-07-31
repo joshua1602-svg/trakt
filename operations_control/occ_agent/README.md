@@ -129,15 +129,23 @@ from the catalogue's own `source` axis:
 
 | # | Category | What happens |
 |---|---|---|
-| 1 | Already known | pre-populated; offered for confirmation when material |
+| 1 | Already known | pre-populated; offered for confirmation when material. The operator review distinguishes operator-supplied, existing-record, client-supplied, Trakt-derived and inherited-default |
 | 2 | **Only the client can answer** | **the pack** |
 | 3 | Trakt works it out | automatic, with provenance |
 | 4 | Learned from the first delivery | never in the initial pack |
 | 5 | Internal operator decision | OCC workflow only |
 
-For scenario A that is **22 client questions instead of 58**, of which 10 are
-required. Everything not asked is *reported* with a reason, so "why is that not
-being asked?" always has an answer.
+For scenario A that is **32 client questions from 91 declared fields**, 10 of
+them required. Everything not asked is *reported* with a reason, so "why is that
+not being asked?" always has an answer.
+
+What the client's numbers MEAN — balance definitions, valuation basis, actual
+versus forecast cashflows, units, cut-off, accrued interest, redemptions,
+statuses, gross versus net — is asked during onboarding, because it is a
+property of how the client runs their book. What is specific to a FILE — its
+columns, its date format, its quality quirks — waits for a file. That split is
+the catalogue's own (`data_semantics` versus `data_definitions`, the latter
+carrying `deferred_until`), not a rule in the pack.
 
 `client_form.py` is how those questions are put and how the answers come back:
 grouped into client-facing steps, conditional on product, asset class, portfolio
