@@ -88,6 +88,34 @@ from . import onboarding_routes  # noqa: E402  (router needs `app` above)
 app.include_router(onboarding_routes.router)
 
 
+def mount_occ_agent(application: FastAPI) -> bool:
+    """Mount the OCC Agent tab's routes, when the feature is switched on.
+
+    Additive and flag-gated: with ``OCC_AGENT_SYNTHETIC_ENABLED`` unset nothing
+    is imported and no route exists, so the live API is byte-for-byte what it
+    was. A failure to mount is logged and swallowed deliberately — a
+    pre-scale capability must never be able to stop the Operations Control API
+    from starting.
+    """
+    from ..occ_agent.policy import feature_enabled
+    if not feature_enabled():
+        return False
+    try:
+        from apps.blob_trigger_app.storage import open_storage
+        from ..occ_agent import api as occ_agent_api
+        from ..occ_agent.service import OccAgentService
+        occ_agent_api.configure(OccAgentService(open_storage()))
+        application.include_router(occ_agent_api.router)
+        logger.info("OCC Agent (synthetic) routes mounted")
+        return True
+    except Exception:  # noqa: BLE001 — never block API startup
+        logger.exception("OCC Agent routes could not be mounted")
+        return False
+
+
+mount_occ_agent(app)
+
+
 @app.exception_handler(OpsError)
 async def _ops_error(request: Request, exc: OpsError):
     return JSONResponse(status_code=exc.http_status,

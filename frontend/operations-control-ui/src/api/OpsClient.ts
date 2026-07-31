@@ -1,4 +1,13 @@
 import type {
+  AgentAudit,
+  AgentMeta,
+  AgentPack,
+  AgentReadinessPackage,
+  AgentStatus,
+  AgentTurn,
+  CaseSummary,
+} from "./agentTypes";
+import type {
   AuditTrail,
   Comparison,
   ConfigCatalogue,
@@ -149,4 +158,39 @@ export interface OpsClient {
   withdrawCase(caseId: string, reason: string): Promise<OnboardingCase>;
   getOnboardingClient(clientId: string): Promise<OnboardingClientDetail>;
   getOnboardingClientVersion(clientId: string, version: number): Promise<ConfigurationVersionRow>;
+  // -- OCC Agent (synthetic onboarding cases) ------------------------------ //
+  // Every one of these is served by the synthetic case store. None of them can
+  // reach a live workflow, and the backend refuses them all when the feature
+  // flag is off — hiding the tab is convenience, not the control.
+  getAgentMeta(): Promise<AgentMeta>;
+  listAgentCases(state?: string): Promise<CaseSummary[]>;
+  createAgentCase(instruction: string, fixtureId?: string): Promise<AgentStatus>;
+  getAgentCase(caseId: string): Promise<AgentStatus>;
+  instructAgent(caseId: string, text: string, confirm?: boolean): Promise<AgentTurn>;
+  answerAgentDecision(
+    caseId: string,
+    input: { decision_id: string; action: string; value?: string; reason?: string },
+  ): Promise<AgentStatus>;
+  /** Named lifecycle steps, for the operator controls beside the conversation. */
+  runAgentStep(
+    caseId: string,
+    step:
+      | "requirements/confirm"
+      | "pack/generate"
+      | "pack/approve"
+      | "artefacts/classify"
+      | "configuration/draft"
+      | "configuration/approve"
+      | "run"
+      | "plan"
+      | "readiness/approve"
+      | "cancel",
+  ): Promise<AgentStatus>;
+  uploadAgentArtefacts(caseId: string, files: File[]): Promise<AgentStatus>;
+  loadAgentFixtureArtefacts(caseId: string, fixtureId: string): Promise<AgentStatus>;
+  returnAgentCaseToStage(caseId: string, targetState: string, reason?: string): Promise<AgentStatus>;
+  runAgentScenario(fixtureId: string): Promise<AgentStatus>;
+  getAgentPack(caseId: string): Promise<AgentPack>;
+  getAgentReadiness(caseId: string): Promise<AgentReadinessPackage>;
+  getAgentAudit(caseId: string): Promise<AgentAudit>;
 }

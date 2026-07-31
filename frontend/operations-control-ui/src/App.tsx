@@ -16,6 +16,9 @@ import { ReviewsScreen } from "@/screens/Reviews";
 import { RulesScreen } from "@/screens/Rules";
 import { WorkflowDetailScreen } from "@/screens/WorkflowDetail";
 import { WorkflowsScreen } from "@/screens/Workflows";
+import { AgentCaseScreen } from "@/screens/agent/AgentCase";
+import { AgentCasesScreen } from "@/screens/agent/AgentCases";
+import { AgentOnly } from "@/screens/agent/AgentLayout";
 import { OnboardingCaseScreen } from "@/screens/onboarding/CaseWizard";
 import { OnboardingClientScreen } from "@/screens/onboarding/ClientView";
 import { OnboardingHomeScreen } from "@/screens/onboarding/Home";
@@ -77,6 +80,25 @@ export default function App() {
                 <Route path="/onboarding" element={<OnboardingHomeScreen />} />
                 <Route path="/onboarding/cases/:id" element={<OnboardingCaseScreen />} />
                 <Route path="/onboarding/clients/:id" element={<OnboardingClientScreen />} />
+                {/* The OCC Agent tab. Flag-gated, and synthetic behind the
+                    guard — the backend refuses these routes outright when the
+                    same flag is off in its own environment. */}
+                <Route
+                  path="/agent"
+                  element={
+                    <AgentOnly>
+                      <AgentCasesScreen />
+                    </AgentOnly>
+                  }
+                />
+                <Route
+                  path="/agent/:caseId"
+                  element={
+                    <AgentOnly>
+                      <AgentCaseScreen />
+                    </AgentOnly>
+                  }
+                />
                 {/* Administrator area. The guard decides what to render; the
                     backend decides what is allowed on every request. */}
                 <Route

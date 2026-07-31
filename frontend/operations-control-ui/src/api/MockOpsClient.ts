@@ -1,6 +1,16 @@
+import { MockAgent } from "./MockAgent";
 import { MockConfigAdmin } from "./MockConfigAdmin";
 import { MockOnboarding } from "./MockOnboarding";
 import { OpsError, type OpsClient } from "./OpsClient";
+import type {
+  AgentAudit,
+  AgentMeta,
+  AgentPack,
+  AgentReadinessPackage,
+  AgentStatus,
+  AgentTurn,
+  CaseSummary,
+} from "./agentTypes";
 import type {
   AuditTrail,
   Comparison,
@@ -104,6 +114,7 @@ export class MockOpsClient implements OpsClient {
   private readonly principal: Principal;
   private readonly config = new MockConfigAdmin();
   private readonly onboarding = new MockOnboarding();
+  private readonly agent = new MockAgent();
   private nextId = 6000;
   /** Counts reads of a running workflow so it visibly "finishes" while polling. */
   private runningTicks = new Map<string, number>();
@@ -1729,5 +1740,81 @@ export class MockOpsClient implements OpsClient {
   ): Promise<ConfigurationVersionRow> {
     await this.wait();
     return this.onboarding.version(clientId, version);
+  // -- OCC Agent ----------------------------------------------------------- //
+
+  async getAgentMeta(): Promise<AgentMeta> {
+    await this.wait();
+    return this.agent.meta();
+  }
+
+  async listAgentCases(state?: string): Promise<CaseSummary[]> {
+    await this.wait();
+    return this.agent.list(state);
+  }
+
+  async createAgentCase(instruction: string, fixtureId?: string): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.create(instruction, fixtureId);
+  }
+
+  async getAgentCase(caseId: string): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.status(caseId);
+  }
+
+  async instructAgent(caseId: string, text: string, confirm = false): Promise<AgentTurn> {
+    await this.wait();
+    return this.agent.instruct(caseId, text, confirm);
+  }
+
+  async answerAgentDecision(
+    caseId: string,
+    input: { decision_id: string; action: string; value?: string; reason?: string },
+  ): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.answerDecision(caseId, input);
+  }
+
+  async runAgentStep(caseId: string, step: string): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.step(caseId, step);
+  }
+
+  async uploadAgentArtefacts(caseId: string, files: File[]): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.uploadArtefacts(
+      caseId,
+      files.map((f) => f.name),
+    );
+  }
+
+  async loadAgentFixtureArtefacts(caseId: string, fixtureId: string): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.loadFixtureArtefacts(caseId, fixtureId);
+  }
+
+  async returnAgentCaseToStage(caseId: string, targetState: string): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.returnToStage(caseId, targetState);
+  }
+
+  async runAgentScenario(fixtureId: string): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.runScenario(fixtureId);
+  }
+
+  async getAgentPack(caseId: string): Promise<AgentPack> {
+    await this.wait();
+    return this.agent.pack(caseId);
+  }
+
+  async getAgentReadiness(caseId: string): Promise<AgentReadinessPackage> {
+    await this.wait();
+    return this.agent.readinessPackage(caseId);
+  }
+
+  async getAgentAudit(caseId: string): Promise<AgentAudit> {
+    await this.wait();
+    return this.agent.audit(caseId);
   }
 }

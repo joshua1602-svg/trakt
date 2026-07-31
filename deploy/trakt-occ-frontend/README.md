@@ -24,6 +24,21 @@ must agree or the dashboard loads and every request fails:
 setting — the API never reads it. Vite inlines it into the bundle at build time,
 so changing it requires a rebuild and redeploy, not a restart.
 
+### Optional: the OCC Agent tab
+
+The OCC Agent (synthetic onboarding) tab is **off** in this deployment and is
+deliberately not set by the workflow — it is a pre-scale capability, not part of
+Client 1 delivery. Turning it on takes two independent settings, one per side:
+
+| Where | Setting | Value |
+|---|---|---|
+| Frontend **build** | `VITE_OCC_AGENT_SYNTHETIC_ENABLED` | `true` — shows the tab |
+| API **App Service** | `OCC_AGENT_SYNTHETIC_ENABLED` | `true` — mounts the routes |
+
+Both fail closed, and neither depends on the other: without the API setting the
+routes do not exist, whatever the bundle was built with. See
+`operations_control/occ_agent/README.md`.
+
 ## Why a separate Static Web App
 
 `azure-static-web-apps-nice-smoke-067ac7603.yml` already exists but deploys

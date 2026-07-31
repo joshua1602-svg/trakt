@@ -11,6 +11,7 @@ export const copy = {
     workflows: "Workflows",
     rules: "Rules",
     history: "History",
+    agent: "Onboarding Agent",
     admin: "Platform configuration",
     onboarding: "Client onboarding",
     startNew: "Create a manual delivery",
@@ -338,6 +339,116 @@ export const copy = {
     builtWithSuffix: "approved rules",
     previousVersion: "Previous version available",
     empty: "No reports yet.",
+  },
+
+  // The OCC Agent tab. A rehearsal space: the operator works the whole
+  // onboarding process in conversation, against synthetic cases only.
+  agent: {
+    title: "Onboarding Agent",
+    subtitle: "Work through an onboarding in conversation, on a practice case.",
+    syntheticChip: "Practice case",
+    syntheticBanner:
+      "Everything in this tab is a practice case. Trakt never writes files, starts the pipeline, " +
+      "sends an email or publishes anything from here.",
+    newCase: "Start a new practice case",
+    newCaseHeading: "What needs onboarding?",
+    newCasePrompt:
+      "Tell Trakt in your own words. For example: “Onboard Northstar Lending. It is a UK " +
+      "equity-release portfolio. They need monthly portfolio MI. The first files will be a loan " +
+      "tape and executed cashflows.”",
+    newCasePlaceholder: "Describe the client and what they need…",
+    createButton: "Start",
+    scenariosHeading: "Or start from a prepared example",
+    scenarioRun: "Run this example",
+    scenarioExpected: "Expected outcome",
+    casesHeading: "Practice cases",
+    caseEmpty: "No practice cases yet.",
+    filterAll: "All",
+    filterNeedsYou: "Needs you",
+    filterBlocked: "Blocked",
+    filterReady: "Ready for execution",
+    disabledTitle: "Not switched on",
+    disabled:
+      "The Onboarding Agent is not switched on for this environment. Ask your Trakt " +
+      "administrator.",
+
+    conversationHeading: "Conversation",
+    conversationPlaceholder: "Tell Trakt what to do, or ask what is still needed…",
+    send: "Send",
+    sending: "Working…",
+    proposalHeading: "Trakt is proposing a change",
+    proposalConfirm: "Confirm and apply",
+    proposalDismiss: "Not yet",
+
+    statusHeading: "Where this case has got to",
+    stageHeading: "Stage",
+    gatesHeading: "Controls",
+    gateDone: "Passed",
+    gateActive: "Now",
+    gateBlocked: "Blocked",
+    gatePending: "Not started",
+    missingHeading: "Missing inputs",
+    decisionsHeading: "Decisions waiting for you",
+    artefactsHeading: "Files received",
+    artefactIntended: "Where this would be filed",
+    artefactNotWritten: "Not written — practice case",
+    configHeading: "Configuration",
+    configProvenance: "Where each value came from",
+    configNeedsConfirm: "Needs your confirmation",
+    executionHeading: "Synthetic execution",
+    readinessHeading: "Readiness",
+    observationsHeading: "Worth knowing",
+    blockersHeading: "What's in the way",
+    packHeading: "Onboarding pack",
+    packIssued: "Recorded as issued. No email was sent.",
+    auditHeading: "What happened",
+    occLinksHeading: "Elsewhere in Trakt",
+    nothingYet: "Nothing yet.",
+
+    decisionIssue: "The issue",
+    decisionEvidence: "Evidence",
+    decisionRecommendation: "Trakt suggests",
+    decisionConfidence: "Confidence",
+    decisionMateriality: "Materiality",
+    decisionConsequence: "If this is wrong",
+    decisionActions: "Your answer",
+    decisionApprove: "Accept",
+    decisionReject: "Reject",
+    decisionAnswered: "Answered",
+
+    actionsHeading: "Governed controls",
+    actionsHelp:
+      "These are the same governed steps the conversation drives. Use whichever you prefer.",
+    uploadHeading: "Provide the client response",
+    uploadHelp:
+      "Upload practice files, or use the files from a prepared example. They stay inside this " +
+      "practice case.",
+    uploadButton: "Add files",
+    uploadFixture: "Use the example files",
+
+    readyHeadline: "Synthetic case ready for execution.",
+    readyNotDone: [
+      "No live files were written.",
+      "No production pipeline was triggered.",
+      "No external email was sent.",
+      "Nothing was published.",
+    ],
+    readyStatus: "READY_FOR_EXECUTION",
+    notReady: "Not ready yet",
+    criteriaHeading: "Readiness criteria",
+    manifestHeading: "Machine-readable summary",
+    downloadPackage: "Show the readiness package",
+    hidePackage: "Hide the readiness package",
+
+    stageOutcomes: {
+      deterministic_execution_completed: "Ran for real",
+      contract_validation_completed: "Contract checked",
+      execution_simulated: "Simulated only",
+      human_input_required: "Needs you",
+      hard_blocked: "Blocked",
+    } as Record<string, string>,
+
+    notFound: "That practice case could not be found.",
   },
 
   admin: {
