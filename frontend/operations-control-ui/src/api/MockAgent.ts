@@ -401,6 +401,7 @@ export class MockAgent {
         },
       ],
       anything_simulated: false,
+      anything_blocked: stored.doc.state === S.BLOCKED,
     };
   }
 

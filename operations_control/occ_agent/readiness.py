@@ -396,14 +396,6 @@ def _execution_manifest(case: SyntheticCase,
     return body
 
 
-def stage_outcome_summary(case: SyntheticCase) -> Dict[str, int]:
-    """How many stages reached each §12 outcome. Used by the UI banner."""
-    counts: Dict[str, int] = {}
-    for outcome in case.stage_outcomes.values():
-        counts[outcome] = counts.get(outcome, 0) + 1
-    return counts
-
-
 def anything_simulated(case: SyntheticCase) -> bool:
     """True when at least one stage was simulated rather than executed.
 

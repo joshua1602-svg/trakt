@@ -85,20 +85,6 @@ class ActionNotAllowed(OpsError):
             http_status=409)
 
 
-class ConfirmationRequired(OpsError):
-    """A material change was proposed but not confirmed.
-
-    Raised only when a caller tries to apply a material change directly. The
-    normal path returns the proposal to the UI, which shows it and asks.
-    """
-
-    def __init__(self, summary: str):
-        super().__init__(
-            "OCC_AGENT_CONFIRMATION_REQUIRED",
-            f"This needs your explicit confirmation: {summary}",
-            http_status=409)
-
-
 @dataclass
 class TurnResult:
     """What one natural-language turn produced."""
@@ -622,7 +608,6 @@ class OccAgentService:
             sandbox=self.store.case_dir(case.tenant, case.case_id),
             asset_type=case.asset_type,
             regime=regime,
-            reporting_date=case.confirmed.reporting_date,
             approved_mappings=self._approved_mappings(case),
             case_id=case.case_id, tenant=case.tenant)
         run_root = self.store.run_dir(case.tenant, case.case_id)
@@ -1125,7 +1110,10 @@ class OccAgentService:
             "observations": case.observations,
             "blockers": case.blockers,
             "occ_links": _occ_links(case),
+            # Surfaced separately so the tab can never present a simulated or
+            # blocked stage as a completed one.
             "anything_simulated": _readiness.anything_simulated(case),
+            "anything_blocked": _readiness.anything_blocked(case),
         }
 
     # ------------------------------------------------------------------ #

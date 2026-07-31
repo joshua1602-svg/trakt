@@ -85,7 +85,6 @@ ISSUE_POLICY_PATH = REPO / "config/asset/issue_policy.yaml"
 #: The existing pending-decision artefact the OCC already reads. Reused verbatim
 #: so a synthetic halt and a live halt present identically.
 DECISIONS_FILE = "34_target_first_decisions.yaml"
-APPROVED_DECISIONS_FILE = "34_target_first_decisions_approved.yaml"
 
 #: Confidence at or above which a deterministic header match stands without a
 #: human. Mirrors ``demo_platform.onboarding.LOW_CONFIDENCE`` and the mapper's
@@ -130,7 +129,6 @@ class SyntheticOnboardingAdapters(AgentAdapters):
                  policy: SyntheticPolicy, sandbox: Path,
                  asset_type: str = "equity_release",
                  regime: str = "",
-                 reporting_date: str = "",
                  registry_path: Path = REGISTRY_PATH,
                  aliases_dir: Path = ALIASES_DIR,
                  issue_policy_path: Path = ISSUE_POLICY_PATH,
@@ -141,7 +139,6 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         self.sandbox = Path(sandbox).resolve()
         self.asset_type = asset_type
         self.regime = regime
-        self.reporting_date = reporting_date
         self.registry_path = Path(registry_path)
         self.aliases_dir = Path(aliases_dir)
         self.issue_policy_path = Path(issue_policy_path)

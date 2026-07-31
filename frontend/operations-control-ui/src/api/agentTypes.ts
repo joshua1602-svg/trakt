@@ -193,7 +193,10 @@ export interface AgentStatus {
   observations: string[];
   blockers: string[];
   occ_links: OccLink[];
+  /** True when a stage was simulated rather than executed for real. */
   anything_simulated: boolean;
+  /** True when a stage was hard-blocked by a deterministic control. */
+  anything_blocked: boolean;
 }
 
 /** What one natural-language turn returned. */

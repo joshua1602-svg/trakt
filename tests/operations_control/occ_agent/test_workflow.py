@@ -516,3 +516,18 @@ def test_a_configuration_answer_can_be_given_in_language(service):
     assert turn.applied is True
     assert turn.case.client_answers[
         "defaults.originator_legal_entity_identifier"] == "894500SYNTHETIC00042"
+
+
+def test_no_forbidden_outcome_word_describes_a_ready_case(service):
+    """§17: the outcome is READY_FOR_EXECUTION, never 'complete' or 'published'."""
+    run = run_scenario(service, "scenario_a_clean", tenant=TENANT_A, actor=ACTOR)
+    package = service.readiness_package(run.case)
+    described = " ".join([
+        package["case_summary"]["status"],
+        package["statement"]["headline"],
+        package["readiness"]["status"],
+        package["execution_manifest"]["readiness_status"],
+    ]).lower()
+    for word in _readiness.FORBIDDEN_OUTCOME_WORDS:
+        assert word not in described, word
+    assert _states.READY_FOR_EXECUTION in package["case_summary"]["status"]
