@@ -4,8 +4,9 @@ import { MockOnboarding } from "./MockOnboarding";
 import { OpsError, type OpsClient } from "./OpsClient";
 import type {
   AgentAudit,
+  AgentChecklist,
   AgentMeta,
-  AgentPack,
+  AgentPreview,
   AgentReadinessPackage,
   AgentStatus,
   AgentTurn,
@@ -1760,50 +1761,74 @@ export class MockOpsClient implements OpsClient {
     return this.agent.create(instruction, fixtureId);
   }
 
-  async getAgentCase(caseId: string): Promise<AgentStatus> {
+  async getAgentCase(caseRef: string): Promise<AgentStatus> {
     await this.wait();
-    return this.agent.status(caseId);
+    return this.agent.status(caseRef);
   }
 
-  async instructAgent(caseId: string, text: string, confirm = false): Promise<AgentTurn> {
+  async instructAgent(caseRef: string, text: string, confirm = false): Promise<AgentTurn> {
     await this.wait();
-    return this.agent.instruct(caseId, text, confirm);
+    return this.agent.instruct(caseRef, text, confirm);
   }
 
   async answerAgentDecision(
-    caseId: string,
+    caseRef: string,
     input: { decision_id: string; action: string; value?: string; reason?: string },
   ): Promise<AgentStatus> {
     await this.wait();
-    return this.agent.answerDecision(caseId, input);
+    return this.agent.answerDecision(caseRef, input);
   }
 
-  async runAgentStep(caseId: string, step: string): Promise<AgentStatus> {
+  async runAgentStep(
+    caseRef: string,
+    step: string,
+    body: Record<string, unknown> = {},
+  ): Promise<AgentStatus> {
     await this.wait();
-    return this.agent.step(caseId, step);
+    return this.agent.step(caseRef, step, body);
   }
 
-  async uploadAgentArtefacts(caseId: string, files: File[]): Promise<AgentStatus> {
+  async saveAgentStep(
+    caseRef: string,
+    step: string,
+    payload: Record<string, unknown>,
+  ): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.saveStep(caseRef, step, payload);
+  }
+
+  async recordAgentClientResponse(
+    caseRef: string,
+    input: { request_id: string; answers: Record<string, unknown>; note?: string; accept?: boolean },
+  ): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.recordClientResponse(caseRef, input);
+  }
+
+  async setAgentRunTarget(
+    caseRef: string,
+    input: { portfolio_id?: string; dataset?: string; reporting_period?: string },
+  ): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.setRunTarget(caseRef, input);
+  }
+
+  async uploadAgentArtefacts(caseRef: string, files: File[]): Promise<AgentStatus> {
     await this.wait();
     return this.agent.uploadArtefacts(
-      caseId,
+      caseRef,
       files.map((f) => f.name),
     );
   }
 
-  async generateAgentResponse(caseId: string): Promise<AgentStatus> {
+  async generateAgentResponse(caseRef: string): Promise<AgentStatus> {
     await this.wait();
-    return this.agent.generateResponse(caseId);
+    return this.agent.generateResponse(caseRef);
   }
 
-  async loadAgentFixtureArtefacts(caseId: string, fixtureId: string): Promise<AgentStatus> {
+  async loadAgentFixtureArtefacts(caseRef: string, fixtureId: string): Promise<AgentStatus> {
     await this.wait();
-    return this.agent.loadFixtureArtefacts(caseId, fixtureId);
-  }
-
-  async returnAgentCaseToStage(caseId: string, targetState: string): Promise<AgentStatus> {
-    await this.wait();
-    return this.agent.returnToStage(caseId, targetState);
+    return this.agent.loadFixtureArtefacts(caseRef, fixtureId);
   }
 
   async runAgentScenario(fixtureId: string): Promise<AgentStatus> {
@@ -1811,18 +1836,23 @@ export class MockOpsClient implements OpsClient {
     return this.agent.runScenario(fixtureId);
   }
 
-  async getAgentPack(caseId: string): Promise<AgentPack> {
+  async getAgentChecklist(caseRef: string): Promise<AgentChecklist> {
     await this.wait();
-    return this.agent.pack(caseId);
+    return this.agent.checklist(caseRef);
   }
 
-  async getAgentReadiness(caseId: string): Promise<AgentReadinessPackage> {
+  async getAgentPreview(caseRef: string): Promise<AgentPreview> {
     await this.wait();
-    return this.agent.readinessPackage(caseId);
+    return this.agent.preview(caseRef);
   }
 
-  async getAgentAudit(caseId: string): Promise<AgentAudit> {
+  async getAgentReadiness(caseRef: string): Promise<AgentReadinessPackage> {
     await this.wait();
-    return this.agent.audit(caseId);
+    return this.agent.readinessPackage(caseRef);
+  }
+
+  async getAgentAudit(caseRef: string): Promise<AgentAudit> {
+    await this.wait();
+    return this.agent.audit(caseRef);
   }
 }

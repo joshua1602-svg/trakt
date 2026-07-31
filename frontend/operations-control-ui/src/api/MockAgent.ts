@@ -1,45 +1,41 @@
+import { MockOnboarding } from "./MockOnboarding";
 import { OpsError } from "./OpsClient";
 import type {
   AgentAudit,
+  AgentChecklist,
   AgentMeta,
-  AgentPack,
+  AgentPreview,
   AgentProposal,
   AgentReadinessPackage,
   AgentStatus,
   AgentTurn,
   CaseSummary,
   DecisionCard,
+  ExecutionFacts,
   LifecycleState,
   ScenarioSummary,
-  SyntheticCaseDoc,
+  SyntheticRunDoc,
 } from "./agentTypes";
+import type { ChecklistRow, OnboardingCase } from "./onboardingTypes";
 
 /**
- * A stateful stand-in for the OCC Agent API, mirroring the backend's lifecycle
- * and its refusals. Used by `VITE_OPS_MODE=mock` and by the tests.
+ * A stateful stand-in for the OCC Agent API, mirroring the backend's structure
+ * as well as its behaviour. Used by `VITE_OPS_MODE=mock` and by the tests.
  *
- * It is a fixture, not a second implementation: it moves a case through the
- * same states in the same order and refuses the same things (an action the
- * current state does not allow; readiness before every criterion passes), so a
- * test that passes here would pass against the real API for the same reason.
- * All the real deterministic work — mapping, validation, materiality — happens
- * server-side and is simply reflected here as outcomes.
+ * The important thing about it is what it does NOT do: it has no onboarding
+ * model of its own. It drives its own `MockOnboarding` instance — exactly as the
+ * server drives the real `OnboardingService` against an isolated container — so
+ * a practice case here is a genuine onboarding case with a genuine status, and
+ * the two lifecycles are as separate in the mock as they are in the product.
+ *
+ * It never activates. Activation is the one call that creates a client
+ * configuration, and a practice case must reach readiness having created
+ * nothing.
  */
 
 const S = {
-  CASE_CREATED: "CASE_CREATED",
-  REQUIREMENTS_EXTRACTED: "REQUIREMENTS_EXTRACTED",
-  REQUIREMENTS_CONFIRMATION_REQUIRED: "REQUIREMENTS_CONFIRMATION_REQUIRED",
-  REQUIREMENTS_CONFIRMED: "REQUIREMENTS_CONFIRMED",
-  ONBOARDING_PACK_GENERATED: "ONBOARDING_PACK_GENERATED",
-  ONBOARDING_PACK_APPROVAL_REQUIRED: "ONBOARDING_PACK_APPROVAL_REQUIRED",
-  ONBOARDING_PACK_ISSUED_SYNTHETICALLY: "ONBOARDING_PACK_ISSUED_SYNTHETICALLY",
-  AWAITING_CLIENT_INPUT: "AWAITING_CLIENT_INPUT",
-  ARTEFACTS_RECEIVED: "ARTEFACTS_RECEIVED",
-  ARTEFACTS_CLASSIFIED: "ARTEFACTS_CLASSIFIED",
-  CONFIG_DRAFTED: "CONFIG_DRAFTED",
-  CONFIG_APPROVAL_REQUIRED: "CONFIG_APPROVAL_REQUIRED",
-  CONFIG_APPROVED: "CONFIG_APPROVED",
+  AWAITING_ONBOARDING: "AWAITING_ONBOARDING",
+  READY_TO_RUN: "READY_TO_RUN",
   SYNTHETIC_ONBOARDING_RUNNING: "SYNTHETIC_ONBOARDING_RUNNING",
   EXCEPTIONS_REQUIRE_INPUT: "EXCEPTIONS_REQUIRE_INPUT",
   SYNTHETIC_ONBOARDING_PASSED: "SYNTHETIC_ONBOARDING_PASSED",
@@ -51,19 +47,8 @@ const S = {
 } as const;
 
 const STATE_LABELS: Record<string, string> = {
-  [S.CASE_CREATED]: "Case created",
-  [S.REQUIREMENTS_EXTRACTED]: "Interpretation proposed",
-  [S.REQUIREMENTS_CONFIRMATION_REQUIRED]: "Interpretation needs your confirmation",
-  [S.REQUIREMENTS_CONFIRMED]: "Requirements confirmed",
-  [S.ONBOARDING_PACK_GENERATED]: "Onboarding pack drafted",
-  [S.ONBOARDING_PACK_APPROVAL_REQUIRED]: "Onboarding pack needs your approval",
-  [S.ONBOARDING_PACK_ISSUED_SYNTHETICALLY]: "Pack recorded as issued (synthetically)",
-  [S.AWAITING_CLIENT_INPUT]: "Waiting for the client response",
-  [S.ARTEFACTS_RECEIVED]: "Synthetic artefacts received",
-  [S.ARTEFACTS_CLASSIFIED]: "Artefacts recognised",
-  [S.CONFIG_DRAFTED]: "Configuration proposed",
-  [S.CONFIG_APPROVAL_REQUIRED]: "Configuration needs your approval",
-  [S.CONFIG_APPROVED]: "Configuration approved",
+  [S.AWAITING_ONBOARDING]: "Working through onboarding",
+  [S.READY_TO_RUN]: "Ready to run",
   [S.SYNTHETIC_ONBOARDING_RUNNING]: "Synthetic onboarding running",
   [S.EXCEPTIONS_REQUIRE_INPUT]: "Exceptions need your input",
   [S.SYNTHETIC_ONBOARDING_PASSED]: "Synthetic onboarding passed",
@@ -76,101 +61,40 @@ const STATE_LABELS: Record<string, string> = {
 
 const ORDER = Object.values(S);
 
+/** Onboarding actions are legal wherever the CASE allows them, so the execution
+ *  table does not gate them — exactly as in `occ_agent.states`. */
+const ONBOARDING_ACTIONS = [
+  "answer_onboarding_question",
+  "request_client_information",
+  "record_client_response",
+  "submit_for_approval",
+  "approve_onboarding",
+  "request_changes",
+  "withdraw_case",
+];
+
 const ALLOWED: Record<string, string[]> = {
-  [S.CASE_CREATED]: ["correct_requirements", "cancel_case"],
-  [S.REQUIREMENTS_EXTRACTED]: ["confirm_requirements", "correct_requirements", "cancel_case"],
-  [S.REQUIREMENTS_CONFIRMATION_REQUIRED]: [
-    "confirm_requirements",
-    "correct_requirements",
-    "cancel_case",
-  ],
-  [S.REQUIREMENTS_CONFIRMED]: [
-    "generate_onboarding_pack",
-    "correct_requirements",
-    "return_to_stage",
-    "cancel_case",
-  ],
-  [S.ONBOARDING_PACK_GENERATED]: [
-    "approve_onboarding_pack",
-    "generate_onboarding_pack",
-    "correct_requirements",
-    "cancel_case",
-  ],
-  [S.ONBOARDING_PACK_APPROVAL_REQUIRED]: [
-    "approve_onboarding_pack",
-    "generate_onboarding_pack",
-    "correct_requirements",
-    "cancel_case",
-  ],
-  [S.ONBOARDING_PACK_ISSUED_SYNTHETICALLY]: ["register_synthetic_artefact", "cancel_case"],
-  [S.AWAITING_CLIENT_INPUT]: ["register_synthetic_artefact", "return_to_stage", "cancel_case"],
-  [S.ARTEFACTS_RECEIVED]: ["register_synthetic_artefact", "classify_artefacts", "cancel_case"],
-  [S.ARTEFACTS_CLASSIFIED]: [
-    "draft_client_config",
-    "register_synthetic_artefact",
-    "resolve_decision",
-    "cancel_case",
-  ],
-  [S.CONFIG_DRAFTED]: [
-    "approve_client_config",
-    "correct_client_config",
-    "draft_client_config",
-    "cancel_case",
-  ],
-  [S.CONFIG_APPROVAL_REQUIRED]: [
-    "approve_client_config",
-    "correct_client_config",
-    "cancel_case",
-  ],
-  [S.CONFIG_APPROVED]: [
-    "run_synthetic_onboarding",
-    "correct_client_config",
-    "return_to_stage",
-    "cancel_case",
-  ],
-  [S.SYNTHETIC_ONBOARDING_RUNNING]: ["cancel_case"],
+  [S.AWAITING_ONBOARDING]: ["register_synthetic_artefact", "cancel_run"],
+  [S.READY_TO_RUN]: ["run_synthetic_onboarding", "register_synthetic_artefact", "cancel_run"],
+  [S.SYNTHETIC_ONBOARDING_RUNNING]: ["cancel_run"],
   [S.EXCEPTIONS_REQUIRE_INPUT]: [
     "resolve_decision",
     "acknowledge_exception",
     "run_synthetic_onboarding",
-    "correct_client_config",
-    "return_to_stage",
-    "cancel_case",
+    "cancel_run",
   ],
-  [S.SYNTHETIC_ONBOARDING_PASSED]: [
-    "generate_orchestration_plan",
-    "return_to_stage",
-    "cancel_case",
-  ],
-  [S.ORCHESTRATION_PLAN_GENERATED]: [
-    "approve_execution_readiness",
-    "return_to_stage",
-    "cancel_case",
-  ],
-  [S.EXECUTION_APPROVAL_REQUIRED]: [
-    "approve_execution_readiness",
-    "return_to_stage",
-    "cancel_case",
-  ],
+  [S.SYNTHETIC_ONBOARDING_PASSED]: ["generate_orchestration_plan", "cancel_run"],
+  [S.ORCHESTRATION_PLAN_GENERATED]: ["approve_execution_readiness", "cancel_run"],
+  [S.EXECUTION_APPROVAL_REQUIRED]: ["approve_execution_readiness", "cancel_run"],
   [S.READY_FOR_EXECUTION]: [],
   [S.BLOCKED]: [
     "resolve_decision",
     "register_synthetic_artefact",
-    "correct_requirements",
-    "correct_client_config",
-    "return_to_stage",
-    "cancel_case",
+    "run_synthetic_onboarding",
+    "cancel_run",
   ],
   [S.CANCELLED]: [],
 };
-
-const RETURNABLE = [
-  S.REQUIREMENTS_EXTRACTED,
-  S.ONBOARDING_PACK_GENERATED,
-  S.AWAITING_CLIENT_INPUT,
-  S.ARTEFACTS_RECEIVED,
-  S.CONFIG_DRAFTED,
-];
 
 const POLICY = {
   runtime_mode: "synthetic",
@@ -180,7 +104,22 @@ const POLICY = {
   allow_production_config_write: false,
   allow_publish: false,
   allow_live_case_access: false,
+  allow_activate_configuration: false,
 };
+
+const LEI = "894500SYNTHETIC00042";
+
+/** What a practice client sends back, keyed by the catalogue's section.field. */
+function clientResponse(domain: string): Record<string, string> {
+  return {
+    "entities.lei": LEI,
+    "entities.country_of_establishment": "GB",
+    "contacts.reporting_contact_name": "Practice Reporting Contact",
+    "contacts.reporting_contact_email": `reporting@${domain}`,
+    "contacts.operational_contact_name": "Practice Operations Contact",
+    "contacts.operational_contact_email": `operations@${domain}`,
+  };
+}
 
 const SCENARIOS: ScenarioSummary[] = [
   {
@@ -189,12 +128,20 @@ const SCENARIOS: ScenarioSummary[] = [
     description:
       "Complete artefacts, valid configuration and high-confidence mappings. Reaches READY_FOR_EXECUTION with no blocking control.",
     instruction:
-      "Onboard Northstar Lending. It is a UK equity-release portfolio. They require monthly portfolio MI. Portfolio id direct_101. First reporting date 2026-06-30.",
+      "Onboard Northstar Lending. It is a UK equity-release portfolio. They require monthly management information. Portfolio id direct_101. First reporting date 2026-06-30.",
     files: [
       { filename: "northstar_loan_extract_202606.csv", artefact_type: "loan_extract", bytes: 4096 },
     ],
+    client_response: Object.keys(clientResponse("northstar.example")),
+    reporting_period: "2026-06-30",
     expected_state: S.READY_FOR_EXECUTION,
-    expected_human_steps: ["confirm the interpretation", "approve the pack", "approve readiness"],
+    expected_onboarding_status: "approved",
+    expected_human_steps: [
+      "ask the client for what is outstanding",
+      "record their response",
+      "approve the onboarding",
+      "approve readiness",
+    ],
     demonstrates: "The whole operating process end to end with nothing in the way.",
   },
   {
@@ -203,7 +150,7 @@ const SCENARIOS: ScenarioSummary[] = [
     description:
       "Two source columns resolve to the same canonical field. The run halts for a human decision, then reaches READY_FOR_EXECUTION.",
     instruction:
-      "Onboard Harbour Point Capital. UK equity release. Monthly portfolio MI. Portfolio id direct_102. First reporting date 2026-06-30.",
+      "Onboard Harbour Point Capital. UK equity release. Monthly management information. Portfolio id direct_102. First reporting date 2026-06-30.",
     files: [
       {
         filename: "harbourpoint_loan_extract_202606.csv",
@@ -211,16 +158,20 @@ const SCENARIOS: ScenarioSummary[] = [
         bytes: 4400,
       },
     ],
+    client_response: Object.keys(clientResponse("harbourpoint.example")),
+    reporting_period: "2026-06-30",
     expected_state: S.READY_FOR_EXECUTION,
+    expected_onboarding_status: "approved",
     expected_human_steps: ["settle the ambiguous mapping"],
     demonstrates: "A control the engine cannot settle alone.",
   },
   {
     fixture_id: "scenario_c_missing_artefact",
     label: "C — Missing mandatory artefact",
-    description: "A required input role is absent, so the case stays blocked.",
+    description:
+      "A required input role is absent, so the practice run is blocked. The onboarding itself still completes.",
     instruction:
-      "Onboard Kestrel Mutual. UK equity release. Monthly portfolio MI. Portfolio id direct_103. First reporting date 2026-06-30.",
+      "Onboard Kestrel Mutual. UK equity release. Monthly management information. Portfolio id direct_103. First reporting date 2026-06-30.",
     files: [
       {
         filename: "kestrel_property_extract_202606.csv",
@@ -228,23 +179,29 @@ const SCENARIOS: ScenarioSummary[] = [
         bytes: 1200,
       },
     ],
+    client_response: Object.keys(clientResponse("kestrel.example")),
+    reporting_period: "2026-06-30",
     expected_state: S.BLOCKED,
-    expected_human_steps: [],
+    expected_onboarding_status: "approved",
+    expected_human_steps: ["provide the missing loan tape"],
     demonstrates: "The configured input requirements refusing an incomplete pack.",
   },
   {
-    fixture_id: "scenario_d_product_config_gap",
-    label: "D — Product configuration gap",
+    fixture_id: "scenario_d_product_information_gap",
+    label: "D — Product information gap",
     description:
-      "Core onboarding proceeds, but the selected product needs configuration the client has not supplied.",
+      "Core onboarding proceeds, but the selected product asks a question the client has not answered, so approval is refused.",
     instruction:
-      "Onboard Aldermere Advances. UK equity release. Portfolio MI and regulatory reporting. Portfolio id direct_104. First reporting date 2026-06-30.",
+      "Onboard Aldermere Advances. UK equity release. Management information and investor reporting. Portfolio id direct_104. First reporting date 2026-06-30.",
     files: [
       { filename: "aldermere_loan_extract_202606.csv", artefact_type: "loan_extract", bytes: 4096 },
     ],
-    expected_state: S.BLOCKED,
-    expected_human_steps: ["supply the product configuration"],
-    demonstrates: "A product-specific configuration requirement.",
+    client_response: Object.keys(clientResponse("aldermere.example")),
+    reporting_period: "2026-06-30",
+    expected_state: S.AWAITING_ONBOARDING,
+    expected_onboarding_status: "in_review",
+    expected_human_steps: ["chase the product question they left unanswered"],
+    demonstrates: "A product-specific requirement, loaded through the product framework.",
   },
   {
     fixture_id: "scenario_e_business_rule_failure",
@@ -252,7 +209,7 @@ const SCENARIOS: ScenarioSummary[] = [
     description:
       "Canonical transformation succeeds; the deterministic business rules then fail at BLOCKING materiality.",
     instruction:
-      "Onboard Brackenfield Finance. UK equity release. Monthly portfolio MI. Portfolio id direct_105. First reporting date 2026-06-30.",
+      "Onboard Brackenfield Finance. UK equity release. Monthly management information. Portfolio id direct_105. First reporting date 2026-06-30.",
     files: [
       {
         filename: "brackenfield_loan_extract_202606.csv",
@@ -260,11 +217,23 @@ const SCENARIOS: ScenarioSummary[] = [
         bytes: 4096,
       },
     ],
+    client_response: Object.keys(clientResponse("brackenfield.example")),
+    reporting_period: "2026-06-30",
     expected_state: S.BLOCKED,
+    expected_onboarding_status: "approved",
     expected_human_steps: [],
     demonstrates: "A deterministic blocker that natural language cannot bypass.",
   },
 ];
+
+/** Which domain each scenario's practice client answers from. */
+const SCENARIO_DOMAINS: Record<string, string> = {
+  scenario_a_clean: "northstar.example",
+  scenario_b_ambiguous_mapping: "harbourpoint.example",
+  scenario_c_missing_artefact: "kestrel.example",
+  scenario_d_product_information_gap: "aldermere.example",
+  scenario_e_business_rule_failure: "brackenfield.example",
+};
 
 function lifecycle(current?: string, reached?: Set<string>): LifecycleState[] {
   return ORDER.map((state) => ({
@@ -285,8 +254,8 @@ function lifecycle(current?: string, reached?: Set<string>): LifecycleState[] {
   }));
 }
 
-interface StoredCase {
-  doc: SyntheticCaseDoc;
+interface StoredRun {
+  doc: SyntheticRunDoc;
   reached: Set<string>;
   scenario: string;
   audit: Record<string, unknown>[];
@@ -316,7 +285,7 @@ const AMBIGUOUS_DECISION: DecisionCard = {
   recommendation_source: "deterministic",
   confidence: 0.5,
   materiality: "BLOCKING",
-  downstream_consequence: "The synthetic run cannot continue until this is answered.",
+  downstream_consequence: "The practice run cannot continue until this is answered.",
   options: [
     { value: "Current Balance", label: "Use Current Balance" },
     { value: "Principal Balance", label: "Use Principal Balance" },
@@ -328,8 +297,14 @@ const AMBIGUOUS_DECISION: DecisionCard = {
   },
 };
 
+const TENANT = "Alpine Capital";
+const ACTOR = "Operator";
+
 export class MockAgent {
-  private cases = new Map<string, StoredCase>();
+  /** The agent's OWN onboarding store, isolated from the one the `/onboarding`
+   *  screens use — the mock's equivalent of the synthetic container. */
+  private readonly onboarding = new MockOnboarding();
+  private runs = new Map<string, StoredRun>();
   private nextId = 1;
 
   meta(): AgentMeta {
@@ -339,56 +314,98 @@ export class MockAgent {
       runtime_mode: "synthetic",
       policy: POLICY,
       lifecycle: lifecycle(),
-      returnable_states: [...RETURNABLE],
+      onboarding_reference: this.onboarding.reference(),
       scenarios: SCENARIOS,
-      tenant: "Alpine Capital",
+      tenant: TENANT,
     };
   }
 
   list(state?: string): CaseSummary[] {
-    const rows = [...this.cases.values()].map((c) => this.summary(c));
+    const rows = [...this.runs.values()].map((r) => this.summary(r));
     return state ? rows.filter((r) => r.state === state) : rows;
   }
 
   create(instruction: string, fixtureId = ""): AgentStatus {
-    const id = `CASE-MOCK${String(this.nextId++).padStart(4, "0")}`;
     const scenario = fixtureId || this.scenarioFor(instruction);
-    const doc = this.blankDoc(id, instruction, scenario);
-    const stored: StoredCase = {
+    const opened = this.onboarding.startNewClient(ACTOR);
+    const facts = interpret(instruction);
+    this.onboarding.saveStep(opened.case_id, "client", {
+      client_name: facts.clientName,
+      jurisdiction: facts.jurisdiction,
+    });
+    this.onboarding.saveStep(opened.case_id, "entities", {
+      entities: [{ legal_name: facts.clientName, roles: ["originator"] }],
+    });
+    this.onboarding.saveStep(opened.case_id, "portfolios", {
+      portfolios: [
+        {
+          portfolio_id: facts.portfolioId,
+          display_name: `${facts.clientName} portfolio`,
+          asset_class: "equity_release",
+          portfolio_type: "direct",
+        },
+      ],
+    });
+    this.onboarding.saveStep(opened.case_id, "reporting", { products: facts.products });
+
+    const doc = this.blankRun(opened.case_id, instruction, scenario, facts.reportingPeriod);
+    const stored: StoredRun = {
       doc,
-      reached: new Set([S.CASE_CREATED, S.REQUIREMENTS_EXTRACTED]),
+      reached: new Set([S.AWAITING_ONBOARDING]),
       scenario,
       audit: [],
     };
-    this.cases.set(id, stored);
-    this.record(stored, "case_created", "an operator opened a synthetic case");
-    this.move(stored, S.REQUIREMENTS_CONFIRMATION_REQUIRED);
-    return this.status(id);
+    this.runs.set(opened.case_id, stored);
+    this.record(stored, "practice_case_opened", "an operator opened a practice case");
+    this.record(stored, "onboarding_answered", "structured answers read from the instruction");
+    // Read the case back: what Trakt worked out for itself only exists after the
+    // answers have been through `saveStep`, and that is what gets shown back.
+    stored.doc.messages.push({
+      role: "agent",
+      text: this.describe(this.onboardingCase(opened.case_id)),
+      at: nowIso(),
+      refs: [],
+    });
+    return this.status(opened.case_id);
   }
 
-  get(caseId: string): StoredCase {
-    const stored = this.cases.get(caseId);
+  get(caseRef: string): StoredRun {
+    const stored = this.runs.get(caseRef);
     if (!stored) {
-      throw new OpsError("That synthetic case could not be found.", "OCC_AGENT_CASE_NOT_FOUND");
+      throw new OpsError("That practice case could not be found.", "OCC_AGENT_RUN_NOT_FOUND");
     }
     return stored;
   }
 
-  status(caseId: string): AgentStatus {
-    const stored = this.get(caseId);
-    const readiness = this.readiness(stored);
+  private onboardingCase(caseRef: string): OnboardingCase {
+    return this.onboarding.case(caseRef);
+  }
+
+  status(caseRef: string): AgentStatus {
+    const stored = this.get(caseRef);
+    const onboarding = this.onboardingCase(caseRef);
+    const facts = this.facts(onboarding, stored);
+    stored.doc.facts = facts;
     return {
-      case: stored.doc,
+      case_ref: caseRef,
+      run: stored.doc,
       summary: this.summary(stored),
+      onboarding,
+      facts,
       state: lifecycle(stored.doc.state).find((s) => s.state === stored.doc.state)!,
       lifecycle: lifecycle(stored.doc.state, stored.reached),
       stage_outcomes: stored.doc.stage_outcomes,
-      readiness,
+      readiness: this.readiness(stored, onboarding),
       policy: POLICY,
       open_decisions: stored.doc.open_decisions,
       observations: stored.doc.observations,
       blockers: stored.doc.blockers,
       occ_links: [
+        {
+          label: "Client onboarding",
+          to: `/onboarding/${caseRef}`,
+          why: "The onboarding case itself, in the screens an operator normally works it in.",
+        },
         {
           label: "Platform configuration",
           to: "/admin/config",
@@ -402,30 +419,77 @@ export class MockAgent {
       ],
       anything_simulated: false,
       anything_blocked: stored.doc.state === S.BLOCKED,
+      configuration_written: onboarding.status === "activated",
     };
   }
 
-  step(caseId: string, step: string): AgentStatus {
-    const stored = this.get(caseId);
+  step(caseRef: string, step: string, body: Record<string, unknown> = {}): AgentStatus {
+    const stored = this.get(caseRef);
     const action = STEP_ACTIONS[step];
     if (!action) throw new OpsError("That is not something Trakt can do.", "OCC_AGENT_UNKNOWN_STEP");
     this.requireAction(stored, action);
-    this.applyStep(stored, step);
-    return this.status(caseId);
+    this.applyStep(stored, step, body);
+    return this.status(caseRef);
   }
 
-  instruct(caseId: string, text: string, confirm: boolean): AgentTurn {
-    const stored = this.get(caseId);
+  saveStep(caseRef: string, step: string, payload: Record<string, unknown>): AgentStatus {
+    this.get(caseRef);
+    this.onboarding.saveStep(caseRef, step, payload);
+    return this.status(caseRef);
+  }
+
+  checklist(caseRef: string): AgentChecklist {
+    this.get(caseRef);
+    return {
+      checklist: this.onboarding.checklist(caseRef),
+      requests: this.onboardingCase(caseRef).information_requests,
+    };
+  }
+
+  preview(caseRef: string): AgentPreview {
+    this.get(caseRef);
+    return {
+      preview: this.onboarding.preview(caseRef),
+      written: false,
+      execution_status: "not_activated",
+    };
+  }
+
+  recordClientResponse(
+    caseRef: string,
+    input: { request_id: string; answers: Record<string, unknown>; note?: string },
+  ): AgentStatus {
+    const stored = this.get(caseRef);
+    const request = this.onboardingCase(caseRef).information_requests.find(
+      (r) => r.request_id === input.request_id,
+    );
+    if (!request) {
+      throw new OpsError(
+        "That information request could not be found.",
+        "OCC_AGENT_REQUEST_NOT_FOUND",
+      );
+    }
+    if (request.status === "open") this.onboarding.markSent(caseRef, input.request_id);
+    this.onboarding.recordResponse(caseRef, input.request_id, {
+      note: input.note ?? "",
+      answers: input.answers,
+    });
+    this.record(stored, "client_response_recorded", "the operator recorded the client's response");
+    return this.status(caseRef);
+  }
+
+  instruct(caseRef: string, text: string, confirm: boolean): AgentTurn {
+    const stored = this.get(caseRef);
     const lower = text.trim().toLowerCase();
     stored.doc.messages.push({ role: "operator", text, at: nowIso(), refs: [] });
 
     if (lower.endsWith("?") || /^(what|why|which|how|when|who)\b/.test(lower)) {
       const reply = this.answer(stored, lower);
       stored.doc.messages.push({ role: "agent", text: reply, at: nowIso(), refs: [] });
-      return { ...this.status(caseId), reply, applied: false, proposal: null };
+      return { ...this.status(caseRef), reply, applied: false, proposal: null };
     }
 
-    const step = this.stepForInstruction(lower, stored);
+    const step = this.stepForInstruction(lower, stored, this.onboardingCase(caseRef));
     if (!step) {
       throw new OpsError(
         "Trakt could not tell what to do with that. Try naming the change directly.",
@@ -450,53 +514,68 @@ export class MockAgent {
         at: nowIso(),
         refs: [proposal.proposal_id],
       });
-      return { ...this.status(caseId), reply: proposal.summary, applied: false, proposal };
+      return { ...this.status(caseRef), reply: proposal.summary, applied: false, proposal };
     }
 
-    this.applyStep(stored, step);
-    const reply = this.statusSentence(stored);
+    this.applyStep(stored, step, {});
+    const reply = this.statusSentence(stored, this.onboardingCase(caseRef));
     stored.doc.messages.push({ role: "agent", text: reply, at: nowIso(), refs: [] });
-    return { ...this.status(caseId), reply, applied: true, proposal: null };
+    return { ...this.status(caseRef), reply, applied: true, proposal: null };
   }
 
   answerDecision(
-    caseId: string,
+    caseRef: string,
     input: { decision_id: string; action: string; value?: string; reason?: string },
   ): AgentStatus {
-    const stored = this.get(caseId);
+    const stored = this.get(caseRef);
     this.requireAction(stored, "resolve_decision");
     const decision = stored.doc.open_decisions.find((d) => d.decision_id === input.decision_id);
     if (!decision) {
-      throw new OpsError("That decision could not be found on this case.", "OCC_AGENT_DECISION_NOT_FOUND");
+      throw new OpsError(
+        "That decision could not be found on this case.",
+        "OCC_AGENT_DECISION_NOT_FOUND",
+      );
     }
     decision.status = input.action === "reject" ? "rejected" : "approved";
     decision.resolved_value = input.value || decision.recommendation;
-    decision.resolved_by = "Operator";
-    stored.doc.approval_history.push({
-      subject: "decision",
-      decision: decision.status,
-      reference: decision.decision_id,
-    });
-    this.record(stored, "human_decision_recorded", input.reason || `operator chose '${input.action}'`);
+    decision.resolved_by = ACTOR;
+    this.record(
+      stored,
+      "human_decision_recorded",
+      input.reason || `operator chose '${input.action}'`,
+    );
     if (!stored.doc.open_decisions.some((d) => d.blocking && d.status === "open")) {
       // The affected controls rerun, exactly as the backend reruns them.
       this.move(stored, S.SYNTHETIC_ONBOARDING_RUNNING);
+      stored.doc.stage_outcomes = COMPLETED_STAGES;
       this.move(stored, S.SYNTHETIC_ONBOARDING_PASSED);
       stored.doc.blockers = [];
     }
-    return this.status(caseId);
+    return this.status(caseRef);
   }
 
-  uploadArtefacts(caseId: string, names: string[]): AgentStatus {
-    const stored = this.get(caseId);
+  setRunTarget(
+    caseRef: string,
+    input: { portfolio_id?: string; dataset?: string; reporting_period?: string },
+  ): AgentStatus {
+    const stored = this.get(caseRef);
+    if (input.portfolio_id) stored.doc.portfolio_id = input.portfolio_id;
+    if (input.dataset) stored.doc.dataset = input.dataset;
+    if (input.reporting_period) stored.doc.reporting_period = input.reporting_period;
+    return this.status(caseRef);
+  }
+
+  uploadArtefacts(caseRef: string, names: string[]): AgentStatus {
+    const stored = this.get(caseRef);
     this.requireAction(stored, "register_synthetic_artefact");
+    const facts = this.facts(this.onboardingCase(caseRef), stored);
     for (const name of names) {
       stored.doc.received_artefacts.push({
         artefact_id: `sart-${this.nextId++}`,
         source_file: name,
         artefact_type: name.toLowerCase().includes("loan") ? "loan_extract" : "property_extract",
-        synthetic_location: `synthetic_cases/${stored.doc.case_id}/artefacts/${name}`,
-        intended_live_uri: `blob://raw-v2/${stored.doc.client_id}/direct/funded/monthly/${stored.doc.portfolio_id}/2026-06-30/${name}`,
+        synthetic_location: `practice_cases/${caseRef}/artefacts/${name}`,
+        intended_live_uri: `blob://raw-v2/${facts.client_id}/direct/funded/${facts.cadence}/${facts.portfolio_id}/${stored.doc.reporting_period}/${name}`,
         execution_status: "simulated_only",
         sha256: "sha256:mock",
         size: 4096,
@@ -504,109 +583,112 @@ export class MockAgent {
         row_count: 24,
         recognition_confidence: 1,
         recognition_basis: "filename_keyword",
-        provided_by: "Operator",
+        provided_by: ACTOR,
         provided_at: nowIso(),
         fixture_id: stored.scenario,
       });
     }
-    this.move(stored, S.ARTEFACTS_RECEIVED);
-    this.record(stored, "synthetic_artefact_registered", "stored in the synthetic case sandbox");
-    return this.status(caseId);
+    this.record(stored, "synthetic_artefact_registered", "stored in the practice sandbox");
+    // Recognition also answers the onboarding's file-format question, exactly as
+    // registering a sample pack does on the server.
+    this.onboarding.registerSample(
+      caseRef,
+      stored.doc.received_artefacts.map((a) => ({ name: a.source_file, headers: [] })),
+    );
+    this.record(stored, "artefacts_classified", "apps.blob_trigger_app.file_roles");
+    return this.status(caseRef);
   }
 
-  generateResponse(caseId: string): AgentStatus {
-    const stored = this.get(caseId);
-    this.requireAction(stored, "register_synthetic_artefact");
-    const name = `${stored.doc.portfolio_id || "portfolio"}_loan_extract_202606.csv`;
-    return this.uploadArtefacts(caseId, [name]);
+  generateResponse(caseRef: string): AgentStatus {
+    const stored = this.get(caseRef);
+    const facts = this.facts(this.onboardingCase(caseRef), stored);
+    return this.uploadArtefacts(caseRef, [
+      `${facts.portfolio_id || "portfolio"}_loan_extract_202606.csv`,
+    ]);
   }
 
-  loadFixtureArtefacts(caseId: string, fixtureId: string): AgentStatus {
-    const scenario = SCENARIOS.find((s) => s.fixture_id === fixtureId);
-    if (!scenario) {
-      throw new OpsError("That synthetic scenario could not be found.", "OCC_AGENT_FIXTURE_NOT_FOUND");
-    }
-    const stored = this.get(caseId);
+  loadFixtureArtefacts(caseRef: string, fixtureId: string): AgentStatus {
+    const scenario = scenarioById(fixtureId);
+    const stored = this.get(caseRef);
     stored.scenario = fixtureId;
     stored.doc.fixture_id = fixtureId;
-    return this.uploadArtefacts(caseId, scenario.files.map((f) => f.filename));
-  }
-
-  returnToStage(caseId: string, targetState: string): AgentStatus {
-    const stored = this.get(caseId);
-    this.requireAction(stored, "return_to_stage");
-    if (!RETURNABLE.includes(targetState as (typeof RETURNABLE)[number])) {
-      throw new OpsError(
-        `This case cannot move to ${STATE_LABELS[targetState] ?? targetState}.`,
-        "OCC_AGENT_ILLEGAL_TRANSITION",
-      );
-    }
-    this.move(stored, targetState);
-    this.record(stored, "returned_to_earlier_stage", "the operator reopened a stage");
-    return this.status(caseId);
+    return this.uploadArtefacts(
+      caseRef,
+      scenario.files.map((f) => f.filename),
+    );
   }
 
   runScenario(fixtureId: string): AgentStatus {
-    const scenario = SCENARIOS.find((s) => s.fixture_id === fixtureId);
-    if (!scenario) {
-      throw new OpsError("That synthetic scenario could not be found.", "OCC_AGENT_FIXTURE_NOT_FOUND");
-    }
+    const scenario = scenarioById(fixtureId);
     const created = this.create(scenario.instruction, fixtureId);
-    const id = created.case.case_id;
-    for (const step of [
-      "requirements/confirm",
-      "pack/generate",
-      "pack/approve",
-    ]) {
-      this.step(id, step);
+    const caseRef = created.case_ref;
+    const stored = this.get(caseRef);
+    stored.doc.reporting_period = scenario.reporting_period;
+
+    this.loadFixtureArtefacts(caseRef, fixtureId);
+
+    // The onboarding half, in the order a human would work it.
+    const outstanding = this.onboarding.checklist(caseRef);
+    if (outstanding.length > 0) {
+      this.step(caseRef, "information-requests");
+      const request = this.onboardingCase(caseRef).information_requests.at(-1);
+      if (request) {
+        this.recordClientResponse(caseRef, {
+          request_id: request.request_id,
+          answers: answersFor(
+            this.onboardingCase(caseRef),
+            request.items,
+            clientResponse(SCENARIO_DOMAINS[fixtureId] ?? "practice.example"),
+          ),
+        });
+      }
     }
-    this.loadFixtureArtefacts(id, fixtureId);
-    const stored = this.get(id);
-    for (const step of [
-      "artefacts/classify",
-      "configuration/draft",
-      "configuration/approve",
-      "run",
-      "plan",
-      "readiness/approve",
-    ]) {
-      if (stored.doc.state === S.BLOCKED || stored.doc.state === S.EXCEPTIONS_REQUIRE_INPUT) break;
-      this.step(id, step);
+    if (!this.onboardingCase(caseRef).ready) return this.status(caseRef);
+    this.step(caseRef, "submit");
+    this.step(caseRef, "approve");
+
+    // The execution half.
+    for (const step of ["run", "plan", "readiness/approve"]) {
+      const now = this.get(caseRef).doc.state;
+      if (now === S.BLOCKED || now === S.EXCEPTIONS_REQUIRE_INPUT) break;
+      this.step(caseRef, step);
     }
-    return this.status(id);
+    return this.status(caseRef);
   }
 
-  pack(caseId: string): AgentPack {
-    const stored = this.get(caseId);
-    return {
-      pack: stored.doc.onboarding_pack as AgentPack["pack"],
-      required_artefacts: stored.doc.required_artefacts,
-      issued_at: stored.doc.pack_issued_synthetically_at,
-    };
-  }
-
-  readinessPackage(caseId: string): AgentReadinessPackage {
-    const stored = this.get(caseId);
-    const readiness = this.readiness(stored);
+  readinessPackage(caseRef: string): AgentReadinessPackage {
+    const stored = this.get(caseRef);
+    const onboarding = this.onboardingCase(caseRef);
+    const readiness = this.readiness(stored, onboarding);
     return {
       readiness,
       package: readiness.ready
         ? {
-            case_summary: { case_id: stored.doc.case_id, status: S.READY_FOR_EXECUTION },
+            case_summary: {
+              case_ref: caseRef,
+              onboarding_status: onboarding.status,
+              status: S.READY_FOR_EXECUTION,
+            },
+            configuration_that_would_be_created: {
+              written: false,
+              execution_status: "not_activated",
+            },
             execution_manifest: {
               runtime_mode: "synthetic",
               execution_performed: false,
+              configuration_activated: false,
               published: false,
               live_writes: [],
               emails_sent: [],
               content_hash: "sha-mock",
             },
             statement: {
-              headline: "Synthetic case ready for execution.",
+              headline: "Practice case ready for execution.",
               not_done: [
                 "No live files were written.",
                 "No production pipeline was triggered.",
                 "No external email was sent.",
+                "No client configuration was activated.",
                 "Nothing was published.",
               ],
             },
@@ -615,83 +697,67 @@ export class MockAgent {
     };
   }
 
-  audit(caseId: string): AgentAudit {
-    return { events: this.get(caseId).audit, chain_intact: true };
+  audit(caseRef: string): AgentAudit {
+    return {
+      events: this.get(caseRef).audit,
+      chain_intact: true,
+      onboarding_events: this.onboardingCase(caseRef).events as unknown as Record<
+        string,
+        unknown
+      >[],
+    };
   }
 
   // -- internals ---------------------------------------------------------- //
 
-  private applyStep(stored: StoredCase, step: string): void {
+  private applyStep(stored: StoredRun, step: string, body: Record<string, unknown>): void {
+    const caseRef = stored.doc.case_ref;
     switch (step) {
-      case "requirements/confirm":
-        stored.doc.confirmed_requirements = { ...stored.doc.extracted_requirements };
-        stored.doc.approval_history.push({ subject: "requirements", decision: "approved" });
-        this.move(stored, S.REQUIREMENTS_CONFIRMED);
-        this.record(stored, "requirements_confirmed", "the operator confirmed the interpretation");
+      case "information-requests": {
+        const items = this.onboarding.checklist(caseRef);
+        if (items.length === 0) {
+          throw new OpsError(
+            "There is nothing outstanding to ask the client for.",
+            "OCC_AGENT_NOTHING_OUTSTANDING",
+          );
+        }
+        this.onboarding.createRequest(caseRef, items);
+        this.record(stored, "client_information_requested", "the checklist became a request");
         break;
-      case "pack/generate":
-        stored.doc.onboarding_pack = MOCK_PACK;
-        stored.doc.required_artefacts = [
-          { role: "loan_extract", label: "Primary loan tape", required: true },
-          { role: "cashflow_extract", label: "Cash-flow tape", required: false },
-        ];
-        this.move(stored, S.ONBOARDING_PACK_GENERATED);
-        this.move(stored, S.ONBOARDING_PACK_APPROVAL_REQUIRED);
-        this.record(stored, "onboarding_pack_generated", "built from the onboarding configuration");
+      }
+      case "submit":
+        this.onboarding.submit(caseRef);
+        this.record(stored, "onboarding_submitted_for_approval", "the onboarding reported ready");
         break;
-      case "pack/approve":
-        stored.doc.approval_history.push({ subject: "onboarding_pack", decision: "approved" });
-        stored.doc.pack_issued_synthetically_at = nowIso();
-        this.move(stored, S.ONBOARDING_PACK_ISSUED_SYNTHETICALLY);
-        this.move(stored, S.AWAITING_CLIENT_INPUT);
+      case "approve":
+        this.onboarding.approve(
+          caseRef,
+          String(body.reason ?? "") || "Approved in a practice case.",
+          ACTOR,
+        );
+        if (stored.doc.state === S.AWAITING_ONBOARDING) this.move(stored, S.READY_TO_RUN);
         this.record(
           stored,
-          "onboarding_pack_issued_synthetically",
-          "recorded as issued; no email was sent",
+          "onboarding_approved",
+          "the operator approved the onboarding; no configuration was created",
         );
         break;
-      case "artefacts/classify": {
-        this.move(stored, S.ARTEFACTS_CLASSIFIED);
-        this.record(stored, "artefacts_classified", "apps.blob_trigger_app.file_roles");
+      case "request-changes": {
+        const reason = String(body.reason ?? "") || "Changes requested.";
+        this.onboarding.requestChanges(caseRef, reason);
+        this.record(stored, "onboarding_changes_requested", reason);
+        break;
+      }
+      case "run": {
         const hasLoanTape = stored.doc.received_artefacts.some(
           (a) => a.artefact_type === "loan_extract",
         );
         if (!hasLoanTape) {
           this.block(stored, ["Trakt still needs the Primary loan tape."]);
+          break;
         }
-        break;
-      }
-      case "configuration/draft":
-        stored.doc.proposed_configuration = MOCK_CONFIG;
-        stored.doc.configuration_provenance = MOCK_PROVENANCE;
-        this.move(stored, S.CONFIG_DRAFTED);
-        this.record(stored, "configuration_drafted", "resolved through the configuration hierarchy");
-        if (stored.scenario === "scenario_d_product_config_gap") {
-          this.block(stored, ["The reporting entity's LEI has not been configured."]);
-        } else {
-          this.move(stored, S.CONFIG_APPROVAL_REQUIRED);
-        }
-        break;
-      case "configuration/approve":
-        stored.doc.confirmed_configuration = { client: { client_id: stored.doc.client_id } };
-        stored.doc.configuration_provenance = stored.doc.configuration_provenance.map((p) => ({
-          ...p,
-          confirmed: true,
-          requires_human_confirmation: false,
-        }));
-        stored.doc.approval_history.push({ subject: "client_configuration", decision: "approved" });
-        this.move(stored, S.CONFIG_APPROVED);
-        this.record(stored, "configuration_approved", "the operator approved the configuration");
-        break;
-      case "run":
         this.move(stored, S.SYNTHETIC_ONBOARDING_RUNNING);
-        stored.doc.stage_outcomes = {
-          onboard: "deterministic_execution_completed",
-          transform: "deterministic_execution_completed",
-          validate: "deterministic_execution_completed",
-          stamp: "deterministic_execution_completed",
-          assemble: "deterministic_execution_completed",
-        };
+        stored.doc.stage_outcomes = COMPLETED_STAGES;
         this.record(stored, "synthetic_onboarding_started", "the conductor ran over the adapter");
         if (stored.scenario === "scenario_b_ambiguous_mapping") {
           stored.doc.stage_outcomes = { onboard: "human_input_required" };
@@ -712,16 +778,20 @@ export class MockAgent {
           this.record(stored, "synthetic_onboarding_passed", "every control passed");
         }
         break;
+      }
       case "plan":
         stored.doc.orchestration_plan = MOCK_PLAN;
-        stored.doc.assembler_plan = { satisfied: true, summary: "Assembler prerequisites are satisfied." };
+        stored.doc.assembler_plan = {
+          satisfied: true,
+          summary: "Assembler prerequisites are satisfied.",
+        };
         this.move(stored, S.ORCHESTRATION_PLAN_GENERATED);
         this.move(stored, S.EXECUTION_APPROVAL_REQUIRED);
         this.record(stored, "orchestration_plan_generated", "nothing was executed");
         break;
       case "readiness/approve": {
-        stored.doc.approval_history.push({ subject: "execution_readiness", decision: "approved" });
-        const verdict = this.readiness(stored);
+        stored.doc.approvals.push({ subject: "execution_readiness", decision: "approved" });
+        const verdict = this.readiness(stored, this.onboardingCase(caseRef));
         if (!verdict.ready) {
           this.block(
             stored,
@@ -736,22 +806,59 @@ export class MockAgent {
       }
       case "cancel":
         this.move(stored, S.CANCELLED);
-        this.record(stored, "case_cancelled", "cancelled by the operator");
+        this.record(stored, "practice_case_cancelled", "cancelled by the operator");
         break;
       default:
         throw new OpsError("That is not something Trakt can do.", "OCC_AGENT_UNKNOWN_STEP");
     }
   }
 
-  private readiness(stored: StoredCase): AgentStatus["readiness"] {
+  private facts(onboarding: OnboardingCase, stored: StoredRun): ExecutionFacts {
+    const answers = onboarding.answers as Record<string, Record<string, unknown>>;
+    const portfolios = ((onboarding.answers.portfolios ?? []) as Record<string, string>[]) ?? [];
+    const portfolio =
+      portfolios.find((p) => p.portfolio_id === stored.doc.portfolio_id) ?? portfolios[0] ?? {};
+    const sources = ((onboarding.answers.sources ?? []) as Record<string, string>[]) ?? [];
+    const source = sources.find((s) => s.portfolio_id === portfolio.portfolio_id);
+    const products = ((answers.reporting?.products ?? []) as string[]) ?? [];
+    return {
+      client_id: onboarding.client_id,
+      client_name: onboarding.client_name,
+      portfolio_id: String(portfolio.portfolio_id ?? ""),
+      portfolio_name: String(portfolio.display_name ?? ""),
+      asset_class: String(portfolio.asset_class ?? ""),
+      dataset: stored.doc.dataset,
+      cadence: String(source?.cadence ?? "monthly"),
+      jurisdiction: String(answers.client?.jurisdiction ?? ""),
+      products,
+      outcome: products.includes("esma_annex2") ? "mi_annex2" : "mi",
+      regime: products.includes("esma_annex2")
+        ? "ESMA_Annex2"
+        : products.includes("investor_reporting")
+          ? "ESMA_Annex12"
+          : "",
+      basis: {},
+    };
+  }
+
+  private readiness(stored: StoredRun, onboarding: OnboardingCase): AgentStatus["readiness"] {
     const doc = stored.doc;
-    const criteria = [
+    const criteria: AgentStatus["readiness"]["criteria"] = [
       {
-        key: "facts_confirmed",
-        label: "Required facts confirmed",
-        passed: Object.keys(doc.confirmed_requirements).length > 0,
-        detail: "The interpretation has been confirmed.",
-        remedy: "Confirm the interpretation.",
+        key: "onboarding_approved",
+        label: "Onboarding approved",
+        passed: onboarding.status === "approved",
+        detail: `The onboarding is ${onboarding.status_label.toLowerCase()}.`,
+        remedy: "Work the onboarding through to approval.",
+        stage: "onboarding",
+      },
+      {
+        key: "onboarding_clean",
+        label: "Nothing outstanding on the onboarding",
+        passed: onboarding.blocking.length === 0,
+        detail: "The onboarding reports no problems.",
+        remedy: "Clear the onboarding's own problems.",
+        stage: "onboarding",
       },
       {
         key: "artefacts_present",
@@ -759,13 +866,7 @@ export class MockAgent {
         passed: doc.received_artefacts.some((a) => a.artefact_type === "loan_extract"),
         detail: "All required files were provided.",
         remedy: "Provide the missing file.",
-      },
-      {
-        key: "configuration_validates",
-        label: "Configuration validates",
-        passed: Object.keys(doc.confirmed_configuration).length > 0,
-        detail: "Configuration resolved.",
-        remedy: "Approve the configuration.",
+        stage: "execution",
       },
       {
         key: "exceptions_cleared",
@@ -773,6 +874,17 @@ export class MockAgent {
         passed: !doc.open_decisions.some((d) => d.blocking && d.status === "open"),
         detail: "No blocking exceptions remain.",
         remedy: "Resolve each blocking decision.",
+        stage: "execution",
+      },
+      {
+        key: "pipeline_contracts",
+        label: "Pipeline input contracts satisfied",
+        passed: ["onboard", "transform", "validate"].every(
+          (s) => doc.stage_outcomes[s] === "deterministic_execution_completed",
+        ),
+        detail: "Every deterministic control completed.",
+        remedy: "Run the practice onboarding.",
+        stage: "execution",
       },
       {
         key: "orchestration_valid",
@@ -780,22 +892,31 @@ export class MockAgent {
         passed: Object.keys(doc.orchestration_plan).length > 0,
         detail: "The execution plan is prepared.",
         remedy: "Generate the orchestration plan.",
+        stage: "execution",
       },
       {
-        key: "approvals_complete",
-        label: "Required approvals complete",
-        passed: ["requirements", "onboarding_pack", "client_configuration", "execution_readiness"].every(
-          (subject) => doc.approval_history.some((a) => a.subject === subject),
-        ),
-        detail: "All required approvals are recorded.",
-        remedy: "Give the outstanding approvals.",
+        key: "execution_approved",
+        label: "Readiness approved",
+        passed: doc.approvals.some((a) => a.subject === "execution_readiness"),
+        detail: "An operator approved readiness for execution.",
+        remedy: "Approve readiness once the plan is right.",
+        stage: "execution",
+      },
+      {
+        key: "no_configuration_written",
+        label: "No configuration was created",
+        passed: onboarding.status !== "activated",
+        detail: "This practice case created no client configuration.",
+        remedy: "This case cannot proceed; report it to your administrator.",
+        stage: "boundary",
       },
       {
         key: "runtime_controls_intact",
-        label: "Synthetic controls intact",
+        label: "Practice controls intact",
         passed: true,
-        detail: "The synthetic boundary held for the whole case.",
+        detail: "The practice boundary held for the whole case.",
         remedy: "",
+        stage: "boundary",
       },
     ];
     const outstanding = criteria.filter((c) => !c.passed);
@@ -807,9 +928,31 @@ export class MockAgent {
     };
   }
 
-  private answer(stored: StoredCase, lower: string): string {
+  private describe(onboarding: OnboardingCase): string {
+    const client = (onboarding.answers.client ?? {}) as Record<string, string>;
+    const lines = [`Onboarding ${onboarding.case_id}.`];
+    if (client.client_name) lines.push(`Client name: ${client.client_name}`);
+    if (client.client_id) lines.push(`Client identifier: ${client.client_id}`);
+    if (client.jurisdiction) lines.push(`Jurisdiction: ${client.jurisdiction}`);
+    const outstanding = this.onboarding.checklist(onboarding.case_id);
+    if (outstanding.length > 0) {
+      lines.push("Still needed from the client:");
+      for (const row of outstanding.slice(0, 8)) lines.push(`- ${row.label}`);
+    }
+    return lines.join("\n");
+  }
+
+  private answer(stored: StoredRun, lower: string): string {
+    const onboarding = this.onboardingCase(stored.doc.case_ref);
+    if (/client/.test(lower) && /(ask|need|send|outstanding|waiting|chase)/.test(lower)) {
+      const checklist = this.onboarding.checklist(stored.doc.case_ref);
+      if (checklist.length === 0) return "There is nothing outstanding from the client.";
+      return `The client still has to tell us:\n${checklist
+        .map((row) => `- ${row.label}`)
+        .join("\n")}`;
+    }
     if (/(left|remain|outstanding|still)/.test(lower)) {
-      const verdict = this.readiness(stored);
+      const verdict = this.readiness(stored, onboarding);
       if (verdict.ready) {
         return "Every readiness criterion is satisfied. Approve readiness to reach READY_FOR_EXECUTION.";
       }
@@ -821,11 +964,15 @@ export class MockAgent {
       const d = stored.doc.open_decisions[0];
       return `${d.title}\n${d.question}`;
     }
-    return this.statusSentence(stored);
+    return this.statusSentence(stored, onboarding);
   }
 
-  private statusSentence(stored: StoredCase): string {
-    const parts = [`This case is at ${STATE_LABELS[stored.doc.state]}.`];
+  private statusSentence(stored: StoredRun, onboarding: OnboardingCase): string {
+    const parts = [
+      `The onboarding is ${onboarding.status_label.toLowerCase()}; the practice run is at ${
+        STATE_LABELS[stored.doc.state]
+      }.`,
+    ];
     if (stored.doc.blockers.length > 0) {
       parts.push(`In the way: ${stored.doc.blockers.slice(0, 3).join("; ")}`);
     }
@@ -833,33 +980,43 @@ export class MockAgent {
     if (blocking.length > 0) {
       parts.push(`${blocking.length} decision${blocking.length === 1 ? "" : "s"} need you.`);
     }
+    const checklist = this.onboarding.checklist(stored.doc.case_ref);
+    if (checklist.length > 0) {
+      parts.push(
+        `${checklist.length} item${checklist.length === 1 ? "" : "s"} still outstanding from the client.`,
+      );
+    }
     return parts.join(" ");
   }
 
-  private stepForInstruction(lower: string, stored: StoredCase): string | null {
+  private stepForInstruction(
+    lower: string,
+    stored: StoredRun,
+    onboarding: OnboardingCase,
+  ): string | null {
     if (/\bcancel\b/.test(lower)) return "cancel";
     if (/\breadiness\b|\bready for execution\b/.test(lower)) return "readiness/approve";
-    if (/\b(approve|accept)\b.*\b(config)/.test(lower)) return "configuration/approve";
-    if (/\b(approve|accept)\b.*\b(pack|questionnaire|email)\b/.test(lower)) return "pack/approve";
-    if (/\b(generate|draft|regenerate)\b.*\b(pack|questionnaire|email)\b/.test(lower))
-      return "pack/generate";
-    if (/\b(generate|draft)\b.*\bconfig/.test(lower)) return "configuration/draft";
+    if (/\b(approve|accept)\b.*\bonboarding\b|\bapprove the case\b/.test(lower)) return "approve";
+    if (/\b(submit|send)\b.*\bapproval\b/.test(lower)) return "submit";
+    if (/\b(ask|request)\b.*\b(client|information|checklist)\b/.test(lower))
+      return "information-requests";
     if (/\b(generate|prepare)\b.*\b(plan|orchestration)\b/.test(lower)) return "plan";
-    if (/\b(run|start)\b.*\b(onboarding|controls)\b/.test(lower)) return "run";
-    if (/\bclassify\b/.test(lower)) return "artefacts/classify";
-    if (/\bconfirm\b.*\b(interpretation|requirements|facts)\b/.test(lower))
-      return "requirements/confirm";
+    if (/\b(run|start|re-?run)\b.*\b(onboarding|practice run|controls)\b/.test(lower)) return "run";
     // A bare "yes" means whatever the case is currently waiting on.
     if (/^(yes|confirm|confirmed|approve|approved|go ahead|proceed)\.?$/.test(lower)) {
+      if (["draft", "in_review", "changes_required"].includes(onboarding.status)) return "submit";
+      if (onboarding.status === "ready_for_approval") return "approve";
+      if (onboarding.status !== "approved") return null;
       return PENDING_CONFIRMATION[stored.doc.state] ?? null;
     }
     return null;
   }
 
-  private requireAction(stored: StoredCase, action: string): void {
+  private requireAction(stored: StoredRun, action: string): void {
+    if (ONBOARDING_ACTIONS.includes(action)) return; // the case's own table decides
     if (!(ALLOWED[stored.doc.state] ?? []).includes(action)) {
       throw new OpsError(
-        `'${action.replace(/_/g, " ")}' is not something you can do while this case is at ${
+        `'${action.replace(/_/g, " ")}' is not something you can do while this practice case is at ${
           STATE_LABELS[stored.doc.state]
         }.`,
         "OCC_AGENT_ACTION_NOT_ALLOWED",
@@ -867,23 +1024,23 @@ export class MockAgent {
     }
   }
 
-  private move(stored: StoredCase, state: string): void {
+  private move(stored: StoredRun, state: string): void {
     stored.doc.state = state;
-    stored.doc.case_version += 1;
+    stored.doc.version += 1;
     stored.doc.updated_at = nowIso();
     stored.reached.add(state);
   }
 
-  private block(stored: StoredCase, blockers: string[]): void {
+  private block(stored: StoredRun, blockers: string[]): void {
     stored.doc.blockers = blockers.filter(Boolean);
     this.move(stored, S.BLOCKED);
-    this.record(stored, "case_blocked", "a deterministic control blocked the case");
+    this.record(stored, "run_blocked", "a deterministic control blocked the run");
   }
 
-  private record(stored: StoredCase, action: string, basis: string): void {
+  private record(stored: StoredRun, action: string, basis: string): void {
     stored.audit.push({
       event_id: `cae-${stored.audit.length + 1}`,
-      case_id: stored.doc.case_id,
+      case_ref: stored.doc.case_ref,
       at: nowIso(),
       action,
       decision_basis: basis,
@@ -892,16 +1049,12 @@ export class MockAgent {
     });
   }
 
-  private summary(stored: StoredCase): CaseSummary {
+  private summary(stored: StoredRun): CaseSummary {
     const doc = stored.doc;
+    const onboarding = this.onboardingCase(doc.case_ref);
     return {
-      case_id: doc.case_id,
+      case_ref: doc.case_ref,
       tenant: doc.tenant,
-      client_id: doc.client_id,
-      client_name: doc.client_name,
-      portfolio_id: doc.portfolio_id,
-      portfolio_name: doc.portfolio_name,
-      asset_type: doc.asset_type,
       state: doc.state,
       state_label: STATE_LABELS[doc.state],
       readiness_status: doc.readiness_status,
@@ -911,6 +1064,11 @@ export class MockAgent {
       fixture_id: doc.fixture_id,
       created_at: doc.created_at,
       updated_at: doc.updated_at,
+      onboarding_status: onboarding.status,
+      onboarding_status_label: onboarding.status_label,
+      client_id: onboarding.client_id,
+      client_name: onboarding.client_name || onboarding.client_id || "Not yet named",
+      onboarding_missing: false,
     };
   }
 
@@ -922,72 +1080,39 @@ export class MockAgent {
     return hit?.fixture_id ?? "scenario_a_clean";
   }
 
-  private blankDoc(id: string, instruction: string, scenario: string): SyntheticCaseDoc {
-    const clientName = /onboard\s+([A-Z][\w ]+?)[.,]/i.exec(instruction)?.[1]?.trim() ?? "New client";
-    const portfolioId = /portfolio id\s+([\w_.-]+)/i.exec(instruction)?.[1] ?? "direct_001";
-    const extracted = {
-      client_name: clientName,
-      proposed_client_id: clientName.toLowerCase().replace(/\W+/g, "_"),
-      asset_type: "equity_release",
-      jurisdiction: "GB",
-      required_products: ["portfolio_mi"],
-      reporting_frequency: "monthly",
-      reporting_date: "2026-06-30",
-      expected_artefacts: ["loan_extract"],
-      proposed_portfolio_id: portfolioId,
-      unresolved_questions: [] as string[],
-    };
+  private blankRun(
+    caseRef: string,
+    instruction: string,
+    scenario: string,
+    reportingPeriod: string,
+  ): SyntheticRunDoc {
     return {
-      case_id: id,
-      tenant: "Alpine Capital",
-      initiating_user: "Operator",
-      state: S.REQUIREMENTS_EXTRACTED,
+      case_ref: caseRef,
+      tenant: TENANT,
+      initiating_user: ACTOR,
+      state: S.AWAITING_ONBOARDING,
       runtime_mode: "synthetic",
-      case_version: 1,
+      version: 1,
       synthetic: true,
-      client_id: extracted.proposed_client_id,
-      client_name: clientName,
-      portfolio_id: portfolioId,
-      portfolio_name: "",
-      asset_type: "equity_release",
-      extracted_requirements: extracted,
-      confirmed_requirements: {},
-      unresolved_questions: [],
-      onboarding_pack: {},
-      pack_issued_synthetically_at: "",
-      required_artefacts: [],
+      portfolio_id: "",
+      dataset: "funded",
+      reporting_period: reportingPeriod,
+      facts: {},
       received_artefacts: [],
-      proposed_configuration: {},
-      confirmed_configuration: {},
-      configuration_provenance: [],
-      mapping_decisions: [],
+      stage_outcomes: {},
+      mapping_report: [],
       open_decisions: [],
       control_results: [],
-      stage_outcomes: {},
-      blockers: [],
-      observations: [],
       planned_pipeline_actions: [],
       orchestration_plan: {},
       assembler_plan: {},
+      readiness: {},
       readiness_status: "not_evaluated",
       readiness_package_ref: "",
-      approval_history: [],
-      messages: [
-        { role: "operator", text: instruction, at: nowIso(), refs: [] },
-        {
-          role: "agent",
-          text: [
-            `Client: ${clientName}`,
-            "Asset type: Equity Release",
-            "Products:",
-            "- Portfolio MI",
-            "Frequency: Monthly",
-            "First reporting date: 2026-06-30",
-          ].join("\n"),
-          at: nowIso(),
-          refs: [],
-        },
-      ],
+      approvals: [],
+      blockers: [],
+      observations: [],
+      messages: [{ role: "operator", text: instruction, at: nowIso(), refs: [] }],
       fixture_id: scenario,
       created_at: nowIso(),
       updated_at: nowIso(),
@@ -995,94 +1120,41 @@ export class MockAgent {
   }
 }
 
+const COMPLETED_STAGES: Record<string, string> = {
+  onboard: "deterministic_execution_completed",
+  transform: "deterministic_execution_completed",
+  validate: "deterministic_execution_completed",
+  stamp: "deterministic_execution_completed",
+  assemble: "deterministic_execution_completed",
+};
+
 const STEP_ACTIONS: Record<string, string> = {
-  "requirements/confirm": "confirm_requirements",
-  "pack/generate": "generate_onboarding_pack",
-  "pack/approve": "approve_onboarding_pack",
-  "artefacts/classify": "classify_artefacts",
-  "configuration/draft": "draft_client_config",
-  "configuration/approve": "approve_client_config",
+  "information-requests": "request_client_information",
+  submit: "submit_for_approval",
+  approve: "approve_onboarding",
+  "request-changes": "request_changes",
   run: "run_synthetic_onboarding",
   plan: "generate_orchestration_plan",
   "readiness/approve": "approve_execution_readiness",
-  cancel: "cancel_case",
+  cancel: "cancel_run",
 };
 
-const MATERIAL_STEPS = new Set([
-  "requirements/confirm",
-  "pack/approve",
-  "configuration/approve",
-  "readiness/approve",
-  "cancel",
-]);
+const MATERIAL_STEPS = new Set(["submit", "approve", "readiness/approve", "cancel"]);
 
 const PROPOSAL_SUMMARIES: Record<string, string> = {
-  "requirements/confirm": "Confirm the proposed interpretation.",
-  "pack/approve": "Approve the onboarding pack.",
-  "configuration/approve": "Approve the proposed configuration.",
+  submit: "Submit the onboarding for approval.",
+  approve: "Approve the onboarding.",
   "readiness/approve": "Approve readiness for execution.",
-  cancel: "Cancel this synthetic case.",
+  cancel: "Cancel this practice case.",
 };
 
-/** What a bare "yes" means, given where the case is. */
+/** What a bare "yes" means once the onboarding is approved. */
 const PENDING_CONFIRMATION: Record<string, string> = {
-  [S.REQUIREMENTS_EXTRACTED]: "requirements/confirm",
-  [S.REQUIREMENTS_CONFIRMATION_REQUIRED]: "requirements/confirm",
-  [S.ONBOARDING_PACK_GENERATED]: "pack/approve",
-  [S.ONBOARDING_PACK_APPROVAL_REQUIRED]: "pack/approve",
-  [S.CONFIG_DRAFTED]: "configuration/approve",
-  [S.CONFIG_APPROVAL_REQUIRED]: "configuration/approve",
+  [S.READY_TO_RUN]: "run",
+  [S.SYNTHETIC_ONBOARDING_PASSED]: "plan",
   [S.ORCHESTRATION_PLAN_GENERATED]: "readiness/approve",
   [S.EXECUTION_APPROVAL_REQUIRED]: "readiness/approve",
 };
-
-const MOCK_PACK = {
-  content_hash: "mock-pack-hash",
-  outcome: "mi",
-  required_roles: ["loan_extract"],
-  optional_roles: ["cashflow_extract"],
-  sections: [
-    {
-      key: "client_email",
-      title: "Draft client email",
-      body: "Dear team,\n\nWe are setting up your portfolio on Trakt.\n\nKind regards,\nTrakt Operations",
-      items: [],
-      depends_on: ["client_name"],
-    },
-    {
-      key: "questionnaire",
-      title: "Onboarding questionnaire",
-      body: "",
-      items: [
-        { id: "q_client_legal_name", question: "What is the client's full legal name?", why: "" },
-      ],
-      depends_on: ["client_name"],
-    },
-  ],
-};
-
-const MOCK_CONFIG = {
-  status: "READY",
-  content_hash: "mock-config-hash",
-  candidate: { client: { client_id: "mock_client" }, portfolio: { asset_class: "equity_release" } },
-  blockers: [],
-  warnings: [],
-};
-
-const MOCK_PROVENANCE = [
-  {
-    key: "portfolio.base_currency",
-    value: "GBP",
-    source: "deterministic_default",
-    evidence: "standard currency for GB",
-    confidence: null,
-    downstream_impact: "All amounts are validated and presented in it.",
-    material: true,
-    requires_human_confirmation: true,
-    confirmed: false,
-    confirmed_by: "",
-  },
-];
 
 const MOCK_PLAN = {
   target: "mi",
@@ -1094,6 +1166,67 @@ const MOCK_PLAN = {
     { step: "assemble", agent: "Assembler Agent", produces: ["platform_canonical_typed.csv"] },
   ],
 };
+
+/** The mock interpreter: what one instruction says, and nothing more. */
+function interpret(instruction: string) {
+  const clientName =
+    /onboard\s+([A-Z][\w ]+?)[.,]/i.exec(instruction)?.[1]?.trim() ?? "New client";
+  // `.` and `-` are legal INSIDE an identifier and only noise at the very end,
+  // so the pattern keeps them and the trim drops the sentence punctuation.
+  const portfolioId = (
+    /portfolio id\s+([\w_.-]+)/i.exec(instruction)?.[1] ?? "direct_001"
+  ).replace(/[.,;:_-]+$/, "");
+  const lower = instruction.toLowerCase();
+  const products = ["mi"];
+  if (/investor reporting|annex ?12/.test(lower)) products.push("investor_reporting");
+  if (/annex ?2|regulatory reporting/.test(lower)) products.push("esma_annex2");
+  return {
+    clientName,
+    portfolioId,
+    products,
+    jurisdiction: /\buk\b|united kingdom|british/.test(lower) ? "GB" : "",
+    reportingPeriod:
+      /(?:first\s+)?report(?:ing)?\s+(?:date|period)[^.]{0,40}?(\d{4}-\d{2}-\d{2})/i.exec(
+        instruction,
+      )?.[1] ?? "",
+  };
+}
+
+/** Turn `{"section.field": value}` into a `recordResponse` payload. */
+function answersFor(
+  onboarding: OnboardingCase,
+  items: ChecklistRow[],
+  response: Record<string, string>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const item of items) {
+    const key = `${item.section}.${item.field}`;
+    if (!(key in response)) continue;
+    if (item.index === null || item.index === undefined) {
+      const block = (out[item.section] ?? {}) as Record<string, unknown>;
+      block[item.field] = response[key];
+      out[item.section] = block;
+      continue;
+    }
+    let rows = out[item.section] as Record<string, unknown>[] | undefined;
+    if (!Array.isArray(rows)) {
+      rows = ((onboarding.answers[item.section] ?? []) as Record<string, unknown>[]).map((r) => ({
+        ...r,
+      }));
+      out[item.section] = rows;
+    }
+    if (rows[item.index]) rows[item.index][item.field] = response[key];
+  }
+  return out;
+}
+
+function scenarioById(fixtureId: string): ScenarioSummary {
+  const scenario = SCENARIOS.find((s) => s.fixture_id === fixtureId);
+  if (!scenario) {
+    throw new OpsError("That practice scenario could not be found.", "OCC_AGENT_FIXTURE_NOT_FOUND");
+  }
+  return scenario;
+}
 
 function nowIso(): string {
   return new Date().toISOString();

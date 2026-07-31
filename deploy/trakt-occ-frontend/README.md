@@ -26,7 +26,7 @@ so changing it requires a rebuild and redeploy, not a restart.
 
 ### Optional: the OCC Agent tab
 
-The OCC Agent (synthetic onboarding) tab is **off** in this deployment and is
+The OCC Agent (practice onboarding) tab is **off** in this deployment and is
 deliberately not set by the workflow — it is a pre-scale capability, not part of
 Client 1 delivery. Turning it on takes two independent settings, one per side:
 

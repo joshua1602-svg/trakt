@@ -1,7 +1,7 @@
 """operations_control.occ_agent.artefacts — synthetic client responses.
 
-An artefact provided to a synthetic case takes exactly the route a real
-delivery takes, minus the one step that would touch production:
+An artefact provided to a practice case takes exactly the route a real delivery
+takes, minus the one step that would touch production:
 
 1. the file name is sanitised by the SAME function a manual delivery uses
    (:func:`operations_control.manual_intake.sanitise_filename`), so traversal,
@@ -10,7 +10,9 @@ delivery takes, minus the one step that would touch production:
 2. the intended live destination is derived by
    :func:`operations_control.manual_intake.derive_raw_prefix`, which re-parses
    its own output with the production path parser — so the URI recorded on the
-   case is one the automated intake route would accept;
+   run is one the automated intake route would accept. The identity it is
+   derived from is the *onboarding case's* — the client and portfolio the
+   operator answered for — not anything this feature invents;
 3. **the file is written into the case sandbox and nowhere else.** The intended
    URI is recorded as text. :meth:`ArtefactService.register` never calls a
    storage write against it, and the synthetic policy would refuse it if it did;
@@ -32,12 +34,7 @@ from typing import Any, Dict, List, Sequence, Tuple
 
 from apps.blob_trigger_app.file_roles import classify_pack
 
-from ..contracts import (
-    BATCH_DATASET_DEFAULT,
-    BATCH_FREQUENCY_DEFAULT,
-    new_id,
-    now_iso,
-)
+from ..contracts import BATCH_FREQUENCY_DEFAULT, new_id, now_iso
 from ..engine import OpsError
 from ..manual_intake import (
     ManualIntakeError,
@@ -45,10 +42,11 @@ from ..manual_intake import (
     derive_raw_prefix,
     sanitise_filename,
 )
-from .case import SyntheticArtefact, SyntheticCase
+from .derive import ExecutionFacts
+from .input_roles import artefact_vocabulary
 from .policy import CAP_LIVE_BLOB_WRITE, SyntheticPolicy
-from .store import SyntheticCaseStore
-from .vocabulary import artefact_vocabulary
+from .run import SyntheticArtefact, SyntheticRun
+from .store import SyntheticRunStore
 
 #: Upper bound on one synthetic artefact. Generous for a tape, small enough that
 #: a mistaken upload cannot fill the sandbox.
@@ -94,18 +92,19 @@ class RoleReadiness:
 class ArtefactService:
     """Registration, classification and readiness for synthetic artefacts."""
 
-    def __init__(self, store: SyntheticCaseStore, policy: SyntheticPolicy):
+    def __init__(self, store: SyntheticRunStore, policy: SyntheticPolicy):
         self.store = store
         self.policy = policy
 
     # ------------------------------------------------------------------ #
-    def register(self, case: SyntheticCase, *, filename: str, data: bytes,
-                 provided_by: str, fixture_id: str = "",
+    def register(self, run: SyntheticRun, facts: ExecutionFacts, *,
+                 filename: str, data: bytes, provided_by: str,
+                 fixture_id: str = "",
                  declared_type: str = "") -> SyntheticArtefact:
         """Accept one synthetic artefact into the case sandbox."""
         if len(data) > MAX_ARTEFACT_BYTES:
             raise ArtefactRejected(
-                "That file is too large for a synthetic case.")
+                "That file is too large for a practice case.")
         if not data:
             raise ArtefactRejected("That file is empty.")
         try:
@@ -113,16 +112,16 @@ class ArtefactService:
         except ManualIntakeError as exc:
             raise ArtefactRejected(str(exc)) from exc
 
-        path = self.store.write_artefact_bytes(case.tenant, case.case_id, leaf,
+        path = self.store.write_artefact_bytes(run.tenant, run.case_ref, leaf,
                                                data)
         columns, rows = _inspect(path)
-        artefact = SyntheticArtefact(
+        return SyntheticArtefact(
             artefact_id=new_id("sart"),
             source_file=leaf,
             artefact_type=declared_type,
-            synthetic_location=self.store.relative(case.tenant, case.case_id,
+            synthetic_location=self.store.relative(run.tenant, run.case_ref,
                                                    path),
-            intended_live_uri=self.intended_uri(case, leaf),
+            intended_live_uri=self.intended_uri(run, facts, leaf),
             execution_status="simulated_only",
             sha256="sha256:" + hashlib.sha256(data).hexdigest(),
             size=len(data),
@@ -131,27 +130,24 @@ class ArtefactService:
             provided_by=provided_by,
             provided_at=now_iso(),
             fixture_id=fixture_id)
-        return artefact
 
-    def intended_uri(self, case: SyntheticCase, filename: str) -> str:
+    def intended_uri(self, run: SyntheticRun, facts: ExecutionFacts,
+                     filename: str) -> str:
         """The live Blob URI this artefact WOULD occupy. Never written to.
 
-        Derived with the production path rules; when identity or period is not
-        yet confirmed the URI is deliberately empty rather than guessed — a
-        wrong intended path is worse than a missing one, because readiness
-        checks it.
+        Derived with the production path rules from the onboarding case's own
+        identity and the run's reporting period. When any of the three is not
+        yet answered the URI is deliberately empty rather than guessed — a wrong
+        intended path is worse than a missing one, because readiness checks it.
         """
-        req = case.confirmed or case.extracted
-        client = case.client_id or req.proposed_client_id
-        portfolio = case.portfolio_id or req.proposed_portfolio_id
-        period = req.reporting_date
-        if not (client and portfolio and period):
+        if not (facts.client_id and facts.portfolio_id and run.reporting_period):
             return ""
         try:
             prefix = derive_raw_prefix(
-                client_id=client, portfolio_id=portfolio,
-                reporting_period=period, dataset=BATCH_DATASET_DEFAULT,
-                frequency=(req.reporting_frequency or BATCH_FREQUENCY_DEFAULT))
+                client_id=facts.client_id, portfolio_id=facts.portfolio_id,
+                reporting_period=run.reporting_period,
+                dataset=run.dataset or facts.dataset,
+                frequency=(facts.cadence or BATCH_FREQUENCY_DEFAULT))
             return derive_blob_uri(prefix, filename)
         except ManualIntakeError:
             return ""
@@ -167,8 +163,7 @@ class ArtefactService:
                             tenant=tenant, actor=actor)
 
     # ------------------------------------------------------------------ #
-    def classify(self, case: SyntheticCase,
-                 artefacts: Sequence[SyntheticArtefact]
+    def classify(self, artefacts: Sequence[SyntheticArtefact]
                  ) -> Tuple[List[SyntheticArtefact], List[str]]:
         """Assign a semantic input role to each artefact.
 
@@ -218,15 +213,14 @@ class ArtefactService:
         return out, findings
 
     # ------------------------------------------------------------------ #
-    def readiness(self, case: SyntheticCase, outcome: str) -> RoleReadiness:
+    def readiness(self, run: SyntheticRun, outcome: str) -> RoleReadiness:
         """Are the configured required roles satisfied for this outcome?"""
         vocab = artefact_vocabulary()
         required = vocab.required_roles(outcome)
         optional = vocab.optional_roles(outcome)
         satisfied: List[str] = []
         low: List[Dict[str, Any]] = []
-        for raw in case.received_artefacts:
-            artefact = SyntheticArtefact.from_dict(raw)
+        for artefact in run.artefacts():
             if artefact.artefact_type not in required:
                 continue
             confidence = artefact.recognition_confidence
@@ -245,6 +239,20 @@ class ArtefactService:
         return RoleReadiness(outcome=outcome, required=required,
                              optional=optional, satisfied=satisfied,
                              missing=missing, low_confidence=low)
+
+
+def sample_manifest(artefacts: Sequence[SyntheticArtefact]
+                    ) -> List[Dict[str, Any]]:
+    """The artefacts as Client Onboarding's own sample-pack shape.
+
+    ``OnboardingService.register_sample`` takes ``[{"name", "headers"}]`` — what
+    the existing intake extracts when it reads a pack — and infers the file
+    format, the expected file names and often the asset class from it. Feeding a
+    practice response through it means the case is answered by the same
+    inference a real sample pack would trigger, rather than by this feature.
+    """
+    return [{"name": a.source_file, "headers": list(a.columns)}
+            for a in artefacts]
 
 
 # --------------------------------------------------------------------------- #
@@ -271,5 +279,3 @@ def _inspect(path: Path) -> Tuple[List[str], int]:
         return [str(c) for c in head.columns], rows
     except Exception:  # noqa: BLE001 — an unreadable file is a finding, not a crash
         return [], 0
-
-

@@ -1,7 +1,8 @@
 import type {
   AgentAudit,
+  AgentChecklist,
   AgentMeta,
-  AgentPack,
+  AgentPreview,
   AgentReadinessPackage,
   AgentStatus,
   AgentTurn,
@@ -159,41 +160,58 @@ export interface OpsClient {
   getOnboardingClient(clientId: string): Promise<OnboardingClientDetail>;
   getOnboardingClientVersion(clientId: string, version: number): Promise<ConfigurationVersionRow>;
 
-  // -- OCC Agent (synthetic onboarding cases) ------------------------------ //
-  // Every one of these is served by the synthetic case store. None of them can
-  // reach a live workflow, and the backend refuses them all when the feature
-  // flag is off — hiding the tab is convenience, not the control.
+  // -- OCC Agent (practice onboarding cases) -------------------------------- //
+  // A practice case is a REAL onboarding case, opened by the calls above and
+  // stored in an isolated container, plus a practice execution beside it. None
+  // of these can reach a live workflow or activate a configuration, and the
+  // backend refuses them all when the feature flag is off — hiding the tab is
+  // convenience, not the control.
   getAgentMeta(): Promise<AgentMeta>;
   listAgentCases(state?: string): Promise<CaseSummary[]>;
   createAgentCase(instruction: string, fixtureId?: string): Promise<AgentStatus>;
-  getAgentCase(caseId: string): Promise<AgentStatus>;
-  instructAgent(caseId: string, text: string, confirm?: boolean): Promise<AgentTurn>;
+  getAgentCase(caseRef: string): Promise<AgentStatus>;
+  instructAgent(caseRef: string, text: string, confirm?: boolean): Promise<AgentTurn>;
   answerAgentDecision(
-    caseId: string,
+    caseRef: string,
     input: { decision_id: string; action: string; value?: string; reason?: string },
   ): Promise<AgentStatus>;
   /** Named lifecycle steps, for the operator controls beside the conversation. */
   runAgentStep(
-    caseId: string,
+    caseRef: string,
     step:
-      | "requirements/confirm"
-      | "pack/generate"
-      | "pack/approve"
-      | "artefacts/classify"
-      | "configuration/draft"
-      | "configuration/approve"
+      | "information-requests"
+      | "submit"
+      | "approve"
+      | "request-changes"
       | "run"
       | "plan"
       | "readiness/approve"
       | "cancel",
+    body?: Record<string, unknown>,
   ): Promise<AgentStatus>;
-  uploadAgentArtefacts(caseId: string, files: File[]): Promise<AgentStatus>;
-  /** Generate a client response from the case's own confirmed requirements. */
-  generateAgentResponse(caseId: string): Promise<AgentStatus>;
-  loadAgentFixtureArtefacts(caseId: string, fixtureId: string): Promise<AgentStatus>;
-  returnAgentCaseToStage(caseId: string, targetState: string, reason?: string): Promise<AgentStatus>;
+  /** Answer one wizard step directly, through Client Onboarding itself. */
+  saveAgentStep(
+    caseRef: string,
+    step: string,
+    payload: Record<string, unknown>,
+  ): Promise<AgentStatus>;
+  recordAgentClientResponse(
+    caseRef: string,
+    input: { request_id: string; answers: Record<string, unknown>; note?: string; accept?: boolean },
+  ): Promise<AgentStatus>;
+  /** Name which delivery the practice run is for. */
+  setAgentRunTarget(
+    caseRef: string,
+    input: { portfolio_id?: string; dataset?: string; reporting_period?: string },
+  ): Promise<AgentStatus>;
+  uploadAgentArtefacts(caseRef: string, files: File[]): Promise<AgentStatus>;
+  /** Generate a client response from the delivery outcome the case implies. */
+  generateAgentResponse(caseRef: string): Promise<AgentStatus>;
+  loadAgentFixtureArtefacts(caseRef: string, fixtureId: string): Promise<AgentStatus>;
   runAgentScenario(fixtureId: string): Promise<AgentStatus>;
-  getAgentPack(caseId: string): Promise<AgentPack>;
-  getAgentReadiness(caseId: string): Promise<AgentReadinessPackage>;
-  getAgentAudit(caseId: string): Promise<AgentAudit>;
+  getAgentChecklist(caseRef: string): Promise<AgentChecklist>;
+  /** What activation WOULD create. It creates nothing. */
+  getAgentPreview(caseRef: string): Promise<AgentPreview>;
+  getAgentReadiness(caseRef: string): Promise<AgentReadinessPackage>;
+  getAgentAudit(caseRef: string): Promise<AgentAudit>;
 }

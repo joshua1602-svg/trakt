@@ -1,8 +1,9 @@
-"""The lifecycle table and its enforcement.
+"""The two lifecycle tables, and the fact that there are exactly two.
 
-The state model is the contract the API, the service and the UI all read, so it
-is tested as a table in its own right — not only through the scenarios that
-happen to walk it.
+The OCC Agent adds an EXECUTION lifecycle. It does not restate the onboarding
+lifecycle — that belongs to
+:mod:`operations_control.onboarding.case`, and these tests assert the OCC Agent
+neither duplicates it nor bypasses it.
 """
 
 from __future__ import annotations
@@ -10,29 +11,57 @@ from __future__ import annotations
 import pytest
 
 from operations_control.occ_agent import states as _states
-from operations_control.occ_agent.case import SyntheticCase
 from operations_control.occ_agent.service import ActionNotAllowed
+from operations_control.onboarding import case as _onboarding_case
 
 from .conftest import ACTOR, TENANT_A
 
-#: Every state named in the specification. Kept as a literal list so a state
+#: Every execution state the feature promises. Kept as a literal list so a state
 #: silently dropped from the table fails here.
 REQUIRED_STATES = (
-    "CASE_CREATED", "REQUIREMENTS_EXTRACTED",
-    "REQUIREMENTS_CONFIRMATION_REQUIRED", "REQUIREMENTS_CONFIRMED",
-    "ONBOARDING_PACK_GENERATED", "ONBOARDING_PACK_APPROVAL_REQUIRED",
-    "ONBOARDING_PACK_ISSUED_SYNTHETICALLY", "AWAITING_CLIENT_INPUT",
-    "ARTEFACTS_RECEIVED", "ARTEFACTS_CLASSIFIED", "CONFIG_DRAFTED",
-    "CONFIG_APPROVAL_REQUIRED", "CONFIG_APPROVED",
-    "SYNTHETIC_ONBOARDING_RUNNING", "EXCEPTIONS_REQUIRE_INPUT",
-    "SYNTHETIC_ONBOARDING_PASSED", "ORCHESTRATION_PLAN_GENERATED",
-    "EXECUTION_APPROVAL_REQUIRED", "READY_FOR_EXECUTION", "BLOCKED",
-    "CANCELLED",
+    "AWAITING_ONBOARDING", "READY_TO_RUN", "SYNTHETIC_ONBOARDING_RUNNING",
+    "EXCEPTIONS_REQUIRE_INPUT", "SYNTHETIC_ONBOARDING_PASSED",
+    "ORCHESTRATION_PLAN_GENERATED", "EXECUTION_APPROVAL_REQUIRED",
+    "READY_FOR_EXECUTION", "BLOCKED", "CANCELLED",
 )
 
 
+# --------------------------------------------------------------------------- #
+# There is one onboarding lifecycle, and it is not this module's
+# --------------------------------------------------------------------------- #
+
+def test_the_execution_table_does_not_restate_the_onboarding_table():
+    """No onboarding status may appear as an execution state.
+
+    Two tables describing the same thing is the duplication this refactor
+    exists to avoid; a name in both would be the first symptom.
+    """
+    onboarding = {s.upper() for s in _onboarding_case.STATUSES}
+    assert onboarding.isdisjoint(set(_states.STATE_SPECS))
+
+
+def test_onboarding_actions_are_not_gated_by_the_execution_table():
+    """Client Onboarding's own transition table decides its actions.
+
+    The execution table must not second-guess it — otherwise there would be two
+    answers to "can this case be approved?", and they would eventually differ.
+    """
+    for state in _states.STATE_SPECS:
+        for action in _states.ONBOARDING_ACTIONS:
+            assert _states.action_allowed(state, action) is True, (state, action)
+
+
+def test_activation_is_not_a_state_this_feature_can_reach():
+    assert "ACTIVATED" not in _states.STATE_SPECS
+    assert not any("activat" in state.lower() for state in _states.STATE_SPECS)
+
+
+# --------------------------------------------------------------------------- #
+# The execution table
+# --------------------------------------------------------------------------- #
+
 def test_every_required_state_exists():
-    assert set(REQUIRED_STATES) <= set(_states.STATE_SPECS)
+    assert set(REQUIRED_STATES) == set(_states.STATE_SPECS)
 
 
 def test_every_state_defines_its_full_contract():
@@ -52,7 +81,7 @@ def test_every_live_state_can_be_blocked_or_cancelled():
             continue        # terminal
         if state != _states.BLOCKED:
             assert _states.BLOCKED in _states.permitted_next(state), state
-        # A blocked case can always still be cancelled.
+        # A blocked run can always still be cancelled.
         assert _states.CANCELLED in _states.permitted_next(state), state
 
 
@@ -88,14 +117,7 @@ def test_the_two_directions_of_the_table_agree():
 
 def test_the_happy_path_is_walkable_end_to_end():
     path = [
-        _states.CASE_CREATED, _states.REQUIREMENTS_EXTRACTED,
-        _states.REQUIREMENTS_CONFIRMATION_REQUIRED,
-        _states.REQUIREMENTS_CONFIRMED, _states.ONBOARDING_PACK_GENERATED,
-        _states.ONBOARDING_PACK_APPROVAL_REQUIRED,
-        _states.ONBOARDING_PACK_ISSUED_SYNTHETICALLY,
-        _states.AWAITING_CLIENT_INPUT, _states.ARTEFACTS_RECEIVED,
-        _states.ARTEFACTS_CLASSIFIED, _states.CONFIG_DRAFTED,
-        _states.CONFIG_APPROVAL_REQUIRED, _states.CONFIG_APPROVED,
+        _states.AWAITING_ONBOARDING, _states.READY_TO_RUN,
         _states.SYNTHETIC_ONBOARDING_RUNNING,
         _states.SYNTHETIC_ONBOARDING_PASSED,
         _states.ORCHESTRATION_PLAN_GENERATED,
@@ -106,18 +128,16 @@ def test_the_happy_path_is_walkable_end_to_end():
 
 
 @pytest.mark.parametrize("current,target", [
-    ("CASE_CREATED", "READY_FOR_EXECUTION"),
-    ("CASE_CREATED", "CONFIG_APPROVED"),
-    ("REQUIREMENTS_EXTRACTED", "SYNTHETIC_ONBOARDING_PASSED"),
-    ("ARTEFACTS_RECEIVED", "READY_FOR_EXECUTION"),
-    ("CONFIG_DRAFTED", "READY_FOR_EXECUTION"),
+    ("AWAITING_ONBOARDING", "READY_FOR_EXECUTION"),
+    ("AWAITING_ONBOARDING", "SYNTHETIC_ONBOARDING_PASSED"),
+    ("READY_TO_RUN", "READY_FOR_EXECUTION"),
     ("SYNTHETIC_ONBOARDING_PASSED", "READY_FOR_EXECUTION"),
-    ("READY_FOR_EXECUTION", "CASE_CREATED"),
-    ("CANCELLED", "REQUIREMENTS_EXTRACTED"),
+    ("READY_FOR_EXECUTION", "AWAITING_ONBOARDING"),
+    ("CANCELLED", "READY_TO_RUN"),
 ])
 def test_invalid_transitions_are_refused(current, target):
     assert _states.is_transition_allowed(current, target) is False
-    with pytest.raises(_states.IllegalCaseTransition):
+    with pytest.raises(_states.IllegalRunTransition):
         _states.assert_transition(current, target)
 
 
@@ -127,14 +147,14 @@ def test_a_state_cannot_transition_to_itself():
 
 
 def test_an_unknown_state_is_refused():
-    assert _states.is_transition_allowed("MADE_UP", "CASE_CREATED") is False
-    with pytest.raises(_states.IllegalCaseTransition):
+    assert _states.is_transition_allowed("MADE_UP", "READY_TO_RUN") is False
+    with pytest.raises(_states.IllegalRunTransition):
         _states.spec("MADE_UP")
 
 
-def test_a_terminal_case_offers_no_human_actions():
-    assert _states.STATE_SPECS[_states.READY_FOR_EXECUTION].allowed_human_actions == ()
-    assert _states.STATE_SPECS[_states.CANCELLED].allowed_human_actions == ()
+def test_a_terminal_run_offers_no_execution_actions():
+    for state in _states.TERMINAL_STATES:
+        assert _states.STATE_SPECS[state].allowed_human_actions == ()
 
 
 def test_asking_is_allowed_everywhere():
@@ -142,84 +162,52 @@ def test_asking_is_allowed_everywhere():
         assert _states.action_allowed(state, _states.ACTION_ASK) is True
 
 
-def test_returnable_states_never_skip_a_control():
-    """Returning re-opens a stage; it can never jump past one."""
-    downstream = {_states.CONFIG_APPROVED, _states.SYNTHETIC_ONBOARDING_PASSED,
-                  _states.ORCHESTRATION_PLAN_GENERATED,
-                  _states.EXECUTION_APPROVAL_REQUIRED,
-                  _states.READY_FOR_EXECUTION}
-    assert set(_states.RETURNABLE_STATES).isdisjoint(downstream)
+def test_the_lifecycle_is_exposed_for_the_ui():
+    lifecycle = _states.lifecycle()
+    assert [entry["state"] for entry in lifecycle] == list(_states.STATE_ORDER)
+    assert lifecycle[0]["state"] == _states.AWAITING_ONBOARDING
+    assert any(entry["terminal"] for entry in lifecycle)
 
 
 # --------------------------------------------------------------------------- #
 # Enforcement through the service
 # --------------------------------------------------------------------------- #
 
-def test_the_service_refuses_an_action_the_state_does_not_allow(service):
-    case = service.create_case(tenant=TENANT_A, initiating_user=ACTOR,
-                               instruction="Onboard Northstar Lending.")
+def test_the_service_refuses_an_execution_action_the_state_does_not_allow(
+        service):
+    agent_case = service.create_case(tenant=TENANT_A, initiating_user=ACTOR,
+                                     instruction="Onboard Northstar Lending.")
     for call in (
-        lambda: service.generate_onboarding_pack(case, actor=ACTOR),
-        lambda: service.classify_artefacts(case, actor=ACTOR),
-        lambda: service.draft_client_config(case, actor=ACTOR),
-        lambda: service.run_synthetic_onboarding(case, actor=ACTOR),
-        lambda: service.generate_orchestration_plan(case, actor=ACTOR),
-        lambda: service.approve_execution_readiness(case, actor=ACTOR),
+        lambda: service.run_synthetic_onboarding(agent_case, actor=ACTOR),
+        lambda: service.generate_orchestration_plan(agent_case, actor=ACTOR),
+        lambda: service.approve_execution_readiness(agent_case, actor=ACTOR),
     ):
         with pytest.raises(ActionNotAllowed):
             call()
 
 
-def test_the_service_refuses_to_confirm_requirements_that_are_incomplete(service):
-    case = service.create_case(tenant=TENANT_A, initiating_user=ACTOR,
-                               instruction="Onboard someone or other.")
-    case = service.confirm_requirements(case, actor=ACTOR)
-    assert case.state == _states.BLOCKED
-    assert case.blockers
-
-
-def test_the_lifecycle_is_exposed_for_the_ui():
-    lifecycle = _states.lifecycle()
-    assert [entry["state"] for entry in lifecycle] == list(_states.STATE_ORDER)
-    assert lifecycle[0]["state"] == _states.CASE_CREATED
-    assert any(entry["terminal"] for entry in lifecycle)
-
-
-# --------------------------------------------------------------------------- #
-# Identity
-# --------------------------------------------------------------------------- #
-
-def test_client_identity_cannot_change_implicitly():
-    from operations_control.occ_agent.case import IdentityChangeRefused
-    case = SyntheticCase(case_id="CASE-AAAA0001", tenant="client_a",
-                         initiating_user="alice", client_id="northstar",
-                         portfolio_id="direct_101")
-    with pytest.raises(IdentityChangeRefused):
-        case.rebind_identity(client_id="someone_else")
-    with pytest.raises(IdentityChangeRefused):
-        case.rebind_identity(portfolio_id="direct_999")
-    # An explicit rebinding is permitted, and only that.
-    case.rebind_identity(client_id="someone_else", explicit=True)
-    assert case.client_id == "someone_else"
-
-
-def test_a_correction_cannot_move_a_case_to_another_client(service):
-    from operations_control.occ_agent.case import IdentityChangeRefused
-    case = service.create_case(
+def test_the_practice_run_cannot_start_before_the_onboarding_is_approved(
+        service):
+    """The gate between the two halves. Approval is the pipeline's input."""
+    from operations_control.engine import OpsError
+    agent_case = service.create_case(
         tenant=TENANT_A, initiating_user=ACTOR,
         instruction="Onboard Northstar Lending. UK equity release. Monthly "
-                    "portfolio MI. Portfolio id direct_101. First reporting "
-                    "date 2026-06-30.")
-    case = service.confirm_requirements(case, actor=ACTOR)
-    assert case.client_id == "northstar_lending"
-    with pytest.raises(IdentityChangeRefused):
-        service.apply_requirement_change(
-            case, updates={"proposed_client_id": "someone_else"}, actor=ACTOR)
+                    "portfolio MI. Portfolio id direct_101.")
+    # Force the run into a state that permits the action, so the refusal under
+    # test is the approval check rather than the lifecycle table.
+    agent_case.run.state = _states.READY_TO_RUN
+    service.store.save(agent_case.run)
+    with pytest.raises(OpsError) as excinfo:
+        service.run_synthetic_onboarding(agent_case, actor=ACTOR)
+    assert excinfo.value.code == "OCC_AGENT_ONBOARDING_NOT_APPROVED"
 
 
-def test_setting_identity_for_the_first_time_is_allowed():
-    case = SyntheticCase(case_id="CASE-AAAA0001", tenant="client_a",
-                         initiating_user="alice")
-    case.rebind_identity(client_id="northstar", portfolio_id="direct_101")
-    assert case.client_id == "northstar"
-    assert case.portfolio_id == "direct_101"
+def test_the_onboarding_refuses_its_own_illegal_transition(service):
+    """Approval is refused by Client Onboarding, not by anything written here."""
+    from operations_control.engine import OpsError
+    agent_case = service.create_case(tenant=TENANT_A, initiating_user=ACTOR,
+                                     instruction="Onboard Northstar Lending.")
+    with pytest.raises(OpsError) as excinfo:
+        service.approve_onboarding(agent_case, actor=ACTOR, reason="because")
+    assert excinfo.value.code == "OPS_ONBOARDING_INCOMPLETE"

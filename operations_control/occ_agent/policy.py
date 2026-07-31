@@ -64,10 +64,14 @@ CAP_LIVE_PIPELINE_TRIGGER = "live_pipeline_trigger"
 CAP_PRODUCTION_CONFIG_WRITE = "production_config_write"
 CAP_PUBLISH = "publish"
 CAP_LIVE_CASE_ACCESS = "live_case_access"
+#: Activation is Client Onboarding's own write boundary — its ``activate()``
+#: is "the only place active configuration is created". Naming it as a
+#: capability makes that the exact line a practice case never crosses.
+CAP_ACTIVATE_CONFIGURATION = "activate_configuration"
 
 CAPABILITIES = (CAP_EXTERNAL_EMAIL, CAP_LIVE_BLOB_WRITE,
                 CAP_LIVE_PIPELINE_TRIGGER, CAP_PRODUCTION_CONFIG_WRITE,
-                CAP_PUBLISH, CAP_LIVE_CASE_ACCESS)
+                CAP_PUBLISH, CAP_LIVE_CASE_ACCESS, CAP_ACTIVATE_CONFIGURATION)
 
 #: Operator-safe refusal wording, by capability. Plain English: these surface in
 #: the OCC exactly like any other governed refusal.
@@ -90,6 +94,10 @@ _REFUSALS: Dict[str, str] = {
     CAP_LIVE_CASE_ACCESS:
         "This is a synthetic onboarding case. It cannot read or change live "
         "delivery workflows.",
+    CAP_ACTIVATE_CONFIGURATION:
+        "This is a practice case. It can be approved, but activating it — "
+        "which is what creates a client's configuration — is not possible "
+        "here.",
 }
 
 
@@ -138,6 +146,7 @@ class SyntheticPolicy:
     allow_production_config_write: bool = False
     allow_publish: bool = False
     allow_live_case_access: bool = False
+    allow_activate_configuration: bool = False
     audit_sink: Optional[Callable[[Dict[str, Any]], None]] = field(
         default=None, compare=False, repr=False)
 
@@ -155,6 +164,7 @@ class SyntheticPolicy:
             "allow_production_config_write": self.allow_production_config_write,
             "allow_publish": self.allow_publish,
             "allow_live_case_access": self.allow_live_case_access,
+            "allow_activate_configuration": self.allow_activate_configuration,
         }
 
     # -- the guards --------------------------------------------------------- #
@@ -218,6 +228,9 @@ class SyntheticPolicy:
     def guard_live_case_access(self, **kw: Any) -> None:
         self.require(CAP_LIVE_CASE_ACCESS, **kw)
 
+    def guard_activate_configuration(self, **kw: Any) -> None:
+        self.require(CAP_ACTIVATE_CONFIGURATION, **kw)
+
 
 def synthetic_policy(
         audit_sink: Optional[Callable[[Dict[str, Any]], None]] = None,
@@ -229,10 +242,6 @@ def synthetic_policy(
 # --------------------------------------------------------------------------- #
 # Path safety
 # --------------------------------------------------------------------------- #
-
-#: A case identifier: uppercase slug with a numeric suffix. Anchored, no
-#: separators, no dots — so it can never contribute a path segment of its own.
-CASE_ID_RE = re.compile(r"^CASE-[A-Z0-9]{4,32}$")
 
 #: A tenant / client / portfolio identifier used as one path segment. Mirrors
 #: manual_intake._SEGMENT_RE so synthetic and live agree on what a segment is.
@@ -248,12 +257,6 @@ class UnsafePathError(OpsError):
             "Trakt could not use that name. Check the file name and try again."
             + (f" ({detail})" if detail else ""),
             http_status=400)
-
-
-def validate_case_id(case_id: str) -> str:
-    if not CASE_ID_RE.match(str(case_id or "")):
-        raise UnsafePathError("case identifier")
-    return case_id
 
 
 def validate_segment(value: str, what: str = "identifier") -> str:

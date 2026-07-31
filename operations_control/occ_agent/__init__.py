@@ -1,25 +1,40 @@
-"""operations_control.occ_agent — the OCC Agent's synthetic onboarding capability.
+"""operations_control.occ_agent — practising an onboarding, end to end.
 
-The natural-language operating layer over the existing Operations Control
-Centre. It creates and drives **synthetic** onboarding cases from an initial
-instruction through to ``READY_FOR_EXECUTION``, reusing the platform's real
-onboarding configuration, agents, gates and controls — and never touching live
-storage, the live pipeline, production configuration, email or publication.
+A natural-language operating layer over two things the Operations Control Centre
+already has, joining them for the first time:
 
-Layering, innermost first:
+* **Client Onboarding** (:mod:`operations_control.onboarding`) — the governed
+  standing-configuration capability, with its own case model, field catalogue,
+  validation, information requests, approval and activation. The OCC Agent
+  *drives* it; it does not reimplement any part of it.
+* **the delivery pipeline** — the Onboarding Agent, the Orchestration Agent, the
+  Assembler Agent and the governed gates, run over a synthetic execution adapter.
 
-    policy      the synthetic execution boundary (no permissions, fail closed)
-    states      the case lifecycle and its legal transitions
-    case/store  the typed case document and its isolated persistence
-    vocabulary  what the agent recognises, read from platform configuration
-    pack        the onboarding pack, built from the configuration framework
-    artefacts   synthetic client responses and their intended live locations
-    configuration  the client configuration candidate, via the real resolver
-    execution   the synthetic adapter, driven by the real orchestration conductor
-    readiness   the deterministic READY_FOR_EXECUTION decision and its package
-    interpretation  natural language in, typed proposals out
-    service     the bounded tool surface everything above is reached through
-    api         the FastAPI router mounted into the existing OCC API
+Client Onboarding stops at activation and never runs a pipeline. The pipeline
+starts from a client that already exists. Between them sits the question an
+operator actually has — *if we onboard this client, will their data go through?*
+— and this package answers it without creating anything: an onboarding case is
+worked through in conversation to **approved**, and a practice execution then
+carries it to ``READY_FOR_EXECUTION``.
+
+The one call the feature never makes is ``OnboardingService.activate()``, which
+its own docstring calls "the only place active configuration is created". In
+synthetic mode the policy refuses it, and a readiness criterion asserts that no
+configuration was written.
+
+Layering, innermost first::
+
+    policy          the synthetic execution boundary (no permissions, fail closed)
+    states          the practice EXECUTION lifecycle and its legal transitions
+    run/store       the execution record beside a case, and its isolated storage
+    input_roles     what a delivered file can be, from platform configuration
+    derive          execution facts, read off the onboarding case
+    artefacts       practice client responses and their intended live locations
+    execution       the synthetic adapter, driven by the real conductor
+    readiness       the deterministic READY_FOR_EXECUTION decision and its package
+    interpretation  natural language in, catalogue-shaped answers out
+    service         the bounded tool surface everything above is reached through
+    api             the FastAPI router mounted into the existing OCC API
 
 Nothing in this package is imported by the live OCC path, and the tab it serves
 is off unless ``OCC_AGENT_SYNTHETIC_ENABLED`` is set.
@@ -28,6 +43,7 @@ is off unless ``OCC_AGENT_SYNTHETIC_ENABLED`` is set.
 from __future__ import annotations
 
 from .policy import (
+    CAP_ACTIVATE_CONFIGURATION,
     FEATURE_FLAG_ENV,
     RUNTIME_MODE_SYNTHETIC,
     SyntheticBoundaryError,
@@ -35,10 +51,12 @@ from .policy import (
     feature_enabled,
     synthetic_policy,
 )
-from .service import OccAgentService
+from .service import AgentCase, OccAgentService
 from .states import READY_FOR_EXECUTION
 
 __all__ = [
+    "AgentCase",
+    "CAP_ACTIVATE_CONFIGURATION",
     "FEATURE_FLAG_ENV",
     "OccAgentService",
     "READY_FOR_EXECUTION",

@@ -1,13 +1,19 @@
-"""operations_control.occ_agent.fixtures — the deterministic synthetic scenarios.
+"""operations_control.occ_agent.fixtures — the deterministic practice scenarios.
 
-Five reusable onboarding fixtures, each exercising a different control path
-(§18). They are entirely synthetic: invented lenders, invented loan references,
+Five reusable onboarding fixtures, each exercising a different control path.
+They are entirely synthetic: invented lenders, invented loan references,
 invented values. No fixture derives from, approximates, or names a live client.
 
 Everything is deterministic — fixed rows, fixed dates, no randomness and no
 dependence on the current date — so a fixture always reaches the same state and
 produces the same execution manifest. That is what makes the scenarios usable as
 tests as well as demonstrations.
+
+A scenario carries two things a real onboarding has: what the operator says at
+the start, and what the client eventually sends back. The second is
+:attr:`Scenario.client_response`, keyed by the catalogue's own
+``section.field`` — so a scenario answers the checklist Client Onboarding
+actually produces, rather than a list of questions invented here.
 
 The scenarios are chosen so that each one is blocked (or not) by a DIFFERENT
 control:
@@ -17,11 +23,12 @@ control:
   the header mapper cannot choose; a human confirms, the affected controls rerun,
   and the case reaches ``READY_FOR_EXECUTION``.
 * **C — missing mandatory artefact**: the required input role is absent, so the
-  configured input requirements block the case.
-* **D — product configuration gap**: core onboarding is fine, but the selected
-  product needs configuration the client has not supplied, so the configuration
-  resolver blocks readiness. The gap belongs to whichever product the fixture
-  selects — it is not written around any one reporting product.
+  configured input requirements block the practice run.
+* **D — product information gap**: core onboarding is fine, but the selected
+  product needs an answer the client has not given, so Client Onboarding's own
+  validation refuses approval and the practice run never starts. The gap belongs
+  to whichever product the fixture selects — it is not written around any one
+  reporting product.
 * **E — material business-rule failure**: canonical transformation succeeds and
   the deterministic business rules then fail at BLOCKING materiality, which
   ordinary conversation cannot clear.
@@ -29,8 +36,8 @@ control:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Tuple
 
 from . import states as _states
 
@@ -58,8 +65,16 @@ class Scenario:
     description: str
     instruction: str
     files: Tuple[SyntheticFile, ...] = ()
+    #: What the client sends back, keyed by the catalogue's ``section.field``.
+    #: A value is applied to every item of a repeatable section that lacks it.
+    client_response: Dict[str, Any] = field(default_factory=dict)
+    #: Which delivery the practice run is for. Standing configuration has no
+    #: concept of a period, so a scenario names one.
+    reporting_period: str = ""
     #: The state the scenario is expected to settle in when driven end to end.
     expected_state: str = _states.READY_FOR_EXECUTION
+    #: The onboarding status it is expected to reach.
+    expected_onboarding_status: str = "approved"
     #: What the human must do part-way through, in the order it is needed.
     expected_human_steps: Tuple[str, ...] = ()
     #: What this scenario is demonstrating.
@@ -72,7 +87,10 @@ class Scenario:
             "files": [{"filename": f.filename, "artefact_type": f.declared_type,
                        "bytes": len(f.content.encode("utf-8"))}
                       for f in self.files],
+            "client_response": sorted(self.client_response),
+            "reporting_period": self.reporting_period,
             "expected_state": self.expected_state,
+            "expected_onboarding_status": self.expected_onboarding_status,
             "expected_human_steps": list(self.expected_human_steps),
             "demonstrates": self.demonstrates,
         }
@@ -198,6 +216,25 @@ def cashflow_tape(*, count: int = 24, prefix: str) -> str:
 # The scenarios
 # --------------------------------------------------------------------------- #
 
+def _client_response(*, domain: str, country: str = "GB",
+                     **extra: Any) -> Dict[str, Any]:
+    """What a client sends back against the outstanding checklist.
+
+    Written in the catalogue's own ``section.field`` terms, so a scenario stays
+    correct if the catalogue changes which of these it asks for — an answer to a
+    question that is no longer asked is simply never applied.
+    """
+    return {
+        "entities.lei": _SYNTHETIC_LEI,
+        "entities.country_of_establishment": country,
+        "contacts.reporting_contact_name": "Practice Reporting Contact",
+        "contacts.reporting_contact_email": f"reporting@{domain}",
+        "contacts.operational_contact_name": "Practice Operations Contact",
+        "contacts.operational_contact_email": f"operations@{domain}",
+        **extra,
+    }
+
+
 SCENARIO_A = Scenario(
     fixture_id="scenario_a_clean",
     label="A — Clean onboarding",
@@ -216,9 +253,12 @@ SCENARIO_A = Scenario(
         SyntheticFile("northstar_cashflow_202606.csv",
                       cashflow_tape(prefix="NSL"), "cashflow_extract"),
     ),
+    client_response=_client_response(domain="northstar.example"),
+    reporting_period=REPORTING_DATE,
     expected_state=_states.READY_FOR_EXECUTION,
-    expected_human_steps=("confirm the interpretation", "approve the pack",
-                          "approve the configuration", "approve readiness"),
+    expected_human_steps=("ask the client for what is outstanding",
+                          "record their response", "approve the onboarding",
+                          "approve readiness"),
     demonstrates="The whole operating process end to end with nothing in the "
                  "way.",
 )
@@ -239,9 +279,11 @@ SCENARIO_B = Scenario(
                                 extra_balance_column=True),
                       "loan_extract"),
     ),
+    client_response=_client_response(domain="harbourpoint.example"),
+    reporting_period=REPORTING_DATE,
     expected_state=_states.READY_FOR_EXECUTION,
-    expected_human_steps=("confirm the interpretation", "approve the pack",
-                          "approve the configuration",
+    expected_human_steps=("ask the client for what is outstanding",
+                          "record their response", "approve the onboarding",
                           "settle the ambiguous mapping", "approve readiness"),
     demonstrates="A control the engine cannot settle alone, and the rerun that "
                  "follows a human decision.",
@@ -262,33 +304,44 @@ SCENARIO_C = Scenario(
         SyntheticFile("kestrel_property_extract_202606.csv",
                       property_tape(prefix="KML"), "property_extract"),
     ),
+    client_response=_client_response(domain="kestrel.example"),
+    reporting_period=REPORTING_DATE,
     expected_state=_states.BLOCKED,
-    expected_human_steps=("confirm the interpretation", "approve the pack"),
+    expected_human_steps=("ask the client for what is outstanding",
+                          "record their response",
+                          "provide the missing loan tape"),
     demonstrates="The configured input requirements refusing an incomplete "
                  "pack.",
 )
 
 SCENARIO_D = Scenario(
-    fixture_id="scenario_d_product_config_gap",
-    label="D — Product configuration gap",
-    description="Core onboarding can proceed, but the selected product needs "
-                "configuration the client has not supplied. Readiness stays "
-                "blocked until it is provided.",
+    fixture_id="scenario_d_product_information_gap",
+    label="D — Product information gap",
+    description="Core onboarding can proceed, but the selected product asks a "
+                "question the client has not answered. Client Onboarding's own "
+                "validation refuses approval, so the practice run never "
+                "starts.",
     instruction=(
         f"Onboard {CLIENT_D}. UK equity release. They need monthly portfolio "
-        "MI and regulatory reporting. Portfolio id direct_104. First "
-        f"reporting date {REPORTING_DATE}. Go-live 2027-01-31. They will send "
-        "a loan tape."),
+        "MI and investor reporting. Portfolio id direct_104. First reporting "
+        f"date {REPORTING_DATE}. They will send a loan tape."),
     files=(
         SyntheticFile("aldermere_loan_extract_202606.csv",
                       loan_tape(prefix="ALD", originator=CLIENT_D),
                       "loan_extract"),
     ),
-    expected_state=_states.BLOCKED,
-    expected_human_steps=("confirm the interpretation", "approve the pack",
-                          "supply the product configuration"),
-    demonstrates="A product-specific configuration requirement, loaded through "
-                 "the product framework rather than hard-coded to one report.",
+    # Everything the base onboarding asks for comes back; the product's own
+    # question does not. Which question that is belongs to the product
+    # declaration, not to this fixture and not to any code path.
+    client_response=_client_response(domain="aldermere.example"),
+    reporting_period=REPORTING_DATE,
+    expected_state=_states.AWAITING_ONBOARDING,
+    expected_onboarding_status="in_review",
+    expected_human_steps=("ask the client for what is outstanding",
+                          "record their response",
+                          "chase the product question they left unanswered"),
+    demonstrates="A product-specific requirement, loaded through the product "
+                 "framework rather than hard-coded to one report.",
 )
 
 SCENARIO_E = Scenario(
@@ -307,9 +360,11 @@ SCENARIO_E = Scenario(
                                 maturity_before_origination=True),
                       "loan_extract"),
     ),
+    client_response=_client_response(domain="brackenfield.example"),
+    reporting_period=REPORTING_DATE,
     expected_state=_states.BLOCKED,
-    expected_human_steps=("confirm the interpretation", "approve the pack",
-                          "approve the configuration"),
+    expected_human_steps=("ask the client for what is outstanding",
+                          "record their response", "approve the onboarding"),
     demonstrates="A deterministic blocker that natural language cannot bypass.",
 )
 

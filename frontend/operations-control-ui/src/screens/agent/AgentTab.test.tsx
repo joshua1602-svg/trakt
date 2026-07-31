@@ -122,12 +122,32 @@ describe("OCC Agent tab — case navigation", () => {
     const box = await screen.findByLabelText(copy.agent.newCaseHeading);
     await user.type(
       box,
-      "Onboard Northstar Lending. UK equity release. Monthly portfolio MI. Portfolio id direct_101.",
+      "Onboard Northstar Lending. UK equity release. Monthly management information. Portfolio id direct_101.",
     );
     await user.click(screen.getByRole("button", { name: copy.agent.createButton }));
     expect(await screen.findByText(copy.agent.conversationHeading)).toBeInTheDocument();
-    // The interpretation is shown for confirmation before it is authoritative.
-    expect(await screen.findByText(/Client: Northstar Lending/)).toBeInTheDocument();
+    // What Trakt now holds is shown back, in the catalogue's own labels.
+    expect(await screen.findByText(/Client name: Northstar Lending/)).toBeInTheDocument();
+  });
+
+  it("opens a REAL onboarding case, and says what the client still owes", async () => {
+    const user = userEvent.setup();
+    renderApp("/agent");
+    const box = await screen.findByLabelText(copy.agent.newCaseHeading);
+    await user.type(
+      box,
+      "Onboard Northstar Lending. UK equity release. Monthly management information. Portfolio id direct_101.",
+    );
+    await user.click(screen.getByRole("button", { name: copy.agent.createButton }));
+    await screen.findByText(copy.agent.conversationHeading);
+
+    // A Client Onboarding reference, not an identifier this feature invented.
+    expect((await screen.findAllByText(/ONB-\d{4}-\d{4}/)).length).toBeGreaterThan(0);
+    // And Client Onboarding's own outstanding-for-client list.
+    const panel = (await screen.findByText(copy.agent.checklistHeading)).closest("section");
+    expect(
+      within(panel as HTMLElement).getByText(/Legal Entity Identifier/),
+    ).toBeInTheDocument();
   });
 
   it("filters cases by status", async () => {
@@ -216,12 +236,12 @@ describe("OCC Agent tab — the operating loop", () => {
     const user = userEvent.setup();
     renderApp("/agent");
     const box = await screen.findByLabelText(copy.agent.newCaseHeading);
-    await user.type(box, "Onboard Northstar Lending. Monthly portfolio MI.");
+    await user.type(box, "Onboard Northstar Lending. Monthly management information.");
     await user.click(screen.getByRole("button", { name: copy.agent.createButton }));
     await screen.findByText(copy.agent.conversationHeading);
 
     const message = screen.getByLabelText(copy.agent.conversationHeading);
-    await user.type(message, "confirm the interpretation{Enter}");
+    await user.type(message, "cancel this case{Enter}");
     expect(await screen.findByText(copy.agent.proposalHeading)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: copy.agent.proposalConfirm }));
@@ -269,5 +289,42 @@ describe("OCC Agent tab — the operating loop", () => {
     await runScenario("A — Clean onboarding");
     expect(await screen.findByText(copy.agent.artefactsHeading)).toBeInTheDocument();
     expect(screen.getAllByText(copy.agent.artefactNotWritten).length).toBeGreaterThan(0);
+  });
+
+  it("shows the configuration it would have created, and says it did not", async () => {
+    await runScenario("A — Clean onboarding");
+    const panel = (await screen.findByText(copy.agent.previewHeading)).closest("section");
+    expect(panel).not.toBeNull();
+    expect(
+      within(panel as HTMLElement).getByText(copy.agent.previewNothingWritten),
+    ).toBeInTheDocument();
+    // There IS a configuration to show — the preview is real, not a placeholder.
+    await waitFor(() =>
+      expect(
+        within(panel as HTMLElement).queryByText(copy.agent.previewNone),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("shows both lifecycles, and never offers to activate", async () => {
+    await runScenario("A — Clean onboarding");
+    const panel = (await screen.findByText(copy.agent.statusHeading)).closest("section");
+    expect(panel).not.toBeNull();
+    // The onboarding reached approved; the practice run reached readiness.
+    expect(within(panel as HTMLElement).getByText("Approved")).toBeInTheDocument();
+    expect(
+      within(panel as HTMLElement).getAllByText(copy.agent.readyStatus).length,
+    ).toBeGreaterThan(0);
+    // Nothing anywhere offers activation.
+    expect(screen.queryByRole("button", { name: /activate/i })).not.toBeInTheDocument();
+  });
+
+  it("links to the onboarding case in the screens it normally lives in", async () => {
+    await runScenario("A — Clean onboarding");
+    const panel = (await screen.findByText(copy.agent.occLinksHeading)).closest("section");
+    const link = within(panel as HTMLElement).getByRole("link", {
+      name: new RegExp(copy.nav.onboarding),
+    });
+    expect(link.getAttribute("href")).toMatch(/^\/onboarding\/ONB-\d{4}-\d{4}$/);
   });
 });

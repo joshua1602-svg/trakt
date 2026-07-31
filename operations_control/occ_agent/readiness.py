@@ -1,16 +1,28 @@
 """operations_control.occ_agent.readiness — the READY_FOR_EXECUTION decision.
 
-Readiness is **derived**, never declared. :func:`evaluate` walks the criteria in
-§16 one at a time, each answered from persisted case state or from a
-deterministic control result, and returns a criterion-by-criterion verdict. The
-service only permits the transition to ``READY_FOR_EXECUTION`` when every
-criterion passes; there is no code path by which an interpreter, a confidence
-score or a chat message can set it.
+Readiness is **derived**, never declared. :func:`evaluate` walks the criteria one
+at a time, each answered from persisted state or from a deterministic control
+result, and returns a criterion-by-criterion verdict. The service only permits
+the transition to ``READY_FOR_EXECUTION`` when every criterion passes; there is
+no code path by which an interpreter, a confidence score or a chat message can
+set it.
 
-:func:`build_package` then produces the readiness package — the sixteen parts of
-§17, including a machine-readable execution manifest. The manifest is
-deterministic: the same case produces byte-identical content, because nothing
-volatile (timestamps, absolute paths, run identifiers) enters the hashed body.
+Half the criteria are not this feature's to judge. Whether the client is
+adequately described, whether anything is still outstanding from them, and
+whether the configuration would generate cleanly are all questions Client
+Onboarding already answers — through ``OnboardingService.readiness()`` and
+``OnboardingService.preview()`` — and they are read from there rather than
+re-derived. What this module adds is the execution half: the files, the
+mappings, the controls, the plan, and the boundary.
+
+One criterion exists only because the case is synthetic: **no configuration was
+written.** A practice case reaches readiness having created nothing, and if it
+somehow had, readiness fails rather than reporting success.
+
+:func:`build_package` then produces the readiness package, including a
+machine-readable execution manifest. The manifest is deterministic: the same run
+produces byte-identical content, because nothing volatile (timestamps, absolute
+paths, run identifiers) enters the hashed body.
 
 Wording is fixed here too. A ready case says ``READY_FOR_EXECUTION`` and states
 plainly what did NOT happen; the words "complete", "live", "published" and
@@ -20,29 +32,37 @@ plainly what did NOT happen; the words "complete", "live", "published" and
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from ..contracts import canonical_json, stable_hash
+from ..onboarding.case import (
+    ACTIVATED,
+    APPROVED,
+    NO_ACTIVE_CONFIGURATION,
+    STATUS_LABELS,
+    OnboardingCase,
+)
 from . import states as _states
-from .case import (
+from .derive import ExecutionFacts, product_label
+from .input_roles import artefact_vocabulary
+from .policy import RUNTIME_MODE_SYNTHETIC, SyntheticPolicy
+from .run import (
     STAGE_DETERMINISTIC_COMPLETED,
     STAGE_HARD_BLOCKED,
     STAGE_SIMULATED,
-    SyntheticArtefact,
-    SyntheticCase,
+    SyntheticRun,
 )
-from .policy import RUNTIME_MODE_SYNTHETIC, SyntheticPolicy
-from .vocabulary import artefact_vocabulary, product_vocabulary
 
-#: The four sentences the UI must be able to state for a ready case.
+#: The five sentences the UI must be able to state for a ready case.
 NOT_DONE_STATEMENTS = (
     "No live files were written.",
     "No production pipeline was triggered.",
     "No external email was sent.",
+    "No client configuration was activated.",
     "Nothing was published.",
 )
 
-READY_HEADLINE = "Synthetic case ready for execution."
+READY_HEADLINE = "Practice case ready for execution."
 
 #: Words that must never describe a synthetic case's outcome.
 FORBIDDEN_OUTCOME_WORDS = ("complete", "live", "published",
@@ -59,10 +79,14 @@ class Criterion:
     detail: str = ""
     #: What the operator must do about it, when it has not passed.
     remedy: str = ""
+    #: Which half of the process the criterion belongs to, so the UI can show
+    #: an operator whether the work is theirs or the client's.
+    stage: str = "execution"        # onboarding | execution | boundary
 
     def to_dict(self) -> Dict[str, Any]:
         return {"key": self.key, "label": self.label, "passed": self.passed,
-                "detail": self.detail, "remedy": self.remedy}
+                "detail": self.detail, "remedy": self.remedy,
+                "stage": self.stage}
 
 
 @dataclass
@@ -87,56 +111,83 @@ class ReadinessVerdict:
         }
 
 
-def evaluate(case: SyntheticCase, policy: SyntheticPolicy) -> ReadinessVerdict:
-    """The §16 criteria, each answered from state or a control result."""
-    req = case.confirmed
-    products = product_vocabulary()
+def evaluate(run: SyntheticRun, case: OnboardingCase, facts: ExecutionFacts,
+             policy: SyntheticPolicy, *,
+             onboarding: Optional[Dict[str, Any]] = None,
+             preview: Optional[Dict[str, Any]] = None) -> ReadinessVerdict:
+    """Every criterion, each answered from state or a deterministic control.
+
+    ``onboarding`` is ``OnboardingService.readiness(case)`` and ``preview`` is
+    ``OnboardingService.preview(case)``. Both are passed in rather than computed
+    here so that readiness cannot disagree with what the Client Onboarding
+    screens show the same operator.
+    """
+    onboarding = onboarding or {}
+    preview = preview or {}
     roles = artefact_vocabulary()
-    outcome = products.outcome_for(req.required_products)
     criteria: List[Criterion] = []
 
     def add(key: str, label: str, passed: bool, detail: str = "",
-            remedy: str = "") -> None:
+            remedy: str = "", stage: str = "execution") -> None:
         criteria.append(Criterion(key=key, label=label, passed=bool(passed),
-                                  detail=detail, remedy=remedy))
+                                  detail=detail, remedy=remedy, stage=stage))
 
-    # 1. Required human facts confirmed.
-    missing_facts = req.missing_mandatory() if case.confirmed_requirements \
-        else ["the interpretation has not been confirmed"]
-    add("facts_confirmed", "Required facts confirmed",
-        not missing_facts and case.has_approval("requirements"),
-        detail=("All required facts are confirmed." if not missing_facts
-                else "Missing: " + ", ".join(missing_facts)),
-        remedy="Confirm the interpretation, supplying the missing facts.")
+    # -- the onboarding half, as Client Onboarding itself judges it ------- #
 
-    # 2. Required artefacts present.
-    received_roles = {SyntheticArtefact.from_dict(a).artefact_type
-                      for a in case.received_artefacts}
-    required_roles = roles.required_roles(outcome)
+    # 1. The onboarding is approved.
+    add("onboarding_approved", "Onboarding approved",
+        case.status == APPROVED,
+        detail=(f"The onboarding is "
+                f"{STATUS_LABELS.get(case.status, case.status).lower()}."),
+        remedy="Work the onboarding through to approval.",
+        stage="onboarding")
+
+    # 2. Nothing is outstanding on the case itself.
+    blocking = list(onboarding.get("blocking") or [])
+    outstanding_requests = list(onboarding.get("outstanding_requests") or [])
+    add("onboarding_clean", "Nothing outstanding on the onboarding",
+        not blocking and not outstanding_requests,
+        detail=("The onboarding reports no problems and nothing outstanding."
+                if not blocking and not outstanding_requests else
+                "; ".join(
+                    [str(p.get("message") or "") for p in blocking[:3]]
+                    + ([f"{len(outstanding_requests)} information request(s) "
+                        "are still open."] if outstanding_requests else []))),
+        remedy="Clear the onboarding's own problems and information requests.",
+        stage="onboarding")
+
+    # 3. The configuration the onboarding would generate is complete.
+    #    Read from preview(), which is exactly what activation would create —
+    #    and which writes nothing.
+    artefacts_planned = list(preview.get("artefacts") or [])
+    add("configuration_generates", "Configuration would generate cleanly",
+        bool(artefacts_planned) and bool(preview.get("ready")),
+        detail=(f"{len(artefacts_planned)} configuration artefact(s) would be "
+                "created on activation." if artefacts_planned else
+                "No configuration could be generated from this case."),
+        remedy="Answer what the onboarding still needs, then preview again.",
+        stage="onboarding")
+
+    # -- the execution half ---------------------------------------------- #
+
+    # 4. Required source files received.
+    received_roles = {a.artefact_type for a in run.artefacts()}
+    required_roles = roles.required_roles(facts.outcome)
     missing_roles = [r for r in required_roles if r not in received_roles]
     add("artefacts_present", "Required source files received",
-        not missing_roles,
+        bool(required_roles) and not missing_roles,
         detail=("All required files were provided." if not missing_roles
                 else "Missing: "
                      + ", ".join(roles.label(r) for r in missing_roles)),
-        remedy="Provide the missing file, or select a fixture that includes "
-               "it.")
+        remedy="Provide the missing file, or generate a practice response.")
 
-    # 3. Configuration validates.
-    config_status = str((case.proposed_configuration or {}).get("status") or "")
-    add("configuration_validates", "Configuration validates",
-        config_status in ("READY", "READY_WITH_WARNINGS"),
-        detail=(f"Configuration resolved: {config_status}." if config_status
-                else "No configuration has been drafted."),
-        remedy="Draft the configuration and clear any blockers it reports.")
-
-    # 4. Mandatory mappings resolved. The mapping REPORT records what the
+    # 5. Mandatory mappings resolved. The mapping REPORT records what the
     #    header mapper did; a mapping the mapper could not settle appears as an
     #    open decision, and that is what has to be clear.
-    unresolved = [d for d in case.open_decisions
+    unresolved = [d for d in run.open_decisions
                   if d.get("status", "open") == "open"
                   and str(d.get("kind", "")).startswith("field_mapping")]
-    unmapped = [m for m in case.mapping_decisions
+    unmapped = [m for m in run.mapping_report
                 if not m.get("canonical_field")
                 and m.get("tier") != "operator_approved"]
     add("mappings_resolved", "Field mappings resolved", not unresolved,
@@ -147,24 +198,16 @@ def evaluate(case: SyntheticCase, policy: SyntheticPolicy) -> ReadinessVerdict:
                 f"{len(unresolved)} mapping decision(s) are still open."),
         remedy="Answer the open mapping decisions.")
 
-    # 5. Blocking validation exceptions cleared.
-    blocking = case.blocking_decisions()
-    add("exceptions_cleared", "Blocking exceptions cleared", not blocking,
-        detail=("No blocking exceptions remain." if not blocking else
-                f"{len(blocking)} blocking decision(s) are open."),
+    # 6. Blocking validation exceptions cleared.
+    blocking_decisions = run.blocking_decisions()
+    add("exceptions_cleared", "Blocking exceptions cleared",
+        not blocking_decisions,
+        detail=("No blocking exceptions remain." if not blocking_decisions else
+                f"{len(blocking_decisions)} blocking decision(s) are open."),
         remedy="Resolve each blocking decision.")
 
-    # 6. Required approvals complete.
-    needed = ("requirements", "onboarding_pack", "client_configuration",
-              "execution_readiness")
-    absent = [s for s in needed if not case.has_approval(s)]
-    add("approvals_complete", "Required approvals complete", not absent,
-        detail=("All required approvals are recorded." if not absent else
-                "Awaiting: " + ", ".join(s.replace("_", " ") for s in absent)),
-        remedy="Give the outstanding approvals.")
-
     # 7. Intended Blob paths valid.
-    artefacts = [SyntheticArtefact.from_dict(a) for a in case.received_artefacts]
+    artefacts = run.artefacts()
     without_uri = [a.source_file for a in artefacts if not a.intended_live_uri]
     add("intended_paths_valid", "Intended storage locations valid",
         bool(artefacts) and not without_uri,
@@ -172,23 +215,19 @@ def evaluate(case: SyntheticCase, policy: SyntheticPolicy) -> ReadinessVerdict:
                 if artefacts and not without_uri else
                 "No location could be derived for: " + ", ".join(without_uri)
                 if without_uri else "No files have been provided."),
-        remedy="Confirm the client identifier, portfolio identifier and "
-               "reporting date so a location can be derived.")
+        remedy="Confirm the client identifier, the portfolio identifier and "
+               "the reporting period so a location can be derived.")
 
     # 8. Intended pipeline inputs satisfy the existing contracts.
-    onboard_ok = case.stage_outcomes.get("onboard") == \
-        STAGE_DETERMINISTIC_COMPLETED
-    transform_ok = case.stage_outcomes.get("transform") == \
-        STAGE_DETERMINISTIC_COMPLETED
-    validate_ok = case.stage_outcomes.get("validate") == \
-        STAGE_DETERMINISTIC_COMPLETED
+    done = STAGE_DETERMINISTIC_COMPLETED
     add("pipeline_contracts", "Pipeline input contracts satisfied",
-        onboard_ok and transform_ok and validate_ok,
-        detail=_stage_detail(case),
-        remedy="Run the synthetic onboarding and clear anything it reports.")
+        all(run.stage_outcomes.get(s) == done
+            for s in ("onboard", "transform", "validate")),
+        detail=_stage_detail(run),
+        remedy="Run the practice onboarding and clear anything it reports.")
 
     # 9. Orchestration sequencing valid.
-    plan = case.orchestration_plan or {}
+    plan = run.orchestration_plan or {}
     add("orchestration_valid", "Orchestration sequencing valid",
         bool(plan.get("steps")) and bool(plan.get("valid")),
         detail=(f"{len(plan.get('steps') or [])} steps sequenced."
@@ -197,88 +236,109 @@ def evaluate(case: SyntheticCase, policy: SyntheticPolicy) -> ReadinessVerdict:
         remedy="Generate the orchestration plan.")
 
     # 10. Assembler prerequisites satisfied.
-    assembler = case.assembler_plan or {}
+    assembler = run.assembler_plan or {}
     add("assembler_prerequisites", "Assembler prerequisites satisfied",
         bool(assembler.get("satisfied")),
         detail=(assembler.get("summary")
                 or "Assembler prerequisites have not been checked."),
         remedy="Generate the orchestration plan, which checks them.")
 
-    # 11. Material configuration values confirmed.
-    unconfirmed = case.unconfirmed_material_values()
-    add("material_values_confirmed", "Material configuration confirmed",
-        not unconfirmed,
-        detail=("Every material value is confirmed." if not unconfirmed else
-                f"{len(unconfirmed)} material or low-confidence value(s) are "
-                "unconfirmed."),
-        remedy="Confirm or correct each material value.")
+    # 11. Execution readiness approved by a human.
+    add("execution_approved", "Readiness approved",
+        run.has_approval("execution_readiness"),
+        detail=("An operator approved readiness for execution."
+                if run.has_approval("execution_readiness")
+                else "Readiness has not been approved."),
+        remedy="Approve readiness once the plan is right.")
 
-    # 12. No synthetic runtime control breached.
-    breached = [e for e in (case.control_results or [])
+    # -- the boundary ----------------------------------------------------- #
+
+    # 12. No configuration was written. The point of the whole exercise.
+    add("no_configuration_written", "No configuration was created",
+        case.status in NO_ACTIVE_CONFIGURATION,
+        detail=("This practice case created no client configuration."
+                if case.status in NO_ACTIVE_CONFIGURATION else
+                "A configuration was activated from this case."),
+        remedy="This case cannot proceed; report it to your administrator.",
+        stage="boundary")
+
+    # 13. No synthetic runtime control breached.
+    breached = [e for e in (run.control_results or [])
                 if e.get("kind") == "boundary_refusal"]
-    add("runtime_controls_intact", "Synthetic controls intact",
-        case.runtime_mode == RUNTIME_MODE_SYNTHETIC
+    add("runtime_controls_intact", "Practice controls intact",
+        run.runtime_mode == RUNTIME_MODE_SYNTHETIC
         and policy.runtime_mode == RUNTIME_MODE_SYNTHETIC
         and not any(policy.permits(c) for c in
                     ("external_email", "live_blob_write",
                      "live_pipeline_trigger", "production_config_write",
-                     "publish")),
-        detail=("The synthetic boundary held for the whole case."
+                     "publish", "activate_configuration")),
+        detail=("The practice boundary held for the whole case."
                 + (f" {len(breached)} prohibited call(s) were refused."
                    if breached else "")),
-        remedy="This case cannot proceed; report it to your administrator.")
+        remedy="This case cannot proceed; report it to your administrator.",
+        stage="boundary")
 
     return ReadinessVerdict(criteria=criteria)
 
 
-def _stage_detail(case: SyntheticCase) -> str:
-    if not case.stage_outcomes:
-        return "The synthetic onboarding has not run."
-    parts = []
-    for stage, outcome in sorted(case.stage_outcomes.items()):
-        parts.append(f"{stage}: {outcome.replace('_', ' ')}")
-    return "; ".join(parts)
+def _stage_detail(run: SyntheticRun) -> str:
+    if not run.stage_outcomes:
+        return "The practice onboarding has not run."
+    return "; ".join(f"{stage}: {outcome.replace('_', ' ')}"
+                     for stage, outcome in sorted(run.stage_outcomes.items()))
 
 
 # --------------------------------------------------------------------------- #
 # The readiness package
 # --------------------------------------------------------------------------- #
 
-def build_package(case: SyntheticCase, verdict: ReadinessVerdict,
-                  audit: List[Dict[str, Any]],
-                  policy: SyntheticPolicy) -> Dict[str, Any]:
-    """The §17 readiness package. Deterministic for a given case."""
-    req = case.confirmed
-    products = product_vocabulary()
+def build_package(run: SyntheticRun, case: OnboardingCase,
+                  facts: ExecutionFacts, verdict: ReadinessVerdict,
+                  audit: List[Dict[str, Any]], policy: SyntheticPolicy, *,
+                  onboarding: Optional[Dict[str, Any]] = None,
+                  preview: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """The readiness package. Deterministic for a given run."""
+    onboarding = onboarding or {}
+    preview = preview or {}
     roles = artefact_vocabulary()
-    selected = [p for p in (products.by_id(pid) for pid in req.required_products)
-                if p is not None]
-    artefacts = [SyntheticArtefact.from_dict(a) for a in case.received_artefacts]
+    artefacts = run.artefacts()
 
-    manifest = _execution_manifest(case, verdict)
-    package: Dict[str, Any] = {
+    manifest = _execution_manifest(run, case, facts, verdict)
+    return {
         # 1
         "case_summary": {
-            "case_id": case.case_id,
-            "tenant": case.tenant,
-            "state": case.state,
+            "case_ref": run.case_ref,
+            "onboarding_status": case.status,
+            "onboarding_kind": case.kind,
+            "tenant": run.tenant,
+            "state": run.state,
             "status": (_states.READY_FOR_EXECUTION if verdict.ready
-                       else case.state),
-            "runtime_mode": case.runtime_mode,
+                       else run.state),
+            "runtime_mode": run.runtime_mode,
             "synthetic": True,
-            "initiating_user": case.initiating_user,
-            "fixture_id": case.fixture_id,
+            "initiating_user": run.initiating_user,
+            "fixture_id": run.fixture_id,
         },
-        # 2
-        "confirmed_facts": req.to_dict(),
+        # 2 — the answers are the case's, not a second copy of them
+        "confirmed_answers": case.answers,
+        "execution_facts": facts.to_dict(),
         # 3
         "approved_product_scope": [
-            {"product_id": p.product_id, "label": p.label,
-             "capability": p.capability, "regime_id": p.regime_id}
-            for p in selected],
-        # 4
-        "approved_configuration": case.confirmed_configuration
-        or (case.proposed_configuration or {}).get("candidate") or {},
+            {"product_id": p, "label": product_label(p)}
+            for p in facts.products],
+        # 4 — what activation WOULD create. Nothing was activated.
+        "configuration_that_would_be_created": {
+            "artefacts": list(preview.get("artefacts") or []),
+            "changes": list(preview.get("changes") or []),
+            "current_version": preview.get("current_version", 0),
+            "next_version": preview.get("next_version", 0),
+            "generated_identifiers": list(
+                preview.get("generated_identifiers") or []),
+            "defaults_used": list(preview.get("defaults_used") or []),
+            "unrepresented": list(preview.get("unrepresented") or []),
+            "written": False,
+            "execution_status": "not_activated",
+        },
         # 5
         "artefact_inventory": [
             {"source_file": a.source_file, "artefact_type": a.artefact_type,
@@ -297,91 +357,105 @@ def build_package(case: SyntheticCase, verdict: ReadinessVerdict,
              "execution_status": "simulated_only", "written": False}
             for a in artefacts],
         # 7
-        "field_mapping_report": case.mapping_decisions,
+        "field_mapping_report": run.mapping_report,
         # 8
-        "validation_summary": [r for r in case.control_results
+        "validation_summary": [r for r in run.control_results
                                if r.get("kind") == "validation"],
         # 9
-        "approved_exceptions": [
-            a for a in case.approval_history
-            if a.get("subject", "").startswith("exception")
-            or a.get("subject") == "decision"],
+        "approved_exceptions": [d for d in run.open_decisions
+                                if d.get("status") in ("approved", "rejected",
+                                                       "acknowledged")],
         # 10
-        "outstanding_observations": list(case.observations),
+        "outstanding_observations": list(run.observations),
         # 11
-        "orchestration_execution_plan": case.orchestration_plan,
+        "orchestration_execution_plan": run.orchestration_plan,
         # 12
-        "assembler_input_plan": case.assembler_plan,
+        "assembler_input_plan": run.assembler_plan,
         # 13
-        "expected_downstream_outputs": _expected_outputs(case, selected),
-        # 14
-        "human_approvals": case.approval_history,
+        "expected_downstream_outputs": _expected_outputs(run, facts),
+        # 14 — the onboarding approval is the CASE's; the execution approval is
+        #      the run's. Neither is restated as the other.
+        "human_approvals": {
+            "onboarding": {"approved_by": case.approved_by,
+                           "approved_at": case.approved_at,
+                           "reason": case.approval_reason},
+            "execution": list(run.approvals),
+        },
         # 15
         "audit_trail": audit,
+        "onboarding_events": case.events,
         # 16
         "execution_manifest": manifest,
 
         "readiness": verdict.to_dict(),
+        "onboarding_readiness": {
+            "problems": list(onboarding.get("problems") or []),
+            "blocking": list(onboarding.get("blocking") or []),
+            "client_checklist": list(onboarding.get("client_checklist") or []),
+            "outstanding_requests": list(
+                onboarding.get("outstanding_requests") or []),
+        },
         "policy": policy.to_dict(),
         "statement": {
             "headline": READY_HEADLINE if verdict.ready
-            else "This synthetic case is not ready for execution.",
+            else "This practice case is not ready for execution.",
             "not_done": list(NOT_DONE_STATEMENTS),
         },
     }
-    return package
 
 
-def _expected_outputs(case: SyntheticCase, selected) -> List[Dict[str, Any]]:
+def _expected_outputs(run: SyntheticRun,
+                      facts: ExecutionFacts) -> List[Dict[str, Any]]:
     """What the live run WOULD produce, from the plan — never claimed as made."""
     outputs: List[Dict[str, Any]] = []
-    for step in (case.orchestration_plan or {}).get("steps") or []:
+    for step in (run.orchestration_plan or {}).get("steps") or []:
         for artefact in step.get("produces") or []:
             outputs.append({"artefact": artefact, "produced_by": step["step"],
                             "execution_status": "not_produced"})
-    for product in selected:
-        outputs.append({"artefact": f"{product.label} output",
+    for product in facts.products:
+        outputs.append({"artefact": f"{product_label(product)} output",
                         "produced_by": "downstream product pipeline",
                         "execution_status": "not_produced"})
     return outputs
 
 
-def _execution_manifest(case: SyntheticCase,
+def _execution_manifest(run: SyntheticRun, case: OnboardingCase,
+                        facts: ExecutionFacts,
                         verdict: ReadinessVerdict) -> Dict[str, Any]:
     """The machine-readable manifest. Deterministic and content-hashed.
 
     Nothing volatile is included — no timestamps, no absolute paths, no run
-    identifiers — so re-generating it for an unchanged case yields the same
+    identifiers — so re-generating it for an unchanged run yields the same
     ``content_hash``. A test asserts that.
     """
-    req = case.confirmed
-    artefacts = [SyntheticArtefact.from_dict(a) for a in case.received_artefacts]
     body = {
-        "schema_version": "1.0.0",
+        "schema_version": "2.0.0",
         "runtime_mode": RUNTIME_MODE_SYNTHETIC,
-        "case_id": case.case_id,
-        "tenant": case.tenant,
-        "client_id": case.client_id,
-        "portfolio_id": case.portfolio_id,
-        "asset_type": case.asset_type,
-        "reporting_date": req.reporting_date,
-        "reporting_frequency": req.reporting_frequency,
-        "products": sorted(req.required_products),
-        "outcome": (case.orchestration_plan or {}).get("outcome", ""),
+        "case_ref": run.case_ref,
+        "tenant": run.tenant,
+        "client_id": facts.client_id,
+        "portfolio_id": facts.portfolio_id,
+        "asset_class": facts.asset_class,
+        "dataset": run.dataset,
+        "reporting_period": run.reporting_period,
+        "cadence": facts.cadence,
+        "products": sorted(facts.products),
+        "outcome": facts.outcome,
+        "regime": facts.regime,
         "inputs": sorted(
             ({"source_file": a.source_file,
               "artefact_type": a.artefact_type,
               "sha256": a.sha256,
               "intended_live_uri": a.intended_live_uri,
               "execution_status": "simulated_only"}
-             for a in artefacts),
+             for a in run.artefacts()),
             key=lambda d: d["source_file"]),
-        "configuration_hash": (case.proposed_configuration or {}).get(
-            "content_hash", ""),
+        "onboarding_status": case.status,
+        "configuration_activated": case.status == ACTIVATED,
         "orchestration_steps": [s.get("step") for s in
-                                (case.orchestration_plan or {}).get("steps")
+                                (run.orchestration_plan or {}).get("steps")
                                 or []],
-        "assembler_prerequisites": (case.assembler_plan or {}).get(
+        "assembler_prerequisites": (run.assembler_plan or {}).get(
             "prerequisites", []),
         "readiness_status": (_states.READY_FOR_EXECUTION if verdict.ready
                              else "NOT_READY"),
@@ -396,14 +470,14 @@ def _execution_manifest(case: SyntheticCase,
     return body
 
 
-def anything_simulated(case: SyntheticCase) -> bool:
+def anything_simulated(run: SyntheticRun) -> bool:
     """True when at least one stage was simulated rather than executed.
 
     Surfaced so a readiness statement can never let a simulated stage read as a
     completed one.
     """
-    return any(o == STAGE_SIMULATED for o in case.stage_outcomes.values())
+    return any(o == STAGE_SIMULATED for o in run.stage_outcomes.values())
 
 
-def anything_blocked(case: SyntheticCase) -> bool:
-    return any(o == STAGE_HARD_BLOCKED for o in case.stage_outcomes.values())
+def anything_blocked(run: SyntheticRun) -> bool:
+    return any(o == STAGE_HARD_BLOCKED for o in run.stage_outcomes.values())

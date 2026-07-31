@@ -348,14 +348,15 @@ export const copy = {
     subtitle: "Work through an onboarding in conversation, on a practice case.",
     syntheticChip: "Practice case",
     syntheticBanner:
-      "Everything in this tab is a practice case. Trakt never writes files, starts the pipeline, " +
-      "sends an email or publishes anything from here.",
+      "Everything in this tab is a practice case. It uses the real onboarding, the real agents " +
+      "and the real controls, but Trakt never activates a configuration, writes files, starts " +
+      "the pipeline, sends an email or publishes anything from here.",
     newCase: "Start a new practice case",
     newCaseHeading: "What needs onboarding?",
     newCasePrompt:
       "Tell Trakt in your own words. For example: “Onboard Northstar Lending. It is a UK " +
-      "equity-release portfolio. They need monthly portfolio MI. The first files will be a loan " +
-      "tape and executed cashflows.”",
+      "equity-release portfolio. They need monthly management information. The first files will " +
+      "be a loan tape and executed cashflows.”",
     newCasePlaceholder: "Describe the client and what they need…",
     createButton: "Start",
     scenariosHeading: "Or start from a prepared example",
@@ -381,21 +382,38 @@ export const copy = {
     proposalDismiss: "Not yet",
 
     statusHeading: "Where this case has got to",
-    stageHeading: "Stage",
+    stageHeading: "Practice run",
+    onboardingStageHeading: "Onboarding",
+    onboardingHeading: "The onboarding",
+    onboardingOpen: "Open it in the onboarding screens",
+    checklistHeading: "What the client still has to tell us",
+    checklistEmpty: "Nothing outstanding from the client.",
+    checklistAsk: "Ask the client for these",
+    checklistRecord: "Record what came back",
+    requestsHeading: "Asked for",
+    requestOutstanding: "Waiting on the client",
+    requestAnswered: "Answered",
+    previewHeading: "What activation would create",
+    previewDescription:
+      "The configuration this onboarding would generate. Nothing here has been created, and " +
+      "this tab cannot create it.",
+    previewNothingWritten: "Not created — practice case",
+    previewNone: "There is not yet enough answered to generate a configuration.",
+    factsHeading: "What the run is for",
     gatesHeading: "Controls",
     gateDone: "Passed",
     gateActive: "Now",
     gateBlocked: "Blocked",
     gatePending: "Not started",
     missingHeading: "Missing inputs",
+    criteriaOnboarding: "The onboarding",
+    criteriaExecution: "The practice run",
+    criteriaBoundary: "The practice boundary",
     decisionsHeading: "Decisions waiting for you",
     artefactsHeading: "Files received",
     artefactIntended: "Where this would be filed",
     artefactNotWritten: "Not written — practice case",
-    configHeading: "Configuration",
-    configProvenance: "Where each value came from",
-    configNeedsConfirm: "Needs your confirmation",
-    executionHeading: "Synthetic execution",
+    executionHeading: "Practice execution",
     readinessHeading: "Readiness",
     observationsHeading: "Worth knowing",
     blockersHeading: "What's in the way",
@@ -430,11 +448,12 @@ export const copy = {
     uploadFixture: "Use the example files",
     uploadGenerate: "Let Trakt make up a response",
 
-    readyHeadline: "Synthetic case ready for execution.",
+    readyHeadline: "Practice case ready for execution.",
     readyNotDone: [
       "No live files were written.",
       "No production pipeline was triggered.",
       "No external email was sent.",
+      "No client configuration was activated.",
       "Nothing was published.",
     ],
     readyStatus: "READY_FOR_EXECUTION",

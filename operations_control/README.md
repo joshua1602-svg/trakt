@@ -28,7 +28,7 @@ sign in with `dev-token`.
 | `TRAKT_OPS_MEMORY_ROOT` | `.ops_state/client_memory` | Where approved rules are projected as client-memory YAML |
 | `TRAKT_OPS_CORS_ORIGINS` | `http://localhost:5173` | Browser origins |
 | `TRAKT_STORAGE_BACKEND` / `TRAKT_LOCAL_BLOB_ROOT` / `TRAKT_BLOB_CONNECTION` | — | Existing storage selection (unchanged) |
-| `OCC_AGENT_SYNTHETIC_ENABLED` | *(unset — off)* | Mounts the OCC Agent tab's routes. Off by default; see `occ_agent/README.md` |
+| `OCC_AGENT_SYNTHETIC_ENABLED` | *(unset — off)* | Mounts the OCC Agent tab's routes (practice onboarding). Off by default; see `occ_agent/README.md` |
 
 In Azure, set `TRAKT_BLOB_CONNECTION` and create the `operations-control`
 container; everything else is the same code path.

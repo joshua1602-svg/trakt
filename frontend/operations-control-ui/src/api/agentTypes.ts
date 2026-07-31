@@ -5,9 +5,21 @@
  * anything: the lifecycle, the readiness verdict, the decision cards and the
  * status text all arrive already decided by the backend, because the controls
  * that decide them are governed and must not be re-implemented in a browser.
+ *
+ * A practice case is two records. `onboarding` is Client Onboarding's own case —
+ * the same shape the `/onboarding` screens render — and `run` is the practice
+ * execution beside it. They are never merged, here or anywhere else.
  */
 
-/** The synthetic runtime policy, as recorded on every case. */
+import type {
+  CasePreview,
+  ChecklistRow,
+  InformationRequest,
+  OnboardingCase,
+  OnboardingReference,
+} from "./onboardingTypes";
+
+/** The synthetic runtime policy, as recorded on every run. */
 export interface SyntheticPolicy {
   runtime_mode: string;
   allow_external_email: boolean;
@@ -16,9 +28,11 @@ export interface SyntheticPolicy {
   allow_production_config_write: boolean;
   allow_publish: boolean;
   allow_live_case_access: boolean;
+  /** Activation is Client Onboarding's own write boundary. Always false here. */
+  allow_activate_configuration: boolean;
 }
 
-/** One state in the case lifecycle, with its full contract. */
+/** One state in the practice EXECUTION lifecycle, with its full contract. */
 export interface LifecycleState {
   state: string;
   label: string;
@@ -32,20 +46,15 @@ export interface LifecycleState {
   blocking_conditions: string[];
   occ_stage: string;
   terminal: boolean;
-  /** Present on the per-case lifecycle, absent on the catalogue. */
+  /** Present on the per-run lifecycle, absent on the catalogue. */
   reached?: boolean;
   current?: boolean;
 }
 
-/** The list-view projection of a case. */
+/** The list-view projection of a practice case. */
 export interface CaseSummary {
-  case_id: string;
+  case_ref: string;
   tenant: string;
-  client_id: string;
-  client_name: string;
-  portfolio_id: string;
-  portfolio_name: string;
-  asset_type: string;
   state: string;
   state_label: string;
   readiness_status: string;
@@ -55,6 +64,12 @@ export interface CaseSummary {
   fixture_id: string;
   created_at: string;
   updated_at: string;
+  /** Joined from the onboarding case, so the list reads as a client list. */
+  onboarding_status?: string;
+  onboarding_status_label?: string;
+  client_id?: string;
+  client_name?: string;
+  onboarding_missing?: boolean;
 }
 
 export interface AgentMessage {
@@ -103,25 +118,14 @@ export interface DecisionCard {
   resolved_by?: string;
 }
 
-export interface ProposedValue {
-  key: string;
-  value: unknown;
-  source: string;
-  evidence: string;
-  confidence: number | null;
-  downstream_impact: string;
-  material: boolean;
-  requires_human_confirmation: boolean;
-  confirmed: boolean;
-  confirmed_by: string;
-}
-
 export interface ReadinessCriterion {
   key: string;
   label: string;
   passed: boolean;
   detail: string;
   remedy: string;
+  /** Which half of the process the criterion belongs to. */
+  stage: "onboarding" | "execution" | "boundary";
 }
 
 export interface Readiness {
@@ -131,42 +135,49 @@ export interface Readiness {
   outstanding: ReadinessCriterion[];
 }
 
-/** The persisted case document. Chat history is presentation, not state. */
-export interface SyntheticCaseDoc {
-  case_id: string;
-  tenant: string;
-  initiating_user: string;
-  state: string;
-  runtime_mode: string;
-  case_version: number;
-  synthetic: boolean;
+/** The execution facts read off the onboarding case. Never entered by hand. */
+export interface ExecutionFacts {
   client_id: string;
   client_name: string;
   portfolio_id: string;
   portfolio_name: string;
-  asset_type: string;
-  extracted_requirements: Record<string, unknown>;
-  confirmed_requirements: Record<string, unknown>;
-  unresolved_questions: string[];
-  onboarding_pack: Record<string, unknown>;
-  pack_issued_synthetically_at: string;
-  required_artefacts: { role: string; label: string; required: boolean }[];
+  asset_class: string;
+  dataset: string;
+  cadence: string;
+  jurisdiction: string;
+  products: string[];
+  outcome: string;
+  regime: string;
+  basis: Record<string, string>;
+}
+
+/** The persisted run document. Chat history is presentation, not state. */
+export interface SyntheticRunDoc {
+  case_ref: string;
+  tenant: string;
+  initiating_user: string;
+  state: string;
+  runtime_mode: string;
+  version: number;
+  synthetic: boolean;
+  portfolio_id: string;
+  dataset: string;
+  reporting_period: string;
+  facts: ExecutionFacts | Record<string, never>;
   received_artefacts: SyntheticArtefact[];
-  proposed_configuration: Record<string, unknown>;
-  confirmed_configuration: Record<string, unknown>;
-  configuration_provenance: ProposedValue[];
-  mapping_decisions: Record<string, unknown>[];
+  stage_outcomes: Record<string, string>;
+  mapping_report: Record<string, unknown>[];
   open_decisions: DecisionCard[];
   control_results: Record<string, unknown>[];
-  stage_outcomes: Record<string, string>;
-  blockers: string[];
-  observations: string[];
   planned_pipeline_actions: Record<string, unknown>[];
   orchestration_plan: Record<string, unknown>;
   assembler_plan: Record<string, unknown>;
+  readiness: Readiness | Record<string, never>;
   readiness_status: string;
   readiness_package_ref: string;
-  approval_history: Record<string, unknown>[];
+  approvals: Record<string, unknown>[];
+  blockers: string[];
+  observations: string[];
   messages: AgentMessage[];
   fixture_id: string;
   created_at: string;
@@ -182,8 +193,12 @@ export interface OccLink {
 
 /** Everything the case workspace renders. One request, one shape. */
 export interface AgentStatus {
-  case: SyntheticCaseDoc;
+  case_ref: string;
+  run: SyntheticRunDoc;
   summary: CaseSummary;
+  /** Client Onboarding's own presentation of the case, unchanged. */
+  onboarding: OnboardingCase;
+  facts: ExecutionFacts;
   state: LifecycleState;
   lifecycle: LifecycleState[];
   stage_outcomes: Record<string, string>;
@@ -197,6 +212,8 @@ export interface AgentStatus {
   anything_simulated: boolean;
   /** True when a stage was hard-blocked by a deterministic control. */
   anything_blocked: boolean;
+  /** Always false. Surfaced so the tab can state it rather than imply it. */
+  configuration_written: boolean;
 }
 
 /** What one natural-language turn returned. */
@@ -215,14 +232,6 @@ export interface AgentProposal {
   basis: string;
   material: boolean;
   confidence: number;
-  change?: {
-    kind: string;
-    updates: Record<string, unknown>;
-    before: Record<string, unknown>;
-    affected_pack_sections: string[];
-    material: boolean;
-    summary: string;
-  };
 }
 
 export interface ScenarioSummary {
@@ -231,7 +240,10 @@ export interface ScenarioSummary {
   description: string;
   instruction: string;
   files: { filename: string; artefact_type: string; bytes: number }[];
+  client_response: string[];
+  reporting_period: string;
   expected_state: string;
+  expected_onboarding_status: string;
   expected_human_steps: string[];
   demonstrates: string;
 }
@@ -242,7 +254,8 @@ export interface AgentMeta {
   runtime_mode: string;
   policy: SyntheticPolicy;
   lifecycle: LifecycleState[];
-  returnable_states: string[];
+  /** The wizard's own reference data, so the tab never restates the catalogue. */
+  onboarding_reference: OnboardingReference;
   scenarios: ScenarioSummary[];
   tenant: string;
 }
@@ -250,24 +263,20 @@ export interface AgentMeta {
 export interface AgentAudit {
   events: Record<string, unknown>[];
   chain_intact: boolean;
+  onboarding_events: Record<string, unknown>[];
 }
 
-export interface AgentPack {
-  pack: {
-    sections?: {
-      key: string;
-      title: string;
-      body: string;
-      items: Record<string, unknown>[];
-      depends_on: string[];
-    }[];
-    outcome?: string;
-    required_roles?: string[];
-    optional_roles?: string[];
-    content_hash?: string;
-  };
-  required_artefacts: { role: string; label: string; required: boolean }[];
-  issued_at: string;
+/** What the client still has to tell us, and what has been asked so far. */
+export interface AgentChecklist {
+  checklist: ChecklistRow[];
+  requests: InformationRequest[];
+}
+
+/** Exactly what activation would create. It creates nothing. */
+export interface AgentPreview {
+  preview: CasePreview;
+  written: boolean;
+  execution_status: string;
 }
 
 export interface AgentReadinessPackage {

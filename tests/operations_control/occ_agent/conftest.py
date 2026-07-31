@@ -21,7 +21,7 @@ import pytest
 
 from apps.blob_trigger_app.storage import Storage
 from operations_control.occ_agent.service import OccAgentService
-from operations_control.occ_agent.store import SyntheticCaseStore
+from operations_control.occ_agent.store import SyntheticRunStore
 
 SYNTHETIC_CONTAINER = "operations-control-synthetic"
 LIVE_CONTAINER = "operations-control"
@@ -62,9 +62,9 @@ def storage(agent_env) -> Storage:
 
 
 @pytest.fixture()
-def synthetic_store(storage, agent_env) -> SyntheticCaseStore:
-    return SyntheticCaseStore(storage, container=SYNTHETIC_CONTAINER,
-                              sandbox=agent_env["sandbox"])
+def synthetic_store(storage, agent_env) -> SyntheticRunStore:
+    return SyntheticRunStore(storage, container=SYNTHETIC_CONTAINER,
+                             sandbox=agent_env["sandbox"])
 
 
 @pytest.fixture()

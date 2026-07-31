@@ -26,9 +26,16 @@ function matches(row: CaseSummary, filter: FilterKey): boolean {
   if (filter === "all") return true;
   if (filter === "blocked") return row.state === "BLOCKED";
   if (filter === "ready") return row.state === "READY_FOR_EXECUTION";
-  // "Needs you" is anything waiting on a human: an approval state, or an open
-  // decision. Both are properties the backend already decided.
-  return row.open_decisions > 0 || /REQUIRED|EXCEPTIONS/.test(row.state);
+  // "Needs you" is anything waiting on a human: an approval state on either
+  // lifecycle, or an open decision. All three are properties the backend
+  // already decided.
+  return (
+    row.open_decisions > 0 ||
+    /REQUIRED|EXCEPTIONS/.test(row.state) ||
+    ["draft", "in_review", "ready_for_approval", "changes_required"].includes(
+      row.onboarding_status ?? "",
+    )
+  );
 }
 
 export function AgentCasesScreen() {
@@ -52,7 +59,7 @@ export function AgentCasesScreen() {
     setBusy(true);
     try {
       const status = await client.createAgentCase(instruction.trim());
-      navigate(`/agent/${status.case.case_id}`);
+      navigate(`/agent/${status.case_ref}`);
     } catch (err) {
       toast.show(errorMessage(err));
     } finally {
@@ -65,7 +72,7 @@ export function AgentCasesScreen() {
     setBusy(true);
     try {
       const status = await client.runAgentScenario(scenario.fixture_id);
-      navigate(`/agent/${status.case.case_id}`);
+      navigate(`/agent/${status.case_ref}`);
     } catch (err) {
       toast.show(errorMessage(err));
     } finally {
@@ -171,25 +178,23 @@ export function AgentCasesScreen() {
         )}
         <ul className="mt-4 space-y-2">
           {rows.map((row) => (
-            <li key={row.case_id}>
+            <li key={row.case_ref}>
               <Link
-                to={`/agent/${row.case_id}`}
+                to={`/agent/${row.case_ref}`}
                 className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-stone-200 bg-white px-4 py-3 hover:border-stone-300"
               >
                 <span className="min-w-0">
                   <span className="flex items-center gap-2">
                     <FlaskConical className="h-4 w-4 text-violet-500" aria-hidden />
                     <span className="truncate text-sm font-semibold text-stone-900">
-                      {row.client_name || row.case_id}
+                      {row.client_name || row.case_ref}
                     </span>
                     <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">
                       {copy.agent.syntheticChip}
                     </span>
                   </span>
                   <span className="mt-1 block text-xs text-stone-500">
-                    {[row.portfolio_id, row.asset_type.replace(/_/g, " ")]
-                      .filter(Boolean)
-                      .join(" · ")}
+                    {[row.case_ref, row.onboarding_status_label].filter(Boolean).join(" · ")}
                   </span>
                 </span>
                 <span className="flex items-center gap-2">

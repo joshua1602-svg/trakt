@@ -68,7 +68,7 @@ from engine.orchestrator_agent.adapters import (
 )
 
 from ..engine import OpsError
-from .case import (
+from .run import (
     STAGE_CONTRACT_VALIDATED,
     STAGE_DETERMINISTIC_COMPLETED,
     STAGE_HARD_BLOCKED,

@@ -1,34 +1,44 @@
-"""operations_control.occ_agent.interpretation — natural language in, typed proposals out.
+"""operations_control.occ_agent.interpretation — natural language in, typed answers out.
 
-Two jobs, both of which end in a schema-validated structure:
+Two jobs, both of which end in a structure the Client Onboarding catalogue
+itself validates:
 
 1. :meth:`Interpreter.interpret_instruction` — an initiating instruction becomes
-   :class:`~operations_control.occ_agent.case.ExtractedRequirements`.
+   an :class:`Interpretation`: one ``save_step`` payload per catalogue step, plus
+   the reporting period, which is a property of a *delivery* rather than of a
+   client and so belongs to the run.
 2. :meth:`Interpreter.interpret_action` — a follow-up sentence becomes a
    :class:`ProposedChange`: one of the lifecycle's named actions plus a typed
    payload.
 
-Three rules hold whatever produces the structure:
+Four rules hold whatever produces the structure:
 
 * **The interpreter never decides state.** It proposes an action; the service
-  runs the deterministic controls and asks :mod:`.states` whether the resulting
-  transition is legal. An action the current state does not allow is refused
-  there, not here.
+  runs the deterministic controls and asks :mod:`.states` — or Client
+  Onboarding's own transition table — whether the resulting move is legal.
 * **The interpreter never writes.** It returns values; only the service
-  persists, and only through the store.
-* **Every output is schema-validated** before it reaches the case, so a model
-  swapped in behind :class:`Interpreter` cannot widen the contract.
+  persists, and only through ``OnboardingService`` or the run store.
+* **Every field it produces must exist in the catalogue.** Validation walks the
+  proposed answers against ``config/onboarding/field_catalogue.yaml``, so a
+  model swapped in behind :class:`Interpreter` cannot invent a field, and cannot
+  reach a section the wizard does not have.
+* **It answers only what the sentence says.** Everything Trakt works out for
+  itself — the client identifier, the portfolio identifier, the reporting
+  currency, the asset class implied by a sample pack — is left to
+  :mod:`operations_control.onboarding.inference`, which already does it, records
+  its provenance, and lets an operator override it.
 
 The default :class:`DeterministicInterpreter` is rule-based and offline: the
 feature must work with no model credentials, and a deterministic interpreter is
-what makes the synthetic fixtures reproducible. It is injected, so a
-model-backed interpreter can be substituted without touching the service — and
-its output still passes through the same validation and the same controls.
+what makes the practice fixtures reproducible. It is injected, so a model-backed
+interpreter can be substituted without touching the service — and its output
+still passes through the same validation and the same controls.
 
-Vocabulary is read from the existing configuration (product profiles, the asset
-support model, the OCC outcome vocabulary and the input-requirements role
-labels) rather than hard-coded, so a new asset or product becomes recognisable
-by configuration change.
+Vocabulary is read from the configuration the platform already uses — the
+catalogue's own option lists, the regime product declaration, the asset model
+and the product profiles' match signals — rather than hard-coded, so a new
+asset, product or cadence becomes recognisable by configuration change. Only the
+*phrasing* an operator types lives in this module.
 """
 
 from __future__ import annotations
@@ -36,22 +46,27 @@ from __future__ import annotations
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import date
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, Tuple
 
+import yaml
+
 from ..engine import OpsError
+from ..onboarding.case import OnboardingCase
+from ..onboarding.catalogue import Catalogue, catalogue
+from ..onboarding.service import STEPS
 from . import states as _states
-from .case import (
-    ExtractedRequirements,
-    PROV_AGENT_INFERENCE,
-    PROV_HUMAN_INSTRUCTION,
-    SyntheticCase,
-)
-from .vocabulary import (
-    artefact_vocabulary,
-    asset_vocabulary,
-    frequency_vocabulary,
-    product_vocabulary,
-)
+from .input_roles import artefact_vocabulary, contains
+from .run import SyntheticRun
+
+REPO = Path(__file__).resolve().parents[2]
+PRODUCT_PROFILES_PATH = REPO / "config/asset/product_profiles.yaml"
+
+#: Where an answer came from. Recorded alongside the value, in the same shape
+#: Client Onboarding's own provenance uses.
+PROV_HUMAN_INSTRUCTION = "human_instruction"
+PROV_AGENT_INFERENCE = "agent_inference"
 
 
 class InterpretationError(OpsError):
@@ -61,10 +76,124 @@ class InterpretationError(OpsError):
         super().__init__(
             "OCC_AGENT_NOT_UNDERSTOOD",
             "Trakt could not tell what to do with that. Try naming the change "
-            "directly — for example 'confirm the interpretation', 'map Current "
-            "Balance to current outstanding balance', or 'what is still "
-            "needed?'." + (f" ({detail})" if detail else ""),
+            "directly — for example 'the jurisdiction is the Netherlands', "
+            "'map Current Balance to current outstanding balance', or 'what is "
+            "still needed?'." + (f" ({detail})" if detail else ""),
             http_status=422)
+
+
+# --------------------------------------------------------------------------- #
+# What an instruction produces
+# --------------------------------------------------------------------------- #
+
+#: Bounds on anything the interpreter proposes, so a model cannot post a payload
+#: large enough to matter.
+MAX_VALUE_CHARS = 2000
+MAX_ITEMS = 50
+
+
+@dataclass
+class Interpretation:
+    """Catalogue-shaped answers read out of one instruction.
+
+    ``steps`` is ``{step_key: save_step payload}`` — exactly what
+    ``OnboardingService.save_step`` takes, so the answers reach the case through
+    the platform's own writer, with its own validation, inference and event
+    history.
+    """
+
+    steps: Dict[str, Any] = field(default_factory=dict)
+    #: Delivery-specific, so not a catalogue answer: it lives on the run.
+    reporting_period: str = ""
+    #: The expected delivery cadence. A catalogue answer, but on the *sources*
+    #: section, which Client Onboarding derives from the portfolios — so it is
+    #: applied after that derivation rather than sent as a step payload.
+    cadence: str = ""
+    #: field path -> PROV_*.
+    provenance: Dict[str, str] = field(default_factory=dict)
+    #: field path -> 0..1, for anything read with less than full confidence.
+    confidence: Dict[str, float] = field(default_factory=dict)
+    #: Semantic input roles the instruction said the client would send.
+    expected_artefacts: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    @property
+    def empty(self) -> bool:
+        return not (self.steps or self.reporting_period or self.cadence
+                    or self.expected_artefacts)
+
+    def validate(self, cat: Optional[Catalogue] = None) -> None:
+        """Every proposed answer must be a field the catalogue declares."""
+        cat = cat or catalogue()
+        for step, payload in (self.steps or {}).items():
+            if step not in STEPS:
+                raise InterpretationError(f"unknown step '{step}'")
+            section = cat.section(step)
+            if section is None:
+                raise InterpretationError(f"unknown step '{step}'")
+            if section.repeatable:
+                items = payload.get(section.key) or payload.get("items") or []
+                if not isinstance(items, list) or len(items) > MAX_ITEMS:
+                    raise InterpretationError(f"{step} items")
+                for item in items:
+                    _check_keys(section, item, step)
+            else:
+                if not isinstance(payload, dict):
+                    raise InterpretationError(f"{step} payload")
+                _check_keys(section, payload, step)
+        if self.reporting_period and not re.fullmatch(
+                r"\d{4}-\d{2}-\d{2}", self.reporting_period):
+            raise InterpretationError("reporting period")
+        for value in self.confidence.values():
+            if not 0.0 <= float(value) <= 1.0:
+                raise InterpretationError("confidence must be 0..1")
+
+    def summary(self, cat: Optional[Catalogue] = None) -> List[str]:
+        """What the interpretation says, in the catalogue's own labels."""
+        cat = cat or catalogue()
+        lines: List[str] = []
+        for step, payload in (self.steps or {}).items():
+            section = cat.section(step)
+            if section is None:      # pragma: no cover — validate() refuses it
+                continue
+            holders = ([payload.get(section.key) or payload.get("items") or []]
+                       if section.repeatable else [[payload]])
+            for group in holders:
+                for item in group:
+                    for key, value in (item or {}).items():
+                        f = section.field(key)
+                        label = f.label if f else key.replace("_", " ")
+                        shown = (", ".join(str(v) for v in value)
+                                 if isinstance(value, list) else str(value))
+                        lines.append(f"{label}: {shown}")
+        if self.reporting_period:
+            lines.append(f"Reporting period: {self.reporting_period}")
+        if self.cadence:
+            lines.append(f"Expected cadence: {self.cadence}")
+        if self.expected_artefacts:
+            vocab = artefact_vocabulary()
+            lines.append("Expected files: " + ", ".join(
+                vocab.label(r) for r in self.expected_artefacts))
+        return lines
+
+
+def _check_keys(section, item: Any, step: str) -> None:
+    if not isinstance(item, dict):
+        raise InterpretationError(f"{step} item")
+    for key, value in item.items():
+        if section.field(key) is None:
+            raise InterpretationError(
+                f"'{key}' is not a field of {section.label}")
+        if isinstance(value, str) and len(value) > MAX_VALUE_CHARS:
+            raise InterpretationError(f"value for {key} is too long")
+        if isinstance(value, list):
+            if len(value) > MAX_ITEMS:
+                raise InterpretationError(f"value for {key} has too many items")
+            for entry in value:
+                if isinstance(entry, str) and len(entry) > MAX_VALUE_CHARS:
+                    raise InterpretationError(f"value for {key} is too long")
 
 
 @dataclass
@@ -97,41 +226,141 @@ class ProposedChange:
         for key, value in self.payload.items():
             if not isinstance(key, str) or len(key) > 64:
                 raise InterpretationError("payload key")
-            if isinstance(value, str) and len(value) > 2000:
+            if isinstance(value, str) and len(value) > MAX_VALUE_CHARS:
                 raise InterpretationError(f"payload value for {key} is too long")
 
 
-_ALL_ACTIONS = frozenset({
-    _states.ACTION_CONFIRM_REQUIREMENTS, _states.ACTION_CORRECT_REQUIREMENTS,
-    _states.ACTION_GENERATE_PACK, _states.ACTION_APPROVE_PACK,
-    _states.ACTION_ISSUE_PACK, _states.ACTION_REGISTER_ARTEFACT,
-    _states.ACTION_CLASSIFY_ARTEFACTS, _states.ACTION_DRAFT_CONFIG,
-    _states.ACTION_APPROVE_CONFIG, _states.ACTION_CORRECT_CONFIG,
-    _states.ACTION_RUN_ONBOARDING, _states.ACTION_RESOLVE_DECISION,
-    _states.ACTION_ACKNOWLEDGE_EXCEPTION, _states.ACTION_GENERATE_PLAN,
-    _states.ACTION_APPROVE_EXECUTION, _states.ACTION_RETURN_TO_STAGE,
-    _states.ACTION_CANCEL, _states.ACTION_ASK,
-})
+_ALL_ACTIONS = frozenset(
+    _states.ONBOARDING_ACTIONS + (
+        _states.ACTION_REGISTER_ARTEFACT, _states.ACTION_RUN_ONBOARDING,
+        _states.ACTION_RESOLVE_DECISION, _states.ACTION_ACKNOWLEDGE_EXCEPTION,
+        _states.ACTION_GENERATE_PLAN, _states.ACTION_APPROVE_EXECUTION,
+        _states.ACTION_CANCEL, _states.ACTION_ASK))
 
 
 class Interpreter(Protocol):
     """The seam a model-backed interpreter would implement."""
 
-    def interpret_instruction(self, text: str) -> ExtractedRequirements: ...
+    def interpret_instruction(self, text: str) -> Interpretation: ...
 
-    def interpret_action(self, text: str,
-                         case: SyntheticCase) -> ProposedChange: ...
+    def interpret_action(self, text: str, run: SyntheticRun,
+                         case: OnboardingCase) -> ProposedChange: ...
+
+
+# --------------------------------------------------------------------------- #
+# Recognition vocabularies, read from configuration
+# --------------------------------------------------------------------------- #
+
+def _load_yaml(path: Path) -> Dict[str, Any]:
+    try:
+        return yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return {}
+
+
+@lru_cache(maxsize=4)
+def _asset_tokens(profiles_path: str) -> Tuple[Tuple[str, str, float], ...]:
+    """``(token, asset_class, confidence)``, longest token first.
+
+    The asset classes are the catalogue's own option list (which is itself the
+    platform's asset model); the recognition synonyms are the ``match`` blocks
+    of ``config/asset/product_profiles.yaml`` — the same signals the Onboarding
+    Agent recognises a pack by.
+    """
+    cat = catalogue()
+    f = cat.field("portfolios", "asset_class")
+    classes = {str(o.get("value")): str(o.get("label") or o.get("value"))
+               for o in ((f.options if f else None) or [])}
+    tokens: List[Tuple[str, str, float]] = []
+    for key, label in classes.items():
+        tokens.append((key.replace("_", " "), key, 0.95))
+        tokens.append((label.lower(), key, 0.95))
+
+    for _pid, profile in (_load_yaml(Path(profiles_path)).get("profiles")
+                          or {}).items():
+        match = (profile or {}).get("match") or {}
+        owner = next((k for k in classes
+                      if k in {str(s).lower()
+                               for s in (match.get("asset_class") or [])}), "")
+        if not owner:
+            continue
+        for token in match.get("signal_tokens") or []:
+            tokens.append((str(token).lower(), owner, 0.95))
+        for group, confidence in (("asset_class", 0.95),
+                                  ("product_type", 0.7)):
+            for token in match.get(group) or []:
+                tokens.append((str(token).replace("_", " ").lower(), owner,
+                               confidence))
+    strongest: Dict[Tuple[str, str], float] = {}
+    for token, asset, confidence in tokens:
+        if token:
+            strongest[(token, asset)] = max(
+                strongest.get((token, asset), 0.0), confidence)
+    return tuple(sorted(((t, a, c) for (t, a), c in strongest.items()),
+                        key=lambda x: (-len(x[0]), x[0])))
+
+
+def asset_tokens() -> Tuple[Tuple[str, str, float], ...]:
+    return _asset_tokens(str(PRODUCT_PROFILES_PATH))
+
+
+#: Extra phrasing per product, for the words an operator types. The PRODUCTS
+#: themselves come from the regime declaration the catalogue reads.
+_PRODUCT_PROSE_TOKENS: Dict[str, Tuple[str, ...]] = {
+    "mi": ("management information", "portfolio mi", "monthly mi", "mi pack",
+           "mi reporting", "portfolio reporting"),
+    "esma_annex2": ("annex 2", "annex2", "esma annex 2", "regulatory reporting",
+                    "securitisation reporting", "underlying exposures"),
+    "investor_reporting": ("investor reporting", "investor report", "annex 12",
+                           "annex12", "noteholder reporting"),
+    "static_pools": ("static pool", "static pools", "vintage analysis"),
+}
+
+
+def product_tokens(cat: Optional[Catalogue] = None
+                   ) -> List[Tuple[str, str]]:
+    """``(token, product_id)``, longest first, from the product declaration."""
+    cat = cat or catalogue()
+    pairs: List[Tuple[str, str]] = []
+    for key, spec in (cat.regime_products or {}).items():
+        pairs.append((key.replace("_", " "), key))
+        label = str((spec or {}).get("label") or "")
+        if label:
+            pairs.append((label.lower(), key))
+        for token in _PRODUCT_PROSE_TOKENS.get(key, ()):
+            pairs.append((token, key))
+    return sorted(set(pairs), key=lambda p: (-len(p[0]), p[0]))
+
+
+def cadence_tokens(cat: Optional[Catalogue] = None) -> List[Tuple[str, str]]:
+    """``(token, cadence)`` from the catalogue's own cadence vocabulary."""
+    cat = cat or catalogue()
+    f = cat.field("sources", "cadence")
+    values = [str(o.get("value")) for o in ((f.options if f else None) or [])]
+    pairs: List[Tuple[str, str]] = []
+    for value in values:
+        pairs.append((value.replace("_", " "), value))
+        adverb = {"monthly": "each month", "weekly": "each week",
+                  "daily": "each day"}.get(value)
+        if adverb:
+            pairs.append((adverb, value))
+    return sorted(set(pairs), key=lambda p: (-len(p[0]), p[0]))
+
+
+def portfolio_type_tokens(cat: Optional[Catalogue] = None
+                          ) -> List[Tuple[str, str]]:
+    cat = cat or catalogue()
+    f = cat.field("portfolios", "portfolio_type")
+    pairs = [(str(o.get("value")), str(o.get("value")))
+             for o in ((f.options if f else None) or [])]
+    pairs += [("bought", "acquired"), ("purchased", "acquired"),
+              ("originated", "direct"), ("own origination", "direct")]
+    return sorted(set(pairs), key=lambda p: (-len(p[0]), p[0]))
 
 
 # --------------------------------------------------------------------------- #
 # Deterministic interpreter
 # --------------------------------------------------------------------------- #
-
-_DATE_RE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
-_MONTH_NAMES = ("january", "february", "march", "april", "may", "june", "july",
-                "august", "september", "october", "november", "december")
-_MONTH_YEAR_RE = re.compile(
-    r"\b(" + "|".join(_MONTH_NAMES) + r")\s+(\d{4})\b", re.I)
 
 #: "Onboard Northstar Lending." / "onboard client Northstar Lending" — the
 #: client name is the proper-noun run that follows the verb. The verb is
@@ -148,9 +377,7 @@ _ONBOARD_RE = re.compile(
     r"(?i:client\s+|portfolio\s+)?"
     rf"({_NAME_RUN})")
 
-_GO_LIVE_RE = re.compile(
-    r"\b(?:go[- ]?live|live)\b[^.]{0,40}?(\d{4}-\d{2}-\d{2})", re.I)
-_FIRST_REPORTING_RE = re.compile(
+_REPORTING_PERIOD_RE = re.compile(
     r"\b(?:first\s+)?report(?:ing)?\s+(?:date|period)\b[^.]{0,40}?"
     r"(\d{4}-\d{2}-\d{2})", re.I)
 
@@ -165,7 +392,7 @@ _CLIENT_ID_RE = re.compile(
 #: Jurisdiction tokens. Two-letter ISO codes are too ambiguous in free text to
 #: match on their own, so only explicit names/adjectives are recognised.
 _JURISDICTIONS: Tuple[Tuple[str, str], ...] = (
-    ("united kingdom", "GB"), ("uk ", "GB"), (" uk", "GB"), ("british", "GB"),
+    ("united kingdom", "GB"), ("uk", "GB"), ("british", "GB"),
     ("england", "GB"), ("scotland", "GB"), ("wales", "GB"),
     ("ireland", "IE"), ("irish", "IE"),
     ("netherlands", "NL"), ("dutch", "NL"),
@@ -174,9 +401,9 @@ _JURISDICTIONS: Tuple[Tuple[str, str], ...] = (
     ("germany", "DE"), ("german", "DE"),
 )
 
-_LEGAL_SUFFIXES = ("lending", "limited", "ltd", "plc", "capital", "partners",
-                   "finance", "financial", "group", "holdings", "bank",
-                   "mortgages", "advances", "llp", "sa", "nv", "bv", "gmbh")
+#: Entity roles an instruction can name a counterparty in.
+_COUNTERPARTY_ROLES = ("originator", "servicer", "trustee", "sponsor",
+                       "seller", "original_lender")
 
 
 def _trim_identifier(value: str) -> str:
@@ -188,38 +415,31 @@ def _trim_identifier(value: str) -> str:
     return str(value or "").strip().rstrip(".,;:-_")
 
 
-def _slug_id(name: str, *, max_len: int = 32) -> str:
-    """A proposed identifier from a display name. Deterministic and path-safe."""
-    tokens = [t for t in re.split(r"[^A-Za-z0-9]+", str(name or "")) if t]
-    if not tokens:
-        return ""
-    joined = "_".join(t.lower() for t in tokens)[:max_len].strip("_")
-    return joined
-
-
 class DeterministicInterpreter:
     """Rule-based interpretation. Offline, reproducible, no credentials.
 
-    It is deliberately conservative: anything it cannot read with confidence
-    becomes an unresolved question rather than an inferred value, because an
-    unresolved question is a prompt to the human and a silent inference is not.
+    It is deliberately conservative: anything it cannot read with confidence is
+    left unanswered, because Client Onboarding's own readiness will then ask for
+    it — which is a prompt to the human, where a silent inference is not.
     """
 
-    def __init__(self, *, today: Optional[date] = None):
+    def __init__(self, *, today: Optional[date] = None,
+                 cat: Optional[Catalogue] = None):
         # Injected so fixtures and tests are reproducible; ``None`` means the
         # interpreter derives nothing from the current date (it never guesses a
-        # reporting date, so this only affects sanity checks).
+        # reporting period, so this only affects sanity checks).
         self.today = today
+        self.catalogue = cat or catalogue()
 
     # -- 1. the initiating instruction ---------------------------------- #
-    def interpret_instruction(self, text: str) -> ExtractedRequirements:
+    def interpret_instruction(self, text: str) -> Interpretation:
         raw = str(text or "").strip()
         if not raw:
             raise InterpretationError("empty instruction")
         lower = raw.lower()
-        req = ExtractedRequirements()
-        prov: Dict[str, str] = {}
-        conf: Dict[str, float] = {}
+        out = Interpretation()
+        client: Dict[str, Any] = {}
+        portfolio: Dict[str, Any] = {}
 
         # Client name.
         name = ""
@@ -232,90 +452,134 @@ class DeterministicInterpreter:
             if m2:
                 name = self._trim_client_name(m2.group(1))
         if name:
-            req.client_name = name
-            prov["client_name"] = PROV_HUMAN_INSTRUCTION
+            client["client_name"] = name
+            out.provenance["client.client_name"] = PROV_HUMAN_INSTRUCTION
 
-        # Identifiers: explicit if stated, otherwise proposed from the name.
+        # Identifiers, only when stated. Trakt proposes them otherwise, with a
+        # collision check — see operations_control.onboarding.inference.
         cm = _CLIENT_ID_RE.search(raw)
         if cm:
-            req.proposed_client_id = _trim_identifier(cm.group(1))
-            prov["proposed_client_id"] = PROV_HUMAN_INSTRUCTION
-        elif req.client_name:
-            req.proposed_client_id = _slug_id(req.client_name)
-            prov["proposed_client_id"] = PROV_AGENT_INFERENCE
-            conf["proposed_client_id"] = 0.6
+            client["client_id"] = _trim_identifier(cm.group(1))
+            out.provenance["client.client_id"] = PROV_HUMAN_INSTRUCTION
 
+        for token, code in _JURISDICTIONS:
+            if contains(lower, token):
+                client["jurisdiction"] = code
+                out.provenance["client.jurisdiction"] = PROV_HUMAN_INSTRUCTION
+                break
+
+        # Portfolio.
         pm = _PORTFOLIO_ID_RE.search(raw)
         if pm:
-            req.proposed_portfolio_id = _trim_identifier(pm.group(1))
-            prov["proposed_portfolio_id"] = PROV_HUMAN_INSTRUCTION
-
+            portfolio["portfolio_id"] = _trim_identifier(pm.group(1))
+            out.provenance["portfolios.portfolio_id"] = PROV_HUMAN_INSTRUCTION
         pn = re.search(r"\b(?i:portfolio)\s+(?i:called|named)\s+"
                        rf"({_NAME_RUN})", raw)
         if pn:
-            req.portfolio_name = pn.group(1).strip()
-            prov["portfolio_name"] = PROV_HUMAN_INSTRUCTION
+            portfolio["display_name"] = self._trim_client_name(pn.group(1))
+            out.provenance["portfolios.display_name"] = PROV_HUMAN_INSTRUCTION
+        elif name:
+            # A book has to be called something for the operator to work with.
+            # Trakt's own inference names it from the client when nothing else
+            # does, so this only fills the very first draft.
+            portfolio["display_name"] = f"{name} portfolio"
+            out.provenance["portfolios.display_name"] = PROV_AGENT_INFERENCE
+            out.confidence["portfolios.display_name"] = 0.6
 
-        # Asset type — matched against the product-profile signal vocabulary.
-        asset, asset_conf = asset_vocabulary().match(lower)
+        asset, asset_confidence = self.match_asset(lower)
         if asset:
-            req.asset_type = asset
-            prov["asset_type"] = (PROV_HUMAN_INSTRUCTION if asset_conf >= 0.9
-                                  else PROV_AGENT_INFERENCE)
-            if asset_conf < 0.9:
-                conf["asset_type"] = asset_conf
+            portfolio["asset_class"] = asset
+            out.provenance["portfolios.asset_class"] = (
+                PROV_HUMAN_INSTRUCTION if asset_confidence >= 0.9
+                else PROV_AGENT_INFERENCE)
+            if asset_confidence < 0.9:
+                out.confidence["portfolios.asset_class"] = asset_confidence
 
-        # Jurisdiction.
-        padded = f" {lower} "
-        for token, code in _JURISDICTIONS:
-            if token in padded:
-                req.jurisdiction = code
-                prov["jurisdiction"] = PROV_HUMAN_INSTRUCTION
+        for token, value in portfolio_type_tokens(self.catalogue):
+            if contains(lower, token):
+                portfolio["portfolio_type"] = value
+                out.provenance["portfolios.portfolio_type"] = \
+                    PROV_HUMAN_INSTRUCTION
                 break
 
-        # Products — matched against the configured product catalogue.
-        products = product_vocabulary().match_all(lower)
+        # Products.
+        products = self.match_products(lower)
         if products:
-            req.required_products = products
-            prov["required_products"] = PROV_HUMAN_INSTRUCTION
+            out.steps["reporting"] = {"products": products}
+            out.provenance["reporting.products"] = PROV_HUMAN_INSTRUCTION
 
-        # Frequency.
-        freq = frequency_vocabulary().match(lower)
-        if freq:
-            req.reporting_frequency = freq
-            prov["reporting_frequency"] = PROV_HUMAN_INSTRUCTION
+        # Entities named as counterparties become entity rows, which is where
+        # the catalogue holds them — and what Annex 2 is generated from.
+        entities = self._entities(raw, name)
+        if entities:
+            out.steps["entities"] = {"entities": entities}
+            out.provenance["entities"] = PROV_HUMAN_INSTRUCTION
 
-        # Expected artefacts — the semantic input roles named in the text.
-        artefacts = artefact_vocabulary().match_all(lower)
-        if artefacts:
-            req.expected_artefacts = artefacts
-            prov["expected_artefacts"] = PROV_HUMAN_INSTRUCTION
+        if client:
+            out.steps["client"] = client
+        if portfolio:
+            out.steps["portfolios"] = {"portfolios": [portfolio]}
 
-        # Dates. Only accepted when explicitly qualified: an unqualified date in
-        # a sentence about go-live must not become the reporting date.
-        gl = _GO_LIVE_RE.search(raw)
-        if gl:
-            req.target_go_live_date = gl.group(1)
-            prov["target_go_live_date"] = PROV_HUMAN_INSTRUCTION
-        fr = _FIRST_REPORTING_RE.search(raw)
-        if fr:
-            req.reporting_date = fr.group(1)
-            prov["reporting_date"] = PROV_HUMAN_INSTRUCTION
+        # Delivery-specific facts.
+        period = _REPORTING_PERIOD_RE.search(raw)
+        if period:
+            out.reporting_period = period.group(1)
+        out.cadence = self.match_cadence(lower)
 
-        # Counterparties.
-        for label in ("warehouse", "investor", "funder", "servicer", "trustee"):
-            cp = re.search(rf"\b(?i:{label})\s+(?i:is\s+)?({_NAME_RUN})", raw)
-            if cp:
-                req.known_counterparties.append(
-                    f"{label}: {cp.group(1).strip().rstrip('.,;:')}")
-        if req.known_counterparties:
-            prov["known_counterparties"] = PROV_HUMAN_INSTRUCTION
+        roles = artefact_vocabulary().match_all(lower)
+        if roles:
+            out.expected_artefacts = roles
 
-        req.provenance = prov
-        req.confidence = conf
-        req.unresolved_questions = self.open_questions(req)
-        req.validate()
-        return req
+        out.validate(self.catalogue)
+        return out
+
+    def _entities(self, raw: str, client_name: str) -> List[Dict[str, Any]]:
+        """Counterparties named with their role, plus the client as originator.
+
+        The catalogue holds legal entities as a repeatable section with a role
+        list; a sentence that says "the servicer is X" is answering that
+        section, not creating a free-text note.
+        """
+        rows: List[Dict[str, Any]] = []
+        seen: set = set()
+        for role in _COUNTERPARTY_ROLES:
+            word = role.replace("_", " ")
+            m = re.search(rf"\b(?i:{word})\s+(?i:is\s+)?({_NAME_RUN})", raw)
+            if not m:
+                continue
+            legal_name = self._trim_client_name(m.group(1))
+            if not legal_name or legal_name.lower() in seen:
+                continue
+            seen.add(legal_name.lower())
+            rows.append({"legal_name": legal_name, "roles": [role]})
+        if client_name and client_name.lower() not in seen:
+            # The client is the originator unless the instruction said someone
+            # else was. Stated rather than assumed: it is shown for confirmation
+            # like every other proposed value.
+            if not any("originator" in r["roles"] for r in rows):
+                rows.insert(0, {"legal_name": client_name,
+                                "roles": ["originator"]})
+        return rows
+
+    # -- vocabulary matching -------------------------------------------- #
+    def match_asset(self, lower_text: str) -> Tuple[str, float]:
+        for token, asset, confidence in asset_tokens():
+            if contains(lower_text, token):
+                return asset, confidence
+        return "", 0.0
+
+    def match_products(self, lower_text: str) -> List[str]:
+        hits: List[str] = []
+        for token, product in product_tokens(self.catalogue):
+            if contains(lower_text, token) and product not in hits:
+                hits.append(product)
+        return hits
+
+    def match_cadence(self, lower_text: str) -> str:
+        for token, value in cadence_tokens(self.catalogue):
+            if contains(lower_text, token):
+                return value
+        return ""
 
     @staticmethod
     def _trim_client_name(candidate: str) -> str:
@@ -333,39 +597,13 @@ class DeterministicInterpreter:
             if t.lower() in stop:
                 break
             kept.append(t)
-        # Trailing bare words that are not part of the entity ("Lending It").
         while kept and kept[-1].lower() in stop:
             kept.pop()
         return " ".join(kept).strip(" .,;:")
 
-    @staticmethod
-    def open_questions(req: ExtractedRequirements) -> List[str]:
-        """What the agent must still ask. Deterministic, so the same facts
-        always produce the same question list."""
-        qs: List[str] = []
-        if not req.client_name:
-            qs.append("What is the client called?")
-        if not req.asset_type:
-            qs.append("What asset type is this portfolio?")
-        if not req.required_products:
-            qs.append("Which Trakt products does the client need?")
-        if not req.proposed_portfolio_id and not req.portfolio_name:
-            qs.append("What is the portfolio identifier?")
-        if not req.reporting_date:
-            qs.append("What is the first reporting date?")
-        if not req.reporting_frequency:
-            qs.append("How often will the client deliver?")
-        if not req.expected_artefacts:
-            qs.append("Which source files will the client send?")
-        if not req.jurisdiction:
-            qs.append("Which jurisdiction does the portfolio sit in?")
-        if not req.target_go_live_date:
-            qs.append("What is the target go-live date?")
-        return qs
-
     # -- 2. a follow-up instruction ------------------------------------- #
-    def interpret_action(self, text: str,
-                         case: SyntheticCase) -> ProposedChange:
+    def interpret_action(self, text: str, run: SyntheticRun,
+                         case: OnboardingCase) -> ProposedChange:
         raw = str(text or "").strip()
         if not raw:
             raise InterpretationError("empty instruction")
@@ -375,7 +613,7 @@ class DeterministicInterpreter:
         if self._is_question(lower):
             change = ProposedChange(
                 action=_states.ACTION_ASK,
-                payload={"question": raw[:2000]},
+                payload={"question": raw[:MAX_VALUE_CHARS]},
                 summary="Answer a question about this case.",
                 basis="the message is phrased as a question")
             change.validate()
@@ -387,14 +625,8 @@ class DeterministicInterpreter:
             mapping.validate()
             return mapping
 
-        # Returning to an earlier stage.
-        back = self._return_change(lower)
-        if back is not None:
-            back.validate()
-            return back
-
-        # Approvals and confirmations, most specific first.
-        for pattern, action, summary, material in _APPROVAL_RULES:
+        # Named actions, most specific first.
+        for pattern, action, summary, material in _ACTION_RULES:
             if re.search(pattern, lower):
                 change = ProposedChange(
                     action=action, summary=summary, material=material,
@@ -406,55 +638,23 @@ class DeterministicInterpreter:
         # A bare "confirm" / "yes" resolves whatever the case is waiting on.
         if re.fullmatch(r"(yes|confirm(ed)?|approved?|go ahead|proceed)\.?",
                         lower):
-            action = _pending_confirmation_action(case)
+            action = pending_confirmation_action(run, case)
             if action is None:
                 raise InterpretationError("nothing is awaiting confirmation")
             change = ProposedChange(
                 action=action,
-                summary=f"Confirm what this case is waiting on "
-                        f"({_states.spec_label(case.state)}).",
+                summary="Confirm what this case is waiting on.",
                 basis="bare confirmation resolved against the current state")
             change.validate()
             return change
 
-        # A correction to the facts: "the reporting date is 2026-06-30".
-        fact = self._fact_change(raw, case)
-        if fact is not None:
-            fact.validate()
-            return fact
-
-        # A configuration value the client has supplied.
-        config = self._config_change(raw)
-        if config is not None:
-            config.validate()
-            return config
+        # Anything else that answers the onboarding.
+        answer = self._answer_change(raw)
+        if answer is not None:
+            answer.validate()
+            return answer
 
         raise InterpretationError()
-
-    @staticmethod
-    def _config_change(raw: str) -> Optional[ProposedChange]:
-        """A configuration answer, e.g. "set the originator's LEI to …".
-
-        The key vocabulary is bounded — it is the set of configuration keys the
-        platform already asks about — so this cannot set an arbitrary key.
-        """
-        from .configuration import configuration_key_vocabulary
-
-        vocab = configuration_key_vocabulary()
-        m = re.search(
-            r"\b(?:set|the)\s+(.+?)\s+(?:to|is|=)\s+(.+?)(?:[.;]|$)", raw, re.I)
-        if not m:
-            return None
-        label, value = m.group(1).strip(), m.group(2).strip().strip("'\"")
-        key = vocab.match(label)
-        if not key or not value:
-            return None
-        return ProposedChange(
-            action=_states.ACTION_CORRECT_CONFIG,
-            payload={"updates": {key: value}},
-            summary=f"Set {label.lower()} to '{value}'.",
-            material=True, requires_confirmation=True,
-            basis="a configuration value was supplied directly")
 
     @staticmethod
     def _is_question(lower: str) -> bool:
@@ -466,8 +666,6 @@ class DeterministicInterpreter:
     def _mapping_change(self, raw: str) -> Optional[ProposedChange]:
         m = re.search(r"\bmap\s+(.+?)\s+to\s+(.+?)(?:[.;]|$)", raw, re.I)
         if not m:
-            # "Confirm Current Balance." inside a mapping decision is handled by
-            # the decision-resolution path, not here.
             return None
         source = m.group(1).strip().strip("'\"")
         target = m.group(2).strip().strip("'\"")
@@ -482,109 +680,110 @@ class DeterministicInterpreter:
             material=True, requires_confirmation=True,
             basis="explicit mapping instruction")
 
-    @staticmethod
-    def _return_change(lower: str) -> Optional[ProposedChange]:
-        if not re.search(r"\b(go back|return|reopen|re-open|back to)\b", lower):
-            return None
-        for state in _states.RETURNABLE_STATES:
-            words = state.lower().replace("_", " ")
-            head = " ".join(words.split()[:2])
-            if words in lower or head in lower:
-                return ProposedChange(
-                    action=_states.ACTION_RETURN_TO_STAGE,
-                    payload={"target_state": state},
-                    summary=f"Return this case to {_states.spec_label(state)}.",
-                    material=True, requires_confirmation=True,
-                    basis="explicit request to return to an earlier stage")
-        # Named the intent but not a recognised stage.
-        raise InterpretationError("which stage should the case return to?")
+    def _answer_change(self, raw: str) -> Optional[ProposedChange]:
+        """A sentence that answers the onboarding.
 
-    def _fact_change(self, raw: str,
-                     case: SyntheticCase) -> Optional[ProposedChange]:
-        """A correction to one confirmed/extracted fact."""
-        updates: Dict[str, Any] = {}
-        m = _FIRST_REPORTING_RE.search(raw) or re.search(
-            r"\breporting date\b[^.]{0,30}?(\d{4}-\d{2}-\d{2})", raw, re.I)
-        if m:
-            updates["reporting_date"] = m.group(1)
-        m = _GO_LIVE_RE.search(raw)
-        if m:
-            updates["target_go_live_date"] = m.group(1)
-        m = _PORTFOLIO_ID_RE.search(raw)
-        if m:
-            updates["proposed_portfolio_id"] = m.group(1)
-        freq = frequency_vocabulary().match(raw.lower())
-        if freq and re.search(r"\b(frequency|deliver|delivery|every)\b", raw,
-                              re.I):
-            updates["reporting_frequency"] = freq
-        products = product_vocabulary().match_all(raw.lower())
-        if products and re.search(r"\b(product|also need|add|require)\b", raw,
-                                  re.I):
-            updates["required_products"] = sorted(
-                set(case.extracted.required_products) | set(products))
-        artefacts = artefact_vocabulary().match_all(raw.lower())
-        if artefacts and re.search(r"\b(send|provide|file|files|tape|artefact|"
-                                   r"artifact|expect)\b", raw, re.I):
-            updates["expected_artefacts"] = sorted(
-                set(case.extracted.expected_artefacts) | set(artefacts))
-        asset, asset_conf = asset_vocabulary().match(raw.lower())
-        if asset and re.search(r"\b(asset|portfolio is|it is a|type)\b", raw,
-                               re.I):
-            updates["asset_type"] = asset
-        if not updates:
+        Read with the same extractor the initiating instruction uses, so "the
+        jurisdiction is the Netherlands" reaches ``save_step`` in exactly the
+        shape the wizard would have written.
+        """
+        try:
+            interpretation = self.interpret_instruction(raw)
+        except InterpretationError:
+            return None
+        if not _says_more_than_a_name(interpretation):
             return None
         return ProposedChange(
-            action=_states.ACTION_CORRECT_REQUIREMENTS,
-            payload={"updates": updates},
-            summary="Update " + ", ".join(
-                k.replace("_", " ") for k in sorted(updates)) + ".",
+            action=_states.ACTION_ANSWER,
+            payload={"interpretation": interpretation.to_dict()},
+            summary="Answer: " + "; ".join(
+                interpretation.summary(self.catalogue)[:4]) + ".",
             material=True, requires_confirmation=True,
             basis="a fact was stated directly")
 
 
+def _says_more_than_a_name(interpretation: Interpretation) -> bool:
+    """Whether a follow-up sentence answers anything beyond naming somebody.
+
+    A bare proper-noun run on a follow-up is almost always a false positive
+    ("send it to Northstar"), and the client is already named by then. So a
+    follow-up counts as an answer only when it says something the case does not
+    already have from its opening instruction.
+    """
+    if interpretation.reporting_period or interpretation.cadence:
+        return True
+    for step, payload in (interpretation.steps or {}).items():
+        if step == "client":
+            if set(payload) - {"client_name"}:
+                return True
+        elif step == "portfolios":
+            for item in (payload.get("portfolios") or []):
+                if set(item) - {"display_name"}:
+                    return True
+        else:
+            if payload:
+                return True
+    return False
+
+
 #: (pattern, action, operator summary, material). Ordered — first match wins.
-_APPROVAL_RULES: Tuple[Tuple[str, str, str, bool], ...] = (
-    (r"\bcancel (this )?case\b", _states.ACTION_CANCEL,
-     "Cancel this synthetic case.", True),
+_ACTION_RULES: Tuple[Tuple[str, str, str, bool], ...] = (
+    (r"\bcancel (this )?(case|run)\b", _states.ACTION_CANCEL,
+     "Cancel this practice case.", True),
+    (r"\bwithdraw\b", _states.ACTION_WITHDRAW,
+     "Withdraw the onboarding.", True),
     (r"\bapprove\b.*\breadiness\b|\bconfirm\b.*\bready for execution\b"
      r"|\bapprove (the )?execution\b",
      _states.ACTION_APPROVE_EXECUTION,
      "Approve readiness for execution.", True),
-    (r"\b(approve|accept)\b.*\b(configuration|config)\b",
-     _states.ACTION_APPROVE_CONFIG, "Approve the proposed configuration.",
+    (r"\b(approve|accept)\b.*\bonboarding\b|\bapprove (the )?case\b",
+     _states.ACTION_APPROVE_ONBOARDING,
+     "Approve the onboarding.", True),
+    (r"\b(submit|send)\b.*\b(for )?approval\b",
+     _states.ACTION_SUBMIT_FOR_APPROVAL,
+     "Submit the onboarding for approval.", True),
+    (r"\brequest changes?\b|\bsend (it )?back\b",
+     _states.ACTION_REQUEST_CHANGES, "Send the onboarding back for changes.",
      True),
-    (r"\b(approve|accept)\b.*\b(pack|questionnaire|email)\b",
-     _states.ACTION_APPROVE_PACK, "Approve the onboarding pack.", True),
-    (r"\b(issue|send)\b.*\bpack\b", _states.ACTION_ISSUE_PACK,
-     "Record the onboarding pack as synthetically issued.", True),
-    (r"\b(generate|draft|regenerate|rebuild)\b.*\b(pack|questionnaire|email)\b",
-     _states.ACTION_GENERATE_PACK, "Generate the onboarding pack.", False),
-    (r"\b(generate|draft|regenerate)\b.*\b(config|configuration)\b",
-     _states.ACTION_DRAFT_CONFIG, "Draft the client configuration.", False),
+    (r"\b(ask|request)\b.*\b(client|information|checklist)\b",
+     _states.ACTION_REQUEST_INFORMATION,
+     "Ask the client for what is still outstanding.", False),
+    (r"\b(record|log)\b.*\b(response|reply|answer)\b",
+     _states.ACTION_RECORD_RESPONSE, "Record the client's response.", True),
     (r"\b(generate|prepare)\b.*\b(plan|orchestration)\b",
      _states.ACTION_GENERATE_PLAN, "Generate the orchestration plan.", False),
-    (r"\b(run|start|re-?run)\b.*\b(onboarding|synthetic run|controls)\b",
-     _states.ACTION_RUN_ONBOARDING, "Run the synthetic onboarding.", False),
-    (r"\bclassify\b.*\b(artefact|artifact|file)", _states.ACTION_CLASSIFY_ARTEFACTS,
-     "Classify the artefacts received.", False),
+    (r"\b(run|start|re-?run)\b.*\b(onboarding|practice run|synthetic run|"
+     r"controls)\b",
+     _states.ACTION_RUN_ONBOARDING, "Run the practice onboarding.", False),
     (r"\backnowledge\b", _states.ACTION_ACKNOWLEDGE_EXCEPTION,
      "Acknowledge the non-blocking exception.", False),
-    (r"\bconfirm\b.*\b(interpretation|requirements|facts|understanding)\b",
-     _states.ACTION_CONFIRM_REQUIREMENTS,
-     "Confirm the proposed interpretation.", True),
 )
 
 
-def _pending_confirmation_action(case: SyntheticCase) -> Optional[str]:
-    """What a bare 'yes' means, given where the case is."""
+def pending_confirmation_action(run: SyntheticRun,
+                                case: OnboardingCase) -> Optional[str]:
+    """What a bare 'yes' means, given where the onboarding and the run are.
+
+    The onboarding half is asked first, because until the case is approved the
+    execution half has nothing to confirm.
+    """
+    from ..onboarding.case import (
+        APPROVED, DRAFT, IN_REVIEW, CHANGES_REQUIRED, READY_FOR_APPROVAL,
+    )
+    if case.status in (DRAFT, IN_REVIEW, CHANGES_REQUIRED):
+        return _states.ACTION_SUBMIT_FOR_APPROVAL
+    if case.status == READY_FOR_APPROVAL:
+        return _states.ACTION_APPROVE_ONBOARDING
+    if case.status != APPROVED:
+        return None
     return {
-        _states.REQUIREMENTS_EXTRACTED: _states.ACTION_CONFIRM_REQUIREMENTS,
-        _states.REQUIREMENTS_CONFIRMATION_REQUIRED:
-            _states.ACTION_CONFIRM_REQUIREMENTS,
-        _states.ONBOARDING_PACK_GENERATED: _states.ACTION_APPROVE_PACK,
-        _states.ONBOARDING_PACK_APPROVAL_REQUIRED: _states.ACTION_APPROVE_PACK,
-        _states.CONFIG_DRAFTED: _states.ACTION_APPROVE_CONFIG,
-        _states.CONFIG_APPROVAL_REQUIRED: _states.ACTION_APPROVE_CONFIG,
+        _states.READY_TO_RUN: _states.ACTION_RUN_ONBOARDING,
+        _states.SYNTHETIC_ONBOARDING_PASSED: _states.ACTION_GENERATE_PLAN,
         _states.ORCHESTRATION_PLAN_GENERATED: _states.ACTION_APPROVE_EXECUTION,
         _states.EXECUTION_APPROVAL_REQUIRED: _states.ACTION_APPROVE_EXECUTION,
-    }.get(case.state)
+    }.get(run.state)
+
+
+def reset_cache() -> None:
+    """Test seam: clear the configuration-derived token caches."""
+    _asset_tokens.cache_clear()
