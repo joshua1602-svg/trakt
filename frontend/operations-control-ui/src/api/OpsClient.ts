@@ -187,6 +187,8 @@ export interface OpsClient {
       | "cancel",
   ): Promise<AgentStatus>;
   uploadAgentArtefacts(caseId: string, files: File[]): Promise<AgentStatus>;
+  /** Generate a client response from the case's own confirmed requirements. */
+  generateAgentResponse(caseId: string): Promise<AgentStatus>;
   loadAgentFixtureArtefacts(caseId: string, fixtureId: string): Promise<AgentStatus>;
   returnAgentCaseToStage(caseId: string, targetState: string, reason?: string): Promise<AgentStatus>;
   runAgentScenario(fixtureId: string): Promise<AgentStatus>;

@@ -583,6 +583,13 @@ export class HttpOpsClient implements OpsClient {
     );
   }
 
+  async generateAgentResponse(caseId: string): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseId)}/artefacts/generate`,
+      {},
+    );
+  }
+
   async loadAgentFixtureArtefacts(caseId: string, fixtureId: string): Promise<AgentStatus> {
     return this.post<AgentStatus>(
       `/ops/agent/cases/${encodeURIComponent(caseId)}/artefacts/fixture`,

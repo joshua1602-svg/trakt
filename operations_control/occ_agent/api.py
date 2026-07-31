@@ -339,6 +339,19 @@ def load_fixture_artefacts(case_id: str, body: LoadFixture,
     return {"ok": True, **service.status(case)}
 
 
+@router.post("/cases/{case_id}/artefacts/generate")
+def generate_response(case_id: str, body: TenantBody,
+                      principal: Principal = Depends(authenticate)
+                      ) -> Dict[str, Any]:
+    """Generate a client response for this case's own requirements."""
+    _require_feature()
+    service = get_service()
+    case = _load(service, _tenant_for(principal, body.tenant), case_id)
+    return {"ok": True,
+            **service.status(service.generate_synthetic_response(
+                case, actor=principal.name))}
+
+
 @router.post("/cases/{case_id}/artefacts/classify")
 def classify(case_id: str, body: TenantBody,
              principal: Principal = Depends(authenticate)) -> Dict[str, Any]:

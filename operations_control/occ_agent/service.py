@@ -454,6 +454,44 @@ class OccAgentService:
                             "sha256": artefact.sha256})
         return case
 
+    def generate_synthetic_response(self, case: SyntheticCase, *,
+                                    actor: str) -> SyntheticCase:
+        """Generate a client response for THIS case's own requirements.
+
+        The alternative to uploading files or replaying a fixture: the same
+        generators the fixtures use, driven by the roles the pack asked for and
+        the case's own client and portfolio. It registers what it produces
+        through the ordinary artefact path, so a generated response is subject
+        to exactly the same sanitisation, classification and controls.
+        """
+        self._require_action(case, _states.ACTION_REGISTER_ARTEFACT)
+        from . import fixtures as _fixtures
+
+        roles = [entry["role"] for entry in case.required_artefacts
+                 if entry.get("required")] or \
+            artefact_vocabulary().required_roles(
+                product_vocabulary().outcome_for(
+                    case.confirmed.required_products))
+        files = _fixtures.generate_response(
+            roles=roles, client_name=case.client_name or case.client_id,
+            portfolio_id=case.portfolio_id)
+        if not files:
+            raise OpsError(
+                "OCC_AGENT_NOTHING_TO_GENERATE",
+                "Trakt cannot make up files for this kind of delivery. Upload "
+                "them, or start from a prepared example.", http_status=400)
+        for spec in files:
+            case = self.register_synthetic_artefact(
+                case, filename=spec.filename,
+                data=spec.content.encode("utf-8"), actor=actor,
+                fixture_id="generated", declared_type=spec.declared_type)
+        self._audit(case, "synthetic_response_generated", actor_type=ACTOR_AGENT,
+                    actor=actor, classification=EXEC_SYNTHETICALLY_EXECUTED,
+                    decision_basis="generated from the case's own confirmed "
+                                   "requirements",
+                    detail={"roles": roles, "files": len(files)})
+        return case
+
     def classify_artefacts(self, case: SyntheticCase, *,
                            actor: str) -> SyntheticCase:
         self._require_action(case, _states.ACTION_CLASSIFY_ARTEFACTS)

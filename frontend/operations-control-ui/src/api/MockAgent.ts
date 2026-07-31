@@ -514,6 +514,13 @@ export class MockAgent {
     return this.status(caseId);
   }
 
+  generateResponse(caseId: string): AgentStatus {
+    const stored = this.get(caseId);
+    this.requireAction(stored, "register_synthetic_artefact");
+    const name = `${stored.doc.portfolio_id || "portfolio"}_loan_extract_202606.csv`;
+    return this.uploadArtefacts(caseId, [name]);
+  }
+
   loadFixtureArtefacts(caseId: string, fixtureId: string): AgentStatus {
     const scenario = SCENARIOS.find((s) => s.fixture_id === fixtureId);
     if (!scenario) {

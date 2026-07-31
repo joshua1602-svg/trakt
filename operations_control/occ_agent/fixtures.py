@@ -317,6 +317,58 @@ SCENARIOS: Tuple[Scenario, ...] = (SCENARIO_A, SCENARIO_B, SCENARIO_C,
                                    SCENARIO_D, SCENARIO_E)
 
 
+#: How each configured input role is generated. A role with no generator here
+#: cannot be produced on demand — the operator uploads it or picks a fixture.
+_ROLE_GENERATORS = {
+    "loan_extract": ("loan_extract", lambda prefix, originator, count:
+                     loan_tape(count=count, prefix=prefix,
+                               originator=originator)),
+    "property_extract": ("property_extract", lambda prefix, _originator, count:
+                         property_tape(count=count, prefix=prefix)),
+    "cashflow_extract": ("cashflow_extract", lambda prefix, _originator, count:
+                         cashflow_tape(count=count, prefix=prefix)),
+}
+
+
+def generate_response(*, roles: List[str], client_name: str,
+                      portfolio_id: str,
+                      count: int = 24) -> List[SyntheticFile]:
+    """A synthetic client response for ONE case's own requirements.
+
+    Produces a file per requested role, named and populated for that case, using
+    the same generators the fixtures use — so a generated response is as
+    deterministic and as well-formed as a prepared one, and reaching
+    ``READY_FOR_EXECUTION`` with it means the same thing.
+
+    A role with no generator is skipped rather than faked: an empty file that
+    looked like a delivery would be worse than an absent one, because the
+    readiness check would then have to catch what this could have refused.
+    """
+    prefix = "".join(c for c in client_name.upper() if c.isalpha())[:3] or "SYN"
+    period = REPORTING_DATE.replace("-", "")[:6]
+    out: List[SyntheticFile] = []
+    for role in roles:
+        spec = _ROLE_GENERATORS.get(role)
+        if spec is None:
+            continue
+        stem, build = spec
+        out.append(SyntheticFile(
+            filename=f"{_slug(portfolio_id or client_name)}_{stem}_{period}.csv",
+            content=build(prefix, client_name or "Synthetic Originator", count),
+            declared_type=role))
+    return out
+
+
+def generatable_roles() -> List[str]:
+    """The roles :func:`generate_response` can actually produce."""
+    return sorted(_ROLE_GENERATORS)
+
+
+def _slug(value: str) -> str:
+    import re
+    return re.sub(r"[^a-z0-9]+", "_", str(value).lower()).strip("_")[:40]
+
+
 def by_id(fixture_id: str) -> Scenario:
     scenario = next((s for s in SCENARIOS if s.fixture_id == fixture_id), None)
     if scenario is None:

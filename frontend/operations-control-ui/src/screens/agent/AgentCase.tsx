@@ -234,6 +234,14 @@ export function AgentCaseScreen() {
                       }}
                     />
                   </label>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void act(() => client.generateAgentResponse(caseId))}
+                    className="rounded-xl border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+                  >
+                    {copy.agent.uploadGenerate}
+                  </button>
                   {doc.fixture_id && (
                     <button
                       type="button"

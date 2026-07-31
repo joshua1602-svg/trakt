@@ -425,6 +425,7 @@ export const copy = {
       "practice case.",
     uploadButton: "Add files",
     uploadFixture: "Use the example files",
+    uploadGenerate: "Let Trakt make up a response",
 
     readyHeadline: "Synthetic case ready for execution.",
     readyNotDone: [
