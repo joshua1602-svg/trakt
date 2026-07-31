@@ -386,7 +386,11 @@ export function AgentCaseScreen() {
             {facts.client_id && <Field label="Client">{facts.client_id}</Field>}
             {facts.portfolio_id && <Field label="Portfolio">{facts.portfolio_id}</Field>}
             {facts.products.length > 0 && (
-              <Field label="Products">{facts.products.map(humanize).join(", ")}</Field>
+              <Field label="Products">
+                {(facts.product_labels.length > 0 ? facts.product_labels : facts.products).join(
+                  ", ",
+                )}
+              </Field>
             )}
             {run.reporting_period && (
               <Field label="Reporting period">{run.reporting_period}</Field>

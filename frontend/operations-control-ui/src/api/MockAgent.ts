@@ -831,6 +831,10 @@ export class MockAgent {
       cadence: String(source?.cadence ?? "monthly"),
       jurisdiction: String(answers.client?.jurisdiction ?? ""),
       products,
+      product_labels: products.map(
+        (id) =>
+          (this.onboarding.reference().catalogue.regime_products?.[id]?.label as string) ?? id,
+      ),
       outcome: products.includes("esma_annex2") ? "mi_annex2" : "mi",
       regime: products.includes("esma_annex2")
         ? "ESMA_Annex2"

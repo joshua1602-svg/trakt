@@ -47,6 +47,9 @@ class ExecutionFacts:
     cadence: str = BATCH_FREQUENCY_DEFAULT
     jurisdiction: str = ""
     products: List[str] = field(default_factory=list)
+    #: The products' display labels, from the product declaration. Carried so a
+    #: browser never has to turn ``esma_annex2`` into something readable itself.
+    product_labels: List[str] = field(default_factory=list)
     outcome: str = OUTCOME_MI
     regime: str = ""
     #: Why each of the above is what it is, for the operator-facing panel.
@@ -59,7 +62,9 @@ class ExecutionFacts:
             "portfolio_name": self.portfolio_name,
             "asset_class": self.asset_class, "dataset": self.dataset,
             "cadence": self.cadence, "jurisdiction": self.jurisdiction,
-            "products": list(self.products), "outcome": self.outcome,
+            "products": list(self.products),
+            "product_labels": list(self.product_labels),
+            "outcome": self.outcome,
             "regime": self.regime, "basis": dict(self.basis),
         }
 
@@ -161,6 +166,7 @@ def facts(case: OnboardingCase, *, portfolio_id: str = "",
         jurisdiction=str((case.answers.get("client") or {})
                          .get("jurisdiction") or ""),
         products=products,
+        product_labels=[product_label(p, cat) for p in products],
         outcome=outcome_for(products, asset_class, cat),
         regime=regime_for(products, asset_class, cat),
     )

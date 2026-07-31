@@ -146,6 +146,8 @@ export interface ExecutionFacts {
   cadence: string;
   jurisdiction: string;
   products: string[];
+  /** The products' display labels, from the product declaration. */
+  product_labels: string[];
   outcome: string;
   regime: string;
   basis: Record<string, string>;
