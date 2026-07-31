@@ -241,7 +241,9 @@ export const copy = {
     filterBlocked: "Blocked",
     filterReady: "Ready to publish",
     filterPublished: "Published",
+    filterCancelled: "Cancelled",
     empty: "No workflows here yet.",
+    cancelledHidden: "Cancelled deliveries are kept but not listed here.",
   },
 
   workflow: {
@@ -255,6 +257,17 @@ export const copy = {
     publishButton: "Publish",
     holdPrompt: "Why are you holding this report?",
     holdButton: "Hold this report",
+    cancel: "Cancel this delivery",
+    cancelHeading: "Cancel this delivery?",
+    cancelExplain:
+      "Nothing has been published, so nothing is withdrawn. The delivery is kept with your reason on it, and any questions still open on it stop being asked.",
+    cancelExplainPublished:
+      "This delivery has already been published. Cancelling does not withdraw what was published.",
+    cancelPrompt: "Why is this being cancelled?",
+    cancelButton: "Cancel delivery",
+    cancelledToast: "Delivery cancelled. It has left the working list.",
+    cancelledNote:
+      "This delivery was cancelled. It is kept for the record and needs nothing from you.",
     warningsHeading: "Worth knowing",
     blockersHeading: "What's in the way",
     notFound: "That workflow could not be found.",

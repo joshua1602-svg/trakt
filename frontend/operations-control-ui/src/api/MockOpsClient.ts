@@ -724,7 +724,18 @@ export class MockOpsClient implements OpsClient {
       ...extra,
     });
 
-    return [
+    // On a cancelled delivery, a step it never reached is not "pending" — it is
+    // never going to happen. Matches the backend's case-file view.
+    const asCaseFile = (steps: WorkflowStep[]): WorkflowStep[] =>
+      workflow.status !== "cancelled"
+        ? steps
+        : steps.map((s) =>
+            s.status === "pending"
+              ? { ...s, status: "not_applicable", status_label: STEP_STATUS_LABELS.not_applicable }
+              : s,
+          );
+
+    return asCaseFile([
       step(
         "files_received",
         "Files received",
@@ -895,7 +906,7 @@ export class MockOpsClient implements OpsClient {
             : [],
         },
       ),
-    ];
+    ]);
   }
 
   private findWorkflow(workflowId: string): Workflow {
@@ -1224,6 +1235,9 @@ export class MockOpsClient implements OpsClient {
     }
     if (params?.status) {
       rows = rows.filter((w) => w.status === params.status);
+    } else {
+      // Kept, but off the working list — it needs nothing from anybody.
+      rows = rows.filter((w) => w.status !== "cancelled");
     }
     return deepCopy(rows);
   }
@@ -1282,12 +1296,27 @@ export class MockOpsClient implements OpsClient {
     return deepCopy(workflow);
   }
 
-  async cancelWorkflow(workflowId: string, _reason: string): Promise<Workflow> {
+  async cancelWorkflow(workflowId: string, reason: string): Promise<Workflow> {
     await this.wait();
     const workflow = this.findWorkflow(workflowId);
     workflow.status = "cancelled";
     workflow.status_sentence = "This workflow was cancelled.";
     workflow.updated_at = new Date().toISOString();
+    // A cancelled delivery has nothing left to decide, so its open questions
+    // stop being asked. Superseded, not approved or rejected: neither answer
+    // was given.
+    for (const review of this.reviews) {
+      if (review.workflow_id === workflowId && review.status === "open") {
+        review.status = "superseded";
+        review.resolved_at = workflow.updated_at;
+      }
+    }
+    const row = (this.workflows as WorkflowRow[]).find((w) => w.workflow_id === workflowId);
+    if (row) {
+      row.status = "cancelled";
+      row.open_decisions = 0;
+    }
+    void reason;
     return deepCopy(workflow);
   }
 
@@ -1347,7 +1376,9 @@ export class MockOpsClient implements OpsClient {
 
   async getReviews(params?: { client?: string; workflow_id?: string }): Promise<Review[]> {
     await this.wait();
-    let reviews = this.reviews;
+    // The queue is what is still to be answered, matching the API, which lists
+    // open decisions only.
+    let reviews = this.reviews.filter((r) => r.status === "open");
     if (params?.client) {
       reviews = reviews.filter((r) => r.client_id === params.client);
     }

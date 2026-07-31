@@ -10,12 +10,18 @@ import { copy, decisionsLabel } from "@/lib/copy";
 import { formatPeriod } from "@/lib/format";
 import { useLoad } from "@/lib/useLoad";
 
+/**
+ * "All" means everything still live. Cancelled deliveries are kept but are not
+ * on the working list — they need nothing from anybody — so they have their own
+ * filter rather than cluttering the default view.
+ */
 const FILTERS: { label: string; status: string }[] = [
   { label: copy.workflows.filterAll, status: "" },
   { label: copy.workflows.filterNeedsReview, status: "needs_review" },
   { label: copy.workflows.filterBlocked, status: "blocked" },
   { label: copy.workflows.filterReady, status: "awaiting_publication" },
   { label: copy.workflows.filterPublished, status: "published" },
+  { label: copy.workflows.filterCancelled, status: "cancelled" },
 ];
 
 export function WorkflowsScreen() {

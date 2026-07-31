@@ -6,8 +6,10 @@ from __future__ import annotations
 import pytest
 
 from operations_control.contracts import (
+    DEC_SUPERSEDED,
     IllegalTransition,
     RUN_AWAITING_PUBLICATION,
+    RUN_CANCELLED,
     RUN_NEEDS_REVIEW,
     RUN_PUBLISHED,
     RUN_RECEIVED,
@@ -204,3 +206,60 @@ class TestLlmAdvisory:
         assert rule is not None
         assert rule["suggested_by"] == "llm"
         assert rule["approved_by"] == "alice"
+
+
+class TestCancellation:
+    """A cancelled delivery is kept, but it stops asking and stops appearing."""
+
+    def test_cancelling_closes_the_questions_it_was_still_asking(
+            self, store, source_registry, delivery_dir):
+        engine = make_engine(store, source_registry, "mapping_halt")
+        run = register_and_create(engine, delivery_dir)
+        parked = start_and_wait(engine, run)
+        assert parked.status == RUN_NEEDS_REVIEW
+        assert store.open_decisions("client_a", run.workflow_id)
+
+        engine.cancel(parked, actor="alice", reason="Raised by mistake")
+
+        # Nothing is left in the review queue for a workflow nobody can act on.
+        assert store.open_decisions("client_a", run.workflow_id) == []
+        assert store.open_decisions("client_a") == []
+
+    def test_a_closed_question_is_superseded_not_answered(
+            self, store, source_registry, delivery_dir):
+        """Neither approve nor reject was chosen, so neither is recorded."""
+        engine = make_engine(store, source_registry, "mapping_halt")
+        run = register_and_create(engine, delivery_dir)
+        parked = start_and_wait(engine, run)
+        decision_id = store.open_decisions("client_a", run.workflow_id)[0][
+            "decision_id"]
+
+        engine.cancel(parked, actor="alice", reason="Raised by mistake")
+
+        doc = store.load_decision("client_a", decision_id)
+        assert doc["status"] == DEC_SUPERSEDED
+        assert doc["resolved_by"] == "alice"
+        assert doc["resolution_reason"] == "Raised by mistake"
+
+    def test_the_record_and_the_audit_survive(self, store, source_registry,
+                                              delivery_dir):
+        engine = make_engine(store, source_registry, "mapping_halt")
+        run = register_and_create(engine, delivery_dir)
+        parked = start_and_wait(engine, run)
+        engine.cancel(parked, actor="alice", reason="Raised by mistake")
+
+        kept = store.load_workflow("client_a", run.workflow_id)
+        assert kept is not None and kept.status == RUN_CANCELLED
+        events = [e["event"] for e in store.list_audit("client_a")]
+        assert "workflow_cancelled" in events
+        assert "decision_superseded" in events
+        assert store.verify_audit_chain("client_a") is True
+
+    def test_a_published_delivery_cannot_be_cancelled(self):
+        """Cancelling would imply the published report went away. It did not."""
+        run = _bare_run()
+        transition(run, RUN_RUNNING)
+        transition(run, RUN_AWAITING_PUBLICATION)
+        transition(run, RUN_PUBLISHED)
+        with pytest.raises(IllegalTransition):
+            transition(run, RUN_CANCELLED)
