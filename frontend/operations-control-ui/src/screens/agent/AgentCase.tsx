@@ -435,21 +435,11 @@ export function AgentCaseScreen() {
           )}
 
           <Panel title={copy.agent.actionsHeading}>
-            <p className="mb-2 text-xs text-stone-500">{copy.agent.actionsHelp}</p>
-            <div className="flex flex-wrap gap-2">
-              {STEPS.filter((entry) => available.has(entry.action)).map((entry) => (
-                <button
-                  key={entry.step}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void act(() => client.runAgentStep(caseId, entry.step))}
-                  className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
-                >
-                  {entry.label}
-                </button>
-              ))}
-              {STEPS.filter((entry) => available.has(entry.action)).length === 0 && <Empty />}
-            </div>
+            <ControlActions
+              available={available}
+              busy={busy}
+              onRun={(step) => void act(() => client.runAgentStep(caseId, step))}
+            />
           </Panel>
 
           <Panel title={copy.agent.occLinksHeading}>
@@ -471,6 +461,68 @@ export function AgentCaseScreen() {
         </aside>
       </div>
     </Page>
+  );
+}
+
+/**
+ * The governed steps available from here.
+ *
+ * Some allowed actions — correcting a fact or a configuration value, answering
+ * a mapping — need a detail that no button can carry, so they are reachable
+ * only through the conversation. Saying "nothing yet" in that case would be
+ * wrong: there IS something to do. The panel distinguishes the two.
+ */
+function ControlActions({
+  available,
+  busy,
+  onRun,
+}: {
+  available: Set<string>;
+  busy: boolean;
+  onRun: (step: (typeof STEPS)[number]["step"]) => void;
+}) {
+  const buttons = STEPS.filter((entry) => available.has(entry.action));
+  const conversational = [...available].filter(
+    (action) => !STEPS.some((entry) => entry.action === action),
+  );
+
+  if (buttons.length === 0 && conversational.length === 0) {
+    return <p className="text-sm text-stone-400">{copy.agent.actionsNone}</p>;
+  }
+
+  return (
+    <>
+      {buttons.length > 0 && (
+        <>
+          <p className="mb-2 text-xs text-stone-500">{copy.agent.actionsHelp}</p>
+          <div className="flex flex-wrap gap-2">
+            {buttons.map((entry) => (
+              <button
+                key={entry.step}
+                type="button"
+                disabled={busy}
+                onClick={() => onRun(entry.step)}
+                className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+              >
+                {entry.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      {conversational.length > 0 && (
+        <>
+          <p className={clsx("text-xs text-stone-500", buttons.length > 0 && "mt-3")}>
+            {copy.agent.actionsInConversation}
+          </p>
+          <ul className="mt-1 list-disc pl-4 text-sm text-stone-600">
+            {conversational.map((action) => (
+              <li key={action}>{humanize(action)}</li>
+            ))}
+          </ul>
+        </>
+      )}
+    </>
   );
 }
 

@@ -244,6 +244,27 @@ describe("OCC Agent tab — the operating loop", () => {
     );
   });
 
+  it("never says there is nothing to do while a blocked case still has options", async () => {
+    // A blocked case allows corrections and a return to an earlier stage —
+    // none of which is a no-argument button, so the panel must point at the
+    // conversation rather than claim the case is finished.
+    await runScenario("E — Material business-rule failure");
+    const panel = (await screen.findByText(copy.agent.actionsHeading)).closest("section");
+    expect(panel).not.toBeNull();
+    expect(
+      within(panel as HTMLElement).getByText(copy.agent.actionsInConversation),
+    ).toBeInTheDocument();
+    expect(
+      within(panel as HTMLElement).queryByText(copy.agent.actionsNone),
+    ).not.toBeInTheDocument();
+  });
+
+  it("says a finished case is finished", async () => {
+    await runScenario("A — Clean onboarding");
+    const panel = (await screen.findByText(copy.agent.actionsHeading)).closest("section");
+    expect(within(panel as HTMLElement).getByText(copy.agent.actionsNone)).toBeInTheDocument();
+  });
+
   it("shows the intended storage location and says it was not written", async () => {
     await runScenario("A — Clean onboarding");
     expect(await screen.findByText(copy.agent.artefactsHeading)).toBeInTheDocument();

@@ -419,6 +419,9 @@ export const copy = {
     actionsHeading: "Governed controls",
     actionsHelp:
       "These are the same governed steps the conversation drives. Use whichever you prefer.",
+    actionsInConversation:
+      "What you can do next needs a detail Trakt has to be told — use the conversation:",
+    actionsNone: "This case is finished. There is nothing further to do.",
     uploadHeading: "Provide the client response",
     uploadHelp:
       "Upload practice files, or use the files from a prepared example. They stay inside this " +
