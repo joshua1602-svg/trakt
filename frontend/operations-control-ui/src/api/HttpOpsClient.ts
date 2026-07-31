@@ -4,6 +4,8 @@ import { OpsError, type OpsClient } from "./OpsClient";
 import type {
   AgentActivation,
   AgentAudit,
+  AgentClassification,
+  AgentClientForm,
   AgentChecklist,
   AgentMeta,
   AgentPack,
@@ -704,6 +706,33 @@ export class HttpOpsClient implements OpsClient {
   async getAgentPack(caseRef: string): Promise<AgentPack> {
     return this.request<{ ok: true } & AgentPack>(
       `/ops/agent/cases/${encodeURIComponent(caseRef)}/pack`,
+    );
+  }
+
+  async getAgentClientForm(caseRef: string): Promise<AgentClientForm> {
+    return this.request<{ ok: true } & AgentClientForm>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/form`,
+    );
+  }
+
+  /**
+   * Persist a structured response. The keys are authoritative catalogue keys,
+   * and the server refuses any it did not ask this client for.
+   */
+  async submitAgentClientForm(
+    caseRef: string,
+    answers: Record<string, unknown>,
+    options: { request_id?: string; strict?: boolean } = {},
+  ): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/form`,
+      { answers, request_id: options.request_id ?? "", strict: options.strict ?? true },
+    );
+  }
+
+  async getAgentClassification(caseRef: string): Promise<AgentClassification> {
+    return this.request<{ ok: true } & AgentClassification>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/classification`,
     );
   }
 

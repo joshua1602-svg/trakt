@@ -163,6 +163,23 @@ class LoadFixture(BaseModel):
     run: bool = True
 
 
+class ClientResponse(BaseModel):
+    """A structured client submission.
+
+    ``answers`` is keyed by authoritative catalogue keys — ``section.field`` or
+    ``section[index].field``. A key the catalogue does not declare, or one the
+    client was not asked, is refused rather than stored: there is deliberately
+    no free-text lane into a governed case.
+    """
+
+    answers: Dict[str, Any] = {}
+    request_id: str = ""
+    #: When false, answers to questions the client was not asked are reported
+    #: and skipped rather than refusing the whole submission.
+    strict: bool = True
+    tenant: Optional[str] = None
+
+
 class SendPack(BaseModel):
     """Issue the approved pack. ``to`` overrides the recorded contacts."""
 
@@ -561,6 +578,50 @@ def send_pack(case_ref: str, body: SendPack,
             **service.status(service.send_pack(agent_case,
                                                actor=principal.name,
                                                to=body.to))}
+
+
+@router.get("/cases/{case_ref}/form")
+def get_client_form(case_ref: str, tenant: Optional[str] = None,
+                    principal: Principal = Depends(authenticate)
+                    ) -> Dict[str, Any]:
+    """The structured form the client should see now.
+
+    Progressive and conditional: a step whose trigger has not happened is
+    reported as locked rather than served empty.
+    """
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, tenant), case_ref)
+    return {"ok": True, "form": service.client_form(agent_case).to_dict()}
+
+
+@router.post("/cases/{case_ref}/form")
+def submit_client_form(case_ref: str, body: ClientResponse,
+                       principal: Principal = Depends(authenticate)
+                       ) -> Dict[str, Any]:
+    """Persist a structured client response, verbatim.
+
+    This is the deterministic lane: every value reaches the case through
+    ``OnboardingService.save_step`` exactly as submitted.
+    """
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
+    return {"ok": True,
+            **service.status(service.submit_client_response(
+                agent_case, actor=principal.name, response=body.answers,
+                request_id=body.request_id, strict=body.strict))}
+
+
+@router.get("/cases/{case_ref}/classification")
+def get_classification(case_ref: str, tenant: Optional[str] = None,
+                       principal: Principal = Depends(authenticate)
+                       ) -> Dict[str, Any]:
+    """Every catalogue field, in one of the five categories, and why."""
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, tenant), case_ref)
+    return {"ok": True, **service.classify_case(agent_case)}
 
 
 # --------------------------------------------------------------------------- #

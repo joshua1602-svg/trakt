@@ -154,6 +154,10 @@ class ActivationIntent:
     client_name: str = ""
     portfolio_id: str = ""
     dataset: str = ""
+    #: What the delivery is FOR, in the engine's own vocabulary. Passed straight
+    #: to ``create_batch``, which refuses anything outside ``OUTCOMES``.
+    outcome: str = ""
+    cadence: str = ""
     reporting_period: str = ""
     files: List[Dict[str, str]] = field(default_factory=list)
     target_locations: List[str] = field(default_factory=list)
@@ -189,6 +193,7 @@ def build_intent(case: OnboardingCase, facts: ExecutionFacts, *,
     return ActivationIntent(
         client_id=facts.client_id, client_name=facts.client_name,
         portfolio_id=facts.portfolio_id, dataset=facts.dataset,
+        outcome=facts.outcome, cadence=facts.cadence,
         reporting_period=reporting_period,
         files=list(files),
         target_locations=sorted({str(f.get("target") or "") for f in files
@@ -199,7 +204,8 @@ def build_intent(case: OnboardingCase, facts: ExecutionFacts, *,
             f"for {facts.client_id}, as a new governed version.",
             "Register the expected source deliveries in the production source "
             "registry.",
-            f"Place {len(files)} file(s) in the production raw location.",
+            f"Place {len(files)} file(s) in the production raw location, "
+            "through the platform's own governed intake.",
             "Start the existing Onboarding Agent, which will profile, map, "
             "transform, validate and assemble the delivery.",
         ],
@@ -302,10 +308,16 @@ class LiveExecutionAdapter:
             result.version = activation.get("version")
             result.artefacts_written = list(activation.get("artefacts") or [])
 
+            # The engine's own signature, in full. Every argument comes from
+            # the intent the human confirmed — nothing is defaulted here, and
+            # `workflow_type` in particular decides whether the delivery may
+            # reach regulatory reporting at all.
             batch = self.engine.create_batch(
                 client_id=intent.client_id, portfolio_id=intent.portfolio_id,
                 reporting_date=intent.reporting_period,
-                dataset=intent.dataset, created_by=actor)
+                workflow_type=intent.outcome,
+                dataset=intent.dataset, frequency=intent.cadence,
+                created_by=actor)
             result.batch_id = str(batch.get("batch_id") or "")
 
             self.engine.upload_batch_files(

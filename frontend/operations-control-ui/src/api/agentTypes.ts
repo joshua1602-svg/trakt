@@ -203,6 +203,110 @@ export interface PackHistoryEntry {
   note: string;
 }
 
+/**
+ * Where one catalogue field sits, and therefore what happens to it.
+ *
+ * Only `client` becomes a question. The rest are pre-populated, derived,
+ * deferred to the first delivery, or internal — and each is reported with a
+ * reason, so "why is that not being asked?" always has an answer.
+ */
+export type FieldCategory =
+  | "known"
+  | "client"
+  | "derived"
+  | "first_delivery"
+  | "internal"
+  | "not_applicable";
+
+export interface FieldClassification {
+  section: string;
+  field: string;
+  label: string;
+  category: FieldCategory;
+  number: number;
+  category_label: string;
+  reason: string;
+  source: string;
+  required: boolean;
+  confirm: boolean;
+  value: unknown;
+  provenance: string;
+  index: number | null;
+  item: string;
+}
+
+export interface ClassificationSummary {
+  total: number;
+  counts: Record<FieldCategory, number>;
+  labels: Record<FieldCategory, string>;
+  numbers: Record<FieldCategory, number>;
+  client_facing: number;
+  confirmations: number;
+}
+
+export interface AgentClassification {
+  summary: ClassificationSummary;
+  fields: FieldClassification[];
+}
+
+/** One question on the structured client form. */
+export interface ClientFormField {
+  /** `section.field` or `section[index].field`. The authoritative key. */
+  key: string;
+  section: string;
+  field: string;
+  label: string;
+  help: string;
+  type: string;
+  options: { value: string; label: string }[];
+  required: boolean;
+  sensitive: boolean;
+  evidence_required: boolean;
+  max_length: number | null;
+  validation: string;
+  /** Pre-populated from what Trakt already knows. */
+  value: unknown;
+  index: number | null;
+  item: string;
+}
+
+export interface ClientFormGroup {
+  key: string;
+  label: string;
+  help: string;
+  repeatable: boolean;
+  index: number | null;
+  item: string;
+  fields: ClientFormField[];
+  required: number;
+}
+
+export interface ClientFormStep {
+  key: string;
+  label: string;
+  help: string;
+  unlocked_by: string;
+  groups: ClientFormGroup[];
+  questions: number;
+  required: number;
+}
+
+/** The progressive, conditional form — only what this client is asked. */
+export interface ClientFormView {
+  case_ref: string;
+  client_name: string;
+  steps: ClientFormStep[];
+  /** Steps that exist but are not open yet, and what would open them. */
+  locked: { step: string; label: string; unlocked_by: string }[];
+  questions: number;
+  required: number;
+  content_hash: string;
+}
+
+export interface AgentClientForm {
+  form: ClientFormView;
+}
+
 /** One question in the client pack. Every one is a catalogue field. */
 export interface PackQuestion {
   section: string;
@@ -219,6 +323,8 @@ export interface PackQuestion {
   evidence_required: boolean;
   sensitive: boolean;
   writes_to: string;
+  step: string;
+  step_label: string;
 }
 
 export interface PackSection {
@@ -228,6 +334,10 @@ export interface PackSection {
   repeatable: boolean;
   questions: PackQuestion[];
   outstanding: number;
+  step: string;
+  step_label: string;
+  index: number | null;
+  item: string;
 }
 
 /** What happened when the pack was issued. `sent` is the honest answer. */
@@ -252,6 +362,12 @@ export interface PackView {
   sections: PackSection[];
   email: { to: string[]; cc: string[]; subject: string; body: string };
   artefacts: { name: string; ref: string }[];
+  /** Category 1: already known, and material enough to put to a human. */
+  confirmations: PackQuestion[];
+  /** What the client is NOT asked, and why. Reported rather than hidden. */
+  not_asked: { key: string; label: string; category: FieldCategory;
+    number: number; reason: string }[];
+  summary: ClassificationSummary | Record<string, never>;
   mapping_statement: string;
   receipt: PackReceipt | Record<string, never>;
   /** False in every environment without a mail integration. */

@@ -5,6 +5,8 @@ import { OpsError, type OpsClient } from "./OpsClient";
 import type {
   AgentActivation,
   AgentAudit,
+  AgentClassification,
+  AgentClientForm,
   AgentChecklist,
   AgentMeta,
   AgentPack,
@@ -1864,6 +1866,25 @@ export class MockOpsClient implements OpsClient {
   async getAgentPack(caseRef: string): Promise<AgentPack> {
     await this.wait();
     return this.agent.pack(caseRef);
+  }
+
+  async getAgentClientForm(caseRef: string): Promise<AgentClientForm> {
+    await this.wait();
+    return { form: this.agent.clientForm(caseRef) };
+  }
+
+  async submitAgentClientForm(
+    caseRef: string,
+    answers: Record<string, unknown>,
+    options: { request_id?: string; strict?: boolean } = {},
+  ): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.submitClientForm(caseRef, answers, options);
+  }
+
+  async getAgentClassification(caseRef: string): Promise<AgentClassification> {
+    await this.wait();
+    return this.agent.classification(caseRef);
   }
 
   async draftAgentPack(caseRef: string): Promise<AgentStatus> {

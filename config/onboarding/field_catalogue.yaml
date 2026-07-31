@@ -43,6 +43,14 @@
 # forms: `<path> == <value>`, `<path> != <value>`, `<path> in [a, b]`,
 # `<path> contains <value>`, `always`. Evaluated by
 # operations_control/onboarding/catalogue.py.
+#
+# `asked_when` — the same expression language, deciding whether the question is
+# worth PUTTING to anyone at all. Distinct from `required_when`, which decides
+# whether an asked question must be answered. A brand colour is never required,
+# but it is only worth asking of a client who receives a branded report; an
+# investor-report distribution list is meaningless to a client who has not
+# selected investor reporting. Absent means "always worth asking", so a field
+# that is unconditional needs no declaration.
 
 version: 1
 
@@ -410,6 +418,7 @@ sections:
         amendable: true
 
       - key: investor_report_recipients
+        asked_when: "reporting.products contains investor_reporting"
         label: Investor report recipients
         help: One address per line.
         scope: contact
@@ -588,6 +597,9 @@ sections:
         amendable: true
 
       - key: source_party
+        # Only worth asking when somebody other than the client sends the file:
+        # a book they originated and deliver themselves has no third party.
+        asked_when: "portfolio_type == acquired"
         label: Who sends the data
         help: The system or organisation the files come from.
         scope: source
@@ -731,8 +743,10 @@ sections:
         amendable: true
 
       - key: brand_colour
+        # Nothing to brand unless the client receives an MI surface.
+        asked_when: "reporting.products contains mi"
         label: Brand colour
-        help: A hex colour, for example #1F3B5C.
+        help: "A hex colour, for example #1F3B5C."
         scope: branding
         source: client_supplied
         type: colour
@@ -743,6 +757,7 @@ sections:
         amendable: true
 
       - key: logo_uri
+        asked_when: "reporting.products contains mi"
         label: Logo
         scope: branding
         source: client_supplied
@@ -753,6 +768,7 @@ sections:
         amendable: true
 
       - key: disclaimer
+        asked_when: "reporting.products contains mi"
         label: Disclaimer
         scope: branding
         source: client_supplied
@@ -787,6 +803,7 @@ sections:
         amendable: true
 
       - key: reporting_calendar_note
+        asked_when: "reporting.products contains mi"
         label: Reporting calendar
         help: >-
           Anything Trakt should know about when reports are due — for example a

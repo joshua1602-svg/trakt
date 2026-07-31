@@ -65,29 +65,45 @@ def test_every_question_traces_to_a_catalogue_field(service, opened):
             assert question.writes_to == f.writes_to
 
 
-def test_every_client_facing_catalogue_field_appears_in_the_pack(service,
-                                                                 opened):
-    """Coverage in the other direction: nothing the catalogue asks is dropped."""
-    cat = catalogue()
+def test_every_outstanding_client_field_appears_in_the_pack(service, opened):
+    """Coverage in the other direction, over what a CLIENT is asked.
+
+    Not over every collected field: the pack deliberately no longer projects
+    values Trakt mints, defaults, derives, or reads from the first delivery.
+    What must not be dropped is a question the client alone can answer and has
+    not yet — and that is exactly the classification's category 2.
+    """
+    from operations_control.occ_agent import classification as _classification
+
+    cat = service.onboarding.catalogue
     built = service.build_pack(opened)
-    present = {(s.key, q.field) for s in built.sections for q in s.questions}
-    for section in cat.sections:
-        for f in section.fields:
-            if not f.collected or f.answered_by_trakt:
-                continue
-            if section.from_regime and f.product and \
-                    f.product not in opened.case.products:
-                continue
-            assert (section.key, f.key) in present, f"{section.key}.{f.key}"
+    present = {(s.key, q.field, q.index) for s in built.sections
+               for q in s.questions}
+    rows = _classification.classify_all(opened.case.answers, cat=cat)
+    for row in rows:
+        if row.client_facing:
+            assert (row.section, row.field, row.index) in present, \
+                f"{row.section}.{row.field}"
 
 
 def test_the_pack_covers_the_areas_the_brief_names(service, opened):
-    """The named collection areas all have a home in the pack."""
+    """Every named area has a home — asked now, or reported as deferred.
+
+    ``client``, ``reporting`` and ``sources`` do not appear as questions for
+    this case because the opening instruction already answered them or Trakt
+    derives them; they appear on the confirmation list and in ``not_asked``.
+    What matters is that no area is silently absent.
+    """
     built = service.build_pack(opened)
-    keys = {s.key for s in built.sections}
+    asked = {s.key for s in built.sections}
+    deferred = {row["key"].split(".")[0] for row in built.not_asked}
+    confirmed = {q.section for q in built.confirmations}
+    accounted = asked | deferred | confirmed
     for expected in ("client", "entities", "contacts", "portfolios", "sources",
                      "reporting", "data_definitions", "access"):
-        assert expected in keys, expected
+        assert expected in accounted, expected
+    # And the data definitions are deferred rather than dropped.
+    assert "data_definitions" in deferred
 
 
 def test_the_pack_states_that_mappings_are_not_collected(service, opened):
@@ -129,10 +145,12 @@ def test_the_pack_asks_for_files_from_the_governed_input_requirements(service,
         set(vocab.required_roles(outcome))
 
 
-def test_an_answered_question_is_marked_answered(service, opened):
+def test_an_answered_question_is_not_asked_again(service, opened):
+    """The instruction named the client, so the pack confirms rather than asks."""
     built = service.build_pack(opened)
-    client = next(s for s in built.sections if s.key == "client")
-    name = next(q for q in client.questions if q.field == "client_name")
+    asked = {(s.key, q.field) for s in built.sections for q in s.questions}
+    assert ("client", "client_name") not in asked
+    name = next(q for q in built.confirmations if q.field == "client_name")
     assert name.status == _pack.ANSWERED
     assert name.value == "Northstar Lending"
 

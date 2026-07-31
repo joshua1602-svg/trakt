@@ -118,6 +118,42 @@ action that will occur.
 A test asserts `assert_may_activate` is called from exactly one place in the
 package.
 
+## Only what the client can answer
+
+Catalogue coverage is not the same as a good client experience. Projecting every
+collected field produced 58 questions for a straightforward equity-release
+onboarding, 20 of which the client could not answer at all.
+
+`classification.py` puts every field in exactly one of five categories, derived
+from the catalogue's own `source` axis:
+
+| # | Category | What happens |
+|---|---|---|
+| 1 | Already known | pre-populated; offered for confirmation when material |
+| 2 | **Only the client can answer** | **the pack** |
+| 3 | Trakt works it out | automatic, with provenance |
+| 4 | Learned from the first delivery | never in the initial pack |
+| 5 | Internal operator decision | OCC workflow only |
+
+For scenario A that is **22 client questions instead of 58**, of which 10 are
+required. Everything not asked is *reported* with a reason, so "why is that not
+being asked?" always has an answer.
+
+`client_form.py` is how those questions are put and how the answers come back:
+grouped into client-facing steps, conditional on product, asset class, portfolio
+structure and delivery method, progressive (a follow-up appears when its trigger
+is answered), and multi-portfolio without repeating client-level questions.
+
+Every answer is keyed by an authoritative catalogue key — `contacts.email` or
+`portfolios[0].portfolio_type` — checked against the form the client was served,
+and written through `OnboardingService.save_step` **exactly as submitted**. A
+test asserts `client_form.py` cannot even import an interpreter.
+
+**There is no secure external client portal today.** Nothing serves a page to a
+client or accepts a submission from outside the operator's network. What exists
+is the domain and API contract one needs; the OCC's own surface renders it in
+the meantime. Building the portal is named under production enablement below.
+
 ## Field mappings are not collected — deliberately
 
 The platform learns field mappings from the first representative delivery: the
@@ -292,6 +328,8 @@ deliberately not been performed.
 | File | Covers |
 |---|---|
 | `test_planning.py` | merge rules, disclosure, provenance |
+| `test_client_experience.py` | the five categories; only category 2 reaches a client; structured persistence |
+| `test_boundary.py` | the OCC Agent / Onboarding Agent line, enforced by AST |
 | `test_conversation_coverage.py` | every collected catalogue field, answerable in words |
 | `test_pack_and_review.py` | the pack is the catalogue; the workflow; the review package; access |
 | `test_activation.py` | the flag, the gate, approval ≠ activation, the live contract (fakes only) |

@@ -2,17 +2,27 @@
 
 A **projection** of the governed catalogue and the case's current answers.
 Nothing here decides what to ask: every question is a field
-``config/onboarding/field_catalogue.yaml`` declares, in the section the
-catalogue puts it in, with the help text the catalogue gives it. A field added
-there appears in the pack; a field removed disappears from it. There is no
-second questionnaire, and a test asserts every question traces to a catalogue
-field.
+``config/onboarding/field_catalogue.yaml`` declares, with the help text the
+catalogue gives it. A field added there appears in the pack; a field removed
+disappears from it. There is no second questionnaire.
 
-What the pack adds is the *shape a client can answer*: sections grouped for a
-reader rather than a wizard, each question marked answered, outstanding or
-worked out by Trakt, the artefact request derived from the governed input
-requirements, delivery instructions built with the production path rules, and a
-covering email.
+Coverage is not the same as a good client experience, though, and this pack used
+to prove the first while failing the second: projecting every collected field
+produced 58 questions for a straightforward equity-release onboarding, 20 of
+which the client could not answer at all. So the pack is now built on two
+things:
+
+* :mod:`operations_control.occ_agent.classification` — which of the five
+  categories each field is in. Only ``CLIENT`` becomes a question; the rest are
+  pre-populated, derived, deferred to the first delivery, or internal.
+* :mod:`operations_control.occ_agent.client_form` — the progressive, conditional
+  structured form those questions are asked through, keyed by authoritative
+  catalogue keys.
+
+What the pack adds around the form is everything else a client needs: what is
+already known and worth confirming, the artefact request derived from the
+governed input requirements, delivery instructions built with the production
+path rules, and a covering email.
 
 One thing the pack states outright, because it is a governed decision rather
 than an omission: **field mappings are not asked for.** They are learned from
@@ -29,8 +39,10 @@ from typing import Any, Dict, List, Optional
 
 from ..contracts import canonical_json, stable_hash
 from ..onboarding.case import OnboardingCase
-from ..onboarding.catalogue import Catalogue, Field, Section, catalogue
+from ..onboarding.catalogue import Catalogue, catalogue
 from ..onboarding.derivation import blob_prefix
+from . import classification as _classification
+from . import client_form as _client_form
 from .input_roles import artefact_vocabulary
 
 #: What the pack tells a client about mappings. A governed decision, stated —
@@ -40,8 +52,8 @@ MAPPING_STATEMENT = (
     "file and Trakt will propose the mapping itself; an operator reviews and "
     "approves it during the first ingestion, and it is then fixed for every "
     "later delivery. What Trakt cannot work out on its own is what your "
-    "numbers MEAN, which is what the questions under \"How to read the data\" "
-    "are for."
+    "numbers MEAN — Trakt asks about that once it has seen your files, not "
+    "before."
 )
 
 #: Where an answer stands, from the client's point of view.
@@ -68,6 +80,9 @@ class PackQuestion:
     sensitive: bool = False
     #: Where the answer ends up, from the field's own declaration.
     writes_to: str = ""
+    #: Which client-facing step this question is asked on.
+    step: str = ""
+    step_label: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -80,10 +95,17 @@ class PackSection:
     help: str = ""
     repeatable: bool = False
     questions: List[PackQuestion] = field(default_factory=list)
+    step: str = ""
+    step_label: str = ""
+    #: For a repeatable section: which item, and what it is called.
+    index: Optional[int] = None
+    item: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {"key": self.key, "label": self.label, "help": self.help,
-                "repeatable": self.repeatable,
+                "repeatable": self.repeatable, "step": self.step,
+                "step_label": self.step_label, "index": self.index,
+                "item": self.item,
                 "questions": [q.to_dict() for q in self.questions],
                 "outstanding": self.outstanding}
 
@@ -138,6 +160,16 @@ class OnboardingPack:
     case_ref: str
     client_name: str = ""
     sections: List[PackSection] = field(default_factory=list)
+    #: The progressive structured form, as the client would be served it.
+    form: Dict[str, Any] = field(default_factory=dict)
+    #: Category 1: already known, and material enough to put to a human.
+    confirmations: List[PackQuestion] = field(default_factory=list)
+    #: Everything the client is NOT asked, and why. Reported rather than
+    #: hidden, so "is that missing?" has an answer.
+    not_asked: List[Dict[str, Any]] = field(default_factory=list)
+    #: Every field, classified. The operator's view of the whole catalogue.
+    classification: List[Dict[str, Any]] = field(default_factory=list)
+    summary: Dict[str, Any] = field(default_factory=dict)
     artefacts: ArtefactRequest = field(default_factory=ArtefactRequest)
     delivery: DeliveryInstructions = field(default_factory=DeliveryInstructions)
     email: DraftEmail = field(default_factory=DraftEmail)
@@ -149,6 +181,11 @@ class OnboardingPack:
             "case_ref": self.case_ref,
             "client_name": self.client_name,
             "sections": [s.to_dict() for s in self.sections],
+            "form": self.form,
+            "confirmations": [q.to_dict() for q in self.confirmations],
+            "not_asked": list(self.not_asked),
+            "classification": list(self.classification),
+            "summary": dict(self.summary),
             "artefacts": self.artefacts.to_dict(),
             "delivery": self.delivery.to_dict(),
             "email": self.email.to_dict(),
@@ -166,28 +203,48 @@ class OnboardingPack:
     def question_count(self) -> int:
         return sum(len(s.questions) for s in self.sections)
 
+    @property
+    def required_count(self) -> int:
+        return len([q for s in self.sections for q in s.questions
+                    if q.required])
+
     def document(self) -> str:
         """The pack as a document a human can read and a client can answer."""
         lines = [f"# Onboarding — {self.client_name or self.case_ref}",
                  "", f"Reference: {self.case_ref}", ""]
-        lines += ["Please complete the questions below and return this "
-                  "document with the files listed at the end.", ""]
-        for section in self.sections:
-            if not section.questions:
-                continue
-            lines += [f"## {section.label}", ""]
-            if section.help:
-                lines += [section.help, ""]
-            for question in section.questions:
-                mark = {ANSWERED: "[answered]", DERIVED: "[Trakt supplies]",
-                        OUTSTANDING: "[  ]"}[question.status]
+        lines += [f"There are {self.question_count} question"
+                  f"{'s' if self.question_count != 1 else ''} for you, "
+                  f"{self.required_count} of them required. Everything else "
+                  "Trakt either already holds or works out itself.", ""]
+
+        if self.confirmations:
+            lines += ["## Please check these are right", "",
+                      "Trakt already holds these. Tell us if any are wrong.",
+                      ""]
+            for question in self.confirmations:
                 where = f" — {question.item}" if question.item else ""
-                lines.append(f"- {mark} **{question.label}**{where}")
-                if question.help:
-                    lines.append(f"      {question.help}")
-                if question.status != OUTSTANDING:
-                    lines.append(f"      Currently: {_render(question.value)}")
+                lines.append(f"- **{question.label}**{where}: "
+                             f"{_render(question.value)}")
             lines.append("")
+
+        for step in self._steps():
+            lines += [f"## {step['label']}", ""]
+            if step["help"]:
+                lines += [step["help"], ""]
+            for section in step["sections"]:
+                if section.repeatable and section.item:
+                    lines += [f"### {section.item}", ""]
+                elif len(step["sections"]) > 1:
+                    lines += [f"### {section.label}", ""]
+                for question in section.questions:
+                    mark = "[required]" if question.required else "[optional]"
+                    lines.append(f"- {mark} **{question.label}**")
+                    if question.help:
+                        lines.append(f"      {question.help}")
+                    if question.status != OUTSTANDING:
+                        lines.append(f"      Currently: "
+                                     f"{_render(question.value)}")
+                lines.append("")
 
         lines += ["## Files to send", ""]
         for row in self.artefacts.required:
@@ -206,58 +263,75 @@ class OnboardingPack:
             lines.append(f"- {location['label']}: `{location['location']}`")
         if self.delivery.naming:
             lines += ["", self.delivery.naming]
-        lines += ["", "## About field mappings", "", self.mapping_statement,
-                  ""]
+
+        lines += ["", "## What we are NOT asking you for", "",
+                  self.mapping_statement, ""]
+        deferred = sorted({row["label"] for row in self.not_asked
+                           if row["category"] == "first_delivery"})
+        if deferred:
+            lines += ["Trakt reads these from the first file you send, so "
+                      "there is nothing for you to fill in:", ""]
+            lines += [f"- {label}" for label in deferred]
+            lines.append("")
         return "\n".join(lines)
+
+    def _steps(self) -> List[Dict[str, Any]]:
+        """The pack's sections regrouped into the client-facing steps."""
+        order: List[str] = []
+        for section in self.sections:
+            if section.step not in order:
+                order.append(section.step)
+        out: List[Dict[str, Any]] = []
+        for key in order:
+            sections = [s for s in self.sections if s.step == key]
+            out.append({"key": key,
+                        "label": sections[0].step_label or key,
+                        "help": _step_help(key),
+                        "sections": sections})
+        return out
+
+
+def _step_help(key: str) -> str:
+    return next((s["help"] for s in _client_form.STEPS if s["key"] == key), "")
 
 
 # --------------------------------------------------------------------------- #
 # Building it
 # --------------------------------------------------------------------------- #
 
-#: Sections a client never sees: Trakt derives every field in them.
-def _client_visible(section: Section) -> bool:
-    return any(f.collected and not f.answered_by_trakt for f in section.fields)
-
-
 def build(case: OnboardingCase, *, cat: Optional[Catalogue] = None,
           outcome: str = "mi", reporting_period: str = "") -> OnboardingPack:
-    """Project the catalogue and the case's answers into a client pack."""
+    """Project the catalogue into what THIS client should actually be asked."""
     cat = cat or catalogue()
     client = case.answers.get("client") or {}
     pack = OnboardingPack(case_ref=case.case_id,
                           client_name=str(client.get("client_name") or ""))
 
-    for section in cat.sections:
-        if not _client_visible(section):
-            continue
-        built = PackSection(key=section.key, label=section.label,
-                            help=section.help, repeatable=section.repeatable)
-        if section.repeatable:
-            items = case.items(section.key) or [{}]
-            for index, item in enumerate(items):
-                label = str(item.get(section.item_label_field) or "").strip()
-                for f in section.fields:
-                    q = _question(case, cat, section, f, item, index, label)
-                    if q is not None:
-                        built.questions.append(q)
-        else:
-            block = case.answers.get(section.key) or {}
-            for f in section.fields:
-                if section.from_regime and f.product \
-                        and f.product not in case.products:
-                    continue
-                q = _question(case, cat, section, f, block, None, "")
-                if q is not None:
-                    built.questions.append(q)
-        if built.questions:
-            pack.sections.append(built)
+    rows = _classification.classify_all(case.answers, cat=cat,
+                                        provenance=case.provenance_class)
+    pack.classification = [r.to_dict() for r in rows]
+    pack.summary = _classification.summarise(rows)
+
+    form = _client_form.build(case, cat=cat)
+    pack.form = form.to_dict()
+    pack.sections = _sections_from_form(form, rows, cat)
+    pack.confirmations = [
+        _question_from(r, cat, status=ANSWERED)
+        for r in rows if r.category == _classification.KNOWN and r.confirm]
+    pack.not_asked = [
+        {"key": f"{r.section}.{r.field}", "label": r.label,
+         "category": r.category, "number": r.number, "reason": r.reason}
+        for r in rows if r.category in (_classification.DERIVED,
+                                        _classification.FIRST_DELIVERY,
+                                        _classification.INTERNAL,
+                                        _classification.NOT_APPLICABLE)]
 
     pack.artefacts = _artefacts(outcome)
     pack.delivery = _delivery(case, reporting_period)
     pack.email = _email(case, pack)
     pack.content_hash = stable_hash(canonical_json({
-        "sections": [s.to_dict() for s in pack.sections],
+        "form": pack.form,
+        "confirmations": [q.to_dict() for q in pack.confirmations],
         "artefacts": pack.artefacts.to_dict(),
         "delivery": pack.delivery.to_dict(),
         "email": pack.email.to_dict(),
@@ -265,27 +339,53 @@ def build(case: OnboardingCase, *, cat: Optional[Catalogue] = None,
     return pack
 
 
-def _question(case: OnboardingCase, cat: Catalogue, section: Section,
-              f: Field, holder: Dict[str, Any], index: Optional[int],
-              item: str) -> Optional[PackQuestion]:
-    if not f.collected:
-        return None                    # derived or system: never asked
-    value = holder.get(f.key)
-    present = _present(value)
-    required = cat.is_required(f, case.answers, holder)
-    if f.answered_by_trakt:
-        status = ANSWERED if present else DERIVED
-    else:
-        status = ANSWERED if present else OUTSTANDING
-    path = f"{section.key}.{f.key}"
+def _sections_from_form(form: "_client_form.ClientForm",
+                        rows: List[_classification.Classification],
+                        cat: Catalogue) -> List[PackSection]:
+    """The form, in the pack's own section shape.
+
+    Kept so every existing reader — the review package, the status projection,
+    the operator's document — sees one shape whether it came from the form or
+    from the catalogue directly.
+    """
+    by_key = {(r.section, r.field, r.index): r for r in rows}
+    out: List[PackSection] = []
+    for step in form.steps:
+        for group in step.groups:
+            questions = []
+            for f in group.fields:
+                row = by_key.get((f.section, f.field, f.index))
+                declared = cat.field(f.section, f.field)
+                questions.append(PackQuestion(
+                    section=f.section, field=f.field, label=f.label,
+                    help=f.help,
+                    status=ANSWERED if _present(f.value) else OUTSTANDING,
+                    value=f.value,
+                    provenance=(row.provenance if row else ""),
+                    index=f.index, item=f.item, required=f.required,
+                    evidence_required=f.evidence_required,
+                    sensitive=f.sensitive,
+                    writes_to=(declared.writes_to if declared else ""),
+                    step=step.key, step_label=step.label))
+            out.append(PackSection(
+                key=group.key, label=group.label, help=group.help,
+                repeatable=group.repeatable, questions=questions,
+                step=step.key, step_label=step.label, item=group.item,
+                index=group.index))
+    return out
+
+
+def _question_from(row: _classification.Classification, cat: Catalogue,
+                   status: str) -> PackQuestion:
+    f = cat.field(row.section, row.field)
     return PackQuestion(
-        section=section.key, field=f.key, label=f.label, help=f.help,
-        status=status, value=value,
-        provenance=str(case.provenance_class.get(path)
-                       or case.provenance.get(path) or ""),
-        index=index, item=item, required=required,
-        evidence_required=f.evidence_required, sensitive=f.sensitive,
-        writes_to=f.writes_to)
+        section=row.section, field=row.field, label=row.label,
+        help=(f.help if f else ""), status=status, value=row.value,
+        provenance=row.provenance, index=row.index, item=row.item,
+        required=row.required,
+        evidence_required=bool(f and f.evidence_required),
+        sensitive=bool(f and f.sensitive),
+        writes_to=(f.writes_to if f else ""))
 
 
 def _artefacts(outcome: str) -> ArtefactRequest:

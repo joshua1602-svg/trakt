@@ -1,6 +1,8 @@
 import type {
   AgentActivation,
   AgentAudit,
+  AgentClassification,
+  AgentClientForm,
   AgentChecklist,
   AgentMeta,
   AgentPack,
@@ -222,6 +224,16 @@ export interface OpsClient {
   // -- the client pack ----------------------------------------------------- //
   /** The pack, plus the document a human would read and send by hand. */
   getAgentPack(caseRef: string): Promise<AgentPack>;
+  /** The structured form this client should see now: only what they can answer. */
+  getAgentClientForm(caseRef: string): Promise<AgentClientForm>;
+  /** Persist a structured response, verbatim. Keys are catalogue keys. */
+  submitAgentClientForm(
+    caseRef: string,
+    answers: Record<string, unknown>,
+    options?: { request_id?: string; strict?: boolean },
+  ): Promise<AgentStatus>;
+  /** Every catalogue field, in one of the five categories, and why. */
+  getAgentClassification(caseRef: string): Promise<AgentClassification>;
   draftAgentPack(caseRef: string): Promise<AgentStatus>;
   /** A human approves the pack for issue. The agent cannot do this. */
   approveAgentPack(caseRef: string, reason?: string): Promise<AgentStatus>;

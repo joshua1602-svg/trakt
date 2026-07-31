@@ -649,20 +649,53 @@ function PackPanel({
         <p className="mt-3 text-sm text-stone-400">{copy.agent.packNone}</p>
       ) : (
         <>
+          {/* What the client is asked, grouped as they will meet it. */}
           <p className="mt-3 text-sm text-stone-700">
-            {pack.questions - pack.outstanding} {copy.agent.packAnswered} ·{" "}
-            <span className="font-medium">{pack.outstanding}</span> {copy.agent.packOutstanding}
+            <span className="font-medium">{pack.questions}</span>{" "}
+            {copy.agent.classificationClientFacing}
+            {pack.summary?.total ? ` (of ${pack.summary.total} fields)` : ""}
           </p>
           <ul className="mt-2 space-y-1 text-sm text-stone-600">
-            {pack.sections.map((section) => (
-              <li key={section.key} className="flex justify-between gap-2">
-                <span>{section.label}</span>
+            {steps(pack.sections).map((step) => (
+              <li key={step.key} className="flex justify-between gap-2">
+                <span>{step.label}</span>
                 <span className="text-xs text-stone-500">
-                  {section.outstanding} {copy.agent.packOutstanding}
+                  {step.questions} · {step.required} {copy.agent.packRequired}
                 </span>
               </li>
             ))}
           </ul>
+
+          {pack.confirmations.length > 0 && (
+            <details className="mt-3">
+              <summary className="cursor-pointer text-sm font-medium text-stone-700">
+                {copy.agent.packConfirmHeading} ({pack.confirmations.length})
+              </summary>
+              <p className="mt-1 text-xs text-stone-500">{copy.agent.packConfirmNote}</p>
+              <ul className="mt-1 space-y-0.5 text-sm text-stone-600">
+                {pack.confirmations.map((question) => (
+                  <li key={`${question.section}.${question.field}-${question.index}`}>
+                    {question.label}: <span className="font-medium">{render(question.value)}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+
+          {pack.not_asked.length > 0 && (
+            <details className="mt-2">
+              <summary className="cursor-pointer text-sm font-medium text-stone-700">
+                {copy.agent.packNotAskedHeading} ({pack.not_asked.length})
+              </summary>
+              <ul className="mt-1 space-y-0.5 text-sm text-stone-600">
+                {pack.not_asked.map((row) => (
+                  <li key={row.key}>
+                    {row.label} — <span className="text-xs text-stone-500">{row.reason}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
           <p className="mt-3 text-xs text-stone-500">{pack.mapping_statement}</p>
           {showDocument && (
             <pre className="mt-3 max-h-96 overflow-auto rounded-xl bg-stone-900 p-3 text-xs text-stone-100">
@@ -735,6 +768,33 @@ function PackPanel({
       )}
     </Panel>
   );
+}
+
+/** The pack's sections regrouped into the client-facing steps. */
+function steps(sections: AgentStatus["pack"]["sections"]) {
+  const order: string[] = [];
+  for (const section of sections) {
+    if (!order.includes(section.step)) order.push(section.step);
+  }
+  return order.map((key) => {
+    const own = sections.filter((s) => s.step === key);
+    return {
+      key,
+      label: own[0]?.step_label || key,
+      questions: own.reduce((n, s) => n + s.questions.length, 0),
+      required: own.reduce(
+        (n, s) => n + s.questions.filter((q) => q.required).length,
+        0,
+      ),
+    };
+  });
+}
+
+function render(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "boolean") return value ? "yes" : "no";
+  if (Array.isArray(value)) return value.join(", ") || "—";
+  return String(value);
 }
 
 /**

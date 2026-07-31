@@ -58,6 +58,8 @@ from ..onboarding.case import (
 )
 from ..onboarding.service import STEP_LABELS, STEPS, OnboardingService
 from . import adapters as _adapters
+from . import classification as _classification
+from . import client_form as _client_form
 from . import communication as _comms
 from . import derive as _derive
 from . import pack as _pack
@@ -586,8 +588,15 @@ class OccAgentService:
             case_id=case_id, request_id=request_id, accept=accept, by=actor,
             note=note)
         if accept and answers:
+            # The fields the request asked for, not every key in the payload:
+            # a repeatable answer carries the whole row back.
+            asked = [
+                (f"{item.get('section')}[{item.get('index')}]."
+                 f"{item.get('field')}" if item.get("index") is not None
+                 else f"{item.get('section')}.{item.get('field')}")
+                for item in (request.items or [])]
             agent_case.case = self._mark_client_supplied(agent_case.case,
-                                                          answers, actor)
+                                                          asked, actor)
         self._audit(agent_case.run, "client_response_recorded",
                     actor_type=ACTOR_HUMAN, actor=actor,
                     classification=EXEC_HUMAN_CONFIRMED,
@@ -600,35 +609,32 @@ class OccAgentService:
         return agent_case
 
     def _mark_client_supplied(self, case: OnboardingCase,
-                              answers: Dict[str, Any],
+                              paths: List[str],
                               actor: str) -> OnboardingCase:
-        """Record that these values came from the client, field by field.
+        """Record that these SPECIFIC values came from the client.
 
         Client Onboarding accepts the response; what it has no way to know is
         that the answers arrived from the client rather than from an operator.
         That distinction is exactly what an approver needs, so it is written to
         the case's own provenance map rather than kept here.
+
+        Takes explicit paths rather than a payload. Writing a repeatable section
+        means sending the whole row back, derived values included, so inferring
+        the answered fields from the payload marked everything in the row as the
+        client's — including a currency Trakt worked out and an entity link it
+        minted. An approver reading "the client told Trakt" against a value the
+        client never saw is worse than no provenance at all.
         """
         recorded: List[str] = []
-        for section_key, payload in (answers or {}).items():
+        for path in paths:
+            section_key, _, rest = path.partition(".")
+            section_key = section_key.split("[")[0]
             section = self.onboarding.catalogue.section(section_key)
-            if section is None:
+            if section is None or section.field(rest) is None:
                 continue
-            rows = (payload if isinstance(payload, list)
-                    else (payload or {}).get(section_key)
-                    if isinstance((payload or {}).get(section_key), list)
-                    else [payload])
-            for index, row in enumerate(rows or []):
-                if not isinstance(row, dict):
-                    continue
-                for key in row:
-                    if section.field(key) is None:
-                        continue
-                    path = (f"{section_key}[{index}].{key}" if section.repeatable
-                            else f"{section_key}.{key}")
-                    case.provenance_class[path] = PROV_CLIENT
-                    case.provenance[path] = _PROVENANCE_SENTENCE[PROV_CLIENT]
-                    recorded.append(path)
+            case.provenance_class[path] = PROV_CLIENT
+            case.provenance[path] = _PROVENANCE_SENTENCE[PROV_CLIENT]
+            recorded.append(path)
         if recorded:
             case.record("provenance_recorded", actor=actor,
                         detail={"fields": sorted(recorded),
@@ -707,6 +713,89 @@ class OccAgentService:
         return _pack.build(agent_case.case, cat=self.onboarding.catalogue,
                            outcome=self.facts(agent_case).outcome,
                            reporting_period=agent_case.run.reporting_period)
+
+    def client_form(self, agent_case: AgentCase) -> _client_form.ClientForm:
+        """The structured form this client should see now. Writes nothing."""
+        return _client_form.build(agent_case.case,
+                                  cat=self.onboarding.catalogue)
+
+    def classify_case(self, agent_case: AgentCase) -> Dict[str, Any]:
+        """Every catalogue field, in one of the five categories.
+
+        The operator's answer to "why is the client not being asked that?" —
+        and the evidence that only category 2 ever reaches one.
+        """
+        rows = _classification.classify_all(
+            agent_case.case.answers, cat=self.onboarding.catalogue,
+            provenance=agent_case.case.provenance_class)
+        return {"summary": _classification.summarise(rows),
+                "fields": [r.to_dict() for r in rows]}
+
+    def submit_client_response(self, agent_case: AgentCase, *, actor: str,
+                               response: Dict[str, Any],
+                               request_id: str = "",
+                               strict: bool = True) -> AgentCase:
+        """Persist a structured client response. Deterministic, end to end.
+
+        Every key is an authoritative catalogue key, checked against the form
+        the client was actually served. Values are written through
+        ``OnboardingService.save_step`` exactly as submitted — no interpretation
+        happens between the control and the case, and a test asserts this path
+        never reaches the interpreter.
+        """
+        case = agent_case.case
+        form = self.client_form(agent_case)
+        plan = _client_form.plan_response(
+            case, response, cat=self.onboarding.catalogue, form=form,
+            strict=strict)
+        problems = _client_form.validate_response(
+            case, plan, cat=self.onboarding.catalogue)
+        if problems:
+            raise OpsError(
+                "OCC_AGENT_RESPONSE_INVALID",
+                "Some answers could not be accepted: "
+                + "; ".join(f"{p['label']}: {p['message']}"
+                            for p in problems[:3]),
+                http_status=400)
+
+        for step in STEPS:
+            payload = plan.steps.get(step)
+            if not payload:
+                continue
+            case = self.onboarding.save_step(case_id=case.case_id, step=step,
+                                             payload=payload, by=actor)
+        agent_case.case = self._mark_client_supplied(
+            case, sorted(plan.accepted), actor)
+        if request_id:
+            agent_case = self._close_request(agent_case, request_id, actor)
+        self._audit(agent_case.run, "client_response_submitted",
+                    actor_type=ACTOR_HUMAN, actor=actor,
+                    classification=EXEC_DETERMINISTIC,
+                    input_reference=request_id,
+                    decision_basis="structured answers written straight "
+                                   "through Client Onboarding; nothing was "
+                                   "interpreted",
+                    detail={"answers": len(plan.accepted),
+                            "ignored": plan.ignored,
+                            "form_hash": form.content_hash})
+        return agent_case
+
+    def _close_request(self, agent_case: AgentCase, request_id: str,
+                       actor: str) -> AgentCase:
+        """Mark the information request this response answers as reviewed."""
+        request = agent_case.case.request(request_id)
+        if request is None:
+            return agent_case
+        if request.status == "open":
+            self.onboarding.mark_request_sent(case_id=agent_case.case_ref,
+                                              request_id=request_id, by=actor)
+        self.onboarding.record_response(
+            case_id=agent_case.case_ref, request_id=request_id, by=actor,
+            note="Structured client form.", answers={})
+        agent_case.case = self.onboarding.review_response(
+            case_id=agent_case.case_ref, request_id=request_id, accept=True,
+            by=actor, note="Structured client form.")
+        return agent_case
 
     def draft_pack(self, agent_case: AgentCase, *, actor: str) -> AgentCase:
         """Draft the client pack, and put it straight in front of a human.

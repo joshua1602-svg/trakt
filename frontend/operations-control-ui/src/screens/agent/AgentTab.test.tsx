@@ -364,6 +364,69 @@ describe("OCC Agent tab — the operating loop", () => {
     ).toBeInTheDocument();
   });
 
+  it("the client is only asked what the client can answer", async () => {
+    const client = new MockOpsClient();
+    const created = await client.runAgentScenario("scenario_a_clean");
+    const classification = await client.getAgentClassification(created.case_ref);
+    const form = await client.getAgentClientForm(created.case_ref);
+
+    // Only category 2 becomes a question.
+    const asked = new Set(
+      form.form.steps.flatMap((s) => s.groups.flatMap((g) => g.fields.map((f) => f.key))),
+    );
+    for (const field of classification.fields) {
+      const key =
+        field.index === null
+          ? `${field.section}.${field.field}`
+          : `${field.section}[${field.index}].${field.field}`;
+      if (asked.has(key)) expect(field.category).toBe("client");
+    }
+    // And the form is materially smaller than the catalogue.
+    expect(form.form.questions).toBeLessThan(classification.summary.total);
+    expect(form.form.required).toBeLessThan(form.form.questions);
+  });
+
+  it("nothing the Onboarding Agent learns is asked of the client", async () => {
+    const client = new MockOpsClient();
+    const created = await client.runAgentScenario("scenario_a_clean");
+    const form = await client.getAgentClientForm(created.case_ref);
+    const asked = new Set(
+      form.form.steps.flatMap((s) => s.groups.flatMap((g) => g.fields.map((f) => f.key))),
+    );
+    for (const deferred of [
+      "sources[0].file_format",
+      "sources[0].expected_files",
+      "client.client_id",
+    ]) {
+      expect(asked.has(deferred)).toBe(false);
+    }
+    expect(form.form.locked.some((l) => l.step === "data")).toBe(true);
+  });
+
+  it("a structured answer is persisted verbatim, and a bad key is refused", async () => {
+    const client = new MockOpsClient();
+    const created = await client.createAgentCase(
+      "Onboard Northstar Lending. UK equity release. Monthly portfolio MI. " +
+        "Portfolio id direct_101.",
+    );
+    const after = await client.submitAgentClientForm(created.case_ref, {
+      "contacts.reporting_contact_name": "Dana Fox",
+    });
+    expect(
+      (after.onboarding.answers.contacts as Record<string, string>).reporting_contact_name,
+    ).toBe("Dana Fox");
+
+    await expect(
+      client.submitAgentClientForm(created.case_ref, {
+        "contacts.favourite_colour": "blue",
+      }),
+    ).rejects.toMatchObject({ errorCode: "OCC_AGENT_UNKNOWN_ANSWER_KEY" });
+
+    await expect(
+      client.submitAgentClientForm(created.case_ref, { "client.client_id": "HIJACKED" }),
+    ).rejects.toMatchObject({ errorCode: "OCC_AGENT_NOT_A_CLIENT_QUESTION" });
+  });
+
   it("every pack question is a field the governed catalogue declares", async () => {
     const client = new MockOpsClient();
     const created = await client.runAgentScenario("scenario_a_clean");

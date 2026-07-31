@@ -237,26 +237,47 @@ class FakeOnboarding:
 
 
 class FakeEngine:
+    """A stand-in with the REAL engine's signatures.
+
+    Deliberately not ``**kwargs``: a fake that accepts anything cannot catch a
+    caller that has drifted from the interface, and this one did — the adapter
+    was omitting ``workflow_type``, which ``create_batch`` requires and which
+    decides whether a delivery may reach regulatory reporting at all. A test
+    below asserts these signatures still match the engine's.
+    """
+
     def __init__(self, fail_on: str = ""):
         self.calls: List[str] = []
         self.uploads: List[Any] = []
+        self.batches: List[Dict[str, Any]] = []
         self.fail_on = fail_on
 
     def _maybe_fail(self, name):
         if self.fail_on == name:
             raise RuntimeError(f"{name} failed")
 
-    def create_batch(self, **kwargs):
+    def create_batch(self, *, client_id: str, portfolio_id: str,
+                     reporting_date: str, workflow_type: str, created_by: str,
+                     auto_start_when_ready: bool = False, dataset: str = "",
+                     frequency: str = "") -> Dict[str, Any]:
         self.calls.append("create_batch")
+        self.batches.append({
+            "client_id": client_id, "portfolio_id": portfolio_id,
+            "reporting_date": reporting_date, "workflow_type": workflow_type,
+            "dataset": dataset, "frequency": frequency,
+            "created_by": created_by})
         self._maybe_fail("create_batch")
         return {"batch_id": "bat_0001"}
 
-    def upload_batch_files(self, *, uploads, **kwargs):
+    def upload_batch_files(self, *, client_id: str, batch_id: str,
+                           uploads, received_by: str) -> Dict[str, Any]:
         self.calls.append("upload_batch_files")
         self._maybe_fail("upload_batch_files")
         self.uploads = list(uploads)
+        return {"batch_id": batch_id}
 
-    def start_batch(self, **kwargs):
+    def start_batch(self, *, client_id: str, batch_id: str,
+                    actor: str) -> Dict[str, Any]:
         self.calls.append("start_batch")
         self._maybe_fail("start_batch")
         return {"workflow_id": "wf_0001"}
@@ -265,7 +286,7 @@ class FakeEngine:
 def _intent() -> _adapters.ActivationIntent:
     return _adapters.ActivationIntent(
         client_id="NORTHSTAR", portfolio_id="direct_101", dataset="funded",
-        reporting_period="2026-06-30",
+        outcome="mi", cadence="monthly", reporting_period="2026-06-30",
         files=[{"name": "loans.csv", "target": "blob://raw/loans.csv"}],
         configuration_artefacts=["clients/NORTHSTAR.yaml"])
 
@@ -282,6 +303,26 @@ def test_the_live_adapter_calls_the_governed_path_in_order():
     assert result.batch_id == "bat_0001"
     assert result.workflow_id == "wf_0001"
     assert engine.uploads == [("loans.csv", b"a,b\n1,2\n")]
+    # Every argument the engine requires, from the confirmed intent.
+    assert engine.batches == [{
+        "client_id": "NORTHSTAR", "portfolio_id": "direct_101",
+        "reporting_date": "2026-06-30", "workflow_type": "mi",
+        "dataset": "funded", "frequency": "monthly", "created_by": ACTOR}]
+
+
+def test_the_adapter_calls_the_engine_with_the_engines_own_signature():
+    """The fakes above are only worth anything if they match the real thing."""
+    import inspect
+
+    import operations_control.engine as _engine
+    real = next(o for o in vars(_engine).values()
+                if inspect.isclass(o) and hasattr(o, "create_batch"))
+    for name in ("create_batch", "upload_batch_files", "start_batch"):
+        expected = inspect.signature(getattr(real, name))
+        actual = inspect.signature(getattr(FakeEngine, name))
+        assert set(expected.parameters) == set(actual.parameters), (
+            f"{name}: fake takes {sorted(actual.parameters)}, "
+            f"engine takes {sorted(expected.parameters)}")
 
 
 def test_the_live_adapter_refuses_before_it_touches_anything():

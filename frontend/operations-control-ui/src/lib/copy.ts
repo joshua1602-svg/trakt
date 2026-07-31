@@ -436,6 +436,21 @@ export const copy = {
       "There is no contact address on this case yet. Record one, or type an address when you " +
       "issue it.",
     packMappingHeading: "About field mappings",
+    packSteps: "Steps",
+    packRequired: "required",
+    packOptional: "optional",
+    packConfirmHeading: "Already known — check these are right",
+    packConfirmNote:
+      "Trakt worked these out or was told them. They are pre-populated, not asked again.",
+    packNotAskedHeading: "What the client is NOT asked, and why",
+    packLocked: "Not open yet",
+
+    classificationHeading: "Who can answer what",
+    classificationDescription:
+      "Every field the governed catalogue declares, in one of five categories. Only the " +
+      "second reaches a client.",
+    classificationShow: "Show every field",
+    classificationClientFacing: "asked of the client",
     packStatusHeading: "Where the pack has got to",
     packNotSent:
       "Trakt did not send this. Send the approved pack and covering email from the record.",

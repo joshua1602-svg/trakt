@@ -4,6 +4,7 @@ import type {
   ActivationIntent,
   ActivationResult,
   AgentActivation,
+  AgentClassification,
   AgentAudit,
   AgentChecklist,
   AgentMeta,
@@ -15,8 +16,13 @@ import type {
   AgentStatus,
   AgentTurn,
   CaseSummary,
+  ClientFormGroup,
+  ClientFormStep,
+  ClientFormView,
   DecisionCard,
   ExecutionFacts,
+  FieldCategory,
+  FieldClassification,
   LifecycleState,
   PackQuestion,
   PackReceipt,
@@ -506,54 +512,292 @@ export class MockAgent {
     };
   }
 
-  private packSections(caseRef: string): PackSection[] {
+  /**
+   * Every catalogue field, in one of the five categories.
+   *
+   * The same rules the server applies, against the mock's own catalogue: an
+   * answered field is already known; a section that needs something else to
+   * exist first is deferred; an operator decision is internal; and what is left
+   * is decided by the field's own `source`.
+   */
+  private classify(caseRef: string): FieldClassification[] {
     const onboarding = this.onboardingCase(caseRef);
     const catalogue = this.onboarding.reference().catalogue;
     const answers = onboarding.answers as Record<string, unknown>;
-    const out: PackSection[] = [];
+    const products = new Set(
+      ((answers.reporting as Record<string, unknown>)?.products as string[]) ?? [],
+    );
+    const out: FieldClassification[] = [];
     for (const section of catalogue.sections ?? []) {
-      // "Collected" is the field's own `source`: a client or an operator
-      // supplies it. Anything derived, inferred or defaulted is Trakt's to
-      // answer, and is never asked of a client.
-      const fields = (section.fields ?? []).filter((f) =>
-        CLIENT_FACING_SOURCES.has(f.source),
-      );
-      if (fields.length === 0) continue;
-      const holder = section.repeatable
-        ? (((answers[section.key] as Record<string, unknown>[]) ?? [{}])[0] ?? {})
-        : ((answers[section.key] as Record<string, unknown>) ?? {});
-      const questions: PackQuestion[] = fields.map((f) => ({
-        section: section.key,
-        field: f.key,
-        label: f.label,
-        help: f.help ?? "",
-        status: present(holder[f.key]) ? "answered" : "outstanding",
-        value: holder[f.key] ?? null,
-        provenance: "",
-        index: section.repeatable ? 0 : null,
-        item: "",
-        required: false,
-        evidence_required: false,
-        sensitive: Boolean(f.sensitive),
-        writes_to: String(f.writes_to ?? ""),
-      }));
-      out.push({
-        key: section.key,
-        label: section.label,
-        help: section.help ?? "",
-        repeatable: Boolean(section.repeatable),
-        questions,
-        outstanding: questions.filter((q) => q.status === "outstanding").length,
+      const items = section.repeatable
+        ? (((answers[section.key] as Record<string, unknown>[]) ?? [{}]))
+        : [(answers[section.key] as Record<string, unknown>) ?? {}];
+      items.forEach((holder, index) => {
+        for (const f of section.fields ?? []) {
+          const path = `${section.key}.${f.key}`;
+          const value = holder?.[f.key] ?? null;
+          const asked = ASKED_WHEN[path];
+          let category: FieldCategory;
+          let reason: string;
+          if (INTERNAL_FIELDS.has(path)) {
+            category = "internal";
+            reason = "an operator decision, not a client question";
+          } else if (present(value)) {
+            category = "known";
+            reason = `already answered (${ORIGIN[f.source] ?? f.source})`;
+          } else if (asked && !asked(products)) {
+            category = "not_applicable";
+            reason = "does not apply here";
+          } else if (DEFERRED_SECTIONS.has(section.key)) {
+            category = "first_delivery";
+            reason = "asked once the client has listed the files they will send";
+          } else {
+            category = BY_SOURCE[f.source] ?? "internal";
+            reason = REASONS[category];
+          }
+          out.push({
+            section: section.key,
+            field: f.key,
+            label: f.label,
+            category,
+            number: CATEGORY_NUMBERS[category],
+            category_label: CATEGORY_LABELS[category],
+            reason,
+            source: f.source,
+            required: Boolean(f.required),
+            confirm:
+              category === "known" &&
+              Boolean(f.required) &&
+              !NEVER_CONFIRMED_SOURCES.has(f.source),
+            value,
+            provenance: "",
+            index: section.repeatable ? index : null,
+            item: "",
+          });
+        }
       });
     }
     return out;
   }
 
+  clientForm(caseRef: string): ClientFormView {
+    const onboarding = this.onboardingCase(caseRef);
+    const catalogue = this.onboarding.reference().catalogue;
+    const asked = this.classify(caseRef).filter((r) => r.category === "client");
+    const steps: ClientFormStep[] = [];
+    for (const spec of FORM_STEPS) {
+      const groups: ClientFormGroup[] = [];
+      for (const key of spec.sections) {
+        const section = (catalogue.sections ?? []).find((s) => s.key === key);
+        if (!section) continue;
+        const rows = asked.filter((r) => r.section === key);
+        if (rows.length === 0) continue;
+        groups.push({
+          key,
+          label: section.label,
+          help: section.help ?? "",
+          repeatable: Boolean(section.repeatable),
+          index: rows[0].index,
+          item: rows[0].item,
+          required: rows.filter((r) => r.required).length,
+          fields: rows.map((r) => {
+            const f = (section.fields ?? []).find((x) => x.key === r.field);
+            return {
+              key: r.index === null ? `${key}.${r.field}` : `${key}[${r.index}].${r.field}`,
+              section: key,
+              field: r.field,
+              label: r.label,
+              help: f?.help ?? "",
+              type: f?.type ?? "text",
+              options: (f?.options ?? []) as { value: string; label: string }[],
+              required: r.required,
+              sensitive: Boolean(f?.sensitive),
+              evidence_required: false,
+              max_length: null,
+              validation: f?.validation ?? "",
+              value: r.value,
+              index: r.index,
+              item: r.item,
+            };
+          }),
+        });
+      }
+      if (groups.length > 0) {
+        steps.push({
+          key: spec.key,
+          label: spec.label,
+          help: spec.help,
+          unlocked_by: "",
+          groups,
+          questions: groups.reduce((n, g) => n + g.fields.length, 0),
+          required: groups.reduce((n, g) => n + g.required, 0),
+        });
+      }
+    }
+    return {
+      case_ref: caseRef,
+      client_name: onboarding.client_name,
+      steps,
+      locked: [
+        {
+          step: "data",
+          label: "How to read the data",
+          unlocked_by: "Asked once the client has listed the files they will send.",
+        },
+      ],
+      questions: steps.reduce((n, s) => n + s.questions, 0),
+      required: steps.reduce((n, s) => n + s.required, 0),
+      content_hash: "sha-mock-form",
+    };
+  }
+
+  private packSections(caseRef: string): PackSection[] {
+    const form = this.clientForm(caseRef);
+    const out: PackSection[] = [];
+    for (const step of form.steps) {
+      for (const group of step.groups) {
+        out.push({
+          key: group.key,
+          label: group.label,
+          help: group.help,
+          repeatable: group.repeatable,
+          step: step.key,
+          step_label: step.label,
+          index: group.index,
+          item: group.item,
+          questions: group.fields.map((f) => ({
+            section: f.section,
+            field: f.field,
+            label: f.label,
+            help: f.help,
+            status: present(f.value) ? "answered" : "outstanding",
+            value: f.value ?? null,
+            provenance: "",
+            index: f.index,
+            item: f.item,
+            required: f.required,
+            evidence_required: f.evidence_required,
+            sensitive: f.sensitive,
+            writes_to: "",
+            step: step.key,
+            step_label: step.label,
+          })),
+          outstanding: group.fields.filter((f) => !present(f.value)).length,
+        });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Persist a structured response, verbatim.
+   *
+   * The same refusals the server applies: a key the catalogue does not declare,
+   * and a key this client was not asked, are both refused with nothing saved.
+   */
+  submitClientForm(
+    caseRef: string,
+    answers: Record<string, unknown>,
+    options: { request_id?: string; strict?: boolean } = {},
+  ): AgentStatus {
+    const stored = this.get(caseRef);
+    const form = this.clientForm(caseRef);
+    const served = new Set(
+      form.steps.flatMap((s) => s.groups.flatMap((g) => g.fields.map((f) => f.key))),
+    );
+    // A key that is not a catalogue field at all, and a key that IS one but
+    // was not put to this client, are different refusals — an operator needs
+    // to know which, and so would a client portal.
+    const catalogue = this.onboarding.reference().catalogue;
+    const declared = new Set(
+      (catalogue.sections ?? []).flatMap((section) =>
+        (section.fields ?? []).map((f) => `${section.key}.${f.key}`),
+      ),
+    );
+    const unknown: string[] = [];
+    const notAsked: string[] = [];
+    for (const key of Object.keys(answers)) {
+      const match = /^([a-z_]+)(?:\[\d+\])?\.([a-z0-9_]+)$/.exec(key);
+      if (!match || !declared.has(`${match[1]}.${match[2]}`)) {
+        unknown.push(key);
+      } else if (!served.has(key)) {
+        notAsked.push(key);
+      }
+    }
+    if (unknown.length > 0) {
+      throw new OpsError(
+        `These answers do not correspond to anything Trakt asks: ${unknown.join(", ")}. Nothing was saved.`,
+        "OCC_AGENT_UNKNOWN_ANSWER_KEY",
+      );
+    }
+    if (notAsked.length > 0 && options.strict !== false) {
+      throw new OpsError(
+        `These are not questions Trakt puts to a client: ${notAsked.join(", ")}. Nothing was saved.`,
+        "OCC_AGENT_NOT_A_CLIENT_QUESTION",
+      );
+    }
+
+    const bySection: Record<string, Record<string, unknown>> = {};
+    const repeatable: Record<string, Record<string, unknown>[]> = {};
+    const onboarding = this.onboardingCase(caseRef);
+    for (const [key, value] of Object.entries(answers)) {
+      const match = /^([a-z_]+)(?:\[(\d+)\])?\.([a-z0-9_]+)$/.exec(key);
+      if (!match) continue;
+      const [, section, index, fieldKey] = match;
+      if (index === undefined) {
+        (bySection[section] ??= {})[fieldKey] = value;
+        continue;
+      }
+      const rows =
+        repeatable[section] ??
+        (((onboarding.answers[section] as Record<string, unknown>[]) ?? []).map((r) => ({
+          ...r,
+        })) as Record<string, unknown>[]);
+      while (rows.length <= Number(index)) rows.push({});
+      rows[Number(index)][fieldKey] = value;
+      repeatable[section] = rows;
+    }
+    for (const [section, payload] of Object.entries(bySection)) {
+      this.onboarding.saveStep(caseRef, section, payload);
+    }
+    for (const [section, rows] of Object.entries(repeatable)) {
+      this.onboarding.saveStep(caseRef, section, { [section]: rows });
+    }
+    this.record(stored, "client_response_submitted",
+                "structured answers written straight through Client Onboarding");
+    return this.status(caseRef);
+  }
+
+  classification(caseRef: string): AgentClassification {
+    const fields = this.classify(caseRef);
+    const counts = Object.fromEntries(
+      (Object.keys(CATEGORY_NUMBERS) as FieldCategory[]).map((k) => [
+        k,
+        fields.filter((f) => f.category === k).length,
+      ]),
+    ) as Record<FieldCategory, number>;
+    return {
+      fields,
+      summary: {
+        total: fields.length,
+        counts,
+        labels: CATEGORY_LABELS,
+        numbers: CATEGORY_NUMBERS,
+        client_facing: counts.client,
+        confirmations: fields.filter((f) => f.confirm).length,
+      },
+    };
+  }
+
   private packView(stored: StoredRun): AgentStatus["pack"] {
     const receipt = stored.doc.pack_receipt as PackReceipt | Record<string, never>;
     const pack = stored.doc.pack as Record<string, unknown>;
+    const classified = this.classification(stored.doc.case_ref);
     return {
       status: stored.doc.pack_status,
+      confirmations: (pack.confirmations as PackQuestion[]) ?? [],
+      not_asked: (pack.not_asked as AgentStatus["pack"]["not_asked"]) ?? [],
+      summary: classified.summary,
       history: stored.doc.pack_history,
       outstanding: Number(pack.outstanding ?? 0),
       questions: Number(pack.questions ?? 0),
@@ -987,8 +1231,24 @@ export class MockAgent {
         const onboarding = this.onboardingCase(caseRef);
         const contacts = (onboarding.answers.contacts ?? {}) as Record<string, string>;
         const outstanding = sections.reduce((n, sec) => n + sec.outstanding, 0);
+        const classified = this.classification(caseRef);
         stored.doc.pack = {
           sections,
+          confirmations: classified.fields
+            .filter((f) => f.confirm)
+            .map((f) => ({
+              section: f.section, field: f.field, label: f.label, help: "",
+              status: "answered", value: f.value, provenance: f.provenance,
+              index: f.index, item: f.item, required: f.required,
+              evidence_required: false, sensitive: false, writes_to: "",
+              step: "", step_label: "",
+            })),
+          not_asked: classified.fields
+            .filter((f) => !["client", "known"].includes(f.category))
+            .map((f) => ({
+              key: `${f.section}.${f.field}`, label: f.label,
+              category: f.category, number: f.number, reason: f.reason,
+            })),
           outstanding,
           questions: sections.reduce((n, sec) => n + sec.questions.length, 0),
           content_hash: "sha-mock-pack",
@@ -1674,9 +1934,6 @@ const RECORD_ONLY_STATEMENT =
   "in this environment. Send the approved pack and covering email from the " +
   "record.";
 
-/** Which field sources a client or an operator actually answers. */
-const CLIENT_FACING_SOURCES = new Set(["client_supplied", "operator_supplied"]);
-
 function present(value: unknown): boolean {
   if (value === null || value === undefined) return false;
   if (typeof value === "boolean") return true;
@@ -1728,3 +1985,114 @@ function reviewDocument(pkg: {
   lines.push("## Field mappings", "", pkg.mapping_note, "");
   return lines.join("\n");
 }
+
+
+/** The five categories, mirroring `occ_agent.classification`. */
+const CATEGORY_NUMBERS: Record<FieldCategory, number> = {
+  not_applicable: 0,
+  known: 1,
+  client: 2,
+  derived: 3,
+  first_delivery: 4,
+  internal: 5,
+};
+
+const CATEGORY_LABELS: Record<FieldCategory, string> = {
+  not_applicable: "Does not apply to this client",
+  known: "Already known",
+  client: "Only the client can answer",
+  derived: "Trakt works it out",
+  first_delivery: "Learned from the first delivery",
+  internal: "Internal operator decision",
+};
+
+/** The catalogue's `source` axis, mapped onto the categories. */
+const BY_SOURCE: Record<string, FieldCategory> = {
+  client_supplied: "client",
+  operator_supplied: "internal",
+  trakt_default: "derived",
+  derived: "derived",
+  system_generated: "derived",
+  // "read from data the client uploads" — the Onboarding Agent's job.
+  inferred: "first_delivery",
+};
+
+const REASONS: Record<FieldCategory, string> = {
+  client: "only the client knows it",
+  derived: "Trakt works it out",
+  first_delivery: "the Onboarding Agent reads it from the first delivery",
+  internal: "an operator decision, not a client question",
+  known: "already answered",
+  not_applicable: "does not apply here",
+};
+
+const ORIGIN: Record<string, string> = {
+  client_supplied: "from the client",
+  operator_supplied: "set by an operator",
+  inferred: "read from a delivery",
+  derived: "derived by Trakt",
+  trakt_default: "a Trakt default",
+  system_generated: "minted by Trakt",
+};
+
+/** Fields whose `source` is right for generation but wrong for who to ask. */
+const INTERNAL_FIELDS = new Set([
+  "client.client_id",
+  "portfolios.portfolio_id",
+  "sources.sample_provided",
+  "sources.mapping_complete",
+  "sources.dataset",
+]);
+
+/** Sections asked once something else exists. */
+const DEFERRED_SECTIONS = new Set(["data_definitions"]);
+
+/** An identifier a client never saw is not put up for confirmation. */
+const NEVER_CONFIRMED_SOURCES = new Set([
+  "operator_supplied",
+  "system_generated",
+  "derived",
+]);
+
+/** The catalogue's own `asked_when` conditions, as predicates over products. */
+const ASKED_WHEN: Record<string, (products: Set<string>) => boolean> = {
+  "contacts.investor_report_recipients": (p) => p.has("investor_reporting"),
+  "presentation.brand_colour": (p) => p.has("mi"),
+  "presentation.logo_uri": (p) => p.has("mi"),
+  "presentation.disclaimer": (p) => p.has("mi"),
+  "presentation.reporting_calendar_note": (p) => p.has("mi"),
+};
+
+/** The client-facing steps, in the order a client meets them. */
+const FORM_STEPS: { key: string; label: string; help: string; sections: string[] }[] = [
+  {
+    key: "about_you",
+    label: "About your business",
+    help: "The legal entity behind the portfolio, and who we should talk to.",
+    sections: ["client", "entities", "contacts"],
+  },
+  {
+    key: "portfolios",
+    label: "Your portfolios",
+    help: "One set of answers per book. Everything above is asked once.",
+    sections: ["portfolios"],
+  },
+  {
+    key: "deliveries",
+    label: "Sending us your data",
+    help: "How each delivery reaches Trakt.",
+    sections: ["sources"],
+  },
+  {
+    key: "reporting",
+    label: "Your reports",
+    help: "What you receive, and how it should look.",
+    sections: ["reporting", "regime", "presentation"],
+  },
+  {
+    key: "access",
+    label: "Who needs access",
+    help: "People at your end who need Trakt, or who receive reports.",
+    sections: ["access"],
+  },
+];
